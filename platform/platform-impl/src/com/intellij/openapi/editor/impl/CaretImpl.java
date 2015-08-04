@@ -310,7 +310,7 @@ public class CaretImpl extends UserDataHolderBase implements Caret {
           LogicalPosition log = myEditor.visualToLogicalPosition(new VisualPosition(newLineNumber, newColumnNumber, newLeansRight));
           int offset = myEditor.logicalPositionToOffset(log);
           if (offset >= document.getTextLength() && (!myEditor.myUseNewRendering || columnShift == 0)) {
-            int lastOffsetColumn = myEditor.offsetToVisualPosition(document.getTextLength(), true, false).column;
+            int lastOffsetColumn = myEditor.offsetToVisualPosition(document.getTextLength(), true).column;
             // We want to move caret to the last column if if it's located at the last line and 'Down' is pressed.
             if (lastOffsetColumn > newColumnNumber) {
               newColumnNumber = lastOffsetColumn;
@@ -324,7 +324,7 @@ public class CaretImpl extends UserDataHolderBase implements Caret {
             if (offset >= 0 && offset < document.getTextLength()) {
               if (text.charAt(offset) == '\t' && (columnShift <= 0 || offset == myOffset)) {
                 if (columnShift <= 0) {
-                  newColumnNumber = myEditor.offsetToVisualPosition(offset, true, false).column;
+                  newColumnNumber = myEditor.offsetToVisualPosition(offset, true).column;
                 }
                 else {
                   SoftWrap softWrap = myEditor.getSoftWrapModel().getSoftWrap(offset + 1);
@@ -648,14 +648,14 @@ public class CaretImpl extends UserDataHolderBase implements Caret {
 
     EditorSettings editorSettings = myEditor.getSettings();
 
-    if (!editorSettings.isVirtualSpace()) {
+    if (!editorSettings.isVirtualSpace() && line <= lastLine) {
       int lineEndColumn = EditorUtil.getLastVisualLineColumnNumber(myEditor, line);
-      if (column > lineEndColumn && (!myEditor.myUseNewRendering || !myEditor.getSoftWrapModel().isInsideSoftWrap(pos))) {
+      if (column > lineEndColumn) {
         column = lineEndColumn;
         leanRight = true;
       }
 
-      if (!myEditor.myUseNewRendering && column < 0 && line > 0) {
+      if (column < 0 && line > 0) {
         line--;
         column = EditorUtil.getLastVisualLineColumnNumber(myEditor, line);
       }
@@ -1065,14 +1065,14 @@ public class CaretImpl extends UserDataHolderBase implements Caret {
     if (hasSelection() && mySelectionMarker != null) {
       position = getRangeMarkerStartPosition();
       if (position == null) {
-        VisualPosition startPosition = myEditor.offsetToVisualPosition(mySelectionMarker.getStartOffset(), true, false);
-        VisualPosition endPosition = myEditor.offsetToVisualPosition(mySelectionMarker.getEndOffset(), false, true);
+        VisualPosition startPosition = myEditor.offsetToVisualPosition(mySelectionMarker.getStartOffset(), true);
+        VisualPosition endPosition = myEditor.offsetToVisualPosition(mySelectionMarker.getEndOffset());
         position = startPosition.after(endPosition) ? endPosition : startPosition;
       }
     }
     else {
       position = isVirtualSelectionEnabled() ? getVisualPosition() : 
-                 myEditor.offsetToVisualPosition(getOffset(), myLogicalCaret.leansForward, false);
+                 myEditor.offsetToVisualPosition(getOffset(), myLogicalCaret.leansForward);
     }
     if (hasVirtualSelection()) {
       position = new VisualPosition(position.line, position.column + myStartVirtualOffset);
@@ -1100,14 +1100,14 @@ public class CaretImpl extends UserDataHolderBase implements Caret {
     if (hasSelection() && mySelectionMarker != null) {
       position = getRangeMarkerEndPosition();
       if (position == null) {
-        VisualPosition startPosition = myEditor.offsetToVisualPosition(mySelectionMarker.getStartOffset(), true, false);
-        VisualPosition endPosition = myEditor.offsetToVisualPosition(mySelectionMarker.getEndOffset(), false, true);
+        VisualPosition startPosition = myEditor.offsetToVisualPosition(mySelectionMarker.getStartOffset(), true);
+        VisualPosition endPosition = myEditor.offsetToVisualPosition(mySelectionMarker.getEndOffset());
         position = startPosition.after(endPosition) ? startPosition : endPosition;
       }
     }
     else {
       position = isVirtualSelectionEnabled() ? getVisualPosition() : 
-                 myEditor.offsetToVisualPosition(getOffset(), myLogicalCaret.leansForward, false);
+                 myEditor.offsetToVisualPosition(getOffset(), myLogicalCaret.leansForward);
     }
     if (hasVirtualSelection()) {
       position = new VisualPosition(position.line, position.column + myEndVirtualOffset);
@@ -1130,8 +1130,7 @@ public class CaretImpl extends UserDataHolderBase implements Caret {
 
   @Override
   public void setSelection(int startOffset, int endOffset, boolean updateSystemSelection) {
-    doSetSelection(myEditor.offsetToVisualPosition(startOffset, true, false), startOffset, 
-                   myEditor.offsetToVisualPosition(endOffset, false, true), endOffset, 
+    doSetSelection(myEditor.offsetToVisualPosition(startOffset, true), startOffset, myEditor.offsetToVisualPosition(endOffset), endOffset, 
                    false, updateSystemSelection);
   }
 
@@ -1142,7 +1141,7 @@ public class CaretImpl extends UserDataHolderBase implements Caret {
       startPosition = getLeadSelectionPosition();
     }
     else {
-      startPosition = myEditor.offsetToVisualPosition(startOffset, true, false);
+      startPosition = myEditor.offsetToVisualPosition(startOffset, true);
     }
     setSelection(startPosition, startOffset, endPosition, endOffset);
   }
@@ -1155,8 +1154,8 @@ public class CaretImpl extends UserDataHolderBase implements Caret {
   @Override
   public void setSelection(@Nullable VisualPosition startPosition, int startOffset, @Nullable VisualPosition endPosition, int endOffset, 
                            boolean updateSystemSelection) {
-    VisualPosition startPositionToUse = startPosition == null ? myEditor.offsetToVisualPosition(startOffset, true, false) : startPosition;
-    VisualPosition endPositionToUse = endPosition == null ? myEditor.offsetToVisualPosition(endOffset, false, true) : endPosition;
+    VisualPosition startPositionToUse = startPosition == null ? myEditor.offsetToVisualPosition(startOffset, true) : startPosition;
+    VisualPosition endPositionToUse = endPosition == null ? myEditor.offsetToVisualPosition(endOffset) : endPosition;
     doSetSelection(startPositionToUse, startOffset, endPositionToUse, endOffset, true, updateSystemSelection);
   }
 
@@ -1474,12 +1473,12 @@ public class CaretImpl extends UserDataHolderBase implements Caret {
 
   @Override
   public boolean isAtRtlLocation() {
-    return myEditor.myUseNewRendering && myEditor.myView.isRtlLocation(myVisibleCaret);
+    return myEditor.myUseNewRendering && myEditor.myView.isRtlLocation(myOffset, myLogicalCaret.leansForward);
   }
 
   @Override
-  public boolean isAtBidiRunBoundary() {
-    return myEditor.myUseNewRendering && myEditor.myView.isAtBidiRunBoundary(myVisibleCaret);
+  public boolean isAtDirectionBoundary() {
+    return myEditor.myUseNewRendering && myEditor.myView.isDirectionBoundary(myVisibleCaret);
   }
 
   /**
@@ -1525,9 +1524,9 @@ public class CaretImpl extends UserDataHolderBase implements Caret {
 
   private void invalidateRangeMarkerVisualPositions(RangeMarker marker) {
     SoftWrapModelImpl model = myEditor.getSoftWrapModel();
-    if (!myEditor.offsetToVisualPosition(marker.getStartOffset(), true, false).equals(myRangeMarkerStartPosition) &&
+    if (!myEditor.offsetToVisualPosition(marker.getStartOffset(), true).equals(myRangeMarkerStartPosition) &&
         model.getSoftWrap(marker.getStartOffset()) == null ||
-        !myEditor.offsetToVisualPosition(marker.getEndOffset(), false, true).equals(myRangeMarkerEndPosition)
+        !myEditor.offsetToVisualPosition(marker.getEndOffset()).equals(myRangeMarkerEndPosition)
         && model.getSoftWrap(marker.getEndOffset()) == null) {
       myRangeMarkerStartPosition = null;
       myRangeMarkerEndPosition = null;

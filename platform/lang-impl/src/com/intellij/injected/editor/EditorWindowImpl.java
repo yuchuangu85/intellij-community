@@ -374,7 +374,7 @@ public class EditorWindowImpl extends UserDataHolderBase implements EditorWindow
 
   @Override
   @NotNull
-  public VisualPosition offsetToVisualPosition(int offset, boolean leanForward, boolean beforeSoftWrap) {
+  public VisualPosition offsetToVisualPosition(int offset, boolean leanForward) {
     return logicalToVisualPosition(offsetToLogicalPosition(offset).leanForward(leanForward));
   }
 

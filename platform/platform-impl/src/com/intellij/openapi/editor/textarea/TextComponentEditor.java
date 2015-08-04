@@ -202,7 +202,7 @@ public class TextComponentEditor extends UserDataHolderBase implements Editor {
 
   @NotNull
   @Override
-  public VisualPosition offsetToVisualPosition(int offset, boolean leanForward, boolean beforeSoftWrap) {
+  public VisualPosition offsetToVisualPosition(int offset, boolean leanForward) {
     return offsetToVisualPosition(offset);
   }
 

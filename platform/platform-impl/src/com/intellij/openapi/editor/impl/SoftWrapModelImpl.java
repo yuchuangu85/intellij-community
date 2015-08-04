@@ -158,7 +158,7 @@ public class SoftWrapModelImpl implements SoftWrapModelEx, PrioritizedInternalDo
   }
 
   private boolean areSoftWrapsEnabledInEditor() {
-    return myEditor.getSettings().isUseSoftWraps()
+    return myEditor.getSettings().isUseSoftWraps() && !myEditor.myUseNewRendering 
            && (!(myEditor.getDocument() instanceof DocumentImpl) || !((DocumentImpl)myEditor.getDocument()).acceptsSlashR());
   }
 
@@ -235,9 +235,6 @@ public class SoftWrapModelImpl implements SoftWrapModelEx, PrioritizedInternalDo
 
   @Override
   public int getSoftWrapIndex(int offset) {
-    if (myEditor.myUseNewRendering && !isSoftWrappingEnabled()) {
-      return -1;
-    }
     return myStorage.getSoftWrapIndex(offset);
   }
 
@@ -435,7 +432,7 @@ public class SoftWrapModelImpl implements SoftWrapModelEx, PrioritizedInternalDo
    *
    * @return      <code>true</code> if soft wraps-aware processing should be used; <code>false</code> otherwise
    */
-  public boolean prepareToMapping() {
+  private boolean prepareToMapping() {
     if (myUpdateInProgress || myBulkUpdateInProgress ||
         myActive > 0 || !isSoftWrappingEnabled() || myEditor.getDocument().getTextLength() <= 0) {
       return false;
@@ -501,29 +498,22 @@ public class SoftWrapModelImpl implements SoftWrapModelEx, PrioritizedInternalDo
       return false;
     }
 
-    if (myEditor.myUseNewRendering) {
-      VisualPosition beforeSoftWrap = myEditor.offsetToVisualPosition(offset, true, true);
-      return visual.line > beforeSoftWrap.line || 
-             visual.column > beforeSoftWrap.column || visual.column == beforeSoftWrap.column && countBeforeSoftWrap;
-    }
-    else {
-      VisualPosition visualBeforeSoftWrap = myEditor.offsetToVisualPosition(offset - 1);
-      int x = 0;
-      LogicalPosition logLineStart = myEditor.visualToLogicalPosition(new VisualPosition(visualBeforeSoftWrap.line, 0));
-      if (logLineStart.softWrapLinesOnCurrentLogicalLine > 0) {
-        int offsetLineStart = myEditor.logicalPositionToOffset(logLineStart);
-        softWrap = model.getSoftWrap(offsetLineStart);
-        if (softWrap != null) {
-          x = softWrap.getIndentInPixels();
-        }
+    VisualPosition visualBeforeSoftWrap = myEditor.offsetToVisualPosition(offset - 1);
+    int x = 0;
+    LogicalPosition logLineStart = myEditor.visualToLogicalPosition(new VisualPosition(visualBeforeSoftWrap.line, 0));
+    if (logLineStart.softWrapLinesOnCurrentLogicalLine > 0) {
+      int offsetLineStart = myEditor.logicalPositionToOffset(logLineStart);
+      softWrap = model.getSoftWrap(offsetLineStart);
+      if (softWrap != null) {
+        x = softWrap.getIndentInPixels();
       }
-      int width = EditorUtil.textWidthInColumns(myEditor, myEditor.getDocument().getCharsSequence(), offset - 1, offset, x);
-      int softWrapStartColumn = visualBeforeSoftWrap.column + width;
-      if (visual.line > visualBeforeSoftWrap.line) {
-        return true;
-      }
-      return countBeforeSoftWrap ? visual.column >= softWrapStartColumn : visual.column > softWrapStartColumn;
     }
+    int width = EditorUtil.textWidthInColumns(myEditor, myEditor.getDocument().getCharsSequence(), offset - 1, offset, x);
+    int softWrapStartColumn = visualBeforeSoftWrap.column  + width;
+    if (visual.line > visualBeforeSoftWrap.line) {
+      return true;
+    }
+    return countBeforeSoftWrap ? visual.column >= softWrapStartColumn : visual.column > softWrapStartColumn;
   }
 
   @Override

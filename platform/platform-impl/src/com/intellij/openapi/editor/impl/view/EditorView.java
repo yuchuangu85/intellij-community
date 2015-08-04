@@ -26,9 +26,6 @@ import com.intellij.openapi.editor.ex.DocumentEx;
 import com.intellij.openapi.editor.ex.util.EditorUIUtil;
 import com.intellij.openapi.editor.ex.util.EditorUtil;
 import com.intellij.openapi.editor.impl.EditorImpl;
-import com.intellij.openapi.editor.impl.FontInfo;
-import com.intellij.openapi.editor.impl.TextDrawingCallback;
-import com.intellij.openapi.editor.impl.softwrap.SoftWrapDrawingType;
 import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Key;
@@ -45,7 +42,7 @@ import java.awt.image.BufferedImage;
  * 
  * Also contains a cache of several font-related quantities (line height, space width, etc).
  */
-public class EditorView implements TextDrawingCallback, Disposable {
+public class EditorView implements Disposable {
   private static Key<LineLayout> FOLD_REGION_TEXT_LAYOUT = Key.create("text.layout");
 
   private final EditorImpl myEditor;
@@ -82,6 +79,8 @@ public class EditorView implements TextDrawingCallback, Disposable {
     
     Disposer.register(this, myTextLayoutCache);
     Disposer.register(this, mySizeManager);
+    
+    reinitSettings();
   }
 
   EditorImpl getEditor() {
@@ -128,57 +127,44 @@ public class EditorView implements TextDrawingCallback, Disposable {
   }
 
   @NotNull
-  public VisualPosition logicalToVisualPosition(@NotNull LogicalPosition pos, boolean beforeSoftWrap) {
+  public VisualPosition logicalToVisualPosition(@NotNull LogicalPosition pos) {
     assertIsDispatchThread();
-    myEditor.getSoftWrapModel().prepareToMapping();
-    return myMapper.logicalToVisualPosition(pos, beforeSoftWrap);
+    return myMapper.logicalToVisualPosition(pos);
   }
 
   @NotNull
   public LogicalPosition visualToLogicalPosition(@NotNull VisualPosition pos) {
     assertIsDispatchThread();
-    myEditor.getSoftWrapModel().prepareToMapping();
     return myMapper.visualToLogicalPosition(pos);
   }
 
   @NotNull
-  public VisualPosition offsetToVisualPosition(int offset, boolean leanTowardsLargerOffsets, boolean beforeSoftWrap) {
+  public VisualPosition offsetToVisualPosition(int offset, boolean leanTowardsLargerOffsets) {
     assertIsDispatchThread();
-    myEditor.getSoftWrapModel().prepareToMapping();
-    return myMapper.offsetToVisualPosition(offset, leanTowardsLargerOffsets, beforeSoftWrap);
+    return myMapper.offsetToVisualPosition(offset, leanTowardsLargerOffsets);
   }
 
-  public int visualPositionToOffset(VisualPosition visualPosition) {
+  public int offsetToVisualLine(int offset) {
     assertIsDispatchThread();
-    myEditor.getSoftWrapModel().prepareToMapping();
-    return myMapper.visualPositionToOffset(visualPosition);
-  }
-
-  public int offsetToVisualLine(int offset, boolean beforeSoftWrap) {
-    assertIsDispatchThread();
-    myEditor.getSoftWrapModel().prepareToMapping();
-    return myMapper.offsetToVisualLine(offset, beforeSoftWrap);
+    return myMapper.offsetToVisualLine(offset);
   }
 
   @NotNull
   public VisualPosition xyToVisualPosition(@NotNull Point p) {
     assertIsDispatchThread();
-    myEditor.getSoftWrapModel().prepareToMapping();
     return myMapper.xyToVisualPosition(p);
   }
 
   @NotNull
   public Point visualPositionToXY(@NotNull VisualPosition pos) {
     assertIsDispatchThread();
-    myEditor.getSoftWrapModel().prepareToMapping();
     return myMapper.visualPositionToXY(pos);
   }
 
   @NotNull
-  public Point offsetToXY(int offset, boolean leanTowardsLargerOffsets, boolean beforeSoftWrap) {
+  public Point offsetToXY(int offset, boolean leanTowardsLargerOffsets) {
     assertIsDispatchThread();
-    myEditor.getSoftWrapModel().prepareToMapping();
-    return myMapper.offsetToXY(offset, leanTowardsLargerOffsets, beforeSoftWrap);
+    return myMapper.offsetToXY(offset, leanTowardsLargerOffsets);
   }
 
   public void setPrefix(String prefixText, TextAttributes attributes) {
@@ -210,7 +196,6 @@ public class EditorView implements TextDrawingCallback, Disposable {
 
   public void paint(Graphics2D g) {
     assertIsDispatchThread();
-    myEditor.getSoftWrapModel().prepareToMapping();
     myPainter.paint(g);
   }
 
@@ -226,23 +211,18 @@ public class EditorView implements TextDrawingCallback, Disposable {
 
   public int getMaxWidthInRange(int startOffset, int endOffset) {
     assertIsDispatchThread();
-    return getMaxWidthInLineRange(offsetToVisualLine(startOffset, false), offsetToVisualLine(endOffset, true));
+    return getMaxWidthInLineRange(offsetToVisualLine(startOffset), offsetToVisualLine(endOffset));
   }
   
   int getMaxWidthInLineRange(int startVisualLine, int endVisualLine) {
     int maxWidth = 0;
     for (int i = startVisualLine; i <= endVisualLine; i++) {
-      LogicalPosition startPosition = visualToLogicalPosition(new VisualPosition(i, 0));
-      if (startPosition.line >= myDocument.getLineCount()) break;
-      int startOffset = logicalPositionToOffset(startPosition);
+      int logicalLine = visualToLogicalPosition(new VisualPosition(i, 0)).line;
+      if (logicalLine >= myDocument.getLineCount()) break;
+      int startOffset = myDocument.getLineStartOffset(logicalLine);
       float x = 0;
-      int maxOffset = 0;
-      for (VisualLineFragmentsIterator.Fragment fragment : VisualLineFragmentsIterator.create(this, startOffset, false)) {
+      for (VisualLineFragmentsIterator.Fragment fragment : VisualLineFragmentsIterator.create(this, startOffset)) {
         x = fragment.getEndX();
-        maxOffset = Math.max(maxOffset, fragment.getMaxOffset());
-      }
-      if (myEditor.getSoftWrapModel().getSoftWrap(maxOffset) != null) {
-        x += myEditor.getSoftWrapModel().getMinDrawingWidthInPixels(SoftWrapDrawingType.BEFORE_SOFT_WRAP_LINE_FEED);
       }
       maxWidth = Math.max(maxWidth, (int) x);
     }
@@ -281,35 +261,23 @@ public class EditorView implements TextDrawingCallback, Disposable {
     myTextLayoutCache.resetToDocumentSize();
   }
   
-  public boolean isRtlLocation(@NotNull VisualPosition visualPosition) {
+  public boolean isRtlLocation(int offset, boolean leanForward) {
+    assertIsDispatchThread();
+    if (myDocument.getTextLength() == 0) return false;
+    int line = myDocument.getLineNumber(offset);
+    LineLayout layout = getLineLayout(line);
+    return layout.isRtlLocation(offset - myDocument.getLineStartOffset(line), leanForward);
+  }
+
+  public boolean isDirectionBoundary(@NotNull VisualPosition visualPosition) {
     assertIsDispatchThread();
     if (myDocument.getTextLength() == 0) return false;
     LogicalPosition logicalPosition = visualToLogicalPosition(visualPosition);
     int offset = logicalPositionToOffset(logicalPosition);
-    if (myEditor.getSoftWrapModel().getSoftWrap(offset) != null) {
-      VisualPosition beforeWrapPosition = offsetToVisualPosition(offset, true, true);
-      if (visualPosition.line == beforeWrapPosition.line && 
-          (visualPosition.column > beforeWrapPosition.column || 
-           visualPosition.column == beforeWrapPosition.column && visualPosition.leansRight)) {
-        return false;
-      }
-      VisualPosition afterWrapPosition = offsetToVisualPosition(offset, false, false);
-      if (visualPosition.line == afterWrapPosition.line &&
-          (visualPosition.column < afterWrapPosition.column ||
-           visualPosition.column == afterWrapPosition.column && !visualPosition.leansRight)) {
-        return false;
-      }
-    } 
+    if (!visualPosition.equals(offsetToVisualPosition(offset, logicalPosition.leansForward))) return false;
     int line = myDocument.getLineNumber(offset);
     LineLayout layout = getLineLayout(line);
-    return layout.isRtlLocation(offset - myDocument.getLineStartOffset(line), logicalPosition.leansForward);
-  }
-
-  public boolean isAtBidiRunBoundary(@NotNull VisualPosition visualPosition) {
-    assertIsDispatchThread();
-    int offset = visualPositionToOffset(visualPosition);
-    int otherSideOffset = visualPositionToOffset(visualPosition.leanRight(!visualPosition.leansRight));
-    return offset != otherSideOffset;
+    return layout.isDirectionBoundary(offset - myDocument.getLineStartOffset(line), logicalPosition.leansForward);
   }
 
   /**
@@ -429,10 +397,5 @@ public class EditorView implements TextDrawingCallback, Disposable {
   
   private static void assertIsReadAccess() {
     ApplicationManager.getApplication().assertReadAccessAllowed();
-  }
-
-  @Override
-  public void drawChars(@NotNull Graphics g, @NotNull char[] data, int start, int end, int x, int y, Color color, FontInfo fontInfo) {
-    myPainter.drawChars(g, data, start, end, x, y, color, fontInfo);
   }
 }

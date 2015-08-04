@@ -220,27 +220,20 @@ class LineLayout {
     return new Iterable<VisualFragment>() {
       @Override
       public Iterator<VisualFragment> iterator() {
-        return new VisualOrderIterator(startX, 0, 0, 0, myBidiRunsInVisualOrder);
+        return new VisualOrderIterator(startX, 0, myBidiRunsInVisualOrder);
       }
     };
   }
 
-  Iterable<VisualFragment> getFragmentsInVisualOrder(final float startX, 
-                                                     final int startVisualColumn, 
-                                                     final int startOffset, 
-                                                     int endOffset) {
+  Iterable<VisualFragment> getFragmentsInVisualOrder(final float startX, final int startVisualColumn, int startOffset, int endOffset) {
     assert startOffset <= endOffset;
     final BidiRun[] runs;
-    int startLogicalColumn = 0;
     if (startOffset == endOffset) {
       runs = new BidiRun[0];
     }
     else {
       List<BidiRun> runList = new ArrayList<BidiRun>();
       for (BidiRun run : myBidiRunsInLogicalOrder) {
-        if (run.startOffset < startOffset) {
-          startLogicalColumn = run.getLogicalColumn(startLogicalColumn, Math.min(startOffset, run.endOffset));
-        }
         if (run.endOffset <= startOffset) continue;
         if (run.startOffset >= endOffset) break;
         runList.add(run.subRun(startOffset, endOffset));
@@ -248,11 +241,10 @@ class LineLayout {
       runs = runList.toArray(new BidiRun[runList.size()]);
       reorderRunsVisually(runs);
     }
-    final int finalStartLogicalColumn = startLogicalColumn;
     return new Iterable<VisualFragment>() {
       @Override
       public Iterator<VisualFragment> iterator() {
-        return new VisualOrderIterator(startX, startVisualColumn, finalStartLogicalColumn, startOffset, runs);
+        return new VisualOrderIterator(startX, startVisualColumn, runs);
       }
     };
   }
@@ -269,32 +261,48 @@ class LineLayout {
     return false;
   }
 
+  boolean isDirectionBoundary(int offset, boolean leanForward) {
+    boolean prevIsRtl = false;
+    boolean found = offset == 0 && !leanForward;
+    for (BidiRun run : myBidiRunsInVisualOrder) {
+      boolean curIsRtl = run.isRtl();
+      if (found || offset == (curIsRtl ? run.endOffset : run.startOffset)) return curIsRtl != prevIsRtl;
+      if (offset > run.startOffset && offset < run.endOffset) return false;
+      found = (offset == (curIsRtl ? run.startOffset : run.endOffset));
+      prevIsRtl = curIsRtl;
+    }
+    return prevIsRtl;
+  }
+
   int findNearestDirectionBoundary(int offset, boolean lookForward) {
     if (lookForward) {
-      byte originLevel = -1;
+      boolean foundOrigin = false;
+      boolean originIsRtl = false;
       for (BidiRun run : myBidiRunsInLogicalOrder) {
-        if (originLevel >= 0) {
-          if (run.level != originLevel) return run.startOffset;
+        if (foundOrigin) {
+          if (run.isRtl() != originIsRtl) return run.startOffset;
         }
         else if (run.endOffset > offset) {
-          originLevel = run.level;
+          foundOrigin = true;
+          originIsRtl = run.isRtl();
         }
       }
-      return originLevel > 0 ? myBidiRunsInLogicalOrder[myBidiRunsInLogicalOrder.length - 1].endOffset : -1;
+      return originIsRtl ? myBidiRunsInLogicalOrder[myBidiRunsInLogicalOrder.length - 1].endOffset : -1;
     }
     else {
-      byte originLevel = -1;
+      boolean foundOrigin = false;
+      boolean originIsRtl = false;
       for (int i = myBidiRunsInLogicalOrder.length - 1; i >= 0; i--) {
         BidiRun run = myBidiRunsInLogicalOrder[i];
-        if (originLevel >= 0) {
-          if (run.level != originLevel) return run.endOffset;
+        if (foundOrigin) {
+          if (run.isRtl() != originIsRtl) return run.endOffset;
         }
         else if (run.startOffset < offset) {
-          originLevel = run.level;
-
+          foundOrigin = true;
+          originIsRtl = run.isRtl();
         }
       }
-      return originLevel > 0 ? 0 : -1;
+      return originIsRtl ? 0 : -1;
     }
   }
 
@@ -334,19 +342,6 @@ class LineLayout {
       }
       return run;
     }
-
-    private int getLogicalColumn(int startLogicalColumn, int offset) {
-      assert offset >= startOffset;
-      assert offset <= endOffset;
-      int currentStartOffset = startOffset;
-      for (LineFragment fragment : fragments) {
-        int currentEndOffset = currentStartOffset + fragment.getLength();
-        startLogicalColumn = fragment.offsetToLogicalColumn(startLogicalColumn, Math.min(offset, currentEndOffset) - currentStartOffset);
-        currentStartOffset = currentEndOffset;
-        if (offset <= currentStartOffset) break;
-      }
-      return startLogicalColumn;
-    }
   }
 
   private static class VisualOrderIterator implements Iterator<VisualFragment> {
@@ -356,12 +351,10 @@ class LineLayout {
     private int myOffsetInsideRun = 0;
     private VisualFragment myFragment = new VisualFragment();
 
-    private VisualOrderIterator(float startX, int startVisualColumn, int startLogicalColumn, int startOffset, BidiRun[] runsInVisualOrder) {
+    public VisualOrderIterator(float startX, int startVisualColumn, BidiRun[] runsInVisualOrder) {
       myRuns = runsInVisualOrder;
       myFragment.startX = startX;
       myFragment.startVisualColumn = startVisualColumn;
-      myFragment.startLogicalColumn = startLogicalColumn;
-      myFragment.startOffset = startOffset;
     }
 
     @Override
@@ -376,10 +369,7 @@ class LineLayout {
       }
       BidiRun run = myRuns[myRunIndex];
 
-      if (myRunIndex == 0 && myFragmentIndex == 0) {
-        myFragment.startLogicalColumn += (run.isRtl() ? run.endOffset : run.startOffset) - myFragment.startOffset; 
-      }
-      else {
+      if (myRunIndex > 0 || myFragmentIndex > 0) {
         myFragment.startLogicalColumn = myFragment.getEndLogicalColumn();
         if (myFragmentIndex == 0) {
           myFragment.startLogicalColumn += (run.isRtl() ? run.endOffset : run.startOffset) - myFragment.getEndOffset();
@@ -392,6 +382,10 @@ class LineLayout {
       myFragment.delegate = run.fragments.get(run.isRtl() ? run.fragments.size() - 1 - myFragmentIndex : myFragmentIndex);
       myFragment.startOffset = run.isRtl() ? run.endOffset - myOffsetInsideRun : run.startOffset + myOffsetInsideRun;
       
+      if (myRunIndex == 0 && myFragmentIndex == 0) {
+        myFragment.startLogicalColumn = myFragment.startOffset;
+      }
+
       myOffsetInsideRun += myFragment.getLength();
       myFragmentIndex++;
       if (myFragmentIndex >= run.fragments.size()) {

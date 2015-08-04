@@ -244,7 +244,7 @@ public class InjectedCaret implements Caret {
   }
 
   @Override
-  public boolean isAtBidiRunBoundary() {
-    return myDelegate.isAtBidiRunBoundary();
+  public boolean isAtDirectionBoundary() {
+    return myDelegate.isAtDirectionBoundary();
   }
 }

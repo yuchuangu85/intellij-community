@@ -59,6 +59,8 @@ import com.intellij.xdebugger.stepping.XSmartStepIntoHandler;
 import com.jetbrains.python.PythonFileType;
 import com.jetbrains.python.console.PythonDebugLanguageConsoleView;
 import com.jetbrains.python.console.pydev.PydevCompletionVariant;
+import com.jetbrains.python.debugger.concurrency.tool.asyncio.PyAsyncioLogManagerImpl;
+import com.jetbrains.python.debugger.concurrency.tool.threading.PyThreadingLogManagerImpl;
 import com.jetbrains.python.debugger.pydev.*;
 import com.jetbrains.python.psi.PyFunction;
 import com.jetbrains.python.psi.PyImportElement;
@@ -170,6 +172,12 @@ public class PyDebugProcess extends XDebugProcess implements IPyDebugProcess, Pr
         }
       }
     });
+
+    if (PyDebuggerOptionsProvider.getInstance(getSession().getProject()).isSaveThreadingLog()) {
+      // notify log manager about new debug process
+      PyThreadingLogManagerImpl.getInstance(getSession().getProject()).recordEvent(getSession(), null);
+      PyAsyncioLogManagerImpl.getInstance(getSession().getProject()).recordEvent(getSession(), null);
+    }
   }
 
   private MultiProcessDebugger createMultiprocessDebugger(ServerSocket serverSocket) {
@@ -306,6 +314,15 @@ public class PyDebugProcess extends XDebugProcess implements IPyDebugProcess, Pr
   @Override
   public void recordSignature(PySignature signature) {
     PySignatureCacheManager.getInstance(getSession().getProject()).recordSignature(myPositionConverter.convertSignature(signature));
+  }
+
+  @Override
+  public void recordLogEvent(PyConcurrencyEvent event) {
+    if (!event.isAsyncio()) {
+      PyThreadingLogManagerImpl.getInstance(getSession().getProject()).recordEvent(getSession(), event);
+    } else {
+      PyAsyncioLogManagerImpl.getInstance(getSession().getProject()).recordEvent(getSession(), event);
+    }
   }
 
   @Override

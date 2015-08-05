@@ -64,6 +64,7 @@ public class PyDebugRunner extends GenericProgramRunner {
   public static final String PORT_PARAM = "--port";
   public static final String FILE_PARAM = "--file";
   public static final String IDE_PROJECT_ROOTS = "IDE_PROJECT_ROOTS";
+  public static final String PYTHON_ASYNCIO_DEBUG = "PYTHONASYNCIODEBUG";
   @SuppressWarnings("SpellCheckingInspection")
   public static final String GEVENT_SUPPORT = "GEVENT_SUPPORT";
   public static boolean isModule = false;
@@ -250,6 +251,12 @@ public class PyDebugRunner extends GenericProgramRunner {
 
     if (PyDebuggerOptionsProvider.getInstance(project).isSaveCallSignatures()) {
       debugParams.addParameter("--save-signatures");
+    }
+
+    if (PyDebuggerOptionsProvider.getInstance(project).isSaveThreadingLog()) {
+      debugParams.addParameter("--save-threading");
+      debugParams.addParameter("--save-asyncio");
+      generalCommandLine.getEnvironment().put(PYTHON_ASYNCIO_DEBUG, "1");
     }
 
     if (PyDebuggerOptionsProvider.getInstance(project).isSupportGeventDebugging()) {

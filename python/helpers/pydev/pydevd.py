@@ -88,6 +88,8 @@ import pydevd_traceproperty
 from _pydev_imps import _pydev_time as time, _pydev_thread
 
 import _pydev_threading as threading
+from pydevd_concurrency_analyser.pydevd_thread_wrappers import wrap_threads, ObjectWrapper
+from pydevd_concurrency_analyser.pydevd_concurrency_logger import ThreadingLogger, AsyncioLogger, send_message
 
 import os
 import atexit
@@ -373,6 +375,8 @@ class PyDB:
         self.plugin = None
         self.has_plugin_line_breaks = False
         self.has_plugin_exception_breaks = False
+        self.thread_analyser = None
+        self.asyncio_analyser = None
 
         # matplotlib support in debugger and debug console
         self.mpl_in_use = False
@@ -1574,6 +1578,12 @@ class PyDB:
 
             filename, base = GetFilenameAndBase(frame)
 
+            if self.thread_analyser is not None:
+                self.thread_analyser.log_event(frame)
+
+            if self.asyncio_analyser is not None:
+                self.asyncio_analyser.log_event(frame)
+
             is_file_to_ignore = DictContains(DONT_TRACE, base) #we don't want to debug threading or anything related to pydevd
 
             #print('trace_dispatch', base, frame.f_lineno, event, frame.f_code.co_name, is_file_to_ignore)
@@ -1691,7 +1701,7 @@ class PyDB:
 
 
         PyDBCommandThread(self).start()
-        if self.signature_factory is not None:
+        if self.signature_factory is not None or self.thread_analyser is not None:
             # we need all data to be sent to IDE even after program finishes
             CheckOutputThread(self).start()
 
@@ -1769,6 +1779,11 @@ class PyDB:
             while not self.readyToRun:
                 time.sleep(0.1)  # busy wait until we receive run command
 
+        if self.thread_analyser is not None:
+            wrap_threads()
+            t = threadingCurrentThread()
+            send_message("threading_event", 0, t.getName(), GetThreadId(t), "thread", "start", file, 1, None, parent=GetThreadId(t))
+
         try:
             self.init_matplotlib_support()
         except:
@@ -1817,6 +1832,8 @@ def processCommandLine(argv):
     setup['multiproc'] = False #Used by PyCharm (reuses connection: ssh tunneling)
     setup['multiprocess'] = False # Used by PyDev (creates new connection to ide)
     setup['save-signatures'] = False
+    setup['save-threading'] = False
+    setup['save-asyncio'] = False
     setup['print-in-debugger-startup'] = False
     setup['cmd-line'] = False
     setup['module'] = False
@@ -1857,6 +1874,12 @@ def processCommandLine(argv):
         elif argv[i] == '--save-signatures':
             del argv[i]
             setup['save-signatures'] = True
+        elif argv[i] == '--save-threading':
+            del argv[i]
+            setup['save-threading'] = True
+        elif argv[i] == '--save-asyncio':
+            del argv[i]
+            setup['save-asyncio'] = True
         elif argv[i] == '--print-in-debugger-startup':
             del argv[i]
             setup['print-in-debugger-startup'] = True
@@ -2345,6 +2368,11 @@ if __name__ == '__main__':
                 # Only import it if we're going to use it!
                 from pydevd_signature import SignatureFactory
                 debugger.signature_factory = SignatureFactory()
+        if setup['save-threading']:
+            debugger.thread_analyser = ThreadingLogger()
+        if setup['save-asyncio']:
+            if IS_PY3K:
+                debugger.asyncio_analyser = AsyncioLogger()
 
         try:
             debugger.connect(host, port)

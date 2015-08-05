@@ -135,6 +135,7 @@ CMD_SHOW_CONSOLE = 142
 
 CMD_GET_ARRAY = 143
 CMD_STEP_INTO_MY_CODE = 144
+CMD_GET_CONCURRENCY_EVENT = 145
 
 CMD_VERSION = 501
 CMD_RETURN = 502
@@ -190,6 +191,7 @@ ID_TO_MEANING = {
 
     '143':'CMD_GET_ARRAY',
     '144':'CMD_STEP_INTO_MY_CODE',
+    '145':'CMD_GET_CONCURRENCY_EVENT',
     }
 
 MAX_IO_MSG_SIZE = 1000  #if the io is too big, we'll not send all (could make the debugger too non-responsive)

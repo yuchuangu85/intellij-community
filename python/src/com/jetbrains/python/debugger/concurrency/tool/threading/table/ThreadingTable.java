@@ -22,13 +22,11 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.table.JBTable;
 import com.intellij.xdebugger.impl.XSourcePositionImpl;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyColorManager;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyTable;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphCell;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphCellRenderer;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
-import com.jetbrains.python.debugger.concurrency.tool.threading.PyThreadingLogManagerImpl;
 
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
@@ -36,14 +34,12 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
 public class ThreadingTable extends ConcurrencyTable {
-  private final ConcurrencyColorManager myColorManager;
   private final GraphManager myGraphManager;
 
-  public ThreadingTable(PyThreadingLogManagerImpl logManager, Project project, ConcurrencyPanel panel) {
-    super(logManager, project, panel);
-    myColorManager = new ConcurrencyColorManager();
-    myGraphManager = new GraphManager(myLogManager, myColorManager);
-    setDefaultRenderer(GraphCell.class, new GraphCellRenderer(myLogManager, myGraphManager));
+  public ThreadingTable(GraphManager graphManager, Project project, ConcurrencyPanel panel) {
+    super(graphManager, project, panel);
+    myGraphManager = graphManager;
+    setDefaultRenderer(GraphCell.class, new GraphCellRenderer(myGraphManager));
     //setDefaultRenderer(ThreadCell.class, new ThreadCellRenderer(myColorManager, myLogManager));
 
     addMouseListener(new MouseAdapter() {
@@ -52,10 +48,10 @@ public class ThreadingTable extends ConcurrencyTable {
           JBTable target = (JBTable)e.getSource();
           int row = target.getSelectedRow();
           if (row != -1) {
-            PyConcurrencyEvent event = myLogManager.getEventAt(row);
+            PyConcurrencyEvent event = myGraphManager.getEventAt(row);
             VirtualFile vFile = LocalFileSystem.getInstance().findFileByPath(event.getFileName());
             navigateToSource(XSourcePositionImpl.create(vFile, event.getLine()));
-            myPanel.showStackTrace(myLogManager.getEventAt(row));
+            myPanel.showStackTrace(myGraphManager.getEventAt(row));
           }
         }
       }
@@ -66,7 +62,7 @@ public class ThreadingTable extends ConcurrencyTable {
       public void valueChanged(ListSelectionEvent e) {
         int row = getSelectedRow();
         if (row != -1) {
-          myPanel.showStackTrace(myLogManager.getEventAt(row));
+          myPanel.showStackTrace(myGraphManager.getEventAt(row));
         }
       }
     });

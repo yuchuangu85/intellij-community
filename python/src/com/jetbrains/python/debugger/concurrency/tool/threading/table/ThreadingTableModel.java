@@ -20,12 +20,12 @@ import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyNamesManager;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyTableModel;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphCell;
-import com.jetbrains.python.debugger.concurrency.tool.threading.PyThreadingLogManagerImpl;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
 
 public class ThreadingTableModel extends ConcurrencyTableModel {
 
-  public ThreadingTableModel(PyThreadingLogManagerImpl logManager) {
-    super(logManager);
+  public ThreadingTableModel(GraphManager graphManager) {
+    super(graphManager);
     myThreadingNamesManager = new ConcurrencyNamesManager();
     COLUMN_NAMES = new String[]{"Graph", "Event"};
   }
@@ -44,7 +44,7 @@ public class ThreadingTableModel extends ConcurrencyTableModel {
 
   @Override
   public Object getValueAt(int rowIndex, int columnIndex) {
-    PyConcurrencyEvent event = myLogManager.getEventAt(rowIndex);
+    PyConcurrencyEvent event = myGraphManager.getEventAt(rowIndex);
     switch (columnIndex) {
       case GRAPH_COLUMN:
         return new GraphCell();

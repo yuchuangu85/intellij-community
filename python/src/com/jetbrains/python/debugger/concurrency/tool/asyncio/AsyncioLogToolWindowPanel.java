@@ -27,6 +27,7 @@ import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
 import com.jetbrains.python.debugger.concurrency.tool.asyncio.table.AsyncioTable;
 import com.jetbrains.python.debugger.concurrency.tool.asyncio.table.AsyncioTableModel;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
 import com.jetbrains.python.debugger.concurrency.tool.threading.PyThreadingLogManagerImpl;
 
 import javax.swing.*;
@@ -34,12 +35,14 @@ import java.awt.*;
 
 public class AsyncioLogToolWindowPanel extends ConcurrencyPanel {
   private final Project myProject;
+  private final GraphManager myGraphManager;
   private JTable myTable;
 
   public AsyncioLogToolWindowPanel(Project project) {
     super(false, project);
     myProject = project;
     logManager = PyAsyncioLogManagerImpl.getInstance(project);
+    myGraphManager = new GraphManager(logManager);
 
     logManager.registerListener(new PyThreadingLogManagerImpl.Listener() {
       @Override
@@ -110,14 +113,13 @@ public class AsyncioLogToolWindowPanel extends ConcurrencyPanel {
 
     if (myTable == null) {
       myLabel.setVisible(false);
-
-      myTable = new AsyncioTable((PyAsyncioLogManagerImpl)logManager, myProject, this);
-      myTable.setModel(new AsyncioTableModel(logManager));
+      myTable = new AsyncioTable(myGraphManager, myProject, this);
+      myTable.setModel(new AsyncioTableModel(myGraphManager));
       myPane = ScrollPaneFactory.createScrollPane(myTable);
       add(myPane);
       setToolbar(createToolbarPanel());
     }
-    myTable.setModel(new AsyncioTableModel(logManager));
+    myTable.setModel(new AsyncioTableModel(myGraphManager));
   }
 
   @Override

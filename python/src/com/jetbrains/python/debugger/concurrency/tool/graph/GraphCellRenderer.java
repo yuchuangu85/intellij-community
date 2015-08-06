@@ -18,7 +18,6 @@ package com.jetbrains.python.debugger.concurrency.tool.graph;
 
 
 import com.intellij.ui.ColoredTableCellRenderer;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManager;
 import com.jetbrains.python.debugger.concurrency.tool.GraphSettings;
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.DrawElement;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.StoppedThreadState;
@@ -29,12 +28,10 @@ import java.awt.*;
 import java.util.ArrayList;
 
 public class GraphCellRenderer extends ColoredTableCellRenderer {
-  private final PyConcurrencyLogManager myLogManager;
   private final GraphManager myGraphManager;
   private int myRow;
 
-  public GraphCellRenderer(PyConcurrencyLogManager logManager, GraphManager graphManager) {
-    myLogManager = logManager;
+  public GraphCellRenderer(GraphManager graphManager) {
     myGraphManager = graphManager;
   }
 

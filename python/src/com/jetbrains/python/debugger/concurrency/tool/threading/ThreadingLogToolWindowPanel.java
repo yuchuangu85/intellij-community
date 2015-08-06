@@ -25,6 +25,7 @@ import com.intellij.util.ui.UIUtil;
 import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManager;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
 import com.jetbrains.python.debugger.concurrency.tool.threading.table.ThreadingTable;
 import com.jetbrains.python.debugger.concurrency.tool.threading.table.ThreadingTableModel;
 
@@ -33,12 +34,14 @@ import java.awt.*;
 
 public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
   private final Project myProject;
+  private final GraphManager myGraphManager;
   private JTable myTable;
 
   public ThreadingLogToolWindowPanel(Project project) {
     super(false, project);
     myProject = project;
     logManager = PyThreadingLogManagerImpl.getInstance(project);
+    myGraphManager = new GraphManager(logManager);
 
     logManager.registerListener(new PyThreadingLogManagerImpl.Listener() {
       @Override
@@ -108,13 +111,13 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
 
     if (myTable == null) {
       myLabel.setVisible(false);
-      myTable = new ThreadingTable((PyThreadingLogManagerImpl)logManager, myProject, this);
-      myTable.setModel(new ThreadingTableModel((PyThreadingLogManagerImpl)logManager));
+      myTable = new ThreadingTable(myGraphManager, myProject, this);
+      myTable.setModel(new ThreadingTableModel(myGraphManager));
       myPane = ScrollPaneFactory.createScrollPane(myTable);
       add(myPane);
       setToolbar(createToolbarPanel());
     }
-    myTable.setModel(new ThreadingTableModel((PyThreadingLogManagerImpl)logManager));
+    myTable.setModel(new ThreadingTableModel(myGraphManager));
   }
 
   @Override

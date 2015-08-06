@@ -21,10 +21,8 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.table.JBTable;
 import com.intellij.xdebugger.impl.XSourcePositionImpl;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyColorManager;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyTable;
-import com.jetbrains.python.debugger.concurrency.tool.asyncio.PyAsyncioLogManagerImpl;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphCell;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphCellRenderer;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
@@ -36,16 +34,11 @@ import java.awt.event.MouseEvent;
 
 public class AsyncioTable extends ConcurrencyTable {
   protected GraphManager myGraphManager;
-  protected ConcurrencyColorManager myColorManager;
 
-  public AsyncioTable(PyAsyncioLogManagerImpl logManager, Project project, ConcurrencyPanel panel) {
-    super(logManager, project, panel);
-    myColorManager = new ConcurrencyColorManager();
-    //myGraphManager = new AsyncioGraphManager(logManager, myColorManager);
-    myGraphManager = new GraphManager(logManager, myColorManager);
-
-    //setDefaultRenderer(TaskCell.class, new TaskCellRenderer(myColorManager, myLogManager));
-    setDefaultRenderer(GraphCell.class, new GraphCellRenderer(myLogManager, myGraphManager));
+  public AsyncioTable(GraphManager graphManager, Project project, ConcurrencyPanel panel) {
+    super(graphManager, project, panel);
+    myGraphManager = graphManager;
+    setDefaultRenderer(GraphCell.class, new GraphCellRenderer(myGraphManager));
 
     addMouseListener(new MouseAdapter() {
       public void mouseClicked(MouseEvent e) {
@@ -53,10 +46,10 @@ public class AsyncioTable extends ConcurrencyTable {
           JBTable target = (JBTable)e.getSource();
           int row = target.getSelectedRow();
           if (row != -1) {
-            PyConcurrencyEvent event = myLogManager.getEventAt(row);
+            PyConcurrencyEvent event = myGraphManager.getEventAt(row);
             VirtualFile vFile = LocalFileSystem.getInstance().findFileByPath(event.getFileName());
             navigateToSource(XSourcePositionImpl.create(vFile, event.getLine()));
-            myPanel.showStackTrace(myLogManager.getEventAt(row));
+            myPanel.showStackTrace(myGraphManager.getEventAt(row));
           }
         }
       }
@@ -67,7 +60,7 @@ public class AsyncioTable extends ConcurrencyTable {
       public void valueChanged(ListSelectionEvent e) {
         int row = getSelectedRow();
         if (row != -1) {
-          myPanel.showStackTrace(myLogManager.getEventAt(row));
+          myPanel.showStackTrace(myGraphManager.getEventAt(row));
         }
       }
     });

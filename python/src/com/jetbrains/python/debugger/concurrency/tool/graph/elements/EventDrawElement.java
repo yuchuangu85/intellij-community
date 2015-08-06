@@ -24,13 +24,13 @@ import java.awt.geom.RoundRectangle2D;
 
 public class EventDrawElement extends DrawElement {
 
-  public EventDrawElement(Color color, ThreadState before, ThreadState after) {
-    super(color, before, after);
+  public EventDrawElement(ThreadState before, ThreadState after) {
+    super(before, after);
   }
 
   @Override
   public DrawElement getNextElement() {
-    return new SimpleDrawElement(myColor, myAfter, myAfter);
+    return new SimpleDrawElement(myAfter, myAfter);
   }
 
   @Override
@@ -53,9 +53,6 @@ public class EventDrawElement extends DrawElement {
   }
 
   private void drawEvent(Graphics g, int padding) {
-    if (!GraphSettings.USE_STD_COLORS) {
-      g.setColor(myColor);
-    }
     Graphics2D g2 = (Graphics2D)g;
     double r = GraphSettings.CELL_HEIGH * 0.25;
     double newX = Math.round((padding + 0.5f) * GraphSettings.NODE_WIDTH) - r;

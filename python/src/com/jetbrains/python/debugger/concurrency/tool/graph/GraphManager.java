@@ -21,18 +21,17 @@ import com.intellij.util.containers.hash.HashMap;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyThreadEvent;
 import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManager;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyColorManager;
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.DrawElement;
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.EventDrawElement;
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.SimpleDrawElement;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.*;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Map;
 
 public class GraphManager {
   private final PyConcurrencyLogManager myLogManager;
-  private final ConcurrencyColorManager myColorManager;
   private DrawElement[][] myGraphScheme;
   private int[] threadCountForRow;
   private Map<String, Integer> threadIndexToId;
@@ -41,9 +40,8 @@ public class GraphManager {
   private int[][] relations;
   private GraphAnalyser myGraphAnalyser;
 
-  public GraphManager(PyConcurrencyLogManager logManager, ConcurrencyColorManager colorManager) {
+  public GraphManager(PyConcurrencyLogManager logManager) {
     myLogManager = logManager;
-    myColorManager = colorManager;
     threadIndexToId = new HashMap<String, Integer>();
     updateGraph();
 
@@ -65,34 +63,38 @@ public class GraphManager {
     }
   }
 
+  public int getSize() {
+    return myLogManager.getSize();
+  }
+
+  public PyConcurrencyEvent getEventAt(int index) {
+    return myLogManager.getEventAt(index);
+  }
+
   public ArrayList<DrawElement> getDrawElementsForRow(int row) {
     synchronized (myUpdateObject) {
-      ArrayList<DrawElement> rowElements = new ArrayList<DrawElement>();
-      for (DrawElement element : myGraphScheme[row]) {
-        rowElements.add(element);
-      }
-      return rowElements;
+      return new ArrayList<DrawElement>(Arrays.asList(myGraphScheme[row]));
     }
   }
 
   private DrawElement getDrawElementForEvent(PyConcurrencyEvent event, DrawElement previousElement, int index) {
     switch (event.getType()) {
       case CREATE:
-        return new EventDrawElement(null, previousElement.getAfter(), previousElement.getAfter());
+        return new EventDrawElement(previousElement.getAfter(), previousElement.getAfter());
       case START:
-        return new EventDrawElement(null, new StoppedThreadState(), new RunThreadState());
+        return new EventDrawElement(new StoppedThreadState(), new RunThreadState());
       case JOIN:
-        return new EventDrawElement(null, previousElement.getAfter(), previousElement.getAfter());
+        return new EventDrawElement(previousElement.getAfter(), previousElement.getAfter());
       case STOP:
-        return new EventDrawElement(null, previousElement.getAfter(), new StoppedThreadState());
+        return new EventDrawElement(previousElement.getAfter(), new StoppedThreadState());
       case ACQUIRE_BEGIN:
-        return new EventDrawElement(null, previousElement.getAfter(), new LockWaitThreadState());
+        return new EventDrawElement(previousElement.getAfter(), new LockWaitThreadState());
       case ACQUIRE_END:
-        return new EventDrawElement(null, previousElement.getAfter(), new LockOwnThreadState());
+        return new EventDrawElement(previousElement.getAfter(), new LockOwnThreadState());
       case RELEASE:
-        return new EventDrawElement(null, previousElement.getAfter(), myGraphAnalyser.getThreadStateAt(index, event.getThreadId()));
+        return new EventDrawElement(previousElement.getAfter(), myGraphAnalyser.getThreadStateAt(index, event.getThreadId()));
       default:
-        return new SimpleDrawElement(null, new StoppedThreadState(), new StoppedThreadState());
+        return new SimpleDrawElement(new StoppedThreadState(), new StoppedThreadState());
     }
   }
 
@@ -118,7 +120,7 @@ public class GraphManager {
 
         if (event.isThreadEvent() && event.getType() == PyConcurrencyEvent.EventType.START) {
           DrawElement element;
-          element = new EventDrawElement(myColorManager.getItemColor(eventThreadId), new StoppedThreadState(), new RunThreadState());
+          element = new EventDrawElement(new StoppedThreadState(), new RunThreadState());
           currentMaxThread++;
           threadIndexToId.put(eventThreadId, currentMaxThread - 1);
 
@@ -134,7 +136,6 @@ public class GraphManager {
           myGraphScheme[i] = new DrawElement[currentMaxThread];
           for (int j = 0; j < currentMaxThread - 1; ++j) {
             myGraphScheme[i][j] = myGraphScheme[i - 1][j].getNextElement();
-            myGraphScheme[i][j].setColor(myGraphScheme[i - 1][j].getColor());
           }
           myGraphScheme[i][currentMaxThread - 1] = element;
 
@@ -154,12 +155,10 @@ public class GraphManager {
           for (int j = 0; j < currentMaxThread; ++j) {
             if (j != eventThreadIdInt) {
               myGraphScheme[i][j] = myGraphScheme[i - 1][j].getNextElement();
-              myGraphScheme[i][j].setColor(myGraphScheme[i - 1][j].getColor());
             }
           }
 
           myGraphScheme[i][eventThreadIdInt] = getDrawElementForEvent(event, myGraphScheme[i - 1][eventThreadIdInt], i);
-          myGraphScheme[i][eventThreadIdInt].setColor(myColorManager.getItemColor(eventThreadId));
 
           if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_BEGIN) {
             HashSet<String> deadlocked = myGraphAnalyser.checkForDeadlocks(i);

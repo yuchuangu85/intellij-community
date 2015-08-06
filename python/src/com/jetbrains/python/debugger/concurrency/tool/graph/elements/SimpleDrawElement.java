@@ -23,13 +23,13 @@ import java.awt.*;
 
 public class SimpleDrawElement extends DrawElement {
 
-  public SimpleDrawElement(Color color, ThreadState before, ThreadState after) {
-    super(color, before, after);
+  public SimpleDrawElement(ThreadState before, ThreadState after) {
+    super(before, after);
   }
 
   @Override
   public DrawElement getNextElement() {
-    return new SimpleDrawElement(myColor, myAfter, myAfter);
+    return new SimpleDrawElement(myAfter, myAfter);
   }
 
   @Override

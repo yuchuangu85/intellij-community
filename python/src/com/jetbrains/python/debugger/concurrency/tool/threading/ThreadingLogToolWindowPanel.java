@@ -43,9 +43,9 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
     logManager = PyThreadingLogManagerImpl.getInstance(project);
     myGraphManager = new GraphManager(logManager);
 
-    logManager.registerListener(new PyThreadingLogManagerImpl.Listener() {
+    myGraphManager.registerListener(new GraphManager.GraphListener() {
       @Override
-      public void logChanged() {
+      public void graphChanged() {
         UIUtil.invokeLaterIfNeeded(new Runnable() {
           @Override
           public void run() {

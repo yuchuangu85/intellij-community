@@ -20,7 +20,7 @@ import com.jetbrains.python.debugger.concurrency.tool.GraphSettings;
 import java.awt.*;
 
 
-public class LockOwnThreadState extends ThreadState {
+public class LockOwnThreadState implements ThreadState {
   @Override
   public void prepareStroke(Graphics g) {
     Graphics2D g2 = (Graphics2D)g;

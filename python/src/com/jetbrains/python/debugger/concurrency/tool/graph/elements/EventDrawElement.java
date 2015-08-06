@@ -34,7 +34,7 @@ public class EventDrawElement extends DrawElement {
   }
 
   @Override
-  public void drawElement(Graphics g, int padding) {
+  public void paint(Graphics g, int padding) {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     int x = Math.round((padding + 0.5f) * GraphSettings.NODE_WIDTH);

@@ -18,6 +18,6 @@ package com.jetbrains.python.debugger.concurrency.tool.graph.states;
 import java.awt.*;
 
 
-public abstract class ThreadState {
-  public abstract void prepareStroke(Graphics g);
+public interface ThreadState {
+  void prepareStroke(Graphics g);
 }

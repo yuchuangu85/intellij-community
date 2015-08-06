@@ -31,9 +31,6 @@ import org.jetbrains.annotations.Nullable;
 
 public class ConcurrencyView implements PersistentStateComponent<ConcurrencyView.State>, Disposable {
   private final Project myProject;
-  private ContentManager myContentManager;
-  private ConcurrencyPanel myGraphPanel;
-  private ConcurrencyPanel myAsyncioPanel;
 
   public ConcurrencyView(Project project) {
     myProject = project;
@@ -61,17 +58,17 @@ public class ConcurrencyView implements PersistentStateComponent<ConcurrencyView
 
   public void initToolWindow(@NotNull ToolWindow toolWindow) {
     ContentFactory contentFactory = ContentFactory.SERVICE.getInstance();
-    myGraphPanel = new ThreadingLogToolWindowPanel(myProject);
-    Content mainContent = contentFactory.createContent(myGraphPanel, null, false);
-    mainContent.setComponent(myGraphPanel);
+    ConcurrencyPanel graphPanel = new ThreadingLogToolWindowPanel(myProject);
+    Content mainContent = contentFactory.createContent(graphPanel, null, false);
+    mainContent.setComponent(graphPanel);
     mainContent.setDisplayName("Threading graph");
     Disposer.register(myProject, mainContent);
-    myContentManager = toolWindow.getContentManager();
+    ContentManager myContentManager = toolWindow.getContentManager();
     myContentManager.addContent(mainContent);
 
-    myAsyncioPanel = new AsyncioLogToolWindowPanel(myProject);
-    Content lockPanelContent = contentFactory.createContent(myAsyncioPanel, null, false);
-    lockPanelContent.setComponent(myAsyncioPanel);
+    ConcurrencyPanel asyncioPanel = new AsyncioLogToolWindowPanel(myProject);
+    Content lockPanelContent = contentFactory.createContent(asyncioPanel, null, false);
+    lockPanelContent.setComponent(asyncioPanel);
     lockPanelContent.setDisplayName("Asyncio graph");
     Disposer.register(myProject, lockPanelContent);
     myContentManager = toolWindow.getContentManager();

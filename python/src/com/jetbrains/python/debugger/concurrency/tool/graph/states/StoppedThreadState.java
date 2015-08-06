@@ -17,7 +17,7 @@ package com.jetbrains.python.debugger.concurrency.tool.graph.states;
 
 import java.awt.*;
 
-public class StoppedThreadState extends ThreadState {
+public class StoppedThreadState implements ThreadState {
   @Override
   public void prepareStroke(Graphics g) {
   }

@@ -28,7 +28,6 @@ import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable
 import com.jetbrains.python.debugger.concurrency.tool.asyncio.table.AsyncioTable;
 import com.jetbrains.python.debugger.concurrency.tool.asyncio.table.AsyncioTableModel;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
-import com.jetbrains.python.debugger.concurrency.tool.threading.PyThreadingLogManagerImpl;
 
 import javax.swing.*;
 import java.awt.*;
@@ -44,9 +43,9 @@ public class AsyncioLogToolWindowPanel extends ConcurrencyPanel {
     logManager = PyAsyncioLogManagerImpl.getInstance(project);
     myGraphManager = new GraphManager(logManager);
 
-    logManager.registerListener(new PyThreadingLogManagerImpl.Listener() {
+    myGraphManager.registerListener(new GraphManager.GraphListener() {
       @Override
-      public void logChanged() {
+      public void graphChanged() {
         UIUtil.invokeLaterIfNeeded(new Runnable() {
           @Override
           public void run() {
@@ -105,7 +104,7 @@ public class AsyncioLogToolWindowPanel extends ConcurrencyPanel {
   }
 
   public void buildLog() {
-    if (logManager.getSize() == 0) {
+    if (myGraphManager.getSize() == 0) {
       myTable = null;
       initMessage();
       return;

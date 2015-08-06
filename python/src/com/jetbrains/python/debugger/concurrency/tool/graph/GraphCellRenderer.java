@@ -56,7 +56,7 @@ public class GraphCellRenderer extends ColoredTableCellRenderer {
     ArrayList<DrawElement> rowElements = myGraphManager.getDrawElementsForRow(myRow);
     int i = 0;
     for (DrawElement element: rowElements) {
-      element.drawElement(g, i);
+      element.paint(g, i);
       ++i;
     }
     int[] relation = myGraphManager.getRelationForRow(myRow);

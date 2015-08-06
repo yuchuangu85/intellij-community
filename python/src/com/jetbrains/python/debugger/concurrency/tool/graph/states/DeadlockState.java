@@ -19,10 +19,7 @@ import com.jetbrains.python.debugger.concurrency.tool.GraphSettings;
 
 import java.awt.*;
 
-/**
- * Created by user on 5/4/15.
- */
-public class DeadlockState extends ThreadState {
+public class DeadlockState implements ThreadState {
   @Override
   public void prepareStroke(Graphics g) {
     Graphics2D g2 = (Graphics2D)g;

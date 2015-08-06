@@ -25,9 +25,11 @@ import com.jetbrains.python.debugger.concurrency.tool.graph.elements.DrawElement
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.EventDrawElement;
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.SimpleDrawElement;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.*;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 public class GraphManager {
@@ -38,6 +40,7 @@ public class GraphManager {
   private final Object myUpdateObject = new Object();
   private int currentMaxThread = 0;
   private int[][] relations;
+  private List<GraphListener> myListeners = new ArrayList<GraphListener>();
   private GraphAnalyser myGraphAnalyser;
 
   public GraphManager(PyConcurrencyLogManager logManager) {
@@ -45,12 +48,30 @@ public class GraphManager {
     threadIndexToId = new HashMap<String, Integer>();
     updateGraph();
 
-    myLogManager.registerListener(new PyConcurrencyLogManager.Listener() {
+    myLogManager.registerListener(new PyConcurrencyLogManager.LogListener() {
       @Override
       public void logChanged() {
         updateGraph();
       }
     });
+  }
+
+  public interface GraphListener {
+    void graphChanged();
+  }
+
+  public void registerListener(@NotNull GraphListener logListener) {
+    synchronized (myUpdateObject) {
+      myListeners.add(logListener);
+    }
+  }
+
+  public void notifyListeners() {
+    synchronized (myUpdateObject) {
+      for (GraphListener logListener : myListeners) {
+        logListener.graphChanged();
+      }
+    }
   }
 
   public String getStringForRow(int row) {
@@ -146,8 +167,7 @@ public class GraphManager {
             String parentId = ((PyThreadEvent)event).getParentThreadId();
             if ((parentId != null) && (threadIndexToId.containsKey(parentId))) {
               int parentNum = threadIndexToId.get(((PyThreadEvent)event).getParentThreadId());
-              int eventNum = eventThreadIdInt;
-              addRelation(i, parentNum, eventNum);
+              addRelation(i, parentNum, eventThreadIdInt);
             }
           }
 
@@ -172,5 +192,6 @@ public class GraphManager {
         threadCountForRow[i] = currentMaxThread;
       }
     }
+    notifyListeners();
   }
 }

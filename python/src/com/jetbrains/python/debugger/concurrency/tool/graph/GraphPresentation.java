@@ -23,9 +23,9 @@ import java.util.List;
 
 public class GraphPresentation {
   private final GraphManager myGraphManager;
-  private GraphVisualSettings myVisualSettings;
   private List<PresentationListener> myListeners = new ArrayList<PresentationListener>();
   private final Object myListenersObject = new Object();
+  private GraphVisualSettings myVisualSettings;
 
   public GraphPresentation(final GraphManager graphManager, GraphVisualSettings visualSettings) {
     myGraphManager = graphManager;
@@ -51,11 +51,19 @@ public class GraphPresentation {
   private void updateGraphModel() {
   }
 
+  public GraphVisualSettings getVisualSettings() {
+    return myVisualSettings;
+  }
+
+  public int getLinesNumber() {
+    return myGraphManager.getMaxThread();
+  }
+
   public ArrayList<ArrayList<DrawElement>> getVisibleGraph() {
     synchronized (myListenersObject) {
-      int val = myVisualSettings.getScrollbarValue();
-      int first = myVisualSettings.getScrollbarMax() != 0 ? val * myGraphManager.getSize() / myVisualSettings.getScrollbarMax() : 0;
-      int last = Math.min(first + myVisualSettings.getScrollbarExtent() / GraphSettings.CELL_WIDTH + 2, myGraphManager.getSize());
+      int val = myVisualSettings.getHorizontalValue();
+      int first = myVisualSettings.getHorizontalMax() == 0 ? 0 : val * myGraphManager.getSize() / myVisualSettings.getHorizontalMax();
+      int last = Math.min(first + myVisualSettings.getHorizontalExtent() / GraphSettings.CELL_WIDTH + 2, myGraphManager.getSize());
       ArrayList<ArrayList<DrawElement>> ret = new ArrayList<ArrayList<DrawElement>>();
       for (int i = first; i < last; ++i) {
         ret.add(myGraphManager.getDrawElementsForRow(i));
@@ -78,8 +86,8 @@ public class GraphPresentation {
   public void notifyListeners() {
     synchronized (myListenersObject) {
       for (PresentationListener logListener : myListeners) {
-        logListener.graphChanged(myVisualSettings.getScrollbarMax() == 0 ? myVisualSettings.getScrollbarValue() :
-                                 myVisualSettings.getScrollbarValue() * myGraphManager.getSize() / myVisualSettings.getScrollbarMax(),
+        logListener.graphChanged(myVisualSettings.getHorizontalMax() == 0 ? myVisualSettings.getHorizontalValue() :
+                                 myVisualSettings.getHorizontalValue() * myGraphManager.getSize() / myVisualSettings.getHorizontalMax(),
                                  myGraphManager.getSize());
       }
     }

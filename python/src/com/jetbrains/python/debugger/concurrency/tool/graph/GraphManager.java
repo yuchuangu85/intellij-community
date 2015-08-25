@@ -77,6 +77,10 @@ public class GraphManager {
     }
   }
 
+  public int getMaxThread() {
+    return myCurrentMaxThread;
+  }
+
   public String getStringForRow(int row) {
     synchronized (myUpdateObject) {
       StringBuilder sb = new StringBuilder();

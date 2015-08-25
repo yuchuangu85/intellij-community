@@ -17,6 +17,8 @@
 package com.jetbrains.python.debugger.concurrency.tool.graph;
 
 
+import com.intellij.ui.JBColor;
+
 import java.awt.*;
 
 public class GraphSettings {
@@ -30,4 +32,5 @@ public class GraphSettings {
   public static Color LOCK_WAIT_COLOR = new Color(255, 179, 3);
   public static Color LOCK_OWNING_COLOR = new Color(120, 255, 0);
   public static Color DEADLOCK_COLOR = Color.RED;
+  public static Color BACKGROUND_COLOR = JBColor.WHITE;
 }

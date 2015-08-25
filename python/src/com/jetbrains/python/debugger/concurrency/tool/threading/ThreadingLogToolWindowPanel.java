@@ -118,7 +118,11 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
       int orient = source.getOrientation();
       if (orient == Adjustable.HORIZONTAL) {
         JScrollBar bar = myPane.getHorizontalScrollBar();
-        myVisualSettings.updateScrollbarValues(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
+        myVisualSettings.updateHorizontalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
+      }
+      if (orient == Adjustable.VERTICAL) {
+        JScrollBar bar = myPane.getVerticalScrollBar();
+        myVisualSettings.updateVerticalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
     }
   }
@@ -136,6 +140,10 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
       AdjustmentListener listener = new MyAdjustmentListener();
       myPane.getHorizontalScrollBar().addAdjustmentListener(listener);
       myPane.getVerticalScrollBar().addAdjustmentListener(listener);
+      JScrollBar bar = myPane.getHorizontalScrollBar();
+      myVisualSettings.updateHorizontalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
+      bar = myPane.getVerticalScrollBar();
+      myVisualSettings.updateVerticalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       add(myPane);
       setToolbar(createToolbarPanel());
     }

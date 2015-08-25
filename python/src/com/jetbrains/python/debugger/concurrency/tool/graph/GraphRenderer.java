@@ -28,10 +28,7 @@ public class GraphRenderer extends JComponent {
   private int myFullLogSize;
 
   public GraphRenderer(GraphPresentation graphPresentation) {
-    setPreferredSize(new Dimension(myFullLogSize * GraphSettings.CELL_WIDTH, 200));
-    setBackground(JBColor.WHITE);
     myGraphPresentation = graphPresentation;
-
     myGraphPresentation.registerListener(new GraphPresentation.PresentationListener() {
       @Override
       public void graphChanged(int leftPadding, int size) {
@@ -40,18 +37,32 @@ public class GraphRenderer extends JComponent {
         update();
       }
     });
+    updateSize();
+  }
+
+  private void updateSize() {
+    int width = myFullLogSize * GraphSettings.CELL_WIDTH;
+    int height = Math.max((GraphSettings.CELL_HEIGHT + GraphSettings.INTERVAL) * myGraphPresentation.getLinesNumber() +
+                        2 * GraphSettings.INTERVAL,
+                        myGraphPresentation.getVisualSettings().getVerticalValue() +
+                        myGraphPresentation.getVisualSettings().getVerticalExtent() - GraphSettings.CELL_HEIGHT);
+    setPreferredSize(new Dimension(width, height));
   }
 
   private void update() {
     repaint();
   }
 
+  private void paintBackground(Graphics g) {
+    updateSize();
+    g.setColor(GraphSettings.BACKGROUND_COLOR);
+    g.fillRect(0, 0, getWidth(), getHeight());
+  }
+
   @Override
   public void paintComponent(Graphics g) {
     super.paintComponent(g);
-    setPreferredSize(new Dimension(myFullLogSize * GraphSettings.CELL_WIDTH, 200));
-    setBackground(JBColor.WHITE);
-
+    paintBackground(g);
     ArrayList<ArrayList<DrawElement>> elements = myGraphPresentation.getVisibleGraph();
     for (int i = 0; i < elements.size(); ++i) {
       ArrayList<DrawElement> row = elements.get(i);

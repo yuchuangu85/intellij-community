@@ -22,22 +22,36 @@ import java.util.List;
 
 public class GraphVisualSettings {
   private int myScale = 1;
-  private int myScrollbarValue = 0;
-  private int myScrollbarExtent;
-  private int myScrollbarMax;
+  private int myHorizontalValue = 0;
+  private int myHorizontalExtent;
+  private int myHorizontalMax;
+  private int myVerticalValue = 0;
+  private int myVerticalExtent;
+  private int myVerticalMax;
   private List<SettingsListener> myListeners = new ArrayList<SettingsListener>();
 
-
-  public int getScrollbarValue() {
-    return myScrollbarValue;
+  public int getVerticalValue() {
+    return myVerticalValue;
   }
 
-  public int getScrollbarExtent() {
-    return myScrollbarExtent;
+  public int getVerticalExtent() {
+    return myVerticalExtent;
   }
 
-  public int getScrollbarMax() {
-    return myScrollbarMax;
+  public int getVerticalMax() {
+    return myVerticalMax;
+  }
+
+  public int getHorizontalValue() {
+    return myHorizontalValue;
+  }
+
+  public int getHorizontalExtent() {
+    return myHorizontalExtent;
+  }
+
+  public int getHorizontalMax() {
+    return myHorizontalMax;
   }
 
   public int getScale() {
@@ -45,10 +59,17 @@ public class GraphVisualSettings {
   }
 
 
-  public void updateScrollbarValues(int scrollbarValue, int scrollbarExtent, int scrollMax) {
-    myScrollbarValue = scrollbarValue;
-    myScrollbarExtent = scrollbarExtent;
-    myScrollbarMax = scrollMax;
+  public void updateHorizontalScrollbar(int scrollbarValue, int scrollbarExtent, int scrollMax) {
+    myHorizontalValue = scrollbarValue;
+    myHorizontalExtent = scrollbarExtent;
+    myHorizontalMax = scrollMax;
+    notifyListeners();
+  }
+
+  public void updateVerticalScrollbar(int scrollbarValue, int scrollbarExtent, int scrollMax) {
+    myVerticalValue = scrollbarValue;
+    myVerticalExtent = scrollbarExtent;
+    myVerticalMax = scrollMax;
     notifyListeners();
   }
 

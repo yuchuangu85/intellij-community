@@ -15,12 +15,11 @@
  */
 package com.jetbrains.python.debugger.concurrency.tool.graph.elements;
 
-import com.jetbrains.python.debugger.concurrency.tool.GraphSettings;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphSettings;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.StoppedThreadState;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.ThreadState;
 
 import java.awt.*;
-import java.awt.geom.RoundRectangle2D;
 
 public class EventDrawElement extends DrawElement {
 
@@ -34,33 +33,15 @@ public class EventDrawElement extends DrawElement {
   }
 
   @Override
-  public void paint(Graphics g, int padding) {
+  public void paint(Graphics g, int x, int y) {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    int x = Math.round((padding + 0.5f) * GraphSettings.NODE_WIDTH);
-
     if (!(myBefore instanceof StoppedThreadState)) {
       myBefore.prepareStroke(g2);
-      g2.drawLine(x, 0, x, Math.round(GraphSettings.CELL_HEIGH * 0.5f));
     }
-
     if (!(myAfter instanceof StoppedThreadState)) {
       myAfter.prepareStroke(g2);
-      g2.drawLine(x, Math.round(GraphSettings.CELL_HEIGH * 0.5f), x, GraphSettings.CELL_HEIGH);
     }
-
-    drawEvent(g2, padding);
-  }
-
-  private void drawEvent(Graphics g, int padding) {
-    Graphics2D g2 = (Graphics2D)g;
-    double r = GraphSettings.CELL_HEIGH * 0.25;
-    double newX = Math.round((padding + 0.5f) * GraphSettings.NODE_WIDTH) - r;
-    double newY = GraphSettings.CELL_HEIGH * 0.5 - r;
-    RoundRectangle2D rectangle2D = new RoundRectangle2D.Double(newX, newY,
-                                                               GraphSettings.CELL_HEIGH * 0.5,
-                                                               GraphSettings.CELL_HEIGH * 0.5,
-                                                               50, 50);
-    g2.fill(rectangle2D);
+    g2.fillRect(x, y, GraphSettings.CELL_WIDTH, GraphSettings.CELL_HEIGHT);
   }
 }

@@ -15,7 +15,7 @@
  */
 package com.jetbrains.python.debugger.concurrency.tool.graph.states;
 
-import com.jetbrains.python.debugger.concurrency.tool.GraphSettings;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphSettings;
 
 import java.awt.*;
 

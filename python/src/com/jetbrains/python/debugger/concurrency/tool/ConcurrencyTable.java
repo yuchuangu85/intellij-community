@@ -20,6 +20,7 @@ import com.intellij.ui.AppUIUtil;
 import com.intellij.ui.table.JBTable;
 import com.intellij.xdebugger.XSourcePosition;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphSettings;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.table.TableModel;
@@ -35,7 +36,7 @@ public class ConcurrencyTable extends JBTable {
     myGraphManager = graphManager;
     myProject = project;
     myPanel = panel;
-    setRowHeight(GraphSettings.CELL_HEIGH);
+    setRowHeight(GraphSettings.CELL_HEIGHT);
     setShowHorizontalLines(false);
   }
 

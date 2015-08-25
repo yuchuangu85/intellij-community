@@ -26,37 +26,47 @@ import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManager;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
-import com.jetbrains.python.debugger.concurrency.tool.threading.table.ThreadingTable;
-import com.jetbrains.python.debugger.concurrency.tool.threading.table.ThreadingTableModel;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphPresentation;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphRenderer;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphVisualSettings;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.AdjustmentEvent;
+import java.awt.event.AdjustmentListener;
 
 public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
   private final Project myProject;
-  private final GraphManager myGraphManager;
-  private JTable myTable;
+  private GraphRenderer myRenderer;
+  private GraphVisualSettings myVisualSettings;
 
   public ThreadingLogToolWindowPanel(Project project) {
     super(false, project);
     myProject = project;
     logManager = PyThreadingLogManagerImpl.getInstance(project);
-    myGraphManager = new GraphManager(logManager);
+    myVisualSettings = new GraphVisualSettings();
+    GraphPresentation graphPresentation = new GraphPresentation(new GraphManager(logManager), myVisualSettings);
+    myRenderer = new GraphRenderer(graphPresentation);
 
-    myGraphManager.registerListener(new GraphManager.GraphListener() {
+    graphPresentation.registerListener(new GraphPresentation.PresentationListener() {
       @Override
-      public void graphChanged() {
+      public void graphChanged(int padding, int size) {
         UIUtil.invokeLaterIfNeeded(new Runnable() {
           @Override
           public void run() {
-            buildLog();
+            updateImage();
           }
         });
       }
     });
 
-    initMessage();
-    buildLog();
+    UIUtil.invokeLaterIfNeeded(new Runnable() {
+      @Override
+      public void run() {
+        initMessage();
+        updateImage();
+      }
+    });
   }
 
   @Override
@@ -102,22 +112,33 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
     add(myLabel);
   }
 
-  public void buildLog() {
+  private class MyAdjustmentListener implements AdjustmentListener {
+    public void adjustmentValueChanged(AdjustmentEvent evt) {
+      Adjustable source = evt.getAdjustable();
+      int orient = source.getOrientation();
+      if (orient == Adjustable.HORIZONTAL) {
+        JScrollBar bar = myPane.getHorizontalScrollBar();
+        myVisualSettings.updateScrollbarValues(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
+      }
+    }
+  }
+
+  public void updateImage() {
     if (logManager.getSize() == 0) {
-      myTable = null;
+      myPane = null;
       initMessage();
       return;
     }
 
-    if (myTable == null) {
+    if (myPane == null) {
       myLabel.setVisible(false);
-      myTable = new ThreadingTable(myGraphManager, myProject, this);
-      myTable.setModel(new ThreadingTableModel(myGraphManager));
-      myPane = ScrollPaneFactory.createScrollPane(myTable);
+      myPane = ScrollPaneFactory.createScrollPane(myRenderer);
+      AdjustmentListener listener = new MyAdjustmentListener();
+      myPane.getHorizontalScrollBar().addAdjustmentListener(listener);
+      myPane.getVerticalScrollBar().addAdjustmentListener(listener);
       add(myPane);
       setToolbar(createToolbarPanel());
     }
-    myTable.setModel(new ThreadingTableModel(myGraphManager));
   }
 
   @Override

@@ -18,7 +18,6 @@ package com.jetbrains.python.debugger.concurrency.tool.graph;
 
 
 import com.intellij.ui.ColoredTableCellRenderer;
-import com.jetbrains.python.debugger.concurrency.tool.GraphSettings;
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.DrawElement;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.StoppedThreadState;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.ThreadState;
@@ -44,9 +43,9 @@ public class GraphCellRenderer extends ColoredTableCellRenderer {
   private void drawRelation(Graphics g, int parent, int child) {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    int x_start = Math.round((parent + 0.5f) * GraphSettings.NODE_WIDTH);
-    int x_finish = Math.round((child + 0.5f) * GraphSettings.NODE_WIDTH);
-    int y = Math.round(GraphSettings.CELL_HEIGH * 0.5f);
+    int x_start = Math.round((parent + 0.5f) * GraphSettings.CELL_WIDTH);
+    int x_finish = Math.round((child + 0.5f) * GraphSettings.CELL_WIDTH);
+    int y = Math.round(GraphSettings.CELL_HEIGHT * 0.5f);
     g2.drawLine(x_start, y, x_finish, y);
   }
 
@@ -55,10 +54,10 @@ public class GraphCellRenderer extends ColoredTableCellRenderer {
     super.paintComponent(g);
     ArrayList<DrawElement> rowElements = myGraphManager.getDrawElementsForRow(myRow);
     int i = 0;
-    for (DrawElement element: rowElements) {
-      element.paint(g, i);
-      ++i;
-    }
+    //for (DrawElement element: rowElements) {
+    //  element.paintInTable(g, i);
+    //  ++i;
+    //}
     int[] relation = myGraphManager.getRelationForRow(myRow);
     if (relation[0] != relation[1]) {
       DrawElement element = rowElements.get(relation[1]);

@@ -15,7 +15,7 @@
  */
 package com.jetbrains.python.debugger.concurrency.tool.graph.elements;
 
-import com.jetbrains.python.debugger.concurrency.tool.GraphSettings;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphSettings;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.StoppedThreadState;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.ThreadState;
 
@@ -33,19 +33,14 @@ public class SimpleDrawElement extends DrawElement {
   }
 
   @Override
-  public void paint(Graphics g, int padding) {
+  public void paint(Graphics g, int x, int y) {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    int x = Math.round((padding + 0.5f) * GraphSettings.NODE_WIDTH);
 
     if (myBefore instanceof StoppedThreadState) {
       return;
     }
-
     myBefore.prepareStroke(g2);
-    g2.drawLine(x, 0, x, Math.round(GraphSettings.CELL_HEIGH * 0.5f));
-    myAfter.prepareStroke(g2);
-    g2.drawLine(x, Math.round(GraphSettings.CELL_HEIGH * 0.5f), x, GraphSettings.CELL_HEIGH);
-
+    g2.fillRect(x, y, GraphSettings.CELL_WIDTH, GraphSettings.CELL_HEIGHT);
   }
 }

@@ -25,6 +25,7 @@ public class GraphPresentation {
   private final GraphManager myGraphManager;
   private GraphVisualSettings myVisualSettings;
   private List<PresentationListener> myListeners = new ArrayList<PresentationListener>();
+  private final Object myListenersObject = new Object();
 
   public GraphPresentation(final GraphManager graphManager, GraphVisualSettings visualSettings) {
     myGraphManager = graphManager;
@@ -51,14 +52,16 @@ public class GraphPresentation {
   }
 
   public ArrayList<ArrayList<DrawElement>> getVisibleGraph() {
-    int val = myVisualSettings.getScrollbarValue();
-    int first = val * myGraphManager.getSize() / myVisualSettings.getScrollbarMax();
-    int last = Math.min(first + myVisualSettings.getScrollbarExtent() / GraphSettings.CELL_WIDTH + 2, myGraphManager.getSize());
-    ArrayList<ArrayList<DrawElement>> ret = new ArrayList<ArrayList<DrawElement>>();
-    for (int i = first; i < last; ++i) {
-      ret.add(myGraphManager.getDrawElementsForRow(i));
+    synchronized (myListenersObject) {
+      int val = myVisualSettings.getScrollbarValue();
+      int first = myVisualSettings.getScrollbarMax() != 0 ? val * myGraphManager.getSize() / myVisualSettings.getScrollbarMax() : 0;
+      int last = Math.min(first + myVisualSettings.getScrollbarExtent() / GraphSettings.CELL_WIDTH + 2, myGraphManager.getSize());
+      ArrayList<ArrayList<DrawElement>> ret = new ArrayList<ArrayList<DrawElement>>();
+      for (int i = first; i < last; ++i) {
+        ret.add(myGraphManager.getDrawElementsForRow(i));
+      }
+      return ret;
     }
-    return ret;
   }
 
 
@@ -67,14 +70,18 @@ public class GraphPresentation {
   }
 
   public void registerListener(@NotNull PresentationListener logListener) {
-    myListeners.add(logListener);
+    synchronized (myListenersObject) {
+      myListeners.add(logListener);
+    }
   }
 
   public void notifyListeners() {
-    for (PresentationListener logListener : myListeners) {
-      logListener.graphChanged(myVisualSettings.getScrollbarMax() == 0? myVisualSettings.getScrollbarValue():
-                               myVisualSettings.getScrollbarValue() * myGraphManager.getSize() / myVisualSettings.getScrollbarMax(),
-                               myGraphManager.getSize());
+    synchronized (myListenersObject) {
+      for (PresentationListener logListener : myListeners) {
+        logListener.graphChanged(myVisualSettings.getScrollbarMax() == 0 ? myVisualSettings.getScrollbarValue() :
+                                 myVisualSettings.getScrollbarValue() * myGraphManager.getSize() / myVisualSettings.getScrollbarMax(),
+                                 myGraphManager.getSize());
+      }
     }
   }
 

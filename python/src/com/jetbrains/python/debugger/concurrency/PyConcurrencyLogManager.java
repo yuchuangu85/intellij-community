@@ -68,10 +68,11 @@ public abstract class PyConcurrencyLogManager {
         lastSession = debugSession;
         myLog = new ArrayList<PyConcurrencyEvent>();
         addSessionListener();
+        notifyListeners(true);
         return;
       }
       myLog.add(event);
-      notifyListeners();
+      notifyListeners(false);
     }
   }
 
@@ -79,7 +80,7 @@ public abstract class PyConcurrencyLogManager {
     lastSession.addSessionListener(new XDebugSessionListener() {
       @Override
       public void sessionPaused() {
-        notifyListeners();
+        notifyListeners(false);
       }
 
       @Override
@@ -88,7 +89,7 @@ public abstract class PyConcurrencyLogManager {
 
       @Override
       public void sessionStopped() {
-        notifyListeners();
+        notifyListeners(false);
       }
 
       @Override
@@ -104,7 +105,7 @@ public abstract class PyConcurrencyLogManager {
   }
 
   public interface LogListener {
-    void logChanged();
+    void logChanged(boolean isNewSession);
   }
 
   public void registerListener(@NotNull LogListener logListener) {
@@ -113,10 +114,10 @@ public abstract class PyConcurrencyLogManager {
     }
   }
 
-  public void notifyListeners() {
+  public void notifyListeners(boolean isNewSession) {
     synchronized (myLogObject) {
       for (LogListener logListener : myListeners) {
-        logListener.logChanged();
+        logListener.logChanged(isNewSession);
       }
     }
   }

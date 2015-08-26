@@ -59,6 +59,10 @@ public class GraphPresentation {
     return myGraphManager.getMaxThread();
   }
 
+  public ArrayList<String> getThreadNames() {
+    return myGraphManager.getThreadNames();
+  }
+
   public ArrayList<ArrayList<DrawElement>> getVisibleGraph() {
     synchronized (myListenersObject) {
       int val = myVisualSettings.getHorizontalValue();

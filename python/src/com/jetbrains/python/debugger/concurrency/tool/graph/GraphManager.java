@@ -36,6 +36,7 @@ public class GraphManager {
   private ArrayList<ArrayList<DrawElement>> myGraphScheme;
   private ArrayList<Integer> myThreadCountForRow;
   private Map<String, Integer> threadIndexToId;
+  private ArrayList<String> threadNames;
   private final Object myUpdateObject = new Object();
   private int myCurrentMaxThread = 0;
   private int[][] relations;
@@ -44,7 +45,6 @@ public class GraphManager {
 
   public GraphManager(PyConcurrencyLogManager logManager) {
     myLogManager = logManager;
-    threadIndexToId = new HashMap<String, Integer>();
     createGraph();
     updateGraph();
 
@@ -79,6 +79,10 @@ public class GraphManager {
 
   public int getMaxThread() {
     return myCurrentMaxThread;
+  }
+
+  public ArrayList<String> getThreadNames() {
+    return new ArrayList<String>(threadNames);
   }
 
   public String getStringForRow(int row) {
@@ -135,6 +139,8 @@ public class GraphManager {
 
   private void createGraph() {
     synchronized (myUpdateObject) {
+      threadIndexToId = new HashMap<String, Integer>();
+      threadNames = new ArrayList<String>();
       myGraphScheme = new ArrayList<ArrayList<DrawElement>>(myLogManager.getSize());
       myThreadCountForRow = new ArrayList<Integer>();
       myGraphAnalyser = new GraphAnalyser(myLogManager);
@@ -155,6 +161,7 @@ public class GraphManager {
           element = new EventDrawElement(new StoppedThreadState(), new RunThreadState());
           myCurrentMaxThread++;
           threadIndexToId.put(eventThreadId, myCurrentMaxThread - 1);
+          threadNames.add(myCurrentMaxThread - 1, event.getThreadName());
           String parentId = ((PyThreadEvent)event).getParentThreadId();
           if (parentId != null) {
             if (threadIndexToId.containsKey(parentId)) {

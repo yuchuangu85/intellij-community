@@ -37,16 +37,17 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
   private final Project myProject;
   private GraphRenderer myRenderer;
   private GraphVisualSettings myVisualSettings;
+  private GraphPresentation myGraphPresentation;
 
   public ThreadingLogToolWindowPanel(Project project) {
     super(false, project);
     myProject = project;
     logManager = PyThreadingLogManagerImpl.getInstance(project);
     myVisualSettings = new GraphVisualSettings();
-    GraphPresentation graphPresentation = new GraphPresentation(new GraphManager(logManager), myVisualSettings);
-    myRenderer = new GraphRenderer(graphPresentation);
+    myGraphPresentation = new GraphPresentation(new GraphManager(logManager), myVisualSettings);
+    myRenderer = new GraphRenderer(myGraphPresentation);
 
-    graphPresentation.registerListener(new GraphPresentation.PresentationListener() {
+    myGraphPresentation.registerListener(new GraphPresentation.PresentationListener() {
       @Override
       public void graphChanged(int padding, int size) {
         UIUtil.invokeLaterIfNeeded(new Runnable() {
@@ -134,7 +135,7 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
 
   public void updateContent() {
     if (logManager.getSize() == 0) {
-      myVisualSettings.setNamesPanelWidth(myNamesPanel.getWidth());
+      myVisualSettings.setNamesPanelWidth(myNamesPanel == null? myVisualSettings.getNamesPanelWidth(): myNamesPanel.getWidth());
       myGraphPane = null;
       initMessage();
       return;
@@ -143,7 +144,7 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
     if (myGraphPane == null) {
       myLabel.setVisible(false);
       initGraphPane();
-      myNamesPanel = new ConcurrencyNamesPanel();
+      myNamesPanel = ScrollPaneFactory.createScrollPane(new ConcurrencyNamesPanel(myGraphPresentation));
 
       JSplitPane p = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
       p.add(myNamesPanel, JSplitPane.LEFT);

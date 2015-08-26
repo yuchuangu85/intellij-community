@@ -31,7 +31,7 @@ public abstract class ConcurrencyPanel extends SimpleToolWindowPanel implements 
   protected JLabel myLabel;
   protected StackTracePanel myStackTracePanel;
   protected JScrollPane myGraphPane;
-  protected ConcurrencyNamesPanel myNamesPanel;
+  protected JScrollPane myNamesPanel;
 
   public ConcurrencyPanel(boolean vertical, Project project) {
     super(vertical);

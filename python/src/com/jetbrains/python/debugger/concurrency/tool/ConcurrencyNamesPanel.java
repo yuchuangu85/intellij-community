@@ -15,8 +15,48 @@
  */
 package com.jetbrains.python.debugger.concurrency.tool;
 
+import com.intellij.util.ui.UIUtil;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphPresentation;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphSettings;
+
 import javax.swing.*;
+import java.awt.*;
+import java.util.ArrayList;
 
 public class ConcurrencyNamesPanel extends JComponent {
+  private final GraphPresentation myGraphPresentation;
 
+  public ConcurrencyNamesPanel(GraphPresentation presentation) {
+    myGraphPresentation = presentation;
+
+    myGraphPresentation.registerListener(new GraphPresentation.PresentationListener() {
+      @Override
+      public void graphChanged(int padding, int size) {
+        UIUtil.invokeLaterIfNeeded(new Runnable() {
+          @Override
+          public void run() {
+            updateNames();
+          }
+        });
+      }
+    });
+  }
+
+  private static int getYLocation(int i) {
+    return i * (GraphSettings.CELL_HEIGHT + GraphSettings.INTERVAL) + GraphSettings.INTERVAL;
+  }
+
+  private void updateNames() {
+    removeAll();
+    ArrayList<String> names = myGraphPresentation.getThreadNames();
+    setSize(new Dimension(getWidth(), getYLocation(names.size())));
+    for (int i = 0; i < names.size(); ++i) {
+      JLabel label = new JLabel();
+      label.setLocation(GraphSettings.INTERVAL, getYLocation(i));
+      label.setSize(new Dimension(getWidth(), GraphSettings.INTERVAL));
+      label.setText(names.get(i));
+      add(label);
+    }
+    repaint();
+  }
 }

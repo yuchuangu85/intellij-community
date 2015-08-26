@@ -30,7 +30,8 @@ public abstract class ConcurrencyPanel extends SimpleToolWindowPanel implements 
   protected PyConcurrencyLogManager logManager;
   protected JLabel myLabel;
   protected StackTracePanel myStackTracePanel;
-  protected JScrollPane myPane;
+  protected JScrollPane myGraphPane;
+  protected ConcurrencyNamesPanel myNamesPanel;
 
   public ConcurrencyPanel(boolean vertical, Project project) {
     super(vertical);
@@ -54,7 +55,7 @@ public abstract class ConcurrencyPanel extends SimpleToolWindowPanel implements 
   public void splitWindow(JComponent component) {
     removeAll();
     JSplitPane p = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
-    p.add(myPane, JSplitPane.LEFT);
+    p.add(myGraphPane, JSplitPane.LEFT);
     p.add(component, JSplitPane.RIGHT);
     p.setDividerLocation((int)getSize().getWidth() * 2 / 3);
     add(p, BorderLayout.CENTER);

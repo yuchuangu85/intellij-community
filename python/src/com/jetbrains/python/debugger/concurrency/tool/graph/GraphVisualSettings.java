@@ -28,7 +28,24 @@ public class GraphVisualSettings {
   private int myVerticalValue = 0;
   private int myVerticalExtent;
   private int myVerticalMax;
+  private int myNamesPanelWidth = NAMES_PANEL_INITIAL_WIDTH;
+  public static int NAMES_PANEL_INITIAL_WIDTH = 200;
+  public static int DIVIDER_WIDTH = 8;
+
   private List<SettingsListener> myListeners = new ArrayList<SettingsListener>();
+
+
+  public int getNamesPanelWidth() {
+    return myNamesPanelWidth;
+  }
+
+  public void setNamesPanelWidth(int namesPanelWidth) {
+    myNamesPanelWidth = namesPanelWidth;
+  }
+
+  public int getDividerWidth() {
+    return DIVIDER_WIDTH;
+  }
 
   public int getVerticalValue() {
     return myVerticalValue;

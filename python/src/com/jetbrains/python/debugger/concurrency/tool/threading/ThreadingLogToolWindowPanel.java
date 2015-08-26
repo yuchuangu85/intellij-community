@@ -23,12 +23,10 @@ import com.intellij.openapi.project.Project;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.util.ui.UIUtil;
 import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManager;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyNamesPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphPresentation;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphRenderer;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphVisualSettings;
+import com.jetbrains.python.debugger.concurrency.tool.graph.*;
 
 import javax.swing.*;
 import java.awt.*;
@@ -54,7 +52,7 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
         UIUtil.invokeLaterIfNeeded(new Runnable() {
           @Override
           public void run() {
-            updateImage();
+            updateContent();
           }
         });
       }
@@ -64,7 +62,7 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
       @Override
       public void run() {
         initMessage();
-        updateImage();
+        updateContent();
       }
     });
   }
@@ -117,35 +115,45 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
       Adjustable source = evt.getAdjustable();
       int orient = source.getOrientation();
       if (orient == Adjustable.HORIZONTAL) {
-        JScrollBar bar = myPane.getHorizontalScrollBar();
+        JScrollBar bar = myGraphPane.getHorizontalScrollBar();
         myVisualSettings.updateHorizontalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
       if (orient == Adjustable.VERTICAL) {
-        JScrollBar bar = myPane.getVerticalScrollBar();
+        JScrollBar bar = myGraphPane.getVerticalScrollBar();
         myVisualSettings.updateVerticalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
     }
   }
 
-  public void updateImage() {
+  private void initGraphPane() {
+    myGraphPane = ScrollPaneFactory.createScrollPane(myRenderer);
+    AdjustmentListener listener = new MyAdjustmentListener();
+    myGraphPane.getHorizontalScrollBar().addAdjustmentListener(listener);
+    myGraphPane.getVerticalScrollBar().addAdjustmentListener(listener);
+  }
+
+  public void updateContent() {
     if (logManager.getSize() == 0) {
-      myPane = null;
+      myVisualSettings.setNamesPanelWidth(myNamesPanel.getWidth());
+      myGraphPane = null;
       initMessage();
       return;
     }
 
-    if (myPane == null) {
+    if (myGraphPane == null) {
       myLabel.setVisible(false);
-      myPane = ScrollPaneFactory.createScrollPane(myRenderer);
-      AdjustmentListener listener = new MyAdjustmentListener();
-      myPane.getHorizontalScrollBar().addAdjustmentListener(listener);
-      myPane.getVerticalScrollBar().addAdjustmentListener(listener);
-      JScrollBar bar = myPane.getHorizontalScrollBar();
-      myVisualSettings.updateHorizontalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
-      bar = myPane.getVerticalScrollBar();
-      myVisualSettings.updateVerticalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
-      add(myPane);
+      initGraphPane();
+      myNamesPanel = new ConcurrencyNamesPanel();
+
+      JSplitPane p = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
+      p.add(myNamesPanel, JSplitPane.LEFT);
+      p.add(myGraphPane, JSplitPane.RIGHT);
+      p.setDividerLocation(myVisualSettings.getNamesPanelWidth());
+      p.setDividerSize(myVisualSettings.getDividerWidth());
+      add(p, BorderLayout.CENTER);
       setToolbar(createToolbarPanel());
+      validate();
+      repaint();
     }
   }
 

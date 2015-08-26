@@ -114,8 +114,8 @@ public class AsyncioLogToolWindowPanel extends ConcurrencyPanel {
       myLabel.setVisible(false);
       myTable = new AsyncioTable(myGraphManager, myProject, this);
       myTable.setModel(new AsyncioTableModel(myGraphManager));
-      myPane = ScrollPaneFactory.createScrollPane(myTable);
-      add(myPane);
+      myGraphPane = ScrollPaneFactory.createScrollPane(myTable);
+      add(myGraphPane);
       setToolbar(createToolbarPanel());
     }
     myTable.setModel(new AsyncioTableModel(myGraphManager));

@@ -111,7 +111,7 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
     add(myLabel);
   }
 
-  private class MyAdjustmentListener implements AdjustmentListener {
+  private class GraphAdjustmentListener implements AdjustmentListener {
     public void adjustmentValueChanged(AdjustmentEvent evt) {
       Adjustable source = evt.getAdjustable();
       int orient = source.getOrientation();
@@ -128,7 +128,7 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
 
   private void initGraphPane() {
     myGraphPane = ScrollPaneFactory.createScrollPane(myRenderer);
-    AdjustmentListener listener = new MyAdjustmentListener();
+    AdjustmentListener listener = new GraphAdjustmentListener();
     myGraphPane.getHorizontalScrollBar().addAdjustmentListener(listener);
     myGraphPane.getVerticalScrollBar().addAdjustmentListener(listener);
   }
@@ -145,6 +145,7 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
       myLabel.setVisible(false);
       initGraphPane();
       myNamesPanel = ScrollPaneFactory.createScrollPane(new ConcurrencyNamesPanel(myGraphPresentation));
+      myGraphPane.getVerticalScrollBar().setModel(myNamesPanel.getVerticalScrollBar().getModel());
 
       JSplitPane p = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
       p.add(myNamesPanel, JSplitPane.LEFT);

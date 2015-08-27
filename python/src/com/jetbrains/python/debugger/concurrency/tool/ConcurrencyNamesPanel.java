@@ -49,7 +49,6 @@ public class ConcurrencyNamesPanel extends JComponent {
   private void updateNames() {
     removeAll();
     ArrayList<String> names = myGraphPresentation.getThreadNames();
-    setSize(new Dimension(getWidth(), getYLocation(names.size())));
     for (int i = 0; i < names.size(); ++i) {
       JLabel label = new JLabel();
       label.setLocation(GraphSettings.INTERVAL, getYLocation(i));
@@ -57,6 +56,8 @@ public class ConcurrencyNamesPanel extends JComponent {
       label.setText(names.get(i));
       add(label);
     }
+    setPreferredSize(new Dimension(myGraphPresentation.getVisualSettings().getNamesPanelWidth(),
+                                   myGraphPresentation.getVisualSettings().getHeightForPanes(myGraphPresentation.getLinesNumber())));
     repaint();
   }
 }

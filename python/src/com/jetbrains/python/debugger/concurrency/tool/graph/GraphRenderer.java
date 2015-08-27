@@ -41,12 +41,8 @@ public class GraphRenderer extends JComponent {
   }
 
   private void updateSize() {
-    int width = myFullLogSize * GraphSettings.CELL_WIDTH;
-    int height = Math.max((GraphSettings.CELL_HEIGHT + GraphSettings.INTERVAL) * myGraphPresentation.getLinesNumber() +
-                        2 * GraphSettings.INTERVAL,
-                        myGraphPresentation.getVisualSettings().getVerticalValue() +
-                        myGraphPresentation.getVisualSettings().getVerticalExtent() - GraphSettings.CELL_HEIGHT);
-    setPreferredSize(new Dimension(width, height));
+    setPreferredSize(new Dimension(myFullLogSize * GraphSettings.CELL_WIDTH,
+                                   myGraphPresentation.getVisualSettings().getHeightForPanes(myGraphPresentation.getLinesNumber())));
   }
 
   private void update() {

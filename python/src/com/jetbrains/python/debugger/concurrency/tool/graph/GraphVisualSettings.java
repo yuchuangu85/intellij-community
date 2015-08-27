@@ -30,7 +30,7 @@ public class GraphVisualSettings {
   private int myVerticalMax;
   private int myNamesPanelWidth = NAMES_PANEL_INITIAL_WIDTH;
   public static int NAMES_PANEL_INITIAL_WIDTH = 200;
-  public static int DIVIDER_WIDTH = 8;
+  public static int DIVIDER_WIDTH = 5;
 
   private List<SettingsListener> myListeners = new ArrayList<SettingsListener>();
 
@@ -73,6 +73,12 @@ public class GraphVisualSettings {
 
   public int getScale() {
     return myScale;
+  }
+
+  public int getHeightForPanes(int linesNumber) {
+    return Math.max((GraphSettings.CELL_HEIGHT + GraphSettings.INTERVAL) * linesNumber +
+                    2 * GraphSettings.INTERVAL,
+                    getVerticalValue() + getVerticalExtent() - GraphSettings.CELL_HEIGHT);
   }
 
 

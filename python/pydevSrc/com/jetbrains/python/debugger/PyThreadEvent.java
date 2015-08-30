@@ -4,11 +4,11 @@ package com.jetbrains.python.debugger;
 
 public class PyThreadEvent extends PyConcurrencyEvent {
   private String myParentThreadId;
-  public PyThreadEvent(Integer time, String threadId, String name, boolean isAsyncio) {
+  public PyThreadEvent(Long time, String threadId, String name, boolean isAsyncio) {
     super(time, threadId, name, isAsyncio);
   }
 
-  public PyThreadEvent(Integer time, String threadId, String name, String parentThreadId, boolean isAsyncio) {
+  public PyThreadEvent(long time, String threadId, String name, String parentThreadId, boolean isAsyncio) {
     super(time, threadId, name, isAsyncio);
     myParentThreadId = parentThreadId;
   }

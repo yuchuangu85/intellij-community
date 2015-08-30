@@ -28,7 +28,8 @@ from pydevd_comm import GlobalDebuggerHolder, NetCommand
 import traceback
 
 import time
-cur_time = lambda: int(round(time.time() * 10000))
+# return time since epoch in milliseconds
+cur_time = lambda: int(round(time.time() * 1000))
 
 
 try:
@@ -115,7 +116,7 @@ def send_message(event_class, time, name, thread_id, type, event, file, line, fr
 
 class ThreadingLogger:
     def __init__(self):
-        self.start_time = cur_time()
+        self.start_time = 0
 
     def log_event(self, frame):
         write_log = False

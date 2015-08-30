@@ -60,7 +60,7 @@ public class PyAsyncioLogManagerImpl extends PyConcurrencyLogManager {
       }
     }
     PyConcurrencyEvent lastEvent = getEventAt(getSize() - 1);
-    int lastTime = lastEvent.getTime();
+    long lastTime = lastEvent.getTime();
     //set last time for stopping on a breakpoint
     for (ConcurrencyStat stat: result.values()) {
       if (stat.myFinishTime == 0) {

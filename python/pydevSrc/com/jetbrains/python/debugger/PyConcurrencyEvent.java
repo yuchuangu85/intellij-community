@@ -25,13 +25,13 @@ public abstract class PyConcurrencyEvent {
   protected String myFileName;
   protected Integer myLine;
   protected boolean myIsAsyncio;
-  protected Integer myTime;
+  protected long myTime;
 
   public enum EventType {
     CREATE, ACQUIRE_BEGIN, ACQUIRE_END, RELEASE, START, JOIN, STOP
   };
 
-  public PyConcurrencyEvent(Integer time, String threadId, String name, boolean isAsyncio) {
+  public PyConcurrencyEvent(long time, String threadId, String name, boolean isAsyncio) {
     myTime = time;
     myThreadId = threadId;
     myName = name;
@@ -70,7 +70,7 @@ public abstract class PyConcurrencyEvent {
     myLine = line;
   }
 
-  public int getTime() {
+  public long getTime() {
     return myTime;
   }
 

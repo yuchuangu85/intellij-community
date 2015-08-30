@@ -40,7 +40,7 @@ public class GraphRenderer extends JComponent {
   }
 
   private void updateSize() {
-    setPreferredSize(new Dimension(myFullLogSize * GraphSettings.CELL_WIDTH,
+    setPreferredSize(new Dimension(myGraphPresentation.getCellsNumber() * GraphSettings.CELL_WIDTH,
                                    myGraphPresentation.getVisualSettings().getHeightForPanes(myGraphPresentation.getLinesNumber())));
   }
 
@@ -64,7 +64,7 @@ public class GraphRenderer extends JComponent {
     prepareRulerStroke(g);
     GraphVisualSettings settings = myGraphPresentation.getVisualSettings();
     int y = settings.getVerticalValue() + settings.getVerticalExtent() - GraphSettings.RULER_STROKE_WIDTH;
-    g.drawLine(0, y, myFullLogSize * GraphSettings.CELL_WIDTH, y);
+    g.drawLine(0, y, getWidth(), y);
     FontMetrics metrics = g.getFontMetrics(getFont());
 
     for (int i = 0; i < getWidth() / GraphSettings.RULER_UNIT_WIDTH; ++i) {

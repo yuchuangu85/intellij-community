@@ -16,17 +16,17 @@
 package com.jetbrains.python.debugger.concurrency.tool;
 
 public class ConcurrencyStat {
-  public int myStartTime;
-  public int myFinishTime;
+  public long myStartTime;
+  public long myFinishTime;
   public int myLockCount;
-  public int myLastAcquireStartTime;
-  public int myWaitTime;
+  public long myLastAcquireStartTime;
+  public long myWaitTime;
 
-  public ConcurrencyStat(int startTime) {
+  public ConcurrencyStat(long startTime) {
     myStartTime = startTime;
   }
 
-  public int getWorkTime() {
+  public long getWorkTime() {
     return myFinishTime - myStartTime;
   }
 }

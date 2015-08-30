@@ -89,7 +89,7 @@ from _pydev_imps import _pydev_time as time, _pydev_thread
 
 import _pydev_threading as threading
 from pydevd_concurrency_analyser.pydevd_thread_wrappers import wrap_threads, ObjectWrapper
-from pydevd_concurrency_analyser.pydevd_concurrency_logger import ThreadingLogger, AsyncioLogger, send_message
+from pydevd_concurrency_analyser.pydevd_concurrency_logger import ThreadingLogger, AsyncioLogger, send_message, cur_time
 
 import os
 import atexit
@@ -1782,7 +1782,7 @@ class PyDB:
         if self.thread_analyser is not None:
             wrap_threads()
             t = threadingCurrentThread()
-            send_message("threading_event", 0, t.getName(), GetThreadId(t), "thread", "start", file, 1, None, parent=GetThreadId(t))
+            send_message("threading_event", cur_time(), t.getName(), GetThreadId(t), "thread", "start", file, 1, None, parent=GetThreadId(t))
 
         try:
             self.init_matplotlib_support()

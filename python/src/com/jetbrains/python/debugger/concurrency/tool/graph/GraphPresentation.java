@@ -59,18 +59,33 @@ public class GraphPresentation {
     return myGraphManager.getMaxThread();
   }
 
+  public int getCellsNumber() {
+    return (int)myGraphManager.getDuration() / myVisualSettings.getMillisPerCell();
+  }
+
   public ArrayList<String> getThreadNames() {
     return myGraphManager.getThreadNames();
   }
 
   public ArrayList<ArrayList<DrawElement>> getVisibleGraph() {
     synchronized (myListenersObject) {
+      if (myVisualSettings.getHorizontalMax() == 0) {
+        return new ArrayList<ArrayList<DrawElement>>();
+      }
       int val = myVisualSettings.getHorizontalValue();
-      int first = myVisualSettings.getHorizontalMax() == 0 ? 0 : val * myGraphManager.getSize() / myVisualSettings.getHorizontalMax();
-      int last = Math.min(first + myVisualSettings.getHorizontalExtent() / GraphSettings.CELL_WIDTH + 2, myGraphManager.getSize());
+      long duration = myGraphManager.getDuration();
+      long startTime = myGraphManager.getStartTime() + val * duration / myVisualSettings.getHorizontalMax();
+      int first = myGraphManager.getLastEventIndexBeforeMoment(startTime);
+      int numberOfBlocks = myVisualSettings.getHorizontalExtent() / GraphSettings.CELL_WIDTH;
+
       ArrayList<ArrayList<DrawElement>> ret = new ArrayList<ArrayList<DrawElement>>();
-      for (int i = first; i < last; ++i) {
-        ret.add(myGraphManager.getDrawElementsForRow(i));
+      ret.add(myGraphManager.getDrawElementsForRow(first));
+      long millisPerCell = myVisualSettings.getMillisPerCell();
+
+      for (int i = 0; i < numberOfBlocks; ++i) {
+        long timeForNextCell = startTime + millisPerCell * i;
+        int eventIndex = myGraphManager.getLastEventIndexBeforeMoment(timeForNextCell);
+        ret.add(myGraphManager.getDrawElementsForRow(eventIndex));
       }
       return ret;
     }
@@ -91,7 +106,7 @@ public class GraphPresentation {
     synchronized (myListenersObject) {
       for (PresentationListener logListener : myListeners) {
         logListener.graphChanged(myVisualSettings.getHorizontalMax() == 0 ? myVisualSettings.getHorizontalValue() :
-                                 myVisualSettings.getHorizontalValue() * myGraphManager.getSize() / myVisualSettings.getHorizontalMax(),
+                                 myVisualSettings.getHorizontalValue() * getCellsNumber() / myVisualSettings.getHorizontalMax(),
                                  myGraphManager.getSize());
       }
     }

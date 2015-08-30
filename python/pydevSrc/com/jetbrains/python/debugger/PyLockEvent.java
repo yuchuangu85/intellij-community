@@ -5,7 +5,7 @@ package com.jetbrains.python.debugger;
 public class PyLockEvent extends PyConcurrencyEvent {
   private final String myId;
 
-  public PyLockEvent(Integer time, String threadId, String name, String id, boolean isAsyncio) {
+  public PyLockEvent(long time, String threadId, String name, String id, boolean isAsyncio) {
     super(time, threadId, name, isAsyncio);
     myId = id;
   }

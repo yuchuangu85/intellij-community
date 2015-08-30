@@ -34,6 +34,10 @@ public class GraphVisualSettings {
 
   private List<SettingsListener> myListeners = new ArrayList<SettingsListener>();
 
+  public int getMillisPerCell() {
+    return myScale * 1;
+  }
+
 
   public int getNamesPanelWidth() {
     return myNamesPanelWidth;

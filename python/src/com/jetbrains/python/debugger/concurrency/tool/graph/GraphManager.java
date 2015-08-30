@@ -16,6 +16,7 @@
  */
 package com.jetbrains.python.debugger.concurrency.tool.graph;
 
+import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.hash.HashMap;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
@@ -97,6 +98,27 @@ public class GraphManager {
 
   public int getSize() {
     return myGraphScheme.size();
+  }
+
+  public long getStartTime() {
+    return myLogManager.getEventAt(0).getTime();
+  }
+
+  public int getLastEventIndexBeforeMoment(long time) {
+    for (int i = 0; i < myLogManager.getSize(); ++i) {
+      PyConcurrencyEvent event = myLogManager.getEventAt(i);
+      if (event.getTime() >= time) {
+        return Math.max(0, i - 1);
+      }
+    }
+    return myLogManager.getSize() - 1;
+  }
+
+  public long getDuration() {
+    if (getSize() > 0) {
+      return getEventAt(getSize() - 1).getTime() - getEventAt(0).getTime();
+    }
+    return 0;
   }
 
   public PyConcurrencyEvent getEventAt(int index) {

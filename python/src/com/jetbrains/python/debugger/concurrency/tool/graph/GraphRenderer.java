@@ -15,7 +15,6 @@
  */
 package com.jetbrains.python.debugger.concurrency.tool.graph;
 
-import com.intellij.ui.JBColor;
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.DrawElement;
 
 import javax.swing.*;
@@ -55,6 +54,31 @@ public class GraphRenderer extends JComponent {
     g.fillRect(0, 0, getWidth(), getHeight());
   }
 
+  private static void prepareRulerStroke(Graphics g) {
+    Graphics2D g2 = (Graphics2D)g;
+    g2.setStroke(new BasicStroke(GraphSettings.RULER_STROKE_WIDTH));
+    g2.setColor(GraphSettings.RULER_COLOR);
+  }
+
+  private void paintRuler(Graphics g) {
+    prepareRulerStroke(g);
+    GraphVisualSettings settings = myGraphPresentation.getVisualSettings();
+    int y = settings.getVerticalValue() + settings.getVerticalExtent() - GraphSettings.RULER_STROKE_WIDTH;
+    g.drawLine(0, y, myFullLogSize * GraphSettings.CELL_WIDTH, y);
+    FontMetrics metrics = g.getFontMetrics(getFont());
+
+    for (int i = 0; i < getWidth() / GraphSettings.RULER_UNIT_WIDTH; ++i) {
+      int markY = i % 10 == 0? y - GraphSettings.RULER_UNIT_MARK: y - GraphSettings.RULER_SUBUNIT_MARK;
+      g.drawLine(i * GraphSettings.RULER_UNIT_WIDTH, markY, i * GraphSettings.RULER_UNIT_WIDTH, y);
+      if ((i != 0) && (i % 10 == 0)) {
+        String text = String.format("%d s", myGraphPresentation.getVisualSettings().getScale() * i / 10);
+        int textWidth = metrics.stringWidth(text);
+        int textHeight = metrics.getHeight();
+        g.drawString(text, i * GraphSettings.RULER_UNIT_WIDTH - textWidth / 2, markY - textHeight);
+      }
+    }
+  }
+
   @Override
   public void paintComponent(Graphics g) {
     super.paintComponent(g);
@@ -68,5 +92,6 @@ public class GraphRenderer extends JComponent {
                       (GraphSettings.CELL_HEIGHT + GraphSettings.INTERVAL) * j + GraphSettings.INTERVAL);
       }
     }
+    paintRuler(g);
   }
 }

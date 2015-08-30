@@ -27,7 +27,14 @@ public class GraphSettings {
   public static int INTERVAL = 20;
   public static int STROKE_WITH_LOCK = 4;
   public static int STROKE_BASIC = 4;
-  public static boolean USE_STD_COLORS = true;
+
+  public static int RULER_STROKE_WIDTH = 1;
+  public static Color RULER_COLOR = JBColor.BLACK;
+  public static int RULER_UNIT_WIDTH = 10;
+  public static int RULER_UNIT_MARK = 10;
+  public static int RULER_SUBUNIT_MARK = 5;
+
+
   public static Color BASIC_COLOR = new Color(125, 125, 125);
   public static Color LOCK_WAIT_COLOR = new Color(255, 179, 3);
   public static Color LOCK_OWNING_COLOR = new Color(120, 255, 0);

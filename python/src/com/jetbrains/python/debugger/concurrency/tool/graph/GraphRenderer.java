@@ -83,14 +83,11 @@ public class GraphRenderer extends JComponent {
   public void paintComponent(Graphics g) {
     super.paintComponent(g);
     paintBackground(g);
-    ArrayList<ArrayList<DrawElement>> elements = myGraphPresentation.getVisibleGraph();
-    for (int i = 0; i < elements.size(); ++i) {
-      ArrayList<DrawElement> row = elements.get(i);
-      for (int j = 0; j < row.size(); ++j) {
-        DrawElement element = row.get(j);
-        element.paint(g, GraphSettings.CELL_WIDTH * (myPadding + i),
-                      (GraphSettings.CELL_HEIGHT + GraphSettings.INTERVAL) * j + GraphSettings.INTERVAL);
-      }
+    ArrayList<GraphBlock> elements = myGraphPresentation.getVisibleGraph();
+    int paddingInsideBlock = 0;
+    for (GraphBlock block: elements) {
+      block.paint(g, GraphSettings.CELL_WIDTH * (myPadding + paddingInsideBlock));
+      paddingInsideBlock += block.getNumberOfCells();
     }
     paintRuler(g);
   }

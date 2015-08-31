@@ -53,6 +53,6 @@ public abstract class DrawElement {
 
   public abstract DrawElement getNextElement();
 
-  public void paint(Graphics g, int x, int y) {
+  public void paint(Graphics g, int x, int y, int numberOfCells) {
   }
 }

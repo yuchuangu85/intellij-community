@@ -33,7 +33,7 @@ public class SimpleDrawElement extends DrawElement {
   }
 
   @Override
-  public void paint(Graphics g, int x, int y) {
+  public void paint(Graphics g, int x, int y, int numberOfCells) {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
@@ -41,6 +41,6 @@ public class SimpleDrawElement extends DrawElement {
       return;
     }
     myBefore.prepareStroke(g2);
-    g2.fillRect(x, y, GraphSettings.CELL_WIDTH, GraphSettings.CELL_HEIGHT);
+    g2.fillRect(x, y, GraphSettings.CELL_WIDTH * numberOfCells, GraphSettings.CELL_HEIGHT);
   }
 }

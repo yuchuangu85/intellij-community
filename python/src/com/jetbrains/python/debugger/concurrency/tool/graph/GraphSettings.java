@@ -22,7 +22,7 @@ import com.intellij.ui.JBColor;
 import java.awt.*;
 
 public class GraphSettings {
-  public static int CELL_WIDTH = 2;
+  public static int CELL_WIDTH = 1;
   public static int CELL_HEIGHT = 20;
   public static int INTERVAL = 20;
   public static int STROKE_WITH_LOCK = 4;

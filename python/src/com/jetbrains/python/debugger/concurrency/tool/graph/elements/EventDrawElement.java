@@ -41,7 +41,7 @@ public class EventDrawElement extends DrawElement {
     }
     if (!(myAfter instanceof StoppedThreadState)) {
       myAfter.prepareStroke(g2);
+      g2.fillRect(x, y, GraphSettings.CELL_WIDTH * numberOfCells, GraphSettings.CELL_HEIGHT);
     }
-    g2.fillRect(x, y, GraphSettings.CELL_WIDTH * numberOfCells, GraphSettings.CELL_HEIGHT);
   }
 }

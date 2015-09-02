@@ -24,15 +24,13 @@ import java.util.ArrayList;
 public class GraphRenderer extends JComponent {
   private final GraphPresentation myGraphPresentation;
   private int myPadding;
-  private int myFullLogSize;
 
   public GraphRenderer(GraphPresentation graphPresentation) {
     myGraphPresentation = graphPresentation;
     myGraphPresentation.registerListener(new GraphPresentation.PresentationListener() {
       @Override
-      public void graphChanged(int leftPadding, int size) {
+      public void graphChanged(int leftPadding) {
         myPadding = leftPadding;
-        myFullLogSize = size;
         update();
       }
     });

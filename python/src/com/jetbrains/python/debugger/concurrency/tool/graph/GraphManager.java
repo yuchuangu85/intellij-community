@@ -116,12 +116,36 @@ public class GraphManager {
 
   public long getDuration() {
     if (getSize() > 0) {
-      return getEventAt(getSize() - 1).getTime() - getEventAt(0).getTime();
+      long lastEventTime = myLogManager.getPauseTime() == 0? getEventAt(getSize() - 1).getTime(): myLogManager.getPauseTime();
+      return lastEventTime - getEventAt(0).getTime();
     }
     return 0;
   }
 
+  public long getPauseTime() {
+    return myLogManager.getPauseTime();
+  }
+
+  private class FakeEvent extends PyConcurrencyEvent {
+    public FakeEvent(long time) {
+      super(time, "", "", false);
+    }
+
+    @Override
+    public String getEventActionName() {
+      return null;
+    }
+
+    @Override
+    public boolean isThreadEvent() {
+      return false;
+    }
+  }
+
   public PyConcurrencyEvent getEventAt(int index) {
+    if (index == myLogManager.getSize()) {
+      return new FakeEvent(getPauseTime());
+    }
     return myLogManager.getEventAt(index);
   }
 

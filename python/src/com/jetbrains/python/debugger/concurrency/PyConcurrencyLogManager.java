@@ -32,6 +32,7 @@ public abstract class PyConcurrencyLogManager {
   private List<LogListener> myListeners = new ArrayList<LogListener>();
   private XDebugSession lastSession;
   protected Project myProject;
+  protected long pauseTime;
 
   public PyConcurrencyLogManager(Project project) {
     myProject = project;
@@ -51,6 +52,14 @@ public abstract class PyConcurrencyLogManager {
   }
 
   public abstract HashMap getStatistics();
+
+  public long getPauseTime() {
+    return pauseTime;
+  }
+
+  public void setPauseTime(long pauseTime) {
+    this.pauseTime = pauseTime;
+  }
 
   public String getStringRepresentation() {
     StringBuilder resultBuilder = new StringBuilder();
@@ -80,11 +89,13 @@ public abstract class PyConcurrencyLogManager {
     lastSession.addSessionListener(new XDebugSessionListener() {
       @Override
       public void sessionPaused() {
+        setPauseTime(System.currentTimeMillis());
         notifyListeners(false);
       }
 
       @Override
       public void sessionResumed() {
+        setPauseTime(0);
       }
 
       @Override
@@ -109,16 +120,12 @@ public abstract class PyConcurrencyLogManager {
   }
 
   public void registerListener(@NotNull LogListener logListener) {
-    synchronized (myLogObject) {
-      myListeners.add(logListener);
-    }
+    myListeners.add(logListener);
   }
 
   public void notifyListeners(boolean isNewSession) {
-    synchronized (myLogObject) {
-      for (LogListener logListener : myListeners) {
-        logListener.logChanged(isNewSession);
-      }
+    for (LogListener logListener : myListeners) {
+      logListener.logChanged(isNewSession);
     }
   }
 

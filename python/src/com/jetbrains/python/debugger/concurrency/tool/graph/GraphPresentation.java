@@ -85,10 +85,7 @@ public class GraphPresentation {
       long curTime, nextTime = startTime;
       int i = 0;
       int numberOfCells = myVisualSettings.getHorizontalExtent() / GraphSettings.CELL_WIDTH + 2;
-      while (i < numberOfCells) {
-        if (curEventId == myGraphManager.getSize() - 1) {
-          break;
-        }
+      while ((i < numberOfCells) && (curEventId < myGraphManager.getSize())) {
         curTime = nextTime;
         nextTime = roundForCell(myGraphManager.getEventAt(curEventId + 1).getTime());
         long period = nextTime - curTime;
@@ -105,7 +102,7 @@ public class GraphPresentation {
 
 
   public interface PresentationListener {
-    void graphChanged(int padding, int size);
+    void graphChanged(int padding);
   }
 
   public void registerListener(@NotNull PresentationListener logListener) {
@@ -118,8 +115,7 @@ public class GraphPresentation {
     synchronized (myListenersObject) {
       for (PresentationListener logListener : myListeners) {
         logListener.graphChanged(myVisualSettings.getHorizontalMax() == 0 ? myVisualSettings.getHorizontalValue() :
-                                 myVisualSettings.getHorizontalValue() * getCellsNumber() / myVisualSettings.getHorizontalMax(),
-                                 myGraphManager.getSize());
+                                 myVisualSettings.getHorizontalValue() * getCellsNumber() / myVisualSettings.getHorizontalMax());
       }
     }
   }

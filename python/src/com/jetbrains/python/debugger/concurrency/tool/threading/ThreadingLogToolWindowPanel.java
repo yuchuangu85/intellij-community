@@ -49,7 +49,7 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
 
     myGraphPresentation.registerListener(new GraphPresentation.PresentationListener() {
       @Override
-      public void graphChanged(int padding, int size) {
+      public void graphChanged(int padding) {
         UIUtil.invokeLaterIfNeeded(new Runnable() {
           @Override
           public void run() {

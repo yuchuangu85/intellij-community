@@ -15,8 +15,6 @@
  */
 package com.jetbrains.python.debugger.concurrency.tool.graph;
 
-import com.jetbrains.python.debugger.concurrency.tool.graph.elements.DrawElement;
-
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;

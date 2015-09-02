@@ -26,7 +26,10 @@ import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManager;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyNamesPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
-import com.jetbrains.python.debugger.concurrency.tool.graph.*;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphPresentation;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphRenderer;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphVisualSettings;
 
 import javax.swing.*;
 import java.awt.*;

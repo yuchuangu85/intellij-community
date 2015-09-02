@@ -16,7 +16,6 @@
  */
 package com.jetbrains.python.debugger.concurrency.tool.graph;
 
-import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.hash.HashMap;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
@@ -42,6 +41,7 @@ public class GraphManager {
   private int myCurrentMaxThread = 0;
   private int[][] relations;
   private List<GraphListener> myListeners = new ArrayList<GraphListener>();
+  private final Object myListenersObject = new Object();
   private GraphAnalyser myGraphAnalyser;
 
   public GraphManager(PyConcurrencyLogManager logManager) {
@@ -65,13 +65,13 @@ public class GraphManager {
   }
 
   public void registerListener(@NotNull GraphListener logListener) {
-    synchronized (myUpdateObject) {
+    synchronized (myListenersObject) {
       myListeners.add(logListener);
     }
   }
 
   public void notifyListeners() {
-    synchronized (myUpdateObject) {
+    synchronized (myListenersObject) {
       for (GraphListener logListener : myListeners) {
         logListener.graphChanged();
       }

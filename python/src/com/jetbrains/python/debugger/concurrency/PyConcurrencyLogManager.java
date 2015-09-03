@@ -40,15 +40,11 @@ public abstract class PyConcurrencyLogManager {
   }
 
   public Integer getSize() {
-    synchronized (myLogObject) {
-      return myLog.size();
-    }
+    return myLog.size();
   }
 
   public PyConcurrencyEvent getEventAt(int index) {
-    synchronized (myLogObject) {
-      return myLog.get(index);
-    }
+    return myLog.get(index);
   }
 
   public abstract HashMap getStatistics();

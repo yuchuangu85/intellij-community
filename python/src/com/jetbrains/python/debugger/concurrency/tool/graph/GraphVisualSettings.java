@@ -82,7 +82,7 @@ public class GraphVisualSettings {
   public int getHeightForPanes(int linesNumber) {
     return Math.max((GraphSettings.CELL_HEIGHT + GraphSettings.INTERVAL) * linesNumber +
                     2 * GraphSettings.INTERVAL,
-                    getVerticalValue() + getVerticalExtent() - GraphSettings.CELL_HEIGHT);
+                    getVerticalValue() + getVerticalExtent());
   }
 
 

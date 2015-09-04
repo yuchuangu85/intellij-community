@@ -36,8 +36,10 @@ public class GraphRenderer extends JComponent {
   }
 
   private void updateSize() {
-    setPreferredSize(new Dimension(myGraphPresentation.getCellsNumber() * GraphSettings.CELL_WIDTH,
-                                   myGraphPresentation.getVisualSettings().getHeightForPanes(myGraphPresentation.getLinesNumber())));
+    int width = myGraphPresentation.getCellsNumber() * GraphSettings.CELL_WIDTH;
+    int height = myGraphPresentation.getVisualSettings().getHeightForPanes(myGraphPresentation.getLinesNumber());
+    setSize(new Dimension(width, height));
+    setPreferredSize(new Dimension(width, height));
   }
 
   private void update() {

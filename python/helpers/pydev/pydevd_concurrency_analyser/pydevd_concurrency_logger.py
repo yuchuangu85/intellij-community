@@ -115,9 +115,6 @@ def send_message(event_class, time, name, thread_id, type, event, file, line, fr
 
 
 class ThreadingLogger:
-    def __init__(self):
-        self.start_time = 0
-
     def log_event(self, frame):
         write_log = False
         self_obj = None
@@ -133,7 +130,7 @@ class ThreadingLogger:
                 if not back:
                     return
                 name, back_base = pydevd_file_utils.GetFilenameAndBase(back)
-                event_time = cur_time() - self.start_time
+                event_time = cur_time()
                 method_name = frame.f_code.co_name
 
                 if isinstance(self_obj, threading.Thread) and method_name in THREAD_METHODS:
@@ -217,7 +214,6 @@ class AsyncioLogger:
     def __init__(self):
         self.task_mgr = NameManager("Task")
         self.coro_mgr = NameManager("Coro")
-        self.start_time = cur_time()
 
     def get_task_id(self, frame):
         while frame is not None:
@@ -232,7 +228,7 @@ class AsyncioLogger:
 
     def log_event(self, frame):
         self_obj = None
-        event_time = event_time = cur_time() - self.start_time
+        event_time = event_time = cur_time()
 
 
         if DictContains(frame.f_locals, "self"):

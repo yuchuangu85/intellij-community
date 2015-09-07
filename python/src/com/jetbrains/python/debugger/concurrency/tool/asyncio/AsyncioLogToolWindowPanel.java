@@ -22,7 +22,8 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.util.ui.UIUtil;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManager;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManagerImpl;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyService;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
 import com.jetbrains.python.debugger.concurrency.tool.asyncio.table.AsyncioTable;
@@ -40,7 +41,7 @@ public class AsyncioLogToolWindowPanel extends ConcurrencyPanel {
   public AsyncioLogToolWindowPanel(Project project) {
     super(false, project);
     myProject = project;
-    logManager = PyAsyncioLogManagerImpl.getInstance(project);
+    logManager = PyConcurrencyService.getInstance(myProject).getAsyncioInstance();
     myGraphManager = new GraphManager(logManager);
 
     myGraphManager.registerListener(new GraphManager.GraphListener() {
@@ -89,7 +90,7 @@ public class AsyncioLogToolWindowPanel extends ConcurrencyPanel {
 
     @Override
     public void actionPerformed(AnActionEvent e) {
-      final PyConcurrencyLogManager logManager = PyAsyncioLogManagerImpl.getInstance(myProject);
+      final PyConcurrencyLogManagerImpl logManager = PyConcurrencyService.getInstance(myProject).getAsyncioInstance();
       UIUtil.invokeLaterIfNeeded(new Runnable() {
         @Override
         public void run() {

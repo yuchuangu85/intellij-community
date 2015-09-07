@@ -20,13 +20,14 @@ import com.intellij.openapi.project.Project;
 import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.XDebugSessionListener;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStat;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-public abstract class PyConcurrencyLogManager {
+public class PyConcurrencyLogManagerImpl {
   private List<PyConcurrencyEvent> myLog;
   private final Object myLogObject = new Object();
   private List<LogListener> myListeners = new ArrayList<LogListener>();
@@ -34,7 +35,7 @@ public abstract class PyConcurrencyLogManager {
   protected Project myProject;
   protected long pauseTime;
 
-  public PyConcurrencyLogManager(Project project) {
+  public PyConcurrencyLogManagerImpl(Project project) {
     myProject = project;
     myLog = new ArrayList<PyConcurrencyEvent>();
   }
@@ -47,7 +48,37 @@ public abstract class PyConcurrencyLogManager {
     return myLog.get(index);
   }
 
-  public abstract HashMap getStatistics();
+  public HashMap getStatistics() {
+    HashMap<String, ConcurrencyStat> result = new HashMap<String, ConcurrencyStat>();
+    for (int i = 0; i < getSize(); ++i) {
+      PyConcurrencyEvent event = getEventAt(i);
+      String threadId = event.getThreadName();
+      if (event.isThreadEvent() && event.getType() == PyConcurrencyEvent.EventType.START) {
+        ConcurrencyStat stat = new ConcurrencyStat(event.getTime());
+        result.put(threadId, stat);
+      } else if (event.getType() == PyConcurrencyEvent.EventType.STOP) {
+        ConcurrencyStat stat = new ConcurrencyStat(event.getTime());
+        stat.myFinishTime = event.getTime();
+      } else if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_BEGIN) {
+        ConcurrencyStat stat = result.get(threadId);
+        stat.myLockCount++;
+        stat.myLastAcquireStartTime = event.getTime();
+      } else if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_END) {
+        ConcurrencyStat stat = result.get(threadId);
+        stat.myWaitTime += (event.getTime() - stat.myLastAcquireStartTime);
+        stat.myLastAcquireStartTime = 0;
+      }
+    }
+    PyConcurrencyEvent lastEvent = getEventAt(getSize() - 1);
+    long lastTime = lastEvent.getTime();
+    //set last time for stopping on a breakpoint
+    for (ConcurrencyStat stat: result.values()) {
+      if (stat.myFinishTime == 0) {
+        stat.myFinishTime = lastTime;
+      }
+    }
+    return result;
+  }
 
   public long getPauseTime() {
     return pauseTime;

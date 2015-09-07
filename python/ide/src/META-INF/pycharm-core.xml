@@ -86,11 +86,8 @@
     <projectService serviceInterface="com.jetbrains.python.configuration.PyConfigurableInterpreterList"
                     serviceImplementation="com.jetbrains.python.configuration.PyConfigurableInterpreterList"/>
 
-    <projectService serviceInterface="com.jetbrains.python.debugger.concurrency.tool.asyncio.PyAsyncioLogManagerImpl"
-                    serviceImplementation="com.jetbrains.python.debugger.concurrency.tool.asyncio.PyAsyncioLogManagerImpl"/>
-
-    <projectService serviceInterface="com.jetbrains.python.debugger.concurrency.tool.threading.PyThreadingLogManagerImpl"
-                    serviceImplementation="com.jetbrains.python.debugger.concurrency.tool.threading.PyThreadingLogManagerImpl"/>
+    <projectService serviceInterface="com.jetbrains.python.debugger.concurrency.PyConcurrencyService"
+                    serviceImplementation="com.jetbrains.python.debugger.concurrency.PyConcurrencyService"/>
 
     <bundledColorScheme path="/colorSchemes/monokai"/>
     <bundledColorScheme path="/colorSchemes/twilight"/>

@@ -19,7 +19,7 @@ import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.hash.HashMap;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyLockEvent;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManager;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManagerImpl;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.LockOwnThreadState;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.LockWaitThreadState;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.RunThreadState;
@@ -28,11 +28,11 @@ import org.jetbrains.annotations.Nullable;
 
 
 public class GraphAnalyser {
-  private final PyConcurrencyLogManager myLogManager;
+  private final PyConcurrencyLogManagerImpl myLogManager;
   private HashMap<String, ThreadLocksInfo> myLocksInfo;
   private int lastInd = 0;
 
-  public GraphAnalyser(PyConcurrencyLogManager logManager) {
+  public GraphAnalyser(PyConcurrencyLogManagerImpl logManager) {
     myLogManager = logManager;
   }
 

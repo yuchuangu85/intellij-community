@@ -20,7 +20,7 @@ import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.hash.HashMap;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyThreadEvent;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManager;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManagerImpl;
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.DrawElement;
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.EventDrawElement;
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.SimpleDrawElement;
@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.Map;
 
 public class GraphManager {
-  private final PyConcurrencyLogManager myLogManager;
+  private final PyConcurrencyLogManagerImpl myLogManager;
   private ArrayList<ArrayList<DrawElement>> myGraphScheme;
   private ArrayList<Integer> myThreadCountForRow;
   private Map<String, Integer> threadIndexToId;
@@ -44,12 +44,12 @@ public class GraphManager {
   private final Object myListenersObject = new Object();
   private GraphAnalyser myGraphAnalyser;
 
-  public GraphManager(PyConcurrencyLogManager logManager) {
+  public GraphManager(PyConcurrencyLogManagerImpl logManager) {
     myLogManager = logManager;
     createGraph();
     updateGraph();
 
-    myLogManager.registerListener(new PyConcurrencyLogManager.LogListener() {
+    myLogManager.registerListener(new PyConcurrencyLogManagerImpl.LogListener() {
       @Override
       public void logChanged(boolean isNewSession) {
         if (isNewSession) {

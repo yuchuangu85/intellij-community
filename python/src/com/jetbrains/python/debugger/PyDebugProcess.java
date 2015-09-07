@@ -59,8 +59,8 @@ import com.intellij.xdebugger.stepping.XSmartStepIntoHandler;
 import com.jetbrains.python.PythonFileType;
 import com.jetbrains.python.console.PythonDebugLanguageConsoleView;
 import com.jetbrains.python.console.pydev.PydevCompletionVariant;
-import com.jetbrains.python.debugger.concurrency.tool.asyncio.PyAsyncioLogManagerImpl;
-import com.jetbrains.python.debugger.concurrency.tool.threading.PyThreadingLogManagerImpl;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManagerImpl;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyService;
 import com.jetbrains.python.debugger.pydev.*;
 import com.jetbrains.python.psi.PyFunction;
 import com.jetbrains.python.psi.PyImportElement;
@@ -175,8 +175,8 @@ public class PyDebugProcess extends XDebugProcess implements IPyDebugProcess, Pr
 
     if (PyDebuggerOptionsProvider.getInstance(getSession().getProject()).isSaveThreadingLog()) {
       // notify log manager about new debug process
-      PyThreadingLogManagerImpl.getInstance(getSession().getProject()).recordEvent(getSession(), null);
-      PyAsyncioLogManagerImpl.getInstance(getSession().getProject()).recordEvent(getSession(), null);
+      PyConcurrencyService.getInstance(getSession().getProject()).getThreadingInstance().recordEvent(getSession(), null);
+      PyConcurrencyService.getInstance(getSession().getProject()).getAsyncioInstance().recordEvent(getSession(), null);
     }
   }
 
@@ -319,9 +319,9 @@ public class PyDebugProcess extends XDebugProcess implements IPyDebugProcess, Pr
   @Override
   public void recordLogEvent(PyConcurrencyEvent event) {
     if (!event.isAsyncio()) {
-      PyThreadingLogManagerImpl.getInstance(getSession().getProject()).recordEvent(getSession(), event);
+      PyConcurrencyService.getInstance(getSession().getProject()).getThreadingInstance().recordEvent(getSession(), event);
     } else {
-      PyAsyncioLogManagerImpl.getInstance(getSession().getProject()).recordEvent(getSession(), event);
+      PyConcurrencyService.getInstance(getSession().getProject()).getAsyncioInstance().recordEvent(getSession(), event);
     }
   }
 

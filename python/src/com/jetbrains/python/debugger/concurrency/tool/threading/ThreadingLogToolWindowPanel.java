@@ -22,7 +22,8 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.util.ui.UIUtil;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManager;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManagerImpl;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyService;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyNamesPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
@@ -45,7 +46,7 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
   public ThreadingLogToolWindowPanel(Project project) {
     super(false, project);
     myProject = project;
-    logManager = PyThreadingLogManagerImpl.getInstance(project);
+    logManager = PyConcurrencyService.getInstance(myProject).getThreadingInstance();
     myVisualSettings = new GraphVisualSettings();
     myGraphPresentation = new GraphPresentation(new GraphManager(logManager), myVisualSettings);
     myRenderer = new GraphRenderer(myGraphPresentation);
@@ -89,7 +90,7 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
 
     @Override
     public void actionPerformed(AnActionEvent e) {
-      final PyConcurrencyLogManager logManager = PyThreadingLogManagerImpl.getInstance(myProject);
+      final PyConcurrencyLogManagerImpl logManager = PyConcurrencyService.getInstance(myProject).getThreadingInstance();
       UIUtil.invokeLaterIfNeeded(new Runnable() {
         @Override
         public void run() {

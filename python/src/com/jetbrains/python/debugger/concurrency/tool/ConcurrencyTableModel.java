@@ -15,7 +15,7 @@
  */
 package com.jetbrains.python.debugger.concurrency.tool;
 
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
 
 import javax.swing.table.AbstractTableModel;
 
@@ -25,11 +25,11 @@ public abstract class ConcurrencyTableModel extends AbstractTableModel {
 
   public static final int COLUMN_COUNT = EVENT_COLUMN + 1;
   protected static String[] COLUMN_NAMES;
-  protected final GraphManager myGraphManager;
+  protected final PyConcurrencyGraphModel myGraphModel;
   protected ConcurrencyNamesManager myThreadingNamesManager;
 
-  public ConcurrencyTableModel(GraphManager graphManager) {
-    myGraphManager = graphManager;
+  public ConcurrencyTableModel(PyConcurrencyGraphModel graphModel) {
+    myGraphModel = graphModel;
   }
 
   @Override
@@ -39,7 +39,7 @@ public abstract class ConcurrencyTableModel extends AbstractTableModel {
 
   @Override
   public int getRowCount() {
-    return myGraphManager.getSize();
+    return myGraphModel.getSize();
   }
 
   @Override

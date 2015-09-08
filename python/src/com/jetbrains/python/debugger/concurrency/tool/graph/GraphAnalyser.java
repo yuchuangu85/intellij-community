@@ -19,7 +19,7 @@ import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.hash.HashMap;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyLockEvent;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManagerImpl;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.LockOwnThreadState;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.LockWaitThreadState;
 import com.jetbrains.python.debugger.concurrency.tool.graph.states.RunThreadState;
@@ -28,12 +28,12 @@ import org.jetbrains.annotations.Nullable;
 
 
 public class GraphAnalyser {
-  private final PyConcurrencyLogManagerImpl myLogManager;
+  private final PyConcurrencyGraphModel myGraphModel;
   private HashMap<String, ThreadLocksInfo> myLocksInfo;
   private int lastInd = 0;
 
-  public GraphAnalyser(PyConcurrencyLogManagerImpl logManager) {
-    myLogManager = logManager;
+  public GraphAnalyser(PyConcurrencyGraphModel graphModel) {
+    myGraphModel = graphModel;
   }
 
   private class ThreadLocksInfo {
@@ -70,7 +70,7 @@ public class GraphAnalyser {
       myLocksInfo = new HashMap<String, ThreadLocksInfo>();
     }
     for (int i = lastInd; i <= ind; ++i) {
-      PyConcurrencyEvent event = myLogManager.getEventAt(i);
+      PyConcurrencyEvent event = myGraphModel.getEventAt(i);
       if (event instanceof PyLockEvent) {
         PyLockEvent lockEvent = (PyLockEvent)event;
         String threadId = lockEvent.getThreadId();
@@ -99,7 +99,7 @@ public class GraphAnalyser {
     if (lastInd != ind) {
       updateLocksInfo(ind);
     }
-    PyConcurrencyEvent event = myLogManager.getEventAt(ind);
+    PyConcurrencyEvent event = myGraphModel.getEventAt(ind);
     String startThreadId = event.getThreadId();
     String startWait = myLocksInfo.get(startThreadId).getLockWait();
     if (startWait == null) {
@@ -136,7 +136,7 @@ public class GraphAnalyser {
     HashSet<String> locksAcquired = new HashSet<String>();
     HashSet<String> locksOwn = new HashSet<String>();
     for (int i = 0; i <= index; ++i) {
-      PyConcurrencyEvent event = myLogManager.getEventAt(i);
+      PyConcurrencyEvent event = myGraphModel.getEventAt(i);
       if ((event.getThreadId().equals(threadId) && event instanceof PyLockEvent)) {
         PyLockEvent lockEvent = (PyLockEvent)event;
         if (lockEvent.getType() == PyLockEvent.EventType.ACQUIRE_BEGIN) {

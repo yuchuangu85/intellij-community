@@ -15,19 +15,20 @@
  */
 package com.jetbrains.python.debugger.concurrency.tool.graph;
 
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class GraphPresentation {
-  private final GraphManager myGraphManager;
+  private final PyConcurrencyGraphModel myGraphModel;
   private List<PresentationListener> myListeners = new ArrayList<PresentationListener>();
   private final Object myListenersObject = new Object();
   private GraphVisualSettings myVisualSettings;
 
-  public GraphPresentation(final GraphManager graphManager, GraphVisualSettings visualSettings) {
-    myGraphManager = graphManager;
+  public GraphPresentation(final PyConcurrencyGraphModel graphModel, GraphVisualSettings visualSettings) {
+    myGraphModel = graphModel;
     myVisualSettings = visualSettings;
 
     myVisualSettings.registerListener(new GraphVisualSettings.SettingsListener() {
@@ -38,7 +39,7 @@ public class GraphPresentation {
       }
     });
 
-    myGraphManager.registerListener(new GraphManager.GraphListener() {
+    myGraphModel.registerListener(new PyConcurrencyGraphModel.GraphListener() {
       @Override
       public void graphChanged() {
         updateGraphModel();
@@ -55,15 +56,15 @@ public class GraphPresentation {
   }
 
   public int getLinesNumber() {
-    return myGraphManager.getMaxThread();
+    return myGraphModel.getMaxThread();
   }
 
   public int getCellsNumber() {
-    return (int)myGraphManager.getDuration() / myVisualSettings.getMillisPerCell();
+    return (int)myGraphModel.getDuration() / myVisualSettings.getMillisPerCell();
   }
 
   public ArrayList<String> getThreadNames() {
-    return myGraphManager.getThreadNames();
+    return myGraphModel.getThreadNames();
   }
 
   private long roundForCell(long time) {
@@ -75,21 +76,21 @@ public class GraphPresentation {
     if (myVisualSettings.getHorizontalMax() == 0) {
       return new ArrayList<GraphBlock>();
     }
-    long startTime = roundForCell(myGraphManager.getStartTime() +
-                                  myVisualSettings.getHorizontalValue() * myGraphManager.getDuration() /
+    long startTime = roundForCell(myGraphModel.getStartTime() +
+                                  myVisualSettings.getHorizontalValue() * myGraphModel.getDuration() /
                                   myVisualSettings.getHorizontalMax());
     ArrayList<GraphBlock> ret = new ArrayList<GraphBlock>();
-    int curEventId = myGraphManager.getLastEventIndexBeforeMoment(startTime);
+    int curEventId = myGraphModel.getLastEventIndexBeforeMoment(startTime);
     long curTime, nextTime = startTime;
     int i = 0;
     int numberOfCells = myVisualSettings.getHorizontalExtent() / GraphSettings.CELL_WIDTH + 2;
-    while ((i < numberOfCells) && (curEventId < myGraphManager.getSize())) {
+    while ((i < numberOfCells) && (curEventId < myGraphModel.getSize())) {
       curTime = nextTime;
-      nextTime = roundForCell(myGraphManager.getEventAt(curEventId + 1).getTime());
+      nextTime = roundForCell(myGraphModel.getEventAt(curEventId + 1).getTime());
       long period = nextTime - curTime;
       int cellsInPeriod = (int)(period / myVisualSettings.getMillisPerCell());
       if (cellsInPeriod != 0) {
-        ret.add(new GraphBlock(myGraphManager.getDrawElementsForRow(curEventId), cellsInPeriod));
+        ret.add(new GraphBlock(myGraphModel.getDrawElementsForRow(curEventId), cellsInPeriod));
         i += cellsInPeriod;
       }
       curEventId += 1;

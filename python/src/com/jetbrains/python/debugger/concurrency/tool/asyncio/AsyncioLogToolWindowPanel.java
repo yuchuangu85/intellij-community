@@ -22,29 +22,28 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.util.ui.UIUtil;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManagerImpl;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.PyConcurrencyService;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
 import com.jetbrains.python.debugger.concurrency.tool.asyncio.table.AsyncioTable;
 import com.jetbrains.python.debugger.concurrency.tool.asyncio.table.AsyncioTableModel;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
 
 import javax.swing.*;
 import java.awt.*;
 
 public class AsyncioLogToolWindowPanel extends ConcurrencyPanel {
   private final Project myProject;
-  private final GraphManager myGraphManager;
+  private final PyConcurrencyGraphModel myGraphModel;
   private JTable myTable;
 
   public AsyncioLogToolWindowPanel(Project project) {
     super(false, project);
     myProject = project;
-    logManager = PyConcurrencyService.getInstance(myProject).getAsyncioInstance();
-    myGraphManager = new GraphManager(logManager);
+    graphModel = PyConcurrencyService.getInstance(myProject).getAsyncioInstance();
+    myGraphModel = new PyConcurrencyGraphModel(myProject);
 
-    myGraphManager.registerListener(new GraphManager.GraphListener() {
+    myGraphModel.registerListener(new PyConcurrencyGraphModel.GraphListener() {
       @Override
       public void graphChanged() {
         UIUtil.invokeLaterIfNeeded(new Runnable() {
@@ -90,11 +89,11 @@ public class AsyncioLogToolWindowPanel extends ConcurrencyPanel {
 
     @Override
     public void actionPerformed(AnActionEvent e) {
-      final PyConcurrencyLogManagerImpl logManager = PyConcurrencyService.getInstance(myProject).getAsyncioInstance();
+      final PyConcurrencyGraphModel graphModel = PyConcurrencyService.getInstance(myProject).getAsyncioInstance();
       UIUtil.invokeLaterIfNeeded(new Runnable() {
         @Override
         public void run() {
-          ConcurrencyStatisticsTable frame = new ConcurrencyStatisticsTable(logManager);
+          ConcurrencyStatisticsTable frame = new ConcurrencyStatisticsTable(graphModel);
           frame.pack();
           frame.setLocationRelativeTo(null);
           frame.setVisible(true);
@@ -105,7 +104,7 @@ public class AsyncioLogToolWindowPanel extends ConcurrencyPanel {
   }
 
   public void buildLog() {
-    if (myGraphManager.getSize() == 0) {
+    if (myGraphModel.getSize() == 0) {
       myTable = null;
       initMessage();
       return;
@@ -113,13 +112,13 @@ public class AsyncioLogToolWindowPanel extends ConcurrencyPanel {
 
     if (myTable == null) {
       myLabel.setVisible(false);
-      myTable = new AsyncioTable(myGraphManager, myProject, this);
-      myTable.setModel(new AsyncioTableModel(myGraphManager));
+      myTable = new AsyncioTable(myGraphModel, myProject, this);
+      myTable.setModel(new AsyncioTableModel(myGraphModel));
       myGraphPane = ScrollPaneFactory.createScrollPane(myTable);
       add(myGraphPane);
       setToolbar(createToolbarPanel());
     }
-    myTable.setModel(new AsyncioTableModel(myGraphManager));
+    myTable.setModel(new AsyncioTableModel(myGraphModel));
   }
 
   @Override

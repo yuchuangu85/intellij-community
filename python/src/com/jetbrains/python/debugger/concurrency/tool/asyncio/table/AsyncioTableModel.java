@@ -16,15 +16,15 @@
 package com.jetbrains.python.debugger.concurrency.tool.asyncio.table;
 
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyNamesManager;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyTableModel;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphCell;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
 
 public class AsyncioTableModel extends ConcurrencyTableModel {
 
-  public AsyncioTableModel(GraphManager graphManager) {
-    super(graphManager);
+  public AsyncioTableModel(PyConcurrencyGraphModel graphModel) {
+    super(graphModel);
     myThreadingNamesManager = new ConcurrencyNamesManager();
     COLUMN_NAMES = new String[]{"Task", "Graph", "Event"};
   }
@@ -43,7 +43,7 @@ public class AsyncioTableModel extends ConcurrencyTableModel {
 
   @Override
   public Object getValueAt(int rowIndex, int columnIndex) {
-    PyConcurrencyEvent event = myGraphManager.getEventAt(rowIndex);
+    PyConcurrencyEvent event = myGraphModel.getEventAt(rowIndex);
     switch (columnIndex) {
       case GRAPH_COLUMN:
         return new GraphCell();

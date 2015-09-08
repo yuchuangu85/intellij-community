@@ -26,8 +26,8 @@ public class PyShowThreadingLogAction extends AnAction {
   public void actionPerformed(AnActionEvent event) {
     Project project = event.getData(PlatformDataKeys.PROJECT);
 
-    PyConcurrencyLogManagerImpl logManager = PyConcurrencyService.getInstance(project).getThreadingInstance();
-    String logString = logManager.getStringRepresentation();
+    PyConcurrencyGraphModel graphModel = PyConcurrencyService.getInstance(project).getThreadingInstance();
+    String logString = graphModel.getStringRepresentation();
 
     Messages.showMessageDialog(project, logString, "Threading log", Messages.getInformationIcon());
 

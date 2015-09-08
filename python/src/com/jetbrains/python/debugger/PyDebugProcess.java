@@ -59,7 +59,6 @@ import com.intellij.xdebugger.stepping.XSmartStepIntoHandler;
 import com.jetbrains.python.PythonFileType;
 import com.jetbrains.python.console.PythonDebugLanguageConsoleView;
 import com.jetbrains.python.console.pydev.PydevCompletionVariant;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManagerImpl;
 import com.jetbrains.python.debugger.concurrency.PyConcurrencyService;
 import com.jetbrains.python.debugger.pydev.*;
 import com.jetbrains.python.psi.PyFunction;
@@ -76,7 +75,6 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-
 import static javax.swing.SwingUtilities.invokeLater;
 
 /**

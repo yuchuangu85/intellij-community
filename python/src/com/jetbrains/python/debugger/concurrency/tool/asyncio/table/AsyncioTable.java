@@ -21,11 +21,11 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.table.JBTable;
 import com.intellij.xdebugger.impl.XSourcePositionImpl;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyTable;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphCell;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphCellRenderer;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
 
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
@@ -33,12 +33,12 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
 public class AsyncioTable extends ConcurrencyTable {
-  protected GraphManager myGraphManager;
+  protected PyConcurrencyGraphModel myGraphModel;
 
-  public AsyncioTable(GraphManager graphManager, Project project, ConcurrencyPanel panel) {
-    super(graphManager, project, panel);
-    myGraphManager = graphManager;
-    setDefaultRenderer(GraphCell.class, new GraphCellRenderer(myGraphManager));
+  public AsyncioTable(PyConcurrencyGraphModel graphModel, Project project, ConcurrencyPanel panel) {
+    super(graphModel, project, panel);
+    myGraphModel = graphModel;
+    setDefaultRenderer(GraphCell.class, new GraphCellRenderer(myGraphModel));
 
     addMouseListener(new MouseAdapter() {
       public void mouseClicked(MouseEvent e) {
@@ -46,10 +46,10 @@ public class AsyncioTable extends ConcurrencyTable {
           JBTable target = (JBTable)e.getSource();
           int row = target.getSelectedRow();
           if (row != -1) {
-            PyConcurrencyEvent event = myGraphManager.getEventAt(row);
+            PyConcurrencyEvent event = myGraphModel.getEventAt(row);
             VirtualFile vFile = LocalFileSystem.getInstance().findFileByPath(event.getFileName());
             navigateToSource(XSourcePositionImpl.create(vFile, event.getLine()));
-            myPanel.showStackTrace(myGraphManager.getEventAt(row));
+            myPanel.showStackTrace(myGraphModel.getEventAt(row));
           }
         }
       }
@@ -60,7 +60,7 @@ public class AsyncioTable extends ConcurrencyTable {
       public void valueChanged(ListSelectionEvent e) {
         int row = getSelectedRow();
         if (row != -1) {
-          myPanel.showStackTrace(myGraphManager.getEventAt(row));
+          myPanel.showStackTrace(myGraphModel.getEventAt(row));
         }
       }
     });

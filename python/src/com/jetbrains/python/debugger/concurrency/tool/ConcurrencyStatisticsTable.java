@@ -17,7 +17,7 @@ package com.jetbrains.python.debugger.concurrency.tool;
 
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.table.JBTable;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManagerImpl;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -30,8 +30,8 @@ public class ConcurrencyStatisticsTable extends JFrame {
   private Object[] threadIds;
   private static double toSeconds = 10000;
 
-  public ConcurrencyStatisticsTable(PyConcurrencyLogManagerImpl logManager) {
-    myThreadStatistics = logManager.getStatistics();
+  public ConcurrencyStatisticsTable(PyConcurrencyGraphModel graphModel) {
+    myThreadStatistics = graphModel.getStatistics();
     threadIds = myThreadStatistics.keySet().toArray();
 
     DefaultTableModel model = new DefaultTableModel() {

@@ -19,21 +19,21 @@ import com.intellij.openapi.project.Project;
 import com.intellij.ui.AppUIUtil;
 import com.intellij.ui.table.JBTable;
 import com.intellij.xdebugger.XSourcePosition;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphSettings;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.table.TableModel;
 
 public class ConcurrencyTable extends JBTable {
-  protected GraphManager myGraphManager;
+  protected PyConcurrencyGraphModel myGraphModel;
   protected Project myProject;
   protected ConcurrencyPanel myPanel;
   protected boolean myColumnsInitialized = false;
 
-  public ConcurrencyTable(GraphManager graphManager, Project project, ConcurrencyPanel panel) {
+  public ConcurrencyTable(PyConcurrencyGraphModel graphModel, Project project, ConcurrencyPanel panel) {
     super();
-    myGraphManager = graphManager;
+    myGraphModel = graphModel;
     myProject = project;
     myPanel = panel;
     setRowHeight(GraphSettings.CELL_HEIGHT);

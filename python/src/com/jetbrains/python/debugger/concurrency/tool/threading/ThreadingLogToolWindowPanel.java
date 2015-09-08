@@ -22,12 +22,11 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.util.ui.UIUtil;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManagerImpl;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.PyConcurrencyService;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyNamesPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphManager;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphPresentation;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphRenderer;
 import com.jetbrains.python.debugger.concurrency.tool.graph.GraphVisualSettings;
@@ -46,9 +45,9 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
   public ThreadingLogToolWindowPanel(Project project) {
     super(false, project);
     myProject = project;
-    logManager = PyConcurrencyService.getInstance(myProject).getThreadingInstance();
+    graphModel = PyConcurrencyService.getInstance(myProject).getThreadingInstance();
     myVisualSettings = new GraphVisualSettings();
-    myGraphPresentation = new GraphPresentation(new GraphManager(logManager), myVisualSettings);
+    myGraphPresentation = new GraphPresentation(graphModel, myVisualSettings);
     myRenderer = new GraphRenderer(myGraphPresentation);
 
     myGraphPresentation.registerListener(new GraphPresentation.PresentationListener() {
@@ -90,11 +89,11 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
 
     @Override
     public void actionPerformed(AnActionEvent e) {
-      final PyConcurrencyLogManagerImpl logManager = PyConcurrencyService.getInstance(myProject).getThreadingInstance();
+      final PyConcurrencyGraphModel graphModel = PyConcurrencyService.getInstance(myProject).getThreadingInstance();
       UIUtil.invokeLaterIfNeeded(new Runnable() {
         @Override
         public void run() {
-          ConcurrencyStatisticsTable frame = new ConcurrencyStatisticsTable(logManager);
+          ConcurrencyStatisticsTable frame = new ConcurrencyStatisticsTable(graphModel);
           frame.pack();
           frame.setLocationRelativeTo(null);
           frame.setVisible(true);
@@ -138,7 +137,7 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
   }
 
   public void updateContent() {
-    if (logManager.getSize() == 0) {
+    if (graphModel.getSize() == 0) {
       myVisualSettings.setNamesPanelWidth(myNamesPanel == null? myVisualSettings.getNamesPanelWidth(): myNamesPanel.getWidth());
       myGraphPane = null;
       initMessage();

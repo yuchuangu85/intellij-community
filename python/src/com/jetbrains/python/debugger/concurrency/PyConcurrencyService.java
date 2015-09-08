@@ -19,23 +19,23 @@ import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
 
 public class PyConcurrencyService {
-  private PyConcurrencyLogManagerImpl myThreadingGraphModel;
-  private PyConcurrencyLogManagerImpl myAsyncioGraphModel;
+  private PyConcurrencyGraphModel myThreadingGraphModel;
+  private PyConcurrencyGraphModel myAsyncioGraphModel;
 
   public PyConcurrencyService(Project project) {
-    myThreadingGraphModel = new PyConcurrencyLogManagerImpl(project);
-    myAsyncioGraphModel = new PyConcurrencyLogManagerImpl(project);
+    myThreadingGraphModel = new PyConcurrencyGraphModel(project);
+    myAsyncioGraphModel = new PyConcurrencyGraphModel(project);
   }
 
   public static PyConcurrencyService getInstance(Project project) {
     return ServiceManager.getService(project, PyConcurrencyService.class);
   }
 
-  public PyConcurrencyLogManagerImpl getThreadingInstance() {
+  public PyConcurrencyGraphModel getThreadingInstance() {
     return myThreadingGraphModel;
   }
 
-  public PyConcurrencyLogManagerImpl getAsyncioInstance() {
+  public PyConcurrencyGraphModel getAsyncioInstance() {
     return myAsyncioGraphModel;
   }
 

@@ -20,14 +20,14 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.SimpleToolWindowPanel;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManagerImpl;
+import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
 
 import javax.swing.*;
 import java.awt.*;
 
 public abstract class ConcurrencyPanel extends SimpleToolWindowPanel implements Disposable {
   private final Project myProject;
-  protected PyConcurrencyLogManagerImpl logManager;
+  protected PyConcurrencyGraphModel graphModel;
   protected JLabel myLabel;
   protected StackTracePanel myStackTracePanel;
   protected JScrollPane myGraphPane;

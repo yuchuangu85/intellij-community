@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2000-2015 JetBrains s.r.o.
  *
@@ -14,13 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool.graph;
+package com.jetbrains.python.debugger.concurrency;
 
+import com.intellij.openapi.project.Project;
 import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.hash.HashMap;
+import com.intellij.xdebugger.XDebugSession;
+import com.intellij.xdebugger.XDebugSessionListener;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyThreadEvent;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyLogManagerImpl;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStat;
+import com.jetbrains.python.debugger.concurrency.tool.graph.GraphAnalyser;
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.DrawElement;
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.EventDrawElement;
 import com.jetbrains.python.debugger.concurrency.tool.graph.elements.SimpleDrawElement;
@@ -31,8 +34,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class GraphManager {
-  private final PyConcurrencyLogManagerImpl myLogManager;
+public class PyConcurrencyGraphModel {
+  protected Project myProject;
+  private List<PyConcurrencyEvent> myLog;
+  private final Object myLogObject = new Object();
   private ArrayList<ArrayList<DrawElement>> myGraphScheme;
   private ArrayList<Integer> myThreadCountForRow;
   private Map<String, Integer> threadIndexToId;
@@ -43,39 +48,123 @@ public class GraphManager {
   private List<GraphListener> myListeners = new ArrayList<GraphListener>();
   private final Object myListenersObject = new Object();
   private GraphAnalyser myGraphAnalyser;
+  private XDebugSession lastSession;
+  protected long pauseTime;
 
-  public GraphManager(PyConcurrencyLogManagerImpl logManager) {
-    myLogManager = logManager;
+  public PyConcurrencyGraphModel(Project project) {
+    myProject = project;
+    myLog = new ArrayList<PyConcurrencyEvent>();
     createGraph();
-    updateGraph();
+  }
 
-    myLogManager.registerListener(new PyConcurrencyLogManagerImpl.LogListener() {
+  public void addSessionListener() {
+    lastSession.addSessionListener(new XDebugSessionListener() {
       @Override
-      public void logChanged(boolean isNewSession) {
-        if (isNewSession) {
-          createGraph();
-        }
+      public void sessionPaused() {
+        setPauseTime(System.currentTimeMillis());
         updateGraph();
+      }
+
+      @Override
+      public void sessionResumed() {
+        setPauseTime(0);
+      }
+
+      @Override
+      public void sessionStopped() {
+        updateGraph();
+      }
+
+      @Override
+      public void stackFrameChanged() {
+
+      }
+
+      @Override
+      public void beforeSessionResume() {
+
       }
     });
   }
 
-  public interface GraphListener {
-    void graphChanged();
-  }
-
-  public void registerListener(@NotNull GraphListener logListener) {
-    synchronized (myListenersObject) {
-      myListeners.add(logListener);
+  public void recordEvent(@NotNull XDebugSession debugSession, PyConcurrencyEvent event) {
+    synchronized (myLogObject) {
+      if (((lastSession == null) || (debugSession != lastSession)) && event == null) {
+        lastSession = debugSession;
+        myLog = new ArrayList<PyConcurrencyEvent>();
+        addSessionListener();
+        createGraph();
+        return;
+      }
+      myLog.add(event);
+      updateGraph();
     }
   }
 
-  public void notifyListeners() {
-    synchronized (myListenersObject) {
-      for (GraphListener logListener : myListeners) {
-        logListener.graphChanged();
+  public PyConcurrencyEvent getEventAt(int index) {
+    if (index == getSize()) {
+      return new FakeEvent(getPauseTime());
+    }
+    return myLog.get(index);
+  }
+
+  public int getSize() {
+    return myLog.size();
+  }
+
+  public String getStringRepresentation() {
+    StringBuilder resultBuilder = new StringBuilder();
+    resultBuilder.append("<html>Size: ").append(myLog.size()).append("<br>");
+    for (PyConcurrencyEvent event: myLog) {
+      resultBuilder.append(event.toString());
+    }
+    resultBuilder.append("</html>");
+    return resultBuilder.toString();
+  }
+
+
+  public long getPauseTime() {
+    return pauseTime;
+  }
+
+  public void setPauseTime(long pauseTime) {
+    this.pauseTime = pauseTime;
+  }
+
+  public long getStartTime() {
+    return getEventAt(0).getTime();
+  }
+
+  public java.util.HashMap getStatistics() {
+    java.util.HashMap<String, ConcurrencyStat> result = new java.util.HashMap<String, ConcurrencyStat>();
+    for (int i = 0; i < getSize(); ++i) {
+      PyConcurrencyEvent event = getEventAt(i);
+      String threadId = event.getThreadName();
+      if (event.isThreadEvent() && event.getType() == PyConcurrencyEvent.EventType.START) {
+        ConcurrencyStat stat = new ConcurrencyStat(event.getTime());
+        result.put(threadId, stat);
+      } else if (event.getType() == PyConcurrencyEvent.EventType.STOP) {
+        ConcurrencyStat stat = new ConcurrencyStat(event.getTime());
+        stat.myFinishTime = event.getTime();
+      } else if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_BEGIN) {
+        ConcurrencyStat stat = result.get(threadId);
+        stat.myLockCount++;
+        stat.myLastAcquireStartTime = event.getTime();
+      } else if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_END) {
+        ConcurrencyStat stat = result.get(threadId);
+        stat.myWaitTime += (event.getTime() - stat.myLastAcquireStartTime);
+        stat.myLastAcquireStartTime = 0;
       }
     }
+    PyConcurrencyEvent lastEvent = getEventAt(getSize() - 1);
+    long lastTime = lastEvent.getTime();
+    //set last time for stopping on a breakpoint
+    for (ConcurrencyStat stat: result.values()) {
+      if (stat.myFinishTime == 0) {
+        stat.myFinishTime = lastTime;
+      }
+    }
+    return result;
   }
 
   public int getMaxThread() {
@@ -96,34 +185,22 @@ public class GraphManager {
     }
   }
 
-  public int getSize() {
-    return myGraphScheme.size();
-  }
-
-  public long getStartTime() {
-    return myLogManager.getEventAt(0).getTime();
-  }
-
   public int getLastEventIndexBeforeMoment(long time) {
-    for (int i = 0; i < myLogManager.getSize(); ++i) {
-      PyConcurrencyEvent event = myLogManager.getEventAt(i);
+    for (int i = 0; i < getSize(); ++i) {
+      PyConcurrencyEvent event = getEventAt(i);
       if (event.getTime() >= time) {
         return Math.max(0, i - 1);
       }
     }
-    return myLogManager.getSize() - 1;
+    return getSize() - 1;
   }
 
   public long getDuration() {
     if (getSize() > 0) {
-      long lastEventTime = myLogManager.getPauseTime() == 0? getEventAt(getSize() - 1).getTime(): myLogManager.getPauseTime();
+      long lastEventTime = getPauseTime() == 0? getEventAt(getSize() - 1).getTime(): getPauseTime();
       return lastEventTime - getEventAt(0).getTime();
     }
     return 0;
-  }
-
-  public long getPauseTime() {
-    return myLogManager.getPauseTime();
   }
 
   private class FakeEvent extends PyConcurrencyEvent {
@@ -140,13 +217,6 @@ public class GraphManager {
     public boolean isThreadEvent() {
       return false;
     }
-  }
-
-  public PyConcurrencyEvent getEventAt(int index) {
-    if (index == myLogManager.getSize()) {
-      return new FakeEvent(getPauseTime());
-    }
-    return myLogManager.getEventAt(index);
   }
 
   public ArrayList<DrawElement> getDrawElementsForRow(int row) {
@@ -183,13 +253,31 @@ public class GraphManager {
     return relations[row];
   }
 
+  public interface GraphListener {
+    void graphChanged();
+  }
+
+  public void registerListener(@NotNull GraphListener logListener) {
+    synchronized (myListenersObject) {
+      myListeners.add(logListener);
+    }
+  }
+
+  public void notifyListeners() {
+    synchronized (myListenersObject) {
+      for (GraphListener logListener : myListeners) {
+        logListener.graphChanged();
+      }
+    }
+  }
+
   private void createGraph() {
     synchronized (myUpdateObject) {
       threadIndexToId = new HashMap<String, Integer>();
       threadNames = new ArrayList<String>();
-      myGraphScheme = new ArrayList<ArrayList<DrawElement>>(myLogManager.getSize());
+      myGraphScheme = new ArrayList<ArrayList<DrawElement>>(getSize());
       myThreadCountForRow = new ArrayList<Integer>();
-      myGraphAnalyser = new GraphAnalyser(myLogManager);
+      myGraphAnalyser = new GraphAnalyser(this);
       myCurrentMaxThread = 0;
       notifyListeners();
     }
@@ -197,9 +285,9 @@ public class GraphManager {
 
   private void updateGraph() {
     synchronized (myUpdateObject) {
-      relations = new int[myLogManager.getSize() + 1][2];
-      for (int i = myGraphScheme.size(); i < myLogManager.getSize(); ++i) {
-        PyConcurrencyEvent event = myLogManager.getEventAt(i);
+      relations = new int[getSize() + 1][2];
+      for (int i = myGraphScheme.size(); i < getSize(); ++i) {
+        PyConcurrencyEvent event = getEventAt(i);
         String eventThreadId = event.getThreadId();
 
         if (event.isThreadEvent() && event.getType() == PyConcurrencyEvent.EventType.START) {

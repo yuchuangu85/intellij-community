@@ -18,9 +18,9 @@ package com.jetbrains.python.debugger.concurrency.tool.asyncio;
 
 
 import com.intellij.ui.ColoredTableCellRenderer;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphElement;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
-import com.jetbrains.python.debugger.concurrency.model.elements.DrawElement;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyRenderingUtil;
 
@@ -54,7 +54,7 @@ public class GraphCellRenderer extends ColoredTableCellRenderer {
   @Override
   protected void paintComponent(Graphics g) {
     super.paintComponent(g);
-    ArrayList<DrawElement> rowElements = myGraphModel.getDrawElementsForRow(myRow);
+    ArrayList<ConcurrencyGraphElement> rowElements = myGraphModel.getDrawElementsForRow(myRow);
     int i = 0;
     //for (DrawElement element: rowElements) {
     //  element.paintInTable(g, i);
@@ -62,7 +62,7 @@ public class GraphCellRenderer extends ColoredTableCellRenderer {
     //}
     int[] relation = myGraphModel.getRelationForRow(myRow);
     if (relation[0] != relation[1]) {
-      DrawElement element = rowElements.get(relation[1]);
+      ConcurrencyGraphElement element = rowElements.get(relation[1]);
       ConcurrencyThreadState state = element.getAfter() == ConcurrencyThreadState.Stopped ? element.getBefore() : element.getAfter();
       ConcurrencyRenderingUtil.prepareStroke(g, state);
       drawRelation(g, relation[0], relation[1]);

@@ -88,8 +88,8 @@ public class ConcurrencyGraphView extends JComponent {
     ArrayList<ConcurrencyGraphBlock> elements = myGraphPresentation.getVisibleGraph();
     int paddingInsideBlock = 0;
     for (ConcurrencyGraphBlock block: elements) {
-      block.paint(g, ConcurrencyGraphSettings.CELL_WIDTH * (myPadding + paddingInsideBlock));
-      paddingInsideBlock += block.getNumberOfCells();
+      ConcurrencyRenderingUtil.paintBlock(g, ConcurrencyGraphSettings.CELL_WIDTH * (myPadding + paddingInsideBlock), block);
+      paddingInsideBlock += block.numberOfCells;
     }
     paintRuler(g);
   }

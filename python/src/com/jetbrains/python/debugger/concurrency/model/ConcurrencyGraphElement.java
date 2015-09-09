@@ -14,17 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.model.elements;
+package com.jetbrains.python.debugger.concurrency.model;
 
-import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
-
-import java.awt.*;
-
-public abstract class DrawElement {
+public class ConcurrencyGraphElement {
   protected ConcurrencyThreadState myBefore;
   protected ConcurrencyThreadState myAfter;
 
-  public DrawElement(ConcurrencyThreadState before, ConcurrencyThreadState after) {
+  public ConcurrencyGraphElement(ConcurrencyThreadState before, ConcurrencyThreadState after) {
     myBefore = before;
     myAfter = after;
   }
@@ -39,10 +35,10 @@ public abstract class DrawElement {
 
   @Override
   public boolean equals(Object element) {
-    if (!(element instanceof DrawElement)) {
+    if (!(element instanceof ConcurrencyGraphElement)) {
       return false;
     }
-    DrawElement other = (DrawElement)element;
+    ConcurrencyGraphElement other = (ConcurrencyGraphElement)element;
     return (this.getBefore().getClass() == other.getBefore().getClass()) &&
            (this.getAfter().getClass() == other.getAfter().getClass());
   }
@@ -51,8 +47,7 @@ public abstract class DrawElement {
     myAfter = state;
   }
 
-  public abstract DrawElement getNextElement();
-
-  public void paint(Graphics g, int x, int y, int numberOfCells) {
+  public ConcurrencyGraphElement getNextElement() {
+    return new ConcurrencyGraphElement(myAfter, myAfter);
   }
 }

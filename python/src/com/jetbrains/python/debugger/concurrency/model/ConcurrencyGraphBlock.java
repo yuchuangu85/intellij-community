@@ -15,29 +15,14 @@
  */
 package com.jetbrains.python.debugger.concurrency.model;
 
-import com.jetbrains.python.debugger.concurrency.model.elements.DrawElement;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
-
-import java.awt.*;
 import java.util.ArrayList;
 
 public class ConcurrencyGraphBlock {
-  private ArrayList<DrawElement> myElements;
+  public ArrayList<ConcurrencyGraphElement> elements;
+  public int numberOfCells;
 
-  public int getNumberOfCells() {
-    return numberOfCells;
-  }
-
-  private int numberOfCells;
-
-  public ConcurrencyGraphBlock(ArrayList<DrawElement> elements, int numberOfCells) {
-    myElements = elements;
+  public ConcurrencyGraphBlock(ArrayList<ConcurrencyGraphElement> elements, int numberOfCells) {
+    this.elements = elements;
     this.numberOfCells = numberOfCells;
-  }
-
-  public void paint(Graphics g, int x) {
-    for (int j = 0; j < myElements.size(); ++j) {
-      myElements.get(j).paint(g, x, (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * j + ConcurrencyGraphSettings.INTERVAL, numberOfCells);
-    }
   }
 }

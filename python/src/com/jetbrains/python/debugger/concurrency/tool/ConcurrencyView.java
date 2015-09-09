@@ -24,8 +24,9 @@ import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
 import com.intellij.ui.content.ContentManager;
-import com.jetbrains.python.debugger.concurrency.tool.asyncio.AsyncioLogToolWindowPanel;
-import com.jetbrains.python.debugger.concurrency.tool.threading.ThreadingLogToolWindowPanel;
+import com.jetbrains.python.debugger.concurrency.tool.panels.AsyncioLogToolWindowPanel;
+import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyPanel;
+import com.jetbrains.python.debugger.concurrency.tool.panels.ThreadingLogToolWindowPanel;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 

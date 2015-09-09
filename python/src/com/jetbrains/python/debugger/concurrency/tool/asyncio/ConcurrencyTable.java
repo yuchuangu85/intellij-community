@@ -13,30 +13,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool;
+package com.jetbrains.python.debugger.concurrency.tool.asyncio;
 
 import com.intellij.openapi.project.Project;
 import com.intellij.ui.AppUIUtil;
 import com.intellij.ui.table.JBTable;
 import com.intellij.xdebugger.XSourcePosition;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphSettings;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
+import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyPanel;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.table.TableModel;
 
 public class ConcurrencyTable extends JBTable {
-  protected PyConcurrencyGraphModel myGraphModel;
+  protected ConcurrencyGraphModel myGraphModel;
   protected Project myProject;
   protected ConcurrencyPanel myPanel;
   protected boolean myColumnsInitialized = false;
 
-  public ConcurrencyTable(PyConcurrencyGraphModel graphModel, Project project, ConcurrencyPanel panel) {
+  public ConcurrencyTable(ConcurrencyGraphModel graphModel, Project project, ConcurrencyPanel panel) {
     super();
     myGraphModel = graphModel;
     myProject = project;
     myPanel = panel;
-    setRowHeight(GraphSettings.CELL_HEIGHT);
+    setRowHeight(ConcurrencyGraphSettings.CELL_HEIGHT);
     setShowHorizontalLines(false);
   }
 

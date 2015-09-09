@@ -13,19 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool.graph;
+package com.jetbrains.python.debugger.concurrency.tool;
+
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphVisualSettings;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphBlock;
 
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 
-public class GraphRenderer extends JComponent {
-  private final GraphPresentation myGraphPresentation;
+public class ConcurrencyGraphView extends JComponent {
+  private final ConcurrencyGraphPresentationModel myGraphPresentation;
   private int myPadding;
 
-  public GraphRenderer(GraphPresentation graphPresentation) {
+  public ConcurrencyGraphView(ConcurrencyGraphPresentationModel graphPresentation) {
     myGraphPresentation = graphPresentation;
-    myGraphPresentation.registerListener(new GraphPresentation.PresentationListener() {
+    myGraphPresentation.registerListener(new ConcurrencyGraphPresentationModel.PresentationListener() {
       @Override
       public void graphChanged(int leftPadding) {
         myPadding = leftPadding;
@@ -36,7 +40,7 @@ public class GraphRenderer extends JComponent {
   }
 
   private void updateSize() {
-    int width = myGraphPresentation.getCellsNumber() * GraphSettings.CELL_WIDTH;
+    int width = myGraphPresentation.getCellsNumber() * ConcurrencyGraphSettings.CELL_WIDTH;
     int height = myGraphPresentation.getVisualSettings().getHeightForPanes(myGraphPresentation.getLinesNumber());
     setSize(new Dimension(width, height));
     setPreferredSize(new Dimension(width, height));
@@ -48,31 +52,31 @@ public class GraphRenderer extends JComponent {
 
   private void paintBackground(Graphics g) {
     updateSize();
-    g.setColor(GraphSettings.BACKGROUND_COLOR);
+    g.setColor(ConcurrencyGraphSettings.BACKGROUND_COLOR);
     g.fillRect(0, 0, getWidth(), getHeight());
   }
 
   private static void prepareRulerStroke(Graphics g) {
     Graphics2D g2 = (Graphics2D)g;
-    g2.setStroke(new BasicStroke(GraphSettings.RULER_STROKE_WIDTH));
-    g2.setColor(GraphSettings.RULER_COLOR);
+    g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.RULER_STROKE_WIDTH));
+    g2.setColor(ConcurrencyGraphSettings.RULER_COLOR);
   }
 
   private void paintRuler(Graphics g) {
     prepareRulerStroke(g);
-    GraphVisualSettings settings = myGraphPresentation.getVisualSettings();
-    int y = settings.getVerticalValue() + settings.getVerticalExtent() - GraphSettings.RULER_STROKE_WIDTH;
+    ConcurrencyGraphVisualSettings settings = myGraphPresentation.getVisualSettings();
+    int y = settings.getVerticalValue() + settings.getVerticalExtent() - ConcurrencyGraphSettings.RULER_STROKE_WIDTH;
     g.drawLine(0, y, getWidth(), y);
     FontMetrics metrics = g.getFontMetrics(getFont());
 
-    for (int i = 0; i < getWidth() / GraphSettings.RULER_UNIT_WIDTH; ++i) {
-      int markY = i % 10 == 0? y - GraphSettings.RULER_UNIT_MARK: y - GraphSettings.RULER_SUBUNIT_MARK;
-      g.drawLine(i * GraphSettings.RULER_UNIT_WIDTH, markY, i * GraphSettings.RULER_UNIT_WIDTH, y);
+    for (int i = 0; i < getWidth() / ConcurrencyGraphSettings.RULER_UNIT_WIDTH; ++i) {
+      int markY = i % 10 == 0 ? y - ConcurrencyGraphSettings.RULER_UNIT_MARK : y - ConcurrencyGraphSettings.RULER_SUBUNIT_MARK;
+      g.drawLine(i * ConcurrencyGraphSettings.RULER_UNIT_WIDTH, markY, i * ConcurrencyGraphSettings.RULER_UNIT_WIDTH, y);
       if ((i != 0) && (i % 10 == 0)) {
         String text = String.format("%d s", myGraphPresentation.getVisualSettings().getScale() * i / 10);
         int textWidth = metrics.stringWidth(text);
         int textHeight = metrics.getHeight();
-        g.drawString(text, i * GraphSettings.RULER_UNIT_WIDTH - textWidth / 2, markY - textHeight);
+        g.drawString(text, i * ConcurrencyGraphSettings.RULER_UNIT_WIDTH - textWidth / 2, markY - textHeight);
       }
     }
   }
@@ -81,10 +85,10 @@ public class GraphRenderer extends JComponent {
   public void paintComponent(Graphics g) {
     super.paintComponent(g);
     paintBackground(g);
-    ArrayList<GraphBlock> elements = myGraphPresentation.getVisibleGraph();
+    ArrayList<ConcurrencyGraphBlock> elements = myGraphPresentation.getVisibleGraph();
     int paddingInsideBlock = 0;
-    for (GraphBlock block: elements) {
-      block.paint(g, GraphSettings.CELL_WIDTH * (myPadding + paddingInsideBlock));
+    for (ConcurrencyGraphBlock block: elements) {
+      block.paint(g, ConcurrencyGraphSettings.CELL_WIDTH * (myPadding + paddingInsideBlock));
       paddingInsideBlock += block.getNumberOfCells();
     }
     paintRuler(g);

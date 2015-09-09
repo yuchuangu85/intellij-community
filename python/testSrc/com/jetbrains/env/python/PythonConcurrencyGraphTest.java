@@ -17,13 +17,12 @@ package com.jetbrains.env.python;
 
 import com.jetbrains.env.PyEnvTestCase;
 import com.jetbrains.env.python.debug.PyDebuggerTask;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.PyConcurrencyService;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
-import com.jetbrains.python.debugger.concurrency.tool.graph.elements.DrawElement;
-import com.jetbrains.python.debugger.concurrency.tool.graph.elements.EventDrawElement;
-import com.jetbrains.python.debugger.concurrency.tool.graph.elements.SimpleDrawElement;
-import com.jetbrains.python.debugger.concurrency.tool.graph.states.*;
+import com.jetbrains.python.debugger.concurrency.model.elements.DrawElement;
+import com.jetbrains.python.debugger.concurrency.model.elements.EventDrawElement;
+import com.jetbrains.python.debugger.concurrency.model.elements.SimpleDrawElement;
+import com.jetbrains.python.debugger.concurrency.model.states.*;
 
 import java.util.ArrayList;
 
@@ -39,7 +38,7 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
   public static DrawElement underLock = new EventDrawElement(new LockOwnThreadState(), new LockOwnThreadState());
 
 
-  public static void compareGraphRows(int row, PyConcurrencyGraphModel graphManager, DrawElement[] correctElements) {
+  public static void compareGraphRows(int row, ConcurrencyGraphModel graphManager, DrawElement[] correctElements) {
     ArrayList<DrawElement> elements = graphManager.getDrawElementsForRow(row);
     assertEquals(String.format("row = %d", row), correctElements.length, elements.size());
     for (int i = 0; i < elements.size(); ++i) {
@@ -49,7 +48,7 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
     }
   }
 
-  public static void compareGraphs(PyConcurrencyGraphModel PyConcurrencyGraphModel, DrawElement[][] correctGraph) {
+  public static void compareGraphs(ConcurrencyGraphModel PyConcurrencyGraphModel, DrawElement[][] correctGraph) {
     for (int i = 0; i < correctGraph.length; ++i) {
       compareGraphRows(i, PyConcurrencyGraphModel, correctGraph[i]);
     }
@@ -58,13 +57,13 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadMain() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test1.py") {
-      public PyConcurrencyGraphModel graphModel;
-      public PyConcurrencyGraphModel myPyConcurrencyGraphModel;
+      public ConcurrencyGraphModel graphModel;
+      public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
         graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new PyConcurrencyGraphModel(getProject());
+        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
       }
 
       @Override
@@ -83,13 +82,13 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadCreation() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test2.py") {
-      public PyConcurrencyGraphModel graphModel;
-      public PyConcurrencyGraphModel myPyConcurrencyGraphModel;
+      public ConcurrencyGraphModel graphModel;
+      public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
         graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new PyConcurrencyGraphModel(getProject());
+        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
       }
 
       @Override
@@ -109,13 +108,13 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadJoin() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test3.py") {
-      public PyConcurrencyGraphModel graphModel;
-      public PyConcurrencyGraphModel myPyConcurrencyGraphModel;
+      public ConcurrencyGraphModel graphModel;
+      public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
         graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new PyConcurrencyGraphModel(getProject());
+        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
       }
 
       @Override
@@ -139,13 +138,13 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadLockWith() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test4.py") {
-      public PyConcurrencyGraphModel graphModel;
-      public PyConcurrencyGraphModel myPyConcurrencyGraphModel;
+      public ConcurrencyGraphModel graphModel;
+      public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
         graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new PyConcurrencyGraphModel(getProject());
+        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
       }
 
       @Override
@@ -172,13 +171,13 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadLockAcquireRelease() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test5.py") {
-      public PyConcurrencyGraphModel graphModel;
-      public PyConcurrencyGraphModel myPyConcurrencyGraphModel;
+      public ConcurrencyGraphModel graphModel;
+      public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
         graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new PyConcurrencyGraphModel(getProject());
+        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
       }
 
       @Override
@@ -205,13 +204,13 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadDoubleLock() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test9.py") {
-      public PyConcurrencyGraphModel graphModel;
-      public PyConcurrencyGraphModel myPyConcurrencyGraphModel;
+      public ConcurrencyGraphModel graphModel;
+      public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
         graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new PyConcurrencyGraphModel(getProject());
+        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
       }
 
       @Override
@@ -240,13 +239,13 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadDeadlock() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test6.py") {
-      public PyConcurrencyGraphModel graphModel;
-      public PyConcurrencyGraphModel myPyConcurrencyGraphModel;
+      public ConcurrencyGraphModel graphModel;
+      public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
         graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new PyConcurrencyGraphModel(getProject());
+        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
       }
 
       @Override
@@ -267,13 +266,13 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testAsyncioTaskCreation() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test7.py") {
-      public PyConcurrencyGraphModel graphModel;
-      public PyConcurrencyGraphModel myPyConcurrencyGraphModel;
+      public ConcurrencyGraphModel graphModel;
+      public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
         graphModel = PyConcurrencyService.getInstance(getProject()).getAsyncioInstance();
-        myPyConcurrencyGraphModel = new PyConcurrencyGraphModel(getProject());
+        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
       }
 
       @Override
@@ -293,13 +292,13 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testAsyncioLock() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test8.py") {
-      public PyConcurrencyGraphModel graphModel;
-      public PyConcurrencyGraphModel myPyConcurrencyGraphModel;
+      public ConcurrencyGraphModel graphModel;
+      public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
         graphModel = PyConcurrencyService.getInstance(getProject()).getAsyncioInstance();
-        myPyConcurrencyGraphModel = new PyConcurrencyGraphModel(getProject());
+        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
       }
 
       @Override

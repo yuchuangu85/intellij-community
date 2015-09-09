@@ -13,23 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool;
+package com.jetbrains.python.debugger.concurrency.tool.panels;
 
 import com.intellij.util.ui.UIUtil;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphPresentation;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphSettings;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 
-public class ConcurrencyNamesPanel extends JComponent {
-  private final GraphPresentation myGraphPresentation;
+public class NamesPanel extends JComponent {
+  private final ConcurrencyGraphPresentationModel myGraphPresentation;
 
-  public ConcurrencyNamesPanel(GraphPresentation presentation) {
+  public NamesPanel(ConcurrencyGraphPresentationModel presentation) {
     myGraphPresentation = presentation;
 
-    myGraphPresentation.registerListener(new GraphPresentation.PresentationListener() {
+    myGraphPresentation.registerListener(new ConcurrencyGraphPresentationModel.PresentationListener() {
       @Override
       public void graphChanged(int padding) {
         UIUtil.invokeLaterIfNeeded(new Runnable() {
@@ -43,7 +43,7 @@ public class ConcurrencyNamesPanel extends JComponent {
   }
 
   private static int getYLocation(int i) {
-    return i * (GraphSettings.CELL_HEIGHT + GraphSettings.INTERVAL) + GraphSettings.INTERVAL;
+    return i * (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) + ConcurrencyGraphSettings.INTERVAL;
   }
 
   private void updateNames() {
@@ -51,8 +51,8 @@ public class ConcurrencyNamesPanel extends JComponent {
     ArrayList<String> names = myGraphPresentation.getThreadNames();
     for (int i = 0; i < names.size(); ++i) {
       JLabel label = new JLabel();
-      label.setLocation(GraphSettings.INTERVAL, getYLocation(i));
-      label.setSize(new Dimension(getWidth(), GraphSettings.INTERVAL));
+      label.setLocation(ConcurrencyGraphSettings.INTERVAL, getYLocation(i));
+      label.setSize(new Dimension(getWidth(), ConcurrencyGraphSettings.INTERVAL));
       label.setText(names.get(i));
       add(label);
     }

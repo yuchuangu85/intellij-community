@@ -13,14 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool.graph;
+package com.jetbrains.python.debugger.concurrency.model;
 
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class GraphVisualSettings {
+public class ConcurrencyGraphVisualSettings {
   private int myScale = 1;
   private int myHorizontalValue = 0;
   private int myHorizontalExtent;
@@ -80,8 +81,8 @@ public class GraphVisualSettings {
   }
 
   public int getHeightForPanes(int linesNumber) {
-    return Math.max((GraphSettings.CELL_HEIGHT + GraphSettings.INTERVAL) * linesNumber +
-                    2 * GraphSettings.INTERVAL,
+    return Math.max((ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * linesNumber +
+                    2 * ConcurrencyGraphSettings.INTERVAL,
                     getVerticalValue() + getVerticalExtent());
   }
 

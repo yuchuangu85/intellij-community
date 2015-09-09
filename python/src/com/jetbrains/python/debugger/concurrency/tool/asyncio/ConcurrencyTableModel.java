@@ -13,9 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool;
+package com.jetbrains.python.debugger.concurrency.tool.asyncio;
 
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyNamesManager;
 
 import javax.swing.table.AbstractTableModel;
 
@@ -25,10 +26,10 @@ public abstract class ConcurrencyTableModel extends AbstractTableModel {
 
   public static final int COLUMN_COUNT = EVENT_COLUMN + 1;
   protected static String[] COLUMN_NAMES;
-  protected final PyConcurrencyGraphModel myGraphModel;
+  protected final ConcurrencyGraphModel myGraphModel;
   protected ConcurrencyNamesManager myThreadingNamesManager;
 
-  public ConcurrencyTableModel(PyConcurrencyGraphModel graphModel) {
+  public ConcurrencyTableModel(ConcurrencyGraphModel graphModel) {
     myGraphModel = graphModel;
   }
 

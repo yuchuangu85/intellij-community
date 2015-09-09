@@ -14,14 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool.graph;
+package com.jetbrains.python.debugger.concurrency.tool;
 
 
 import com.intellij.ui.JBColor;
 
 import java.awt.*;
 
-public class GraphSettings {
+public class ConcurrencyGraphSettings {
   public static int CELL_WIDTH = 1;
   public static int CELL_HEIGHT = 20;
   public static int INTERVAL = 20;

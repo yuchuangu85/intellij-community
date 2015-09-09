@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool.threading;
+package com.jetbrains.python.debugger.concurrency.tool.panels;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.*;
@@ -22,14 +22,11 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.util.ui.UIUtil;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.PyConcurrencyService;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyNamesPanel;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphPresentation;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphRenderer;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphVisualSettings;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphView;
 
 import javax.swing.*;
 import java.awt.*;
@@ -38,19 +35,17 @@ import java.awt.event.AdjustmentListener;
 
 public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
   private final Project myProject;
-  private GraphRenderer myRenderer;
-  private GraphVisualSettings myVisualSettings;
-  private GraphPresentation myGraphPresentation;
+  private ConcurrencyGraphView myRenderer;
+  private ConcurrencyGraphPresentationModel myGraphPresentation;
 
   public ThreadingLogToolWindowPanel(Project project) {
     super(false, project);
     myProject = project;
     graphModel = PyConcurrencyService.getInstance(myProject).getThreadingInstance();
-    myVisualSettings = new GraphVisualSettings();
-    myGraphPresentation = new GraphPresentation(graphModel, myVisualSettings);
-    myRenderer = new GraphRenderer(myGraphPresentation);
+    myGraphPresentation = new ConcurrencyGraphPresentationModel(graphModel);
+    myRenderer = new ConcurrencyGraphView(myGraphPresentation);
 
-    myGraphPresentation.registerListener(new GraphPresentation.PresentationListener() {
+    myGraphPresentation.registerListener(new ConcurrencyGraphPresentationModel.PresentationListener() {
       @Override
       public void graphChanged(int padding) {
         UIUtil.invokeLaterIfNeeded(new Runnable() {
@@ -89,7 +84,7 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
 
     @Override
     public void actionPerformed(AnActionEvent e) {
-      final PyConcurrencyGraphModel graphModel = PyConcurrencyService.getInstance(myProject).getThreadingInstance();
+      final ConcurrencyGraphModel graphModel = PyConcurrencyService.getInstance(myProject).getThreadingInstance();
       UIUtil.invokeLaterIfNeeded(new Runnable() {
         @Override
         public void run() {
@@ -120,11 +115,11 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
       int orient = source.getOrientation();
       if (orient == Adjustable.HORIZONTAL) {
         JScrollBar bar = myGraphPane.getHorizontalScrollBar();
-        myVisualSettings.updateHorizontalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
+        myGraphPresentation.getVisualSettings().updateHorizontalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
       if (orient == Adjustable.VERTICAL) {
         JScrollBar bar = myGraphPane.getVerticalScrollBar();
-        myVisualSettings.updateVerticalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
+        myGraphPresentation.getVisualSettings().updateVerticalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
     }
   }
@@ -138,7 +133,9 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
 
   public void updateContent() {
     if (graphModel.getSize() == 0) {
-      myVisualSettings.setNamesPanelWidth(myNamesPanel == null? myVisualSettings.getNamesPanelWidth(): myNamesPanel.getWidth());
+      myGraphPresentation.getVisualSettings().setNamesPanelWidth(myNamesPanel == null?
+                                                                 myGraphPresentation.getVisualSettings().getNamesPanelWidth():
+                                                                 myNamesPanel.getWidth());
       myGraphPane = null;
       initMessage();
       return;
@@ -147,14 +144,14 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
     if (myGraphPane == null) {
       myLabel.setVisible(false);
       initGraphPane();
-      myNamesPanel = ScrollPaneFactory.createScrollPane(new ConcurrencyNamesPanel(myGraphPresentation));
+      myNamesPanel = ScrollPaneFactory.createScrollPane(new NamesPanel(myGraphPresentation));
       myGraphPane.getVerticalScrollBar().setModel(myNamesPanel.getVerticalScrollBar().getModel());
 
       JSplitPane p = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
       p.add(myNamesPanel, JSplitPane.LEFT);
       p.add(myGraphPane, JSplitPane.RIGHT);
-      p.setDividerLocation(myVisualSettings.getNamesPanelWidth());
-      p.setDividerSize(myVisualSettings.getDividerWidth());
+      p.setDividerLocation(myGraphPresentation.getVisualSettings().getNamesPanelWidth());
+      p.setDividerSize(myGraphPresentation.getVisualSettings().getDividerWidth());
       add(p, BorderLayout.CENTER);
       setToolbar(createToolbarPanel());
       validate();

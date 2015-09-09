@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency;
+package com.jetbrains.python.debugger.concurrency.model;
 
 import com.intellij.openapi.project.Project;
 import com.intellij.util.containers.HashSet;
@@ -22,19 +22,19 @@ import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.XDebugSessionListener;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyThreadEvent;
+import com.jetbrains.python.debugger.concurrency.model.states.*;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStat;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphAnalyser;
-import com.jetbrains.python.debugger.concurrency.tool.graph.elements.DrawElement;
-import com.jetbrains.python.debugger.concurrency.tool.graph.elements.EventDrawElement;
-import com.jetbrains.python.debugger.concurrency.tool.graph.elements.SimpleDrawElement;
-import com.jetbrains.python.debugger.concurrency.tool.graph.states.*;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphAnalyser;
+import com.jetbrains.python.debugger.concurrency.model.elements.DrawElement;
+import com.jetbrains.python.debugger.concurrency.model.elements.EventDrawElement;
+import com.jetbrains.python.debugger.concurrency.model.elements.SimpleDrawElement;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class PyConcurrencyGraphModel {
+public class ConcurrencyGraphModel {
   protected Project myProject;
   private List<PyConcurrencyEvent> myLog;
   private final Object myLogObject = new Object();
@@ -47,11 +47,11 @@ public class PyConcurrencyGraphModel {
   private int[][] relations;
   private List<GraphListener> myListeners = new ArrayList<GraphListener>();
   private final Object myListenersObject = new Object();
-  private GraphAnalyser myGraphAnalyser;
+  private ConcurrencyGraphAnalyser myGraphAnalyser;
   private XDebugSession lastSession;
   protected long pauseTime;
 
-  public PyConcurrencyGraphModel(Project project) {
+  public ConcurrencyGraphModel(Project project) {
     myProject = project;
     myLog = new ArrayList<PyConcurrencyEvent>();
     createGraph();
@@ -277,7 +277,7 @@ public class PyConcurrencyGraphModel {
       threadNames = new ArrayList<String>();
       myGraphScheme = new ArrayList<ArrayList<DrawElement>>(getSize());
       myThreadCountForRow = new ArrayList<Integer>();
-      myGraphAnalyser = new GraphAnalyser(this);
+      myGraphAnalyser = new ConcurrencyGraphAnalyser(this);
       myCurrentMaxThread = 0;
       notifyListeners();
     }

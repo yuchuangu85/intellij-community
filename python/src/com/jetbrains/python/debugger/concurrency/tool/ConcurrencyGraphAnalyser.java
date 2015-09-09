@@ -13,26 +13,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool.graph;
+package com.jetbrains.python.debugger.concurrency.tool;
 
 import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.hash.HashMap;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyLockEvent;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
-import com.jetbrains.python.debugger.concurrency.tool.graph.states.LockOwnThreadState;
-import com.jetbrains.python.debugger.concurrency.tool.graph.states.LockWaitThreadState;
-import com.jetbrains.python.debugger.concurrency.tool.graph.states.RunThreadState;
-import com.jetbrains.python.debugger.concurrency.tool.graph.states.ThreadState;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
+import com.jetbrains.python.debugger.concurrency.model.states.LockOwnThreadState;
+import com.jetbrains.python.debugger.concurrency.model.states.LockWaitThreadState;
+import com.jetbrains.python.debugger.concurrency.model.states.RunThreadState;
+import com.jetbrains.python.debugger.concurrency.model.states.ThreadState;
 import org.jetbrains.annotations.Nullable;
 
 
-public class GraphAnalyser {
-  private final PyConcurrencyGraphModel myGraphModel;
+public class ConcurrencyGraphAnalyser {
+  private final ConcurrencyGraphModel myGraphModel;
   private HashMap<String, ThreadLocksInfo> myLocksInfo;
   private int lastInd = 0;
 
-  public GraphAnalyser(PyConcurrencyGraphModel graphModel) {
+  public ConcurrencyGraphAnalyser(ConcurrencyGraphModel graphModel) {
     myGraphModel = graphModel;
   }
 

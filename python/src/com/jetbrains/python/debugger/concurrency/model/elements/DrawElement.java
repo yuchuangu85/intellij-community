@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool.graph.elements;
+package com.jetbrains.python.debugger.concurrency.model.elements;
 
-import com.jetbrains.python.debugger.concurrency.tool.graph.states.ThreadState;
+import com.jetbrains.python.debugger.concurrency.model.states.ThreadState;
 
 import java.awt.*;
 

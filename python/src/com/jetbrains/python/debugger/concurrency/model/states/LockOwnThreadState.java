@@ -13,17 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool.graph.states;
+package com.jetbrains.python.debugger.concurrency.model.states;
 
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphSettings;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 
 import java.awt.*;
 
-public class DeadlockState implements ThreadState {
+
+public class LockOwnThreadState implements ThreadState {
   @Override
   public void prepareStroke(Graphics g) {
     Graphics2D g2 = (Graphics2D)g;
-    g2.setStroke(new BasicStroke(GraphSettings.STROKE_BASIC));
-    g2.setColor(GraphSettings.DEADLOCK_COLOR);
+    g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.STROKE_BASIC));
+    g2.setColor(ConcurrencyGraphSettings.LOCK_OWNING_COLOR);
   }
 }

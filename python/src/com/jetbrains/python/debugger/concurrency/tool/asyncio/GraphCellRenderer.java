@@ -14,24 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool.graph;
+package com.jetbrains.python.debugger.concurrency.tool.asyncio;
 
 
 import com.intellij.ui.ColoredTableCellRenderer;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
-import com.jetbrains.python.debugger.concurrency.tool.graph.elements.DrawElement;
-import com.jetbrains.python.debugger.concurrency.tool.graph.states.StoppedThreadState;
-import com.jetbrains.python.debugger.concurrency.tool.graph.states.ThreadState;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
+import com.jetbrains.python.debugger.concurrency.model.elements.DrawElement;
+import com.jetbrains.python.debugger.concurrency.model.states.StoppedThreadState;
+import com.jetbrains.python.debugger.concurrency.model.states.ThreadState;
 
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 
 public class GraphCellRenderer extends ColoredTableCellRenderer {
-  private final PyConcurrencyGraphModel myGraphModel;
+  private final ConcurrencyGraphModel myGraphModel;
   private int myRow;
 
-  public GraphCellRenderer(PyConcurrencyGraphModel graphModel) {
+  public GraphCellRenderer(ConcurrencyGraphModel graphModel) {
     myGraphModel = graphModel;
   }
 
@@ -44,9 +45,9 @@ public class GraphCellRenderer extends ColoredTableCellRenderer {
   private void drawRelation(Graphics g, int parent, int child) {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    int x_start = Math.round((parent + 0.5f) * GraphSettings.CELL_WIDTH);
-    int x_finish = Math.round((child + 0.5f) * GraphSettings.CELL_WIDTH);
-    int y = Math.round(GraphSettings.CELL_HEIGHT * 0.5f);
+    int x_start = Math.round((parent + 0.5f) * ConcurrencyGraphSettings.CELL_WIDTH);
+    int x_finish = Math.round((child + 0.5f) * ConcurrencyGraphSettings.CELL_WIDTH);
+    int y = Math.round(ConcurrencyGraphSettings.CELL_HEIGHT * 0.5f);
     g2.drawLine(x_start, y, x_finish, y);
   }
 

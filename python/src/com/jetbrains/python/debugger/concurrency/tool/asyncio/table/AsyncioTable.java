@@ -21,11 +21,11 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.table.JBTable;
 import com.intellij.xdebugger.impl.XSourcePositionImpl;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyPanel;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyTable;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphCell;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphCellRenderer;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
+import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyPanel;
+import com.jetbrains.python.debugger.concurrency.tool.asyncio.ConcurrencyTable;
+import com.jetbrains.python.debugger.concurrency.tool.asyncio.GraphCell;
+import com.jetbrains.python.debugger.concurrency.tool.asyncio.GraphCellRenderer;
 
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
@@ -33,9 +33,9 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
 public class AsyncioTable extends ConcurrencyTable {
-  protected PyConcurrencyGraphModel myGraphModel;
+  protected ConcurrencyGraphModel myGraphModel;
 
-  public AsyncioTable(PyConcurrencyGraphModel graphModel, Project project, ConcurrencyPanel panel) {
+  public AsyncioTable(ConcurrencyGraphModel graphModel, Project project, ConcurrencyPanel panel) {
     super(graphModel, project, panel);
     myGraphModel = graphModel;
     setDefaultRenderer(GraphCell.class, new GraphCellRenderer(myGraphModel));

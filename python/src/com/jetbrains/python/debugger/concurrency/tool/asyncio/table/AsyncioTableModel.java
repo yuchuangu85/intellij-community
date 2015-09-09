@@ -16,14 +16,14 @@
 package com.jetbrains.python.debugger.concurrency.tool.asyncio.table;
 
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyNamesManager;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyTableModel;
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphCell;
+import com.jetbrains.python.debugger.concurrency.tool.asyncio.ConcurrencyTableModel;
+import com.jetbrains.python.debugger.concurrency.tool.asyncio.GraphCell;
 
 public class AsyncioTableModel extends ConcurrencyTableModel {
 
-  public AsyncioTableModel(PyConcurrencyGraphModel graphModel) {
+  public AsyncioTableModel(ConcurrencyGraphModel graphModel) {
     super(graphModel);
     myThreadingNamesManager = new ConcurrencyNamesManager();
     COLUMN_NAMES = new String[]{"Task", "Graph", "Event"};

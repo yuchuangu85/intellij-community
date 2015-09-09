@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool.graph.states;
+package com.jetbrains.python.debugger.concurrency.model.states;
 
 import java.awt.*;
 

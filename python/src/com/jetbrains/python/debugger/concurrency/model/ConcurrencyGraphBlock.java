@@ -13,14 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool.graph;
+package com.jetbrains.python.debugger.concurrency.model;
 
-import com.jetbrains.python.debugger.concurrency.tool.graph.elements.DrawElement;
+import com.jetbrains.python.debugger.concurrency.model.elements.DrawElement;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 
 import java.awt.*;
 import java.util.ArrayList;
 
-public class GraphBlock {
+public class ConcurrencyGraphBlock {
   private ArrayList<DrawElement> myElements;
 
   public int getNumberOfCells() {
@@ -29,14 +30,14 @@ public class GraphBlock {
 
   private int numberOfCells;
 
-  public GraphBlock(ArrayList<DrawElement> elements, int numberOfCells) {
+  public ConcurrencyGraphBlock(ArrayList<DrawElement> elements, int numberOfCells) {
     myElements = elements;
     this.numberOfCells = numberOfCells;
   }
 
   public void paint(Graphics g, int x) {
     for (int j = 0; j < myElements.size(); ++j) {
-      myElements.get(j).paint(g, x, (GraphSettings.CELL_HEIGHT + GraphSettings.INTERVAL) * j + GraphSettings.INTERVAL, numberOfCells);
+      myElements.get(j).paint(g, x, (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * j + ConcurrencyGraphSettings.INTERVAL, numberOfCells);
     }
   }
 }

@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool.graph.elements;
+package com.jetbrains.python.debugger.concurrency.model.elements;
 
-import com.jetbrains.python.debugger.concurrency.tool.graph.GraphSettings;
-import com.jetbrains.python.debugger.concurrency.tool.graph.states.StoppedThreadState;
-import com.jetbrains.python.debugger.concurrency.tool.graph.states.ThreadState;
+import com.jetbrains.python.debugger.concurrency.model.states.StoppedThreadState;
+import com.jetbrains.python.debugger.concurrency.model.states.ThreadState;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 
 import java.awt.*;
 
@@ -41,6 +41,6 @@ public class SimpleDrawElement extends DrawElement {
       return;
     }
     myBefore.prepareStroke(g2);
-    g2.fillRect(x, y, GraphSettings.CELL_WIDTH * numberOfCells, GraphSettings.CELL_HEIGHT);
+    g2.fillRect(x, y, ConcurrencyGraphSettings.CELL_WIDTH * numberOfCells, ConcurrencyGraphSettings.CELL_HEIGHT);
   }
 }

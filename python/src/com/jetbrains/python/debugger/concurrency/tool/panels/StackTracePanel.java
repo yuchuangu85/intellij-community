@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool;
+package com.jetbrains.python.debugger.concurrency.tool.panels;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.util.treeView.TreeState;

@@ -13,25 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.tool.graph;
+package com.jetbrains.python.debugger.concurrency.model;
 
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyGraphModel;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class GraphPresentation {
-  private final PyConcurrencyGraphModel myGraphModel;
+public class ConcurrencyGraphPresentationModel {
+  private final ConcurrencyGraphModel myGraphModel;
   private List<PresentationListener> myListeners = new ArrayList<PresentationListener>();
   private final Object myListenersObject = new Object();
-  private GraphVisualSettings myVisualSettings;
+  private ConcurrencyGraphVisualSettings myVisualSettings;
 
-  public GraphPresentation(final PyConcurrencyGraphModel graphModel, GraphVisualSettings visualSettings) {
+  public ConcurrencyGraphPresentationModel(final ConcurrencyGraphModel graphModel) {
     myGraphModel = graphModel;
-    myVisualSettings = visualSettings;
+    myVisualSettings = new ConcurrencyGraphVisualSettings();
 
-    myVisualSettings.registerListener(new GraphVisualSettings.SettingsListener() {
+    myVisualSettings.registerListener(new ConcurrencyGraphVisualSettings.SettingsListener() {
       @Override
       public void settingsChanged() {
         updateGraphModel();
@@ -39,7 +39,7 @@ public class GraphPresentation {
       }
     });
 
-    myGraphModel.registerListener(new PyConcurrencyGraphModel.GraphListener() {
+    myGraphModel.registerListener(new ConcurrencyGraphModel.GraphListener() {
       @Override
       public void graphChanged() {
         updateGraphModel();
@@ -51,7 +51,7 @@ public class GraphPresentation {
   private void updateGraphModel() {
   }
 
-  public GraphVisualSettings getVisualSettings() {
+  public ConcurrencyGraphVisualSettings getVisualSettings() {
     return myVisualSettings;
   }
 
@@ -72,32 +72,31 @@ public class GraphPresentation {
     return time - (time % millisPerCell);
   }
 
-  public ArrayList<GraphBlock> getVisibleGraph() {
+  public ArrayList<ConcurrencyGraphBlock> getVisibleGraph() {
     if (myVisualSettings.getHorizontalMax() == 0) {
-      return new ArrayList<GraphBlock>();
+      return new ArrayList<ConcurrencyGraphBlock>();
     }
     long startTime = roundForCell(myGraphModel.getStartTime() +
                                   myVisualSettings.getHorizontalValue() * myGraphModel.getDuration() /
                                   myVisualSettings.getHorizontalMax());
-    ArrayList<GraphBlock> ret = new ArrayList<GraphBlock>();
+    ArrayList<ConcurrencyGraphBlock> ret = new ArrayList<ConcurrencyGraphBlock>();
     int curEventId = myGraphModel.getLastEventIndexBeforeMoment(startTime);
     long curTime, nextTime = startTime;
     int i = 0;
-    int numberOfCells = myVisualSettings.getHorizontalExtent() / GraphSettings.CELL_WIDTH + 2;
+    int numberOfCells = myVisualSettings.getHorizontalExtent() / ConcurrencyGraphSettings.CELL_WIDTH + 2;
     while ((i < numberOfCells) && (curEventId < myGraphModel.getSize())) {
       curTime = nextTime;
       nextTime = roundForCell(myGraphModel.getEventAt(curEventId + 1).getTime());
       long period = nextTime - curTime;
       int cellsInPeriod = (int)(period / myVisualSettings.getMillisPerCell());
       if (cellsInPeriod != 0) {
-        ret.add(new GraphBlock(myGraphModel.getDrawElementsForRow(curEventId), cellsInPeriod));
+        ret.add(new ConcurrencyGraphBlock(myGraphModel.getDrawElementsForRow(curEventId), cellsInPeriod));
         i += cellsInPeriod;
       }
       curEventId += 1;
     }
     return ret;
   }
-
 
   public interface PresentationListener {
     void graphChanged(int padding);

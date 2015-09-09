@@ -17,12 +17,14 @@
 package com.jetbrains.python.debugger.concurrency.tool.panels;
 
 import com.intellij.icons.AllIcons;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.SimpleToolWindowPanel;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.util.ui.UIUtil;
-import com.jetbrains.python.debugger.concurrency.PyConcurrencyService;
+import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphView;
@@ -33,17 +35,24 @@ import java.awt.*;
 import java.awt.event.AdjustmentEvent;
 import java.awt.event.AdjustmentListener;
 
-public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
-  private final Project myProject;
+public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements Disposable {
   private ConcurrencyGraphView myRenderer;
+  private ConcurrencyGraphModel myGraphModel;
   private ConcurrencyGraphPresentationModel myGraphPresentation;
+  private String myType;
+  private final Project myProject;
+  protected JLabel myLabel;
+  protected StackTracePanel myStackTracePanel;
+  protected JScrollPane myGraphPane;
+  protected JScrollPane myNamesPanel;
 
-  public ThreadingLogToolWindowPanel(Project project) {
-    super(false, project);
+  public ConcurrencyToolWindowPanel(boolean vertical, Project project, ConcurrencyGraphModel graphModel, String type) {
+    super(vertical);
     myProject = project;
-    graphModel = PyConcurrencyService.getInstance(myProject).getThreadingInstance();
-    myGraphPresentation = new ConcurrencyGraphPresentationModel(graphModel);
+    myGraphModel = graphModel;
+    myGraphPresentation = new ConcurrencyGraphPresentationModel(myGraphModel);
     myRenderer = new ConcurrencyGraphView(myGraphPresentation);
+    myType = type;
 
     myGraphPresentation.registerListener(new ConcurrencyGraphPresentationModel.PresentationListener() {
       @Override
@@ -66,7 +75,6 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
     });
   }
 
-  @Override
   protected JPanel createToolbarPanel() {
     final DefaultActionGroup group = new DefaultActionGroup();
     group.add(new StatisticsAction());
@@ -79,12 +87,12 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
 
   private class StatisticsAction extends AnAction implements DumbAware {
     public StatisticsAction() {
-      super("Statistical info", "Show threading statistics", AllIcons.ToolbarDecorator.Analyze);
+      super("Statistical info", "Show " + myType + " statistics", AllIcons.ToolbarDecorator.Analyze);
     }
 
     @Override
     public void actionPerformed(AnActionEvent e) {
-      final ConcurrencyGraphModel graphModel = PyConcurrencyService.getInstance(myProject).getThreadingInstance();
+      final ConcurrencyGraphModel graphModel = myGraphModel;
       UIUtil.invokeLaterIfNeeded(new Runnable() {
         @Override
         public void run() {
@@ -97,13 +105,12 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
     }
   }
 
-  @Override
   public void initMessage() {
     removeAll();
     myLabel = new JLabel();
     myLabel.setHorizontalAlignment(JLabel.CENTER);
     myLabel.setVerticalAlignment(JLabel.CENTER);
-    myLabel.setText("<html>The Threading log is empty. <br>" +
+    myLabel.setText("<html>The " + myType + " log is empty. <br>" +
                     "Check the box \"Build diagram for concurrent programs\" " +
                     "in Settings | Build, Execution, Deployment | Python debugger</html>");
     add(myLabel);
@@ -124,6 +131,28 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
     }
   }
 
+  public void showStackTrace(PyConcurrencyEvent event) {
+    if (myStackTracePanel == null) {
+      myStackTracePanel = new StackTracePanel(false, myProject);
+      myStackTracePanel.buildStackTrace(event.getFrames());
+      splitWindow(myStackTracePanel);
+    } else {
+      myStackTracePanel.buildStackTrace(event.getFrames());
+    }
+  }
+
+  public void splitWindow(JComponent component) {
+    removeAll();
+    JSplitPane p = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
+    p.add(myGraphPane, JSplitPane.LEFT);
+    p.add(component, JSplitPane.RIGHT);
+    p.setDividerLocation((int)getSize().getWidth() * 2 / 3);
+    add(p, BorderLayout.CENTER);
+    setToolbar(createToolbarPanel());
+    validate();
+    repaint();
+  }
+
   private void initGraphPane() {
     myGraphPane = ScrollPaneFactory.createScrollPane(myRenderer);
     AdjustmentListener listener = new GraphAdjustmentListener();
@@ -132,7 +161,7 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
   }
 
   public void updateContent() {
-    if (graphModel.getSize() == 0) {
+    if (myGraphModel.getSize() == 0) {
       myGraphPresentation.visualSettings.setNamesPanelWidth(myNamesPanel == null?
                                                                  myGraphPresentation.visualSettings.getNamesPanelWidth():
                                                                  myNamesPanel.getWidth());

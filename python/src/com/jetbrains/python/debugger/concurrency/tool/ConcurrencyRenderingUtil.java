@@ -16,7 +16,6 @@
 package com.jetbrains.python.debugger.concurrency.tool;
 
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphBlock;
-import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphElement;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
 
 import java.awt.*;
@@ -51,9 +50,9 @@ public class ConcurrencyRenderingUtil {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     for (int j = 0; j < graphBlock.elements.size(); ++j) {
-      ConcurrencyGraphElement element = graphBlock.elements.get(j);
-      if (element.getAfter() != ConcurrencyThreadState.Stopped) {
-        prepareStroke(g2, element.getAfter());
+      ConcurrencyThreadState element = graphBlock.elements.get(j);
+      if (element != ConcurrencyThreadState.Stopped) {
+        prepareStroke(g2, element);
         g2.fillRect(x, (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * j + ConcurrencyGraphSettings.INTERVAL,
                     ConcurrencyGraphSettings.CELL_WIDTH * graphBlock.numberOfCells, ConcurrencyGraphSettings.CELL_HEIGHT);
       }

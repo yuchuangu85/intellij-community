@@ -115,11 +115,11 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
       int orient = source.getOrientation();
       if (orient == Adjustable.HORIZONTAL) {
         JScrollBar bar = myGraphPane.getHorizontalScrollBar();
-        myGraphPresentation.getVisualSettings().updateHorizontalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
+        myGraphPresentation.visualSettings.updateHorizontalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
       if (orient == Adjustable.VERTICAL) {
         JScrollBar bar = myGraphPane.getVerticalScrollBar();
-        myGraphPresentation.getVisualSettings().updateVerticalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
+        myGraphPresentation.visualSettings.updateVerticalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
     }
   }
@@ -133,8 +133,8 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
 
   public void updateContent() {
     if (graphModel.getSize() == 0) {
-      myGraphPresentation.getVisualSettings().setNamesPanelWidth(myNamesPanel == null?
-                                                                 myGraphPresentation.getVisualSettings().getNamesPanelWidth():
+      myGraphPresentation.visualSettings.setNamesPanelWidth(myNamesPanel == null?
+                                                                 myGraphPresentation.visualSettings.getNamesPanelWidth():
                                                                  myNamesPanel.getWidth());
       myGraphPane = null;
       initMessage();
@@ -150,8 +150,8 @@ public class ThreadingLogToolWindowPanel extends ConcurrencyPanel {
       JSplitPane p = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
       p.add(myNamesPanel, JSplitPane.LEFT);
       p.add(myGraphPane, JSplitPane.RIGHT);
-      p.setDividerLocation(myGraphPresentation.getVisualSettings().getNamesPanelWidth());
-      p.setDividerSize(myGraphPresentation.getVisualSettings().getDividerWidth());
+      p.setDividerLocation(myGraphPresentation.visualSettings.getNamesPanelWidth());
+      p.setDividerSize(myGraphPresentation.visualSettings.getDividerWidth());
       add(p, BorderLayout.CENTER);
       setToolbar(createToolbarPanel());
       validate();

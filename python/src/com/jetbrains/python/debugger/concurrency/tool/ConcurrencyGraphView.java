@@ -41,7 +41,7 @@ public class ConcurrencyGraphView extends JComponent {
 
   private void updateSize() {
     int width = myGraphPresentation.getCellsNumber() * ConcurrencyGraphSettings.CELL_WIDTH;
-    int height = myGraphPresentation.getVisualSettings().getHeightForPanes(myGraphPresentation.getLinesNumber());
+    int height = myGraphPresentation.visualSettings.getHeightForPanes(myGraphPresentation.getLinesNumber());
     setSize(new Dimension(width, height));
     setPreferredSize(new Dimension(width, height));
   }
@@ -64,7 +64,7 @@ public class ConcurrencyGraphView extends JComponent {
 
   private void paintRuler(Graphics g) {
     prepareRulerStroke(g);
-    ConcurrencyGraphVisualSettings settings = myGraphPresentation.getVisualSettings();
+    ConcurrencyGraphVisualSettings settings = myGraphPresentation.visualSettings;
     int y = settings.getVerticalValue() + settings.getVerticalExtent() - ConcurrencyGraphSettings.RULER_STROKE_WIDTH;
     g.drawLine(0, y, getWidth(), y);
     FontMetrics metrics = g.getFontMetrics(getFont());
@@ -73,7 +73,7 @@ public class ConcurrencyGraphView extends JComponent {
       int markY = i % 10 == 0 ? y - ConcurrencyGraphSettings.RULER_UNIT_MARK : y - ConcurrencyGraphSettings.RULER_SUBUNIT_MARK;
       g.drawLine(i * ConcurrencyGraphSettings.RULER_UNIT_WIDTH, markY, i * ConcurrencyGraphSettings.RULER_UNIT_WIDTH, y);
       if ((i != 0) && (i % 10 == 0)) {
-        String text = String.format("%d s", myGraphPresentation.getVisualSettings().getScale() * i / 10);
+        String text = String.format("%d s", myGraphPresentation.visualSettings.getScale() * i / 10);
         int textWidth = metrics.stringWidth(text);
         int textHeight = metrics.getHeight();
         g.drawString(text, i * ConcurrencyGraphSettings.RULER_UNIT_WIDTH - textWidth / 2, markY - textHeight);

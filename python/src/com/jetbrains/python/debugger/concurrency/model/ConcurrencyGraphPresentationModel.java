@@ -25,13 +25,13 @@ public class ConcurrencyGraphPresentationModel {
   private final ConcurrencyGraphModel myGraphModel;
   private List<PresentationListener> myListeners = new ArrayList<PresentationListener>();
   private final Object myListenersObject = new Object();
-  private ConcurrencyGraphVisualSettings myVisualSettings;
+  public ConcurrencyGraphVisualSettings visualSettings;
 
   public ConcurrencyGraphPresentationModel(final ConcurrencyGraphModel graphModel) {
     myGraphModel = graphModel;
-    myVisualSettings = new ConcurrencyGraphVisualSettings();
+    visualSettings = new ConcurrencyGraphVisualSettings();
 
-    myVisualSettings.registerListener(new ConcurrencyGraphVisualSettings.SettingsListener() {
+    visualSettings.registerListener(new ConcurrencyGraphVisualSettings.SettingsListener() {
       @Override
       public void settingsChanged() {
         updateGraphModel();
@@ -51,16 +51,12 @@ public class ConcurrencyGraphPresentationModel {
   private void updateGraphModel() {
   }
 
-  public ConcurrencyGraphVisualSettings getVisualSettings() {
-    return myVisualSettings;
-  }
-
   public int getLinesNumber() {
     return myGraphModel.getMaxThread();
   }
 
   public int getCellsNumber() {
-    return (int)myGraphModel.getDuration() / myVisualSettings.getMillisPerCell();
+    return (int)myGraphModel.getDuration() / visualSettings.getMillisPerCell();
   }
 
   public ArrayList<String> getThreadNames() {
@@ -68,27 +64,27 @@ public class ConcurrencyGraphPresentationModel {
   }
 
   private long roundForCell(long time) {
-    long millisPerCell = myVisualSettings.getMillisPerCell();
+    long millisPerCell = visualSettings.getMillisPerCell();
     return time - (time % millisPerCell);
   }
 
   public ArrayList<ConcurrencyGraphBlock> getVisibleGraph() {
-    if (myVisualSettings.getHorizontalMax() == 0) {
+    if (visualSettings.getHorizontalMax() == 0) {
       return new ArrayList<ConcurrencyGraphBlock>();
     }
     long startTime = roundForCell(myGraphModel.getStartTime() +
-                                  myVisualSettings.getHorizontalValue() * myGraphModel.getDuration() /
-                                  myVisualSettings.getHorizontalMax());
+                                  visualSettings.getHorizontalValue() * myGraphModel.getDuration() /
+                                  visualSettings.getHorizontalMax());
     ArrayList<ConcurrencyGraphBlock> ret = new ArrayList<ConcurrencyGraphBlock>();
     int curEventId = myGraphModel.getLastEventIndexBeforeMoment(startTime);
     long curTime, nextTime = startTime;
     int i = 0;
-    int numberOfCells = myVisualSettings.getHorizontalExtent() / ConcurrencyGraphSettings.CELL_WIDTH + 2;
+    int numberOfCells = visualSettings.getHorizontalExtent() / ConcurrencyGraphSettings.CELL_WIDTH + 2;
     while ((i < numberOfCells) && (curEventId < myGraphModel.getSize())) {
       curTime = nextTime;
       nextTime = roundForCell(myGraphModel.getEventAt(curEventId + 1).getTime());
       long period = nextTime - curTime;
-      int cellsInPeriod = (int)(period / myVisualSettings.getMillisPerCell());
+      int cellsInPeriod = (int)(period / visualSettings.getMillisPerCell());
       if (cellsInPeriod != 0) {
         ret.add(new ConcurrencyGraphBlock(myGraphModel.getDrawElementsForRow(curEventId), cellsInPeriod));
         i += cellsInPeriod;
@@ -109,10 +105,11 @@ public class ConcurrencyGraphPresentationModel {
   }
 
   public void notifyListeners() {
+    int horizontalMax = visualSettings.getHorizontalMax();
+    int horizontalValue = visualSettings.getHorizontalValue();
     synchronized (myListenersObject) {
       for (PresentationListener logListener : myListeners) {
-        logListener.graphChanged(myVisualSettings.getHorizontalMax() == 0 ? myVisualSettings.getHorizontalValue() :
-                                 myVisualSettings.getHorizontalValue() * getCellsNumber() / myVisualSettings.getHorizontalMax());
+        logListener.graphChanged(horizontalMax == 0 ? horizontalValue: horizontalValue * getCellsNumber() / horizontalMax);
       }
     }
   }

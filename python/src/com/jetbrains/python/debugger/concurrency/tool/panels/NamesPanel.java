@@ -56,8 +56,8 @@ public class NamesPanel extends JComponent {
       label.setText(names.get(i));
       add(label);
     }
-    setPreferredSize(new Dimension(myGraphPresentation.getVisualSettings().getNamesPanelWidth(),
-                                   myGraphPresentation.getVisualSettings().getHeightForPanes(myGraphPresentation.getLinesNumber())));
+    setPreferredSize(new Dimension(myGraphPresentation.visualSettings.getNamesPanelWidth(),
+                                   myGraphPresentation.visualSettings.getHeightForPanes(myGraphPresentation.getLinesNumber())));
     repaint();
   }
 }

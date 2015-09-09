@@ -17,38 +17,26 @@ package com.jetbrains.env.python;
 
 import com.jetbrains.env.PyEnvTestCase;
 import com.jetbrains.env.python.debug.PyDebuggerTask;
+import com.jetbrains.python.debugger.PyDebuggerOptionsProvider;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.PyConcurrencyService;
-import com.jetbrains.python.debugger.concurrency.model.elements.DrawElement;
-import com.jetbrains.python.debugger.concurrency.model.elements.EventDrawElement;
-import com.jetbrains.python.debugger.concurrency.model.elements.SimpleDrawElement;
-import com.jetbrains.python.debugger.concurrency.model.states.*;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
 
 import java.util.ArrayList;
 
 public class PythonConcurrencyGraphTest extends PyEnvTestCase {
-  public static DrawElement threadStart = new EventDrawElement(new StoppedThreadState(), new RunThreadState());
-  public static DrawElement threadStop = new EventDrawElement(new RunThreadState(), new StoppedThreadState());
-  public static DrawElement simple = new SimpleDrawElement(new RunThreadState(), new RunThreadState());
-  public static DrawElement empty = new SimpleDrawElement(new StoppedThreadState(), new StoppedThreadState());
-  public static DrawElement event = new EventDrawElement(new RunThreadState(), new RunThreadState());
-  public static DrawElement lockAcquireStart = new EventDrawElement(new RunThreadState(), new LockWaitThreadState());
-  public static DrawElement lockAcquired = new EventDrawElement(new LockWaitThreadState(), new LockOwnThreadState());
-  public static DrawElement lockReleased = new EventDrawElement(new LockOwnThreadState(), new RunThreadState());
-  public static DrawElement underLock = new EventDrawElement(new LockOwnThreadState(), new LockOwnThreadState());
 
-
-  public static void compareGraphRows(int row, ConcurrencyGraphModel graphManager, DrawElement[] correctElements) {
-    ArrayList<DrawElement> elements = graphManager.getDrawElementsForRow(row);
+  public static void compareGraphRows(int row, ConcurrencyGraphModel graphManager, ConcurrencyThreadState[] correctElements) {
+    ArrayList<ConcurrencyThreadState> elements = graphManager.getDrawElementsForRow(row);
     assertEquals(String.format("row = %d", row), correctElements.length, elements.size());
     for (int i = 0; i < elements.size(); ++i) {
-      DrawElement graphElement = elements.get(i);
-      DrawElement correctElement = correctElements[i];
+      ConcurrencyThreadState graphElement = elements.get(i);
+      ConcurrencyThreadState correctElement = correctElements[i];
       assertEquals(String.format("row = %d column = %d", row, i), correctElement, graphElement);
     }
   }
 
-  public static void compareGraphs(ConcurrencyGraphModel PyConcurrencyGraphModel, DrawElement[][] correctGraph) {
+  public static void compareGraphs(ConcurrencyGraphModel PyConcurrencyGraphModel, ConcurrencyThreadState[][] correctGraph) {
     for (int i = 0; i < correctGraph.length; ++i) {
       compareGraphRows(i, PyConcurrencyGraphModel, correctGraph[i]);
     }
@@ -57,22 +45,21 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadMain() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test1.py") {
-      public ConcurrencyGraphModel graphModel;
       public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
-        graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
+        PyDebuggerOptionsProvider.getInstance(getProject()).setSaveThreadingLog(true);
+        myPyConcurrencyGraphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
       }
 
       @Override
       public void testing() throws Exception {
         waitForTerminate();
 
-        DrawElement[][] correct = {
-          {threadStart},
-          {threadStop},
+        ConcurrencyThreadState[][] correct = {
+          {ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Stopped},
         };
 
         compareGraphs(myPyConcurrencyGraphModel, correct);
@@ -82,25 +69,23 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadCreation() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test2.py") {
-      public ConcurrencyGraphModel graphModel;
       public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
-        graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
+        PyDebuggerOptionsProvider.getInstance(getProject()).setSaveThreadingLog(true);
+        myPyConcurrencyGraphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
       }
 
       @Override
       public void testing() throws Exception {
         waitForTerminate();
 
-        DrawElement[][] correct = {
-          {threadStart},
-          {simple, threadStart},
-          {simple, simple, threadStart},
+        ConcurrencyThreadState[][] correct = {
+          {ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
         };
-
         compareGraphs(myPyConcurrencyGraphModel, correct);
       }
     });
@@ -108,27 +93,26 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadJoin() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test3.py") {
-      public ConcurrencyGraphModel graphModel;
       public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
-        graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
+        PyDebuggerOptionsProvider.getInstance(getProject()).setSaveThreadingLog(true);
+        myPyConcurrencyGraphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
       }
 
       @Override
       public void testing() throws Exception {
         waitForTerminate();
-        DrawElement[][] correct = {
-          {threadStart},
-          {simple, threadStart},
-          {simple, simple, threadStart},
-          {event, simple, simple},
-          {simple, threadStop, simple},
-          {event, empty, simple},
-          {simple, empty, threadStop},
-          {threadStop, empty, empty}
+        ConcurrencyThreadState[][] correct = {
+          {ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Stopped, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Stopped, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Stopped, ConcurrencyThreadState.Stopped},
+          {ConcurrencyThreadState.Stopped, ConcurrencyThreadState.Stopped, ConcurrencyThreadState.Stopped},
         };
 
         compareGraphs(myPyConcurrencyGraphModel, correct);
@@ -138,30 +122,29 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadLockWith() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test4.py") {
-      public ConcurrencyGraphModel graphModel;
       public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
-        graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
+        PyDebuggerOptionsProvider.getInstance(getProject()).setSaveThreadingLog(true);
+        myPyConcurrencyGraphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
       }
 
       @Override
       public void testing() throws Exception {
         waitForTerminate();
 
-        DrawElement[][] correct = {
-          {threadStart},
-          {event},
-          {simple, threadStart},
-          {simple, lockAcquireStart},
-          {simple, lockAcquired},
-          {simple, lockReleased},
-          {simple, simple, threadStart},
-          {simple, simple, lockAcquireStart},
-          {simple, simple, lockAcquired},
-          {simple, simple, lockReleased},
+        ConcurrencyThreadState[][] correct = {
+          {ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.LockWait},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.LockOwn},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.LockWait},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.LockOwn},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
         };
 
         compareGraphs(myPyConcurrencyGraphModel, correct);
@@ -171,30 +154,29 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadLockAcquireRelease() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test5.py") {
-      public ConcurrencyGraphModel graphModel;
       public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
-        graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
+        PyDebuggerOptionsProvider.getInstance(getProject()).setSaveThreadingLog(true);
+        myPyConcurrencyGraphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
       }
 
       @Override
       public void testing() throws Exception {
         waitForTerminate();
 
-        DrawElement[][] correct = {
-          {threadStart},
-          {event},
-          {simple, threadStart},
-          {simple, lockAcquireStart},
-          {simple, lockAcquired},
-          {simple, lockReleased},
-          {simple, simple, threadStart},
-          {simple, simple, lockAcquireStart},
-          {simple, simple, lockAcquired},
-          {simple, simple, lockReleased},
+        ConcurrencyThreadState[][] correct = {
+          {ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.LockWait},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.LockOwn},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.LockWait},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.LockOwn},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
         };
 
         compareGraphs(myPyConcurrencyGraphModel, correct);
@@ -204,31 +186,29 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadDoubleLock() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test9.py") {
-      public ConcurrencyGraphModel graphModel;
       public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
-        graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
+        PyDebuggerOptionsProvider.getInstance(getProject()).setSaveThreadingLog(true);
+        myPyConcurrencyGraphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
       }
 
       @Override
       public void testing() throws Exception {
         waitForTerminate();
 
-        DrawElement[][] correct = {
-          {threadStart},
-          {event},
-          {event},
-          {simple, threadStart},
-          {simple, lockAcquireStart},
-          {simple, lockAcquired},
-          {simple, new EventDrawElement(new LockOwnThreadState(), new LockWaitThreadState())},
-          {simple, new EventDrawElement(new LockWaitThreadState(), new LockOwnThreadState())},
-          {simple, new EventDrawElement(new LockOwnThreadState(), new LockOwnThreadState())},
-          {simple, new EventDrawElement(new LockOwnThreadState(), new RunThreadState())},
-          {threadStop, simple},
+        ConcurrencyThreadState[][] correct = {
+          {ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.LockWait},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.LockOwn},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.LockWait},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.LockOwn},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.LockOwn},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
         };
 
         compareGraphs(myPyConcurrencyGraphModel, correct);
@@ -239,23 +219,21 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testThreadDeadlock() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test6.py") {
-      public ConcurrencyGraphModel graphModel;
       public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
-        graphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
-        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
+        PyDebuggerOptionsProvider.getInstance(getProject()).setSaveThreadingLog(true);
+        myPyConcurrencyGraphModel = PyConcurrencyService.getInstance(getProject()).getThreadingInstance();
       }
 
       @Override
       public void testing() throws Exception {
         waitFor(myPausedSemaphore, 3000);
 
-        DrawElement[][] correct = {
-          {simple, new EventDrawElement(new LockOwnThreadState(), new LockWaitThreadState()), underLock},
-          {simple, new SimpleDrawElement(new LockWaitThreadState(), new DeadlockState()),
-            new EventDrawElement(new LockOwnThreadState(), new DeadlockState())},
+        ConcurrencyThreadState[][] correct = {
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.LockWait, ConcurrencyThreadState.LockOwn},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Deadlock, ConcurrencyThreadState.Deadlock},
         };
 
         compareGraphRows(10, myPyConcurrencyGraphModel, correct[0]);
@@ -266,23 +244,22 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testAsyncioTaskCreation() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test7.py") {
-      public ConcurrencyGraphModel graphModel;
       public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
-        graphModel = PyConcurrencyService.getInstance(getProject()).getAsyncioInstance();
-        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
+        PyDebuggerOptionsProvider.getInstance(getProject()).setSaveThreadingLog(true);
+        myPyConcurrencyGraphModel = PyConcurrencyService.getInstance(getProject()).getAsyncioInstance();
       }
 
       @Override
       public void testing() throws Exception {
         waitForTerminate();
 
-        DrawElement[][] correct = {
-          {threadStart},
-          {simple, threadStart},
-          {simple, simple, threadStart},
+        ConcurrencyThreadState[][] correct = {
+          {ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
         };
 
         compareGraphs(myPyConcurrencyGraphModel, correct);
@@ -292,29 +269,28 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public void testAsyncioLock() throws Exception {
     runPythonTest(new PyDebuggerTask("/concurrency", "test8.py") {
-      public ConcurrencyGraphModel graphModel;
       public ConcurrencyGraphModel myPyConcurrencyGraphModel;
 
       @Override
       public void before() throws Exception {
-        graphModel = PyConcurrencyService.getInstance(getProject()).getAsyncioInstance();
-        myPyConcurrencyGraphModel = new ConcurrencyGraphModel(getProject());
+        PyDebuggerOptionsProvider.getInstance(getProject()).setSaveThreadingLog(true);
+        myPyConcurrencyGraphModel = PyConcurrencyService.getInstance(getProject()).getAsyncioInstance();
       }
 
       @Override
       public void testing() throws Exception {
         waitForTerminate();
 
-        DrawElement[][] correct = {
-          {threadStart},
-          {simple, threadStart},
-          {simple, simple, threadStart},
-          {lockAcquireStart, simple, simple},
-          {lockAcquired, simple, simple},
-          {lockReleased, simple, simple},
-          {simple, lockAcquireStart, simple},
-          {simple, lockAcquired, simple},
-          {simple, lockReleased, simple},
+        ConcurrencyThreadState[][] correct = {
+          {ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.LockWait, ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.LockOwn, ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.LockWait, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.LockOwn, ConcurrencyThreadState.Run},
+          {ConcurrencyThreadState.Run, ConcurrencyThreadState.Run, ConcurrencyThreadState.Run},
         };
 
         compareGraphs(myPyConcurrencyGraphModel, correct);

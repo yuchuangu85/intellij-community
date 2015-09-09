@@ -20,8 +20,8 @@ import com.intellij.ui.AppUIUtil;
 import com.intellij.ui.table.JBTable;
 import com.intellij.xdebugger.XSourcePosition;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
-import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
+import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyPanel;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.table.TableModel;

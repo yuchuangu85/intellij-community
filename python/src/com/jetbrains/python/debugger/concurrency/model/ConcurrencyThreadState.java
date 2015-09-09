@@ -13,11 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jetbrains.python.debugger.concurrency.model.states;
+package com.jetbrains.python.debugger.concurrency.model;
 
-import java.awt.*;
-
-
-public interface ThreadState {
-  void prepareStroke(Graphics g);
+public enum ConcurrencyThreadState {
+  Run, Stopped, LockWait, LockOwn, Deadlock
 }

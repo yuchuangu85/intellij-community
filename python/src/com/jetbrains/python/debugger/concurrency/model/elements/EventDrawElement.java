@@ -15,15 +15,15 @@
  */
 package com.jetbrains.python.debugger.concurrency.model.elements;
 
-import com.jetbrains.python.debugger.concurrency.model.states.StoppedThreadState;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
-import com.jetbrains.python.debugger.concurrency.model.states.ThreadState;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyRenderingUtil;
 
 import java.awt.*;
 
 public class EventDrawElement extends DrawElement {
 
-  public EventDrawElement(ThreadState before, ThreadState after) {
+  public EventDrawElement(ConcurrencyThreadState before, ConcurrencyThreadState after) {
     super(before, after);
   }
 
@@ -36,11 +36,11 @@ public class EventDrawElement extends DrawElement {
   public void paint(Graphics g, int x, int y, int numberOfCells) {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    if (!(myBefore instanceof StoppedThreadState)) {
-      myBefore.prepareStroke(g2);
+    if (myBefore != ConcurrencyThreadState.Stopped) {
+      ConcurrencyRenderingUtil.prepareStroke(g2, myBefore);
     }
-    if (!(myAfter instanceof StoppedThreadState)) {
-      myAfter.prepareStroke(g2);
+    if (myAfter != ConcurrencyThreadState.Stopped) {
+      ConcurrencyRenderingUtil.prepareStroke(g2, myAfter);
       g2.fillRect(x, y, ConcurrencyGraphSettings.CELL_WIDTH * numberOfCells, ConcurrencyGraphSettings.CELL_HEIGHT);
     }
   }

@@ -15,15 +15,15 @@
  */
 package com.jetbrains.python.debugger.concurrency.model.elements;
 
-import com.jetbrains.python.debugger.concurrency.model.states.StoppedThreadState;
-import com.jetbrains.python.debugger.concurrency.model.states.ThreadState;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyRenderingUtil;
 
 import java.awt.*;
 
 public class SimpleDrawElement extends DrawElement {
 
-  public SimpleDrawElement(ThreadState before, ThreadState after) {
+  public SimpleDrawElement(ConcurrencyThreadState before, ConcurrencyThreadState after) {
     super(before, after);
   }
 
@@ -37,10 +37,10 @@ public class SimpleDrawElement extends DrawElement {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-    if (myBefore instanceof StoppedThreadState) {
+    if (myBefore == ConcurrencyThreadState.Stopped) {
       return;
     }
-    myBefore.prepareStroke(g2);
+    ConcurrencyRenderingUtil.prepareStroke(g2, myBefore);
     g2.fillRect(x, y, ConcurrencyGraphSettings.CELL_WIDTH * numberOfCells, ConcurrencyGraphSettings.CELL_HEIGHT);
   }
 }

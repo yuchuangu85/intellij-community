@@ -22,10 +22,10 @@ import com.intellij.ui.table.JBTable;
 import com.intellij.xdebugger.impl.XSourcePositionImpl;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
-import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyPanel;
 import com.jetbrains.python.debugger.concurrency.tool.asyncio.ConcurrencyTable;
 import com.jetbrains.python.debugger.concurrency.tool.asyncio.GraphCell;
 import com.jetbrains.python.debugger.concurrency.tool.asyncio.GraphCellRenderer;
+import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyPanel;
 
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;

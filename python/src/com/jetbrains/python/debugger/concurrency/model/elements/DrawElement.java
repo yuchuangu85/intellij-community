@@ -16,24 +16,24 @@
  */
 package com.jetbrains.python.debugger.concurrency.model.elements;
 
-import com.jetbrains.python.debugger.concurrency.model.states.ThreadState;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
 
 import java.awt.*;
 
 public abstract class DrawElement {
-  protected ThreadState myBefore;
-  protected ThreadState myAfter;
+  protected ConcurrencyThreadState myBefore;
+  protected ConcurrencyThreadState myAfter;
 
-  public DrawElement(ThreadState before, ThreadState after) {
+  public DrawElement(ConcurrencyThreadState before, ConcurrencyThreadState after) {
     myBefore = before;
     myAfter = after;
   }
 
-  public ThreadState getBefore() {
+  public ConcurrencyThreadState getBefore() {
     return myBefore;
   }
 
-  public ThreadState getAfter() {
+  public ConcurrencyThreadState getAfter() {
     return myAfter;
   }
 
@@ -47,7 +47,7 @@ public abstract class DrawElement {
            (this.getAfter().getClass() == other.getAfter().getClass());
   }
 
-  public void setAfter(ThreadState state) {
+  public void setAfter(ConcurrencyThreadState state) {
     myAfter = state;
   }
 

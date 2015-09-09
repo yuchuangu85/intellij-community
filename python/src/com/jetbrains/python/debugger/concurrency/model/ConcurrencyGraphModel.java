@@ -22,12 +22,12 @@ import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.XDebugSessionListener;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyThreadEvent;
-import com.jetbrains.python.debugger.concurrency.model.states.*;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStat;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphAnalyser;
 import com.jetbrains.python.debugger.concurrency.model.elements.DrawElement;
 import com.jetbrains.python.debugger.concurrency.model.elements.EventDrawElement;
 import com.jetbrains.python.debugger.concurrency.model.elements.SimpleDrawElement;
+import com.jetbrains.python.debugger.concurrency.model.states.*;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphAnalyser;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStat;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -228,19 +228,19 @@ public class ConcurrencyGraphModel {
       case CREATE:
         return new EventDrawElement(previousElement.getAfter(), previousElement.getAfter());
       case START:
-        return new EventDrawElement(new StoppedThreadState(), new RunThreadState());
+        return new EventDrawElement(ConcurrencyThreadState.Stopped, ConcurrencyThreadState.Run);
       case JOIN:
         return new EventDrawElement(previousElement.getAfter(), previousElement.getAfter());
       case STOP:
-        return new EventDrawElement(previousElement.getAfter(), new StoppedThreadState());
+        return new EventDrawElement(previousElement.getAfter(), ConcurrencyThreadState.Stopped);
       case ACQUIRE_BEGIN:
-        return new EventDrawElement(previousElement.getAfter(), new LockWaitThreadState());
+        return new EventDrawElement(previousElement.getAfter(), ConcurrencyThreadState.LockWait);
       case ACQUIRE_END:
-        return new EventDrawElement(previousElement.getAfter(), new LockOwnThreadState());
+        return new EventDrawElement(previousElement.getAfter(), ConcurrencyThreadState.LockOwn);
       case RELEASE:
         return new EventDrawElement(previousElement.getAfter(), myGraphAnalyser.getThreadStateAt(index, event.getThreadId()));
       default:
-        return new SimpleDrawElement(new StoppedThreadState(), new StoppedThreadState());
+        return new SimpleDrawElement(ConcurrencyThreadState.Stopped, ConcurrencyThreadState.Stopped);
     }
   }
 
@@ -292,7 +292,7 @@ public class ConcurrencyGraphModel {
 
         if (event.isThreadEvent() && event.getType() == PyConcurrencyEvent.EventType.START) {
           DrawElement element;
-          element = new EventDrawElement(new StoppedThreadState(), new RunThreadState());
+          element = new EventDrawElement(ConcurrencyThreadState.Stopped, ConcurrencyThreadState.Run);
           myCurrentMaxThread++;
           threadIndexToId.put(eventThreadId, myCurrentMaxThread - 1);
           threadNames.add(myCurrentMaxThread - 1, event.getThreadName());
@@ -333,7 +333,7 @@ public class ConcurrencyGraphModel {
             HashSet<String> deadlocked = myGraphAnalyser.checkForDeadlocks(i);
             if (deadlocked != null) {
               for (String threadId : deadlocked) {
-                myGraphScheme.get(i).get(threadIndexToId.get(threadId)).setAfter(new DeadlockState());
+                myGraphScheme.get(i).get(threadIndexToId.get(threadId)).setAfter(ConcurrencyThreadState.Deadlock);
               }
             }
           }

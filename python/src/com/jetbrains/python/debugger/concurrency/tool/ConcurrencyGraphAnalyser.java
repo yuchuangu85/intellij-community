@@ -20,10 +20,7 @@ import com.intellij.util.containers.hash.HashMap;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyLockEvent;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
-import com.jetbrains.python.debugger.concurrency.model.states.LockOwnThreadState;
-import com.jetbrains.python.debugger.concurrency.model.states.LockWaitThreadState;
-import com.jetbrains.python.debugger.concurrency.model.states.RunThreadState;
-import com.jetbrains.python.debugger.concurrency.model.states.ThreadState;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
 import org.jetbrains.annotations.Nullable;
 
 
@@ -132,7 +129,7 @@ public class ConcurrencyGraphAnalyser {
     return null;
   }
 
-  public ThreadState getThreadStateAt(int index, String threadId) {
+  public ConcurrencyThreadState getThreadStateAt(int index, String threadId) {
     HashSet<String> locksAcquired = new HashSet<String>();
     HashSet<String> locksOwn = new HashSet<String>();
     for (int i = 0; i <= index; ++i) {
@@ -152,11 +149,11 @@ public class ConcurrencyGraphAnalyser {
       }
     }
     if (locksAcquired.size() > 0) {
-      return new LockWaitThreadState();
+      return ConcurrencyThreadState.LockWait;
     }
     if (locksOwn.size() > 0) {
-      return new LockOwnThreadState();
+      return ConcurrencyThreadState.LockOwn;
     }
-    return new RunThreadState();
+    return ConcurrencyThreadState.Run;
   }
 }

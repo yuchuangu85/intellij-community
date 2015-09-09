@@ -15,9 +15,9 @@
  */
 package com.jetbrains.python.debugger.concurrency.tool;
 
-import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphVisualSettings;
-import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphBlock;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphVisualSettings;
 
 import javax.swing.*;
 import java.awt.*;

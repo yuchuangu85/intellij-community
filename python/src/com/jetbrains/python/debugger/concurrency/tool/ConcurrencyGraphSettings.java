@@ -29,7 +29,6 @@ public class ConcurrencyGraphSettings {
 
   public static int RULER_STROKE_WIDTH = 1;
   public static Color RULER_COLOR = JBColor.BLACK;
-  public static int RULER_UNIT_WIDTH = 10;
   public static int RULER_UNIT_MARK = 10;
   public static int RULER_SUBUNIT_MARK = 5;
 

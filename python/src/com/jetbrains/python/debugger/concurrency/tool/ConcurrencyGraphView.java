@@ -68,15 +68,17 @@ public class ConcurrencyGraphView extends JComponent {
     int y = settings.getVerticalValue() + settings.getVerticalExtent() - ConcurrencyGraphSettings.RULER_STROKE_WIDTH;
     g.drawLine(0, y, getWidth(), y);
     FontMetrics metrics = g.getFontMetrics(getFont());
+    int rulerUnitWidth = ConcurrencyGraphSettings.CELL_WIDTH * myGraphPresentation.visualSettings.getCellsPerRulerUnit();
 
-    for (int i = 0; i < getWidth() / ConcurrencyGraphSettings.RULER_UNIT_WIDTH; ++i) {
+    for (int i = 0; i < getWidth() / rulerUnitWidth; ++i) {
       int markY = i % 10 == 0 ? y - ConcurrencyGraphSettings.RULER_UNIT_MARK : y - ConcurrencyGraphSettings.RULER_SUBUNIT_MARK;
-      g.drawLine(i * ConcurrencyGraphSettings.RULER_UNIT_WIDTH, markY, i * ConcurrencyGraphSettings.RULER_UNIT_WIDTH, y);
+      g.drawLine(i * rulerUnitWidth, markY, i * rulerUnitWidth, y);
       if ((i != 0) && (i % 10 == 0)) {
-        String text = String.format("%d s", myGraphPresentation.visualSettings.getScale() * i / 10);
+        String text = String.format("%d ms", myGraphPresentation.visualSettings.getMillisPerCell() *
+                                             myGraphPresentation.visualSettings.getCellsPerRulerUnit() * i);
         int textWidth = metrics.stringWidth(text);
         int textHeight = metrics.getHeight();
-        g.drawString(text, i * ConcurrencyGraphSettings.RULER_UNIT_WIDTH - textWidth / 2, markY - textHeight);
+        g.drawString(text, i * rulerUnitWidth - textWidth / 2, markY - textHeight);
       }
     }
   }

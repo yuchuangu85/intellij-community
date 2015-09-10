@@ -18,14 +18,15 @@ package com.jetbrains.python.debugger.concurrency.model;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 
 public class ConcurrencyGraphVisualSettings {
-  private int myScale = 1;
-  private int myHorizontalValue = 0;
+  private int myScale = 2;
+  private int myHorizontalValue;
   private int myHorizontalExtent;
   private int myHorizontalMax;
-  private int myVerticalValue = 0;
+  private int myVerticalValue;
   private int myVerticalExtent;
   private int myVerticalMax;
   private int myNamesPanelWidth = NAMES_PANEL_INITIAL_WIDTH;
+  private int myCellsPerRulerUnit = 10;
   private final ConcurrencyGraphPresentationModel myGraphModel;
   public static int NAMES_PANEL_INITIAL_WIDTH = 200;
   public static int DIVIDER_WIDTH = 5;
@@ -35,9 +36,12 @@ public class ConcurrencyGraphVisualSettings {
   }
 
   public int getMillisPerCell() {
-    return myScale * 1;
+    return myScale;
   }
 
+  public int getCellsPerRulerUnit() {
+    return myCellsPerRulerUnit;
+  }
 
   public int getNamesPanelWidth() {
     return myNamesPanelWidth;

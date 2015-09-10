@@ -16,10 +16,6 @@
 package com.jetbrains.python.debugger.concurrency.model;
 
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
-import org.jetbrains.annotations.NotNull;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class ConcurrencyGraphVisualSettings {
   private int myScale = 1;
@@ -30,10 +26,13 @@ public class ConcurrencyGraphVisualSettings {
   private int myVerticalExtent;
   private int myVerticalMax;
   private int myNamesPanelWidth = NAMES_PANEL_INITIAL_WIDTH;
+  private final ConcurrencyGraphPresentationModel myGraphModel;
   public static int NAMES_PANEL_INITIAL_WIDTH = 200;
   public static int DIVIDER_WIDTH = 5;
 
-  private List<SettingsListener> myListeners = new ArrayList<SettingsListener>();
+  public ConcurrencyGraphVisualSettings(ConcurrencyGraphPresentationModel graphModel) {
+    myGraphModel = graphModel;
+  }
 
   public int getMillisPerCell() {
     return myScale * 1;
@@ -91,27 +90,13 @@ public class ConcurrencyGraphVisualSettings {
     myHorizontalValue = scrollbarValue;
     myHorizontalExtent = scrollbarExtent;
     myHorizontalMax = scrollMax;
-    notifyListeners();
+    myGraphModel.updateGraphModel();
   }
 
   public void updateVerticalScrollbar(int scrollbarValue, int scrollbarExtent, int scrollMax) {
     myVerticalValue = scrollbarValue;
     myVerticalExtent = scrollbarExtent;
     myVerticalMax = scrollMax;
-    notifyListeners();
-  }
-
-  public interface SettingsListener {
-    void settingsChanged();
-  }
-
-  public void registerListener(@NotNull SettingsListener logListener) {
-    myListeners.add(logListener);
-  }
-
-  public void notifyListeners() {
-    for (SettingsListener logListener : myListeners) {
-      logListener.settingsChanged();
-    }
+    myGraphModel.updateGraphModel();
   }
 }

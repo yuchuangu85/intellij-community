@@ -29,15 +29,7 @@ public class ConcurrencyGraphPresentationModel {
 
   public ConcurrencyGraphPresentationModel(final ConcurrencyGraphModel graphModel) {
     myGraphModel = graphModel;
-    visualSettings = new ConcurrencyGraphVisualSettings();
-
-    visualSettings.registerListener(new ConcurrencyGraphVisualSettings.SettingsListener() {
-      @Override
-      public void settingsChanged() {
-        updateGraphModel();
-        notifyListeners();
-      }
-    });
+    visualSettings = new ConcurrencyGraphVisualSettings(this);
 
     myGraphModel.registerListener(new ConcurrencyGraphModel.GraphListener() {
       @Override
@@ -48,7 +40,8 @@ public class ConcurrencyGraphPresentationModel {
     });
   }
 
-  private void updateGraphModel() {
+  public void updateGraphModel() {
+    notifyListeners();
   }
 
   public int getLinesNumber() {

@@ -78,6 +78,8 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   protected JPanel createToolbarPanel() {
     final DefaultActionGroup group = new DefaultActionGroup();
     group.add(new StatisticsAction());
+    group.add(new ScaleIncrementAction());
+    group.add(new ScaleDecrementAction());
 
     final ActionToolbar actionToolBar = ActionManager.getInstance().createActionToolbar("Toolbar", group, false);
     final JPanel buttonsPanel = new JPanel(new BorderLayout());
@@ -100,6 +102,40 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
           frame.pack();
           frame.setLocationRelativeTo(null);
           frame.setVisible(true);
+        }
+      });
+    }
+  }
+
+  private class ScaleIncrementAction extends AnAction implements DumbAware {
+    public ScaleIncrementAction() {
+      super("Increment", "Increment scale", AllIcons.Actions.SortAsc);
+    }
+
+    @Override
+    public void actionPerformed(AnActionEvent e) {
+      final ConcurrencyGraphModel graphModel = myGraphModel;
+      UIUtil.invokeLaterIfNeeded(new Runnable() {
+        @Override
+        public void run() {
+          myGraphPresentation.visualSettings.increaseScale();
+        }
+      });
+    }
+  }
+
+  private class ScaleDecrementAction extends AnAction implements DumbAware {
+    public ScaleDecrementAction() {
+      super("Decrement", "Decrement scale", AllIcons.Actions.SortDesc);
+    }
+
+    @Override
+    public void actionPerformed(AnActionEvent e) {
+      final ConcurrencyGraphModel graphModel = myGraphModel;
+      UIUtil.invokeLaterIfNeeded(new Runnable() {
+        @Override
+        public void run() {
+          myGraphPresentation.visualSettings.decreaseScale();
         }
       });
     }

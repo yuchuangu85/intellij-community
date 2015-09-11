@@ -18,7 +18,7 @@ package com.jetbrains.python.debugger.concurrency.model;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 
 public class ConcurrencyGraphVisualSettings {
-  private int myScale = 2;
+  private int myMillisPerCell = 10;
   private int myHorizontalValue;
   private int myHorizontalExtent;
   private int myHorizontalMax;
@@ -35,8 +35,18 @@ public class ConcurrencyGraphVisualSettings {
     myGraphModel = graphModel;
   }
 
+  public void increaseScale() {
+    myMillisPerCell = Math.max(1, Math.min((int)Math.round(myMillisPerCell * 0.9), myMillisPerCell - 1));
+    myGraphModel.updateGraphModel();
+  }
+
+  public void decreaseScale() {
+    myMillisPerCell = Math.max((int)Math.round(myMillisPerCell * 1.1), myMillisPerCell + 1);
+    myGraphModel.updateGraphModel();
+  }
+
   public int getMillisPerCell() {
-    return myScale;
+    return myMillisPerCell;
   }
 
   public int getCellsPerRulerUnit() {
@@ -77,10 +87,6 @@ public class ConcurrencyGraphVisualSettings {
 
   public int getHorizontalMax() {
     return myHorizontalMax;
-  }
-
-  public int getScale() {
-    return myScale;
   }
 
   public int getHeightForPanes(int linesNumber) {

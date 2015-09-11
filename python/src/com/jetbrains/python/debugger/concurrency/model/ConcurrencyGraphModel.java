@@ -45,7 +45,8 @@ public class ConcurrencyGraphModel {
   private final Object myListenersObject = new Object();
   private ConcurrencyGraphAnalyser myGraphAnalyser;
   private XDebugSession lastSession;
-  protected long pauseTime;
+  private long myStartTime; //millis
+  private long myPauseTime; //millis
 
   public ConcurrencyGraphModel(Project project) {
     myProject = project;
@@ -92,6 +93,9 @@ public class ConcurrencyGraphModel {
         createGraph();
         return;
       }
+      if (event.getTime() == 0) {
+        myStartTime = System.currentTimeMillis();
+      }
       myLog.add(event);
       updateGraph();
     }
@@ -99,7 +103,7 @@ public class ConcurrencyGraphModel {
 
   public PyConcurrencyEvent getEventAt(int index) {
     if (index == getSize()) {
-      return new FakeEvent(getPauseTime());
+      return new FakeEvent((getPauseTime() - getStartTime()) * 1000); // convert from millis to microseconds
     }
     return myLog.get(index);
   }
@@ -120,15 +124,15 @@ public class ConcurrencyGraphModel {
 
 
   public long getPauseTime() {
-    return pauseTime;
+    return myPauseTime;
   }
 
   public void setPauseTime(long pauseTime) {
-    this.pauseTime = pauseTime;
+    this.myPauseTime = pauseTime;
   }
 
   public long getStartTime() {
-    return getEventAt(0).getTime();
+    return myStartTime;
   }
 
   public java.util.HashMap getStatistics() {
@@ -193,8 +197,7 @@ public class ConcurrencyGraphModel {
 
   public long getDuration() {
     if (getSize() > 0) {
-      long lastEventTime = getPauseTime() == 0? getEventAt(getSize() - 1).getTime(): getPauseTime();
-      return lastEventTime - getEventAt(0).getTime();
+      return getPauseTime() == 0? getEventAt(getSize() - 1).getTime(): (getPauseTime() - getStartTime());
     }
     return 0;
   }

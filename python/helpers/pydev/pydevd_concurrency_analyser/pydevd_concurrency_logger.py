@@ -29,7 +29,7 @@ import traceback
 
 import time
 # return time since epoch in milliseconds
-cur_time = lambda: int(round(time.time() * 1000))
+cur_time = lambda: int(round(time.time() * 1000000))
 
 
 try:
@@ -115,6 +115,12 @@ def send_message(event_class, time, name, thread_id, type, event, file, line, fr
 
 
 class ThreadingLogger:
+    def __init__(self):
+        self.start_time = cur_time()
+
+    def set_start_time(self, time):
+        self.start_time = time
+
     def log_event(self, frame):
         write_log = False
         self_obj = None
@@ -130,7 +136,7 @@ class ThreadingLogger:
                 if not back:
                     return
                 name, back_base = pydevd_file_utils.GetFilenameAndBase(back)
-                event_time = cur_time()
+                event_time = cur_time() - self.start_time
                 method_name = frame.f_code.co_name
 
                 if isinstance(self_obj, threading.Thread) and method_name in THREAD_METHODS:
@@ -214,6 +220,7 @@ class AsyncioLogger:
     def __init__(self):
         self.task_mgr = NameManager("Task")
         self.coro_mgr = NameManager("Coro")
+        self.start_time = cur_time()
 
     def get_task_id(self, frame):
         while frame is not None:
@@ -227,14 +234,8 @@ class AsyncioLogger:
         return None
 
     def log_event(self, frame):
-        self_obj = None
-        event_time = event_time = cur_time()
+        event_time = cur_time() - self.start_time
 
-
-        if DictContains(frame.f_locals, "self"):
-            self_obj = frame.f_locals["self"]
-
-        method_name = frame.f_code.co_name
         # Debug loop iterations
         # if isinstance(self_obj, asyncio.base_events.BaseEventLoop):
         #     if method_name == "_run_once":

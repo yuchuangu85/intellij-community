@@ -49,7 +49,7 @@ public class ConcurrencyGraphPresentationModel {
   }
 
   public int getCellsNumber() {
-    return (int)myGraphModel.getDuration() / visualSettings.getMillisPerCell();
+    return (int)myGraphModel.getDuration() / visualSettings.getMicrosecsPerCell();
   }
 
   public ArrayList<String> getThreadNames() {
@@ -57,7 +57,7 @@ public class ConcurrencyGraphPresentationModel {
   }
 
   private long roundForCell(long time) {
-    long millisPerCell = visualSettings.getMillisPerCell();
+    long millisPerCell = visualSettings.getMicrosecsPerCell();
     return time - (time % millisPerCell);
   }
 
@@ -65,8 +65,7 @@ public class ConcurrencyGraphPresentationModel {
     if (visualSettings.getHorizontalMax() == 0) {
       return new ArrayList<ConcurrencyGraphBlock>();
     }
-    long startTime = roundForCell(myGraphModel.getStartTime() +
-                                  visualSettings.getHorizontalValue() * myGraphModel.getDuration() /
+    long startTime = roundForCell(visualSettings.getHorizontalValue() * myGraphModel.getDuration() /
                                   visualSettings.getHorizontalMax());
     ArrayList<ConcurrencyGraphBlock> ret = new ArrayList<ConcurrencyGraphBlock>();
     int curEventId = myGraphModel.getLastEventIndexBeforeMoment(startTime);
@@ -77,7 +76,7 @@ public class ConcurrencyGraphPresentationModel {
       curTime = nextTime;
       nextTime = roundForCell(myGraphModel.getEventAt(curEventId + 1).getTime());
       long period = nextTime - curTime;
-      int cellsInPeriod = (int)(period / visualSettings.getMillisPerCell());
+      int cellsInPeriod = (int)(period / visualSettings.getMicrosecsPerCell());
       if (cellsInPeriod != 0) {
         ret.add(new ConcurrencyGraphBlock(myGraphModel.getDrawElementsForRow(curEventId), cellsInPeriod));
         i += cellsInPeriod;

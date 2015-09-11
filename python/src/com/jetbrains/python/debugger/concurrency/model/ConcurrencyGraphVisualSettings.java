@@ -18,7 +18,7 @@ package com.jetbrains.python.debugger.concurrency.model;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 
 public class ConcurrencyGraphVisualSettings {
-  private int myMillisPerCell = 10;
+  private int myMicrosecsPerCell = 1000;
   private int myHorizontalValue;
   private int myHorizontalExtent;
   private int myHorizontalMax;
@@ -36,17 +36,18 @@ public class ConcurrencyGraphVisualSettings {
   }
 
   public void increaseScale() {
-    myMillisPerCell = Math.max(1, Math.min((int)Math.round(myMillisPerCell * 0.9), myMillisPerCell - 1));
+    myMicrosecsPerCell = Math.max(100, (int) (Math.round(myMicrosecsPerCell * 0.9) - Math.round(myMicrosecsPerCell * 0.9) % 100));
     myGraphModel.updateGraphModel();
   }
 
   public void decreaseScale() {
-    myMillisPerCell = Math.max((int)Math.round(myMillisPerCell * 1.1), myMillisPerCell + 1);
+    myMicrosecsPerCell = Math.max((int)(Math.round(myMicrosecsPerCell * 1.1) - Math.round(myMicrosecsPerCell * 1.1) % 100),
+                                  myMicrosecsPerCell + 100);
     myGraphModel.updateGraphModel();
   }
 
-  public int getMillisPerCell() {
-    return myMillisPerCell;
+  public int getMicrosecsPerCell() {
+    return myMicrosecsPerCell;
   }
 
   public int getCellsPerRulerUnit() {

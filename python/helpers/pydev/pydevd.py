@@ -1782,7 +1782,8 @@ class PyDB:
         if self.thread_analyser is not None:
             wrap_threads()
             t = threadingCurrentThread()
-            send_message("threading_event", cur_time(), t.getName(), GetThreadId(t), "thread", "start", file, 1, None, parent=GetThreadId(t))
+            self.thread_analyser.set_start_time(cur_time())
+            send_message("threading_event", 0, t.getName(), GetThreadId(t), "thread", "start", file, 1, None, parent=GetThreadId(t))
 
         try:
             self.init_matplotlib_support()

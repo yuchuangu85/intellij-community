@@ -74,8 +74,9 @@ public class ConcurrencyGraphView extends JComponent {
       int markY = i % 10 == 0 ? y - ConcurrencyGraphSettings.RULER_UNIT_MARK : y - ConcurrencyGraphSettings.RULER_SUBUNIT_MARK;
       g.drawLine(i * rulerUnitWidth, markY, i * rulerUnitWidth, y);
       if ((i != 0) && (i % 10 == 0)) {
-        String text = String.format("%d ms", myGraphPresentation.visualSettings.getMicrosecsPerCell() *
-                                              myGraphPresentation.visualSettings.getCellsPerRulerUnit() * i / 1000);
+        int ms = myGraphPresentation.visualSettings.getMicrosecsPerCell() *
+                 myGraphPresentation.visualSettings.getCellsPerRulerUnit() * i / 1000;
+        String text = String.format("%.2f s", ms / 1000f);
         int textWidth = metrics.stringWidth(text);
         int textHeight = metrics.getHeight();
         g.drawString(text, i * rulerUnitWidth - textWidth / 2, markY - textHeight);

@@ -109,7 +109,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
 
   private class ScaleIncrementAction extends AnAction implements DumbAware {
     public ScaleIncrementAction() {
-      super("Increment", "Increment scale", AllIcons.Actions.SortAsc);
+      super("Zoom In", "Zoom In", AllIcons.Actions.SortAsc);
     }
 
     @Override
@@ -126,7 +126,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
 
   private class ScaleDecrementAction extends AnAction implements DumbAware {
     public ScaleDecrementAction() {
-      super("Decrement", "Decrement scale", AllIcons.Actions.SortDesc);
+      super("Zoom Out", "Zoom Out", AllIcons.Actions.SortDesc);
     }
 
     @Override

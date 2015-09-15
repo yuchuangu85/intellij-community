@@ -3,11 +3,11 @@ package com.jetbrains.python.debugger;
 
 
 public class PyLockEvent extends PyConcurrencyEvent {
-  private final String myId;
+  private final String myLockId;
 
   public PyLockEvent(long time, String threadId, String name, String id, boolean isAsyncio) {
     super(time, threadId, name, isAsyncio);
-    myId = id;
+    myLockId = id;
   }
 
   @Override
@@ -32,8 +32,8 @@ public class PyLockEvent extends PyConcurrencyEvent {
     return sb.toString();
   }
 
-  public String getId() {
-    return myId;
+  public String getLockId() {
+    return myLockId;
   }
 
   @Override
@@ -45,7 +45,7 @@ public class PyLockEvent extends PyConcurrencyEvent {
   public String toString() {
     return myTime + " " + myThreadId + " PyLockEvent" +
            " myType=" + myType +
-           " myId= " + myId +
+           " myLockId= " + myLockId +
            " " + myFileName +
            " " + myLine +
            "<br>";

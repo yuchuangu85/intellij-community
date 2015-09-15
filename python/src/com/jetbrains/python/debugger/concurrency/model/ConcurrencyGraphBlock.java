@@ -20,9 +20,11 @@ import java.util.ArrayList;
 public class ConcurrencyGraphBlock {
   public ArrayList<ConcurrencyThreadState> elements;
   public int numberOfCells;
+  public int eventId;
 
-  public ConcurrencyGraphBlock(ArrayList<ConcurrencyThreadState> elements, int numberOfCells) {
+  public ConcurrencyGraphBlock(ArrayList<ConcurrencyThreadState> elements, int numberOfCells, int eventId) {
     this.elements = elements;
     this.numberOfCells = numberOfCells;
+    this.eventId = eventId;
   }
 }

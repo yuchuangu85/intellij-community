@@ -52,7 +52,7 @@ public class ConcurrencyNamesManager {
     }
 
     if (event instanceof PyLockEvent) {
-      sb.append(getLockNameById(((PyLockEvent)event).getId()));
+      sb.append(getLockNameById(((PyLockEvent)event).getLockId()));
       sb.append(" ");
       sb.append(event.getEventActionName());
       return sb.toString();

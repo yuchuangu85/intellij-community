@@ -19,6 +19,7 @@ import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphBlock;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
 
 import java.awt.*;
+import java.util.ArrayList;
 
 public class ConcurrencyRenderingUtil {
 
@@ -35,9 +36,17 @@ public class ConcurrencyRenderingUtil {
         g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.STROKE_BASIC));
         g2.setColor(ConcurrencyGraphSettings.LOCK_WAIT_COLOR);
         break;
+      case LockWaitSelected:
+        g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.STROKE_BASIC));
+        g2.setColor(ConcurrencyGraphSettings.LOCK_WAIT_SELECTED_COLOR);
+        break;
       case LockOwn:
         g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.STROKE_BASIC));
         g2.setColor(ConcurrencyGraphSettings.LOCK_OWNING_COLOR);
+        break;
+      case LockOwnSelected:
+        g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.STROKE_BASIC));
+        g2.setColor(ConcurrencyGraphSettings.LOCK_OWNING_SELECTED_COLOR);
         break;
       case Deadlock:
         g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.STROKE_BASIC));
@@ -46,17 +55,43 @@ public class ConcurrencyRenderingUtil {
     }
   }
 
-  public static void paintBlock(Graphics g, int x, ConcurrencyGraphBlock graphBlock) {
+  public static void paintBlockElements(Graphics g, int externalPadding, ArrayList<ConcurrencyGraphBlock> drawingElements) {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    for (int j = 0; j < graphBlock.elements.size(); ++j) {
-      ConcurrencyThreadState element = graphBlock.elements.get(j);
-      if (element != ConcurrencyThreadState.Stopped) {
-        prepareStroke(g2, element);
-        g2.fillRect(x, (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * j + ConcurrencyGraphSettings.INTERVAL,
-                    ConcurrencyGraphSettings.CELL_WIDTH * graphBlock.numberOfCells, ConcurrencyGraphSettings.CELL_HEIGHT);
+    int paddingInsideBlock = 0;
+    for (ConcurrencyGraphBlock block: drawingElements) {
+      int padding = ConcurrencyGraphSettings.CELL_WIDTH * (externalPadding + paddingInsideBlock);
+      for (int j = 0; j < block.elements.size(); ++j) {
+        ConcurrencyThreadState element = block.elements.get(j);
+        if (element != ConcurrencyThreadState.Stopped) {
+          prepareStroke(g2, element);
+          g2.fillRect(padding,
+                      (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * j + ConcurrencyGraphSettings.INTERVAL,
+                      ConcurrencyGraphSettings.CELL_WIDTH * block.numberOfCells, ConcurrencyGraphSettings.CELL_HEIGHT);
+        }
       }
+      paddingInsideBlock += block.numberOfCells;
     }
+  }
+
+  public static Point getElementIndex(int externalPadding, ArrayList<ConcurrencyGraphBlock> drawingElements, int x, int y) {
+    x = x / ConcurrencyGraphSettings.CELL_WIDTH - externalPadding;
+    int paddingInsideBlock = 0;
+    for (int i = 0; i < drawingElements.size(); ++i) {
+      ConcurrencyGraphBlock block = drawingElements.get(i);
+      int blockWidth = block.numberOfCells;
+      if ((paddingInsideBlock < x) && (paddingInsideBlock + blockWidth > x)) {
+        int yRet = y / (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL);
+        if ((y % (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) > ConcurrencyGraphSettings.INTERVAL) &&
+            yRet < block.elements.size()) {
+          return new Point(i, yRet);
+        } else {
+          return new Point(i, -1);
+        }
+      }
+      paddingInsideBlock += block.numberOfCells;
+    }
+    return new Point(-1, -1);
   }
 
 }

@@ -71,7 +71,7 @@ public class ConcurrencyGraphAnalyser {
       if (event instanceof PyLockEvent) {
         PyLockEvent lockEvent = (PyLockEvent)event;
         String threadId = lockEvent.getThreadId();
-        String lockId = lockEvent.getId();
+        String lockId = lockEvent.getLockId();
         if (!myLocksInfo.containsKey(threadId)) {
           myLocksInfo.put(threadId, new ThreadLocksInfo());
         }
@@ -137,14 +137,14 @@ public class ConcurrencyGraphAnalyser {
       if ((event.getThreadId().equals(threadId) && event instanceof PyLockEvent)) {
         PyLockEvent lockEvent = (PyLockEvent)event;
         if (lockEvent.getType() == PyLockEvent.EventType.ACQUIRE_BEGIN) {
-          locksAcquired.add(lockEvent.getId());
+          locksAcquired.add(lockEvent.getLockId());
         }
         if (lockEvent.getType() == PyLockEvent.EventType.ACQUIRE_END) {
-          locksAcquired.remove(lockEvent.getId());
-          locksOwn.add(lockEvent.getId());
+          locksAcquired.remove(lockEvent.getLockId());
+          locksOwn.add(lockEvent.getLockId());
         }
         if (lockEvent.getType() == PyLockEvent.EventType.RELEASE) {
-          locksOwn.remove(lockEvent.getId());
+          locksOwn.remove(lockEvent.getLockId());
         }
       }
     }

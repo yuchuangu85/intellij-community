@@ -15,6 +15,8 @@
  */
 package com.jetbrains.python.debugger.concurrency.model;
 
+import com.jetbrains.python.debugger.PyConcurrencyEvent;
+import com.jetbrains.python.debugger.PyLockEvent;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 import org.jetbrains.annotations.NotNull;
 
@@ -22,7 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ConcurrencyGraphPresentationModel {
-  private final ConcurrencyGraphModel myGraphModel;
+  public ConcurrencyGraphModel myGraphModel;
   private List<PresentationListener> myListeners = new ArrayList<PresentationListener>();
   private final Object myListenersObject = new Object();
   public ConcurrencyGraphVisualSettings visualSettings;
@@ -78,12 +80,30 @@ public class ConcurrencyGraphPresentationModel {
       long period = nextTime - curTime;
       int cellsInPeriod = (int)(period / visualSettings.getMicrosecsPerCell());
       if (cellsInPeriod != 0) {
-        ret.add(new ConcurrencyGraphBlock(myGraphModel.getDrawElementsForRow(curEventId), cellsInPeriod));
+        ret.add(new ConcurrencyGraphBlock(myGraphModel.getDrawElementsForRow(curEventId), cellsInPeriod, curEventId + 1));
         i += cellsInPeriod;
       }
       curEventId += 1;
     }
     return ret;
+  }
+
+  public int applySelectionFilter(int startEventId, int threadIndex, int firstEventId) {
+    String threadId = myGraphModel.getThreadIdByIndex(threadIndex);
+    PyConcurrencyEvent event = null;
+    while (startEventId >= 0) {
+      event = myGraphModel.getEventAt(startEventId);
+      if (event.getThreadId().equals(threadId)) {
+        break;
+      }
+      startEventId--;
+    }
+    if ((event != null) && (event instanceof PyLockEvent) && (event.getType() != PyConcurrencyEvent.EventType.RELEASE)) {
+      PyLockEvent lockEvent = (PyLockEvent)event;
+      String lockId = lockEvent.getLockId();
+      myGraphModel.setFilterLockId(lockId);
+    }
+    return startEventId;
   }
 
   public interface PresentationListener {

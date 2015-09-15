@@ -21,6 +21,7 @@ import com.intellij.util.containers.hash.HashMap;
 import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.XDebugSessionListener;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
+import com.jetbrains.python.debugger.PyLockEvent;
 import com.jetbrains.python.debugger.PyThreadEvent;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphAnalyser;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStat;
@@ -47,6 +48,7 @@ public class ConcurrencyGraphModel {
   private XDebugSession lastSession;
   private long myStartTime; //millis
   private long myPauseTime; //millis
+  private String myFilterLockId;
 
   public ConcurrencyGraphModel(Project project) {
     myProject = project;
@@ -233,8 +235,20 @@ public class ConcurrencyGraphModel {
       case STOP:
         return ConcurrencyThreadState.Stopped;
       case ACQUIRE_BEGIN:
+        if ((myFilterLockId != null) && (event instanceof PyLockEvent)) {
+          PyLockEvent lockEvent = (PyLockEvent)event;
+          if (lockEvent.getLockId().equals(myFilterLockId)) {
+            return ConcurrencyThreadState.LockWaitSelected;
+          }
+        }
         return ConcurrencyThreadState.LockWait;
       case ACQUIRE_END:
+        if ((myFilterLockId != null) && (event instanceof PyLockEvent)) {
+          PyLockEvent lockEvent = (PyLockEvent)event;
+          if (lockEvent.getLockId().equals(myFilterLockId)) {
+            return ConcurrencyThreadState.LockOwnSelected;
+          }
+        }
         return ConcurrencyThreadState.LockOwn;
       case RELEASE:
         return myGraphAnalyser.getThreadStateAt(index, event.getThreadId());
@@ -268,6 +282,22 @@ public class ConcurrencyGraphModel {
         logListener.graphChanged();
       }
     }
+  }
+
+  public String getThreadIdByIndex(int index) {
+    // terrible code! fix it!
+    for (Map.Entry<String, Integer> entry: threadIndexToId.entrySet()) {
+      if (entry.getValue() == index) {
+        return entry.getKey();
+      }
+    }
+    return null;
+  }
+
+  public void setFilterLockId(String filterLockId) {
+    myFilterLockId = filterLockId;
+    createGraph();
+    updateGraph();
   }
 
   private void createGraph() {

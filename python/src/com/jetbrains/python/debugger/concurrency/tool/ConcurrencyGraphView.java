@@ -21,11 +21,14 @@ import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphVisualSet
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 
 public class ConcurrencyGraphView extends JComponent {
   private final ConcurrencyGraphPresentationModel myGraphPresentation;
   private int myPadding;
+  private ArrayList<ConcurrencyGraphBlock> myDrawingElements;
 
   public ConcurrencyGraphView(ConcurrencyGraphPresentationModel graphPresentation) {
     myGraphPresentation = graphPresentation;
@@ -36,6 +39,15 @@ public class ConcurrencyGraphView extends JComponent {
         update();
       }
     });
+
+    addMouseListener(new MouseAdapter() {
+      @Override
+      public void mouseClicked(MouseEvent e) {
+        super.mouseClicked(e);
+        showConnectedLocks(e.getPoint());
+      }
+    });
+
     updateSize();
   }
 
@@ -44,6 +56,18 @@ public class ConcurrencyGraphView extends JComponent {
     int height = myGraphPresentation.visualSettings.getHeightForPanes(myGraphPresentation.getLinesNumber());
     setSize(new Dimension(width, height));
     setPreferredSize(new Dimension(width, height));
+  }
+
+  private void showConnectedLocks(Point clickedPoint) {
+    Point p = ConcurrencyRenderingUtil.getElementIndex(myPadding, myDrawingElements, clickedPoint.x, clickedPoint.y);
+    int elementIndex = p.x;
+    int threadIndex = p.y;
+    if ((elementIndex != -1) && (threadIndex != -1)) {
+      int eventId = myDrawingElements.get(elementIndex).eventId;
+      myGraphPresentation.applySelectionFilter(eventId, threadIndex, myDrawingElements.get(0).eventId);
+    } else {
+      myGraphPresentation.myGraphModel.setFilterLockId(null);
+    }
   }
 
   private void update() {
@@ -88,12 +112,8 @@ public class ConcurrencyGraphView extends JComponent {
   public void paintComponent(Graphics g) {
     super.paintComponent(g);
     paintBackground(g);
-    ArrayList<ConcurrencyGraphBlock> elements = myGraphPresentation.getVisibleGraph();
-    int paddingInsideBlock = 0;
-    for (ConcurrencyGraphBlock block: elements) {
-      ConcurrencyRenderingUtil.paintBlock(g, ConcurrencyGraphSettings.CELL_WIDTH * (myPadding + paddingInsideBlock), block);
-      paddingInsideBlock += block.numberOfCells;
-    }
+    myDrawingElements = myGraphPresentation.getVisibleGraph();
+    ConcurrencyRenderingUtil.paintBlockElements(g, myPadding, myDrawingElements);
     paintRuler(g);
   }
 }

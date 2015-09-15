@@ -16,5 +16,5 @@
 package com.jetbrains.python.debugger.concurrency.model;
 
 public enum ConcurrencyThreadState {
-  Run, Stopped, LockWait, LockOwn, Deadlock
+  Run, Stopped, LockWait, LockWaitSelected, LockOwn, LockOwnSelected, Deadlock
 }

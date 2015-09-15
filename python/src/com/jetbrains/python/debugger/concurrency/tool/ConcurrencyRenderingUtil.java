@@ -62,7 +62,7 @@ public class ConcurrencyRenderingUtil {
     for (ConcurrencyGraphBlock block: drawingElements) {
       int padding = ConcurrencyGraphSettings.CELL_WIDTH * (externalPadding + paddingInsideBlock);
       for (int j = 0; j < block.elements.size(); ++j) {
-        ConcurrencyThreadState element = block.elements.get(j);
+        ConcurrencyThreadState element = block.elements.get(j).threadState;
         if (element != ConcurrencyThreadState.Stopped) {
           prepareStroke(g2, element);
           g2.fillRect(padding,
@@ -80,7 +80,7 @@ public class ConcurrencyRenderingUtil {
     for (int i = 0; i < drawingElements.size(); ++i) {
       ConcurrencyGraphBlock block = drawingElements.get(i);
       int blockWidth = block.numberOfCells;
-      if ((paddingInsideBlock < x) && (paddingInsideBlock + blockWidth > x)) {
+      if ((paddingInsideBlock < x) && (paddingInsideBlock + blockWidth >= x)) {
         int yRet = y / (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL);
         if ((y % (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) > ConcurrencyGraphSettings.INTERVAL) &&
             yRet < block.elements.size()) {

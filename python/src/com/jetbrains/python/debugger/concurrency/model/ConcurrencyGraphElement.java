@@ -15,14 +15,12 @@
  */
 package com.jetbrains.python.debugger.concurrency.model;
 
-import java.util.ArrayList;
+public class ConcurrencyGraphElement {
+  public ConcurrencyThreadState threadState;
+  public int eventIndex;
 
-public class ConcurrencyGraphBlock {
-  public ArrayList<ConcurrencyGraphElement> elements;
-  public int numberOfCells;
-
-  public ConcurrencyGraphBlock(ArrayList<ConcurrencyGraphElement> elements, int numberOfCells) {
-    this.elements = elements;
-    this.numberOfCells = numberOfCells;
+  public ConcurrencyGraphElement(ConcurrencyThreadState threadState, int eventIndex) {
+    this.threadState = threadState;
+    this.eventIndex = eventIndex;
   }
 }

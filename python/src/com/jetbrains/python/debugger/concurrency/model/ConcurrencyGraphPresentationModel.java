@@ -80,7 +80,7 @@ public class ConcurrencyGraphPresentationModel {
       long period = nextTime - curTime;
       int cellsInPeriod = (int)(period / visualSettings.getMicrosecsPerCell());
       if (cellsInPeriod != 0) {
-        ret.add(new ConcurrencyGraphBlock(myGraphModel.getDrawElementsForRow(curEventId), cellsInPeriod, curEventId + 1));
+        ret.add(new ConcurrencyGraphBlock(myGraphModel.getDrawElementsForRow(curEventId), cellsInPeriod));
         i += cellsInPeriod;
       }
       curEventId += 1;
@@ -88,22 +88,15 @@ public class ConcurrencyGraphPresentationModel {
     return ret;
   }
 
-  public int applySelectionFilter(int startEventId, int threadIndex, int firstEventId) {
-    String threadId = myGraphModel.getThreadIdByIndex(threadIndex);
-    PyConcurrencyEvent event = null;
-    while (startEventId >= 0) {
-      event = myGraphModel.getEventAt(startEventId);
-      if (event.getThreadId().equals(threadId)) {
-        break;
-      }
-      startEventId--;
-    }
-    if ((event != null) && (event instanceof PyLockEvent) && (event.getType() != PyConcurrencyEvent.EventType.RELEASE)) {
+  public void applySelectionFilter(int eventId) {
+    PyConcurrencyEvent event = myGraphModel.getEventAt(eventId);
+    if ((event instanceof PyLockEvent) && (event.getType() != PyConcurrencyEvent.EventType.RELEASE)) {
       PyLockEvent lockEvent = (PyLockEvent)event;
       String lockId = lockEvent.getLockId();
       myGraphModel.setFilterLockId(lockId);
+    } else if (event.getType() == PyConcurrencyEvent.EventType.STOP) {
+      myGraphModel.setFilterLockId(null);
     }
-    return startEventId;
   }
 
   public interface PresentationListener {

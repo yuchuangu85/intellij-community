@@ -35,7 +35,7 @@ public class ConcurrencyGraphModel {
   protected Project myProject;
   private List<PyConcurrencyEvent> myLog;
   private final Object myLogObject = new Object();
-  private ArrayList<ArrayList<ConcurrencyThreadState>> myGraphScheme;
+  private ArrayList<ArrayList<ConcurrencyGraphElement>> myGraphScheme;
   private ArrayList<Integer> myThreadCountForRow;
   private Map<String, Integer> threadIndexToId;
   private ArrayList<String> threadNames;
@@ -220,40 +220,40 @@ public class ConcurrencyGraphModel {
     }
   }
 
-  public ArrayList<ConcurrencyThreadState> getDrawElementsForRow(int row) {
-    return new ArrayList<ConcurrencyThreadState>(myGraphScheme.get(row));
+  public ArrayList<ConcurrencyGraphElement> getDrawElementsForRow(int row) {
+    return new ArrayList<ConcurrencyGraphElement>(myGraphScheme.get(row));
   }
 
-  private ConcurrencyThreadState getThreadStateForEvent(PyConcurrencyEvent event, ConcurrencyThreadState threadState, int index) {
+  private ConcurrencyGraphElement getThreadStateForEvent(PyConcurrencyEvent event, ConcurrencyThreadState threadState, int index) {
     switch (event.getType()) {
       case CREATE:
-        return threadState;
+        return new ConcurrencyGraphElement(threadState, index);
       case START:
-        return ConcurrencyThreadState.Run;
+        return new ConcurrencyGraphElement(ConcurrencyThreadState.Run, index);
       case JOIN:
-        return threadState;
+        return new ConcurrencyGraphElement(threadState, index);
       case STOP:
-        return ConcurrencyThreadState.Stopped;
+        return new ConcurrencyGraphElement(ConcurrencyThreadState.Stopped, index);
       case ACQUIRE_BEGIN:
         if ((myFilterLockId != null) && (event instanceof PyLockEvent)) {
           PyLockEvent lockEvent = (PyLockEvent)event;
           if (lockEvent.getLockId().equals(myFilterLockId)) {
-            return ConcurrencyThreadState.LockWaitSelected;
+            return new ConcurrencyGraphElement(ConcurrencyThreadState.LockWaitSelected, index);
           }
         }
-        return ConcurrencyThreadState.LockWait;
+        return new ConcurrencyGraphElement(ConcurrencyThreadState.LockWait, index);
       case ACQUIRE_END:
         if ((myFilterLockId != null) && (event instanceof PyLockEvent)) {
           PyLockEvent lockEvent = (PyLockEvent)event;
           if (lockEvent.getLockId().equals(myFilterLockId)) {
-            return ConcurrencyThreadState.LockOwnSelected;
+            return new ConcurrencyGraphElement(ConcurrencyThreadState.LockOwnSelected, index);
           }
         }
-        return ConcurrencyThreadState.LockOwn;
+        return new ConcurrencyGraphElement(ConcurrencyThreadState.LockOwn, index);
       case RELEASE:
         return myGraphAnalyser.getThreadStateAt(index, event.getThreadId());
       default:
-        return ConcurrencyThreadState.Stopped;
+        return new ConcurrencyGraphElement(ConcurrencyThreadState.Stopped, index);
     }
   }
 
@@ -304,7 +304,7 @@ public class ConcurrencyGraphModel {
     synchronized (myUpdateObject) {
       threadIndexToId = new HashMap<String, Integer>();
       threadNames = new ArrayList<String>();
-      myGraphScheme = new ArrayList<ArrayList<ConcurrencyThreadState>>(getSize());
+      myGraphScheme = new ArrayList<ArrayList<ConcurrencyGraphElement>>(getSize());
       myThreadCountForRow = new ArrayList<Integer>();
       myGraphAnalyser = new ConcurrencyGraphAnalyser(this);
       myCurrentMaxThread = 0;
@@ -320,7 +320,7 @@ public class ConcurrencyGraphModel {
         String eventThreadId = event.getThreadId();
 
         if (event.isThreadEvent() && event.getType() == PyConcurrencyEvent.EventType.START) {
-          ConcurrencyThreadState element = ConcurrencyThreadState.Run;
+          ConcurrencyGraphElement element = new ConcurrencyGraphElement(ConcurrencyThreadState.Run, i);
           myCurrentMaxThread++;
           threadIndexToId.put(eventThreadId, myCurrentMaxThread - 1);
           threadNames.add(myCurrentMaxThread - 1, event.getThreadName());
@@ -332,7 +332,7 @@ public class ConcurrencyGraphModel {
               addRelation(i, parentNum, eventNum);
             }
           }
-          myGraphScheme.add(i, new ArrayList<ConcurrencyThreadState>(myCurrentMaxThread));
+          myGraphScheme.add(i, new ArrayList<ConcurrencyGraphElement>(myCurrentMaxThread));
           for (int j = 0; j < myCurrentMaxThread - 1; ++j) {
             myGraphScheme.get(i).add(j, myGraphScheme.get(i - 1).get(j));
           }
@@ -348,12 +348,13 @@ public class ConcurrencyGraphModel {
             }
           }
 
-          myGraphScheme.add(i, new ArrayList<ConcurrencyThreadState>());
+          myGraphScheme.add(i, new ArrayList<ConcurrencyGraphElement>());
           for (int j = 0; j < myCurrentMaxThread; ++j) {
             if (j != eventThreadIdInt) {
               myGraphScheme.get(i).add(j, myGraphScheme.get(i - 1).get(j));
             } else {
-              myGraphScheme.get(i).add(eventThreadIdInt, getThreadStateForEvent(event, myGraphScheme.get(i - 1).get(eventThreadIdInt), i));
+              myGraphScheme.get(i).add(eventThreadIdInt,
+                                       getThreadStateForEvent(event, myGraphScheme.get(i - 1).get(eventThreadIdInt).threadState, i));
             }
           }
 
@@ -361,7 +362,7 @@ public class ConcurrencyGraphModel {
             HashSet<String> deadlocked = myGraphAnalyser.checkForDeadlocks(i);
             if (deadlocked != null) {
               for (String threadId : deadlocked) {
-                myGraphScheme.get(i).set(threadIndexToId.get(threadId), ConcurrencyThreadState.Deadlock);
+                myGraphScheme.get(i).set(threadIndexToId.get(threadId), new ConcurrencyGraphElement(ConcurrencyThreadState.Deadlock, i));
               }
             }
           }

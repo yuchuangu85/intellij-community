@@ -58,13 +58,13 @@ public class ConcurrencyGraphView extends JComponent {
     setPreferredSize(new Dimension(width, height));
   }
 
-  private void showConnectedLocks(Point clickedPoint) {
-    Point p = ConcurrencyRenderingUtil.getElementIndex(myPadding, myDrawingElements, clickedPoint.x, clickedPoint.y);
+  private void showConnectedLocks(Point clickPoint) {
+    Point p = ConcurrencyRenderingUtil.getElementIndex(myPadding, myDrawingElements, clickPoint.x, clickPoint.y);
     int elementIndex = p.x;
     int threadIndex = p.y;
     if ((elementIndex != -1) && (threadIndex != -1)) {
-      int eventId = myDrawingElements.get(elementIndex).eventId;
-      myGraphPresentation.applySelectionFilter(eventId, threadIndex, myDrawingElements.get(0).eventId);
+      int eventId = myDrawingElements.get(elementIndex).elements.get(threadIndex).eventIndex;
+      myGraphPresentation.applySelectionFilter(eventId);
     } else {
       myGraphPresentation.myGraphModel.setFilterLockId(null);
     }

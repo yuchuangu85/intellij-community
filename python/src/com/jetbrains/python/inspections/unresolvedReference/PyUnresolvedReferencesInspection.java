@@ -49,8 +49,8 @@ import com.jetbrains.python.codeInsight.imports.AutoImportQuickFix;
 import com.jetbrains.python.codeInsight.imports.OptimizeImportsQuickFix;
 import com.jetbrains.python.codeInsight.imports.PythonReferenceImporter;
 import com.jetbrains.python.console.PydevConsoleRunner;
-import com.jetbrains.python.documentation.DocStringParameterReference;
-import com.jetbrains.python.documentation.DocStringTypeReference;
+import com.jetbrains.python.documentation.docstrings.DocStringParameterReference;
+import com.jetbrains.python.documentation.docstrings.DocStringTypeReference;
 import com.jetbrains.python.inspections.*;
 import com.jetbrains.python.inspections.quickfix.*;
 import com.jetbrains.python.packaging.PyPIPackageUtil;
@@ -168,11 +168,11 @@ public class PyUnresolvedReferencesInspection extends PyInspection {
         final PyType type = myTypeEvalContext.getType(qualifier);
         if (type instanceof PyClassType) {
           final PyClass pyClass = ((PyClassType)type).getPyClass();
-          if (pyClass.isNewStyleClass()) {
+          if (pyClass.isNewStyleClass(null)) {
             if (pyClass.getOwnSlots() == null) {
               return;
             }
-            final List<String> slots = pyClass.getSlots();
+            final List<String> slots = pyClass.getSlots(null);
             final String attrName = node.getReferencedName();
             if (slots != null && !slots.contains(attrName) && !slots.contains(PyNames.DICT)) {
               for (PyClass ancestor : pyClass.getAncestorClasses(myTypeEvalContext)) {
@@ -182,7 +182,7 @@ public class PyUnresolvedReferencesInspection extends PyInspection {
                 if (PyNames.OBJECT.equals(ancestor.getName())) {
                   break;
                 }
-                final List<String> ancestorSlots = ancestor.getSlots();
+                final List<String> ancestorSlots = ancestor.getSlots(null);
                 if (ancestorSlots == null || ancestorSlots.contains(attrName) || ancestorSlots.contains(PyNames.DICT)) {
                   return;
                 }
@@ -534,10 +534,18 @@ public class PyUnresolvedReferencesInspection extends PyInspection {
                 return;
               }
               addCreateMemberFromUsageFixes(type, reference, refText, actions);
-              if (type instanceof PyClassTypeImpl) {
+              if (type instanceof PyClassType) {
                 if (reference instanceof PyOperatorReference) {
+                  String className = type.getName();
+                  final PyClassType classType = (PyClassType)type;
+                  if (classType.isDefinition()) {
+                    final PyClassLikeType metaClassType = classType.getMetaClassType(myTypeEvalContext, true);
+                    if (metaClassType != null) {
+                      className = metaClassType.getName();
+                    }
+                  }
                   description = PyBundle.message("INSP.unresolved.operator.ref",
-                                                 type.getName(), refName,
+                                                 className, refName,
                                                  ((PyOperatorReference)reference).getReadableOperatorName());
                 }
                 else {
@@ -756,7 +764,7 @@ public class PyUnresolvedReferencesInspection extends PyInspection {
         if (PyTypeChecker.overridesGetAttr(cls, myTypeEvalContext)) {
           return true;
         }
-        if (cls.findProperty(name, true) != null) {
+        if (cls.findProperty(name, true, myTypeEvalContext) != null) {
           return true;
         }
         if (PyUtil.hasUnresolvedAncestors(cls, myTypeEvalContext)) {

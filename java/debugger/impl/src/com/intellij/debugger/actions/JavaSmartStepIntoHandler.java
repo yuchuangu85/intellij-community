@@ -67,7 +67,7 @@ public class JavaSmartStepIntoHandler extends JvmSmartStepIntoHandler {
     }
     TextRange curLineRange = DocumentUtil.getLineTextRange(doc, line);
     PsiElement element = position.getElementAt();
-    PsiElement method = getBody(DebuggerUtilsEx.getContainingMethod(element));
+    PsiElement method = DebuggerUtilsEx.getBody(DebuggerUtilsEx.getContainingMethod(element));
     final TextRange lineRange = (method != null) ? curLineRange.intersection(method.getTextRange()) : curLineRange;
 
     if (lineRange == null || lineRange.isEmpty()) {
@@ -123,6 +123,24 @@ public class JavaSmartStepIntoHandler extends JvmSmartStepIntoHandler {
             if (navMethod instanceof PsiMethod) {
               targets.add(new MethodSmartStepTarget(((PsiMethod)navMethod), null, expression, true, null));
             }
+          }
+        }
+
+        @Override
+        public void visitField(PsiField field) {
+          TextRange range = field.getTextRange();
+          if (lineRange.intersects(range)) {
+            //textRange.set(textRange.get().union(range));
+            super.visitField(field);
+          }
+        }
+
+        @Override
+        public void visitMethod(PsiMethod method) {
+          TextRange range = method.getTextRange();
+          if (lineRange.intersects(range)) {
+            //textRange.set(textRange.get().union(range));
+            super.visitMethod(method);
           }
         }
 
@@ -209,15 +227,5 @@ public class JavaSmartStepIntoHandler extends JvmSmartStepIntoHandler {
       return targets;
     }
     return Collections.emptyList();
-  }
-
-  private static PsiElement getBody(@Nullable PsiElement containingMethod) {
-    if (containingMethod instanceof PsiMethod) {
-      return ((PsiMethod)containingMethod).getBody();
-    }
-    else if (containingMethod instanceof PsiLambdaExpression) {
-      return ((PsiLambdaExpression)containingMethod).getBody();
-    }
-    return null;
   }
 }

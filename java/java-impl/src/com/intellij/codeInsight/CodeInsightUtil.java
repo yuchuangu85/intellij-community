@@ -188,7 +188,13 @@ public class CodeInsightUtil {
         boolean deprecated2 = o2.isDeprecated();
         if (deprecated1 && !deprecated2) return 1;
         if (!deprecated1 && deprecated2) return -1;
-        return proximityComparator.compare(o1, o2);
+        int compare = proximityComparator.compare(o1, o2);
+        if (compare != 0) return compare;
+
+        String qname1 = o1.getQualifiedName();
+        String qname2 = o2.getQualifiedName();
+        if (qname1 == null || qname2 == null) return 0;
+        return qname1.compareToIgnoreCase(qname2);
       }
     });
   }
@@ -243,7 +249,12 @@ public class CodeInsightUtil {
     }
   }
 
-  public static Editor positionCursor(final Project project, PsiFile targetFile, PsiElement element) {
+  public static Editor positionCursorAtLBrace(final Project project, PsiFile targetFile, @NotNull PsiClass psiClass) {
+    final PsiElement lBrace = psiClass.getLBrace();
+    return positionCursor(project, targetFile, lBrace != null ? lBrace : psiClass);
+  }
+  
+  public static Editor positionCursor(final Project project, PsiFile targetFile, @NotNull PsiElement element) {
     TextRange range = element.getTextRange();
     int textOffset = range.getStartOffset();
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2015 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,6 +42,7 @@ import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.html.HtmlTag;
+import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.psi.xml.XmlTokenType;
@@ -63,13 +64,13 @@ public class XmlTagInsertHandler implements InsertHandler<LookupElement> {
     Project project = context.getProject();
     Editor editor = context.getEditor();
     // Need to insert " " to prevent creating tags like <tagThis is my text
-    editor.getDocument().putUserData(ENFORCING_TAG, Boolean.TRUE);
+    InjectedLanguageUtil.getTopLevelEditor(editor).getDocument().putUserData(ENFORCING_TAG, Boolean.TRUE);
     final int offset = editor.getCaretModel().getOffset();
     editor.getDocument().insertString(offset, " ");
     PsiDocumentManager.getInstance(project).commitDocument(editor.getDocument());
     PsiElement current = context.getFile().findElementAt(context.getStartOffset());
     editor.getDocument().deleteString(offset, offset + 1);
-    editor.getDocument().putUserData(ENFORCING_TAG, null);
+    InjectedLanguageUtil.getTopLevelEditor(editor).getDocument().putUserData(ENFORCING_TAG, null);
 
     final XmlTag tag = PsiTreeUtil.getContextOfType(current, XmlTag.class, true);
 
@@ -156,13 +157,13 @@ public class XmlTagInsertHandler implements InsertHandler<LookupElement> {
       public void templateFinished(final Template template, boolean brokenOff) {
         final int offset = editor.getCaretModel().getOffset();
 
-        if (chooseAttributeName && offset >= 3) {
-          char c = editor.getDocument().getCharsSequence().charAt(offset - 3);
+        if (chooseAttributeName && offset > 0) {
+          char c = editor.getDocument().getCharsSequence().charAt(offset - 1);
           if (c == '/' || (c == ' ' && brokenOff)) {
             new WriteCommandAction.Simple(project) {
               @Override
               protected void run() throws Throwable {
-                editor.getDocument().replaceString(offset - 2, offset + 1, ">");
+                editor.getDocument().replaceString(offset, offset + 3, ">");
               }
             }.execute();
           }

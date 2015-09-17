@@ -374,6 +374,10 @@ public class PsiManagerImpl extends PsiManagerEx {
     myTreeChangePreprocessors.add(preprocessor);
   }
 
+  public void removeTreeChangePreprocessor(@NotNull PsiTreeChangePreprocessor preprocessor) {
+    myTreeChangePreprocessors.remove(preprocessor);
+  }
+
   private void fireEvent(@NotNull PsiTreeChangeEventImpl event) {
     boolean isRealTreeChange = event.getCode() != PsiTreeChangeEventImpl.PsiEventType.PROPERTY_CHANGED
                                && event.getCode() != PsiTreeChangeEventImpl.PsiEventType.BEFORE_PROPERTY_CHANGE;
@@ -521,5 +525,6 @@ public class PsiManagerImpl extends PsiManagerEx {
   public void cleanupForNextTest() {
     assert ApplicationManager.getApplication().isUnitTestMode();
     myFileManager.cleanupForNextTest();
+    dropResolveCaches();
   }
 }

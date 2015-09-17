@@ -315,8 +315,6 @@ def layoutFull(String home, String targetDirectory, String patchedDescriptorDir 
   // product specific custom layout
   customLayout(targetDirectory)
 
-  printUnusedModules(info.usedModules)
-
   reorder(home, targetDirectory)
   return info
 }
@@ -391,20 +389,17 @@ public def layoutCommunityPlugins(String home, boolean maySkipAndroidPlugin = fa
 
       jar("artifact-resolver-m2.jar") {
         module("maven-artifact-resolver-m2")
+        module("maven-artifact-resolver-common")
       }
 
       jar("artifact-resolver-m3.jar") {
         module("maven-artifact-resolver-m3")
-        module("maven-artifact-resolver-m2") {
-          include(name: 'org/jetbrains/idea/maven/artifactResolver/common/*')
-        }
+        module("maven-artifact-resolver-common")
       }
 
       jar("artifact-resolver-m31.jar") {
         module("maven-artifact-resolver-m31")
-        module("maven-artifact-resolver-m2") {
-          include(name: 'org/jetbrains/idea/maven/artifactResolver/common/*')
-        }
+        module("maven-artifact-resolver-common")
       }
 
       dir("maven3-server-lib") {
@@ -638,11 +633,6 @@ public def layoutCommunityPlugins(String home, boolean maySkipAndroidPlugin = fa
           }
         }
 
-        fileset(dir: "${home}/plugins/coverage-common/lib") {
-          exclude(name: "finder.jar")
-          exclude(name: "**/coverage-src.zip")
-        }
-
         fileset(dir: "${home}/plugins/coverage/lib", excludes: "**/jacoco_src.zip")
       }
     }
@@ -666,6 +656,15 @@ public def layoutCommunityPlugins(String home, boolean maySkipAndroidPlugin = fa
   }
 }
 
+def setPluginVersionAndSince(String moduleName, String version) {
+  def file = new File(projectBuilder.moduleOutput(findModule(moduleName)) + "/META-INF/plugin.xml")
+  if (file.isFile()) {
+    def text = file.text
+    if (!text.contains("<version>")) {
+      file.text = text.replace("</id>", "</id>\n  <version>${version}</version>\n  <idea-version since-build=\"${version}\" until-build=\"${version}\"/>\n")
+    }
+  }
+}
 
 def layoutPlugin(String moduleName) {
   layoutPlugin(moduleName, moduleName, {})
@@ -696,6 +695,8 @@ def layoutPlugin(String pluginName, String moduleName, String jarName, Closure c
   if (excludedPlugins.contains(moduleName) || excludedPlugins.contains(pluginName)) {
     return
   }
+
+  setPluginVersionAndSince(moduleName, requireProperty("buildNumber", requireProperty("build.number", snapshot)))
 
   dir(pluginName) {
     dir("lib") {
@@ -820,6 +821,10 @@ def layoutAndroid(String androidHome, String androidToolsBaseHome) {
         module("lint-checks")
         module("ninepatch")
         module("perflib")
+        module("rpclib")
+        module("chartlib")
+        module("builder-model")
+        module("builder-test-api")
       }
       jar("androidAnnotations.jar") {
         fileset(dir: "$androidHome/android/annotations")

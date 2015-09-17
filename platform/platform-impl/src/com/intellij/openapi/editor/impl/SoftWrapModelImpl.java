@@ -602,6 +602,7 @@ public class SoftWrapModelImpl implements SoftWrapModelEx, PrioritizedInternalDo
   void onBulkDocumentUpdateFinished() {
     myBulkUpdateInProgress = false;
     if (!isSoftWrappingEnabled()) {
+      myDirty = true;
       return;
     }
     recalculate();
@@ -658,7 +659,6 @@ public class SoftWrapModelImpl implements SoftWrapModelEx, PrioritizedInternalDo
     myApplianceManager.reset();
     myStorage.removeAll();
     myDeferredFoldRegions.clear();
-    myEditor.getScrollingModel().scrollToCaret(ScrollType.CENTER);
     myApplianceManager.recalculateIfNecessary();
   }
 

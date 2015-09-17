@@ -21,11 +21,10 @@ package com.intellij.ui;
 
 import com.intellij.ide.PowerSaveMode;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.ex.ApplicationManagerEx;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.util.ProgressIndicatorUtils;
 import com.intellij.openapi.project.IndexNotReadyException;
-import com.intellij.openapi.util.Ref;
+import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.ui.tabs.impl.TabLabel;
 import com.intellij.util.Alarm;
@@ -50,14 +49,14 @@ public class DeferredIconImpl<T> implements DeferredIcon {
   @NotNull
   private volatile Icon myDelegateIcon;
   private Function<T, Icon> myEvaluator;
-  private volatile boolean myIsScheduled = false;
+  private volatile boolean myIsScheduled;
   private T myParam;
   private static final Icon EMPTY_ICON = JBUI.emptyIcon(16);
   private final boolean myNeedReadAction;
   private boolean myDone;
   private final boolean myAutoUpdatable;
-  private long myLastCalcTime = 0L;
-  private long myLastTimeSpent = 0L;
+  private long myLastCalcTime;
+  private long myLastTimeSpent;
 
   private static final ThreadPoolExecutor ourIconsCalculatingExecutor = ConcurrencyUtil.newSingleThreadExecutor("Icons");
 
@@ -87,7 +86,7 @@ public class DeferredIconImpl<T> implements DeferredIcon {
   }
 
   @Override
-  public void paintIcon(final Component c, final Graphics g, final int x, final int y) {
+  public void paintIcon(@NotNull final Component c, @NotNull final Graphics g, final int x, final int y) {
     if (!(myDelegateIcon instanceof DeferredIconImpl && ((DeferredIconImpl)myDelegateIcon).myDelegateIcon instanceof DeferredIconImpl)) {
       myDelegateIcon.paintIcon(c, g, x, y); //SOE protection
     }
@@ -108,35 +107,27 @@ public class DeferredIconImpl<T> implements DeferredIcon {
 
         final long startTime = System.currentTimeMillis();
         if (myNeedReadAction) {
-          final Ref<Boolean> cancelled = new Ref<Boolean>();
-          boolean result = ProgressIndicatorUtils.runWithWriteActionPriority(new Runnable() {
+          boolean result = ProgressIndicatorUtils.runInReadActionWithWriteActionPriority(new Runnable() {
             @Override
             public void run() {
-              if (!ApplicationManagerEx.getApplicationEx().tryRunReadAction(new Runnable() {
+              IconDeferrerImpl.evaluateDeferred(new Runnable() {
                 @Override
                 public void run() {
-                  IconDeferrerImpl.evaluateDeferred(new Runnable() {
-                    @Override
-                    public void run() {
-                      try {
-                        evaluated[0] = nonNull(myEvaluator.fun(myParam));
-                      }
-                      catch (IndexNotReadyException e) {
-                        evaluated[0] = EMPTY_ICON;
-                      }
-                    }
-                  });
-                  if (myAutoUpdatable) {
-                    myLastCalcTime = System.currentTimeMillis();
-                    myLastTimeSpent = myLastCalcTime - startTime;
+                  try {
+                    evaluated[0] = nonNull(myEvaluator.fun(myParam));
+                  }
+                  catch (IndexNotReadyException e) {
+                    evaluated[0] = EMPTY_ICON;
                   }
                 }
-              })) {
-                cancelled.set(Boolean.TRUE);
+              });
+              if (myAutoUpdatable) {
+                myLastCalcTime = System.currentTimeMillis();
+                myLastTimeSpent = myLastCalcTime - startTime;
               }
             }
           });
-          if (cancelled.get() == Boolean.TRUE || !result) {
+          if (!result) {
             myIsScheduled = false;
             return;
           }
@@ -175,7 +166,7 @@ public class DeferredIconImpl<T> implements DeferredIcon {
             if (actualTarget == null) return;
 
             if (shouldRevalidate) {
-              // revalidate will not work: jtree caches size of nodes
+              // revalidate will not work: JTree caches size of nodes
               if (actualTarget instanceof JTree) {
                 final TreeUI ui = ((JTree)actualTarget).getUI();
                 if (ui instanceof BasicTreeUI) {
@@ -293,7 +284,7 @@ public class DeferredIconImpl<T> implements DeferredIcon {
   }
 
   public boolean isDone() {
-    if (myAutoUpdatable && myDone && myLastCalcTime > 0 && (System.currentTimeMillis() - myLastCalcTime) > Math.max(MIN_AUTO_UPDATE_MILLIS, 10 * myLastTimeSpent)) {
+    if (myAutoUpdatable && myDone && myLastCalcTime > 0 && System.currentTimeMillis() - myLastCalcTime > Math.max(MIN_AUTO_UPDATE_MILLIS, 10 * myLastTimeSpent)) {
       myDone = false;
       myIsScheduled = false;
     }
@@ -304,7 +295,7 @@ public class DeferredIconImpl<T> implements DeferredIcon {
     private final Alarm myAlarm = new Alarm();
     private final Set<RepaintRequest> myQueue = new LinkedHashSet<RepaintRequest>();
 
-    public void pushDirtyComponent(@NotNull Component c, final Rectangle rec) {
+    private void pushDirtyComponent(@NotNull Component c, final Rectangle rec) {
       ApplicationManager.getApplication().assertIsDispatchThread(); // assert myQueue accessed from EDT only
       myAlarm.cancelAllRequests();
       myAlarm.addRequest(new Runnable() {
@@ -346,7 +337,17 @@ public class DeferredIconImpl<T> implements DeferredIcon {
     }
   }
 
-  public interface IconListener<T> {
+  interface IconListener<T> {
     void evalDone(DeferredIconImpl<T> source, T key, @NotNull Icon result);
+  }
+
+  public static boolean equalIcons(Icon icon1, Icon icon2) {
+    if (icon1 instanceof DeferredIconImpl) {
+      icon1 = ((DeferredIconImpl)icon1).myDelegateIcon;
+    }
+    if (icon2 instanceof DeferredIconImpl) {
+      icon2 = ((DeferredIconImpl)icon2).myDelegateIcon;
+    }
+    return Comparing.equal(icon1, icon2);
   }
 }

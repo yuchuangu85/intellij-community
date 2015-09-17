@@ -28,6 +28,8 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.project.DumbModePermission;
+import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.*;
 import com.intellij.openapi.util.Comparing;
@@ -46,11 +48,13 @@ import com.intellij.openapi.vcs.ui.RefreshableOnComponent;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.IdeBorderFactory;
+import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.SplitterWithSecondHideable;
 import com.intellij.util.Alarm;
 import com.intellij.util.Consumer;
 import com.intellij.util.OnOffListener;
 import com.intellij.util.containers.ContainerUtilRt;
+import com.intellij.util.ui.ButtonlessScrollBarUI;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -673,7 +677,12 @@ public class CommitChangeListDialog extends DialogWrapper implements CheckinProj
               new Runnable() {
                 @Override
                 public void run() {
-                  session.execute(getIncludedChanges(), getCommitMessage());
+                  DumbService.allowStartingDumbModeInside(DumbModePermission.MAY_START_BACKGROUND, new Runnable() {
+                    @Override
+                    public void run() {
+                      session.execute(getIncludedChanges(), getCommitMessage());
+                    }
+                  });
                 }
               }, commitExecutor.getActionText(), true, getProject());
 
@@ -1009,7 +1018,11 @@ public class CommitChangeListDialog extends DialogWrapper implements CheckinProj
     myBrowser.getBottomPanel().add(legendPanel, BorderLayout.SOUTH);
 
     JPanel infoPanel = new JPanel(new BorderLayout());
-    infoPanel.add(myAdditionalOptionsPanel, BorderLayout.CENTER);
+    JScrollPane optionsPane = ScrollPaneFactory.createScrollPane(myAdditionalOptionsPanel, true);
+    optionsPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+    optionsPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
+    optionsPane.getVerticalScrollBar().setUI(ButtonlessScrollBarUI.createTransparent());
+    infoPanel.add(optionsPane, BorderLayout.CENTER);
     rootPane.add(infoPanel, BorderLayout.EAST);
     infoPanel.setBorder(IdeBorderFactory.createEmptyBorder(0, 10, 0, 0));
 

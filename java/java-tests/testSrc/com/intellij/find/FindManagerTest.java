@@ -39,7 +39,12 @@ import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.search.GlobalSearchScopesCore;
 import com.intellij.psi.search.LocalSearchScope;
+import com.intellij.psi.search.scope.packageSet.NamedScope;
+import com.intellij.psi.search.scope.packageSet.PackageSet;
+import com.intellij.psi.search.scope.packageSet.PackageSetFactory;
+import com.intellij.psi.search.scope.packageSet.ParsingException;
 import com.intellij.testFramework.IdeaTestUtil;
 import com.intellij.testFramework.LightVirtualFile;
 import com.intellij.testFramework.PlatformTestUtil;
@@ -194,10 +199,9 @@ public class FindManagerTest extends DaemonAnalyzerTestCase {
   }
 
   private List<UsageInfo> findUsages(@NotNull FindModel findModel) {
-    PsiDirectory psiDirectory = FindInProjectUtil.getPsiDirectory(findModel, myProject);
     List<UsageInfo> result = new ArrayList<>();
     final CommonProcessors.CollectProcessor<UsageInfo> collector = new CommonProcessors.CollectProcessor<>(result);
-    FindInProjectUtil.findUsages(findModel, psiDirectory, myProject, collector, new FindUsagesProcessPresentation(FindInProjectUtil.setupViewPresentation(true, findModel)));
+    FindInProjectUtil.findUsages(findModel, myProject, collector, new FindUsagesProcessPresentation(FindInProjectUtil.setupViewPresentation(true, findModel)));
     return result;
   }
 
@@ -661,6 +665,20 @@ public class FindManagerTest extends DaemonAnalyzerTestCase {
     }
   }
 
+  public void testFindInExcludedDirectory() throws Exception {
+    VirtualFile root = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(createTempDirectory());
+    addSourceContentToRoots(myModule, root);
+    VirtualFile excluded = createChildDirectory(root, "excluded");
+    createFile(myModule, excluded, "a.txt", "foo bar foo");
+    PsiTestUtil.addExcludedRoot(myModule, excluded);
+
+    FindModel findModel = FindManagerTestUtils.configureFindModel("foo");
+    findModel.setWholeWordsOnly(true);
+    findModel.setProjectScope(false);
+    findModel.setDirectoryName(excluded.getPath());
+    assertSize(2, findUsages(findModel));
+  }
+
   public void testFindInJavaDocs() {
     FindModel findModel = FindManagerTestUtils.configureFindModel("done");
     String text = "/** done done done */";
@@ -808,6 +826,14 @@ public class FindManagerTest extends DaemonAnalyzerTestCase {
     finally {
       DumbServiceImpl.getInstance(getProject()).setDumb(false);
     }
+  }
+
+  public void testNoFilesFromAdditionalIndexedRootsWithCustomExclusionScope() throws ParsingException {
+    FindModel findModel = FindManagerTestUtils.configureFindModel("Object.prototype.__defineGetter__");
+    PackageSet compile = PackageSetFactory.getInstance().compile("!src[subdir]:*..*");
+    findModel.setCustomScope(GlobalSearchScopesCore.filterScope(myProject, new NamedScope.UnnamedScope(compile)));
+    findModel.setCustomScope(true);
+    assertSize(0, findUsages(findModel));
   }
 
   private void doTestRegexpReplace(String initialText, String searchString, String replaceString, String expectedResult) {

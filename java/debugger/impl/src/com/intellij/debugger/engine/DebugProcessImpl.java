@@ -26,10 +26,7 @@ import com.intellij.debugger.engine.events.SuspendContextCommandImpl;
 import com.intellij.debugger.engine.jdi.ThreadReferenceProxy;
 import com.intellij.debugger.engine.requests.MethodReturnValueWatcher;
 import com.intellij.debugger.engine.requests.RequestManagerImpl;
-import com.intellij.debugger.impl.DebuggerContextImpl;
-import com.intellij.debugger.impl.DebuggerSession;
-import com.intellij.debugger.impl.DebuggerUtilsEx;
-import com.intellij.debugger.impl.PrioritizedTask;
+import com.intellij.debugger.impl.*;
 import com.intellij.debugger.jdi.StackFrameProxyImpl;
 import com.intellij.debugger.jdi.ThreadReferenceProxyImpl;
 import com.intellij.debugger.jdi.VirtualMachineProxyImpl;
@@ -82,6 +79,7 @@ import com.sun.jdi.connect.*;
 import com.sun.jdi.request.EventRequest;
 import com.sun.jdi.request.EventRequestManager;
 import com.sun.jdi.request.StepRequest;
+import org.intellij.lang.annotations.MagicConstant;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -759,11 +757,15 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
 
   private volatile RunToCursorBreakpoint myRunToCursorBreakpoint;
 
+  public void setRunToCursorBreakpoint(@Nullable RunToCursorBreakpoint breakpoint) {
+    myRunToCursorBreakpoint = breakpoint;
+  }
+
   public void cancelRunToCursorBreakpoint() {
     DebuggerManagerThreadImpl.assertIsManagerThread();
     final RunToCursorBreakpoint runToCursorBreakpoint = myRunToCursorBreakpoint;
     if (runToCursorBreakpoint != null) {
-      myRunToCursorBreakpoint = null;
+      setRunToCursorBreakpoint(null);
       getRequestsManager().deleteRequest(runToCursorBreakpoint);
       if (runToCursorBreakpoint.isRestoreBreakpoints()) {
         final BreakpointManager breakpointManager = DebuggerManagerEx.getInstanceEx(getProject()).getBreakpointManager();
@@ -1246,7 +1248,7 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
     return invokeCommand.start((EvaluationContextImpl)evaluationContext, false);
   }
 
-  public void clearCashes(int suspendPolicy) {
+  public void clearCashes(@MagicConstant(flagsFromClass = EventRequest.class) int suspendPolicy) {
     if (!isAttached()) return;
     switch (suspendPolicy) {
       case EventRequest.SUSPEND_ALL:
@@ -1412,6 +1414,7 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
     }
   }
 
+  @NotNull
   public SuspendManager getSuspendManager() {
     return mySuspendManager;
   }
@@ -1531,7 +1534,7 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
       if (myBreakpoint != null) {
         myBreakpoint.setSuspendPolicy(suspendContext.getSuspendPolicy() == EventRequest.SUSPEND_EVENT_THREAD? DebuggerSettings.SUSPEND_THREAD : DebuggerSettings.SUSPEND_ALL);
         myBreakpoint.createRequest(suspendContext.getDebugProcess());
-        myRunToCursorBreakpoint = myBreakpoint;
+        setRunToCursorBreakpoint(myBreakpoint);
       }
       doStep(suspendContext, stepThread, myStepSize, StepRequest.STEP_INTO, hint);
       super.contextAction();
@@ -1601,23 +1604,25 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
       applyThreadFilter(getContextThread());
       final SuspendContextImpl context = getSuspendContext();
       myRunToCursorBreakpoint.setSuspendPolicy(context.getSuspendPolicy() == EventRequest.SUSPEND_EVENT_THREAD? DebuggerSettings.SUSPEND_THREAD : DebuggerSettings.SUSPEND_ALL);
-      DebugProcessImpl debugProcess = context.getDebugProcess();
+      final DebugProcessImpl debugProcess = context.getDebugProcess();
       myRunToCursorBreakpoint.createRequest(debugProcess);
-      DebugProcessImpl.this.myRunToCursorBreakpoint = myRunToCursorBreakpoint;
+      setRunToCursorBreakpoint(myRunToCursorBreakpoint);
 
       if (debugProcess.getRequestsManager().getWarning(myRunToCursorBreakpoint) == null) {
         super.contextAction();
       }
       else {
-        myDebugProcessDispatcher.getMulticaster().resumed(getSuspendContext());
         DebuggerInvocationUtil.swingInvokeLater(myProject, new Runnable() {
           @Override
           public void run() {
-            SourcePosition position = myRunToCursorBreakpoint.getSourcePosition();
-            String name = position != null ? position.getFile().getName() : "<No File>";
             Messages.showErrorDialog(
-              DebuggerBundle.message("error.running.to.cursor.no.executable.code", name, myRunToCursorBreakpoint.getLineIndex()+1),
+              DebuggerBundle.message("error.running.to.cursor.no.executable.code",
+                                     myRunToCursorBreakpoint.getSourcePosition().getFile().getName(),
+                                     myRunToCursorBreakpoint.getLineIndex() + 1),
               UIUtil.removeMnemonic(ActionsBundle.actionText(XDebuggerActions.RUN_TO_CURSOR)));
+            DebuggerSession session = debugProcess.getSession();
+            session.getContextManager().setState(DebuggerContextUtil.createDebuggerContext(session, context),
+                                                 DebuggerSession.State.PAUSED, DebuggerSession.Event.CONTEXT, null);
           }
         });
       }

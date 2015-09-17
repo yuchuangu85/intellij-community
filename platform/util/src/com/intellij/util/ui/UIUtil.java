@@ -27,6 +27,8 @@ import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.ui.*;
 import com.intellij.util.*;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.containers.JBIterable;
+import com.intellij.util.containers.JBTreeTraverser;
 import com.intellij.util.containers.WeakHashMap;
 import org.intellij.lang.annotations.Language;
 import org.jetbrains.annotations.NonNls;
@@ -42,16 +44,15 @@ import javax.swing.Timer;
 import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.UndoableEditListener;
 import javax.swing.plaf.ButtonUI;
 import javax.swing.plaf.ComboBoxUI;
 import javax.swing.plaf.ProgressBarUI;
 import javax.swing.plaf.basic.BasicComboBoxUI;
 import javax.swing.plaf.basic.BasicRadioButtonUI;
 import javax.swing.plaf.basic.ComboPopup;
-import javax.swing.text.DefaultEditorKit;
-import javax.swing.text.DefaultFormatterFactory;
-import javax.swing.text.JTextComponent;
-import javax.swing.text.NumberFormatter;
+import javax.swing.text.*;
 import javax.swing.text.html.HTMLEditorKit;
 import javax.swing.text.html.StyleSheet;
 import javax.swing.undo.UndoManager;
@@ -87,7 +88,8 @@ import java.util.regex.Pattern;
 @SuppressWarnings("StaticMethodOnlyUsedInOneClass")
 public class UIUtil {
 
-  @NonNls public static final String BORDER_LINE = "<hr size=1 noshade>";
+  public static final String BORDER_LINE = "<hr size=1 noshade>";
+
   private static final StyleSheet DEFAULT_HTML_KIT_CSS;
 
   static {
@@ -2055,6 +2057,13 @@ public class UIUtil {
     for (MouseWheelListener each : mouseWheelListeners) {
       c.removeMouseWheelListener(each);
     }
+    
+    if (c instanceof AbstractButton) {
+      final ActionListener[] listeners = ((AbstractButton)c).getActionListeners();
+      for (ActionListener listener : listeners) {
+        ((AbstractButton)c).removeActionListener(listener);
+      }
+    }
   }
 
   public static void disposeProgress(final JProgressBar progress) {
@@ -2279,6 +2288,12 @@ public class UIUtil {
     return result.toString();
   }
 
+  /**
+   * Please use Application.invokeLater() with a modality state, unless you work with Swings internals
+   * and 'runnable' deals with Swings components only and doesn't access any PSI, VirtualFiles, project/module model or other project settings.<p/>
+   *
+   * On AWT thread, invoked runnable immediately, otherwise do {@link SwingUtilities#invokeLater(Runnable)} on it.
+   */
   public static void invokeLaterIfNeeded(@NotNull Runnable runnable) {
     if (EdtInvocationManager.getInstance().isEventDispatchThread()) {
       runnable.run();
@@ -2289,6 +2304,9 @@ public class UIUtil {
   }
 
   /**
+   * Please use Application.invokeAndWait() with a modality state, unless you work with Swings internals
+   * and 'runnable' deals with Swings components only and doesn't access any PSI, VirtualFiles, project/module model or other project settings.<p/>
+   *
    * Invoke and wait in the event dispatch thread
    * or in the current thread if the current thread
    * is event queue thread.
@@ -2312,6 +2330,9 @@ public class UIUtil {
   }
 
   /**
+   * Please use Application.invokeAndWait() with a modality state, unless you work with Swings internals
+   * and 'runnable' deals with Swings components only and doesn't access any PSI, VirtualFiles, project/module model or other project settings.<p/>
+   *
    * Invoke and wait in the event dispatch thread
    * or in the current thread if the current thread
    * is event queue thread.
@@ -2332,6 +2353,9 @@ public class UIUtil {
   }
 
   /**
+   * Please use Application.invokeAndWait() with a modality state, unless you work with Swings internals
+   * and 'runnable' deals with Swings components only and doesn't access any PSI, VirtualFiles, project/module model or other project settings.<p/>
+   *
    * Invoke and wait in the event dispatch thread
    * or in the current thread if the current thread
    * is event queue thread.
@@ -2549,7 +2573,7 @@ public class UIUtil {
    * @param parent parent component
    * @return true if parent if a top parent of child, false otherwise
    *
-   * @see javax.swing.SwingUtilities#isDescendingFrom(java.awt.Component, java.awt.Component)
+   * @see SwingUtilities#isDescendingFrom(Component, Component)
    */
   public static boolean isDescendingFrom(@Nullable Component child, @NotNull Component parent) {
     while (child != null && child != parent) {
@@ -2573,6 +2597,57 @@ public class UIUtil {
 
     return null;
   }
+
+  @NotNull
+  public static JBIterable<Component> getParents(@Nullable Component c) {
+    return JBIterable.generate(c, new Function.Mono<Component>() {
+      @Override
+      public Component fun(Component c) {
+        return c.getParent();
+      }
+    });
+  }
+
+  @NotNull
+  public static JBTreeTraverser<Component> uiTraverser() {
+    return new JBTreeTraverser<Component>(COMPONENT_CHILDREN);
+  }
+
+  @NotNull
+  public static JBTreeTraverser<Component> uiTraverser(@Nullable Component component) {
+    return new JBTreeTraverser<Component>(COMPONENT_CHILDREN).withRoot(component);
+  }
+
+  public static final Key<Iterable<? extends Component>> NOT_IN_HIERARCHY_COMPONENTS = Key.create("NOT_IN_HIERARCHY_COMPONENTS");
+
+  private static final Function<Component, Iterable<Component>> COMPONENT_CHILDREN = new Function<Component, Iterable<Component>>() {
+    @NotNull
+    @Override
+    public JBIterable<Component> fun(@NotNull Component c) {
+      JBIterable<Component> result;
+      if (c instanceof JMenu) {
+        result = JBIterable.of(((JMenu)c).getMenuComponents());
+      }
+      else if (c instanceof Container) {
+        result = JBIterable.of(((Container)c).getComponents());
+      }
+      else {
+        result = JBIterable.empty();
+      }
+      if (c instanceof JComponent) {
+        JComponent jc = (JComponent)c;
+        Iterable<? extends Component> orphans = getClientProperty(jc, NOT_IN_HIERARCHY_COMPONENTS);
+        if (orphans != null) {
+          result = result.append(orphans);
+        }
+        JPopupMenu jpm = jc.getComponentPopupMenu();
+        if (jpm != null && jpm.isVisible() && jpm.getInvoker() == jc) {
+          result = result.append(Collections.singletonList(jpm));
+        }
+      }
+      return result;
+    }
+  };
 
   public static void scrollListToVisibleIfNeeded(@NotNull final JList list) {
     SwingUtilities.invokeLater(new Runnable() {
@@ -3115,6 +3190,32 @@ public class UIUtil {
     }
   }
 
+  private static final DocumentAdapter SET_TEXT_CHECKER = new DocumentAdapter() {
+    @Override
+    protected void textChanged(DocumentEvent e) {
+      Document document = e.getDocument();
+      if (document instanceof AbstractDocument) {
+        StackTraceElement[] stackTrace = new Throwable().getStackTrace();
+        for (StackTraceElement element : stackTrace) {
+          if (!element.getClassName().equals(JTextComponent.class.getName()) || !element.getMethodName().equals("setText")) continue;
+          UndoableEditListener[] undoableEditListeners = ((AbstractDocument)document).getUndoableEditListeners();
+          for (final UndoableEditListener listener : undoableEditListeners) {
+            if (listener instanceof UndoManager) {
+              Runnable runnable = new Runnable() {
+                public void run() {
+                  ((UndoManager)listener).discardAllEdits();
+                }
+              };
+              //noinspection SSBasedInspection
+              SwingUtilities.invokeLater(runnable);
+              return;
+            }
+          }
+        }
+      }
+    }
+  };
+
   public static void addUndoRedoActions(@NotNull final JTextComponent textComponent) {
     if (textComponent.getClientProperty(UNDO_MANAGER) instanceof UndoManager) {
       return;
@@ -3122,6 +3223,7 @@ public class UIUtil {
     UndoManager undoManager = new UndoManager();
     textComponent.putClientProperty(UNDO_MANAGER, undoManager);
     textComponent.getDocument().addUndoableEditListener(undoManager);
+    textComponent.getDocument().addDocumentListener(SET_TEXT_CHECKER);
     textComponent.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, SystemInfo.isMac? InputEvent.META_MASK : InputEvent.CTRL_MASK), "undoKeystroke");
     textComponent.getActionMap().put("undoKeystroke", UNDO_ACTION);
     textComponent.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, (SystemInfo.isMac? InputEvent.META_MASK : InputEvent.CTRL_MASK) | InputEvent.SHIFT_MASK), "redoKeystroke");
@@ -3319,5 +3421,27 @@ public class UIUtil {
     if (textComponent instanceof JTextArea) {
       ((JTextArea)textComponent).setColumns(columns);
     }
+  }
+
+  /**
+   * Returns the first focusable component in the specified container.
+   * This method returns {@code null} if container is {@code null},
+   * or if focus traversal policy cannot be determined,
+   * or if found focusable component is not a {@link JComponent}.
+   *
+   * @param container a container whose first focusable component is to be returned
+   * @return the first focusable component or {@code null} if it cannot be found
+   */
+  public static JComponent getPreferredFocusedComponent(Container container) {
+    Container parent = container;
+    if (parent == null) return null;
+    FocusTraversalPolicy policy = parent.getFocusTraversalPolicy();
+    while (policy == null) {
+      parent = parent.getParent();
+      if (parent == null) return null;
+      policy = parent.getFocusTraversalPolicy();
+    }
+    Component component = policy.getFirstComponent(container);
+    return component instanceof JComponent ? (JComponent)component : null;
   }
 }

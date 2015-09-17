@@ -16,6 +16,7 @@
 package com.intellij.psi;
 
 import com.google.common.util.concurrent.Atomics;
+import com.intellij.injected.editor.DocumentWindow;
 import com.intellij.lang.Language;
 import com.intellij.lang.LanguageParserDefinitions;
 import com.intellij.lang.ParserDefinition;
@@ -182,8 +183,14 @@ public class SingleRootFileViewProvider extends UserDataHolderBase implements Fi
         if (alreadyCreated == psiFile) {
           LOG.error(this + ".createFile() must create new file instance but got the same: " + psiFile);
         }
-        if (psiFile instanceof PsiFileImpl) {
-          ((PsiFileImpl)psiFile).markInvalidated();
+        if (psiFile instanceof PsiFileEx) {
+          DebugUtil.startPsiModification("invalidating throw-away copy");
+          try {
+            ((PsiFileEx)psiFile).markInvalidated();
+          }
+          finally {
+            DebugUtil.finishPsiModification();
+          }
         }
         psiFile = alreadyCreated;
       }
@@ -525,8 +532,8 @@ public class SingleRootFileViewProvider extends UserDataHolderBase implements Fi
 
   public void forceCachedPsi(@NotNull PsiFile psiFile) {
     PsiFile prev = myPsiFile.getAndSet(psiFile);
-    if (prev != null && prev != psiFile && prev instanceof PsiFileImpl) {
-      ((PsiFileImpl)prev).markInvalidated();
+    if (prev != null && prev != psiFile && prev instanceof PsiFileEx) {
+      ((PsiFileEx)prev).markInvalidated();
     }
     ((PsiManagerEx)myManager).getFileManager().setViewProvider(getVirtualFile(), this);
   }
@@ -542,6 +549,9 @@ public class SingleRootFileViewProvider extends UserDataHolderBase implements Fi
 
   private void checkLengthConsistency() {
     Document document = getCachedDocument();
+    if (document instanceof DocumentWindow) {
+      return;
+    }
     if (document != null &&
         ((PsiDocumentManagerBase)PsiDocumentManager.getInstance(myManager.getProject())).getSynchronizer().isInSynchronization(document)) {
       return;
@@ -568,8 +578,8 @@ public class SingleRootFileViewProvider extends UserDataHolderBase implements Fi
 
   public void markInvalidated() {
     PsiFile psiFile = getCachedPsi(myBaseLanguage);
-    if (psiFile instanceof PsiFileImpl) {
-      ((PsiFileImpl)psiFile).markInvalidated();
+    if (psiFile instanceof PsiFileEx) {
+      ((PsiFileEx)psiFile).markInvalidated();
     }
   }
 

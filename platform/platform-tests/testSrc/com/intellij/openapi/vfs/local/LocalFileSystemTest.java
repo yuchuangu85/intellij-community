@@ -37,6 +37,7 @@ import com.intellij.openapi.vfs.newvfs.persistent.PersistentFSImpl;
 import com.intellij.openapi.vfs.newvfs.persistent.RefreshWorker;
 import com.intellij.testFramework.PlatformTestCase;
 import com.intellij.testFramework.PlatformTestUtil;
+import com.intellij.util.ArrayUtil;
 import com.intellij.util.Function;
 import com.intellij.util.messages.MessageBusConnection;
 import org.jetbrains.annotations.NotNull;
@@ -194,7 +195,7 @@ public class LocalFileSystemTest extends PlatformTestCase {
     assertNotNull(dir);
 
     final VirtualFile child = myFS.refreshAndFindFileByIoFile(childFile);
-    assertNotNull(child);
+    assertNotNull(Arrays.toString(dir.getChildren()), child);
 
     assertTrue(childFile.delete());
   }
@@ -241,6 +242,7 @@ public class LocalFileSystemTest extends PlatformTestCase {
     assertNotNull(root);
 
     File jarFile = IoTestUtil.createTestJar();
+    assertNotNull(getVirtualFile(jarFile));
     root = VirtualFileManager.getInstance().findFileByUrl("jar://" + jarFile.getPath() + "!/");
     assertNotNull(root);
 
@@ -335,7 +337,7 @@ public class LocalFileSystemTest extends PlatformTestCase {
     String content = "";
     FileUtil.writeToFile(new File(testDir, "Foo.java"), content);
 
-    VirtualFile virtualDir = myFS.findFileByIoFile(testDir);
+    VirtualFile virtualDir = getVirtualFile(testDir);
     assertNotNull(virtualDir);
     virtualDir.getChildren();
     virtualDir.refresh(false, true);
@@ -637,5 +639,32 @@ public class LocalFileSystemTest extends PlatformTestCase {
         }
       }
     }.execute();
+  }
+
+  public void testBrokenSymlinkMove() throws IOException, InterruptedException {
+    if (!SystemInfo.areSymLinksSupported) {
+      System.err.println(getName() + " skipped: " + SystemInfo.OS_NAME);
+      return;
+    }
+
+    final File srcDir = IoTestUtil.createTestDir("src");
+    final File link = IoTestUtil.createSymLink(srcDir.getPath() + "/missing", srcDir.getPath() + "/link", false);
+    final File dstDir = IoTestUtil.createTestDir("dst");
+
+    new WriteAction() {
+      @Override
+      protected void run(@NotNull Result result) throws Throwable {
+        VirtualFile file = myFS.refreshAndFindFileByIoFile(link);
+        assertNotNull(file);
+
+        VirtualFile target = myFS.refreshAndFindFileByIoFile(dstDir);
+        assertNotNull(target);
+
+        myFS.moveFile(this, file, target);
+      }
+    }.execute();
+
+    assertOrderedEquals(ArrayUtil.EMPTY_STRING_ARRAY, srcDir.list());
+    assertOrderedEquals(new String[]{link.getName()}, dstDir.list());
   }
 }

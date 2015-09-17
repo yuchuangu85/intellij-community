@@ -323,7 +323,7 @@ public class HtmlUtil {
       final String tagName = tokenizer.nextToken();
       if (tagName.length() == 0) continue;
 
-      descriptors[index++] = new XmlElementDescriptorImpl(context instanceof XmlTag ? (XmlTag)context : null) {
+      descriptors[index++] = new XmlElementDescriptorImpl(null) {
         @Override
         public String getName(PsiElement context) {
           return tagName;
@@ -632,7 +632,13 @@ public class HtmlUtil {
   }
 
   public static boolean supportsXmlTypedHandlers(PsiFile file) {
-    return "JavaScript".equals(file.getLanguage().getID());
+    Language language = file.getLanguage();
+    while (language != null) {
+      if ("JavaScript".equals(language.getID())) return true;
+      language = language.getBaseLanguage();
+    }
+
+    return false;
   }
 
   public static boolean hasHtmlPrefix(@NotNull String url) {

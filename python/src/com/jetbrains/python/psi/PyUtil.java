@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2015 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,12 +23,17 @@ import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.LookupElementBuilder;
 import com.intellij.ide.fileTemplates.FileTemplate;
 import com.intellij.ide.fileTemplates.FileTemplateManager;
-import com.intellij.ide.scratch.ScratchFileService;
+import com.intellij.ide.scratch.ScratchRootType;
 import com.intellij.injected.editor.VirtualFileWindow;
 import com.intellij.lang.ASTFactory;
 import com.intellij.lang.ASTNode;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.EditorFactory;
+import com.intellij.openapi.editor.ex.EditorEx;
+import com.intellij.openapi.editor.highlighter.EditorHighlighter;
+import com.intellij.openapi.editor.highlighter.EditorHighlighterFactory;
 import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
@@ -47,9 +52,7 @@ import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.WindowManager;
 import com.intellij.psi.*;
-import com.intellij.psi.codeStyle.CodeStyleSettings;
 import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
-import com.intellij.psi.codeStyle.CommonCodeStyleSettings.IndentOptions;
 import com.intellij.psi.stubs.StubElement;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.QualifiedName;
@@ -355,7 +358,7 @@ public class PyUtil {
   @NotNull
   public static List<PyClass> getAllSuperClasses(@NotNull PyClass pyClass) {
     List<PyClass> superClasses = new ArrayList<PyClass>();
-    for (PyClass ancestor : pyClass.getAncestorClasses()) {
+    for (PyClass ancestor : pyClass.getAncestorClasses(null)) {
       if (!PyNames.FAKE_OLD_BASE.equals(ancestor.getName())) {
         superClasses.add(ancestor);
       }
@@ -896,6 +899,27 @@ public class PyUtil {
     return result;
   }
 
+  /**
+   * Force re-highlighting in all open editors that belong to specified project.
+   */
+  public static void rehighlightOpenEditors(final @NotNull Project project) {
+    ApplicationManager.getApplication().runWriteAction(new Runnable() {
+      @Override
+      public void run() {
+
+        for (Editor editor : EditorFactory.getInstance().getAllEditors()) {
+          if (editor instanceof EditorEx && editor.getProject() == project) {
+            final VirtualFile vFile = ((EditorEx)editor).getVirtualFile();
+            if (vFile != null) {
+              final EditorHighlighter highlighter = EditorHighlighterFactory.getInstance().createEditorHighlighter(project, vFile);
+              ((EditorEx)editor).setHighlighter(highlighter);
+            }
+          }
+        }
+      }
+    });
+  }
+
   public static class KnownDecoratorProviderHolder {
     public static PyKnownDecoratorProvider[] KNOWN_DECORATOR_PROVIDERS = Extensions.getExtensions(PyKnownDecoratorProvider.EP_NAME);
 
@@ -933,11 +957,11 @@ public class PyUtil {
   /**
    * If directory is a PsiDirectory, that is also a valid Python package, return PsiFile that points to __init__.py,
    * if such file exists, or directory itself (i.e. namespace package). Otherwise, return {@code null}.
-   * Unlike {@link #turnDirIntoInit(com.intellij.psi.PsiElement)} this function handles namespace packages and
+   * Unlike {@link #turnDirIntoInit(PsiElement)} this function handles namespace packages and
    * accepts only PsiDirectories as target.
    *
    * @param directory directory to check
-   * @param anchor optional PSI element to determine language level as for {@link #isPackage(com.intellij.psi.PsiDirectory, com.intellij.psi.PsiElement)}
+   * @param anchor optional PSI element to determine language level as for {@link #isPackage(PsiDirectory, PsiElement)}
    * @return PsiFile or PsiDirectory, if target is a Python package and {@code null} null otherwise
    */
   @Nullable
@@ -1080,10 +1104,6 @@ public class PyUtil {
 
   public static boolean isSpecialName(@NotNull String name) {
     return name.length() > 4 && name.startsWith("__") && name.endsWith("__");
-  }
-
-  public static boolean isPythonIdentifier(@NotNull String name) {
-    return PyNames.isIdentifier(name);
   }
 
   /**
@@ -1288,7 +1308,7 @@ public class PyUtil {
         PyFunction.Modifier modifier = node.getModifier();
         boolean isMetaclassMethod = false;
         PyClass type_cls = PyBuiltinCache.getInstance(node).getClass("type");
-        for (PyClass ancestor_cls : cls.getAncestorClasses()) {
+        for (PyClass ancestor_cls : cls.getAncestorClasses(null)) {
           if (ancestor_cls == type_cls) {
             isMetaclassMethod = true;
             break;
@@ -1325,7 +1345,7 @@ public class PyUtil {
           if (firstArg.equals(klass.getName()) || firstArg.equals(PyNames.CANONICAL_SELF + "." + PyNames.__CLASS__)) {
             return true;
           }
-          for (PyClass s : klass.getAncestorClasses()) {
+          for (PyClass s : klass.getAncestorClasses(null)) {
             if (firstArg.equals(s.getName())) {
               return true;
             }
@@ -1508,6 +1528,7 @@ public class PyUtil {
     return resultCasted;
   }
 
+
   /**
    * Inserts specified element into the statement list either at the beginning or at its end. If new element is going to be
    * inserted at the beginning, any preceding docstrings and/or calls to super methods will be skipped.
@@ -1563,51 +1584,80 @@ public class PyUtil {
       }
     }
     if (statementListWasEmpty) {
-      final PsiElement parent = statementList.getParent();
-      if (parent instanceof PyStatementListContainer) {
-        final PsiDocumentManager documentManager = PsiDocumentManager.getInstance(parent.getProject());
-        final PsiFile pyFile = parent.getContainingFile();
-        final Document document = documentManager.getDocument(pyFile);
-        if (document != null && document.getLineNumber(parent.getTextOffset()) == document.getLineNumber(statementList.getTextOffset())) {
-          final CodeStyleSettings codeStyleManager = CodeStyleSettingsManager.getSettings(parent.getProject());
-          final IndentOptions indentOptions = codeStyleManager.getCommonSettings(pyFile.getLanguage()).getIndentOptions();
-          final int indentSize = indentOptions.INDENT_SIZE;
-          final String indentation = StringUtil.repeatSymbol(' ', PyPsiUtils.getElementIndentation(parent) + indentSize);
-          documentManager.doPostponedOperationsAndUnblockDocument(document);
-          document.insertString(statementList.getTextOffset(), "\n" + indentation);
-          documentManager.commitDocument(document);
-        }
+      final PsiDocumentManager documentManager = PsiDocumentManager.getInstance(statementList.getProject());
+      final Document document = documentManager.getDocument(statementList.getContainingFile());
+      if (document != null) {
+        documentManager.doPostponedOperationsAndUnblockDocument(document);
+        document.insertString(statementList.getTextOffset(), "\n" + PyIndentUtil.getElementIndent(statementList));
+        documentManager.commitDocument(document);
       }
     }
     return element;
   }
 
   @NotNull
-  public static List<PyParameter> getParameters(@NotNull PyCallable callable, @NotNull TypeEvalContext context) {
-    PyType type = context.getType(callable);
+  public static List<List<PyParameter>> getOverloadedParametersSet(@NotNull PyCallable callable, @NotNull TypeEvalContext context) {
+    final List<List<PyParameter>> parametersSet = getOverloadedParametersSet(context.getType(callable), context);
+    return parametersSet != null ? parametersSet : Collections.singletonList(Arrays.asList(callable.getParameterList().getParameters()));
+  }
+
+  @Nullable
+  private static List<PyParameter> getParametersOfCallableType(@NotNull PyCallableType type, @NotNull TypeEvalContext context) {
+    final List<PyCallableParameter> callableTypeParameters = type.getParameters(context);
+    if (callableTypeParameters != null) {
+      boolean allParametersDefined = true;
+      final List<PyParameter> parameters = new ArrayList<PyParameter>();
+      for (PyCallableParameter callableParameter : callableTypeParameters) {
+        final PyParameter parameter = callableParameter.getParameter();
+        if (parameter == null) {
+          allParametersDefined = false;
+          break;
+        }
+        parameters.add(parameter);
+      }
+      if (allParametersDefined) {
+        return parameters;
+      }
+    }
+    return null;
+  }
+
+  @Nullable
+  private static List<List<PyParameter>> getOverloadedParametersSet(@Nullable PyType type, @NotNull TypeEvalContext context) {
     if (type instanceof PyUnionType) {
       type = ((PyUnionType)type).excludeNull(context);
     }
+
     if (type instanceof PyCallableType) {
-      final PyCallableType callableType = (PyCallableType)type;
-      final List<PyCallableParameter> callableTypeParameters = callableType.getParameters(context);
-      if (callableTypeParameters != null) {
-        boolean allParametersDefined = true;
-        final List<PyParameter> parameters = new ArrayList<PyParameter>();
-        for (PyCallableParameter callableParameter : callableTypeParameters) {
-          final PyParameter parameter = callableParameter.getParameter();
-          if (parameter == null) {
-            allParametersDefined = false;
-            break;
-          }
-          parameters.add(parameter);
-        }
-        if (allParametersDefined) {
-          return parameters;
-        }
+      final List<PyParameter> results = getParametersOfCallableType((PyCallableType)type, context);
+      if (results != null) {
+        return Collections.singletonList(results);
       }
     }
-    return Arrays.asList(callable.getParameterList().getParameters());
+    else if (type instanceof PyUnionType) {
+      final List<List<PyParameter>> results = new ArrayList<List<PyParameter>>();
+      final Collection<PyType> members = ((PyUnionType)type).getMembers();
+      for (PyType member : members) {
+        if (member instanceof PyCallableType) {
+          final List<PyParameter> parameters = getParametersOfCallableType((PyCallableType)member, context);
+          if (parameters != null) {
+            results.add(parameters);
+          }
+        }
+      }
+      if (!results.isEmpty()) {
+        return results;
+      }
+    }
+
+    return null;
+  }
+
+  @NotNull
+  public static List<PyParameter> getParameters(@NotNull PyCallable callable, @NotNull TypeEvalContext context) {
+    final List<List<PyParameter>> parametersSet = getOverloadedParametersSet(callable, context);
+    assert !parametersSet.isEmpty();
+    return parametersSet.get(0);
   }
 
   public static boolean isSignatureCompatibleTo(@NotNull PyCallable callable, @NotNull PyCallable otherCallable,
@@ -1688,7 +1738,7 @@ public class PyUtil {
   }
 
   /**
-   * Filters out {@link com.jetbrains.python.refactoring.classes.membersManager.PyMemberInfo}
+   * Filters out {@link PyMemberInfo}
    * that should not be displayed in this refactoring (like object)
    *
    * @param pyMemberInfos collection to sort
@@ -1756,10 +1806,10 @@ public class PyUtil {
 
   /**
    * Checks that given class is the root of class hierarchy, i.e. it's either {@code object} or
-   * special {@link com.jetbrains.python.PyNames#FAKE_OLD_BASE} class for old-style classes.
+   * special {@link PyNames#FAKE_OLD_BASE} class for old-style classes.
    *
    * @param cls    Python class to check
-   * @see com.jetbrains.python.psi.impl.PyBuiltinCache
+   * @see PyBuiltinCache
    * @see PyNames#FAKE_OLD_BASE
    */
   public static boolean isObjectClass(@NotNull PyClass cls) {
@@ -1769,11 +1819,11 @@ public class PyUtil {
 
   /**
    * Checks that given type is the root of type hierarchy, i.e. it's type of either {@code object} or special
-   * {@link com.jetbrains.python.PyNames#FAKE_OLD_BASE} class for old-style classes.
+   * {@link PyNames#FAKE_OLD_BASE} class for old-style classes.
    *
    * @param type   Python class to check
    * @param anchor arbitrary PSI element to find appropriate SDK
-   * @see com.jetbrains.python.psi.impl.PyBuiltinCache
+   * @see PyBuiltinCache
    * @see PyNames#FAKE_OLD_BASE
    */
   public static boolean isObjectType(@NotNull PyType type, @NotNull PsiElement anchor) {
@@ -1782,13 +1832,8 @@ public class PyUtil {
   }
 
   public static boolean isInScratchFile(@NotNull PsiElement element) {
-    final ScratchFileService service = ScratchFileService.getInstance();
-    final PsiFile file = element.getContainingFile();
-    if (file != null) {
-      final VirtualFile virtualFile = file.getVirtualFile();
-      return service != null && virtualFile != null && service.getRootType(virtualFile) != null;
-    }
-    return false;
+    PsiFile file = element.getContainingFile();
+    return file != null && ScratchRootType.getInstance().isScratchFile(file.getVirtualFile());
   }
 
   /**

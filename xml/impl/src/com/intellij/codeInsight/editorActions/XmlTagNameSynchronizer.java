@@ -54,11 +54,12 @@ import com.intellij.psi.impl.PsiDocumentManagerBase;
 import com.intellij.psi.impl.source.tree.TreeUtil;
 import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
 import com.intellij.psi.xml.XmlTokenType;
+import com.intellij.util.Function;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.xml.util.HtmlUtil;
 import com.intellij.xml.util.XmlUtil;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Set;
@@ -70,9 +71,7 @@ public class XmlTagNameSynchronizer extends CommandAdapter implements NamedCompo
   private static final Logger LOG = Logger.getInstance(XmlTagNameSynchronizer.class);
   private static final Set<String> SUPPORTED_LANGUAGES = ContainerUtil.set(HTMLLanguage.INSTANCE.getID(),
                                                                            XMLLanguage.INSTANCE.getID(),
-                                                                           XHTMLLanguage.INSTANCE.getID(),
-                                                                           "JavaScript",
-                                                                           "ECMA Script Level 4");
+                                                                           XHTMLLanguage.INSTANCE.getID());
 
   private static final Key<TagNameSynchronizer> SYNCHRONIZER_KEY = Key.create("tag_name_synchronizer");
   private final FileDocumentManager myFileDocumentManager;
@@ -84,22 +83,8 @@ public class XmlTagNameSynchronizer extends CommandAdapter implements NamedCompo
       public void editorCreated(@NotNull EditorFactoryEvent event) {
         installSynchronizer(event.getEditor());
       }
-
-      @Override
-      public void editorReleased(@NotNull EditorFactoryEvent event) {
-        uninstallSynchronizer(event.getEditor());
-      }
     }, ApplicationManager.getApplication());
     processor.addCommandListener(this);
-  }
-
-  public void uninstallSynchronizer(final Editor editor) {
-    final Document document = editor.getDocument();
-    final TagNameSynchronizer synchronizer = findSynchronizer(document);
-    if (synchronizer != null) {
-      synchronizer.clearMarkers();
-    }
-    document.putUserData(SYNCHRONIZER_KEY, null);
   }
 
   private void installSynchronizer(final Editor editor) {
@@ -116,7 +101,8 @@ public class XmlTagNameSynchronizer extends CommandAdapter implements NamedCompo
     final PsiFile psiFile = file != null && file.isValid() ? PsiManager.getInstance(project).findFile(file) : null;
     if (psiFile != null) {
       for (Language language : psiFile.getViewProvider().getLanguages()) {
-        if (SUPPORTED_LANGUAGES.contains(language.getID())) return language;
+        if ( SUPPORTED_LANGUAGES.contains(language.getID()) ||
+             HtmlUtil.supportsXmlTypedHandlers(psiFile)) return language;
       }
     }
     return null;
@@ -128,21 +114,29 @@ public class XmlTagNameSynchronizer extends CommandAdapter implements NamedCompo
     return "XmlTagNameSynchronizer";
   }
 
-  @Nullable
-  public TagNameSynchronizer findSynchronizer(final Document document) {
-    if (!WebEditorOptions.getInstance().isSyncTagEditing() || document == null) return null;
-    return document.getUserData(SYNCHRONIZER_KEY);
+  @NotNull
+  private static TagNameSynchronizer[] findSynchronizers(final Document document) {
+    if (!WebEditorOptions.getInstance().isSyncTagEditing() || document == null) return TagNameSynchronizer.EMPTY;
+    final Editor[] editors = EditorFactory.getInstance().getEditors(document);
+
+    return ContainerUtil.mapNotNull(editors, new Function<Editor, TagNameSynchronizer>() {
+      @Override
+      public TagNameSynchronizer fun(Editor editor) {
+        return editor.getUserData(SYNCHRONIZER_KEY);
+      }
+    }, TagNameSynchronizer.EMPTY);
   }
 
   @Override
   public void beforeCommandFinished(CommandEvent event) {
-    final TagNameSynchronizer synchronizer = findSynchronizer(event.getDocument());
-    if (synchronizer != null) {
+    final TagNameSynchronizer[] synchronizers = findSynchronizers(event.getDocument());
+    for (TagNameSynchronizer synchronizer : synchronizers) {
       synchronizer.beforeCommandFinished();
     }
   }
 
   private static class TagNameSynchronizer extends DocumentAdapter {
+    public static final TagNameSynchronizer[] EMPTY = new TagNameSynchronizer[0];
     private final PsiDocumentManagerBase myDocumentManager;
     private final Language myLanguage;
 
@@ -158,7 +152,7 @@ public class XmlTagNameSynchronizer extends CommandAdapter implements NamedCompo
       final Disposable disposable = ((EditorImpl)editor).getDisposable();
       final Document document = editor.getDocument();
       document.addDocumentListener(this, disposable);
-      document.putUserData(SYNCHRONIZER_KEY, this);
+      editor.putUserData(SYNCHRONIZER_KEY, this);
       myDocumentManager = (PsiDocumentManagerBase)PsiDocumentManager.getInstance(project);
     }
 
@@ -168,7 +162,9 @@ public class XmlTagNameSynchronizer extends CommandAdapter implements NamedCompo
 
       final Document document = event.getDocument();
       if (myState == State.APPLYING || UndoManager.getInstance(myEditor.getProject()).isUndoInProgress() ||
-          !PomModelImpl.isAllowPsiModification() || ((DocumentEx)document).isInBulkUpdate()) return;
+          !PomModelImpl.isAllowPsiModification() || ((DocumentEx)document).isInBulkUpdate()) {
+        return;
+      }
 
       final int offset = event.getOffset();
       final int oldLength = event.getOldLength();
@@ -274,7 +270,8 @@ public class XmlTagNameSynchronizer extends CommandAdapter implements NamedCompo
             break;
           }
           if (!XmlUtil.isValidTagNameChar(c)) break;
-        } catch (IndexOutOfBoundsException e) {
+        }
+        catch (IndexOutOfBoundsException e) {
           LOG.error("incorrect offset:" + i + ", initial: " + offset, new Attachment("document.txt", sequence.toString()));
           return null;
         }
@@ -314,7 +311,8 @@ public class XmlTagNameSynchronizer extends CommandAdapter implements NamedCompo
           final LookupImpl lookup = (LookupImpl)LookupManager.getActiveLookup(myEditor);
           if (lookup != null) {
             lookup.performGuardedChange(apply);
-          } else {
+          }
+          else {
             apply.run();
           }
         }

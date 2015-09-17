@@ -25,16 +25,12 @@ import com.intellij.openapi.externalSystem.model.ProjectSystemId;
 import com.intellij.openapi.externalSystem.model.project.ExternalConfigPathAware;
 import com.intellij.openapi.externalSystem.model.project.ProjectData;
 import com.intellij.openapi.externalSystem.service.project.manage.ProjectDataManager;
-import com.intellij.openapi.externalSystem.util.DisposeAwareProjectChange;
-import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
 import com.intellij.openapi.externalSystem.util.ExternalSystemBundle;
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil;
 import com.intellij.openapi.externalSystem.view.ExternalSystemNode;
 import com.intellij.openapi.externalSystem.view.ModuleNode;
 import com.intellij.openapi.externalSystem.view.ProjectNode;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.roots.ex.ProjectRootManagerEx;
-import com.intellij.util.ObjectUtils;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -56,7 +52,7 @@ public class IgnoreExternalProjectAction extends ExternalSystemToggleAction {
   public void setSelected(AnActionEvent e, boolean state) {
     final ProjectSystemId projectSystemId = getSystemId(e);
     final ExternalSystemNode<ExternalConfigPathAware> projectNode = getProjectNode(e);
-    if (projectNode == null || projectNode.getData() == null) return;
+    if (projectSystemId == null || projectNode == null || projectNode.getData() == null) return;
 
     projectNode.setIgnored(state);
 
@@ -72,24 +68,15 @@ public class IgnoreExternalProjectAction extends ExternalSystemToggleAction {
       return;
     }
 
-    ExternalSystemApiUtil.executeProjectChangeAction(true, new DisposeAwareProjectChange(project) {
-      @Override
-      public void execute() {
-        ProjectRootManagerEx.getInstanceEx(project).mergeRootsChangesDuring(new Runnable() {
-          @Override
-          public void run() {
-            final DataNode<ProjectData> projectDataNode = externalProjectInfo.getExternalProjectStructure();
-            ServiceManager.getService(ProjectDataManager.class).importData(projectDataNode, project, true);
-          }
-        });
-      }
-    });
+    final DataNode<ProjectData> projectDataNode = externalProjectInfo.getExternalProjectStructure();
+    ServiceManager.getService(ProjectDataManager.class).importData(projectDataNode, project, true);
   }
 
   @Override
   public boolean isSelected(AnActionEvent e) {
     boolean selected = super.isSelected(e);
-    final String systemIdName = ObjectUtils.notNull(getSystemId(e).getReadableName(), "external");
+    ProjectSystemId systemId = getSystemId(e);
+    final String systemIdName = systemId != null ? systemId.getReadableName() : "external";
     if (selected) {
       setText(e, ExternalSystemBundle.message("action.unignore.external.project.text", systemIdName));
       setDescription(e, ExternalSystemBundle.message("action.unignore.external.project.description", systemIdName));

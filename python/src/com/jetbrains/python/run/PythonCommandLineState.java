@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2015 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import com.intellij.execution.ExecutionException;
 import com.intellij.execution.ExecutionResult;
 import com.intellij.execution.Executor;
 import com.intellij.execution.configurations.*;
+import com.intellij.execution.configurations.GeneralCommandLine.ParentEnvironmentType;
 import com.intellij.execution.filters.TextConsoleBuilder;
 import com.intellij.execution.filters.TextConsoleBuilderFactory;
 import com.intellij.execution.filters.UrlFilter;
@@ -56,6 +57,7 @@ import com.jetbrains.python.debugger.PyDebuggerOptionsProvider;
 import com.jetbrains.python.facet.LibraryContributingFacet;
 import com.jetbrains.python.facet.PythonPathContributingFacet;
 import com.jetbrains.python.library.PythonLibraryType;
+import com.jetbrains.python.remote.PyRemotePathMapper;
 import com.jetbrains.python.sdk.PySdkUtil;
 import com.jetbrains.python.sdk.PythonEnvUtil;
 import com.jetbrains.python.sdk.PythonSdkAdditionalData;
@@ -184,11 +186,11 @@ public abstract class PythonCommandLineState extends CommandLineState {
     Sdk sdk = PythonSdkType.findSdkByPath(myConfig.getInterpreterPath());
     final ProcessHandler processHandler;
     if (PySdkUtil.isRemote(sdk)) {
-      processHandler =
-        createRemoteProcessStarter().startRemoteProcess(sdk, commandLine, myConfig.getProject(), myConfig.getMappingSettings());
+      PyRemotePathMapper pathMapper = createRemotePathMapper();
+      processHandler = createRemoteProcessStarter().startRemoteProcess(sdk, commandLine, myConfig.getProject(), pathMapper);
     }
     else {
-      EncodingEnvironmentUtil.fixDefaultEncodingIfMac(commandLine, myConfig.getProject());
+      EncodingEnvironmentUtil.setLocaleEnvironmentIfMac(commandLine);
       processHandler = doCreateProcess(commandLine);
       ProcessTerminatedListener.attach(processHandler);
     }
@@ -197,6 +199,15 @@ public abstract class PythonCommandLineState extends CommandLineState {
     PythonRunConfigurationExtensionsManager.getInstance().attachExtensionsToProcess(myConfig, processHandler, getRunnerSettings());
 
     return processHandler;
+  }
+
+  @Nullable
+  private PyRemotePathMapper createRemotePathMapper() {
+    if (myConfig.getMappingSettings() == null) {
+      return null;
+    } else {
+      return PyRemotePathMapper.fromSettings(myConfig.getMappingSettings(), PyRemotePathMapper.PyPathMappingType.USER_DEFINED);
+    }
   }
 
   protected PyRemoteProcessStarter createRemoteProcessStarter() {
@@ -267,7 +278,7 @@ public abstract class PythonCommandLineState extends CommandLineState {
 
     commandLine.getEnvironment().clear();
     commandLine.getEnvironment().putAll(env);
-    commandLine.setPassParentEnvironment(myConfig.isPassParentEnvs());
+    commandLine.withParentEnvironmentType(myConfig.isPassParentEnvs() ? ParentEnvironmentType.SHELL : ParentEnvironmentType.NONE);
 
     buildPythonPath(commandLine, myConfig.isPassParentEnvs());
   }

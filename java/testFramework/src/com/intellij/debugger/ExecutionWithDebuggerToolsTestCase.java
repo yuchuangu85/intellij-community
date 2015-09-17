@@ -95,6 +95,11 @@ public abstract class ExecutionWithDebuggerToolsTestCase extends ExecutionTestCa
     debugProcess.getManagerThread().schedule(debugProcess.createStepIntoCommand(context, false, null));
   }
 
+  protected void stepOver(SuspendContextImpl context) {
+    DebugProcessImpl debugProcess = context.getDebugProcess();
+    debugProcess.getManagerThread().schedule(debugProcess.createStepOverCommand(context, false));
+  }
+
   protected void waitBreakpoints() {
     myScriptRunnablesSema.down();
     waitFor(new Runnable() {
@@ -108,14 +113,32 @@ public abstract class ExecutionWithDebuggerToolsTestCase extends ExecutionTestCa
   @Override
   protected void tearDown() throws Exception {
     super.tearDown();
+    throwExceptionsIfAny();
+  }
+
+  protected void throwExceptionsIfAny() throws CompositeException {
     synchronized (myException) {
-      if (!myException.isEmpty()) throw myException;
+      myException.throwIfNotEmpty();
     }
   }
 
   protected void onBreakpoint(SuspendContextRunnable runnable) {
     addDefaultBreakpointListener();
     myScriptRunnables.add(runnable);
+  }
+
+  protected void doWhenPausedThenResume(final SuspendContextRunnable runnable) {
+    onBreakpoint(new SuspendContextRunnable() {
+      @Override
+      public void run(SuspendContextImpl suspendContext) throws Exception {
+        try {
+          runnable.run(suspendContext);
+        }
+        finally {
+          resume(suspendContext);
+        }
+      }
+    });
   }
 
   protected void addDefaultBreakpointListener() {

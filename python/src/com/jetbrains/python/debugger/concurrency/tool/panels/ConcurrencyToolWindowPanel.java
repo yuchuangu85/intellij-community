@@ -25,15 +25,19 @@ import com.intellij.openapi.ui.SimpleToolWindowPanel;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.util.ui.UIUtil;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
+import com.jetbrains.python.debugger.PyStackFrameInfo;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphView;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
+import com.sun.istack.internal.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.AdjustmentEvent;
 import java.awt.event.AdjustmentListener;
+import java.util.*;
+import java.util.List;
 
 public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements Disposable {
   private ConcurrencyGraphView myRenderer;
@@ -51,7 +55,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     myProject = project;
     myGraphModel = graphModel;
     myGraphPresentation = new ConcurrencyGraphPresentationModel(myGraphModel);
-    myRenderer = new ConcurrencyGraphView(myGraphPresentation);
+    myRenderer = new ConcurrencyGraphView(myGraphPresentation, this);
     myType = type;
 
     myGraphPresentation.registerListener(new ConcurrencyGraphPresentationModel.PresentationListener() {
@@ -114,7 +118,6 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
 
     @Override
     public void actionPerformed(AnActionEvent e) {
-      final ConcurrencyGraphModel graphModel = myGraphModel;
       UIUtil.invokeLaterIfNeeded(new Runnable() {
         @Override
         public void run() {
@@ -167,23 +170,30 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     }
   }
 
-  public void showStackTrace(PyConcurrencyEvent event) {
+  public void showStackTrace(@Nullable PyConcurrencyEvent event) {
+    List<PyStackFrameInfo> frames = event == null ? new ArrayList<PyStackFrameInfo>(0) : event.getFrames();
     if (myStackTracePanel == null) {
       myStackTracePanel = new StackTracePanel(false, myProject);
-      myStackTracePanel.buildStackTrace(event.getFrames());
+      myStackTracePanel.buildStackTrace(frames);
       splitWindow(myStackTracePanel);
     } else {
-      myStackTracePanel.buildStackTrace(event.getFrames());
+      myStackTracePanel.buildStackTrace(frames);
     }
   }
 
   public void splitWindow(JComponent component) {
     removeAll();
-    JSplitPane p = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
-    p.add(myGraphPane, JSplitPane.LEFT);
-    p.add(component, JSplitPane.RIGHT);
-    p.setDividerLocation((int)getSize().getWidth() * 2 / 3);
-    add(p, BorderLayout.CENTER);
+    JSplitPane graphPanel = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
+    graphPanel.add(myGraphPane, JSplitPane.LEFT);
+    graphPanel.add(component, JSplitPane.RIGHT);
+    graphPanel.setDividerLocation(getWidth() * 2 / 3);
+    graphPanel.setDividerSize(myGraphPresentation.visualSettings.getDividerWidth());
+    JSplitPane mainPanel = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
+    mainPanel.add(myNamesPanel, JSplitPane.LEFT);
+    mainPanel.add(graphPanel, JSplitPane.RIGHT);
+    mainPanel.setDividerLocation(myNamesPanel.getWidth());
+    mainPanel.setDividerSize(myGraphPresentation.visualSettings.getDividerWidth());
+    add(mainPanel, BorderLayout.CENTER);
     setToolbar(createToolbarPanel());
     validate();
     repaint();

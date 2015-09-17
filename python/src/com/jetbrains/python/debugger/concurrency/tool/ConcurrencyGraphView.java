@@ -18,6 +18,7 @@ package com.jetbrains.python.debugger.concurrency.tool;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphBlock;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphVisualSettings;
+import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyToolWindowPanel;
 
 import javax.swing.*;
 import java.awt.*;
@@ -29,8 +30,9 @@ public class ConcurrencyGraphView extends JComponent {
   private final ConcurrencyGraphPresentationModel myGraphPresentation;
   private int myPadding;
   private ArrayList<ConcurrencyGraphBlock> myDrawingElements;
+  private ConcurrencyToolWindowPanel myToolWindow;
 
-  public ConcurrencyGraphView(ConcurrencyGraphPresentationModel graphPresentation) {
+  public ConcurrencyGraphView(ConcurrencyGraphPresentationModel graphPresentation, ConcurrencyToolWindowPanel toolWindow) {
     myGraphPresentation = graphPresentation;
     myGraphPresentation.registerListener(new ConcurrencyGraphPresentationModel.PresentationListener() {
       @Override
@@ -39,12 +41,22 @@ public class ConcurrencyGraphView extends JComponent {
         update();
       }
     });
+    myToolWindow = toolWindow;
 
     addMouseListener(new MouseAdapter() {
       @Override
       public void mouseClicked(MouseEvent e) {
         super.mouseClicked(e);
-        showConnectedLocks(e.getPoint());
+        int eventIndex = getEventIndex(e.getPoint());
+        if (e.getClickCount() == 2) {
+          if (eventIndex >= 0) {
+            myGraphPresentation.applySelectionFilter(eventIndex);
+            myToolWindow.showStackTrace(myGraphPresentation.myGraphModel.getEventAt(eventIndex));
+            return;
+          }
+        }
+        myGraphPresentation.myGraphModel.setFilterLockId(null);
+        myToolWindow.showStackTrace(null);
       }
     });
 
@@ -58,15 +70,14 @@ public class ConcurrencyGraphView extends JComponent {
     setPreferredSize(new Dimension(width, height));
   }
 
-  private void showConnectedLocks(Point clickPoint) {
+  private int getEventIndex(Point clickPoint) {
     Point p = ConcurrencyRenderingUtil.getElementIndex(myPadding, myDrawingElements, clickPoint.x, clickPoint.y);
     int elementIndex = p.x;
     int threadIndex = p.y;
     if ((elementIndex != -1) && (threadIndex != -1)) {
-      int eventId = myDrawingElements.get(elementIndex).elements.get(threadIndex).eventIndex;
-      myGraphPresentation.applySelectionFilter(eventId);
+      return myDrawingElements.get(elementIndex).elements.get(threadIndex).eventIndex;
     } else {
-      myGraphPresentation.myGraphModel.setFilterLockId(null);
+      return -1;
     }
   }
 

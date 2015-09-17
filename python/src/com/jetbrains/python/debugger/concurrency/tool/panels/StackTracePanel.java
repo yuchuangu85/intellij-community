@@ -46,6 +46,8 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.List;
 
 
@@ -116,10 +118,10 @@ public class StackTracePanel extends SimpleToolWindowPanel implements Disposable
       }
     });
 
-    myTree.addTreeSelectionListener(new TreeSelectionListener() {
+    myTree.addMouseListener(new MouseAdapter() {
       @Override
-      public void valueChanged(TreeSelectionEvent e) {
-        TreePath path=e.getNewLeadSelectionPath();
+      public void mouseClicked(MouseEvent e) {
+        TreePath path = myTree.getPathForLocation(e.getX(), e.getY());
         if (path != null) {
           DefaultMutableTreeNode frameNode=(DefaultMutableTreeNode)path.getLastPathComponent();
           Object userObject = frameNode.getUserObject();

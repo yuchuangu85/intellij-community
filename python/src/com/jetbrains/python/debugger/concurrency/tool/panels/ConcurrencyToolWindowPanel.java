@@ -212,6 +212,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
                                                                  myGraphPresentation.visualSettings.getNamesPanelWidth():
                                                                  myNamesPanel.getWidth());
       myGraphPane = null;
+      myStackTracePanel = null;
       initMessage();
       return;
     }

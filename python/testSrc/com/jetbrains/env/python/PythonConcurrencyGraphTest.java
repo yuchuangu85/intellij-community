@@ -18,6 +18,7 @@ package com.jetbrains.env.python;
 import com.jetbrains.env.PyEnvTestCase;
 import com.jetbrains.env.python.debug.PyDebuggerTask;
 import com.jetbrains.python.debugger.PyDebuggerOptionsProvider;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphElement;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.PyConcurrencyService;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
@@ -27,10 +28,10 @@ import java.util.ArrayList;
 public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
   public static void compareGraphRows(int row, ConcurrencyGraphModel graphManager, ConcurrencyThreadState[] correctElements) {
-    ArrayList<ConcurrencyThreadState> elements = graphManager.getDrawElementsForRow(row);
+    ArrayList<ConcurrencyGraphElement> elements = graphManager.getDrawElementsForRow(row);
     assertEquals(String.format("row = %d", row), correctElements.length, elements.size());
     for (int i = 0; i < elements.size(); ++i) {
-      ConcurrencyThreadState graphElement = elements.get(i);
+      ConcurrencyThreadState graphElement = elements.get(i).threadState;
       ConcurrencyThreadState correctElement = correctElements[i];
       assertEquals(String.format("row = %d column = %d", row, i), correctElement, graphElement);
     }

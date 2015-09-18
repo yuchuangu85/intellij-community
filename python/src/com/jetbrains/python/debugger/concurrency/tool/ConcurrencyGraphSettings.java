@@ -25,7 +25,7 @@ public class ConcurrencyGraphSettings {
   public static int CELL_WIDTH = 1;
   public static int CELL_HEIGHT = 20;
   public static int INTERVAL = 20;
-  public static int STROKE_BASIC = 4;
+  public static int STROKE_BASIC = 2;
 
   public static int RULER_STROKE_WIDTH = 1;
   public static Color RULER_COLOR = JBColor.BLACK;

@@ -15,14 +15,17 @@
  */
 package com.jetbrains.python.debugger.concurrency.model;
 
+import java.awt.*;
 import java.util.ArrayList;
 
 public class ConcurrencyGraphBlock {
   public ArrayList<ConcurrencyGraphElement> elements;
   public int numberOfCells;
+  public Point relation;
 
-  public ConcurrencyGraphBlock(ArrayList<ConcurrencyGraphElement> elements, int numberOfCells) {
+  public ConcurrencyGraphBlock(ArrayList<ConcurrencyGraphElement> elements, int numberOfCells, Point relation) {
     this.elements = elements;
     this.numberOfCells = numberOfCells;
+    this.relation = relation;
   }
 }

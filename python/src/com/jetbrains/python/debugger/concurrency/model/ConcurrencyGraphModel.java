@@ -27,6 +27,7 @@ import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphAnalyser;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStat;
 import org.jetbrains.annotations.NotNull;
 
+import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +42,7 @@ public class ConcurrencyGraphModel {
   private ArrayList<String> threadNames;
   private final Object myUpdateObject = new Object();
   private int myCurrentMaxThread = 0;
-  private int[][] relations;
+  private HashMap<Integer, Point> relations;
   private List<GraphListener> myListeners = new ArrayList<GraphListener>();
   private final Object myListenersObject = new Object();
   private ConcurrencyGraphAnalyser myGraphAnalyser;
@@ -258,12 +259,11 @@ public class ConcurrencyGraphModel {
   }
 
   private void addRelation(int index, int parent, int child) {
-    relations[index][0] = parent;
-    relations[index][1] = child;
+    relations.put(index, new Point(parent, child));
   }
 
-  public int[] getRelationForRow(int row) {
-    return relations[row];
+  public Point getRelationForRow(int row) {
+    return relations.get(row);
   }
 
   public interface GraphListener {
@@ -308,13 +308,13 @@ public class ConcurrencyGraphModel {
       myThreadCountForRow = new ArrayList<Integer>();
       myGraphAnalyser = new ConcurrencyGraphAnalyser(this);
       myCurrentMaxThread = 0;
+      relations = new HashMap<Integer, Point>();
       notifyListeners();
     }
   }
 
   private void updateGraph() {
     synchronized (myUpdateObject) {
-      relations = new int[getSize() + 1][2];
       for (int i = myGraphScheme.size(); i < getSize(); ++i) {
         PyConcurrencyEvent event = getEventAt(i);
         String eventThreadId = event.getThreadId();

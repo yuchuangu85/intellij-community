@@ -69,6 +69,17 @@ public class ConcurrencyRenderingUtil {
                       (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * j + ConcurrencyGraphSettings.INTERVAL,
                       ConcurrencyGraphSettings.CELL_WIDTH * block.numberOfCells, ConcurrencyGraphSettings.CELL_HEIGHT);
         }
+        if (block.relation != null) {
+          int parent = block.relation.x;
+          int child = block.relation.y;
+          if ((parent != 0) || (child != 0)) {
+            prepareStroke(g, block.elements.get(parent).threadState);
+            g2.drawLine(padding, (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * parent +
+                                 ConcurrencyGraphSettings.INTERVAL + ConcurrencyGraphSettings.STROKE_BASIC,
+                        padding, (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * (child + 1) -
+                                 ConcurrencyGraphSettings.STROKE_BASIC);
+          }
+        }
       }
       paddingInsideBlock += block.numberOfCells;
     }
@@ -92,6 +103,11 @@ public class ConcurrencyRenderingUtil {
       paddingInsideBlock += block.numberOfCells;
     }
     return new Point(-1, -1);
+  }
+
+  public static void paintRelation(Graphics g, int[] relation) {
+    Graphics2D g2 = (Graphics2D)g;
+
   }
 
 }

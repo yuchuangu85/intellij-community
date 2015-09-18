@@ -80,7 +80,8 @@ public class ConcurrencyGraphPresentationModel {
       long period = nextTime - curTime;
       int cellsInPeriod = (int)(period / visualSettings.getMicrosecsPerCell());
       if (cellsInPeriod != 0) {
-        ret.add(new ConcurrencyGraphBlock(myGraphModel.getDrawElementsForRow(curEventId), cellsInPeriod));
+        ret.add(new ConcurrencyGraphBlock(myGraphModel.getDrawElementsForRow(curEventId),
+                                          cellsInPeriod, myGraphModel.getRelationForRow(curEventId)));
         i += cellsInPeriod;
       }
       curEventId += 1;

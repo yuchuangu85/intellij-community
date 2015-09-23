@@ -28,6 +28,7 @@ public class ConcurrencyGraphPresentationModel {
   private List<PresentationListener> myListeners = new ArrayList<PresentationListener>();
   private final Object myListenersObject = new Object();
   public ConcurrencyGraphVisualSettings visualSettings;
+  private ArrayList<ConcurrencyGraphBlock> myVisibleGraph;
 
   public ConcurrencyGraphPresentationModel(final ConcurrencyGraphModel graphModel) {
     myGraphModel = graphModel;
@@ -43,6 +44,7 @@ public class ConcurrencyGraphPresentationModel {
   }
 
   public void updateGraphModel() {
+    updateVisibleGraph();
     notifyListeners();
   }
 
@@ -63,13 +65,14 @@ public class ConcurrencyGraphPresentationModel {
     return time - (time % millisPerCell);
   }
 
-  public ArrayList<ConcurrencyGraphBlock> getVisibleGraph() {
-    if (visualSettings.getHorizontalMax() == 0) {
-      return new ArrayList<ConcurrencyGraphBlock>();
+  private void updateVisibleGraph() {
+    if ((visualSettings.getHorizontalMax() == 0) || (myGraphModel.getSize() == 0)) {
+      myVisibleGraph = new ArrayList<ConcurrencyGraphBlock>();
+      return;
     }
     long startTime = roundForCell(visualSettings.getHorizontalValue() * myGraphModel.getDuration() /
                                   visualSettings.getHorizontalMax());
-    ArrayList<ConcurrencyGraphBlock> ret = new ArrayList<ConcurrencyGraphBlock>();
+    myVisibleGraph = new ArrayList<ConcurrencyGraphBlock>();
     int curEventId = myGraphModel.getLastEventIndexBeforeMoment(startTime);
     long curTime, nextTime = startTime;
     int i = 0;
@@ -80,13 +83,17 @@ public class ConcurrencyGraphPresentationModel {
       long period = nextTime - curTime;
       int cellsInPeriod = (int)(period / visualSettings.getMicrosecsPerCell());
       if (cellsInPeriod != 0) {
-        ret.add(new ConcurrencyGraphBlock(myGraphModel.getDrawElementsForRow(curEventId),
+        myVisibleGraph.add(new ConcurrencyGraphBlock(myGraphModel.getDrawElementsForRow(curEventId),
                                           cellsInPeriod, myGraphModel.getRelationForRow(curEventId)));
         i += cellsInPeriod;
       }
       curEventId += 1;
     }
-    return ret;
+  }
+
+  public ArrayList<ConcurrencyGraphBlock> getVisibleGraph() {
+    updateVisibleGraph();
+    return myVisibleGraph;
   }
 
   public void applySelectionFilter(int eventId) {
@@ -108,6 +115,12 @@ public class ConcurrencyGraphPresentationModel {
     synchronized (myListenersObject) {
       myListeners.add(logListener);
     }
+  }
+
+  public int getPadding() {
+    int horizontalMax = visualSettings.getHorizontalMax();
+    int horizontalValue = visualSettings.getHorizontalValue();
+    return horizontalMax == 0 ? horizontalValue: horizontalValue * getCellsNumber() / horizontalMax;
   }
 
   public void notifyListeners() {

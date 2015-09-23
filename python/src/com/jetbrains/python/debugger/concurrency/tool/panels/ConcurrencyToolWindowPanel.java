@@ -22,40 +22,37 @@ import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.SimpleToolWindowPanel;
-import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.util.ui.UIUtil;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyStackFrameInfo;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphView;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyTableUtil;
 import com.sun.istack.internal.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.AdjustmentEvent;
 import java.awt.event.AdjustmentListener;
-import java.util.*;
+import java.util.ArrayList;
 import java.util.List;
 
 public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements Disposable {
-  private ConcurrencyGraphView myRenderer;
   private ConcurrencyGraphModel myGraphModel;
   private ConcurrencyGraphPresentationModel myGraphPresentation;
   private String myType;
   private final Project myProject;
   protected JLabel myLabel;
   protected StackTracePanel myStackTracePanel;
-  protected JScrollPane myGraphPane;
   protected JScrollPane myNamesPanel;
+  private JScrollPane myTableScrollPane;
 
   public ConcurrencyToolWindowPanel(boolean vertical, Project project, ConcurrencyGraphModel graphModel, String type) {
     super(vertical);
     myProject = project;
     myGraphModel = graphModel;
     myGraphPresentation = new ConcurrencyGraphPresentationModel(myGraphModel);
-    myRenderer = new ConcurrencyGraphView(myGraphPresentation, this);
     myType = type;
 
     myGraphPresentation.registerListener(new ConcurrencyGraphPresentationModel.PresentationListener() {
@@ -160,11 +157,11 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
       Adjustable source = evt.getAdjustable();
       int orient = source.getOrientation();
       if (orient == Adjustable.HORIZONTAL) {
-        JScrollBar bar = myGraphPane.getHorizontalScrollBar();
+        JScrollBar bar = myTableScrollPane.getHorizontalScrollBar();
         myGraphPresentation.visualSettings.updateHorizontalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
       if (orient == Adjustable.VERTICAL) {
-        JScrollBar bar = myGraphPane.getVerticalScrollBar();
+        JScrollBar bar = myTableScrollPane.getVerticalScrollBar();
         myGraphPresentation.visualSettings.updateVerticalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
     }
@@ -184,7 +181,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   public void splitWindow(JComponent component) {
     removeAll();
     JSplitPane graphPanel = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
-    graphPanel.add(myGraphPane, JSplitPane.LEFT);
+    graphPanel.add(myTableScrollPane, JSplitPane.LEFT);
     graphPanel.add(component, JSplitPane.RIGHT);
     graphPanel.setDividerLocation(getWidth() * 2 / 3);
     graphPanel.setDividerSize(myGraphPresentation.visualSettings.getDividerWidth());
@@ -199,36 +196,28 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     repaint();
   }
 
-  private void initGraphPane() {
-    myGraphPane = ScrollPaneFactory.createScrollPane(myRenderer);
+  private void initTable() {
+    myTableScrollPane = ConcurrencyTableUtil.createTables(myGraphModel, myGraphPresentation, this);
+    add(myTableScrollPane);
+
     AdjustmentListener listener = new GraphAdjustmentListener();
-    myGraphPane.getHorizontalScrollBar().addAdjustmentListener(listener);
-    myGraphPane.getVerticalScrollBar().addAdjustmentListener(listener);
+    myTableScrollPane.getHorizontalScrollBar().addAdjustmentListener(listener);
+    myTableScrollPane.getVerticalScrollBar().addAdjustmentListener(listener);
   }
 
   public void updateContent() {
     if (myGraphModel.getSize() == 0) {
-      myGraphPresentation.visualSettings.setNamesPanelWidth(myNamesPanel == null?
-                                                                 myGraphPresentation.visualSettings.getNamesPanelWidth():
+      myGraphPresentation.visualSettings.setNamesPanelWidth(myNamesPanel == null? myGraphPresentation.visualSettings.getNamesPanelWidth():
                                                                  myNamesPanel.getWidth());
-      myGraphPane = null;
+      myTableScrollPane = null;
       myStackTracePanel = null;
       initMessage();
       return;
     }
 
-    if (myGraphPane == null) {
+    if (myTableScrollPane == null) {
       myLabel.setVisible(false);
-      initGraphPane();
-      myNamesPanel = ScrollPaneFactory.createScrollPane(new NamesPanel(myGraphPresentation));
-      myGraphPane.getVerticalScrollBar().setModel(myNamesPanel.getVerticalScrollBar().getModel());
-
-      JSplitPane p = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
-      p.add(myNamesPanel, JSplitPane.LEFT);
-      p.add(myGraphPane, JSplitPane.RIGHT);
-      p.setDividerLocation(myGraphPresentation.visualSettings.getNamesPanelWidth());
-      p.setDividerSize(myGraphPresentation.visualSettings.getDividerWidth());
-      add(p, BorderLayout.CENTER);
+      initTable();
       setToolbar(createToolbarPanel());
       validate();
       repaint();

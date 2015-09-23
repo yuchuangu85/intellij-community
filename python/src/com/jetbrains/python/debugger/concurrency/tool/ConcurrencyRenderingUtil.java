@@ -55,6 +55,24 @@ public class ConcurrencyRenderingUtil {
     }
   }
 
+  public static void paintRow(Graphics g, int externalPadding, ArrayList<ConcurrencyGraphBlock> drawingElements, int row) {
+    Graphics2D g2 = (Graphics2D)g;
+    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    int paddingInsideBlock = 0;
+    for (ConcurrencyGraphBlock block: drawingElements) {
+      if (row < block.elements.size()) {
+        int padding = ConcurrencyGraphSettings.CELL_WIDTH * (externalPadding + paddingInsideBlock);
+        ConcurrencyThreadState drawElement = block.elements.get(row).threadState;
+        if (drawElement != ConcurrencyThreadState.Stopped) {
+          prepareStroke(g2, drawElement);
+          g2.fillRect(padding, ConcurrencyGraphSettings.INTERVAL / 2,
+                      ConcurrencyGraphSettings.CELL_WIDTH * block.numberOfCells, ConcurrencyGraphSettings.CELL_HEIGHT);
+        }
+      }
+      paddingInsideBlock += block.numberOfCells;
+    }
+  }
+
   public static void paintBlockElements(Graphics g, int externalPadding, ArrayList<ConcurrencyGraphBlock> drawingElements) {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);

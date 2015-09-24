@@ -16,32 +16,76 @@
 package com.jetbrains.python.debugger.concurrency.model;
 
 import com.intellij.ui.table.JBTable;
+import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphCellRenderer;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
+import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyRenderingUtil;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyTableUtil;
+import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyToolWindowPanel;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.table.TableModel;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.ArrayList;
 
 public class ConcurrencyTable extends JBTable {
   protected ConcurrencyGraphPresentationModel myPresentationModel;
+  private int myTimeCursor;
+  private ConcurrencyGraphCellRenderer myRenderer;
+  private ConcurrencyToolWindowPanel myPanel;
 
-  public ConcurrencyTable(ConcurrencyGraphPresentationModel model, TableModel tableModel) {
+  public ConcurrencyTable(ConcurrencyGraphPresentationModel model, TableModel tableModel, ConcurrencyToolWindowPanel panel) {
     super();
     myPresentationModel = model;
+    myPanel = panel;
     setModel(tableModel);
-    setDefaultRenderer(ConcurrencyTableUtil.GraphCell.class, new ConcurrencyGraphCellRenderer(myPresentationModel, this));
+    myRenderer = new ConcurrencyGraphCellRenderer(myPresentationModel, this);
+    setDefaultRenderer(ConcurrencyTableUtil.GraphCell.class, myRenderer);
+
+    addMouseListener(new MouseAdapter() {
+      @Override
+      public void mouseClicked(MouseEvent e) {
+        Point cursorPoint = e.getPoint();
+        myTimeCursor = cursorPoint.x;
+        int row = rowAtPoint(cursorPoint) >= 0? rowAtPoint(cursorPoint): getSelectedRow();
+        if (row >= 0) {
+          int eventIndex = getEventIndex(cursorPoint, row);
+          PyConcurrencyEvent event = eventIndex != -1? myPresentationModel.myGraphModel.getEventAt(eventIndex): null;
+          myPanel.showStackTrace(event);
+        }
+      }
+    });
   }
 
-  private static void prepareRulerStroke(Graphics g) {
+  private int getEventIndex(Point clickPoint, int row) {
+    int index = ConcurrencyRenderingUtil.getElementIndex(myRenderer.getPadding(), myPresentationModel.getVisibleGraph(), clickPoint.x);
+    if (index != -1){
+      ArrayList<ConcurrencyGraphElement> elements = myPresentationModel.getVisibleGraph().get(index).elements;
+      if (row < elements.size()) {
+        return elements.get(row).eventIndex;
+      }
+    }
+    return -1;
+  }
+
+  private void drawTimeCursor(@NotNull Graphics g) {
+    int cursorPosition = Math.max(0, myPresentationModel.visualSettings.getHorizontalMax() - 2);
+    if (myTimeCursor != 0) {
+      cursorPosition = myTimeCursor;
+    }
+    Graphics2D g2 = (Graphics2D)g;
+    g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.TIME_CURSOR_WIDTH));
+    g2.setColor(ConcurrencyGraphSettings.TIME_CURSOR_COLOR);
+    g2.drawLine(cursorPosition, 0, cursorPosition, myPresentationModel.visualSettings.getVerticalMax());
+    repaint();
+  }
+
+  private void paintRuler(@NotNull Graphics g) {
     Graphics2D g2 = (Graphics2D)g;
     g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.RULER_STROKE_WIDTH));
     g2.setColor(ConcurrencyGraphSettings.RULER_COLOR);
-  }
-
-  private void paintRuler(Graphics g) {
-    prepareRulerStroke(g);
     ConcurrencyGraphVisualSettings settings = myPresentationModel.visualSettings;
     int y = settings.getVerticalValue() + settings.getVerticalExtent() - ConcurrencyGraphSettings.RULER_STROKE_WIDTH;
     g.drawLine(0, y, getWidth(), y);
@@ -66,5 +110,6 @@ public class ConcurrencyTable extends JBTable {
   protected void paintComponent(@NotNull Graphics g) {
     super.paintComponent(g);
     paintRuler(g);
+    drawTimeCursor(g);
   }
 }

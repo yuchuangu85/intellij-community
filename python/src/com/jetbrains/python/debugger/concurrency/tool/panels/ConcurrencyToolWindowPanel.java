@@ -144,8 +144,8 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   public void initMessage() {
     removeAll();
     myLabel = new JLabel();
-    myLabel.setHorizontalAlignment(JLabel.CENTER);
-    myLabel.setVerticalAlignment(JLabel.CENTER);
+    myLabel.setHorizontalAlignment(SwingConstants.CENTER);
+    myLabel.setVerticalAlignment(SwingConstants.CENTER);
     myLabel.setText("<html>The " + myType + " log is empty. <br>" +
                     "Check the box \"Build diagram for concurrent programs\" " +
                     "in Settings | Build, Execution, Deployment | Python debugger</html>");
@@ -180,17 +180,12 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
 
   public void splitWindow(JComponent component) {
     removeAll();
-    JSplitPane graphPanel = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
+    JSplitPane graphPanel = new JSplitPane(JSplitPane.VERTICAL_SPLIT, true);
     graphPanel.add(myTableScrollPane, JSplitPane.LEFT);
     graphPanel.add(component, JSplitPane.RIGHT);
-    graphPanel.setDividerLocation(getWidth() * 2 / 3);
+    graphPanel.setDividerLocation(getHeight() * 2 / 3);
     graphPanel.setDividerSize(myGraphPresentation.visualSettings.getDividerWidth());
-    JSplitPane mainPanel = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
-    mainPanel.add(myNamesPanel, JSplitPane.LEFT);
-    mainPanel.add(graphPanel, JSplitPane.RIGHT);
-    mainPanel.setDividerLocation(myNamesPanel.getWidth());
-    mainPanel.setDividerSize(myGraphPresentation.visualSettings.getDividerWidth());
-    add(mainPanel, BorderLayout.CENTER);
+    add(graphPanel, BorderLayout.CENTER);
     setToolbar(createToolbarPanel());
     validate();
     repaint();

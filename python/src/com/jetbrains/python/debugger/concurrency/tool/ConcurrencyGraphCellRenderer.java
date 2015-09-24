@@ -42,6 +42,10 @@ public class ConcurrencyGraphCellRenderer extends ColoredTableCellRenderer {
     });
   }
 
+  public int getPadding() {
+    return myPadding;
+  }
+
   @Override
   protected void paintComponent(Graphics g) {
     super.paintComponent(g);

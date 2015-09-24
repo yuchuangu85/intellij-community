@@ -60,16 +60,18 @@ public class ConcurrencyRenderingUtil {
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     int paddingInsideBlock = 0;
     for (ConcurrencyGraphBlock block: drawingElements) {
-      if (row < block.elements.size()) {
-        int padding = ConcurrencyGraphSettings.CELL_WIDTH * (externalPadding + paddingInsideBlock);
-        ConcurrencyThreadState drawElement = block.elements.get(row).threadState;
-        if (drawElement != ConcurrencyThreadState.Stopped) {
-          prepareStroke(g2, drawElement);
-          g2.fillRect(padding, ConcurrencyGraphSettings.INTERVAL / 2,
-                      ConcurrencyGraphSettings.CELL_WIDTH * block.numberOfCells, ConcurrencyGraphSettings.CELL_HEIGHT);
+      if (block != null) {
+        if (row < block.elements.size()) {
+          int padding = ConcurrencyGraphSettings.CELL_WIDTH * (externalPadding + paddingInsideBlock);
+          ConcurrencyThreadState drawElement = block.elements.get(row).threadState;
+          if (drawElement != ConcurrencyThreadState.Stopped) {
+            prepareStroke(g2, drawElement);
+            g2.fillRect(padding, ConcurrencyGraphSettings.INTERVAL / 2,
+                        ConcurrencyGraphSettings.CELL_WIDTH * block.numberOfCells, ConcurrencyGraphSettings.CELL_HEIGHT);
+          }
         }
+        paddingInsideBlock += block.numberOfCells;
       }
-      paddingInsideBlock += block.numberOfCells;
     }
   }
 
@@ -103,29 +105,17 @@ public class ConcurrencyRenderingUtil {
     }
   }
 
-  public static Point getElementIndex(int externalPadding, ArrayList<ConcurrencyGraphBlock> drawingElements, int x, int y) {
+  public static int getElementIndex(int externalPadding, ArrayList<ConcurrencyGraphBlock> drawingElements, int x) {
     x = x / ConcurrencyGraphSettings.CELL_WIDTH - externalPadding;
     int paddingInsideBlock = 0;
     for (int i = 0; i < drawingElements.size(); ++i) {
       ConcurrencyGraphBlock block = drawingElements.get(i);
       int blockWidth = block.numberOfCells;
       if ((paddingInsideBlock < x) && (paddingInsideBlock + blockWidth >= x)) {
-        int yRet = y / (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL);
-        if ((y % (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) > ConcurrencyGraphSettings.INTERVAL) &&
-            yRet < block.elements.size()) {
-          return new Point(i, yRet);
-        } else {
-          return new Point(i, -1);
-        }
+        return i;
       }
       paddingInsideBlock += block.numberOfCells;
     }
-    return new Point(-1, -1);
+    return -1;
   }
-
-  public static void paintRelation(Graphics g, int[] relation) {
-    Graphics2D g2 = (Graphics2D)g;
-
-  }
-
 }

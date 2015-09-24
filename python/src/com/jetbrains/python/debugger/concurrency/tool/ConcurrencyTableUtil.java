@@ -21,6 +21,7 @@ import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphVisualSettings;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyTable;
+import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyToolWindowPanel;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
@@ -102,15 +103,17 @@ public class ConcurrencyTableUtil {
     table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
     table.setShowHorizontalLines(false);
     table.setShowVerticalLines(false);
+    table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
   }
 
 
-  public static JScrollPane createTables(ConcurrencyGraphModel graphModel, ConcurrencyGraphPresentationModel graphPresentation, JComponent toolWindow) {
+  public static JScrollPane createTables(ConcurrencyGraphModel graphModel, ConcurrencyGraphPresentationModel graphPresentation,
+                                         ConcurrencyToolWindowPanel toolWindow) {
     JBTable fixedTable = new JBTable(new FixedTableModel(graphModel));
     setTableSettings(fixedTable);
     fixedTable.getColumnModel().getColumn(0).setPreferredWidth(ConcurrencyGraphVisualSettings.NAMES_PANEL_INITIAL_WIDTH);
 
-    ConcurrencyTable graphTable = new ConcurrencyTable(graphPresentation, new ScrollableTableModel(graphModel));
+    ConcurrencyTable graphTable = new ConcurrencyTable(graphPresentation, new ScrollableTableModel(graphModel), toolWindow);
     setTableSettings(graphTable);
 
     ListSelectionModel model = fixedTable.getSelectionModel();
@@ -121,7 +124,7 @@ public class ConcurrencyTableUtil {
     JViewport viewport = new JViewport();
     viewport.setView(fixedTable);
     viewport.setPreferredSize(fixedSize);
-    scrollPane.setCorner(JScrollPane.UPPER_LEFT_CORNER, fixedTable.getTableHeader());
+    scrollPane.setCorner(ScrollPaneConstants.UPPER_LEFT_CORNER, fixedTable.getTableHeader());
     scrollPane.setRowHeaderView(viewport);
 
     return scrollPane;

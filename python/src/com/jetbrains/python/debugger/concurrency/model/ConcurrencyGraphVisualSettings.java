@@ -29,7 +29,7 @@ public class ConcurrencyGraphVisualSettings {
   private int myCellsPerRulerUnit = 10;
   private final ConcurrencyGraphPresentationModel myGraphModel;
   public static int NAMES_PANEL_INITIAL_WIDTH = 200;
-  public static int DIVIDER_WIDTH = 5;
+  public static int DIVIDER_WIDTH = 3;
 
   public ConcurrencyGraphVisualSettings(ConcurrencyGraphPresentationModel graphModel) {
     myGraphModel = graphModel;

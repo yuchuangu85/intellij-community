@@ -17,6 +17,7 @@
 package com.jetbrains.python.debugger.concurrency.tool;
 
 
+import com.intellij.ui.Gray;
 import com.intellij.ui.JBColor;
 
 import java.awt.*;
@@ -27,17 +28,19 @@ public class ConcurrencyGraphSettings {
   public static int INTERVAL = 10;
   public static int STROKE_BASIC = 2;
   public static int TABLE_ROW_HEIGHT = 30;
+  public static int TIME_CURSOR_WIDTH = 1;
 
   public static int RULER_STROKE_WIDTH = 1;
   public static Color RULER_COLOR = JBColor.BLACK;
   public static int RULER_UNIT_MARK = 10;
   public static int RULER_SUBUNIT_MARK = 5;
 
-  public static Color BASIC_COLOR = new Color(125, 125, 125);
-  public static Color LOCK_WAIT_COLOR = new Color(255, 179, 3);
-  public static Color LOCK_WAIT_SELECTED_COLOR = new Color(255, 240, 0);
-  public static Color LOCK_OWNING_COLOR = new Color(100, 200, 100);
-  public static Color LOCK_OWNING_SELECTED_COLOR = new Color(120, 255, 0);
-  public static Color DEADLOCK_COLOR = Color.RED;
+  public static Color BASIC_COLOR = Gray._125;
+  public static Color LOCK_WAIT_COLOR = new JBColor(new Color(255, 179, 3), new Color(255, 179, 3));
+  public static Color LOCK_WAIT_SELECTED_COLOR = new JBColor(new Color(255, 240, 0), new Color(255, 240, 0));
+  public static Color LOCK_OWNING_COLOR = new JBColor(new Color(100, 200, 100), new Color(100, 200, 100));
+  public static Color LOCK_OWNING_SELECTED_COLOR = new JBColor(new Color(120, 255, 0), new Color(120, 255, 0));
+  public static Color TIME_CURSOR_COLOR = JBColor.RED;
+  public static Color DEADLOCK_COLOR = JBColor.RED;
   public static Color BACKGROUND_COLOR = JBColor.WHITE;
 }

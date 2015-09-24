@@ -79,8 +79,8 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   protected JPanel createToolbarPanel() {
     final DefaultActionGroup group = new DefaultActionGroup();
     group.add(new StatisticsAction());
-    group.add(new ScaleIncrementAction());
-    group.add(new ScaleDecrementAction());
+    group.add(new ZoomInAction());
+    group.add(new ZoomOutAction());
 
     final ActionToolbar actionToolBar = ActionManager.getInstance().createActionToolbar("Toolbar", group, false);
     final JPanel buttonsPanel = new JPanel(new BorderLayout());
@@ -108,9 +108,9 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     }
   }
 
-  private class ScaleIncrementAction extends AnAction implements DumbAware {
-    public ScaleIncrementAction() {
-      super("Zoom In", "Zoom In", AllIcons.Actions.SortAsc);
+  private class ZoomInAction extends AnAction implements DumbAware {
+    public ZoomInAction() {
+      super("Zoom In", "Zoom In", AllIcons.Graph.ZoomIn);
     }
 
     @Override
@@ -124,9 +124,9 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     }
   }
 
-  private class ScaleDecrementAction extends AnAction implements DumbAware {
-    public ScaleDecrementAction() {
-      super("Zoom Out", "Zoom Out", AllIcons.Actions.SortDesc);
+  private class ZoomOutAction extends AnAction implements DumbAware {
+    public ZoomOutAction() {
+      super("Zoom Out", "Zoom Out", AllIcons.Graph.ZoomOut);
     }
 
     @Override

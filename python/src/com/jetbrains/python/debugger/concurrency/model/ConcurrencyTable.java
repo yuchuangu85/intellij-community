@@ -101,7 +101,7 @@ public class ConcurrencyTable extends JBTable {
         String text = String.format("%.2f s", ms / 1000f);
         int textWidth = metrics.stringWidth(text);
         int textHeight = metrics.getHeight();
-        g.drawString(text, i * rulerUnitWidth - textWidth / 2, markY - textHeight);
+        g.drawString(text, i * rulerUnitWidth - textWidth / 2, markY - textHeight / 3);
       }
     }
   }

@@ -35,12 +35,12 @@ public class ConcurrencyGraphVisualSettings {
     myGraphModel = graphModel;
   }
 
-  public void increaseScale() {
+  public void zoomIn() {
     myMicrosecsPerCell = Math.max(100, (int) (Math.round(myMicrosecsPerCell * 0.9) - Math.round(myMicrosecsPerCell * 0.9) % 100));
     myGraphModel.updateGraphModel();
   }
 
-  public void decreaseScale() {
+  public void zoomOut() {
     myMicrosecsPerCell = Math.max((int)(Math.round(myMicrosecsPerCell * 1.1) - Math.round(myMicrosecsPerCell * 1.1) % 100),
                                   myMicrosecsPerCell + 100);
     myGraphModel.updateGraphModel();

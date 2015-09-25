@@ -32,7 +32,6 @@ import java.util.ArrayList;
 
 public class ConcurrencyTable extends JBTable {
   protected ConcurrencyGraphPresentationModel myPresentationModel;
-  private int myTimeCursor;
   private ConcurrencyGraphCellRenderer myRenderer;
   private ConcurrencyToolWindowPanel myPanel;
 
@@ -48,7 +47,7 @@ public class ConcurrencyTable extends JBTable {
       @Override
       public void mouseClicked(MouseEvent e) {
         Point cursorPoint = e.getPoint();
-        myTimeCursor = cursorPoint.x;
+        myPresentationModel.setTimeCursor((float) cursorPoint.x / myPresentationModel.visualSettings.getHorizontalMax());
         int row = rowAtPoint(cursorPoint) >= 0? rowAtPoint(cursorPoint): getSelectedRow();
         if (row >= 0) {
           int eventIndex = getEventIndex(cursorPoint, row);
@@ -72,8 +71,8 @@ public class ConcurrencyTable extends JBTable {
 
   private void drawTimeCursor(@NotNull Graphics g) {
     int cursorPosition = Math.max(0, myPresentationModel.visualSettings.getHorizontalMax() - 2);
-    if (myTimeCursor != 0) {
-      cursorPosition = myTimeCursor;
+    if (myPresentationModel.getTimeCursor() > 0) {
+      cursorPosition = Math.round(myPresentationModel.visualSettings.getHorizontalMax() * myPresentationModel.getTimeCursor());
     }
     Graphics2D g2 = (Graphics2D)g;
     g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.TIME_CURSOR_WIDTH));

@@ -52,8 +52,8 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     super(vertical);
     myProject = project;
     myGraphModel = graphModel;
-    myGraphPresentation = new ConcurrencyGraphPresentationModel(myGraphModel);
     myType = type;
+    myGraphPresentation = new ConcurrencyGraphPresentationModel(myGraphModel);
 
     myGraphPresentation.registerListener(new ConcurrencyGraphPresentationModel.PresentationListener() {
       @Override
@@ -118,7 +118,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
       UIUtil.invokeLaterIfNeeded(new Runnable() {
         @Override
         public void run() {
-          myGraphPresentation.visualSettings.increaseScale();
+          myGraphPresentation.visualSettings.zoomIn();
         }
       });
     }
@@ -135,7 +135,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
       UIUtil.invokeLaterIfNeeded(new Runnable() {
         @Override
         public void run() {
-          myGraphPresentation.visualSettings.decreaseScale();
+          myGraphPresentation.visualSettings.zoomOut();
         }
       });
     }

@@ -25,10 +25,11 @@ import java.util.List;
 
 public class ConcurrencyGraphPresentationModel {
   public ConcurrencyGraphModel myGraphModel;
+  public ConcurrencyGraphVisualSettings visualSettings;
   private List<PresentationListener> myListeners = new ArrayList<PresentationListener>();
   private final Object myListenersObject = new Object();
-  public ConcurrencyGraphVisualSettings visualSettings;
   private ArrayList<ConcurrencyGraphBlock> myVisibleGraph;
+  private float myTimeCursor;
 
   public ConcurrencyGraphPresentationModel(final ConcurrencyGraphModel graphModel) {
     myGraphModel = graphModel;
@@ -43,21 +44,21 @@ public class ConcurrencyGraphPresentationModel {
     });
   }
 
+  public float getTimeCursor() {
+    return myTimeCursor;
+  }
+
+  public void setTimeCursor(float timeCursor) {
+    myTimeCursor = timeCursor;
+  }
+
   public void updateGraphModel() {
     updateVisibleGraph();
     notifyListeners();
   }
 
-  public int getLinesNumber() {
-    return myGraphModel.getMaxThread();
-  }
-
   public int getCellsNumber() {
     return (int)myGraphModel.getDuration() / visualSettings.getMicrosecsPerCell();
-  }
-
-  public ArrayList<String> getThreadNames() {
-    return myGraphModel.getThreadNames();
   }
 
   private long roundForCell(long time) {

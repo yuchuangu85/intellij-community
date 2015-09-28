@@ -36,16 +36,25 @@ public class ConcurrencyGraphVisualSettings {
   }
 
   public void zoomIn() {
+    int prevMicrosecsPerCell = myMicrosecsPerCell;
     myMicrosecsPerCell = Math.max(100, (int) (Math.round(myMicrosecsPerCell * 0.9) - Math.round(myMicrosecsPerCell * 0.9) % 100));
-    myGraphModel.updateTimerPeriod();
-    myGraphModel.updateGraphModel();
+    if (myMicrosecsPerCell != prevMicrosecsPerCell) {
+      myGraphModel.updateTimerPeriod();
+      myGraphModel.setTimeCursor(myGraphModel.getTimeCursor() * prevMicrosecsPerCell / myMicrosecsPerCell);
+      myGraphModel.updateGraphModel();
+    }
   }
 
   public void zoomOut() {
+    int prevMicrosecsPerCell = myMicrosecsPerCell;
     myMicrosecsPerCell = Math.max((int)(Math.round(myMicrosecsPerCell * 1.1) - Math.round(myMicrosecsPerCell * 1.1) % 100),
                                   myMicrosecsPerCell + 100);
-    myGraphModel.updateTimerPeriod();
-    myGraphModel.updateGraphModel();
+    if (myMicrosecsPerCell != prevMicrosecsPerCell) {
+
+      myGraphModel.updateTimerPeriod();
+      myGraphModel.setTimeCursor(myGraphModel.getTimeCursor() * prevMicrosecsPerCell / myMicrosecsPerCell);
+      myGraphModel.updateGraphModel();
+    }
   }
 
   public int getMicrosecsPerCell() {

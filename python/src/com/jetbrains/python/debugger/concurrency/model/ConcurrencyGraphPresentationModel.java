@@ -30,7 +30,7 @@ public class ConcurrencyGraphPresentationModel {
   private final Object myListenersObject = new Object();
   private ArrayList<ConcurrencyGraphBlock> myVisibleGraph;
   private final Object myVisibleGraphObject = new Object();
-  private float myTimeCursor;
+  private int myTimeCursor;
 
   public ConcurrencyGraphPresentationModel(final ConcurrencyGraphModel graphModel) {
     myGraphModel = graphModel;
@@ -51,11 +51,11 @@ public class ConcurrencyGraphPresentationModel {
     myGraphModel.setTimerPeriod(visualSettings.getCellsPerRulerUnit() * visualSettings.getMicrosecsPerCell() / 1000);
   }
 
-  public float getTimeCursor() {
+  public int getTimeCursor() {
     return myTimeCursor;
   }
 
-  public void setTimeCursor(float timeCursor) {
+  public void setTimeCursor(int timeCursor) {
     myTimeCursor = timeCursor;
   }
 

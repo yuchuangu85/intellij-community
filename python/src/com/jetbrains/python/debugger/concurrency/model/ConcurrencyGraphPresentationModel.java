@@ -42,6 +42,12 @@ public class ConcurrencyGraphPresentationModel {
         notifyListeners();
       }
     });
+
+    updateTimerPeriod();
+  }
+
+  public void updateTimerPeriod() {
+    myGraphModel.setTimerPeriod(visualSettings.getCellsPerRulerUnit() * visualSettings.getMicrosecsPerCell() / 1000);
   }
 
   public float getTimeCursor() {
@@ -78,7 +84,7 @@ public class ConcurrencyGraphPresentationModel {
     long curTime, nextTime = startTime;
     int i = 0;
     int numberOfCells = visualSettings.getHorizontalExtent() / ConcurrencyGraphSettings.CELL_WIDTH + 2;
-    while ((i < numberOfCells) && (curEventId < myGraphModel.getSize())) {
+    while ((i < numberOfCells) && (curEventId < myGraphModel.getSize() - 1)) {
       curTime = nextTime;
       nextTime = roundForCell(myGraphModel.getEventAt(curEventId + 1).getTime());
       long period = nextTime - curTime;

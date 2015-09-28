@@ -33,6 +33,7 @@ public class ConcurrencyGraphSettings {
   public static Color RULER_COLOR = JBColor.BLACK;
   public static int RULER_UNIT_MARK = 10;
   public static int RULER_SUBUNIT_MARK = 5;
+  public static int RULER_SUBUNITS_PER_UNIT = 10;
 
   public static Color BASIC_COLOR = new JBColor(new Color(152, 251, 152), new Color(152, 251, 152));
   public static Color LOCK_WAIT_COLOR = new JBColor(new Color(255, 179, 3), new Color(255, 179, 3));
@@ -41,5 +42,4 @@ public class ConcurrencyGraphSettings {
   public static Color LOCK_OWNING_SELECTED_COLOR = new JBColor(new Color(0, 100, 255), new Color(0, 100, 255));
   public static Color TIME_CURSOR_COLOR = JBColor.RED;
   public static Color DEADLOCK_COLOR = JBColor.RED;
-  public static Color BACKGROUND_COLOR = JBColor.WHITE;
 }

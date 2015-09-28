@@ -92,9 +92,10 @@ public class ConcurrencyTable extends JBTable {
     int rulerUnitWidth = ConcurrencyGraphSettings.CELL_WIDTH * myPresentationModel.visualSettings.getCellsPerRulerUnit();
 
     for (int i = 0; i < getWidth() / rulerUnitWidth; ++i) {
-      int markY = i % 10 == 0 ? y - ConcurrencyGraphSettings.RULER_UNIT_MARK : y - ConcurrencyGraphSettings.RULER_SUBUNIT_MARK;
+      int markY = i % ConcurrencyGraphSettings.RULER_SUBUNITS_PER_UNIT == 0 ? y - ConcurrencyGraphSettings.RULER_UNIT_MARK:
+                  y - ConcurrencyGraphSettings.RULER_SUBUNIT_MARK;
       g.drawLine(i * rulerUnitWidth, markY, i * rulerUnitWidth, y);
-      if ((i != 0) && (i % 10 == 0)) {
+      if ((i != 0) && (i % ConcurrencyGraphSettings.RULER_SUBUNITS_PER_UNIT == 0)) {
         int ms = myPresentationModel.visualSettings.getMicrosecsPerCell() *
                  myPresentationModel.visualSettings.getCellsPerRulerUnit() * i / 1000;
         String text = String.format("%.2f s", ms / 1000f);

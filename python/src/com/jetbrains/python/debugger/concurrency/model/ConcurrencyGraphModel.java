@@ -28,9 +28,8 @@ import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStat;
 import org.jetbrains.annotations.NotNull;
 
 import java.awt.*;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
 
 public class ConcurrencyGraphModel {
   protected Project myProject;
@@ -47,32 +46,34 @@ public class ConcurrencyGraphModel {
   private final Object myListenersObject = new Object();
   private ConcurrencyGraphAnalyser myGraphAnalyser;
   private XDebugSession lastSession;
-  private long myStartTime; //millis
-  private long myPauseTime; //millis
   private String myFilterLockId;
+  private Timer myTimer;
+  private long myStartTime; //millis
+  private long myFinishTime; //millis
+  private long myTimerPeriod = 10; //millis
+  private boolean myLastSessionStopped;
 
   public ConcurrencyGraphModel(Project project) {
     myProject = project;
     myLog = new ArrayList<PyConcurrencyEvent>();
-    createGraph();
   }
 
   public void addSessionListener() {
     lastSession.addSessionListener(new XDebugSessionListener() {
       @Override
       public void sessionPaused() {
-        setPauseTime(System.currentTimeMillis());
-        updateGraph();
       }
 
       @Override
       public void sessionResumed() {
-        setPauseTime(0);
       }
 
       @Override
       public void sessionStopped() {
+        myFinishTime = System.currentTimeMillis();
+        myLastSessionStopped = true;
         updateGraph();
+        notifyListeners();
       }
 
       @Override
@@ -105,14 +106,17 @@ public class ConcurrencyGraphModel {
   }
 
   public PyConcurrencyEvent getEventAt(int index) {
-    if (index == getSize()) {
-      return new FakeEvent((getPauseTime() - getStartTime()) * 1000); // convert from millis to microseconds
+    if (index == myLog.size()) {
+      PyConcurrencyEvent lastEvent = myLog.get(myLog.size() - 1);
+      // add a fake event with current time
+      return new FakeEvent((myFinishTime - getStartTime()) * 1000, lastEvent); // convert from millis to microseconds
     }
     return myLog.get(index);
   }
 
   public int getSize() {
-    return myLog.size();
+    // we add a fake event with current time
+    return myLog.size() > 0? myLog.size() + 1: myLog.size();
   }
 
   public String getStringRepresentation() {
@@ -123,15 +127,6 @@ public class ConcurrencyGraphModel {
     }
     resultBuilder.append("</html>");
     return resultBuilder.toString();
-  }
-
-
-  public long getPauseTime() {
-    return myPauseTime;
-  }
-
-  public void setPauseTime(long pauseTime) {
-    this.myPauseTime = pauseTime;
   }
 
   public long getStartTime() {
@@ -200,14 +195,14 @@ public class ConcurrencyGraphModel {
 
   public long getDuration() {
     if (getSize() > 0) {
-      return getPauseTime() == 0? getEventAt(getSize() - 1).getTime(): (getPauseTime() - getStartTime());
+      return (myFinishTime - getStartTime()) * 1000; // convert to microseconds
     }
     return 0;
   }
 
   private class FakeEvent extends PyConcurrencyEvent {
-    public FakeEvent(long time) {
-      super(time, "", "", false);
+    public FakeEvent(long time, PyConcurrencyEvent previousEvent) {
+      super(time, previousEvent.getThreadId(), previousEvent.getThreadName(), previousEvent.isThreadEvent());
     }
 
     @Override
@@ -300,6 +295,27 @@ public class ConcurrencyGraphModel {
     updateGraph();
   }
 
+  public void setTimerPeriod(long timerPeriod) {
+    myTimerPeriod = timerPeriod;
+  }
+
+  private void startTimer() {
+    myTimer = new Timer();
+    TimerTask task = new TimerTask() {
+      @Override
+      public void run() {
+        if (myLastSessionStopped) {
+          myTimer.cancel();
+          notifyListeners();
+          return;
+        }
+        myFinishTime = System.currentTimeMillis();
+        notifyListeners();
+      }
+    };
+    myTimer.schedule(task, new Date(), myTimerPeriod);
+  }
+
   private void createGraph() {
     synchronized (myUpdateObject) {
       threadIndexToId = new HashMap<String, Integer>();
@@ -309,13 +325,15 @@ public class ConcurrencyGraphModel {
       myGraphAnalyser = new ConcurrencyGraphAnalyser(this);
       myCurrentMaxThread = 0;
       relations = new HashMap<Integer, Point>();
+      myLastSessionStopped = false;
+      startTimer();
       notifyListeners();
     }
   }
 
   private void updateGraph() {
     synchronized (myUpdateObject) {
-      for (int i = myGraphScheme.size(); i < getSize(); ++i) {
+      for (int i = myGraphScheme.size(); i < myLog.size(); ++i) {
         PyConcurrencyEvent event = getEventAt(i);
         String eventThreadId = event.getThreadId();
 
@@ -337,8 +355,8 @@ public class ConcurrencyGraphModel {
             myGraphScheme.get(i).add(j, myGraphScheme.get(i - 1).get(j));
           }
           myGraphScheme.get(i).add(myCurrentMaxThread - 1, element);
-        } else {
-
+        }
+        else {
           int eventThreadIdInt = threadIndexToId.containsKey(eventThreadId) ? threadIndexToId.get(eventThreadId) : 0;
           if (event instanceof PyThreadEvent) {
             String parentId = ((PyThreadEvent)event).getParentThreadId();
@@ -370,6 +388,5 @@ public class ConcurrencyGraphModel {
         myThreadCountForRow.add(i, myCurrentMaxThread);
       }
     }
-    notifyListeners();
   }
 }

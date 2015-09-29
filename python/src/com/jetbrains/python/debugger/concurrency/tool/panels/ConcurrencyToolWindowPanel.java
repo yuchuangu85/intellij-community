@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2000-2015 JetBrains s.r.o.
  *
@@ -30,6 +29,7 @@ import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentat
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyTableUtil;
 import com.sun.istack.internal.Nullable;
+import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
@@ -46,7 +46,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   protected JLabel myLabel;
   protected StackTracePanel myStackTracePanel;
   protected JScrollPane myNamesPanel;
-  private JScrollPane myTableScrollPane;
+  public JScrollPane tableScrollPane;
   public JTable fixedTable;
   public JTable graphTable;
   public ActionToolbar toolbar;
@@ -56,7 +56,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     myProject = project;
     myGraphModel = graphModel;
     myType = type;
-    myGraphPresentation = new ConcurrencyGraphPresentationModel(myGraphModel);
+    myGraphPresentation = new ConcurrencyGraphPresentationModel(myGraphModel, this);
 
     myGraphPresentation.registerListener(new ConcurrencyGraphPresentationModel.PresentationListener() {
       @Override
@@ -84,12 +84,36 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     group.add(new StatisticsAction());
     group.add(new ZoomInAction());
     group.add(new ZoomOutAction());
+    group.add(new ScrollToTheEndToolbarAction(myGraphPresentation));
 
     final ActionToolbar actionToolBar = ActionManager.getInstance().createActionToolbar("Toolbar", group, false);
     toolbar = actionToolBar;
     final JPanel buttonsPanel = new JPanel(new BorderLayout());
     buttonsPanel.add(actionToolBar.getComponent(), BorderLayout.CENTER);
     return buttonsPanel;
+  }
+
+  private class ScrollToTheEndToolbarAction extends ToggleAction implements DumbAware {
+    private ConcurrencyGraphPresentationModel myPresentationModel;
+
+    public ScrollToTheEndToolbarAction(@NotNull final ConcurrencyGraphPresentationModel presentationModel) {
+      super();
+      myPresentationModel = presentationModel;
+      final String message = "Scroll to the end";
+      getTemplatePresentation().setDescription(message);
+      getTemplatePresentation().setText(message);
+      getTemplatePresentation().setIcon(AllIcons.RunConfigurations.Scroll_down);
+    }
+
+    @Override
+    public boolean isSelected(AnActionEvent e) {
+      return myPresentationModel.isScrollToTheEnd();
+    }
+
+    @Override
+    public void setSelected(AnActionEvent e, boolean state) {
+      myPresentationModel.setScrollToTheEnd(state);
+    }
   }
 
   private class StatisticsAction extends AnAction implements DumbAware {
@@ -161,11 +185,11 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
       Adjustable source = evt.getAdjustable();
       int orient = source.getOrientation();
       if (orient == Adjustable.HORIZONTAL) {
-        JScrollBar bar = myTableScrollPane.getHorizontalScrollBar();
+        JScrollBar bar = tableScrollPane.getHorizontalScrollBar();
         myGraphPresentation.visualSettings.updateHorizontalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
       if (orient == Adjustable.VERTICAL) {
-        JScrollBar bar = myTableScrollPane.getVerticalScrollBar();
+        JScrollBar bar = tableScrollPane.getVerticalScrollBar();
         myGraphPresentation.visualSettings.updateVerticalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
     }
@@ -190,7 +214,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   public void splitWindow(JComponent component) {
     removeAll();
     JSplitPane graphPanel = new JSplitPane(JSplitPane.VERTICAL_SPLIT, true);
-    graphPanel.add(myTableScrollPane, JSplitPane.LEFT);
+    graphPanel.add(tableScrollPane, JSplitPane.LEFT);
     graphPanel.add(component, JSplitPane.RIGHT);
     graphPanel.setDividerLocation(getHeight() * 2 / 3);
     graphPanel.setDividerSize(myGraphPresentation.visualSettings.getDividerWidth());
@@ -201,25 +225,25 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   }
 
   private void initTable() {
-    myTableScrollPane = ConcurrencyTableUtil.createTables(myGraphModel, myGraphPresentation, this);
-    add(myTableScrollPane);
+    tableScrollPane = ConcurrencyTableUtil.createTables(myGraphModel, myGraphPresentation, this);
+    add(tableScrollPane);
 
     AdjustmentListener listener = new GraphAdjustmentListener();
-    myTableScrollPane.getHorizontalScrollBar().addAdjustmentListener(listener);
-    myTableScrollPane.getVerticalScrollBar().addAdjustmentListener(listener);
+    tableScrollPane.getHorizontalScrollBar().addAdjustmentListener(listener);
+    tableScrollPane.getVerticalScrollBar().addAdjustmentListener(listener);
   }
 
   public void updateContent() {
     if (myGraphModel.getSize() == 0) {
       myGraphPresentation.visualSettings.setNamesPanelWidth(myNamesPanel == null ? myGraphPresentation.visualSettings.getNamesPanelWidth() :
                                                             myNamesPanel.getWidth());
-      myTableScrollPane = null;
+      tableScrollPane = null;
       myStackTracePanel = null;
       initMessage();
       return;
     }
 
-    if (myTableScrollPane == null) {
+    if (tableScrollPane == null) {
       myLabel.setVisible(false);
       initTable();
       setToolbar(createToolbarPanel());

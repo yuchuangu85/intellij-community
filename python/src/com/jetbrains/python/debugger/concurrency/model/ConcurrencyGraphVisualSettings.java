@@ -15,6 +15,7 @@
  */
 package com.jetbrains.python.debugger.concurrency.model;
 
+import com.intellij.util.ui.UIUtil;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 
 public class ConcurrencyGraphVisualSettings {
@@ -27,21 +28,22 @@ public class ConcurrencyGraphVisualSettings {
   private int myVerticalMax;
   private int myNamesPanelWidth = NAMES_PANEL_INITIAL_WIDTH;
   private int myCellsPerRulerUnit = 10;
-  private final ConcurrencyGraphPresentationModel myGraphModel;
+  private final ConcurrencyGraphPresentationModel myPresentationModel;
   public static int NAMES_PANEL_INITIAL_WIDTH = 200;
   public static int DIVIDER_WIDTH = 3;
 
-  public ConcurrencyGraphVisualSettings(ConcurrencyGraphPresentationModel graphModel) {
-    myGraphModel = graphModel;
+  public ConcurrencyGraphVisualSettings(ConcurrencyGraphPresentationModel presentationModel) {
+    myPresentationModel = presentationModel;
   }
 
   public void zoomIn() {
     int prevMicrosecsPerCell = myMicrosecsPerCell;
     myMicrosecsPerCell = Math.max(100, (int)(Math.round(myMicrosecsPerCell * 0.9) - Math.round(myMicrosecsPerCell * 0.9) % 100));
     if (myMicrosecsPerCell != prevMicrosecsPerCell) {
-      myGraphModel.updateTimerPeriod();
-      myGraphModel.setTimeCursor(myGraphModel.getTimeCursor() * prevMicrosecsPerCell / myMicrosecsPerCell);
-      myGraphModel.updateGraphModel();
+      myPresentationModel.updateTimerPeriod();
+      myPresentationModel.graphModel.setTimeCursor(
+        myPresentationModel.graphModel.getTimeCursor() * prevMicrosecsPerCell / myMicrosecsPerCell);
+      myPresentationModel.updateGraphModel();
     }
   }
 
@@ -51,9 +53,21 @@ public class ConcurrencyGraphVisualSettings {
                                   myMicrosecsPerCell + 100);
     if (myMicrosecsPerCell != prevMicrosecsPerCell) {
 
-      myGraphModel.updateTimerPeriod();
-      myGraphModel.setTimeCursor(myGraphModel.getTimeCursor() * prevMicrosecsPerCell / myMicrosecsPerCell);
-      myGraphModel.updateGraphModel();
+      myPresentationModel.updateTimerPeriod();
+      myPresentationModel.graphModel.setTimeCursor(
+        myPresentationModel.graphModel.getTimeCursor() * prevMicrosecsPerCell / myMicrosecsPerCell);
+      myPresentationModel.updateGraphModel();
+    }
+  }
+
+  public void scrollToTheEnd() {
+    if (myPresentationModel.toolWindowPanel.tableScrollPane != null) {
+      UIUtil.invokeLaterIfNeeded(new Runnable() {
+        @Override
+        public void run() {
+          myPresentationModel.toolWindowPanel.tableScrollPane.getHorizontalScrollBar().setValue(myHorizontalMax - myHorizontalExtent);
+        }
+      });
     }
   }
 
@@ -112,13 +126,13 @@ public class ConcurrencyGraphVisualSettings {
     myHorizontalValue = scrollbarValue;
     myHorizontalExtent = scrollbarExtent;
     myHorizontalMax = scrollMax;
-    myGraphModel.updateGraphModel();
+    myPresentationModel.updateGraphModel();
   }
 
   public void updateVerticalScrollbar(int scrollbarValue, int scrollbarExtent, int scrollMax) {
     myVerticalValue = scrollbarValue;
     myVerticalExtent = scrollbarExtent;
     myVerticalMax = scrollMax;
-    myGraphModel.updateGraphModel();
+    myPresentationModel.updateGraphModel();
   }
 }

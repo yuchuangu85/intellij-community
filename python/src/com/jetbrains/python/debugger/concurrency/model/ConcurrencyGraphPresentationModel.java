@@ -18,27 +18,33 @@ package com.jetbrains.python.debugger.concurrency.model;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyLockEvent;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
+import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyToolWindowPanel;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class ConcurrencyGraphPresentationModel {
-  public ConcurrencyGraphModel myGraphModel;
+  public ConcurrencyGraphModel graphModel;
   public ConcurrencyGraphVisualSettings visualSettings;
+  public ConcurrencyToolWindowPanel toolWindowPanel;
   private List<PresentationListener> myListeners = new ArrayList<PresentationListener>();
   private final Object myListenersObject = new Object();
   private ArrayList<ConcurrencyGraphBlock> myVisibleGraph;
   private final Object myVisibleGraphObject = new Object();
-  private int myTimeCursor;
+  private boolean myScrollToTheEnd = true;
 
-  public ConcurrencyGraphPresentationModel(final ConcurrencyGraphModel graphModel) {
-    myGraphModel = graphModel;
+  public ConcurrencyGraphPresentationModel(final ConcurrencyGraphModel graphModel, ConcurrencyToolWindowPanel panel) {
+    this.graphModel = graphModel;
     visualSettings = new ConcurrencyGraphVisualSettings(this);
+    toolWindowPanel = panel;
 
-    myGraphModel.registerListener(new ConcurrencyGraphModel.GraphListener() {
+    this.graphModel.registerListener(new ConcurrencyGraphModel.GraphListener() {
       @Override
       public void graphChanged() {
+        if (myScrollToTheEnd) {
+          visualSettings.scrollToTheEnd();
+        }
         updateGraphModel();
         notifyListeners();
       }
@@ -47,16 +53,16 @@ public class ConcurrencyGraphPresentationModel {
     updateTimerPeriod();
   }
 
+  public boolean isScrollToTheEnd() {
+    return myScrollToTheEnd;
+  }
+
+  public void setScrollToTheEnd(boolean scrollToTheEnd) {
+    myScrollToTheEnd = scrollToTheEnd;
+  }
+
   public void updateTimerPeriod() {
-    myGraphModel.setTimerPeriod(visualSettings.getCellsPerRulerUnit() * visualSettings.getMicrosecsPerCell() / 1000);
-  }
-
-  public int getTimeCursor() {
-    return myTimeCursor;
-  }
-
-  public void setTimeCursor(int timeCursor) {
-    myTimeCursor = timeCursor;
+    graphModel.setTimerPeriod(visualSettings.getCellsPerRulerUnit() * visualSettings.getMicrosecsPerCell() / 1000);
   }
 
   public void updateGraphModel() {
@@ -65,7 +71,7 @@ public class ConcurrencyGraphPresentationModel {
   }
 
   public int getCellsNumber() {
-    return (int)myGraphModel.getDuration() / visualSettings.getMicrosecsPerCell();
+    return (int)graphModel.getDuration() / visualSettings.getMicrosecsPerCell();
   }
 
   private long roundForCell(long time) {
@@ -75,25 +81,25 @@ public class ConcurrencyGraphPresentationModel {
 
   private void updateVisibleGraph() {
     synchronized (myVisibleGraphObject) {
-      if ((visualSettings.getHorizontalMax() == 0) || (myGraphModel.getSize() == 0)) {
+      if ((visualSettings.getHorizontalMax() == 0) || (graphModel.getSize() == 0)) {
         myVisibleGraph = new ArrayList<ConcurrencyGraphBlock>();
         return;
       }
-      long startTime = roundForCell(visualSettings.getHorizontalValue() * myGraphModel.getDuration() /
+      long startTime = roundForCell(visualSettings.getHorizontalValue() * graphModel.getDuration() /
                                     visualSettings.getHorizontalMax());
       myVisibleGraph = new ArrayList<ConcurrencyGraphBlock>();
-      int curEventId = myGraphModel.getLastEventIndexBeforeMoment(startTime);
+      int curEventId = graphModel.getLastEventIndexBeforeMoment(startTime);
       long curTime, nextTime = startTime;
       int i = 0;
       int numberOfCells = visualSettings.getHorizontalExtent() / ConcurrencyGraphSettings.CELL_WIDTH + 2;
-      while ((i < numberOfCells) && (curEventId < myGraphModel.getSize() - 1)) {
+      while ((i < numberOfCells) && (curEventId < graphModel.getSize() - 1)) {
         curTime = nextTime;
-        nextTime = roundForCell(myGraphModel.getEventAt(curEventId + 1).getTime());
+        nextTime = roundForCell(graphModel.getEventAt(curEventId + 1).getTime());
         long period = nextTime - curTime;
         int cellsInPeriod = (int)(period / visualSettings.getMicrosecsPerCell());
         if (cellsInPeriod != 0) {
-          myVisibleGraph.add(new ConcurrencyGraphBlock(myGraphModel.getDrawElementsForRow(curEventId),
-                                                       cellsInPeriod, myGraphModel.getRelationForRow(curEventId)));
+          myVisibleGraph.add(new ConcurrencyGraphBlock(graphModel.getDrawElementsForRow(curEventId),
+                                                       cellsInPeriod, graphModel.getRelationForRow(curEventId)));
           i += cellsInPeriod;
         }
         curEventId += 1;
@@ -107,14 +113,14 @@ public class ConcurrencyGraphPresentationModel {
   }
 
   public void applySelectionFilter(int eventId) {
-    PyConcurrencyEvent event = myGraphModel.getEventAt(eventId);
+    PyConcurrencyEvent event = graphModel.getEventAt(eventId);
     if ((event instanceof PyLockEvent) && (event.getType() != PyConcurrencyEvent.EventType.RELEASE)) {
       PyLockEvent lockEvent = (PyLockEvent)event;
       String lockId = lockEvent.getLockId();
-      myGraphModel.setFilterLockId(lockId);
+      graphModel.setFilterLockId(lockId);
     }
     else if (event.getType() == PyConcurrencyEvent.EventType.STOP) {
-      myGraphModel.setFilterLockId(null);
+      graphModel.setFilterLockId(null);
     }
   }
 

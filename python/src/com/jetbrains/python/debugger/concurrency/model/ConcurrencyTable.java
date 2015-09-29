@@ -47,11 +47,11 @@ public class ConcurrencyTable extends JBTable {
       @Override
       public void mouseClicked(MouseEvent e) {
         Point cursorPoint = e.getPoint();
-        myPresentationModel.setTimeCursor(cursorPoint.x);
+        myPresentationModel.graphModel.setTimeCursor(cursorPoint.x);
         int row = rowAtPoint(cursorPoint) >= 0 ? rowAtPoint(cursorPoint) : getSelectedRow();
         if (row >= 0) {
           int eventIndex = getEventIndex(cursorPoint, row);
-          PyConcurrencyEvent event = eventIndex != -1 ? myPresentationModel.myGraphModel.getEventAt(eventIndex) : null;
+          PyConcurrencyEvent event = eventIndex != -1 ? myPresentationModel.graphModel.getEventAt(eventIndex) : null;
           myPanel.showStackTrace(event);
         }
       }
@@ -70,9 +70,9 @@ public class ConcurrencyTable extends JBTable {
   }
 
   private void drawTimeCursor(@NotNull Graphics g) {
-    int cursorPosition = Math.max(0, myPresentationModel.visualSettings.getHorizontalMax() - 2);
-    if (myPresentationModel.getTimeCursor() > 0) {
-      cursorPosition = myPresentationModel.getTimeCursor();
+    int cursorPosition = Math.max(0, myPresentationModel.getCellsNumber() * ConcurrencyGraphSettings.CELL_WIDTH - 2);
+    if (myPresentationModel.graphModel.getTimeCursor() > 0) {
+      cursorPosition = myPresentationModel.graphModel.getTimeCursor();
     }
     Graphics2D g2 = (Graphics2D)g;
     g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.TIME_CURSOR_WIDTH));

@@ -51,6 +51,7 @@ public class ConcurrencyGraphModel {
   private long myStartTime; //millis
   private long myFinishTime; //millis
   private long myTimerPeriod = 10; //millis
+  private int myTimeCursor; //px
   private boolean myLastSessionStopped;
 
   public ConcurrencyGraphModel(Project project) {
@@ -292,6 +293,14 @@ public class ConcurrencyGraphModel {
     return null;
   }
 
+  public int getTimeCursor() {
+    return myTimeCursor;
+  }
+
+  public void setTimeCursor(int timeCursor) {
+    myTimeCursor = timeCursor;
+  }
+
   public void setFilterLockId(String filterLockId) {
     myFilterLockId = filterLockId;
     createGraph();
@@ -329,6 +338,7 @@ public class ConcurrencyGraphModel {
       myCurrentMaxThread = 0;
       relations = new HashMap<Integer, Point>();
       myLastSessionStopped = false;
+      myTimeCursor = 0;
       startTimer();
       notifyListeners();
     }

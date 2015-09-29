@@ -107,14 +107,14 @@ public class ConcurrencyTableUtil {
   }
 
 
-  public static JScrollPane createTables(ConcurrencyGraphModel graphModel, ConcurrencyGraphPresentationModel graphPresentation,
+  public static JScrollPane createTables(ConcurrencyGraphModel graphModel, ConcurrencyGraphPresentationModel presentationModel,
                                          ConcurrencyToolWindowPanel toolWindow) {
     JBTable fixedTable = new JBTable(new FixedTableModel(graphModel));
     toolWindow.fixedTable = fixedTable;
     setTableSettings(fixedTable);
     fixedTable.getColumnModel().getColumn(0).setPreferredWidth(ConcurrencyGraphVisualSettings.NAMES_PANEL_INITIAL_WIDTH);
 
-    ConcurrencyTable graphTable = new ConcurrencyTable(graphPresentation, new ScrollableTableModel(graphModel), toolWindow);
+    ConcurrencyTable graphTable = new ConcurrencyTable(presentationModel, new ScrollableTableModel(graphModel), toolWindow);
     toolWindow.graphTable = graphTable;
     setTableSettings(graphTable);
 

@@ -25,7 +25,7 @@ import javax.swing.*;
 import java.awt.*;
 
 public class ConcurrencyGraphCellRenderer extends ColoredTableCellRenderer {
-  private ConcurrencyGraphPresentationModel myGraphPresentation;
+  private ConcurrencyGraphPresentationModel myPresentationModel;
   private int myRow;
   private int myPadding;
   private JTable myTable;
@@ -34,11 +34,11 @@ public class ConcurrencyGraphCellRenderer extends ColoredTableCellRenderer {
   public ConcurrencyGraphCellRenderer(ConcurrencyGraphPresentationModel presentationModel,
                                       final JTable table,
                                       ConcurrencyToolWindowPanel panel) {
-    myGraphPresentation = presentationModel;
+    myPresentationModel = presentationModel;
     myTable = table;
     myPanel = panel;
 
-    myGraphPresentation.registerListener(new ConcurrencyGraphPresentationModel.PresentationListener() {
+    myPresentationModel.registerListener(new ConcurrencyGraphPresentationModel.PresentationListener() {
       @Override
       public void graphChanged(int leftPadding) {
         myPadding = leftPadding;
@@ -54,14 +54,14 @@ public class ConcurrencyGraphCellRenderer extends ColoredTableCellRenderer {
   @Override
   protected void paintComponent(Graphics g) {
     super.paintComponent(g);
-    ConcurrencyRenderingUtil.paintRow(g, myPadding, myGraphPresentation.getVisibleGraph(), myRow);
+    ConcurrencyRenderingUtil.paintRow(g, myPadding, myPresentationModel.getVisibleGraph(), myRow);
   }
 
   @Override
   protected void customizeCellRenderer(JTable table, @Nullable Object value, boolean selected, boolean hasFocus, int row, int column) {
     myRow = row;
-    int width = Math.max(myGraphPresentation.getCellsNumber() * ConcurrencyGraphSettings.CELL_WIDTH, myPanel.getGraphPaneWidth());
+    int width = Math.max(myPresentationModel.getCellsNumber() * ConcurrencyGraphSettings.CELL_WIDTH, myPanel.getGraphPaneWidth());
     table.getColumnModel().getColumn(column).setPreferredWidth(width);
-    myPadding = myGraphPresentation.getPadding();
+    myPadding = myPresentationModel.getPadding();
   }
 }

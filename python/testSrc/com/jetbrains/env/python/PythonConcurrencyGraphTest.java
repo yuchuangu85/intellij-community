@@ -27,8 +27,8 @@ import java.util.ArrayList;
 
 public class PythonConcurrencyGraphTest extends PyEnvTestCase {
 
-  public static void compareGraphRows(int row, ConcurrencyGraphModel graphManager, ConcurrencyThreadState[] correctElements) {
-    ArrayList<ConcurrencyGraphElement> elements = graphManager.getDrawElementsForRow(row);
+  public static void compareGraphRows(int row, ConcurrencyGraphModel graphModel, ConcurrencyThreadState[] correctElements) {
+    ArrayList<ConcurrencyGraphElement> elements = graphModel.getDrawElementsForRow(row);
     assertEquals(String.format("row = %d", row), correctElements.length, elements.size());
     for (int i = 0; i < elements.size(); ++i) {
       ConcurrencyThreadState graphElement = elements.get(i).threadState;
@@ -37,9 +37,9 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
     }
   }
 
-  public static void compareGraphs(ConcurrencyGraphModel PyConcurrencyGraphModel, ConcurrencyThreadState[][] correctGraph) {
+  public static void compareGraphs(ConcurrencyGraphModel graphModel, ConcurrencyThreadState[][] correctGraph) {
     for (int i = 0; i < correctGraph.length; ++i) {
-      compareGraphRows(i, PyConcurrencyGraphModel, correctGraph[i]);
+      compareGraphRows(i, graphModel, correctGraph[i]);
     }
   }
 

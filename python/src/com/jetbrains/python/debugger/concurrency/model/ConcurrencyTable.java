@@ -35,9 +35,9 @@ public class ConcurrencyTable extends JBTable {
   private ConcurrencyGraphCellRenderer myRenderer;
   private ConcurrencyToolWindowPanel myPanel;
 
-  public ConcurrencyTable(ConcurrencyGraphPresentationModel model, TableModel tableModel, ConcurrencyToolWindowPanel panel) {
+  public ConcurrencyTable(ConcurrencyGraphPresentationModel presentationModel, TableModel tableModel, ConcurrencyToolWindowPanel panel) {
     super();
-    myPresentationModel = model;
+    myPresentationModel = presentationModel;
     myPanel = panel;
     setModel(tableModel);
     myRenderer = new ConcurrencyGraphCellRenderer(myPresentationModel, this, myPanel);

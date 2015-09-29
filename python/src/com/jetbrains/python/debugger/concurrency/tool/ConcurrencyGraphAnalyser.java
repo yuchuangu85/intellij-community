@@ -109,7 +109,7 @@ public class ConcurrencyGraphAnalyser {
     String wait = startWait;
     while (wait != null) {
       boolean isOwnedBySmb = false;
-      for (String thread: myLocksInfo.keySet()) {
+      for (String thread : myLocksInfo.keySet()) {
         ThreadLocksInfo info = myLocksInfo.get(thread);
         if (info.isOwning(wait) && (info.getLockWait() != null)) {
           if (threadsInsideDeadlock.contains(thread)) {

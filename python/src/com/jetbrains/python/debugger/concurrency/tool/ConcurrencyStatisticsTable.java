@@ -77,5 +77,4 @@ public class ConcurrencyStatisticsTable extends JFrame {
     add(scrollPane);
     setTitle("Statistics information");
   }
-
 }

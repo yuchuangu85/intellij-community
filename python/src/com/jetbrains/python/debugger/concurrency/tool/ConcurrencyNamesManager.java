@@ -34,7 +34,8 @@ public class ConcurrencyNamesManager {
   private String getLockNameById(String lockId) {
     if (myLockMap.containsKey(lockId)) {
       return myLockMap.get(lockId);
-    } else {
+    }
+    else {
       lastNumber++;
       String newName = "Lock-" + lastNumber;
       myLockMap.put(lockId, newName);

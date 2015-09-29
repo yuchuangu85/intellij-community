@@ -31,6 +31,5 @@ public class PyShowThreadingLogAction extends AnAction {
     String logString = graphModel.getStringRepresentation();
 
     Messages.showMessageDialog(project, logString, "Threading log", Messages.getInformationIcon());
-
   }
 }

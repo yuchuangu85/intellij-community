@@ -37,7 +37,7 @@ public class ConcurrencyGraphVisualSettings {
 
   public void zoomIn() {
     int prevMicrosecsPerCell = myMicrosecsPerCell;
-    myMicrosecsPerCell = Math.max(100, (int) (Math.round(myMicrosecsPerCell * 0.9) - Math.round(myMicrosecsPerCell * 0.9) % 100));
+    myMicrosecsPerCell = Math.max(100, (int)(Math.round(myMicrosecsPerCell * 0.9) - Math.round(myMicrosecsPerCell * 0.9) % 100));
     if (myMicrosecsPerCell != prevMicrosecsPerCell) {
       myGraphModel.updateTimerPeriod();
       myGraphModel.setTimeCursor(myGraphModel.getTimeCursor() * prevMicrosecsPerCell / myMicrosecsPerCell);

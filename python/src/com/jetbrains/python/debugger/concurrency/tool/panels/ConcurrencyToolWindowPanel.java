@@ -47,6 +47,9 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   protected StackTracePanel myStackTracePanel;
   protected JScrollPane myNamesPanel;
   private JScrollPane myTableScrollPane;
+  public JTable fixedTable;
+  public JTable graphTable;
+  public ActionToolbar toolbar;
 
   public ConcurrencyToolWindowPanel(boolean vertical, Project project, ConcurrencyGraphModel graphModel, String type) {
     super(vertical);
@@ -83,6 +86,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     group.add(new ZoomOutAction());
 
     final ActionToolbar actionToolBar = ActionManager.getInstance().createActionToolbar("Toolbar", group, false);
+    toolbar = actionToolBar;
     final JPanel buttonsPanel = new JPanel(new BorderLayout());
     buttonsPanel.add(actionToolBar.getComponent(), BorderLayout.CENTER);
     return buttonsPanel;
@@ -167,13 +171,18 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     }
   }
 
+  public int getGraphPaneWidth() {
+    return getWidth() - fixedTable.getWidth() - toolbar.getComponent().getWidth() - 3;
+  }
+
   public void showStackTrace(@Nullable PyConcurrencyEvent event) {
     List<PyStackFrameInfo> frames = event == null ? new ArrayList<PyStackFrameInfo>(0) : event.getFrames();
     if (myStackTracePanel == null) {
       myStackTracePanel = new StackTracePanel(false, myProject);
       myStackTracePanel.buildStackTrace(frames);
       splitWindow(myStackTracePanel);
-    } else {
+    }
+    else {
       myStackTracePanel.buildStackTrace(frames);
     }
   }
@@ -202,8 +211,8 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
 
   public void updateContent() {
     if (myGraphModel.getSize() == 0) {
-      myGraphPresentation.visualSettings.setNamesPanelWidth(myNamesPanel == null? myGraphPresentation.visualSettings.getNamesPanelWidth():
-                                                                 myNamesPanel.getWidth());
+      myGraphPresentation.visualSettings.setNamesPanelWidth(myNamesPanel == null ? myGraphPresentation.visualSettings.getNamesPanelWidth() :
+                                                            myNamesPanel.getWidth());
       myTableScrollPane = null;
       myStackTracePanel = null;
       initMessage();

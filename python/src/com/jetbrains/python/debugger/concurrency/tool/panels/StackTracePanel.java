@@ -102,7 +102,8 @@ public class StackTracePanel extends SimpleToolWindowPanel implements Disposable
               isExternal = !ProjectRootManager.getInstance(myProject).getFileIndex().isInContent(file);
             }
             filename = file.getName();
-          } else {
+          }
+          else {
             append("<frame not available>", SimpleTextAttributes.GRAY_ATTRIBUTES);
             return;
           }
@@ -121,7 +122,7 @@ public class StackTracePanel extends SimpleToolWindowPanel implements Disposable
       public void mouseClicked(MouseEvent e) {
         TreePath path = myTree.getPathForLocation(e.getX(), e.getY());
         if (path != null) {
-          DefaultMutableTreeNode frameNode=(DefaultMutableTreeNode)path.getLastPathComponent();
+          DefaultMutableTreeNode frameNode = (DefaultMutableTreeNode)path.getLastPathComponent();
           Object userObject = frameNode.getUserObject();
           if (userObject instanceof PyStackFrameInfo) {
             PyStackFrameInfo frameInfo = (PyStackFrameInfo)userObject;
@@ -162,7 +163,7 @@ public class StackTracePanel extends SimpleToolWindowPanel implements Disposable
     final TreeState treeState = TreeState.createOn(myTree, rootNode);
     rootNode.removeAllChildren();
 
-    for(PyStackFrameInfo frame: frames) {
+    for (PyStackFrameInfo frame : frames) {
       DefaultMutableTreeNode frameNode = new DefaultMutableTreeNode(frame);
       rootNode.add(frameNode);
     }

@@ -39,5 +39,4 @@ public class PyConcurrencyService {
   public ConcurrencyGraphModel getAsyncioInstance() {
     return myAsyncioGraphModel;
   }
-
 }

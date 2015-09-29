@@ -59,7 +59,7 @@ public class ConcurrencyRenderingUtil {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     int paddingInsideBlock = 0;
-    for (ConcurrencyGraphBlock block: drawingElements) {
+    for (ConcurrencyGraphBlock block : drawingElements) {
       if (block != null) {
         if (row < block.elements.size()) {
           int padding = ConcurrencyGraphSettings.CELL_WIDTH * (externalPadding + paddingInsideBlock);
@@ -79,7 +79,7 @@ public class ConcurrencyRenderingUtil {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     int paddingInsideBlock = 0;
-    for (ConcurrencyGraphBlock block: drawingElements) {
+    for (ConcurrencyGraphBlock block : drawingElements) {
       int padding = ConcurrencyGraphSettings.CELL_WIDTH * (externalPadding + paddingInsideBlock);
       for (int j = 0; j < block.elements.size(); ++j) {
         ConcurrencyThreadState element = block.elements.get(j).threadState;

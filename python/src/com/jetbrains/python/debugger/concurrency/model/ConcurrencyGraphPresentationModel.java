@@ -112,7 +112,8 @@ public class ConcurrencyGraphPresentationModel {
       PyLockEvent lockEvent = (PyLockEvent)event;
       String lockId = lockEvent.getLockId();
       myGraphModel.setFilterLockId(lockId);
-    } else if (event.getType() == PyConcurrencyEvent.EventType.STOP) {
+    }
+    else if (event.getType() == PyConcurrencyEvent.EventType.STOP) {
       myGraphModel.setFilterLockId(null);
     }
   }
@@ -130,7 +131,7 @@ public class ConcurrencyGraphPresentationModel {
   public int getPadding() {
     int horizontalMax = visualSettings.getHorizontalMax();
     int horizontalValue = visualSettings.getHorizontalValue();
-    return horizontalMax == 0 ? horizontalValue: horizontalValue * getCellsNumber() / horizontalMax;
+    return horizontalMax == 0 ? horizontalValue : horizontalValue * getCellsNumber() / horizontalMax;
   }
 
   public void notifyListeners() {
@@ -138,9 +139,8 @@ public class ConcurrencyGraphPresentationModel {
     int horizontalValue = visualSettings.getHorizontalValue();
     synchronized (myListenersObject) {
       for (PresentationListener logListener : myListeners) {
-        logListener.graphChanged(horizontalMax == 0 ? horizontalValue: horizontalValue * getCellsNumber() / horizontalMax);
+        logListener.graphChanged(horizontalMax == 0 ? horizontalValue : horizontalValue * getCellsNumber() / horizontalMax);
       }
     }
   }
-
 }

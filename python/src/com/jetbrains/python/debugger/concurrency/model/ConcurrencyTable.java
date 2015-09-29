@@ -40,7 +40,7 @@ public class ConcurrencyTable extends JBTable {
     myPresentationModel = model;
     myPanel = panel;
     setModel(tableModel);
-    myRenderer = new ConcurrencyGraphCellRenderer(myPresentationModel, this);
+    myRenderer = new ConcurrencyGraphCellRenderer(myPresentationModel, this, myPanel);
     setDefaultRenderer(ConcurrencyTableUtil.GraphCell.class, myRenderer);
 
     addMouseListener(new MouseAdapter() {
@@ -48,10 +48,10 @@ public class ConcurrencyTable extends JBTable {
       public void mouseClicked(MouseEvent e) {
         Point cursorPoint = e.getPoint();
         myPresentationModel.setTimeCursor(cursorPoint.x);
-        int row = rowAtPoint(cursorPoint) >= 0? rowAtPoint(cursorPoint): getSelectedRow();
+        int row = rowAtPoint(cursorPoint) >= 0 ? rowAtPoint(cursorPoint) : getSelectedRow();
         if (row >= 0) {
           int eventIndex = getEventIndex(cursorPoint, row);
-          PyConcurrencyEvent event = eventIndex != -1? myPresentationModel.myGraphModel.getEventAt(eventIndex): null;
+          PyConcurrencyEvent event = eventIndex != -1 ? myPresentationModel.myGraphModel.getEventAt(eventIndex) : null;
           myPanel.showStackTrace(event);
         }
       }
@@ -60,7 +60,7 @@ public class ConcurrencyTable extends JBTable {
 
   private int getEventIndex(Point clickPoint, int row) {
     int index = ConcurrencyRenderingUtil.getElementIndex(myRenderer.getPadding(), myPresentationModel.getVisibleGraph(), clickPoint.x);
-    if (index != -1){
+    if (index != -1) {
       ArrayList<ConcurrencyGraphElement> elements = myPresentationModel.getVisibleGraph().get(index).elements;
       if (row < elements.size()) {
         return elements.get(row).eventIndex;
@@ -92,7 +92,7 @@ public class ConcurrencyTable extends JBTable {
     int rulerUnitWidth = ConcurrencyGraphSettings.CELL_WIDTH * myPresentationModel.visualSettings.getCellsPerRulerUnit();
 
     for (int i = 0; i < getWidth() / rulerUnitWidth; ++i) {
-      int markY = i % ConcurrencyGraphSettings.RULER_SUBUNITS_PER_UNIT == 0 ? y - ConcurrencyGraphSettings.RULER_UNIT_MARK:
+      int markY = i % ConcurrencyGraphSettings.RULER_SUBUNITS_PER_UNIT == 0 ? y - ConcurrencyGraphSettings.RULER_UNIT_MARK :
                   y - ConcurrencyGraphSettings.RULER_SUBUNIT_MARK;
       g.drawLine(i * rulerUnitWidth, markY, i * rulerUnitWidth, y);
       if ((i != 0) && (i % ConcurrencyGraphSettings.RULER_SUBUNITS_PER_UNIT == 0)) {

@@ -116,13 +116,13 @@ public class ConcurrencyGraphModel {
 
   public int getSize() {
     // we add a fake event with current time
-    return myLog.size() > 0? myLog.size() + 1: myLog.size();
+    return myLog.size() > 0 ? myLog.size() + 1 : myLog.size();
   }
 
   public String getStringRepresentation() {
     StringBuilder resultBuilder = new StringBuilder();
     resultBuilder.append("<html>Size: ").append(myLog.size()).append("<br>");
-    for (PyConcurrencyEvent event: myLog) {
+    for (PyConcurrencyEvent event : myLog) {
       resultBuilder.append(event.toString());
     }
     resultBuilder.append("</html>");
@@ -141,14 +141,17 @@ public class ConcurrencyGraphModel {
       if (event.isThreadEvent() && event.getType() == PyConcurrencyEvent.EventType.START) {
         ConcurrencyStat stat = new ConcurrencyStat(event.getTime());
         result.put(threadId, stat);
-      } else if (event.getType() == PyConcurrencyEvent.EventType.STOP) {
+      }
+      else if (event.getType() == PyConcurrencyEvent.EventType.STOP) {
         ConcurrencyStat stat = new ConcurrencyStat(event.getTime());
         stat.myFinishTime = event.getTime();
-      } else if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_BEGIN) {
+      }
+      else if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_BEGIN) {
         ConcurrencyStat stat = result.get(threadId);
         stat.myLockCount++;
         stat.myLastAcquireStartTime = event.getTime();
-      } else if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_END) {
+      }
+      else if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_END) {
         ConcurrencyStat stat = result.get(threadId);
         stat.myWaitTime += (event.getTime() - stat.myLastAcquireStartTime);
         stat.myLastAcquireStartTime = 0;
@@ -157,7 +160,7 @@ public class ConcurrencyGraphModel {
     PyConcurrencyEvent lastEvent = getEventAt(getSize() - 1);
     long lastTime = lastEvent.getTime();
     //set last time for stopping on a breakpoint
-    for (ConcurrencyStat stat: result.values()) {
+    for (ConcurrencyStat stat : result.values()) {
       if (stat.myFinishTime == 0) {
         stat.myFinishTime = lastTime;
       }
@@ -281,7 +284,7 @@ public class ConcurrencyGraphModel {
 
   public String getThreadIdByIndex(int index) {
     // terrible code! fix it!
-    for (Map.Entry<String, Integer> entry: threadIndexToId.entrySet()) {
+    for (Map.Entry<String, Integer> entry : threadIndexToId.entrySet()) {
       if (entry.getValue() == index) {
         return entry.getKey();
       }
@@ -370,7 +373,8 @@ public class ConcurrencyGraphModel {
           for (int j = 0; j < myCurrentMaxThread; ++j) {
             if (j != eventThreadIdInt) {
               myGraphScheme.get(i).add(j, myGraphScheme.get(i - 1).get(j));
-            } else {
+            }
+            else {
               myGraphScheme.get(i).add(eventThreadIdInt,
                                        getThreadStateForEvent(event, myGraphScheme.get(i - 1).get(eventThreadIdInt).threadState, i));
             }

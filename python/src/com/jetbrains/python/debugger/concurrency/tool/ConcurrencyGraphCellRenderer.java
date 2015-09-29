@@ -18,6 +18,7 @@ package com.jetbrains.python.debugger.concurrency.tool;
 
 import com.intellij.ui.ColoredTableCellRenderer;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
+import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyToolWindowPanel;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
@@ -28,10 +29,14 @@ public class ConcurrencyGraphCellRenderer extends ColoredTableCellRenderer {
   private int myRow;
   private int myPadding;
   private JTable myTable;
+  private ConcurrencyToolWindowPanel myPanel;
 
-  public ConcurrencyGraphCellRenderer(ConcurrencyGraphPresentationModel presentationModel, final JTable table) {
+  public ConcurrencyGraphCellRenderer(ConcurrencyGraphPresentationModel presentationModel,
+                                      final JTable table,
+                                      ConcurrencyToolWindowPanel panel) {
     myGraphPresentation = presentationModel;
     myTable = table;
+    myPanel = panel;
 
     myGraphPresentation.registerListener(new ConcurrencyGraphPresentationModel.PresentationListener() {
       @Override
@@ -55,7 +60,7 @@ public class ConcurrencyGraphCellRenderer extends ColoredTableCellRenderer {
   @Override
   protected void customizeCellRenderer(JTable table, @Nullable Object value, boolean selected, boolean hasFocus, int row, int column) {
     myRow = row;
-    int width = myGraphPresentation.getCellsNumber() * ConcurrencyGraphSettings.CELL_WIDTH;
+    int width = Math.max(myGraphPresentation.getCellsNumber() * ConcurrencyGraphSettings.CELL_WIDTH, myPanel.getGraphPaneWidth());
     table.getColumnModel().getColumn(column).setPreferredWidth(width);
     myPadding = myGraphPresentation.getPadding();
   }

@@ -27,6 +27,7 @@ public class ConcurrencyGraphSettings {
   public static int STROKE_BASIC = 2;
   public static int TABLE_ROW_HEIGHT = 20;
   public static int TIME_CURSOR_WIDTH = 1;
+  public static int NAMES_PANEL_WIDTH = 100;
 
   public static int RULER_STROKE_WIDTH = 1;
   public static Color RULER_COLOR = JBColor.BLACK;

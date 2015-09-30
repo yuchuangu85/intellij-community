@@ -46,10 +46,10 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   protected JLabel myLabel;
   protected StackTracePanel myStackTracePanel;
   protected JScrollPane myNamesPanel;
-  public JScrollPane tableScrollPane;
-  public JTable fixedTable;
-  public JTable graphTable;
-  public ActionToolbar toolbar;
+  private JScrollPane tableScrollPane;
+  private JTable myFixedTable;
+  private ActionToolbar myToolbar;
+  private JPanel myTablePanel;
 
   public ConcurrencyToolWindowPanel(boolean vertical, Project project, ConcurrencyGraphModel graphModel, String type) {
     super(vertical);
@@ -87,7 +87,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     group.add(new ScrollToTheEndToolbarAction(myPresentationModel));
 
     final ActionToolbar actionToolBar = ActionManager.getInstance().createActionToolbar("Toolbar", group, false);
-    toolbar = actionToolBar;
+    myToolbar = actionToolBar;
     final JPanel buttonsPanel = new JPanel(new BorderLayout());
     buttonsPanel.add(actionToolBar.getComponent(), BorderLayout.CENTER);
     return buttonsPanel;
@@ -195,8 +195,25 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     }
   }
 
+  public void setTableScrollPane(JScrollPane tableScrollPane) {
+    this.tableScrollPane = tableScrollPane;
+  }
+
+  public JScrollPane getTableScrollPane() {
+    return tableScrollPane;
+  }
+
+
+  public void setToolbar(ActionToolbar toolbar) {
+    this.myToolbar = toolbar;
+  }
+
+  public void setFixedTable(JTable fixedTable) {
+    this.myFixedTable = fixedTable;
+  }
+
   public int getGraphPaneWidth() {
-    return getWidth() - fixedTable.getWidth() - toolbar.getComponent().getWidth() - 3;
+    return getWidth() - myFixedTable.getWidth() - myToolbar.getComponent().getWidth() - 3;
   }
 
   public void showStackTrace(@Nullable PyConcurrencyEvent event) {
@@ -214,7 +231,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   public void splitWindow(JComponent component) {
     removeAll();
     JSplitPane graphPanel = new JSplitPane(JSplitPane.VERTICAL_SPLIT, true);
-    graphPanel.add(tableScrollPane, JSplitPane.LEFT);
+    graphPanel.add(myTablePanel, JSplitPane.LEFT);
     graphPanel.add(component, JSplitPane.RIGHT);
     graphPanel.setDividerLocation(getHeight() * 2 / 3);
     graphPanel.setDividerSize(myPresentationModel.visualSettings.getDividerWidth());
@@ -225,8 +242,8 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   }
 
   private void initTable() {
-    tableScrollPane = ConcurrencyTableUtil.createTables(myGraphModel, myPresentationModel, this);
-    add(tableScrollPane);
+    myTablePanel = ConcurrencyTableUtil.createTables(myGraphModel, myPresentationModel, this);
+    add(myTablePanel);
 
     AdjustmentListener listener = new GraphAdjustmentListener();
     tableScrollPane.getHorizontalScrollBar().addAdjustmentListener(listener);
@@ -237,13 +254,13 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     if (myGraphModel.getSize() == 0) {
       myPresentationModel.visualSettings.setNamesPanelWidth(myNamesPanel == null ? myPresentationModel.visualSettings.getNamesPanelWidth() :
                                                             myNamesPanel.getWidth());
-      tableScrollPane = null;
+      myTablePanel = null;
       myStackTracePanel = null;
       initMessage();
       return;
     }
 
-    if (tableScrollPane == null) {
+    if (myTablePanel == null) {
       myLabel.setVisible(false);
       initTable();
       setToolbar(createToolbarPanel());

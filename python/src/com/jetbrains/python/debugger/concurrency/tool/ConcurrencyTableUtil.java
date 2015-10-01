@@ -16,17 +16,14 @@
 package com.jetbrains.python.debugger.concurrency.tool;
 
 import com.intellij.ui.ScrollPaneFactory;
-import com.intellij.ui.components.JBViewport;
 import com.intellij.ui.table.JBTable;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphVisualSettings;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyTable;
 import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyToolWindowPanel;
-import javafx.scene.layout.Border;
 
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import javax.swing.table.AbstractTableModel;
 import java.awt.*;
 
@@ -120,7 +117,7 @@ public class ConcurrencyTableUtil {
 
     @Override
     public String getColumnName(int column) {
-      return "Waiting time";
+      return "Waiting time (s)";
     }
 
     @Override
@@ -130,7 +127,10 @@ public class ConcurrencyTableUtil {
 
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
-      return "0";
+      String threadId = myGraphModel.getThreadIdByIndex(rowIndex);
+      ConcurrencyStat threadStatistics = myGraphModel.getStatisticsByThreadId(threadId);
+      return String.format("%.2f (%d%%)", (double)threadStatistics.getWaitTime() / 1000000, // convert to seconds
+                           threadStatistics.getWaitTime() * 100 / threadStatistics.getWorkTime()); // convert to percents
     }
   }
 
@@ -142,7 +142,7 @@ public class ConcurrencyTableUtil {
   }
 
   public static JPanel createTables(ConcurrencyGraphModel graphModel, ConcurrencyGraphPresentationModel presentationModel,
-                                         ConcurrencyToolWindowPanel toolWindow) {
+                                    ConcurrencyToolWindowPanel toolWindow) {
     JPanel tablePanel = new JPanel(new BorderLayout());
 
     JBTable fixedTable = new JBTable(new FixedTableModel(graphModel));
@@ -165,6 +165,7 @@ public class ConcurrencyTableUtil {
     JBTable statTable = new JBTable(new StatTableModel(graphModel));
     setTableSettings(statTable);
     statTable.setSelectionModel(graphTable.getSelectionModel());
+    toolWindow.setStatTable(statTable);
     JScrollPane statScrollPane = ScrollPaneFactory.createScrollPane(statTable);
     statScrollPane.setPreferredSize(new Dimension(ConcurrencyGraphSettings.NAMES_PANEL_WIDTH, toolWindow.getHeight()));
     statScrollPane.setBorder(BorderFactory.createEmptyBorder());

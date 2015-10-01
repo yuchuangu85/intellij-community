@@ -53,6 +53,8 @@ public class ConcurrencyGraphModel {
   private long myTimerPeriod = 10; //millis
   private int myTimeCursor; //px
   private boolean myLastSessionStopped;
+  private HashMap<String, ConcurrencyStat> myStatInfo;
+  private int myLastEventForStat;
 
   public ConcurrencyGraphModel(Project project) {
     myProject = project;
@@ -134,39 +136,34 @@ public class ConcurrencyGraphModel {
     return myStartTime;
   }
 
-  public java.util.HashMap getStatistics() {
-    java.util.HashMap<String, ConcurrencyStat> result = new java.util.HashMap<String, ConcurrencyStat>();
-    for (int i = 0; i < getSize(); ++i) {
-      PyConcurrencyEvent event = getEventAt(i);
-      String threadId = event.getThreadName();
-      if (event.isThreadEvent() && event.getType() == PyConcurrencyEvent.EventType.START) {
-        ConcurrencyStat stat = new ConcurrencyStat(event.getTime());
-        result.put(threadId, stat);
-      }
-      else if (event.getType() == PyConcurrencyEvent.EventType.STOP) {
-        ConcurrencyStat stat = new ConcurrencyStat(event.getTime());
-        stat.myFinishTime = event.getTime();
-      }
-      else if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_BEGIN) {
-        ConcurrencyStat stat = result.get(threadId);
-        stat.myLockCount++;
-        stat.myLastAcquireStartTime = event.getTime();
-      }
-      else if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_END) {
-        ConcurrencyStat stat = result.get(threadId);
-        stat.myWaitTime += (event.getTime() - stat.myLastAcquireStartTime);
-        stat.myLastAcquireStartTime = 0;
-      }
-    }
-    PyConcurrencyEvent lastEvent = getEventAt(getSize() - 1);
-    long lastTime = lastEvent.getTime();
-    //set last time for stopping on a breakpoint
-    for (ConcurrencyStat stat : result.values()) {
-      if (stat.myFinishTime == 0) {
-        stat.myFinishTime = lastTime;
-      }
+  public ConcurrencyStat getStatisticsByThreadId(String threadId) {
+    ConcurrencyStat result = myStatInfo.get(threadId);
+    if (result.getFinishTime() == 0) {
+      result.setPauseTime(getEventAt(getSize() - 1).getTime());
     }
     return result;
+  }
+
+  private void updateStatistics() {
+    for (int i = myLastEventForStat; i < getSize(); ++i) {
+      PyConcurrencyEvent event = getEventAt(i);
+      String threadId = event.getThreadId();
+      if (event.isThreadEvent() && event.getType() == PyConcurrencyEvent.EventType.START) {
+        ConcurrencyStat stat = new ConcurrencyStat(event.getTime());
+        myStatInfo.put(threadId, stat);
+      }
+      else if (event.getType() == PyConcurrencyEvent.EventType.STOP) {
+        myStatInfo.get(threadId).setFinishTime(event.getTime());
+      }
+      else if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_BEGIN) {
+        myStatInfo.get(threadId).setLastAcquireStartTime(event.getTime());
+      }
+      else if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_END) {
+        ConcurrencyStat stat = myStatInfo.get(threadId);
+        stat.incWaitTime(event.getTime() - stat.getLastAcquireStartTime());
+        stat.setLastAcquireStartTime(0);
+      }
+    }
   }
 
   public int getMaxThread() {
@@ -339,6 +336,8 @@ public class ConcurrencyGraphModel {
       relations = new HashMap<Integer, Point>();
       myLastSessionStopped = false;
       myTimeCursor = 0;
+      myStatInfo = new HashMap<String, ConcurrencyStat>();
+      myLastEventForStat = 0;
       startTimer();
       notifyListeners();
     }
@@ -401,6 +400,7 @@ public class ConcurrencyGraphModel {
         }
         myThreadCountForRow.add(i, myCurrentMaxThread);
       }
+      updateStatistics();
     }
   }
 }

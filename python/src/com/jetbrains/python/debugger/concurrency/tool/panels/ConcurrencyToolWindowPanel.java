@@ -26,7 +26,6 @@ import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyStackFrameInfo;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStatisticsTable;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyTableUtil;
 import com.sun.istack.internal.Nullable;
 import org.jetbrains.annotations.NotNull;
@@ -48,6 +47,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   protected JScrollPane myNamesPanel;
   private JScrollPane tableScrollPane;
   private JTable myFixedTable;
+  private JTable myStatTable;
   private ActionToolbar myToolbar;
   private JPanel myTablePanel;
 
@@ -81,7 +81,6 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
 
   protected JPanel createToolbarPanel() {
     final DefaultActionGroup group = new DefaultActionGroup();
-    group.add(new StatisticsAction());
     group.add(new ZoomInAction());
     group.add(new ZoomOutAction());
     group.add(new ScrollToTheEndToolbarAction(myPresentationModel));
@@ -116,26 +115,6 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     }
   }
 
-  private class StatisticsAction extends AnAction implements DumbAware {
-    public StatisticsAction() {
-      super("Statistical info", "Show " + myType + " statistics", AllIcons.ToolbarDecorator.Analyze);
-    }
-
-    @Override
-    public void actionPerformed(AnActionEvent e) {
-      final ConcurrencyGraphModel graphModel = myGraphModel;
-      UIUtil.invokeLaterIfNeeded(new Runnable() {
-        @Override
-        public void run() {
-          ConcurrencyStatisticsTable frame = new ConcurrencyStatisticsTable(graphModel);
-          frame.pack();
-          frame.setLocationRelativeTo(null);
-          frame.setVisible(true);
-        }
-      });
-    }
-  }
-
   private class ZoomInAction extends AnAction implements DumbAware {
     public ZoomInAction() {
       super("Zoom In", "Zoom In", AllIcons.Graph.ZoomIn);
@@ -159,7 +138,6 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
 
     @Override
     public void actionPerformed(AnActionEvent e) {
-      final ConcurrencyGraphModel graphModel = myGraphModel;
       UIUtil.invokeLaterIfNeeded(new Runnable() {
         @Override
         public void run() {
@@ -193,6 +171,14 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
         myPresentationModel.visualSettings.updateVerticalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
     }
+  }
+
+  public JTable getStatTable() {
+    return myStatTable;
+  }
+
+  public void setStatTable(JTable statTable) {
+    myStatTable = statTable;
   }
 
   public void setTableScrollPane(JScrollPane tableScrollPane) {

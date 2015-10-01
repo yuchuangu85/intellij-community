@@ -61,11 +61,12 @@ public class ConcurrencyGraphVisualSettings {
   }
 
   public void scrollToTheEnd() {
-    if (myPresentationModel.toolWindowPanel.getTableScrollPane() != null) {
+    if (myPresentationModel.getToolWindowPanel().getTableScrollPane() != null) {
       UIUtil.invokeLaterIfNeeded(new Runnable() {
         @Override
         public void run() {
-          myPresentationModel.toolWindowPanel.getTableScrollPane().getHorizontalScrollBar().setValue(myHorizontalMax - myHorizontalExtent);
+          myPresentationModel.getToolWindowPanel().getTableScrollPane().getHorizontalScrollBar().
+            setValue(myHorizontalMax - myHorizontalExtent);
         }
       });
     }

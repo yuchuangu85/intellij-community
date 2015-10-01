@@ -15,19 +15,22 @@
  */
 package com.jetbrains.python.debugger.concurrency.model;
 
+import com.intellij.util.ui.UIUtil;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyLockEvent;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyToolWindowPanel;
 import org.jetbrains.annotations.NotNull;
 
+import javax.swing.*;
+import javax.swing.table.AbstractTableModel;
 import java.util.ArrayList;
 import java.util.List;
 
 public class ConcurrencyGraphPresentationModel {
   public ConcurrencyGraphModel graphModel;
   public ConcurrencyGraphVisualSettings visualSettings;
-  public ConcurrencyToolWindowPanel toolWindowPanel;
+  private ConcurrencyToolWindowPanel myToolWindowPanel;
   private List<PresentationListener> myListeners = new ArrayList<PresentationListener>();
   private final Object myListenersObject = new Object();
   private ArrayList<ConcurrencyGraphBlock> myVisibleGraph;
@@ -37,7 +40,7 @@ public class ConcurrencyGraphPresentationModel {
   public ConcurrencyGraphPresentationModel(final ConcurrencyGraphModel graphModel, ConcurrencyToolWindowPanel panel) {
     this.graphModel = graphModel;
     visualSettings = new ConcurrencyGraphVisualSettings(this);
-    toolWindowPanel = panel;
+    myToolWindowPanel = panel;
 
     this.graphModel.registerListener(new ConcurrencyGraphModel.GraphListener() {
       @Override
@@ -45,6 +48,15 @@ public class ConcurrencyGraphPresentationModel {
         if (myScrollToTheEnd) {
           visualSettings.scrollToTheEnd();
         }
+        UIUtil.invokeLaterIfNeeded(new Runnable() {
+          @Override
+          public void run() {
+            JTable table = myToolWindowPanel.getStatTable();
+            if (table != null) {
+              ((AbstractTableModel)table.getModel()).fireTableDataChanged();
+            }
+          }
+        });
         updateGraphModel();
         notifyListeners();
       }
@@ -63,6 +75,10 @@ public class ConcurrencyGraphPresentationModel {
 
   public void updateTimerPeriod() {
     graphModel.setTimerPeriod(visualSettings.getCellsPerRulerUnit() * visualSettings.getMicrosecsPerCell() / 1000);
+  }
+
+  public ConcurrencyToolWindowPanel getToolWindowPanel() {
+    return myToolWindowPanel;
   }
 
   public void updateGraphModel() {

@@ -16,17 +16,53 @@
 package com.jetbrains.python.debugger.concurrency.tool;
 
 public class ConcurrencyStat {
-  public long myStartTime;
-  public long myFinishTime;
-  public int myLockCount;
-  public long myLastAcquireStartTime;
-  public long myWaitTime;
+  private long myStartTime;
+  private long myFinishTime;
+  private long myPauseTime;
+  private long myLastAcquireStartTime;
+  private long myWaitTime;
 
   public ConcurrencyStat(long startTime) {
     myStartTime = startTime;
   }
 
+  public void setPauseTime(long pauseTime) {
+    myPauseTime = pauseTime;
+  }
+
+  public long getStartTime() {
+    return myStartTime;
+  }
+
+  public void setStartTime(long startTime) {
+    myStartTime = startTime;
+  }
+
+  public long getFinishTime() {
+    return myFinishTime;
+  }
+
+  public void setFinishTime(long finishTime) {
+    myFinishTime = finishTime;
+  }
+
+  public long getLastAcquireStartTime() {
+    return myLastAcquireStartTime;
+  }
+
+  public void setLastAcquireStartTime(long lastAcquireStartTime) {
+    myLastAcquireStartTime = lastAcquireStartTime;
+  }
+
+  public long getWaitTime() {
+    return myLastAcquireStartTime != 0 ? myWaitTime + (myPauseTime - myLastAcquireStartTime) : myWaitTime;
+  }
+
+  public void incWaitTime(long timePeriod) {
+    myWaitTime += timePeriod;
+  }
+
   public long getWorkTime() {
-    return myFinishTime - myStartTime;
+    return myFinishTime == 0 ? myPauseTime - myStartTime : myFinishTime - myStartTime;
   }
 }

@@ -199,7 +199,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   }
 
   public int getGraphPaneWidth() {
-    return getWidth() - myFixedTable.getWidth() - myToolbar.getComponent().getWidth() - 3;
+    return getWidth() - myFixedTable.getWidth() - myStatTable.getWidth() - myToolbar.getComponent().getWidth() - 3;
   }
 
   public void showStackTrace(@Nullable PyConcurrencyEvent event) {

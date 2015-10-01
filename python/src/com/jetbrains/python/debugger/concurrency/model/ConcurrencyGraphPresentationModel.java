@@ -74,7 +74,9 @@ public class ConcurrencyGraphPresentationModel {
   }
 
   public void updateTimerPeriod() {
-    graphModel.setTimerPeriod(visualSettings.getCellsPerRulerUnit() * visualSettings.getMicrosecsPerCell() / 1000);
+    int rulerUnitWidth = ConcurrencyGraphSettings.CELL_WIDTH * visualSettings.getCellsPerRulerUnit();
+    graphModel.setTimerPeriod(visualSettings.getCellsPerRulerUnit() * visualSettings.getMicrosecsPerCell() /
+                              (rulerUnitWidth * 1000)); //convert from mcs to millis
   }
 
   public ConcurrencyToolWindowPanel getToolWindowPanel() {

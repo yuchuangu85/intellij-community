@@ -19,7 +19,7 @@ import com.intellij.util.ui.UIUtil;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
 
 public class ConcurrencyGraphVisualSettings {
-  private int myMicrosecsPerCell = 1000;
+  private int myMicrosecsPerCell = 10000;
   private int myHorizontalValue;
   private int myHorizontalExtent;
   private int myHorizontalMax;

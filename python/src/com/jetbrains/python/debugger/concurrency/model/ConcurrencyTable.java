@@ -70,7 +70,7 @@ public class ConcurrencyTable extends JBTable {
   }
 
   private void drawTimeCursor(@NotNull Graphics g) {
-    int cursorPosition = Math.max(0, myPresentationModel.getCellsNumber() * ConcurrencyGraphSettings.CELL_WIDTH - 2);
+    int cursorPosition = Math.max(0, myPresentationModel.getCellsNumber() * ConcurrencyGraphSettings.CELL_WIDTH);
     if (myPresentationModel.graphModel.getTimeCursor() > 0) {
       cursorPosition = myPresentationModel.graphModel.getTimeCursor();
     }

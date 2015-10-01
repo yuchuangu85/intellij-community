@@ -15,6 +15,7 @@
  */
 package com.jetbrains.python.debugger.concurrency.tool;
 
+import com.intellij.ui.JBColor;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.table.JBTable;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
@@ -158,7 +159,7 @@ public class ConcurrencyTableUtil {
     graphTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
     graphTable.setSelectionModel(fixedTable.getSelectionModel());
     JScrollPane graphScrollPane = ScrollPaneFactory.createScrollPane(graphTable);
-    graphScrollPane.setBorder(BorderFactory.createEmptyBorder());
+    graphScrollPane.setBorder(BorderFactory.createLineBorder(JBColor.border()));
     toolWindow.setTableScrollPane(graphScrollPane);
     tablePanel.add(graphScrollPane, BorderLayout.CENTER);
 

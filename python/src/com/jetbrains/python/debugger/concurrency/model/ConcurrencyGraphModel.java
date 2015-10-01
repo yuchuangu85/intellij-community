@@ -26,6 +26,7 @@ import com.jetbrains.python.debugger.PyThreadEvent;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphAnalyser;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyStat;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
 import java.util.*;
@@ -258,8 +259,13 @@ public class ConcurrencyGraphModel {
     relations.put(index, new Point(parent, child));
   }
 
+  @Nullable
   public Point getRelationForRow(int row) {
-    return relations.get(row);
+    Point relation = relations.get(row);
+    if ((relation == null) || (relation.x == 0) && (relation.y == 0)) {
+      return null;
+    }
+    return relation;
   }
 
   public interface GraphListener {
@@ -278,6 +284,10 @@ public class ConcurrencyGraphModel {
         logListener.graphChanged();
       }
     }
+  }
+
+  public ConcurrencyThreadState getThreadStateForEvent(int eventId, int threadIndex) {
+    return myGraphScheme.get(eventId).get(threadIndex).threadState;
   }
 
   public String getThreadIdByIndex(int index) {

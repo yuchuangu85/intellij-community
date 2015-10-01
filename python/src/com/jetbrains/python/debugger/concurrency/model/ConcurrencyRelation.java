@@ -15,14 +15,36 @@
  */
 package com.jetbrains.python.debugger.concurrency.model;
 
-import java.util.ArrayList;
+/**
+ * Created by user on 10/1/15.
+ */
+public class ConcurrencyRelation {
+  private int myPadding;
+  private int myParent;
+  private int myChild;
+  private ConcurrencyThreadState myThreadState;
 
-public class ConcurrencyGraphBlock {
-  public ArrayList<ConcurrencyGraphElement> elements;
-  public int numberOfCells;
+  public ConcurrencyRelation(int padding, int parent, int child, ConcurrencyThreadState threadState) {
+    myPadding = padding;
+    myParent = parent;
+    myChild = child;
+    myThreadState = threadState;
+  }
 
-  public ConcurrencyGraphBlock(ArrayList<ConcurrencyGraphElement> elements, int numberOfCells) {
-    this.elements = elements;
-    this.numberOfCells = numberOfCells;
+  public int getPadding() {
+    return myPadding;
+  }
+
+  public int getParent() {
+    return myParent;
+  }
+
+  public int getChild() {
+    return myChild;
+  }
+
+  public ConcurrencyThreadState getThreadState() {
+    return myThreadState;
   }
 }
+

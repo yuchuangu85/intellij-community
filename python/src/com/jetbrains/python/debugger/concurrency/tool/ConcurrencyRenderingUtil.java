@@ -16,6 +16,7 @@
 package com.jetbrains.python.debugger.concurrency.tool;
 
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphBlock;
+import com.jetbrains.python.debugger.concurrency.model.ConcurrencyRelation;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
 
 import java.awt.*;
@@ -89,19 +90,20 @@ public class ConcurrencyRenderingUtil {
                       (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * j + ConcurrencyGraphSettings.INTERVAL,
                       ConcurrencyGraphSettings.CELL_WIDTH * block.numberOfCells, ConcurrencyGraphSettings.CELL_HEIGHT);
         }
-        if (block.relation != null) {
-          int parent = block.relation.x;
-          int child = block.relation.y;
-          if ((parent != 0) || (child != 0)) {
-            prepareStroke(g, block.elements.get(parent).threadState);
-            g2.drawLine(padding, (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * parent +
-                                 ConcurrencyGraphSettings.INTERVAL + ConcurrencyGraphSettings.STROKE_BASIC,
-                        padding, (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * (child + 1) -
-                                 ConcurrencyGraphSettings.STROKE_BASIC);
-          }
-        }
       }
       paddingInsideBlock += block.numberOfCells;
+    }
+  }
+
+  public static void paintRelations(Graphics g, int externalPadding, ArrayList<ConcurrencyRelation> relations) {
+    for (ConcurrencyRelation relation : relations) {
+      prepareStroke(g, relation.getThreadState());
+      Graphics2D g2 = (Graphics2D)g;
+      int padding = externalPadding + relation.getPadding() * ConcurrencyGraphSettings.CELL_WIDTH;
+      g2.drawLine(padding, (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * relation.getParent() +
+                           ConcurrencyGraphSettings.INTERVAL / 2 + ConcurrencyGraphSettings.STROKE_BASIC - relation.getParent(),
+                  padding, (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * (relation.getChild() + 1) -
+                           ConcurrencyGraphSettings.INTERVAL / 2 - ConcurrencyGraphSettings.STROKE_BASIC + 1);
     }
   }
 

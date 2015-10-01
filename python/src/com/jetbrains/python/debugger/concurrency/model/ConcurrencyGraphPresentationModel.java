@@ -24,6 +24,7 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
+import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -35,6 +36,7 @@ public class ConcurrencyGraphPresentationModel {
   private final Object myListenersObject = new Object();
   private ArrayList<ConcurrencyGraphBlock> myVisibleGraph;
   private final Object myVisibleGraphObject = new Object();
+  private ArrayList<ConcurrencyRelation> myRelations;
   private boolean myScrollToTheEnd = true;
 
   public ConcurrencyGraphPresentationModel(final ConcurrencyGraphModel graphModel, ConcurrencyToolWindowPanel panel) {
@@ -97,6 +99,10 @@ public class ConcurrencyGraphPresentationModel {
     return time - (time % millisPerCell);
   }
 
+  public ArrayList<ConcurrencyRelation> getRelations() {
+    return myRelations;
+  }
+
   private void updateVisibleGraph() {
     synchronized (myVisibleGraphObject) {
       if ((visualSettings.getHorizontalMax() == 0) || (graphModel.getSize() == 0)) {
@@ -106,18 +112,22 @@ public class ConcurrencyGraphPresentationModel {
       long startTime = roundForCell(visualSettings.getHorizontalValue() * graphModel.getDuration() /
                                     visualSettings.getHorizontalMax());
       myVisibleGraph = new ArrayList<ConcurrencyGraphBlock>();
+      myRelations = new ArrayList<ConcurrencyRelation>();
       int curEventId = graphModel.getLastEventIndexBeforeMoment(startTime);
       long curTime, nextTime = startTime;
       int i = 0;
       int numberOfCells = visualSettings.getHorizontalExtent() / ConcurrencyGraphSettings.CELL_WIDTH + 2;
       while ((i < numberOfCells) && (curEventId < graphModel.getSize() - 1)) {
         curTime = nextTime;
+        Point relation = graphModel.getRelationForRow(curEventId);
+        if (relation != null) {
+          myRelations.add(new ConcurrencyRelation(i, relation.x, relation.y, graphModel.getThreadStateForEvent(curEventId, relation.x)));
+        }
         nextTime = roundForCell(graphModel.getEventAt(curEventId + 1).getTime());
         long period = nextTime - curTime;
         int cellsInPeriod = (int)(period / visualSettings.getMicrosecsPerCell());
         if (cellsInPeriod != 0) {
-          myVisibleGraph.add(new ConcurrencyGraphBlock(graphModel.getDrawElementsForRow(curEventId),
-                                                       cellsInPeriod, graphModel.getRelationForRow(curEventId)));
+          myVisibleGraph.add(new ConcurrencyGraphBlock(graphModel.getDrawElementsForRow(curEventId), cellsInPeriod));
           i += cellsInPeriod;
         }
         curEventId += 1;

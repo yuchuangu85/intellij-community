@@ -106,9 +106,15 @@ public class ConcurrencyTable extends JBTable {
     }
   }
 
+  private void painRelations(@NotNull Graphics g) {
+    // we have to draw relations upon the table in order to draw over the horizontal lines
+    ConcurrencyRenderingUtil.paintRelations(g, myPresentationModel.getPadding(), myPresentationModel.getRelations());
+  }
+
   @Override
   protected void paintComponent(@NotNull Graphics g) {
     super.paintComponent(g);
+    painRelations(g);
     paintRuler(g);
     drawTimeCursor(g);
   }

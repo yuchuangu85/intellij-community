@@ -219,7 +219,9 @@ public class ConcurrencyGraphModel {
   }
 
   public ArrayList<ConcurrencyGraphElement> getDrawElementsForRow(int row) {
-    return new ArrayList<ConcurrencyGraphElement>(myGraphScheme.get(row));
+    synchronized (myUpdateObject) {
+      return new ArrayList<ConcurrencyGraphElement>(myGraphScheme.get(row));
+    }
   }
 
   private ConcurrencyGraphElement getThreadStateForEvent(PyConcurrencyEvent event, ConcurrencyThreadState threadState, int index) {

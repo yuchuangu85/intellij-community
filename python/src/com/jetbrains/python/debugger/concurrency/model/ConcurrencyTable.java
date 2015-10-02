@@ -90,8 +90,9 @@ public class ConcurrencyTable extends JBTable {
     g.drawLine(0, y, getWidth(), y);
     FontMetrics metrics = g.getFontMetrics(getFont());
     int rulerUnitWidth = ConcurrencyGraphSettings.CELL_WIDTH * myPresentationModel.getVisualSettings().getCellsPerRulerUnit();
-
-    for (int i = 0; i < getWidth() / rulerUnitWidth; ++i) {
+    int horizontalValue = myPresentationModel.getVisualSettings().getHorizontalValue();
+    for (int i = horizontalValue / rulerUnitWidth;
+         i < (horizontalValue + myPresentationModel.getVisualSettings().getHorizontalExtent()) / rulerUnitWidth; ++i) {
       int markY = i % ConcurrencyGraphSettings.RULER_SUBUNITS_PER_UNIT == 0 ? y - ConcurrencyGraphSettings.RULER_UNIT_MARK :
                   y - ConcurrencyGraphSettings.RULER_SUBUNIT_MARK;
       g.drawLine(i * rulerUnitWidth, markY, i * rulerUnitWidth, y);

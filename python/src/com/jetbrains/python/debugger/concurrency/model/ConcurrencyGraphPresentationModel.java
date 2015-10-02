@@ -171,17 +171,13 @@ public class ConcurrencyGraphPresentationModel {
   }
 
   public int getPadding() {
-    int horizontalMax = visualSettings.getHorizontalMax();
-    int horizontalValue = visualSettings.getHorizontalValue();
-    return horizontalMax == 0 ? horizontalValue : horizontalValue * getCellsNumber() / horizontalMax;
+    return visualSettings.getHorizontalValue();
   }
 
   public void notifyListeners() {
-    int horizontalMax = visualSettings.getHorizontalMax();
-    int horizontalValue = visualSettings.getHorizontalValue();
     synchronized (myListenersObject) {
       for (PresentationListener logListener : myListeners) {
-        logListener.graphChanged(horizontalMax == 0 ? horizontalValue : horizontalValue * getCellsNumber() / horizontalMax);
+        logListener.graphChanged(getPadding());
       }
     }
   }

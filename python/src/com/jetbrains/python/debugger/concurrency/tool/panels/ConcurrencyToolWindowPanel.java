@@ -125,7 +125,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
       UIUtil.invokeLaterIfNeeded(new Runnable() {
         @Override
         public void run() {
-          myPresentationModel.visualSettings.zoomIn();
+          myPresentationModel.getVisualSettings().zoomIn();
         }
       });
     }
@@ -141,7 +141,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
       UIUtil.invokeLaterIfNeeded(new Runnable() {
         @Override
         public void run() {
-          myPresentationModel.visualSettings.zoomOut();
+          myPresentationModel.getVisualSettings().zoomOut();
         }
       });
     }
@@ -164,11 +164,11 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
       int orient = source.getOrientation();
       if (orient == Adjustable.HORIZONTAL) {
         JScrollBar bar = tableScrollPane.getHorizontalScrollBar();
-        myPresentationModel.visualSettings.updateHorizontalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
+        myPresentationModel.getVisualSettings().updateHorizontalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
       if (orient == Adjustable.VERTICAL) {
         JScrollBar bar = tableScrollPane.getVerticalScrollBar();
-        myPresentationModel.visualSettings.updateVerticalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
+        myPresentationModel.getVisualSettings().updateVerticalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
     }
   }
@@ -220,7 +220,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     graphPanel.add(myTablePanel, JSplitPane.LEFT);
     graphPanel.add(component, JSplitPane.RIGHT);
     graphPanel.setDividerLocation(getHeight() * 2 / 3);
-    graphPanel.setDividerSize(myPresentationModel.visualSettings.getDividerWidth());
+    graphPanel.setDividerSize(myPresentationModel.getVisualSettings().getDividerWidth());
     add(graphPanel, BorderLayout.CENTER);
     setToolbar(createToolbarPanel());
     validate();
@@ -238,8 +238,9 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
 
   public void updateContent() {
     if (myGraphModel.getSize() == 0) {
-      myPresentationModel.visualSettings.setNamesPanelWidth(myNamesPanel == null ? myPresentationModel.visualSettings.getNamesPanelWidth() :
-                                                            myNamesPanel.getWidth());
+      myPresentationModel.getVisualSettings().setNamesPanelWidth(myNamesPanel == null ?
+                                                                 myPresentationModel.getVisualSettings().getNamesPanelWidth() :
+                                                                 myNamesPanel.getWidth());
       myTablePanel = null;
       myStackTracePanel = null;
       initMessage();

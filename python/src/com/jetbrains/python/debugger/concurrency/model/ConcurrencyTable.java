@@ -47,11 +47,11 @@ public class ConcurrencyTable extends JBTable {
       @Override
       public void mouseClicked(MouseEvent e) {
         Point cursorPoint = e.getPoint();
-        myPresentationModel.graphModel.setTimeCursor(cursorPoint.x);
+        myPresentationModel.getGraphModel().setTimeCursor(cursorPoint.x);
         int row = rowAtPoint(cursorPoint) >= 0 ? rowAtPoint(cursorPoint) : getSelectedRow();
         if (row >= 0) {
           int eventIndex = getEventIndex(cursorPoint, row);
-          PyConcurrencyEvent event = eventIndex != -1 ? myPresentationModel.graphModel.getEventAt(eventIndex) : null;
+          PyConcurrencyEvent event = eventIndex != -1 ? myPresentationModel.getGraphModel().getEventAt(eventIndex) : null;
           myPanel.showStackTrace(event);
         }
       }
@@ -71,13 +71,13 @@ public class ConcurrencyTable extends JBTable {
 
   private void drawTimeCursor(@NotNull Graphics g) {
     int cursorPosition = Math.max(0, myPresentationModel.getCellsNumber() * ConcurrencyGraphSettings.CELL_WIDTH);
-    if (myPresentationModel.graphModel.getTimeCursor() > 0) {
-      cursorPosition = myPresentationModel.graphModel.getTimeCursor();
+    if (myPresentationModel.getGraphModel().getTimeCursor() > 0) {
+      cursorPosition = myPresentationModel.getGraphModel().getTimeCursor();
     }
     Graphics2D g2 = (Graphics2D)g;
     g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.TIME_CURSOR_WIDTH));
     g2.setColor(ConcurrencyGraphSettings.TIME_CURSOR_COLOR);
-    g2.drawLine(cursorPosition, 0, cursorPosition, myPresentationModel.visualSettings.getVerticalMax());
+    g2.drawLine(cursorPosition, 0, cursorPosition, myPresentationModel.getVisualSettings().getVerticalMax());
     repaint();
   }
 
@@ -85,19 +85,19 @@ public class ConcurrencyTable extends JBTable {
     Graphics2D g2 = (Graphics2D)g;
     g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.RULER_STROKE_WIDTH));
     g2.setColor(ConcurrencyGraphSettings.RULER_COLOR);
-    ConcurrencyGraphVisualSettings settings = myPresentationModel.visualSettings;
+    ConcurrencyGraphVisualSettings settings = myPresentationModel.getVisualSettings();
     int y = settings.getVerticalValue() + settings.getVerticalExtent() - ConcurrencyGraphSettings.RULER_STROKE_WIDTH;
     g.drawLine(0, y, getWidth(), y);
     FontMetrics metrics = g.getFontMetrics(getFont());
-    int rulerUnitWidth = ConcurrencyGraphSettings.CELL_WIDTH * myPresentationModel.visualSettings.getCellsPerRulerUnit();
+    int rulerUnitWidth = ConcurrencyGraphSettings.CELL_WIDTH * myPresentationModel.getVisualSettings().getCellsPerRulerUnit();
 
     for (int i = 0; i < getWidth() / rulerUnitWidth; ++i) {
       int markY = i % ConcurrencyGraphSettings.RULER_SUBUNITS_PER_UNIT == 0 ? y - ConcurrencyGraphSettings.RULER_UNIT_MARK :
                   y - ConcurrencyGraphSettings.RULER_SUBUNIT_MARK;
       g.drawLine(i * rulerUnitWidth, markY, i * rulerUnitWidth, y);
       if ((i != 0) && (i % ConcurrencyGraphSettings.RULER_SUBUNITS_PER_UNIT == 0)) {
-        int ms = myPresentationModel.visualSettings.getMicrosecsPerCell() *
-                 myPresentationModel.visualSettings.getCellsPerRulerUnit() * i / 1000;
+        int ms = myPresentationModel.getVisualSettings().getMicrosecsPerCell() *
+                 myPresentationModel.getVisualSettings().getCellsPerRulerUnit() * i / 1000;
         String text = String.format("%.2f s", ms / 1000f);
         int textWidth = metrics.stringWidth(text);
         int textHeight = metrics.getHeight();

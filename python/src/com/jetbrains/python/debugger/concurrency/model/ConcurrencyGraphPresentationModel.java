@@ -29,8 +29,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ConcurrencyGraphPresentationModel {
-  public ConcurrencyGraphModel graphModel;
-  public ConcurrencyGraphVisualSettings visualSettings;
+  private ConcurrencyGraphModel graphModel;
+  private ConcurrencyGraphVisualSettings visualSettings;
   private ConcurrencyToolWindowPanel myToolWindowPanel;
   private List<PresentationListener> myListeners = new ArrayList<PresentationListener>();
   private final Object myListenersObject = new Object();
@@ -77,8 +77,8 @@ public class ConcurrencyGraphPresentationModel {
 
   public void updateTimerPeriod() {
     int rulerUnitWidth = ConcurrencyGraphSettings.CELL_WIDTH * visualSettings.getCellsPerRulerUnit();
-    graphModel.setTimerPeriod(visualSettings.getCellsPerRulerUnit() * visualSettings.getMicrosecsPerCell() /
-                              (rulerUnitWidth * 1000)); //convert from mcs to millis
+    graphModel.setTimerPeriod(Math.max(1, visualSettings.getCellsPerRulerUnit() * visualSettings.getMicrosecsPerCell() /
+                                          (rulerUnitWidth * 1000))); //convert from mcs to millis
   }
 
   public ConcurrencyToolWindowPanel getToolWindowPanel() {
@@ -100,7 +100,15 @@ public class ConcurrencyGraphPresentationModel {
   }
 
   public ArrayList<ConcurrencyRelation> getRelations() {
-    return myRelations;
+    return new ArrayList<ConcurrencyRelation>(myRelations);
+  }
+
+  public ConcurrencyGraphModel getGraphModel() {
+    return graphModel;
+  }
+
+  public ConcurrencyGraphVisualSettings getVisualSettings() {
+    return visualSettings;
   }
 
   private void updateVisibleGraph() {

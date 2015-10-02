@@ -41,8 +41,8 @@ public class ConcurrencyGraphVisualSettings {
     myMicrosecsPerCell = Math.max(100, (int)(Math.round(myMicrosecsPerCell * 0.9) - Math.round(myMicrosecsPerCell * 0.9) % 100));
     if (myMicrosecsPerCell != prevMicrosecsPerCell) {
       myPresentationModel.updateTimerPeriod();
-      myPresentationModel.graphModel.setTimeCursor(
-        myPresentationModel.graphModel.getTimeCursor() * prevMicrosecsPerCell / myMicrosecsPerCell);
+      myPresentationModel.getGraphModel().setTimeCursor(
+        myPresentationModel.getGraphModel().getTimeCursor() * prevMicrosecsPerCell / myMicrosecsPerCell);
       myPresentationModel.updateGraphModel();
     }
   }
@@ -54,8 +54,8 @@ public class ConcurrencyGraphVisualSettings {
     if (myMicrosecsPerCell != prevMicrosecsPerCell) {
 
       myPresentationModel.updateTimerPeriod();
-      myPresentationModel.graphModel.setTimeCursor(
-        myPresentationModel.graphModel.getTimeCursor() * prevMicrosecsPerCell / myMicrosecsPerCell);
+      myPresentationModel.getGraphModel().setTimeCursor(
+        myPresentationModel.getGraphModel().getTimeCursor() * prevMicrosecsPerCell / myMicrosecsPerCell);
       myPresentationModel.updateGraphModel();
     }
   }

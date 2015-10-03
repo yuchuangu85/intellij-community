@@ -43,12 +43,13 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   private final @NotNull Project myProject;
   private final String myType;
   private JLabel myLabel;
-  private @Nullable StackTracePanel myStackTracePanel;
+  private @Nullable ConcurrencyStackTracePanel myStackTracePanel;
   private @Nullable JScrollPane tableScrollPane;
   private @Nullable JTable myFixedTable;
   private @Nullable JTable myStatTable;
   private @Nullable ActionToolbar myToolbar;
   private @Nullable JPanel myTablePanel;
+  private @Nullable JPanel myNotes;
 
   public ConcurrencyToolWindowPanel(@NotNull Project project, @NotNull ConcurrencyGraphModel graphModel, String type) {
     super(false);
@@ -210,7 +211,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   public void showStackTrace(@Nullable PyConcurrencyEvent event) {
     List<PyStackFrameInfo> frames = event == null ? new ArrayList<PyStackFrameInfo>(0) : event.getFrames();
     if (myStackTracePanel == null) {
-      myStackTracePanel = new StackTracePanel(myProject);
+      myStackTracePanel = new ConcurrencyStackTracePanel(myProject);
       myStackTracePanel.buildStackTrace(frames);
       splitWindow(myStackTracePanel);
     }
@@ -220,11 +221,12 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   }
 
   private void splitWindow(@NotNull JComponent component) {
-    if (myTablePanel == null) {
+    if ((myTablePanel == null) || (myNotes == null)) {
       return;
     }
     removeAll();
     JSplitPane graphPanel = new JSplitPane(JSplitPane.VERTICAL_SPLIT, true);
+    myTablePanel.add(myNotes, BorderLayout.SOUTH);
     graphPanel.add(myTablePanel, JSplitPane.LEFT);
     graphPanel.add(component, JSplitPane.RIGHT);
     graphPanel.setDividerLocation(getHeight() * 2 / 3);
@@ -238,6 +240,8 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   private void initTable() {
     myTablePanel = ConcurrencyTableUtil.createTables(myGraphModel, myPresentationModel, this);
     add(myTablePanel);
+    myNotes = new ConcurrencyNotesPanel(this);
+    myTablePanel.add(myNotes, BorderLayout.SOUTH);
 
     AdjustmentListener listener = new GraphAdjustmentListener();
     if (tableScrollPane != null) {

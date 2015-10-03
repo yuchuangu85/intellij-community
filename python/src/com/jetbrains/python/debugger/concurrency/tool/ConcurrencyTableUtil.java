@@ -23,6 +23,7 @@ import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentat
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphVisualSettings;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyTable;
 import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyToolWindowPanel;
+import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
@@ -151,8 +152,9 @@ public class ConcurrencyTableUtil {
     table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
   }
 
-  public static JPanel createTables(ConcurrencyGraphModel graphModel, ConcurrencyGraphPresentationModel presentationModel,
-                                    ConcurrencyToolWindowPanel toolWindow) {
+  @NotNull
+  public static JPanel createTables(@NotNull ConcurrencyGraphModel graphModel, @NotNull ConcurrencyGraphPresentationModel presentationModel,
+                                    @NotNull ConcurrencyToolWindowPanel toolWindow) {
     JPanel tablePanel = new JPanel(new BorderLayout());
 
     JBTable fixedTable = new JBTable(new FixedTableModel(graphModel));

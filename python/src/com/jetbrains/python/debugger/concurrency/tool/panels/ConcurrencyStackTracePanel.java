@@ -48,13 +48,13 @@ import java.awt.event.MouseEvent;
 import java.util.List;
 
 
-public class StackTracePanel extends SimpleToolWindowPanel implements Disposable {
+public class ConcurrencyStackTracePanel extends SimpleToolWindowPanel implements Disposable {
   private final @NotNull Tree myTree;
   private final @NotNull DefaultTreeModel myModel;
   private final @NotNull Project myProject;
   private final @NotNull DefaultMutableTreeNode rootNode;
 
-  public StackTracePanel(@NotNull Project project) {
+  public ConcurrencyStackTracePanel(@NotNull Project project) {
     super(false);
     myProject = project;
 

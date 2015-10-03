@@ -83,6 +83,7 @@ public class ConcurrencyTable extends JBTable {
 
   private void paintRuler(@NotNull Graphics g) {
     Graphics2D g2 = (Graphics2D)g;
+    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     g2.setStroke(new BasicStroke(ConcurrencyGraphSettings.RULER_STROKE_WIDTH));
     g2.setColor(ConcurrencyGraphSettings.RULER_COLOR);
     ConcurrencyGraphVisualSettings settings = myPresentationModel.getVisualSettings();

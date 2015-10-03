@@ -62,8 +62,10 @@ public class ConcurrencyGraphCellRenderer extends ColoredTableCellRenderer {
   protected void customizeCellRenderer(JTable table, @Nullable Object value, boolean selected, boolean hasFocus, int row, int column) {
     myRow = row;
     int width = Math.max(myPresentationModel.getCellsNumber() * ConcurrencyGraphSettings.CELL_WIDTH, myPanel.getGraphPaneWidth());
-    table.setSize(new Dimension(width, table.getHeight() - 1));
-    table.setPreferredSize(new Dimension(width, table.getHeight() - 1));
+    int height = Math.max(myPresentationModel.getGraphModel().getMaxThread() * ConcurrencyGraphSettings.TABLE_ROW_HEIGHT,
+                          table.getHeight() - 1);
+    table.setSize(new Dimension(width, height));
+    table.setPreferredSize(new Dimension(width, height));
     myPadding = myPresentationModel.getPadding();
   }
 }

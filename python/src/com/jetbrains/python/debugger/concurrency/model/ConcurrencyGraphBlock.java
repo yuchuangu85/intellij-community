@@ -18,11 +18,19 @@ package com.jetbrains.python.debugger.concurrency.model;
 import java.util.ArrayList;
 
 public class ConcurrencyGraphBlock {
-  public ArrayList<ConcurrencyGraphElement> elements;
-  public int numberOfCells;
+  private final ArrayList<ConcurrencyGraphElement> myElements;
+  private final int myNumberOfCells;
 
   public ConcurrencyGraphBlock(ArrayList<ConcurrencyGraphElement> elements, int numberOfCells) {
-    this.elements = elements;
-    this.numberOfCells = numberOfCells;
+    myElements = elements;
+    myNumberOfCells = numberOfCells;
+  }
+
+  public ArrayList<ConcurrencyGraphElement> getElements() {
+    return myElements;
+  }
+
+  public int getNumberOfCells() {
+    return myNumberOfCells;
   }
 }

@@ -22,21 +22,22 @@ import com.jetbrains.python.debugger.PyLockEvent;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphElement;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 
 public class ConcurrencyGraphAnalyser {
-  private final ConcurrencyGraphModel myGraphModel;
+  private final @NotNull ConcurrencyGraphModel myGraphModel;
   private HashMap<String, ThreadLocksInfo> myLocksInfo;
   private int lastInd = 0;
 
-  public ConcurrencyGraphAnalyser(ConcurrencyGraphModel graphModel) {
+  public ConcurrencyGraphAnalyser(@NotNull ConcurrencyGraphModel graphModel) {
     myGraphModel = graphModel;
   }
 
-  private class ThreadLocksInfo {
+  private static class ThreadLocksInfo {
     private String lockWait;
-    private HashSet<String> locksOwn;
+    private final HashSet<String> locksOwn;
 
     public ThreadLocksInfo() {
       locksOwn = new HashSet<String>();
@@ -50,8 +51,8 @@ public class ConcurrencyGraphAnalyser {
       locksOwn.add(lockId);
     }
 
-    public boolean removeOwn(String lockId) {
-      return locksOwn.remove(lockId);
+    public void removeOwn(String lockId) {
+      locksOwn.remove(lockId);
     }
 
     public String getLockWait() {
@@ -63,7 +64,7 @@ public class ConcurrencyGraphAnalyser {
     }
   }
 
-  public void updateLocksInfo(int ind) {
+  private void updateLocksInfo(int ind) {
     if (lastInd == 0) {
       myLocksInfo = new HashMap<String, ThreadLocksInfo>();
     }

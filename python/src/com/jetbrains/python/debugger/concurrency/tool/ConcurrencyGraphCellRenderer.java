@@ -19,21 +19,22 @@ package com.jetbrains.python.debugger.concurrency.tool;
 import com.intellij.ui.ColoredTableCellRenderer;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
 import com.jetbrains.python.debugger.concurrency.tool.panels.ConcurrencyToolWindowPanel;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
 
 public class ConcurrencyGraphCellRenderer extends ColoredTableCellRenderer {
-  private ConcurrencyGraphPresentationModel myPresentationModel;
+  private final @NotNull ConcurrencyGraphPresentationModel myPresentationModel;
   private int myRow;
   private int myPadding;
-  private JTable myTable;
-  private ConcurrencyToolWindowPanel myPanel;
+  private final @NotNull JTable myTable;
+  private final @NotNull ConcurrencyToolWindowPanel myPanel;
 
-  public ConcurrencyGraphCellRenderer(ConcurrencyGraphPresentationModel presentationModel,
-                                      final JTable table,
-                                      ConcurrencyToolWindowPanel panel) {
+  public ConcurrencyGraphCellRenderer(@NotNull ConcurrencyGraphPresentationModel presentationModel,
+                                      @NotNull JTable table,
+                                      @NotNull ConcurrencyToolWindowPanel panel) {
     myPresentationModel = presentationModel;
     myTable = table;
     myPanel = panel;
@@ -52,7 +53,7 @@ public class ConcurrencyGraphCellRenderer extends ColoredTableCellRenderer {
   }
 
   @Override
-  protected void paintComponent(Graphics g) {
+  protected void paintComponent(@NotNull Graphics g) {
     super.paintComponent(g);
     ConcurrencyRenderingUtil.paintRow(g, myPadding, myPresentationModel.getVisibleGraph(), myRow);
   }

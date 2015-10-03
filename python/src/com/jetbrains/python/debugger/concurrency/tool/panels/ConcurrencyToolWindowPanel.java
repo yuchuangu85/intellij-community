@@ -27,8 +27,8 @@ import com.jetbrains.python.debugger.PyStackFrameInfo;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphPresentationModel;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyTableUtil;
-import com.sun.istack.internal.Nullable;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
@@ -38,21 +38,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements Disposable {
-  private ConcurrencyGraphModel myGraphModel;
-  private ConcurrencyGraphPresentationModel myPresentationModel;
-  private String myType;
-  private final Project myProject;
-  protected JLabel myLabel;
-  protected StackTracePanel myStackTracePanel;
-  protected JScrollPane myNamesPanel;
-  private JScrollPane tableScrollPane;
-  private JTable myFixedTable;
-  private JTable myStatTable;
-  private ActionToolbar myToolbar;
-  private JPanel myTablePanel;
+  private final @NotNull ConcurrencyGraphModel myGraphModel;
+  private final @NotNull ConcurrencyGraphPresentationModel myPresentationModel;
+  private final @NotNull Project myProject;
+  private final String myType;
+  private JLabel myLabel;
+  private @Nullable StackTracePanel myStackTracePanel;
+  private @Nullable JScrollPane tableScrollPane;
+  private @Nullable JTable myFixedTable;
+  private @Nullable JTable myStatTable;
+  private @Nullable ActionToolbar myToolbar;
+  private @Nullable JPanel myTablePanel;
 
-  public ConcurrencyToolWindowPanel(boolean vertical, Project project, ConcurrencyGraphModel graphModel, String type) {
-    super(vertical);
+  public ConcurrencyToolWindowPanel(@NotNull Project project, @NotNull ConcurrencyGraphModel graphModel, String type) {
+    super(false);
     myProject = project;
     myGraphModel = graphModel;
     myType = type;
@@ -79,7 +78,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     });
   }
 
-  protected JPanel createToolbarPanel() {
+  private JPanel createToolbarPanel() {
     final DefaultActionGroup group = new DefaultActionGroup();
     group.add(new ZoomInAction());
     group.add(new ZoomOutAction());
@@ -92,8 +91,8 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     return buttonsPanel;
   }
 
-  private class ScrollToTheEndToolbarAction extends ToggleAction implements DumbAware {
-    private ConcurrencyGraphPresentationModel myPresentationModel;
+  private static class ScrollToTheEndToolbarAction extends ToggleAction implements DumbAware {
+    private final ConcurrencyGraphPresentationModel myPresentationModel;
 
     public ScrollToTheEndToolbarAction(@NotNull final ConcurrencyGraphPresentationModel presentationModel) {
       super();
@@ -147,7 +146,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     }
   }
 
-  public void initMessage() {
+  private void initMessage() {
     removeAll();
     myLabel = new JLabel();
     myLabel.setHorizontalAlignment(SwingConstants.CENTER);
@@ -162,7 +161,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     public void adjustmentValueChanged(AdjustmentEvent evt) {
       Adjustable source = evt.getAdjustable();
       int orient = source.getOrientation();
-      if (orient == Adjustable.HORIZONTAL) {
+      if ((orient == Adjustable.HORIZONTAL) && (tableScrollPane != null)) {
         JScrollBar bar = tableScrollPane.getHorizontalScrollBar();
         myPresentationModel.getVisualSettings().updateHorizontalScrollbar(bar.getValue(), bar.getVisibleAmount(), bar.getMaximum());
       }
@@ -173,39 +172,45 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     }
   }
 
+  @Nullable
   public JTable getStatTable() {
     return myStatTable;
   }
 
-  public void setStatTable(JTable statTable) {
+  public void setStatTable(@NotNull JTable statTable) {
     myStatTable = statTable;
   }
 
-  public void setTableScrollPane(JScrollPane tableScrollPane) {
+  public void setTableScrollPane(@NotNull JScrollPane tableScrollPane) {
     this.tableScrollPane = tableScrollPane;
   }
 
+  @Nullable
   public JScrollPane getTableScrollPane() {
     return tableScrollPane;
   }
 
 
-  public void setToolbar(ActionToolbar toolbar) {
-    this.myToolbar = toolbar;
+  public void setToolbar(@NotNull ActionToolbar toolbar) {
+    myToolbar = toolbar;
   }
 
-  public void setFixedTable(JTable fixedTable) {
+  public void setFixedTable(@NotNull JTable fixedTable) {
     this.myFixedTable = fixedTable;
   }
 
   public int getGraphPaneWidth() {
-    return getWidth() - myFixedTable.getWidth() - myStatTable.getWidth() - myToolbar.getComponent().getWidth() - 3;
+    int result = 0;
+    result += myFixedTable == null ? 0 : myFixedTable.getWidth();
+    result += myStatTable == null ? 0 : myStatTable.getWidth();
+    result += myToolbar == null ? 0 : myToolbar.getComponent().getWidth();
+    return Math.max(0, getWidth() - result - 3);
   }
 
   public void showStackTrace(@Nullable PyConcurrencyEvent event) {
     List<PyStackFrameInfo> frames = event == null ? new ArrayList<PyStackFrameInfo>(0) : event.getFrames();
     if (myStackTracePanel == null) {
-      myStackTracePanel = new StackTracePanel(false, myProject);
+      myStackTracePanel = new StackTracePanel(myProject);
       myStackTracePanel.buildStackTrace(frames);
       splitWindow(myStackTracePanel);
     }
@@ -214,7 +219,10 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     }
   }
 
-  public void splitWindow(JComponent component) {
+  private void splitWindow(@NotNull JComponent component) {
+    if (myTablePanel == null) {
+      return;
+    }
     removeAll();
     JSplitPane graphPanel = new JSplitPane(JSplitPane.VERTICAL_SPLIT, true);
     graphPanel.add(myTablePanel, JSplitPane.LEFT);
@@ -232,15 +240,14 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     add(myTablePanel);
 
     AdjustmentListener listener = new GraphAdjustmentListener();
-    tableScrollPane.getHorizontalScrollBar().addAdjustmentListener(listener);
-    tableScrollPane.getVerticalScrollBar().addAdjustmentListener(listener);
+    if (tableScrollPane != null) {
+      tableScrollPane.getHorizontalScrollBar().addAdjustmentListener(listener);
+      tableScrollPane.getVerticalScrollBar().addAdjustmentListener(listener);
+    }
   }
 
-  public void updateContent() {
+  private void updateContent() {
     if (myGraphModel.getSize() == 0) {
-      myPresentationModel.getVisualSettings().setNamesPanelWidth(myNamesPanel == null ?
-                                                                 myPresentationModel.getVisualSettings().getNamesPanelWidth() :
-                                                                 myNamesPanel.getWidth());
       myTablePanel = null;
       myStackTracePanel = null;
       initMessage();

@@ -16,46 +16,44 @@
 package com.jetbrains.python.debugger.concurrency.model;
 
 import com.intellij.util.ui.UIUtil;
-import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyGraphSettings;
+import org.jetbrains.annotations.NotNull;
 
 public class ConcurrencyGraphVisualSettings {
-  private int myMicrosecsPerCell = 10000;
+  private int myMcsPerCell = 10000;
   private int myHorizontalValue;
   private int myHorizontalExtent;
   private int myHorizontalMax;
   private int myVerticalValue;
   private int myVerticalExtent;
   private int myVerticalMax;
-  private int myNamesPanelWidth = NAMES_PANEL_INITIAL_WIDTH;
-  private int myCellsPerRulerUnit = 10;
   private final ConcurrencyGraphPresentationModel myPresentationModel;
-  public static int NAMES_PANEL_INITIAL_WIDTH = 200;
-  public static int DIVIDER_WIDTH = 3;
+  public static final int NAMES_PANEL_INITIAL_WIDTH = 200;
+  private static final int DIVIDER_WIDTH = 3;
 
-  public ConcurrencyGraphVisualSettings(ConcurrencyGraphPresentationModel presentationModel) {
+  public ConcurrencyGraphVisualSettings(@NotNull ConcurrencyGraphPresentationModel presentationModel) {
     myPresentationModel = presentationModel;
   }
 
   public void zoomIn() {
-    int prevMicrosecsPerCell = myMicrosecsPerCell;
-    myMicrosecsPerCell = Math.max(100, (int)(Math.round(myMicrosecsPerCell * 0.9) - Math.round(myMicrosecsPerCell * 0.9) % 100));
-    if (myMicrosecsPerCell != prevMicrosecsPerCell) {
+    int prevMcsPerCell = myMcsPerCell;
+    myMcsPerCell = Math.max(100, (int)(Math.round(myMcsPerCell * 0.9) - Math.round(myMcsPerCell * 0.9) % 100));
+    if (myMcsPerCell != prevMcsPerCell) {
       myPresentationModel.updateTimerPeriod();
       myPresentationModel.getGraphModel().setTimeCursor(
-        myPresentationModel.getGraphModel().getTimeCursor() * prevMicrosecsPerCell / myMicrosecsPerCell);
+        myPresentationModel.getGraphModel().getTimeCursor() * prevMcsPerCell / myMcsPerCell);
       myPresentationModel.updateGraphModel();
     }
   }
 
   public void zoomOut() {
-    int prevMicrosecsPerCell = myMicrosecsPerCell;
-    myMicrosecsPerCell = Math.max((int)(Math.round(myMicrosecsPerCell * 1.1) - Math.round(myMicrosecsPerCell * 1.1) % 100),
-                                  myMicrosecsPerCell + 100);
-    if (myMicrosecsPerCell != prevMicrosecsPerCell) {
+    int prevMicrosecsPerCell = myMcsPerCell;
+    myMcsPerCell = Math.max((int)(Math.round(myMcsPerCell * 1.1) - Math.round(myMcsPerCell * 1.1) % 100),
+                            myMcsPerCell + 100);
+    if (myMcsPerCell != prevMicrosecsPerCell) {
 
       myPresentationModel.updateTimerPeriod();
       myPresentationModel.getGraphModel().setTimeCursor(
-        myPresentationModel.getGraphModel().getTimeCursor() * prevMicrosecsPerCell / myMicrosecsPerCell);
+        myPresentationModel.getGraphModel().getTimeCursor() * prevMicrosecsPerCell / myMcsPerCell);
       myPresentationModel.updateGraphModel();
     }
   }
@@ -72,20 +70,12 @@ public class ConcurrencyGraphVisualSettings {
     }
   }
 
-  public int getMicrosecsPerCell() {
-    return myMicrosecsPerCell;
+  public int getMcsPerCell() {
+    return myMcsPerCell;
   }
 
   public int getCellsPerRulerUnit() {
-    return myCellsPerRulerUnit;
-  }
-
-  public int getNamesPanelWidth() {
-    return myNamesPanelWidth;
-  }
-
-  public void setNamesPanelWidth(int namesPanelWidth) {
-    myNamesPanelWidth = namesPanelWidth;
+    return 10;
   }
 
   public int getDividerWidth() {
@@ -115,13 +105,6 @@ public class ConcurrencyGraphVisualSettings {
   public int getHorizontalMax() {
     return myHorizontalMax;
   }
-
-  public int getHeightForPanes(int linesNumber) {
-    return Math.max((ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * linesNumber +
-                    2 * ConcurrencyGraphSettings.INTERVAL,
-                    getVerticalValue() + getVerticalExtent());
-  }
-
 
   public void updateHorizontalScrollbar(int scrollbarValue, int scrollbarExtent, int scrollMax) {
     myHorizontalValue = scrollbarValue;

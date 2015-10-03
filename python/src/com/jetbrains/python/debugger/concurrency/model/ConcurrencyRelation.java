@@ -15,14 +15,12 @@
  */
 package com.jetbrains.python.debugger.concurrency.model;
 
-/**
- * Created by user on 10/1/15.
- */
+
 public class ConcurrencyRelation {
-  private int myPadding;
-  private int myParent;
-  private int myChild;
-  private ConcurrencyThreadState myThreadState;
+  private final int myPadding;
+  private final int myParent;
+  private final int myChild;
+  private final ConcurrencyThreadState myThreadState;
 
   public ConcurrencyRelation(int padding, int parent, int child, ConcurrencyThreadState threadState) {
     myPadding = padding;

@@ -59,7 +59,7 @@ public class ConcurrencyView implements PersistentStateComponent<ConcurrencyView
   public void initToolWindow(@NotNull ToolWindow toolWindow) {
     ContentFactory contentFactory = ContentFactory.SERVICE.getInstance();
     ConcurrencyGraphModel graphModel = PyConcurrencyService.getInstance(myProject).getThreadingInstance();
-    ConcurrencyToolWindowPanel graphPanel = new ConcurrencyToolWindowPanel(false, myProject, graphModel, "threading");
+    ConcurrencyToolWindowPanel graphPanel = new ConcurrencyToolWindowPanel(myProject, graphModel, "threading");
     Content mainContent = contentFactory.createContent(graphPanel, null, false);
     mainContent.setComponent(graphPanel);
     mainContent.setDisplayName("Threading graph");
@@ -68,7 +68,7 @@ public class ConcurrencyView implements PersistentStateComponent<ConcurrencyView
     myContentManager.addContent(mainContent);
 
     graphModel = PyConcurrencyService.getInstance(myProject).getAsyncioInstance();
-    ConcurrencyToolWindowPanel asyncioPanel = new ConcurrencyToolWindowPanel(false, myProject, graphModel, "asyncio");
+    ConcurrencyToolWindowPanel asyncioPanel = new ConcurrencyToolWindowPanel(myProject, graphModel, "asyncio");
     Content lockPanelContent = contentFactory.createContent(asyncioPanel, null, false);
     lockPanelContent.setComponent(asyncioPanel);
     lockPanelContent.setDisplayName("Asyncio graph");

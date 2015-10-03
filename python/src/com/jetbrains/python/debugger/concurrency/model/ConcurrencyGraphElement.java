@@ -15,12 +15,23 @@
  */
 package com.jetbrains.python.debugger.concurrency.model;
 
-public class ConcurrencyGraphElement {
-  public ConcurrencyThreadState threadState;
-  public int eventIndex;
+import org.jetbrains.annotations.NotNull;
 
-  public ConcurrencyGraphElement(ConcurrencyThreadState threadState, int eventIndex) {
-    this.threadState = threadState;
-    this.eventIndex = eventIndex;
+public class ConcurrencyGraphElement {
+  private final @NotNull ConcurrencyThreadState myThreadState;
+  private final int myEventIndex;
+
+  public ConcurrencyGraphElement(@NotNull ConcurrencyThreadState threadState, int eventIndex) {
+    myThreadState = threadState;
+    myEventIndex = eventIndex;
+  }
+
+  @NotNull
+  public ConcurrencyThreadState getThreadState() {
+    return myThreadState;
+  }
+
+  public int getEventIndex() {
+    return myEventIndex;
   }
 }

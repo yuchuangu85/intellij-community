@@ -34,7 +34,7 @@ public class ConcurrencyTableUtil {
   }
 
   private static class FixedTableModel extends AbstractTableModel {
-    private ConcurrencyGraphModel myGraphModel;
+    private final ConcurrencyGraphModel myGraphModel;
 
     public FixedTableModel(ConcurrencyGraphModel graphModel) {
       myGraphModel = graphModel;
@@ -67,7 +67,7 @@ public class ConcurrencyTableUtil {
   }
 
   private static class ScrollableTableModel extends AbstractTableModel {
-    private ConcurrencyGraphModel myGraphModel;
+    private final ConcurrencyGraphModel myGraphModel;
 
     public ScrollableTableModel(ConcurrencyGraphModel graphModel) {
       myGraphModel = graphModel;
@@ -100,7 +100,7 @@ public class ConcurrencyTableUtil {
   }
 
   private static class StatTableModel extends AbstractTableModel {
-    private ConcurrencyGraphModel myGraphModel;
+    private final ConcurrencyGraphModel myGraphModel;
 
     public StatTableModel(ConcurrencyGraphModel graphModel) {
       myGraphModel = graphModel;
@@ -128,10 +128,19 @@ public class ConcurrencyTableUtil {
 
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
+      double waitTime;
+      long percents;
       String threadId = myGraphModel.getThreadIdByIndex(rowIndex);
-      ConcurrencyStat threadStatistics = myGraphModel.getStatisticsByThreadId(threadId);
-      return String.format("%.2f (%d%%)", (double)threadStatistics.getWaitTime() / 1000000, // convert to seconds
-                           threadStatistics.getWaitTime() * 100 / threadStatistics.getWorkTime()); // convert to percents
+      if (threadId == null) {
+        waitTime = 0;
+        percents = 0;
+      }
+      else {
+        ConcurrencyStat threadStatistics = myGraphModel.getStatisticsByThreadId(threadId);
+        waitTime = (double)threadStatistics.getWaitTime() / 1000000; // convert to seconds
+        percents = threadStatistics.getWaitTime() * 100 / threadStatistics.getWorkTime(); // convert to percents
+      }
+      return String.format("%.2f (%d%%)", waitTime, percents);
     }
   }
 

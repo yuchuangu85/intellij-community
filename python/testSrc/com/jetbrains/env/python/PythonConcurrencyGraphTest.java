@@ -31,7 +31,7 @@ public class PythonConcurrencyGraphTest extends PyEnvTestCase {
     ArrayList<ConcurrencyGraphElement> elements = graphModel.getDrawElementsForRow(row);
     assertEquals(String.format("row = %d", row), correctElements.length, elements.size());
     for (int i = 0; i < elements.size(); ++i) {
-      ConcurrencyThreadState graphElement = elements.get(i).threadState;
+      ConcurrencyThreadState graphElement = elements.get(i).getThreadState();
       ConcurrencyThreadState correctElement = correctElements[i];
       assertEquals(String.format("row = %d column = %d", row, i), correctElement, graphElement);
     }

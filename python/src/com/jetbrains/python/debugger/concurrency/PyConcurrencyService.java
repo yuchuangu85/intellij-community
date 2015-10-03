@@ -18,14 +18,15 @@ package com.jetbrains.python.debugger.concurrency;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphModel;
+import org.jetbrains.annotations.NotNull;
 
 public class PyConcurrencyService {
-  private ConcurrencyGraphModel myThreadingGraphModel;
-  private ConcurrencyGraphModel myAsyncioGraphModel;
+  private final @NotNull ConcurrencyGraphModel myThreadingGraphModel;
+  private final @NotNull ConcurrencyGraphModel myAsyncioGraphModel;
 
-  public PyConcurrencyService(Project project) {
-    myThreadingGraphModel = new ConcurrencyGraphModel(project);
-    myAsyncioGraphModel = new ConcurrencyGraphModel(project);
+  private PyConcurrencyService(Project project) {
+    myThreadingGraphModel = new ConcurrencyGraphModel();
+    myAsyncioGraphModel = new ConcurrencyGraphModel();
   }
 
   public static PyConcurrencyService getInstance(Project project) {

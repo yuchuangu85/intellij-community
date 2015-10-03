@@ -36,6 +36,7 @@ import com.intellij.xdebugger.impl.XSourcePositionImpl;
 import com.jetbrains.python.debugger.PySourcePosition;
 import com.jetbrains.python.debugger.PyStackFrameInfo;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -48,13 +49,13 @@ import java.util.List;
 
 
 public class StackTracePanel extends SimpleToolWindowPanel implements Disposable {
-  private final Tree myTree;
-  private final DefaultTreeModel myModel;
-  private final Project myProject;
-  private final DefaultMutableTreeNode rootNode;
+  private final @NotNull Tree myTree;
+  private final @NotNull DefaultTreeModel myModel;
+  private final @NotNull Project myProject;
+  private final @NotNull DefaultMutableTreeNode rootNode;
 
-  public StackTracePanel(boolean vertical, Project project) {
-    super(vertical);
+  public StackTracePanel(@NotNull Project project) {
+    super(false);
     myProject = project;
 
     String root = "root";
@@ -106,11 +107,11 @@ public class StackTracePanel extends SimpleToolWindowPanel implements Disposable
             return;
           }
 
-          append(frameInfo.getName(), gray(SimpleTextAttributes.REGULAR_ATTRIBUTES, isExternal));
-          append(", ", gray(SimpleTextAttributes.REGULAR_ATTRIBUTES, isExternal));
-          append(filename, gray(SimpleTextAttributes.REGULAR_ATTRIBUTES, isExternal));
-          append(":", gray(SimpleTextAttributes.REGULAR_ATTRIBUTES, isExternal));
-          append(Integer.toString(position.getLine() + 1), gray(SimpleTextAttributes.REGULAR_ATTRIBUTES, isExternal));
+          append(frameInfo.getName(), gray(isExternal));
+          append(", ", gray(isExternal));
+          append(filename, gray(isExternal));
+          append(":", gray(isExternal));
+          append(Integer.toString(position.getLine() + 1), gray(isExternal));
         }
       }
     });
@@ -136,7 +137,7 @@ public class StackTracePanel extends SimpleToolWindowPanel implements Disposable
     add(ScrollPaneFactory.createScrollPane(myTree));
   }
 
-  private void navigateToSource(final XSourcePosition sourcePosition) {
+  private void navigateToSource(final @Nullable XSourcePosition sourcePosition) {
     if (sourcePosition != null) {
       AppUIUtil.invokeOnEdt(new Runnable() {
         @Override
@@ -147,17 +148,17 @@ public class StackTracePanel extends SimpleToolWindowPanel implements Disposable
     }
   }
 
-  private static SimpleTextAttributes gray(SimpleTextAttributes attributes, boolean gray) {
+  private static SimpleTextAttributes gray(boolean gray) {
     if (!gray) {
-      return attributes;
+      return SimpleTextAttributes.REGULAR_ATTRIBUTES;
     }
     else {
-      return (attributes.getStyle() & SimpleTextAttributes.STYLE_ITALIC) != 0
+      return (SimpleTextAttributes.REGULAR_ATTRIBUTES.getStyle() & SimpleTextAttributes.STYLE_ITALIC) != 0
              ? SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES : SimpleTextAttributes.GRAYED_ATTRIBUTES;
     }
   }
 
-  public void buildStackTrace(List<PyStackFrameInfo> frames) {
+  public void buildStackTrace(@NotNull List<PyStackFrameInfo> frames) {
     final TreeState treeState = TreeState.createOn(myTree, rootNode);
     rootNode.removeAllChildren();
 

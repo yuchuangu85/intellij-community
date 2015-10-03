@@ -31,9 +31,9 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 
 public class ConcurrencyTable extends JBTable {
-  protected ConcurrencyGraphPresentationModel myPresentationModel;
-  private ConcurrencyGraphCellRenderer myRenderer;
-  private ConcurrencyToolWindowPanel myPanel;
+  private final ConcurrencyGraphPresentationModel myPresentationModel;
+  private final ConcurrencyGraphCellRenderer myRenderer;
+  private final ConcurrencyToolWindowPanel myPanel;
 
   public ConcurrencyTable(ConcurrencyGraphPresentationModel presentationModel, TableModel tableModel, ConcurrencyToolWindowPanel panel) {
     super();
@@ -61,9 +61,9 @@ public class ConcurrencyTable extends JBTable {
   private int getEventIndex(Point clickPoint, int row) {
     int index = ConcurrencyRenderingUtil.getElementIndex(myRenderer.getPadding(), myPresentationModel.getVisibleGraph(), clickPoint.x);
     if (index != -1) {
-      ArrayList<ConcurrencyGraphElement> elements = myPresentationModel.getVisibleGraph().get(index).elements;
+      ArrayList<ConcurrencyGraphElement> elements = myPresentationModel.getVisibleGraph().get(index).getElements();
       if (row < elements.size()) {
-        return elements.get(row).eventIndex;
+        return elements.get(row).getEventIndex();
       }
     }
     return -1;
@@ -97,7 +97,7 @@ public class ConcurrencyTable extends JBTable {
                   y - ConcurrencyGraphSettings.RULER_SUBUNIT_MARK;
       g.drawLine(i * rulerUnitWidth, markY, i * rulerUnitWidth, y);
       if ((i != 0) && (i % ConcurrencyGraphSettings.RULER_SUBUNITS_PER_UNIT == 0)) {
-        int ms = myPresentationModel.getVisualSettings().getMicrosecsPerCell() *
+        int ms = myPresentationModel.getVisualSettings().getMcsPerCell() *
                  myPresentationModel.getVisualSettings().getCellsPerRulerUnit() * i / 1000;
         String text = String.format("%.2f s", ms / 1000f);
         int textWidth = metrics.stringWidth(text);

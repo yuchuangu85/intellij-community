@@ -29,17 +29,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ConcurrencyGraphPresentationModel {
-  private ConcurrencyGraphModel graphModel;
-  private ConcurrencyGraphVisualSettings visualSettings;
-  private ConcurrencyToolWindowPanel myToolWindowPanel;
-  private List<PresentationListener> myListeners = new ArrayList<PresentationListener>();
+  private final ConcurrencyGraphModel graphModel;
+  private final ConcurrencyGraphVisualSettings visualSettings;
+  private final ConcurrencyToolWindowPanel myToolWindowPanel;
+  private final List<PresentationListener> myListeners = new ArrayList<PresentationListener>();
   private final Object myListenersObject = new Object();
   private ArrayList<ConcurrencyGraphBlock> myVisibleGraph;
   private final Object myVisibleGraphObject = new Object();
   private ArrayList<ConcurrencyRelation> myRelations;
   private boolean myScrollToTheEnd = true;
 
-  public ConcurrencyGraphPresentationModel(final ConcurrencyGraphModel graphModel, ConcurrencyToolWindowPanel panel) {
+  public ConcurrencyGraphPresentationModel(@NotNull final ConcurrencyGraphModel graphModel, @NotNull ConcurrencyToolWindowPanel panel) {
     this.graphModel = graphModel;
     visualSettings = new ConcurrencyGraphVisualSettings(this);
     myToolWindowPanel = panel;
@@ -77,10 +77,11 @@ public class ConcurrencyGraphPresentationModel {
 
   public void updateTimerPeriod() {
     int rulerUnitWidth = ConcurrencyGraphSettings.CELL_WIDTH * visualSettings.getCellsPerRulerUnit();
-    graphModel.setTimerPeriod(Math.max(1, visualSettings.getCellsPerRulerUnit() * visualSettings.getMicrosecsPerCell() /
+    graphModel.setTimerPeriod(Math.max(1, visualSettings.getCellsPerRulerUnit() * visualSettings.getMcsPerCell() /
                                           (rulerUnitWidth * 1000))); //convert from mcs to millis
   }
 
+  @NotNull
   public ConcurrencyToolWindowPanel getToolWindowPanel() {
     return myToolWindowPanel;
   }
@@ -91,22 +92,25 @@ public class ConcurrencyGraphPresentationModel {
   }
 
   public int getCellsNumber() {
-    return (int)graphModel.getDuration() / visualSettings.getMicrosecsPerCell();
+    return (int)graphModel.getDuration() / visualSettings.getMcsPerCell();
   }
 
   private long roundForCell(long time) {
-    long millisPerCell = visualSettings.getMicrosecsPerCell();
+    long millisPerCell = visualSettings.getMcsPerCell();
     return time - (time % millisPerCell);
   }
 
+  @NotNull
   public ArrayList<ConcurrencyRelation> getRelations() {
     return new ArrayList<ConcurrencyRelation>(myRelations);
   }
 
+  @NotNull
   public ConcurrencyGraphModel getGraphModel() {
     return graphModel;
   }
 
+  @NotNull
   public ConcurrencyGraphVisualSettings getVisualSettings() {
     return visualSettings;
   }
@@ -133,7 +137,7 @@ public class ConcurrencyGraphPresentationModel {
         }
         nextTime = roundForCell(graphModel.getEventAt(curEventId + 1).getTime());
         long period = nextTime - curTime;
-        int cellsInPeriod = (int)(period / visualSettings.getMicrosecsPerCell());
+        int cellsInPeriod = (int)(period / visualSettings.getMcsPerCell());
         if (cellsInPeriod != 0) {
           myVisibleGraph.add(new ConcurrencyGraphBlock(graphModel.getDrawElementsForRow(curEventId), cellsInPeriod));
           i += cellsInPeriod;
@@ -174,7 +178,7 @@ public class ConcurrencyGraphPresentationModel {
     return visualSettings.getHorizontalValue();
   }
 
-  public void notifyListeners() {
+  private void notifyListeners() {
     synchronized (myListenersObject) {
       for (PresentationListener logListener : myListeners) {
         logListener.graphChanged(getPadding());

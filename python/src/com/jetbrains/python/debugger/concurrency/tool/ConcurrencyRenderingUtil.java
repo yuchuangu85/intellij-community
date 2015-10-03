@@ -18,13 +18,14 @@ package com.jetbrains.python.debugger.concurrency.tool;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyGraphBlock;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyRelation;
 import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
+import org.jetbrains.annotations.NotNull;
 
 import java.awt.*;
 import java.util.ArrayList;
 
 public class ConcurrencyRenderingUtil {
 
-  public static void prepareStroke(Graphics g, ConcurrencyThreadState threadState) {
+  private static void prepareStroke(@NotNull Graphics g, @NotNull ConcurrencyThreadState threadState) {
     Graphics2D g2 = (Graphics2D)g;
     switch (threadState) {
       case Run:
@@ -56,46 +57,48 @@ public class ConcurrencyRenderingUtil {
     }
   }
 
-  public static void paintRow(Graphics g, int externalPadding, ArrayList<ConcurrencyGraphBlock> drawingElements, int row) {
+  public static void paintRow(@NotNull Graphics g, int externalPadding, @NotNull ArrayList<ConcurrencyGraphBlock> drawingElements,
+                              int row) {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     int paddingInsideBlock = 0;
     for (ConcurrencyGraphBlock block : drawingElements) {
       if (block != null) {
-        if (row < block.elements.size()) {
+        if (row < block.getElements().size()) {
           int padding = ConcurrencyGraphSettings.CELL_WIDTH * (externalPadding + paddingInsideBlock);
-          ConcurrencyThreadState drawElement = block.elements.get(row).threadState;
+          ConcurrencyThreadState drawElement = block.getElements().get(row).getThreadState();
           if (drawElement != ConcurrencyThreadState.Stopped) {
             prepareStroke(g2, drawElement);
             g2.fillRect(padding, ConcurrencyGraphSettings.INTERVAL / 2,
-                        ConcurrencyGraphSettings.CELL_WIDTH * block.numberOfCells, ConcurrencyGraphSettings.CELL_HEIGHT);
+                        ConcurrencyGraphSettings.CELL_WIDTH * block.getNumberOfCells(), ConcurrencyGraphSettings.CELL_HEIGHT);
           }
         }
-        paddingInsideBlock += block.numberOfCells;
+        paddingInsideBlock += block.getNumberOfCells();
       }
     }
   }
 
-  public static void paintBlockElements(Graphics g, int externalPadding, ArrayList<ConcurrencyGraphBlock> drawingElements) {
+  public static void paintBlockElements(@NotNull Graphics g, int externalPadding,
+                                        @NotNull ArrayList<ConcurrencyGraphBlock> drawingElements) {
     Graphics2D g2 = (Graphics2D)g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     int paddingInsideBlock = 0;
     for (ConcurrencyGraphBlock block : drawingElements) {
       int padding = ConcurrencyGraphSettings.CELL_WIDTH * (externalPadding + paddingInsideBlock);
-      for (int j = 0; j < block.elements.size(); ++j) {
-        ConcurrencyThreadState element = block.elements.get(j).threadState;
+      for (int j = 0; j < block.getElements().size(); ++j) {
+        ConcurrencyThreadState element = block.getElements().get(j).getThreadState();
         if (element != ConcurrencyThreadState.Stopped) {
           prepareStroke(g2, element);
           g2.fillRect(padding,
                       (ConcurrencyGraphSettings.CELL_HEIGHT + ConcurrencyGraphSettings.INTERVAL) * j + ConcurrencyGraphSettings.INTERVAL,
-                      ConcurrencyGraphSettings.CELL_WIDTH * block.numberOfCells, ConcurrencyGraphSettings.CELL_HEIGHT);
+                      ConcurrencyGraphSettings.CELL_WIDTH * block.getNumberOfCells(), ConcurrencyGraphSettings.CELL_HEIGHT);
         }
       }
-      paddingInsideBlock += block.numberOfCells;
+      paddingInsideBlock += block.getNumberOfCells();
     }
   }
 
-  public static void paintRelations(Graphics g, int externalPadding, ArrayList<ConcurrencyRelation> relations) {
+  public static void paintRelations(@NotNull Graphics g, int externalPadding, @NotNull ArrayList<ConcurrencyRelation> relations) {
     for (ConcurrencyRelation relation : relations) {
       prepareStroke(g, relation.getThreadState());
       Graphics2D g2 = (Graphics2D)g;
@@ -107,16 +110,16 @@ public class ConcurrencyRenderingUtil {
     }
   }
 
-  public static int getElementIndex(int externalPadding, ArrayList<ConcurrencyGraphBlock> drawingElements, int x) {
+  public static int getElementIndex(int externalPadding, @NotNull ArrayList<ConcurrencyGraphBlock> drawingElements, int x) {
     x = x / ConcurrencyGraphSettings.CELL_WIDTH - externalPadding;
     int paddingInsideBlock = 0;
     for (int i = 0; i < drawingElements.size(); ++i) {
       ConcurrencyGraphBlock block = drawingElements.get(i);
-      int blockWidth = block.numberOfCells;
+      int blockWidth = block.getNumberOfCells();
       if ((paddingInsideBlock < x) && (paddingInsideBlock + blockWidth >= x)) {
         return i;
       }
-      paddingInsideBlock += block.numberOfCells;
+      paddingInsideBlock += block.getNumberOfCells();
     }
     return -1;
   }

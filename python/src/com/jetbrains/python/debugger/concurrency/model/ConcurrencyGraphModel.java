@@ -15,7 +15,6 @@
  */
 package com.jetbrains.python.debugger.concurrency.model;
 
-import com.intellij.openapi.project.Project;
 import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.hash.HashMap;
 import com.intellij.xdebugger.XDebugSession;
@@ -33,20 +32,18 @@ import java.util.*;
 import java.util.List;
 
 public class ConcurrencyGraphModel {
-  protected Project myProject;
-  private List<PyConcurrencyEvent> myLog;
+  private @NotNull List<PyConcurrencyEvent> myLog;
   private final Object myLogObject = new Object();
   private ArrayList<ArrayList<ConcurrencyGraphElement>> myGraphScheme;
-  private ArrayList<Integer> myThreadCountForRow;
   private Map<String, Integer> threadIndexToId;
   private ArrayList<String> threadNames;
   private final Object myUpdateObject = new Object();
   private int myCurrentMaxThread = 0;
-  private HashMap<Integer, Point> relations;
-  private List<GraphListener> myListeners = new ArrayList<GraphListener>();
+  private @Nullable HashMap<Integer, Point> relations;
+  private @NotNull final List<GraphListener> myListeners = new ArrayList<GraphListener>();
   private final Object myListenersObject = new Object();
   private ConcurrencyGraphAnalyser myGraphAnalyser;
-  private XDebugSession lastSession;
+  private @Nullable XDebugSession lastSession;
   private String myFilterLockId;
   private Timer myTimer;
   private long myStartTime; //millis
@@ -57,12 +54,14 @@ public class ConcurrencyGraphModel {
   private HashMap<String, ConcurrencyStat> myStatInfo;
   private int myLastEventForStat;
 
-  public ConcurrencyGraphModel(Project project) {
-    myProject = project;
+  public ConcurrencyGraphModel() {
     myLog = new ArrayList<PyConcurrencyEvent>();
   }
 
-  public void addSessionListener() {
+  private void addSessionListener() {
+    if (lastSession == null) {
+      return;
+    }
     lastSession.addSessionListener(new XDebugSessionListener() {
       @Override
       public void sessionPaused() {
@@ -92,7 +91,7 @@ public class ConcurrencyGraphModel {
     });
   }
 
-  public void recordEvent(@NotNull XDebugSession debugSession, PyConcurrencyEvent event) {
+  public void recordEvent(@NotNull XDebugSession debugSession, @Nullable PyConcurrencyEvent event) {
     synchronized (myLogObject) {
       if (((lastSession == null) || (debugSession != lastSession)) && event == null) {
         lastSession = debugSession;
@@ -101,7 +100,7 @@ public class ConcurrencyGraphModel {
         createGraph();
         return;
       }
-      if (event.getTime() == 0) {
+      if ((event != null) && (event.getTime() == 0)) {
         myStartTime = System.currentTimeMillis();
       }
       myLog.add(event);
@@ -109,6 +108,7 @@ public class ConcurrencyGraphModel {
     }
   }
 
+  @NotNull
   public PyConcurrencyEvent getEventAt(int index) {
     if (index == myLog.size()) {
       PyConcurrencyEvent lastEvent = myLog.get(myLog.size() - 1);
@@ -123,6 +123,7 @@ public class ConcurrencyGraphModel {
     return myLog.size() > 0 ? myLog.size() + 1 : myLog.size();
   }
 
+  @NotNull
   public String getStringRepresentation() {
     StringBuilder resultBuilder = new StringBuilder();
     resultBuilder.append("<html>Size: ").append(myLog.size()).append("<br>");
@@ -133,11 +134,12 @@ public class ConcurrencyGraphModel {
     return resultBuilder.toString();
   }
 
-  public long getStartTime() {
+  private long getStartTime() {
     return myStartTime;
   }
 
-  public ConcurrencyStat getStatisticsByThreadId(String threadId) {
+  @NotNull
+  public ConcurrencyStat getStatisticsByThreadId(@NotNull String threadId) {
     ConcurrencyStat result = myStatInfo.get(threadId);
     if (result.getFinishTime() == 0) {
       result.setPauseTime(getEventAt(getSize() - 1).getTime());
@@ -171,18 +173,9 @@ public class ConcurrencyGraphModel {
     return myCurrentMaxThread;
   }
 
+  @NotNull
   public ArrayList<String> getThreadNames() {
-    return new ArrayList<String>(threadNames);
-  }
-
-  public String getStringForRow(int row) {
-    synchronized (myUpdateObject) {
-      StringBuilder sb = new StringBuilder();
-      for (int i = 0; i < myThreadCountForRow.get(row); ++i) {
-        sb.append(myGraphScheme.get(row).get(i).toString()).append(" ");
-      }
-      return sb.toString();
-    }
+    return threadNames != null ? new ArrayList<String>(threadNames) : new ArrayList<String>();
   }
 
   public int getLastEventIndexBeforeMoment(long time) {
@@ -202,7 +195,7 @@ public class ConcurrencyGraphModel {
     return 0;
   }
 
-  private class FakeEvent extends PyConcurrencyEvent {
+  private static class FakeEvent extends PyConcurrencyEvent {
     public FakeEvent(long time, PyConcurrencyEvent previousEvent) {
       super(time, previousEvent.getThreadId(), previousEvent.getThreadName(), previousEvent.isThreadEvent());
     }
@@ -218,13 +211,17 @@ public class ConcurrencyGraphModel {
     }
   }
 
+  @NotNull
   public ArrayList<ConcurrencyGraphElement> getDrawElementsForRow(int row) {
     synchronized (myUpdateObject) {
-      return new ArrayList<ConcurrencyGraphElement>(myGraphScheme.get(row));
+      return myGraphScheme != null ? new ArrayList<ConcurrencyGraphElement>(myGraphScheme.get(row)) :
+             new ArrayList<ConcurrencyGraphElement>();
     }
   }
 
-  private ConcurrencyGraphElement getThreadStateForEvent(PyConcurrencyEvent event, ConcurrencyThreadState threadState, int index) {
+  @NotNull
+  private ConcurrencyGraphElement getThreadStateForEvent(@NotNull PyConcurrencyEvent event, @NotNull ConcurrencyThreadState threadState,
+                                                         int index) {
     switch (event.getType()) {
       case CREATE:
         return new ConcurrencyGraphElement(threadState, index);
@@ -251,18 +248,25 @@ public class ConcurrencyGraphModel {
         }
         return new ConcurrencyGraphElement(ConcurrencyThreadState.LockOwn, index);
       case RELEASE:
-        return myGraphAnalyser.getThreadStateAt(index, event.getThreadId());
+        return myGraphAnalyser != null ? myGraphAnalyser.getThreadStateAt(index, event.getThreadId()) :
+               new ConcurrencyGraphElement(threadState, index);
       default:
         return new ConcurrencyGraphElement(ConcurrencyThreadState.Stopped, index);
     }
   }
 
   private void addRelation(int index, int parent, int child) {
+    if (relations == null) {
+      relations = new HashMap<Integer, Point>();
+    }
     relations.put(index, new Point(parent, child));
   }
 
   @Nullable
   public Point getRelationForRow(int row) {
+    if (relations == null) {
+      return null;
+    }
     Point relation = relations.get(row);
     if ((relation == null) || (relation.x == 0) && (relation.y == 0)) {
       return null;
@@ -280,7 +284,7 @@ public class ConcurrencyGraphModel {
     }
   }
 
-  public void notifyListeners() {
+  private void notifyListeners() {
     synchronized (myListenersObject) {
       for (GraphListener logListener : myListeners) {
         logListener.graphChanged();
@@ -288,12 +292,17 @@ public class ConcurrencyGraphModel {
     }
   }
 
+  @Nullable
   public ConcurrencyThreadState getThreadStateForEvent(int eventId, int threadIndex) {
-    return myGraphScheme.get(eventId).get(threadIndex).threadState;
+    return myGraphScheme != null ? myGraphScheme.get(eventId).get(threadIndex).getThreadState() : null;
   }
 
+  @Nullable
   public String getThreadIdByIndex(int index) {
     // terrible code! fix it!
+    if (threadIndexToId == null) {
+      return null;
+    }
     for (Map.Entry<String, Integer> entry : threadIndexToId.entrySet()) {
       if (entry.getValue() == index) {
         return entry.getKey();
@@ -342,7 +351,6 @@ public class ConcurrencyGraphModel {
       threadIndexToId = new HashMap<String, Integer>();
       threadNames = new ArrayList<String>();
       myGraphScheme = new ArrayList<ArrayList<ConcurrencyGraphElement>>(getSize());
-      myThreadCountForRow = new ArrayList<Integer>();
       myGraphAnalyser = new ConcurrencyGraphAnalyser(this);
       myCurrentMaxThread = 0;
       relations = new HashMap<Integer, Point>();
@@ -397,7 +405,7 @@ public class ConcurrencyGraphModel {
             }
             else {
               myGraphScheme.get(i).add(eventThreadIdInt,
-                                       getThreadStateForEvent(event, myGraphScheme.get(i - 1).get(eventThreadIdInt).threadState, i));
+                                       getThreadStateForEvent(event, myGraphScheme.get(i - 1).get(eventThreadIdInt).getThreadState(), i));
             }
           }
 
@@ -410,7 +418,6 @@ public class ConcurrencyGraphModel {
             }
           }
         }
-        myThreadCountForRow.add(i, myCurrentMaxThread);
       }
       updateStatistics();
     }

@@ -74,6 +74,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+
 import static javax.swing.SwingUtilities.invokeLater;
 
 /**
@@ -170,11 +171,6 @@ public class PyDebugProcess extends XDebugProcess implements IPyDebugProcess, Pr
       }
     });
 
-    if (PyDebuggerOptionsProvider.getInstance(getSession().getProject()).isSaveThreadingLog()) {
-      // notify log manager about new debug process
-      PyConcurrencyService.getInstance(getSession().getProject()).getThreadingInstance().recordEvent(getSession(), null);
-      PyConcurrencyService.getInstance(getSession().getProject()).getAsyncioInstance().recordEvent(getSession(), null);
-    }
   }
 
   private MultiProcessDebugger createMultiprocessDebugger(ServerSocket serverSocket) {

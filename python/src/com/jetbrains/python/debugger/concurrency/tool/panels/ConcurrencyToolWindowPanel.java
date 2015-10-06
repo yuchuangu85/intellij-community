@@ -152,9 +152,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
     myLabel = new JLabel();
     myLabel.setHorizontalAlignment(SwingConstants.CENTER);
     myLabel.setVerticalAlignment(SwingConstants.CENTER);
-    myLabel.setText("<html>The " + myType + " log is empty. <br>" +
-                    "Check the box \"Build diagram for concurrent programs\" " +
-                    "in Settings | Build, Execution, Deployment | Python debugger</html>");
+    myLabel.setText("<html>The " + myType + " log is empty </html>");
     add(myLabel);
   }
 

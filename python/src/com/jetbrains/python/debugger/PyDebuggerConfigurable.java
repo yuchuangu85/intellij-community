@@ -35,7 +35,6 @@ public class PyDebuggerConfigurable implements SearchableConfigurable, Configura
   private JCheckBox mySaveSignatures;
   private JButton myClearCacheButton;
   private JCheckBox mySupportGevent;
-  private JCheckBox myCollectThreadingLog;
 
   private final Project myProject;
 
@@ -74,22 +73,19 @@ public class PyDebuggerConfigurable implements SearchableConfigurable, Configura
   public boolean isModified() {
     return myAttachToSubprocess.isSelected() != mySettings.isAttachToSubprocess() ||
            mySaveSignatures.isSelected() != mySettings.isSaveCallSignatures() ||
-           mySupportGevent.isSelected() != mySettings.isSupportGeventDebugging() ||
-          myCollectThreadingLog.isSelected() != mySettings.isSaveThreadingLog();
+           mySupportGevent.isSelected() != mySettings.isSupportGeventDebugging();
   }
 
   public void apply() throws ConfigurationException {
     mySettings.setAttachToSubprocess(myAttachToSubprocess.isSelected());
     mySettings.setSaveCallSignatures(mySaveSignatures.isSelected());
     mySettings.setSupportGeventDebugging(mySupportGevent.isSelected());
-    mySettings.setSaveThreadingLog(myCollectThreadingLog.isSelected());
   }
 
   public void reset() {
     myAttachToSubprocess.setSelected(mySettings.isAttachToSubprocess());
     mySaveSignatures.setSelected(mySettings.isSaveCallSignatures());
     mySupportGevent.setSelected(mySettings.isSupportGeventDebugging());
-    myCollectThreadingLog.setSelected(mySettings.isSaveThreadingLog());
   }
 
   public void disposeUIResources() {

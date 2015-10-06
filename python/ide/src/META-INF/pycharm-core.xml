@@ -100,11 +100,8 @@
     <!-- Console -->
     <toolWindow id="Python Console" anchor="bottom" icon="PythonIcons.Python.PythonConsoleToolWindow"
                 factoryClass="com.jetbrains.python.console.PythonConsoleToolWindowFactory" secondary="false"/>
-    <toolWindow id="Concurrent Activities Diagram"
-                anchor="bottom"
-                secondary="true"
-                icon="AllIcons.Toolwindows.ToolWindowStructure"
-                factoryClass="com.jetbrains.python.debugger.concurrency.tool.ConcurrencyLogToolWindowFactory"/>
+    <programRunner implementation="com.jetbrains.python.debugger.concurrency.PyConcurrencyDebugRunner"/>
+    <executor implementation="com.jetbrains.python.debugger.concurrency.PyConcurrencyExecutor" order="last"/>
   </extensions>
 
   <actions>
@@ -130,11 +127,6 @@
 
       <add-to-group group-id="WelcomeScreen.QuickStart" anchor="first"/>
     </group>
-
-    <action id="PyDebugger.ShowLog" class="com.jetbrains.python.debugger.concurrency.PyShowThreadingLogAction"
-            text="Show threading log">
-      <add-to-group group-id="ToolsMenu" anchor="first"/>
-    </action>
 
     <action id="MarkSourceRoot" class="com.intellij.ide.projectView.actions.MarkJavaSourceRootAction">
       <add-to-group group-id="MarkRootGroup"/>

@@ -34,6 +34,9 @@ boolean maySkipAndroidPlugin() {
   return isDefined("productProperties") && productProperties.maySkipAndroidPlugin
 }
 
+boolean setPluginAndIDEVersionInPluginXml() {
+  return !isDefined("productProperties") || productProperties.setPluginAndIDEVersionInPluginXml
+}
 
 String appInfoModule() {
   return isDefined("productProperties") ? productProperties.appInfoModule : "community-resources"
@@ -651,7 +654,7 @@ public def layoutCommunityPlugins(String home, boolean maySkipAndroidPlugin = fa
     }
 
     layoutPlugin("settings-repository") {
-      fileset(dir: "$home/plugins/settings-repository/lib", excludes: "**/*-sources.jar,**/*.xml,**/com/**,**/org/**,**/java/**")
+      fileset(dir: "$home/plugins/settings-repository/lib", excludes: "**/*-sources.jar,**/*.xml,**/com/**,**/org/**,**/java/**,**/dev/**")
     }
   }
 }
@@ -661,7 +664,8 @@ def setPluginVersionAndSince(String moduleName, String version) {
   if (file.isFile()) {
     def text = file.text
     if (!text.contains("<version>")) {
-      file.text = text.replace("</id>", "</id>\n  <version>${version}</version>\n  <idea-version since-build=\"${version}\" until-build=\"${version}\"/>\n")
+      def nextMajorVersion = Integer.parseInt(version.substring(0, version.indexOf('.'))) + 1
+      file.text = text.replace("</id>", "</id>\n  <version>${version}</version>\n  <idea-version since-build=\"${version}\" until-build=\"${nextMajorVersion}.0\"/>\n")
     }
   }
 }
@@ -696,7 +700,9 @@ def layoutPlugin(String pluginName, String moduleName, String jarName, Closure c
     return
   }
 
-  setPluginVersionAndSince(moduleName, requireProperty("buildNumber", requireProperty("build.number", snapshot)))
+  if (setPluginAndIDEVersionInPluginXml()) {
+    setPluginVersionAndSince(moduleName, requireProperty("buildNumber", requireProperty("build.number", snapshot)))
+  }
 
   dir(pluginName) {
     dir("lib") {

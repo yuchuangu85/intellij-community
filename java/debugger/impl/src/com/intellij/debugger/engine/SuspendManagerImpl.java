@@ -15,7 +15,7 @@
  */
 package com.intellij.debugger.engine;
 
-import com.intellij.debugger.engine.events.DebuggerCommandImpl;
+import com.intellij.debugger.engine.events.SuspendContextCommandImpl;
 import com.intellij.debugger.jdi.ThreadReferenceProxyImpl;
 import com.intellij.openapi.diagnostic.Logger;
 import com.sun.jdi.InternalException;
@@ -113,13 +113,6 @@ public class SuspendManagerImpl implements SuspendManager {
     };
     pushContext(suspendContext);
     return suspendContext;
-  }
-
-  public SuspendContextImpl createDummyContext(@MagicConstant(flagsFromClass = EventRequest.class) int suspendPolicy) {
-    return new SuspendContextImpl(myDebugProcess, suspendPolicy, 0, null) {
-      @Override
-      protected void resumeImpl() {}
-    };
   }
 
   @Override
@@ -281,7 +274,7 @@ public class SuspendManagerImpl implements SuspendManager {
   }
 
   @Override
-  public void resumeThread(SuspendContextImpl context, ThreadReferenceProxyImpl thread) {
+  public void resumeThread(SuspendContextImpl context, @NotNull ThreadReferenceProxyImpl thread) {
     //LOG.assertTrue(thread != context.getThread(), "Use resume() instead of resuming breakpoint thread");
     LOG.assertTrue(!context.isExplicitlyResumed(thread));
 
@@ -316,9 +309,9 @@ public class SuspendManagerImpl implements SuspendManager {
     if(suspendContext.myVotesToVote == 0) {
       if(suspendContext.myIsVotedForResume) {
         // resume in a separate request to allow other requests be processed (e.g. dependent bpts enable)
-        myDebugProcess.getManagerThread().schedule(new DebuggerCommandImpl() {
+        myDebugProcess.getManagerThread().schedule(new SuspendContextCommandImpl(suspendContext) {
           @Override
-          protected void action() throws Exception {
+          public void contextAction() throws Exception {
             resume(suspendContext);
           }
 
@@ -360,7 +353,7 @@ public class SuspendManagerImpl implements SuspendManager {
     processVote(suspendContext);
   }
 
-  LinkedList<SuspendContextImpl> getPausedContexts() {
+  public List<SuspendContextImpl> getPausedContexts() {
     return myPausedContexts;
   }
 }

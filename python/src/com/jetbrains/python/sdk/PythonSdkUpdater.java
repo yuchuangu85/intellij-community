@@ -124,6 +124,8 @@ public class PythonSdkUpdater implements StartupActivity {
                   try {
                     LOG.info("Performing background update of skeletons for SDK " + sdk.getHomePath());
                     updateSdk(project, null, PySdkUpdater.fromSdkPath(sdk.getHomePath()));
+                  } catch (PySdkUpdater.PySdkNotFoundException e) {
+                    LOG.info("Sdk " + sdk.getName() + " was removed during update process.");
                   }
                   catch (InvalidSdkException e) {
                     if (PythonSdkType.isVagrant(sdk)) {
@@ -193,6 +195,7 @@ public class PythonSdkUpdater implements StartupActivity {
    * Updates SDK based on sys.path and cleans legacy information up.
    */
   private static void updateSdkPath(@NotNull PySdkUpdater sdkUpdater, @NotNull List<String> sysPath) {
+    if (getInstance().isAlreadyUpdated(sdkUpdater.getHomePath())) return;
     addNewSysPathEntries(sdkUpdater, sysPath);
     removeSourceRoots(sdkUpdater);
     removeDuplicateClassRoots(sdkUpdater);
@@ -300,5 +303,13 @@ public class PythonSdkUpdater implements StartupActivity {
       return oldRoots.contains(rootFile);
     }
     return false;
+  }
+
+  public void clearAlreadyUpdated() {
+    myAlreadyUpdated.clear();
+  }
+
+  public boolean isAlreadyUpdated(String path) {
+    return myAlreadyUpdated.contains(path);
   }
 }

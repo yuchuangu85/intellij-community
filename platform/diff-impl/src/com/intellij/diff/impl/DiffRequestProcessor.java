@@ -98,7 +98,7 @@ public abstract class DiffRequestProcessor implements Disposable {
   }
 
   public DiffRequestProcessor(@Nullable Project project, @NotNull String place) {
-    this(project, DiffUtil.createUserDataHolder(DiffUserDataKeysEx.PLACE, place));
+    this(project, DiffUtil.createUserDataHolder(DiffUserDataKeys.PLACE, place));
   }
 
   public DiffRequestProcessor(@Nullable Project project, @NotNull UserDataHolder context) {
@@ -107,7 +107,7 @@ public abstract class DiffRequestProcessor implements Disposable {
     myContext = new MyDiffContext(context);
     myActiveRequest = new LoadingDiffRequest();
 
-    mySettings = DiffSettingsHolder.getInstance().getSettings(myContext.getUserData(DiffUserDataKeysEx.PLACE));
+    mySettings = DiffSettingsHolder.getInstance().getSettings(myContext.getUserData(DiffUserDataKeys.PLACE));
 
     myAvailableTools = DiffManagerEx.getInstance().getDiffTools();
     myToolOrder = new LinkedList<DiffTool>(getToolOrderFromSettings(myAvailableTools));
@@ -341,7 +341,7 @@ public abstract class DiffRequestProcessor implements Disposable {
 
   protected void requestFocusInternal() {
     JComponent component = getPreferredFocusedComponent();
-    if (component != null) component.requestFocus();
+    if (component != null) component.requestFocusInWindow();
   }
 
   @NotNull

@@ -323,13 +323,13 @@ public class PyQuickFixTest extends PyTestCase {
 
   // PY-1445
   public void testConvertSingleQuotedDocstring() {
-    getCommonCodeStyleSettings().getIndentOptions().INDENT_SIZE = 2;
+    getIndentOptions().INDENT_SIZE = 2;
     doInspectionTest(PySingleQuotedDocstringInspection.class, PyBundle.message("QFIX.convert.single.quoted.docstring"), true, true);
   }
 
   // PY-8926
   public void testConvertSingleQuotedDocstringEscape() {
-    getCommonCodeStyleSettings().getIndentOptions().INDENT_SIZE = 2;
+    getIndentOptions().INDENT_SIZE = 2;
     doInspectionTest(PySingleQuotedDocstringInspection.class, PyBundle.message("QFIX.convert.single.quoted.docstring"), true, true);
   }
 
@@ -438,7 +438,7 @@ public class PyQuickFixTest extends PyTestCase {
 
   // PY-3394
   public void testDocstringParams() {
-    getCommonCodeStyleSettings().getIndentOptions().INDENT_SIZE = 2;
+    getIndentOptions().INDENT_SIZE = 2;
     runWithDocStringFormat(DocStringFormat.EPYTEXT, new Runnable() {
       public void run() {
         doInspectionTest(PyDocstringInspection.class, PyBundle.message("QFIX.docstring.add.$0", "b"), true, true);
@@ -447,7 +447,7 @@ public class PyQuickFixTest extends PyTestCase {
   }
 
   public void testDocstringParams1() {
-    getCommonCodeStyleSettings().getIndentOptions().INDENT_SIZE = 2;
+    getIndentOptions().INDENT_SIZE = 2;
     runWithDocStringFormat(DocStringFormat.EPYTEXT, new Runnable() {
       public void run() {
         doInspectionTest(PyDocstringInspection.class, PyBundle.message("QFIX.docstring.remove.$0", "c"), true, true);
@@ -530,6 +530,46 @@ public class PyQuickFixTest extends PyTestCase {
       @Override
       public void run() {
         doInspectionTest(PyDocstringInspection.class, PyBundle.message("QFIX.docstring.add.$0", "kwargs"), true, true);
+      }
+    });
+  }
+
+  // PY-16908
+  public void testNumpyDocStringRemoveFirstOfCombinedParams() {
+    runWithDocStringFormat(DocStringFormat.NUMPY, new Runnable() {
+      @Override
+      public void run() {
+        doInspectionTest(PyDocstringInspection.class, PyBundle.message("QFIX.docstring.remove.$0", "x"), true, true);
+      }
+    });
+  }
+
+  // PY-16908
+  public void testNumpyDocStringRemoveMidOfCombinedParams() {
+    runWithDocStringFormat(DocStringFormat.NUMPY, new Runnable() {
+      @Override
+      public void run() {
+        doInspectionTest(PyDocstringInspection.class, PyBundle.message("QFIX.docstring.remove.$0", "y"), true, true);
+      }
+    });
+  }
+  
+  // PY-16908
+  public void testNumpyDocStringRemoveLastOfCombinedParams() {
+    runWithDocStringFormat(DocStringFormat.NUMPY, new Runnable() {
+      @Override
+      public void run() {
+        doInspectionTest(PyDocstringInspection.class, PyBundle.message("QFIX.docstring.remove.$0", "z"), true, true);
+      }
+    });
+  }
+
+  // PY-16908
+  public void testNumpyDocStringRemoveCombinedVarargParam() {
+    runWithDocStringFormat(DocStringFormat.NUMPY, new Runnable() {
+      @Override
+      public void run() {
+        doInspectionTest(PyDocstringInspection.class, PyBundle.message("QFIX.docstring.remove.$0", "args"), true, true);
       }
     });
   }
@@ -625,6 +665,7 @@ public class PyQuickFixTest extends PyTestCase {
    * @param available       true if the fix should be available, false if it should be explicitly not available.
    * @throws Exception
    */
+  @SuppressWarnings("Duplicates")
   protected void doInspectionTest(@NonNls @NotNull String[] testFiles,
                                   @NotNull Class inspectionClass,
                                   @NonNls @NotNull String quickFixName,
@@ -635,10 +676,14 @@ public class PyQuickFixTest extends PyTestCase {
     myFixture.checkHighlighting(true, false, false);
     final List<IntentionAction> intentionActions = myFixture.filterAvailableIntentions(quickFixName);
     if (available) {
-      assertOneElement(intentionActions);
+      if (intentionActions.isEmpty()) {
+        throw new AssertionError("Quickfix \"" + quickFixName + "\" is not available");
+      }
+      if (intentionActions.size() > 1) {
+        throw new AssertionError("There are more than one quickfix with the name \"" + quickFixName + "\"");
+      }
       if (applyFix) {
         myFixture.launchAction(intentionActions.get(0));
-
         myFixture.checkResultByFile(graftBeforeExt(testFiles[0], "_after"));
       }
     }

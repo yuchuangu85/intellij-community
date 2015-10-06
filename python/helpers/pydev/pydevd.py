@@ -1722,19 +1722,6 @@ class PyDB:
         return None
 
     def run(self, file, globals=None, locals=None, module=False, set_trace=True):
-        if module:
-            filename = self.get_fullname(file)
-            if filename is None:
-                sys.stderr.write("No module named %s\n" % file)
-                return
-            else:
-                file = filename
-
-        if os.path.isdir(file):
-            new_target = os.path.join(file, '__main__.py')
-            if os.path.isfile(new_target):
-                file = new_target
-
         if globals is None:
             m = save_main_module(file, 'pydevd')
             globals = m.__dict__
@@ -1784,7 +1771,26 @@ class PyDB:
             sys.stderr.write("Matplotlib support in debugger failed\n")
             traceback.print_exc()
 
-        pydev_imports.execfile(file, globals, locals)  # execute the script
+        launch = pydev_imports.execfile
+
+        if module:
+            try:
+                import runpy
+                launch = lambda f, g, l: runpy.run_module(f, init_globals=g)
+            except:
+                filename = self.get_fullname(file)
+                if filename is None:
+                    sys.stderr.write("No module named %s\n" % file)
+                    return
+                else:
+                    file = filename
+
+        if os.path.isdir(file):
+            new_target = os.path.join(file, '__main__.py')
+            if os.path.isfile(new_target):
+                file = new_target
+
+        launch(file, globals, locals)  # execute the script
 
     def exiting(self):
         sys.stdout.flush()
@@ -1851,7 +1857,11 @@ def processCommandLine(argv):
             setup['server'] = True
         elif argv[i] == '--file':
             del argv[i]
-            setup['file'] = argv[i]
+            file = argv[i]
+            if file.startswith('-m'):
+                setup['module'] = True
+                file = file[2:]
+            setup['file'] = file
             i = len(argv) # pop out, file is our last argument
         elif argv[i] == '--DEBUG_RECORD_SOCKET_READS':
             del argv[i]
@@ -2236,6 +2246,7 @@ if __name__ == '__main__':
     f = setup['file']
     fix_app_engine_debug = False
 
+    debugger = PyDB()
 
     try:
         import pydev_monkey
@@ -2323,7 +2334,6 @@ if __name__ == '__main__':
     except:
         pass  # It's ok not having stackless there...
 
-    debugger = PyDB()
     is_module = setup['module']
 
     if fix_app_engine_debug:

@@ -328,7 +328,7 @@ public final class EditorImpl extends UserDataHolderBase implements EditorEx, Hi
     assertIsDispatchThread();
     myProject = project;
     myDocument = (DocumentEx)document;
-    if (myDocument instanceof DocumentImpl) {
+    if (myDocument instanceof DocumentImpl && !myUseNewRendering) {
       ((DocumentImpl)myDocument).requestTabTracking();
     }
     myScheme = createBoundColorSchemeDelegate(null);
@@ -888,7 +888,7 @@ public final class EditorImpl extends UserDataHolderBase implements EditorEx, Hi
     if (myConnection != null) {
       myConnection.disconnect();
     }
-    if (myDocument instanceof DocumentImpl) {
+    if (myDocument instanceof DocumentImpl && !myUseNewRendering) {
       ((DocumentImpl)myDocument).giveUpTabTracking();
     }
     Disposer.dispose(myDisposable);
@@ -1511,6 +1511,11 @@ public final class EditorImpl extends UserDataHolderBase implements EditorEx, Hi
     }
     return result;
   }
+  
+  public int visualLineStartOffset(int visualLine) {
+    if (myUseNewRendering) return myView.visualLineStartOffset(visualLine);
+    throw new UnsupportedOperationException();
+  }
 
   private int logicalToVisualLine(int line) {
     assertReadAccess();
@@ -1525,8 +1530,9 @@ public final class EditorImpl extends UserDataHolderBase implements EditorEx, Hi
   }
 
   private int logicalLineToY(int line) {
-    VisualPosition visible = logicalToVisualPosition(new LogicalPosition(line, 0));
-    return visibleLineToY(visible.line);
+    int visualLine = myUseNewRendering && line < myDocument.getLineCount() ? offsetToVisualLine(myDocument.getLineStartOffset(line)) : 
+                     logicalToVisualPosition(new LogicalPosition(line, 0)).line;
+    return visibleLineToY(visualLine);
   }
 
   @Override
@@ -1954,7 +1960,7 @@ public final class EditorImpl extends UserDataHolderBase implements EditorEx, Hi
   }
 
   public boolean hasTabs() {
-    return !(myDocument instanceof DocumentImpl) || ((DocumentImpl)myDocument).mightContainTabs();
+    return myUseNewRendering || !(myDocument instanceof DocumentImpl) || ((DocumentImpl)myDocument).mightContainTabs();
   }
 
   public boolean isScrollToCaret() {
@@ -1996,6 +2002,8 @@ public final class EditorImpl extends UserDataHolderBase implements EditorEx, Hi
   }
 
   void validateSize() {
+    if (myUseNewRendering && isReleased) return;
+    
     Dimension dim = getPreferredSize();
 
     if (!dim.equals(myPreferredSize) && !myDocument.isInBulkUpdate()) {
@@ -3791,7 +3799,7 @@ public final class EditorImpl extends UserDataHolderBase implements EditorEx, Hi
   }
 
   public Dimension getPreferredSize() {
-    if (myUseNewRendering) return myView.getPreferredSize();
+    if (myUseNewRendering) return isReleased ? new Dimension() : myView.getPreferredSize();
     if (ourIsUnitTestMode && getUserData(DO_DOCUMENT_UPDATE_TEST) == null) {
       return new Dimension(1, 1);
     }

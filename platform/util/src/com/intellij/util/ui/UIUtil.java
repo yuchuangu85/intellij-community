@@ -1976,7 +1976,8 @@ public class UIUtil {
 
     @NonNls String fontFamilyAndSize = "font-family:'" + font.getFamily() + "'; font-size:" + font.getSize() + "pt;";
     @NonNls @Language("HTML")
-    String body = "body, div, td, p {" + fontFamilyAndSize + " " + (fgColor != null ? "color:#" + ColorUtil.toHex(fgColor)+";" : "") + "}\n";
+    String body = "body, div, td, p {" + fontFamilyAndSize + " " + (fgColor != null ? "color:#" + ColorUtil.toHex(fgColor)+";" : "") + "}\n" +
+                  "code {font-size:" + font.getSize() + "pt;}\n";
     if (resource != null) {
       body += "ul {list-style-image:url('" + StringUtil.escapeCharCharacters(resource.toExternalForm()) + "');}\n";
     }
@@ -3069,6 +3070,33 @@ public class UIUtil {
     }
 
     return null;
+  }
+
+  public static int getLcdContrastValue() {
+    int lcdContrastValue  = Registry.get("lcd.contrast.value").asInteger();
+
+    // Evaluate the value depending on our current theme
+    if (lcdContrastValue == 0) {
+      if (SystemInfo.isMacIntel64) {
+        lcdContrastValue = UIUtil.isUnderDarcula() ? 100 : 250;
+      } else {
+        Map map = (Map)Toolkit.getDefaultToolkit().getDesktopProperty("awt.font.desktophints");
+
+        if (map == null) {
+          lcdContrastValue = 140;
+        } else {
+          Object o = map.get(RenderingHints.KEY_TEXT_LCD_CONTRAST);
+          lcdContrastValue = (o == null) ? 140 : ((Integer)o);
+        }
+      }
+    }
+
+    if (lcdContrastValue < 100 || lcdContrastValue > 250) {
+      // the default value
+      lcdContrastValue = 140;
+    }
+
+    return lcdContrastValue;
   }
 
   /**

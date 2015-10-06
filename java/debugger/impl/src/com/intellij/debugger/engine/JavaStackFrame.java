@@ -138,7 +138,7 @@ public class JavaStackFrame extends XStackFrame {
       xFrame.computeChildren(node);
       return;
     }
-    myDebugProcess.getManagerThread().schedule(new DebuggerContextCommandImpl(myDebugProcess.getDebuggerContext()) {
+    myDebugProcess.getManagerThread().schedule(new DebuggerContextCommandImpl(myDebugProcess.getDebuggerContext(), myDescriptor.getFrameProxy().threadProxy()) {
       @Override
       public Priority getPriority() {
         return Priority.NORMAL;
@@ -325,10 +325,8 @@ public class JavaStackFrame extends XStackFrame {
         // trying to collect values from variable slots
         try {
           for (Map.Entry<DecompiledLocalVariable, Value> entry : LocalVariablesUtil.fetchValues(getStackFrameProxy(), debugProcess).entrySet()) {
-            DecompiledLocalVariable var = entry.getKey();
-            children.add(JavaValue.create(
-              myNodeManager.getArgumentValueDescriptor(null, var.getSlot(), entry.getValue(), var.isParam(), var.getDisplayName()),
-              evaluationContext, myNodeManager));
+            children.add(JavaValue.create(myNodeManager.getArgumentValueDescriptor(
+              null, entry.getKey(), entry.getValue()), evaluationContext, myNodeManager));
           }
         }
         catch (Exception ex) {
@@ -399,6 +397,7 @@ public class JavaStackFrame extends XStackFrame {
     }
   }
 
+  @NotNull
   public StackFrameProxyImpl getStackFrameProxy() {
     return myDescriptor.getFrameProxy();
   }

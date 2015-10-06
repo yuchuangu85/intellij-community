@@ -26,6 +26,7 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Computable;
 import com.intellij.psi.*;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.containers.MultiMap;
 import com.sun.jdi.*;
 import org.jetbrains.annotations.NotNull;
@@ -122,16 +123,19 @@ public class LocalVariablesUtil {
   public static Map<DecompiledLocalVariable, Value> fetchValues(@NotNull StackFrameProxyImpl frameProxy, DebugProcess process) throws Exception {
     Map<DecompiledLocalVariable, Value> map = new LinkedHashMap<DecompiledLocalVariable, Value>(); // LinkedHashMap for correct order
 
-    List<Value> argValues = frameProxy.getArgumentValues();
+    com.sun.jdi.Method method = frameProxy.location().method();
+    final int firstLocalVariableSlot = getFirstLocalsSlot(method);
 
     // gather code variables names
-    MultiMap<Integer, String> namesMap = calcNames(new SimpleStackFrameContext(frameProxy, process), argValues.size());
+    MultiMap<Integer, String> namesMap = calcNames(new SimpleStackFrameContext(frameProxy, process), firstLocalVariableSlot);
 
     // first add arguments
     int slot = 0;
-    for (Value value : argValues) {
-      map.put(new DecompiledLocalVariable(slot, true, null, namesMap.get(slot)), value);
-      slot++;
+    List<String> typeNames = method.argumentTypeNames();
+    List<Value> argValues = frameProxy.getArgumentValues();
+    for (int i = 0; i < argValues.size(); i++) {
+      map.put(new DecompiledLocalVariable(slot, true, null, namesMap.get(slot)), argValues.get(i));
+      slot += getTypeSlotSize(typeNames.get(i));
     }
 
     if (!ourInitializationOk) {
@@ -260,26 +264,29 @@ public class LocalVariablesUtil {
   }
 
   @NotNull
-  private static MultiMap<Integer, String> calcNames(@NotNull final StackFrameContext context, final int methodArgsNumber) {
+  private static MultiMap<Integer, String> calcNames(@NotNull final StackFrameContext context, final int firstLocalsSlot) {
     return ApplicationManager.getApplication().runReadAction(new Computable<MultiMap<Integer, String>>() {
       @Override
       public MultiMap<Integer, String> compute() {
         SourcePosition position = ContextUtil.getSourcePosition(context);
         if (position != null) {
-          PsiElement method = DebuggerUtilsEx.getContainingMethod(position.getElementAt());
+          PsiElement element = position.getElementAt();
+          PsiElement method = DebuggerUtilsEx.getContainingMethod(element);
           if (method != null) {
             PsiParameterList params = DebuggerUtilsEx.getParameterList(method);
             if (params != null) {
               MultiMap<Integer, String> res = new MultiMap<Integer, String>();
-              int paramCount = params.getParametersCount();
-              int offset = Math.max(0, methodArgsNumber - paramCount);
-              for (int i = 0; i < paramCount; i++) {
-                res.putValue(i + offset, params.getParameters()[i].getName());
+              int psiFirstLocalsSlot = getFirstLocalsSlot(method);
+              int slot = Math.max(0, firstLocalsSlot - psiFirstLocalsSlot);
+              for (int i = 0; i < params.getParametersCount(); i++) {
+                PsiParameter parameter = params.getParameters()[i];
+                res.putValue(slot, parameter.getName());
+                slot += getTypeSlotSize(parameter.getType());
               }
               PsiElement body = DebuggerUtilsEx.getBody(method);
               if (body != null) {
                 try {
-                  body.accept(new LocalVariableNameFinder(getFirstLocalsSlot(method), res));
+                  body.accept(new LocalVariableNameFinder(firstLocalsSlot, res, element));
                 }
                 catch (Exception e) {
                   LOG.info(e);
@@ -294,34 +301,58 @@ public class LocalVariablesUtil {
     });
   }
 
+  /**
+   * Walker that preserves the order of locals declarations but walks only visible scope
+   */
   private static class LocalVariableNameFinder extends JavaRecursiveElementVisitor {
-    private final int myStartSlot;
     private final MultiMap<Integer, String> myNames;
     private int myCurrentSlotIndex;
+    private final PsiElement myElement;
     private final Stack<Integer> myIndexStack;
+    private boolean myReached = false;
 
-    public LocalVariableNameFinder(int startSlot, MultiMap<Integer, String> names) {
-      myStartSlot = startSlot;
+    public LocalVariableNameFinder(int startSlot, MultiMap<Integer, String> names, PsiElement element) {
       myNames = names;
-      myCurrentSlotIndex = myStartSlot;
+      myCurrentSlotIndex = startSlot;
+      myElement = element;
       myIndexStack = new Stack<Integer>();
+
+    }
+
+    private boolean shouldVisit(PsiElement scope) {
+      return !myReached && PsiTreeUtil.isContextAncestor(scope, myElement, false);
+    }
+
+    @Override
+    public void visitElement(PsiElement element) {
+      if (element == myElement) {
+        myReached = true;
+      }
+      else {
+        super.visitElement(element);
+      }
     }
 
     @Override
     public void visitLocalVariable(PsiLocalVariable variable) {
-      appendName(variable.getName());
-      myCurrentSlotIndex += getTypeSlotSize(variable.getType());
+      super.visitLocalVariable(variable);
+      if (!myReached) {
+        appendName(variable.getName());
+        myCurrentSlotIndex += getTypeSlotSize(variable.getType());
+      }
     }
 
     public void visitSynchronizedStatement(PsiSynchronizedStatement statement) {
-      myIndexStack.push(myCurrentSlotIndex);
-      try {
-        appendName("<monitor>");
-        myCurrentSlotIndex++;
-        super.visitSynchronizedStatement(statement);
-      }
-      finally {
-        myCurrentSlotIndex = myIndexStack.pop();
+      if (shouldVisit(statement)) {
+        myIndexStack.push(myCurrentSlotIndex);
+        try {
+          appendName("<monitor>");
+          myCurrentSlotIndex++;
+          super.visitSynchronizedStatement(statement);
+        }
+        finally {
+          myCurrentSlotIndex = myIndexStack.pop();
+        }
       }
     }
 
@@ -331,56 +362,66 @@ public class LocalVariablesUtil {
 
     @Override
     public void visitCodeBlock(PsiCodeBlock block) {
-      myIndexStack.push(myCurrentSlotIndex);
-      try {
-        super.visitCodeBlock(block);
-      }
-      finally {
-        myCurrentSlotIndex = myIndexStack.pop();
+      if (shouldVisit(block)) {
+        myIndexStack.push(myCurrentSlotIndex);
+        try {
+          super.visitCodeBlock(block);
+        }
+        finally {
+          myCurrentSlotIndex = myIndexStack.pop();
+        }
       }
     }
 
     @Override
     public void visitForStatement(PsiForStatement statement) {
-      myIndexStack.push(myCurrentSlotIndex);
-      try {
-        super.visitForStatement(statement);
-      }
-      finally {
-        myCurrentSlotIndex = myIndexStack.pop();
+      if (shouldVisit(statement)) {
+        myIndexStack.push(myCurrentSlotIndex);
+        try {
+          super.visitForStatement(statement);
+        }
+        finally {
+          myCurrentSlotIndex = myIndexStack.pop();
+        }
       }
     }
 
     @Override
     public void visitForeachStatement(PsiForeachStatement statement) {
-      myIndexStack.push(myCurrentSlotIndex);
-      try {
-        super.visitForeachStatement(statement);
-      }
-      finally {
-        myCurrentSlotIndex = myIndexStack.pop();
+      if (shouldVisit(statement)) {
+        myIndexStack.push(myCurrentSlotIndex);
+        try {
+          super.visitForeachStatement(statement);
+        }
+        finally {
+          myCurrentSlotIndex = myIndexStack.pop();
+        }
       }
     }
 
     @Override
     public void visitCatchSection(PsiCatchSection section) {
-      myIndexStack.push(myCurrentSlotIndex);
-      try {
-        super.visitCatchSection(section);
-      }
-      finally {
-        myCurrentSlotIndex = myIndexStack.pop();
+      if (shouldVisit(section)) {
+        myIndexStack.push(myCurrentSlotIndex);
+        try {
+          super.visitCatchSection(section);
+        }
+        finally {
+          myCurrentSlotIndex = myIndexStack.pop();
+        }
       }
     }
 
     @Override
     public void visitResourceList(PsiResourceList resourceList) {
-      myIndexStack.push(myCurrentSlotIndex);
-      try {
-        super.visitResourceList(resourceList);
-      }
-      finally {
-        myCurrentSlotIndex = myIndexStack.pop();
+      if (shouldVisit(resourceList)) {
+        myIndexStack.push(myCurrentSlotIndex);
+        try {
+          super.visitResourceList(resourceList);
+        }
+        finally {
+          myCurrentSlotIndex = myIndexStack.pop();
+        }
       }
     }
 

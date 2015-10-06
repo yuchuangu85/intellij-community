@@ -28,7 +28,6 @@ import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.NullableComputable;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.psi.impl.light.LightElement;
 import com.intellij.psi.impl.smartPointers.SelfElementInfo;
 import com.intellij.psi.impl.smartPointers.SmartPointerAnchorProvider;
 import com.intellij.psi.impl.source.PsiFileImpl;
@@ -39,8 +38,6 @@ import com.intellij.psi.stubs.StubElement;
 import com.intellij.psi.stubs.StubTree;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.tree.IStubFileElementType;
-import com.intellij.psi.util.PsiModificationTracker;
-import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtilCore;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -104,9 +101,8 @@ public abstract class PsiAnchor {
 
     Language lang = null;
     final FileViewProvider viewProvider = file.getViewProvider();
-    final Set<Language> languages = viewProvider.getLanguages();
-    for (Language l : languages) {
-      if (PsiTreeUtil.isAncestor(viewProvider.getPsi(l), element, false)) {
+    for (Language l : viewProvider.getLanguages()) {
+      if (viewProvider.getPsi(l) == file) {
         lang = l;
         break;
       }
@@ -459,8 +455,6 @@ public abstract class PsiAnchor {
     private final int myIndex;
     private final Language myLanguage;
     private final IStubElementType myElementType;
-    private final short myCreationModCount;
-    private final short myCreationStamp;
 
     private StubIndexReference(@NotNull final PsiFile file, final int index, @NotNull Language language, IStubElementType elementType) {
       myLanguage = language;
@@ -468,16 +462,6 @@ public abstract class PsiAnchor {
       myVirtualFile = file.getVirtualFile();
       myProject = file.getProject();
       myIndex = index;
-      myCreationModCount = getModCount();
-      myCreationStamp = (short)file.getModificationStamp();
-    }
-
-    private short getModCount() {
-      final PsiModificationTracker tracker = PsiManager.getInstance(getProject()).getModificationTracker();
-      if (myVirtualFile.getName().endsWith(".java")) {
-        return (short)tracker.getJavaStructureModificationCount();
-      }
-      return (short)tracker.getModificationCount();
     }
 
     @Override
@@ -524,11 +508,10 @@ public abstract class PsiAnchor {
       }
       catch (AssertionError e) {
         String msg = e.getMessage();
-        msg += "\n current (java)modCount=" + getModCount() + "; creation (java)modCount=" + myCreationModCount;
         if (file == null) {
           msg += "\n no PSI file";
         } else {
-          msg += "\n current file stamp=" + (short)file.getModificationStamp() + "; creation file stamp=" + myCreationStamp;
+          msg += "\n current file stamp=" + (short)file.getModificationStamp();
         }
         final Document document = FileDocumentManager.getInstance().getCachedDocument(myVirtualFile);
         if (document != null) {

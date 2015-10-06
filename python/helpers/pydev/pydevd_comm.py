@@ -364,6 +364,7 @@ class ReaderThread(PyDBDaemonThread):
 
 
     def handleExcept(self):
+        traceback.print_exc()
         GlobalDebuggerHolder.globalDbg.FinishDebuggingSession()
 
     def processCommand(self, cmd_id, seq, text):

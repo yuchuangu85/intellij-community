@@ -59,7 +59,7 @@ import java.util.Set;
  * ProjectRootManager extended with ability to watch events.
  */
 public class ProjectRootManagerComponent extends ProjectRootManagerImpl implements ProjectComponent {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.roots.impl.ProjectManagerComponent");
+  private static final Logger LOG = Logger.getInstance(ProjectRootManagerComponent.class);
 
   private boolean myPointerChangesDetected = false;
   private int myInsideRefresh = 0;
@@ -229,7 +229,7 @@ public class ProjectRootManagerComponent extends ProjectRootManagerImpl implemen
     final Set<String> flat = new HashSet<String>();
 
     final String projectFilePath = myProject.getProjectFilePath();
-    final File projectDirFile = new File(projectFilePath).getParentFile();
+    final File projectDirFile = projectFilePath == null ? null : new File(projectFilePath).getParentFile();
     if (projectDirFile != null && projectDirFile.getName().equals(Project.DIRECTORY_STORE_FOLDER)) {
       recursive.add(projectDirFile.getAbsolutePath());
     }

@@ -148,9 +148,7 @@ public class DebugProcessEvents extends DebugProcessImpl {
 
             final boolean methodWatcherActive = myReturnValueWatcher != null && myReturnValueWatcher.isEnabled();
             int processed = 0;
-            for (EventIterator eventIterator = eventSet.eventIterator(); eventIterator.hasNext();) {
-              final Event event = eventIterator.nextEvent();
-
+            for (Event event : eventSet) {
               if (methodWatcherActive) {
                 if (event instanceof MethodExitEvent) {
                   if (myReturnValueWatcher.processMethodExitEvent((MethodExitEvent)event)) {
@@ -415,6 +413,8 @@ public class DebugProcessEvents extends DebugProcessImpl {
     if (hint != null) {
       final int nextStepDepth = hint.getNextStepDepth(suspendContext);
       if (nextStepDepth == RequestHint.RESUME) {
+        getSession().resetIgnoreStepFiltersFlag();
+        getSession().clearSteppingThrough();
         shouldResume = true;
       }
       else if (nextStepDepth != RequestHint.STOP) {

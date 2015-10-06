@@ -124,7 +124,7 @@ public class TestStateStorage implements Disposable {
       return myMap == null ? null : myMap.get(testUrl);
     }
     catch (IOException e) {
-      thingsWentWrongLetsReinitialize(e);
+      thingsWentWrongLetsReinitialize(e, "Can't get state for " + testUrl);
       return null;
     }
   }
@@ -135,7 +135,7 @@ public class TestStateStorage implements Disposable {
       myMap.put(testUrl, record);
     }
     catch (IOException e) {
-      thingsWentWrongLetsReinitialize(e);
+      thingsWentWrongLetsReinitialize(e, "Can't write state for " + testUrl);
     }
   }
 
@@ -152,10 +152,18 @@ public class TestStateStorage implements Disposable {
     }
   }
 
-  private void thingsWentWrongLetsReinitialize(IOException e) {
+  private void thingsWentWrongLetsReinitialize(IOException e, String message) {
     try {
+      if (myMap != null) {
+        try {
+          myMap.close();
+        }
+        catch (IOException ignore) {
+        }
+        IOUtil.deleteAllFilesStartingWith(myFile);
+      }
       myMap = initializeMap();
-      LOG.error("Repaired after crash", e);
+      LOG.error(message, e);
     }
     catch (IOException e1) {
       LOG.error("Cannot repair", e1);

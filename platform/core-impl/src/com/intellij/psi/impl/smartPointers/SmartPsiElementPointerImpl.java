@@ -80,23 +80,24 @@ class SmartPsiElementPointerImpl<E extends PsiElement> implements SmartPointerEx
   @Nullable
   public E getElement() {
     E element = getCachedElement();
-    if (element != null && !element.isValid()) {
-      element = null;
-    }
-    if (element == null) {
-      //noinspection unchecked
-      element = (E)myElementInfo.restoreElement();
-      if (element != null && (!element.getClass().equals(myElementClass) || !element.isValid())) {
-        element = null;
-      }
-
+    if (element == null || !element.isValid()) {
+      element = doRestoreElement();
       cacheElement(element);
     }
-
     return element;
   }
 
-  private void cacheElement(E element) {
+  @Nullable
+  E doRestoreElement() {
+    //noinspection unchecked
+    E element = (E)myElementInfo.restoreElement();
+    if (element != null && (!element.getClass().equals(myElementClass) || !element.isValid())) {
+      return null;
+    }
+    return element;
+  }
+
+  void cacheElement(@Nullable E element) {
     myElement = element == null ? null : 
                 ((PsiManagerEx)PsiManager.getInstance(getProject())).isBatchFilesProcessingMode() ? new WeakReference<E>(element) : 
                 new SoftReference<E>(element);
@@ -182,7 +183,7 @@ class SmartPsiElementPointerImpl<E extends PsiElement> implements SmartPointerEx
     }
 
     for(SmartPointerElementInfoFactory factory: Extensions.getExtensions(SmartPointerElementInfoFactory.EP_NAME)) {
-      final SmartPointerElementInfo result = factory.createElementInfo(element);
+      final SmartPointerElementInfo result = factory.createElementInfo(element, containingFile);
       if (result != null) return result;
     }
 

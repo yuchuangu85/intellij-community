@@ -303,7 +303,7 @@ public class PyDebugRunner extends GenericProgramRunner {
     if (PyDebuggerOptionsProvider.getInstance(project).isSaveThreadingLog()) {
       debugParams.addParameter("--save-threading");
       debugParams.addParameter("--save-asyncio");
-      generalCommandLine.getEnvironment().put(PYTHON_ASYNCIO_DEBUG, "1");
+      cmd.getEnvironment().put(PYTHON_ASYNCIO_DEBUG, "1");
     }
 
     if (PyDebuggerOptionsProvider.getInstance(project).isSupportGeventDebugging()) {

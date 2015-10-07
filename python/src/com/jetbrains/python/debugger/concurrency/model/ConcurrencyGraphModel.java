@@ -214,8 +214,10 @@ public class ConcurrencyGraphModel {
   @NotNull
   public ArrayList<ConcurrencyGraphElement> getDrawElementsForRow(int row) {
     synchronized (myUpdateObject) {
-      return myGraphScheme != null ? new ArrayList<ConcurrencyGraphElement>(myGraphScheme.get(row)) :
-             new ArrayList<ConcurrencyGraphElement>();
+      if ((myGraphScheme == null) || (row >= myGraphScheme.size())) {
+        return new ArrayList<ConcurrencyGraphElement>();
+      }
+      return new ArrayList<ConcurrencyGraphElement>(myGraphScheme.get(row));
     }
   }
 

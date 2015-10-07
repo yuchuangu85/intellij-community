@@ -49,4 +49,12 @@ public class WinProcessManager {
       throw new IllegalStateException("Unknown Process implementation");
     }
   }
+
+  public static String[] getTaskListCmd() {
+    String windir = System.getenv("WINDIR");
+    if (windir == null) {
+      throw new IllegalStateException("WINDIR environment variable is not found");
+    }
+    return new String[]{windir +"\\system32\\"+"tasklist.exe", "/V", "/FO", "CSV"};
+  }
 }

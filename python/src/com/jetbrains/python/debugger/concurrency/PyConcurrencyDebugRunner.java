@@ -92,6 +92,9 @@ public class PyConcurrencyDebugRunner extends PyDebugRunner {
         }
       });
     }
+    else {
+      toolWindow.show(null);
+    }
   }
 
   private static ToolWindow createToolWindow(Project project, ToolWindowManager toolWindowManager) {

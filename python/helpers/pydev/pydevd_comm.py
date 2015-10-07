@@ -329,6 +329,7 @@ class ReaderThread(PyDBDaemonThread):
                     r = self.sock.recv(1024)
                 except:
                     if not self.killReceived:
+                        traceback.print_exc()
                         self.handleExcept()
                     return #Finished communication.
 
@@ -364,7 +365,6 @@ class ReaderThread(PyDBDaemonThread):
 
 
     def handleExcept(self):
-        traceback.print_exc()
         GlobalDebuggerHolder.globalDbg.FinishDebuggingSession()
 
     def processCommand(self, cmd_id, seq, text):

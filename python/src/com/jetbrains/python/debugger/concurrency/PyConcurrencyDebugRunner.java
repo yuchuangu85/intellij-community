@@ -16,30 +16,30 @@
 package com.jetbrains.python.debugger.concurrency;
 
 import com.intellij.execution.ExecutionException;
-import com.intellij.execution.ExecutionResult;
 import com.intellij.execution.configurations.RunProfile;
 import com.intellij.execution.configurations.RunProfileState;
 import com.intellij.execution.runners.ExecutionEnvironment;
 import com.intellij.icons.AllIcons;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowAnchor;
 import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.xdebugger.XDebugSession;
+import com.intellij.xdebugger.XDebugSessionAdapter;
 import com.intellij.xdebugger.XDebuggerManager;
 import com.intellij.xdebugger.breakpoints.XBreakpoint;
-import com.jetbrains.python.debugger.PyDebugProcess;
 import com.jetbrains.python.debugger.PyDebugRunner;
 import com.jetbrains.python.debugger.PyDebuggerOptionsProvider;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyLogToolWindowFactory;
-import com.jetbrains.python.run.PythonCommandLineState;
 import org.jetbrains.annotations.NotNull;
 
-import java.net.ServerSocket;
+import java.util.ArrayList;
 
 public class PyConcurrencyDebugRunner extends PyDebugRunner {
   public static final String WINDOW_ID = "Concurrent Activities Diagram";
   private Project myProject;
+  private ArrayList<XBreakpoint> myDisabledBreakpoints;
 
   @Override
   protected XDebugSession createSession(@NotNull RunProfileState state, @NotNull ExecutionEnvironment environment)
@@ -47,25 +47,41 @@ public class PyConcurrencyDebugRunner extends PyDebugRunner {
     myProject = environment.getProject();
     PyDebuggerOptionsProvider.getInstance(myProject).setSaveThreadingLog(true);
     XDebugSession session = super.createSession(state, environment);
+
+    disableBreakpoints();
+    session.addSessionListener(new XDebugSessionAdapter() {
+      @Override
+      public void sessionStopped() {
+        ApplicationManager.getApplication().runReadAction(new Runnable() {
+          @Override
+          public void run() {
+            for (XBreakpoint breakpoint : myDisabledBreakpoints) {
+              breakpoint.setEnabled(true);
+            }
+          }
+        });
+      }
+    });
+
     PyDebuggerOptionsProvider.getInstance(myProject).setSaveThreadingLog(false);
+    PyConcurrencyService.getInstance(myProject).getThreadingInstance().recordEvent(session, null);
+    PyConcurrencyService.getInstance(myProject).getAsyncioInstance().recordEvent(session, null);
+    initToolWindow();
     return session;
   }
 
-  @NotNull
-  @Override
-  protected PyDebugProcess createDebugProcess(@NotNull XDebugSession session,
-                                              ServerSocket serverSocket,
-                                              ExecutionResult result,
-                                              PythonCommandLineState pyState) {
-    PyDebugProcess debugProcess = super.createDebugProcess(session, serverSocket, result, pyState);
-    XDebuggerManager manager = XDebuggerManager.getInstance(myProject);
+  private void disableBreakpoints() {
+    myDisabledBreakpoints = new ArrayList<XBreakpoint>();
+    final XDebuggerManager manager = XDebuggerManager.getInstance(myProject);
     for (XBreakpoint breakpoint : manager.getBreakpointManager().getAllBreakpoints()) {
-      breakpoint.setEnabled(false);
+      if (breakpoint.isEnabled()) {
+        breakpoint.setEnabled(false);
+        myDisabledBreakpoints.add(breakpoint);
+      }
     }
+  }
 
-    PyConcurrencyService.getInstance(myProject).getThreadingInstance().recordEvent(debugProcess.getSession(), null);
-    PyConcurrencyService.getInstance(myProject).getAsyncioInstance().recordEvent(debugProcess.getSession(), null);
-
+  private void initToolWindow() {
     final ToolWindowManager toolWindowManager = ToolWindowManager.getInstance(myProject);
     final ToolWindow toolWindow = toolWindowManager.getToolWindow(WINDOW_ID);
     if (toolWindow == null) {
@@ -76,7 +92,6 @@ public class PyConcurrencyDebugRunner extends PyDebugRunner {
         }
       });
     }
-    return debugProcess;
   }
 
   private static ToolWindow createToolWindow(Project project, ToolWindowManager toolWindowManager) {

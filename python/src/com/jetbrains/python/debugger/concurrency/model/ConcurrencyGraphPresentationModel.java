@@ -149,7 +149,7 @@ public class ConcurrencyGraphPresentationModel {
 
   public ArrayList<ConcurrencyGraphBlock> getVisibleGraph() {
     updateVisibleGraph();
-    return myVisibleGraph;
+    return new ArrayList<ConcurrencyGraphBlock>(myVisibleGraph);
   }
 
   public void applySelectionFilter(int eventId) {

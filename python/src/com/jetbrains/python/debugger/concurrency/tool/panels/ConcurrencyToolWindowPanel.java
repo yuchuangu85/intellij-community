@@ -34,6 +34,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.AdjustmentEvent;
 import java.awt.event.AdjustmentListener;
+import java.awt.event.MouseWheelEvent;
+import java.awt.event.MouseWheelListener;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -122,12 +124,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
 
     @Override
     public void actionPerformed(AnActionEvent e) {
-      UIUtil.invokeLaterIfNeeded(new Runnable() {
-        @Override
-        public void run() {
-          myPresentationModel.getVisualSettings().zoomIn();
-        }
-      });
+      myPresentationModel.getVisualSettings().zoomIn();
     }
   }
 
@@ -138,12 +135,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
 
     @Override
     public void actionPerformed(AnActionEvent e) {
-      UIUtil.invokeLaterIfNeeded(new Runnable() {
-        @Override
-        public void run() {
-          myPresentationModel.getVisualSettings().zoomOut();
-        }
-      });
+      myPresentationModel.getVisualSettings().zoomOut();
     }
   }
 
@@ -243,6 +235,20 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
 
     AdjustmentListener listener = new GraphAdjustmentListener();
     if (tableScrollPane != null) {
+      tableScrollPane.addMouseWheelListener(new MouseWheelListener() {
+        @Override
+        public void mouseWheelMoved(MouseWheelEvent e) {
+          if (e.isControlDown()) {
+            if (e.getWheelRotation() < 0) {
+              myPresentationModel.getVisualSettings().zoomIn();
+            }
+            else {
+              myPresentationModel.getVisualSettings().zoomOut();
+            }
+          }
+        }
+      });
+      tableScrollPane.setWheelScrollingEnabled(false);
       tableScrollPane.getHorizontalScrollBar().addAdjustmentListener(listener);
       tableScrollPane.getVerticalScrollBar().addAdjustmentListener(listener);
     }

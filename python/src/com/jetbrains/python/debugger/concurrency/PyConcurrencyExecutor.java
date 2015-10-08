@@ -18,7 +18,7 @@ package com.jetbrains.python.debugger.concurrency;
 import com.intellij.execution.Executor;
 import com.intellij.execution.ExecutorRegistry;
 import com.intellij.execution.executors.DefaultDebugExecutor;
-import com.intellij.icons.AllIcons;
+import icons.PythonIcons;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -39,7 +39,7 @@ public class PyConcurrencyExecutor extends DefaultDebugExecutor {
   @NotNull
   @Override
   public Icon getIcon() {
-    return AllIcons.Toolwindows.ToolWindowStructure;
+    return PythonIcons.Python.Debug.ConcurrencyDiagram;
   }
 
   @NotNull

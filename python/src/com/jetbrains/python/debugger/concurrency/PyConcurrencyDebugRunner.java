@@ -33,6 +33,7 @@ import com.intellij.xdebugger.breakpoints.XBreakpoint;
 import com.jetbrains.python.debugger.PyDebugRunner;
 import com.jetbrains.python.debugger.PyDebuggerOptionsProvider;
 import com.jetbrains.python.debugger.concurrency.tool.ConcurrencyLogToolWindowFactory;
+import icons.PythonIcons;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -108,7 +109,7 @@ public class PyConcurrencyDebugRunner extends PyDebugRunner {
 
   private static ToolWindow createToolWindow(Project project, ToolWindowManager toolWindowManager) {
     ToolWindow toolWindow = toolWindowManager.registerToolWindow(WINDOW_ID, false, ToolWindowAnchor.BOTTOM);
-    toolWindow.setIcon(AllIcons.Toolwindows.ToolWindowStructure);
+    toolWindow.setIcon(PythonIcons.Python.Debug.ConcurrencyDiagram);
     new ConcurrencyLogToolWindowFactory().createToolWindowContent(project, toolWindow);
     return toolWindow;
   }

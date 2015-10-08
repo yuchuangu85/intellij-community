@@ -24,6 +24,7 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowAnchor;
+import com.intellij.openapi.wm.ToolWindowId;
 import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.XDebugSessionAdapter;
@@ -47,6 +48,7 @@ public class PyConcurrencyDebugRunner extends PyDebugRunner {
     myProject = environment.getProject();
     PyDebuggerOptionsProvider.getInstance(myProject).setSaveThreadingLog(true);
     XDebugSession session = super.createSession(state, environment);
+    final ToolWindowManager toolWindowManager = ToolWindowManager.getInstance(myProject);
 
     disableBreakpoints();
     session.addSessionListener(new XDebugSessionAdapter() {
@@ -58,6 +60,12 @@ public class PyConcurrencyDebugRunner extends PyDebugRunner {
             for (XBreakpoint breakpoint : myDisabledBreakpoints) {
               breakpoint.setEnabled(true);
             }
+          }
+        });
+        ApplicationManager.getApplication().invokeLater(new Runnable() {
+          @Override
+          public void run() {
+            toolWindowManager.getToolWindow(ToolWindowId.DEBUG).setAvailable(true, null);
           }
         });
       }
@@ -83,6 +91,7 @@ public class PyConcurrencyDebugRunner extends PyDebugRunner {
 
   private void initToolWindow() {
     final ToolWindowManager toolWindowManager = ToolWindowManager.getInstance(myProject);
+    toolWindowManager.getToolWindow(ToolWindowId.DEBUG).setAvailable(false, null);
     final ToolWindow toolWindow = toolWindowManager.getToolWindow(WINDOW_ID);
     if (toolWindow == null) {
       toolWindowManager.invokeLater(new Runnable() {

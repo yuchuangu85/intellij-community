@@ -75,7 +75,7 @@ public class ConcurrencyGraphModel {
       public void sessionStopped() {
         myFinishTime = System.currentTimeMillis();
         myLastSessionStopped = true;
-        updateGraph();
+        updateGraph(myGraphScheme.size());
         notifyListeners();
       }
 
@@ -91,6 +91,15 @@ public class ConcurrencyGraphModel {
     });
   }
 
+  private int recordToLog(PyConcurrencyEvent event) {
+    int i = myLog.size() - 1;
+    while ((i >= 0) && (myLog.get(i).getTime() > event.getTime())) {
+      i--;
+    }
+    myLog.add(i + 1, event);
+    return i + 1;
+  }
+
   public void recordEvent(@NotNull XDebugSession debugSession, @Nullable PyConcurrencyEvent event) {
     synchronized (myLogObject) {
       if (((lastSession == null) || (debugSession != lastSession)) && event == null) {
@@ -103,8 +112,7 @@ public class ConcurrencyGraphModel {
       if ((event != null) && (event.getTime() == 0)) {
         myStartTime = System.currentTimeMillis();
       }
-      myLog.add(event);
-      updateGraph();
+      updateGraph(recordToLog(event));
     }
   }
 
@@ -324,7 +332,7 @@ public class ConcurrencyGraphModel {
   public void setFilterLockId(String filterLockId) {
     myFilterLockId = filterLockId;
     createGraph();
-    updateGraph();
+    updateGraph(myGraphScheme.size());
   }
 
   public void setTimerPeriod(long timerPeriod) {
@@ -365,9 +373,18 @@ public class ConcurrencyGraphModel {
     }
   }
 
-  private void updateGraph() {
+  private void updateGraph(int indexInserted) {
     synchronized (myUpdateObject) {
-      for (int i = myGraphScheme.size(); i < myLog.size(); ++i) {
+      int oldSize = myGraphScheme.size();
+      if ((indexInserted < oldSize) && (myCurrentMaxThread != 0)) {
+        myCurrentMaxThread = myGraphScheme.get(indexInserted - 1).size();
+        for (int i = indexInserted; i < myGraphScheme.size(); ++i) {
+          if ((relations != null) && (relations.containsKey(i))) {
+            relations.remove(i);
+          }
+        }
+      }
+      for (int i = indexInserted; i < myLog.size(); ++i) {
         PyConcurrencyEvent event = getEventAt(i);
         String eventThreadId = event.getThreadId();
 
@@ -412,7 +429,8 @@ public class ConcurrencyGraphModel {
           }
 
           if (event.getType() == PyConcurrencyEvent.EventType.ACQUIRE_BEGIN) {
-            HashSet<String> deadlocked = myGraphAnalyser.checkForDeadlocks(i);
+            int indexForCheck = indexInserted < oldSize ? 0 : i;
+            HashSet<String> deadlocked = myGraphAnalyser.checkForDeadlocks(indexForCheck);
             if (deadlocked != null) {
               for (String threadId : deadlocked) {
                 myGraphScheme.get(i).set(threadIndexToId.get(threadId), new ConcurrencyGraphElement(ConcurrencyThreadState.Deadlock, i));

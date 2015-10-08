@@ -162,7 +162,7 @@ public class ConcurrencyTableUtil {
     setTableSettings(fixedTable);
     JScrollPane namesScrollPane = ScrollPaneFactory.createScrollPane(fixedTable);
     namesScrollPane.setPreferredSize(new Dimension(ConcurrencyGraphVisualSettings.NAMES_PANEL_INITIAL_WIDTH, toolWindow.getHeight()));
-    namesScrollPane.setBorder(BorderFactory.createEmptyBorder());
+    namesScrollPane.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, JBColor.border()));
     tablePanel.add(namesScrollPane, BorderLayout.LINE_START);
 
     ConcurrencyTable graphTable = new ConcurrencyTable(presentationModel, new ScrollableTableModel(graphModel), toolWindow);
@@ -170,7 +170,7 @@ public class ConcurrencyTableUtil {
     graphTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
     graphTable.setSelectionModel(fixedTable.getSelectionModel());
     JScrollPane graphScrollPane = ScrollPaneFactory.createScrollPane(graphTable);
-    graphScrollPane.setBorder(BorderFactory.createLineBorder(JBColor.border()));
+    graphScrollPane.setBorder(BorderFactory.createEmptyBorder());
     graphScrollPane.getVerticalScrollBar().setModel(namesScrollPane.getVerticalScrollBar().getModel());
     toolWindow.setTableScrollPane(graphScrollPane);
     tablePanel.add(graphScrollPane, BorderLayout.CENTER);
@@ -181,7 +181,7 @@ public class ConcurrencyTableUtil {
     toolWindow.setStatTable(statTable);
     JScrollPane statScrollPane = ScrollPaneFactory.createScrollPane(statTable);
     statScrollPane.setPreferredSize(new Dimension(ConcurrencyGraphSettings.NAMES_PANEL_WIDTH, toolWindow.getHeight()));
-    statScrollPane.setBorder(BorderFactory.createEmptyBorder());
+    statScrollPane.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, JBColor.border()));
     statScrollPane.getVerticalScrollBar().setModel(graphScrollPane.getVerticalScrollBar().getModel());
     tablePanel.add(statScrollPane, BorderLayout.LINE_END);
 

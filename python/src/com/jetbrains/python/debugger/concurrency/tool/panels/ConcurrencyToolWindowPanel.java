@@ -49,6 +49,7 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
   private @Nullable JScrollPane tableScrollPane;
   private @Nullable JTable myFixedTable;
   private @Nullable JTable myStatTable;
+  private @Nullable JTable myNamesTable;
   private @Nullable ActionToolbar myToolbar;
   private @Nullable JPanel myTablePanel;
   private @Nullable JPanel myNotes;
@@ -170,6 +171,15 @@ public class ConcurrencyToolWindowPanel extends SimpleToolWindowPanel implements
 
   public void setStatTable(@NotNull JTable statTable) {
     myStatTable = statTable;
+  }
+
+  @Nullable
+  public JTable getNamesTable() {
+    return myNamesTable;
+  }
+
+  public void setNamesTable(@Nullable JTable namesTable) {
+    myNamesTable = namesTable;
   }
 
   public void setTableScrollPane(@NotNull JScrollPane tableScrollPane) {

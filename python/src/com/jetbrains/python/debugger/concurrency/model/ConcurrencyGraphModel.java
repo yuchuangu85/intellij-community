@@ -18,7 +18,7 @@ package com.jetbrains.python.debugger.concurrency.model;
 import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.hash.HashMap;
 import com.intellij.xdebugger.XDebugSession;
-import com.intellij.xdebugger.XDebugSessionListener;
+import com.intellij.xdebugger.XDebugSessionAdapter;
 import com.jetbrains.python.debugger.PyConcurrencyEvent;
 import com.jetbrains.python.debugger.PyLockEvent;
 import com.jetbrains.python.debugger.PyThreadEvent;
@@ -62,31 +62,13 @@ public class ConcurrencyGraphModel {
     if (lastSession == null) {
       return;
     }
-    lastSession.addSessionListener(new XDebugSessionListener() {
-      @Override
-      public void sessionPaused() {
-      }
-
-      @Override
-      public void sessionResumed() {
-      }
-
+    lastSession.addSessionListener(new XDebugSessionAdapter() {
       @Override
       public void sessionStopped() {
         myFinishTime = System.currentTimeMillis();
         myLastSessionStopped = true;
         updateGraph(myGraphScheme.size());
         notifyListeners();
-      }
-
-      @Override
-      public void stackFrameChanged() {
-
-      }
-
-      @Override
-      public void beforeSessionResume() {
-
       }
     });
   }

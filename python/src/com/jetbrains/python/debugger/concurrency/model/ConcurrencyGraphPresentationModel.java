@@ -59,6 +59,10 @@ public class ConcurrencyGraphPresentationModel {
             if (table != null) {
               ((AbstractTableModel)table.getModel()).fireTableDataChanged();
             }
+            table = myToolWindowPanel.getNamesTable();
+            if (table != null) {
+              ((AbstractTableModel)table.getModel()).fireTableDataChanged();
+            }
           }
         });
         updateGraphModel();

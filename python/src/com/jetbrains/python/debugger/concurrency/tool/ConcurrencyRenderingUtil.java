@@ -21,6 +21,7 @@ import com.jetbrains.python.debugger.concurrency.model.ConcurrencyThreadState;
 import org.jetbrains.annotations.NotNull;
 
 import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 
 public class ConcurrencyRenderingUtil {
@@ -57,23 +58,33 @@ public class ConcurrencyRenderingUtil {
     }
   }
 
-  public static void paintRow(@NotNull Graphics g, int externalPadding, @NotNull ArrayList<ConcurrencyGraphBlock> drawingElements,
-                              int row) {
-    Graphics2D g2 = (Graphics2D)g;
-    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    int paddingInsideBlock = 0;
-    for (ConcurrencyGraphBlock block : drawingElements) {
-      if (block != null) {
-        if (row < block.getElements().size()) {
-          int padding = ConcurrencyGraphSettings.CELL_WIDTH * (externalPadding + paddingInsideBlock);
-          ConcurrencyThreadState drawElement = block.getElements().get(row).getThreadState();
-          if (drawElement != ConcurrencyThreadState.Stopped) {
-            prepareStroke(g2, drawElement);
-            g2.fillRect(padding, ConcurrencyGraphSettings.INTERVAL / 2,
-                        ConcurrencyGraphSettings.CELL_WIDTH * block.getNumberOfCells(), ConcurrencyGraphSettings.CELL_HEIGHT);
+  public static void paintRow(@NotNull Image img, int externalPadding, @NotNull ConcurrencyGraphBlock[] drawingElements,
+                              int row, boolean isSelected) {
+    if (img instanceof BufferedImage) {
+      BufferedImage bufImage = (BufferedImage)img;
+      Graphics2D g2 = bufImage.createGraphics();
+      if (isSelected) {
+        g2.setColor(ConcurrencyGraphSettings.BACKGROUND_SELECTED);
+      }
+      else {
+        g2.setColor(ConcurrencyGraphSettings.BACKGOUND_COLOR);
+      }
+      g2.fillRect(0, 0, bufImage.getWidth(), bufImage.getHeight());
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+      int paddingInsideBlock = 0;
+      for (ConcurrencyGraphBlock block : drawingElements) {
+        if (block != null) {
+          if (row < block.getElements().size()) {
+            int padding = ConcurrencyGraphSettings.CELL_WIDTH * (externalPadding + paddingInsideBlock);
+            ConcurrencyThreadState drawElement = block.getElements().get(row).getThreadState();
+            if (drawElement != ConcurrencyThreadState.Stopped) {
+              prepareStroke(g2, drawElement);
+              g2.fillRect(padding, ConcurrencyGraphSettings.INTERVAL / 2,
+                          ConcurrencyGraphSettings.CELL_WIDTH * block.getNumberOfCells(), ConcurrencyGraphSettings.CELL_HEIGHT);
+            }
           }
+          paddingInsideBlock += block.getNumberOfCells();
         }
-        paddingInsideBlock += block.getNumberOfCells();
       }
     }
   }
@@ -110,11 +121,11 @@ public class ConcurrencyRenderingUtil {
     }
   }
 
-  public static int getElementIndex(int externalPadding, @NotNull ArrayList<ConcurrencyGraphBlock> drawingElements, int x) {
+  public static int getElementIndex(int externalPadding, @NotNull ConcurrencyGraphBlock[] drawingElements, int x) {
     x = x / ConcurrencyGraphSettings.CELL_WIDTH - externalPadding;
     int paddingInsideBlock = 0;
-    for (int i = 0; i < drawingElements.size(); ++i) {
-      ConcurrencyGraphBlock block = drawingElements.get(i);
+    for (int i = 0; i < drawingElements.length; ++i) {
+      ConcurrencyGraphBlock block = drawingElements[i];
       int blockWidth = block.getNumberOfCells();
       if ((paddingInsideBlock < x) && (paddingInsideBlock + blockWidth >= x)) {
         return i;

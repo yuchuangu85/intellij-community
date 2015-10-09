@@ -17,6 +17,7 @@ package com.jetbrains.python.debugger.concurrency.tool;
 
 
 import com.intellij.ui.JBColor;
+import com.intellij.util.ui.UIUtil;
 
 import java.awt.*;
 
@@ -35,6 +36,8 @@ public class ConcurrencyGraphSettings {
   public static final int RULER_SUBUNIT_MARK = 5;
   public static final int RULER_SUBUNITS_PER_UNIT = 10;
 
+  public static final Color BACKGOUND_COLOR = JBColor.WHITE;
+  public static final Color BACKGROUND_SELECTED = UIUtil.getListSelectionBackground();
   public static final Color BASIC_COLOR = new JBColor(new Color(152, 251, 152), new Color(152, 251, 152));
   public static final Color LOCK_WAIT_COLOR = new JBColor(new Color(255, 179, 3), new Color(255, 179, 3));
   public static final Color LOCK_WAIT_SELECTED_COLOR = new JBColor(new Color(255, 240, 0), new Color(255, 240, 0));

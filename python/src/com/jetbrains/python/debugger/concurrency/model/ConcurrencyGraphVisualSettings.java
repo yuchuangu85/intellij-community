@@ -117,6 +117,5 @@ public class ConcurrencyGraphVisualSettings {
     myVerticalValue = scrollbarValue;
     myVerticalExtent = scrollbarExtent;
     myVerticalMax = scrollMax;
-    myPresentationModel.updateGraphModel();
   }
 }

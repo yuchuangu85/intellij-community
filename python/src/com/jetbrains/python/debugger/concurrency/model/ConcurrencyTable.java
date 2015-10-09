@@ -61,7 +61,7 @@ public class ConcurrencyTable extends JBTable {
   private int getEventIndex(Point clickPoint, int row) {
     int index = ConcurrencyRenderingUtil.getElementIndex(myRenderer.getPadding(), myPresentationModel.getVisibleGraph(), clickPoint.x);
     if (index != -1) {
-      ArrayList<ConcurrencyGraphElement> elements = myPresentationModel.getVisibleGraph().get(index).getElements();
+      ArrayList<ConcurrencyGraphElement> elements = myPresentationModel.getVisibleGraph()[index].getElements();
       if (row < elements.size()) {
         return elements.get(row).getEventIndex();
       }

@@ -38,6 +38,8 @@ public class ConcurrencyGraphPresentationModel {
   private final Object myVisibleGraphObject = new Object();
   private ArrayList<ConcurrencyRelation> myRelations;
   private boolean myScrollToTheEnd = true;
+  private boolean isGraphChanged = false;
+  private ConcurrencyGraphBlock[] myGraphForDrawing;
 
   public ConcurrencyGraphPresentationModel(@NotNull final ConcurrencyGraphModel graphModel, @NotNull ConcurrencyToolWindowPanel panel) {
     this.graphModel = graphModel;
@@ -144,12 +146,19 @@ public class ConcurrencyGraphPresentationModel {
         }
         curEventId += 1;
       }
+      isGraphChanged = true;
     }
   }
 
-  public ArrayList<ConcurrencyGraphBlock> getVisibleGraph() {
-    updateVisibleGraph();
-    return new ArrayList<ConcurrencyGraphBlock>(myVisibleGraph);
+  public ConcurrencyGraphBlock[] getVisibleGraph() {
+    synchronized (myVisibleGraphObject) {
+      if (isGraphChanged) {
+        myGraphForDrawing = new ConcurrencyGraphBlock[myVisibleGraph.size()];
+        myGraphForDrawing = myVisibleGraph.toArray(myGraphForDrawing);
+        isGraphChanged = false;
+      }
+    }
+    return myGraphForDrawing;
   }
 
   public void applySelectionFilter(int eventId) {

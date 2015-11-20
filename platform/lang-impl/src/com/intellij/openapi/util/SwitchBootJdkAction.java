@@ -15,6 +15,9 @@
  */
 package com.intellij.openapi.util;
 
+import com.intellij.execution.ExecutionException;
+import com.intellij.execution.configurations.GeneralCommandLine;
+import com.intellij.execution.util.ExecUtil;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.Presentation;
@@ -26,20 +29,21 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.DialogWrapper;
-import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.ui.JBColor;
 import com.intellij.ui.ListCellRendererWrapper;
 import com.intellij.ui.components.JBLabel;
+import com.intellij.util.VersionUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import javax.swing.event.ListDataEvent;
+import javax.swing.event.ListDataListener;
 import java.io.*;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -49,12 +53,23 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
   @NonNls private static final Logger LOG = Logger.getInstance("#com.intellij.ide.actions.SwitchBootJdkAction");
   @NonNls private static final String productJdkConfigFileName = getExecutable() + ".jdk";
   @NonNls private static final File productJdkConfigFile = new File(PathManager.getConfigPath(), productJdkConfigFileName);
-  @NonNls private static final File customJdkFile = new File(PathManager.getHomePath() + File.separator + "jre" + File.separator + "jdk");
+  @NonNls private static final File bundledJdkFile = getBundledJDKFile();
+
+
+
+  @NotNull
+  private static File getBundledJDKFile() {
+    StringBuilder bundledJDKPath = new StringBuilder(PathManager.getHomePath() + File.separator + "jre");
+    if (SystemInfo.isMac) {
+      bundledJDKPath.append(File.separator).append("jdk");
+    }
+    return new File(bundledJDKPath.toString());
+  }
 
   @Override
   public void update(AnActionEvent e) {
     Presentation presentation = e.getPresentation();
-    if (!SystemInfo.isMac || !customJdkFile.exists()) {
+    if (!(SystemInfo.isMac || SystemInfo.isLinux)) {
       presentation.setEnabledAndVisible(false);
       return;
     }
@@ -70,8 +85,11 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
 
 
     try {
+      //noinspection IOResourceOpenedButNotSafelyClosed
       stream = new FileInputStream(fileWithBundles);
+      //noinspection IOResourceOpenedButNotSafelyClosed
       inputStream = new InputStreamReader(stream, Charset.forName("UTF-8"));
+      //noinspection IOResourceOpenedButNotSafelyClosed
       bufferedReader = new BufferedReader(inputStream);
 
       String line;
@@ -79,7 +97,7 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
       while ((line = bufferedReader.readLine()) != null) {
         File file = new File(line);
         if (file.exists()) {
-          list.add(new JdkBundleDescriptor(file, file.getName()));
+          list.add(new JdkBundleDescriptor(file));
         }
       }
 
@@ -120,6 +138,7 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
       File selectedJdkBundleFile = dialog.getSelectedFile();
       FileWriter fooWriter = null;
       try {
+        //noinspection IOResourceOpenedButNotSafelyClosed
         fooWriter = new FileWriter(productJdkConfigFile, false);
         fooWriter.write(selectedJdkBundleFile.getAbsolutePath());
       }
@@ -141,20 +160,116 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
   }
 
   private static class JdkBundleDescriptor {
-    private File bundleAsFile;
-    private String visualRepresentation;
+    @NotNull private File myBundleAsFile;
+    @NotNull private String myBundleName;
+    @Nullable private Pair<Version,Integer> myVersionUpdate;
+    private boolean myBoot;
+    private boolean myBundled;
 
-    public JdkBundleDescriptor(@NotNull File bundleAsFile, @NotNull String visualRepresentation) {
-      this.bundleAsFile = bundleAsFile;
-      this.visualRepresentation = visualRepresentation;
+    public JdkBundleDescriptor(@NotNull File bundleAsFile, boolean boot) {
+      myBundleAsFile = bundleAsFile;
+      Pair<String, Pair<Version, Integer>> nameVersionAndUpdate = JdkUtil.getJDKNameVersionAndUpdate(bundleAsFile.getAbsolutePath());
+      myVersionUpdate = nameVersionAndUpdate.second;
+      myBundleName = nameVersionAndUpdate.first;
+      myBoot = boot;
     }
 
+    public JdkBundleDescriptor(@NotNull File bundleAsFile) {
+      this(bundleAsFile, false);
+    }
+
+    @NotNull
     public File getBundleAsFile() {
-      return bundleAsFile;
+      return myBundleAsFile;
     }
 
     public String getVisualRepresentation() {
-      return visualRepresentation;
+      StringBuilder representation = new StringBuilder(myBundleName);
+      if (myVersionUpdate != null) {
+        representation.append(myVersionUpdate.first.toString()).append((myVersionUpdate.second > 0 ? "_" + myVersionUpdate.second : ""));
+      }
+
+      if (myBoot || myBundled) {
+        representation.append(" [");
+        if (myBoot) representation.append(myBundled ? "boot, " : "boot");
+        if (myBundled) representation.append("bundled");
+        representation.append("]");
+      }
+      return representation.toString();
+    }
+
+    public void setBundled(boolean bundled) {
+      myBundled = bundled;
+    }
+
+    public boolean isBoot() {
+      return myBoot;
+    }
+
+    @NotNull
+    public String getBundleName() {
+      return myBundleName;
+    }
+
+    @Nullable
+    public Pair<Version,Integer> getVersionUpdate() {
+      return myVersionUpdate;
+    }
+  }
+
+  private static class JdkBundlesList {
+    private ArrayList<JdkBundleDescriptor> bundleList = new ArrayList<JdkBundleDescriptor>();
+    private HashMap<String, JdkBundleDescriptor> bundleMap = new HashMap<String, JdkBundleDescriptor>();
+    private HashMap<String, JdkBundleDescriptor> versionMap = new HashMap<String, JdkBundleDescriptor>();
+
+    public JdkBundlesList(File bootBundle) {
+      addBundle(bootBundle, true, false);
+    }
+
+    public void addUniqueBundle(File bundle, boolean bundled) {
+      JdkBundleDescriptor bundleDescr = bundleMap.get(bundle.getAbsolutePath());
+      if (bundleDescr == null) {
+        addBundle(bundle, false, bundled);
+      }
+      else {
+        if (bundled) bundleDescr.setBundled(true); // preserve bundled flag
+      }
+    }
+
+    public void addUniqueBundle(File bundle) {
+      addUniqueBundle(bundle, false);
+    }
+
+    private void addBundle(File bundle, boolean boot, boolean bundled) {
+      JdkBundleDescriptor bundleDescriptor = new JdkBundleDescriptor(bundle, boot);
+
+      Pair<Version, Integer> versionUpdate = bundleDescriptor.getVersionUpdate();
+      String versionUpdateKey = versionUpdate != null ? versionUpdate.first + versionUpdate.second.toString() : null;
+      if (!bundleList.isEmpty() && versionUpdate != null) {
+        JdkBundleDescriptor descr = versionMap.get(versionUpdateKey);
+        if (descr != null) {
+          Pair<Version, Integer> descrVersionUpdate = descr.getVersionUpdate();
+          if (descrVersionUpdate != null && descrVersionUpdate.second >= versionUpdate.second) {
+            return; // do not add old jdk builds
+          }
+        }
+      }
+
+      bundleList.add(bundleDescriptor);
+      bundleMap.put(bundle.getAbsolutePath(), bundleDescriptor);
+      bundleDescriptor.setBundled(bundled);
+
+      if (versionUpdateKey != null) {
+        versionMap.put(versionUpdateKey, bundleDescriptor);
+      }
+    }
+
+    public ArrayList<JdkBundleDescriptor> toArrayList() {
+      return bundleList;
+    }
+
+    public boolean contains(String path) {
+      return bundleMap.keySet().contains(path);
     }
   }
 
@@ -165,42 +280,52 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
     protected SwitchBootJdkDialog(@Nullable Project project, final List<JdkBundleDescriptor> jdkBundlesList) {
       super(project, false);
 
-      final ArrayList<JdkBundleDescriptor> pathsList = JdkUtil.findJdkPaths();
+      final JdkBundlesList pathsList = JdkUtil.findJdkPaths();
       if (!jdkBundlesList.isEmpty()) {
         JdkBundleDescriptor jdkBundleDescription = jdkBundlesList.get(0);
-        pathsList.add(0, jdkBundleDescription);
+        pathsList.addUniqueBundle(jdkBundleDescription.getBundleAsFile());
       }
 
       myComboBox = new ComboBox();
 
       DefaultComboBoxModel model = new DefaultComboBoxModel();
 
-      for (JdkBundleDescriptor jdkBundlePath : pathsList) {
-        if (!(jdkBundlesList.isEmpty() || jdkBundlePath == null)
-            && FileUtil.filesEqual(jdkBundlePath.getBundleAsFile(),jdkBundlesList.get(0).getBundleAsFile()))
-        {
-          continue;
-        }
+      for (JdkBundleDescriptor jdkBundlePath : pathsList.toArrayList()) {
+        //noinspection unchecked
         model.addElement(jdkBundlePath);
       }
 
-      myComboBox.setModel(model);
+      model.addListDataListener(new ListDataListener() {
+        @Override
+        public void intervalAdded(ListDataEvent e) { }
 
-      if (pathsList.isEmpty()) {
-        myComboBox.setEnabled(false);
-      }
+        @Override
+        public void intervalRemoved(ListDataEvent e) { }
+
+        @Override
+        public void contentsChanged(ListDataEvent e) {
+          setOKActionEnabled(!((JdkBundleDescriptor)myComboBox.getSelectedItem()).isBoot());
+        }
+      });
+
+      //noinspection unchecked
+      myComboBox.setModel(model);
 
       myComboBox.setRenderer(new ListCellRendererWrapper() {
         @Override
         public void customize(JList list, Object value, int index, boolean selected, boolean hasFocus) {
           if (value != null) {
             JdkBundleDescriptor jdkBundleDescriptor = ((JdkBundleDescriptor)value);
+            if (jdkBundleDescriptor.isBoot()) {
+              setForeground(JBColor.DARK_GRAY);
+            }
             setText(jdkBundleDescriptor.getVisualRepresentation());
-          } else {
+          }
+          else {
             if (LOG.isDebugEnabled()) {
-              LOG.debug("Null value has been passed to a cell renderer. Available JDKs count: " + pathsList.size());
+              LOG.debug("Null value has been passed to a cell renderer. Available JDKs count: " + pathsList.toArrayList().size());
               StringBuilder jdkNames = new StringBuilder();
-              for (JdkBundleDescriptor jdkBundlePath : pathsList) {
+              for (JdkBundleDescriptor jdkBundlePath : pathsList.toArrayList()) {
                 if (!jdkBundlesList.isEmpty()) {
                   continue;
                 }
@@ -215,6 +340,7 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
       });
 
       setTitle("Switch IDE Boot JDK");
+      setOKActionEnabled(false); // First item is a boot jdk
       init();
     }
 
@@ -237,87 +363,112 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
     }
 
     public File getSelectedFile() {
-      return ((JdkBundleDescriptor)myComboBox.getSelectedItem()).bundleAsFile;
+      return ((JdkBundleDescriptor)myComboBox.getSelectedItem()).myBundleAsFile;
     }
   }
 
+  private static final Pattern[] VERSION_UPDATE_PATTERNS = {
+    Pattern.compile("^java version \"([\\d]+\\.[\\d]+\\.[\\d]+)_([\\d]+)\".*", Pattern.MULTILINE),
+    Pattern.compile("^openjdk version \"([\\d]+\\.[\\d]+\\.[\\d]+)_([\\d]+).*\".*", Pattern.MULTILINE),
+    Pattern.compile("^[a-zA-Z() \"\\d]*([\\d]+\\.[\\d]+\\.?[\\d]*).*", Pattern.MULTILINE)
+  };
+
   private static final String STANDARD_JDK_LOCATION_ON_MAC_OS_X = "/Library/Java/JavaVirtualMachines/";
   private static final String STANDARD_JDK_6_LOCATION_ON_MAC_OS_X = "/System/Library/Java/JavaVirtualMachines/";
+  private static final String STANDARD_JVM_LOCATION_ON_LINUX = "/usr/lib/jvm/";
+
+  private static final Version JDK6_VERSION = new Version(1, 6, 0);
+  private static final Version JDK8_VERSION = new Version(1, 8, 0);
+
 
   private static class JdkUtil {
-    private static ArrayList <JdkBundleDescriptor> findJdkPaths () {
-      ArrayList<JdkBundleDescriptor> jdkPathsList = new ArrayList<JdkBundleDescriptor>();
-      if (!SystemInfo.isMac) return jdkPathsList;
+    private static JdkBundlesList findJdkPaths () {
 
-      if (customJdkFile.exists()) {
-          jdkPathsList.add(new JdkBundleDescriptor(customJdkFile, "JDK bundled with IDE"));
+      File bootJDK = new File(System.getProperty("java.home")).getParentFile();
+
+      JdkBundlesList jdkBundlesList = new JdkBundlesList(bootJDK);
+
+      if (bundledJdkFile.exists()) {
+        jdkBundlesList.addUniqueBundle(bundledJdkFile, true);
       }
 
-      ArrayList<JdkBundleDescriptor> jdk6List = jdkBundlesFromLocation(STANDARD_JDK_6_LOCATION_ON_MAC_OS_X, "1.6.0");
-
-      if (jdk6List.isEmpty()) {
-        jdkPathsList.addAll(jdkBundlesFromLocation(STANDARD_JDK_LOCATION_ON_MAC_OS_X, "1.6.0"));
+      if (SystemInfo.isMac) {
+        addJDKBundlesFromLocation(jdkBundlesList, STANDARD_JDK_6_LOCATION_ON_MAC_OS_X, JDK6_VERSION, JDK6_VERSION);
+        addJDKBundlesFromLocation(jdkBundlesList, STANDARD_JDK_LOCATION_ON_MAC_OS_X, JDK6_VERSION, JDK6_VERSION);
+        addJDKBundlesFromLocation(jdkBundlesList, STANDARD_JDK_LOCATION_ON_MAC_OS_X, JDK8_VERSION, null);
+      }
+      else if (SystemInfo.isLinux) {
+        addJDKBundlesFromLocation(jdkBundlesList, STANDARD_JVM_LOCATION_ON_LINUX, JDK8_VERSION, null);
       }
 
-      jdkPathsList.addAll(jdkBundlesFromLocation(STANDARD_JDK_LOCATION_ON_MAC_OS_X, "jdk1.8.0_(\\d*).jdk"));
-
-      return jdkPathsList;
+      return jdkBundlesList;
     }
 
-    private static ArrayList<JdkBundleDescriptor> jdkBundlesFromLocation(String jdkLocationOnMacOsX, String filter) {
+    private static void addJDKBundlesFromLocation(JdkBundlesList jdkList, String location, @Nullable Version minVer,
+                                                  @Nullable Version maxVer) {
+      File jvmLocation = new File(location);
 
-      ArrayList<JdkBundleDescriptor> localJdkPathsList = new ArrayList<JdkBundleDescriptor>();
+      if (!jvmLocation.exists()) {
+        LOG.debug("Standard jvm location does not exists: " + jvmLocation);
+        return;
+      }
 
-      File standardJdkLocationOnMacFile = new File(jdkLocationOnMacOsX);
+      File[] jvms = jvmLocation.listFiles();
 
-      if (!standardJdkLocationOnMacFile.exists()) {
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Location does not exists: " + jdkLocationOnMacOsX);
+      if (jvms == null) {
+        LOG.debug("Cannot get jvm list from: " + jvmLocation);
+        return;
+      }
+
+      for (File jvm : jvms) {
+        if (!new File(jvm, "lib/tools.jar").exists()) continue; // Skip JRE
+
+        try {
+          String jvmCanonicalPath = jvm.getCanonicalPath();
+
+          if (jdkList.contains(jvmCanonicalPath)) continue; // Skip symlinked JDKs
+
+          Pair<String, Pair<Version,Integer>> version = getJDKNameVersionAndUpdate(jvmCanonicalPath);
+
+          if (version.second == null) continue; // Skip unknown
+          Version jdkVer = version.second.first;
+          if (minVer != null && jdkVer.lessThan(minVer.major, minVer.minor, minVer.bugfix))
+            continue; // Skip below supported
+
+          if (maxVer != null && maxVer.lessThan(jdkVer.major, jdkVer.minor, jdkVer.bugfix))
+            continue; // Skip above supported
+
+          jdkList.addUniqueBundle(new File(jvmCanonicalPath));
         }
-        return localJdkPathsList;
-      }
-
-      File[] filesInStandardJdkLocation = standardJdkLocationOnMacFile.listFiles();
-
-      if (filesInStandardJdkLocation == null) {
-        LOG.debug("Some IO  exception happened.");
-        return localJdkPathsList;
-      }
-
-      int latestUpdateNumber = 0;
-      JdkBundleDescriptor latestBundle = null;
-
-      Pattern p = Pattern.compile(filter);
-
-      for (File possibleJdkBundle : filesInStandardJdkLocation) {
-        // todo add some logic to verify the bundle
-
-        Matcher m = p.matcher(possibleJdkBundle.getName());
-
-        while (m.find()) {
-          try {
-            if (m.groupCount() > 0) {
-              int updateNumber = Integer.parseInt(m.group(1));
-              if (latestUpdateNumber < updateNumber) {
-                latestBundle = new JdkBundleDescriptor(possibleJdkBundle, possibleJdkBundle.getName());
-              }
-            } else {
-              latestBundle = new JdkBundleDescriptor(possibleJdkBundle, possibleJdkBundle.getName());
-            }
-          } catch (NumberFormatException nfe) {
-            if (LOG.isDebugEnabled()) {
-              LOG.debug("Fail parsing update number");
-            }
-          }
+        catch (Exception e) {
+          LOG.debug(e);
         }
+      }
+    }
 
+    private static Pair<String, Pair<Version,Integer>> getJDKNameVersionAndUpdate(String jvmPath) {
+      GeneralCommandLine commandLine = new GeneralCommandLine();
+      commandLine.setExePath(jvmPath + File.separator + "jre" + File.separator + "bin" + File.separator + "java");
+      commandLine.addParameter("-version");
+
+      String displayVersion = null;
+      Pair<Version, Integer> versionAndUpdate = null;
+      try {
+        displayVersion = ExecUtil.readFirstLine(commandLine.createProcess().getErrorStream(), null);
+      }
+      catch (ExecutionException e) {
+        LOG.debug(e);
       }
 
-      if (latestBundle != null) {
-        localJdkPathsList.add(latestBundle);
+      if (displayVersion != null) {
+        versionAndUpdate = VersionUtil.parseVersionAndUpdate(displayVersion, VERSION_UPDATE_PATTERNS);
+        displayVersion = displayVersion.replaceFirst("\".*\"", "");
+      }
+      else {
+        displayVersion = new File(jvmPath).getName();
       }
 
-      return localJdkPathsList;
+      return Pair.create(displayVersion, versionAndUpdate);
     }
   }
 

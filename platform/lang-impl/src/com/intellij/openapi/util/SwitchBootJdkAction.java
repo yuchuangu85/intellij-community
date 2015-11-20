@@ -220,7 +220,7 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
   private static class JdkBundlesList {
     private ArrayList<JdkBundleDescriptor> bundleList = new ArrayList<JdkBundleDescriptor>();
     private HashMap<String, JdkBundleDescriptor> bundleMap = new HashMap<String, JdkBundleDescriptor>();
-    private HashMap<String, JdkBundleDescriptor> versionMap = new HashMap<String, JdkBundleDescriptor>();
+    private HashMap<Version, JdkBundleDescriptor> versionMap = new HashMap<Version, JdkBundleDescriptor>();
 
     public JdkBundlesList(File bootBundle) {
       addBundle(bootBundle, true, false);
@@ -244,11 +244,10 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
       JdkBundleDescriptor bundleDescriptor = new JdkBundleDescriptor(bundle, boot);
 
       Pair<Version, Integer> versionUpdate = bundleDescriptor.getVersionUpdate();
-      String versionUpdateKey = versionUpdate != null ? versionUpdate.first + versionUpdate.second.toString() : null;
       if (!bundleList.isEmpty() && versionUpdate != null) {
-        JdkBundleDescriptor descr = versionMap.get(versionUpdateKey);
-        if (descr != null) {
-          Pair<Version, Integer> descrVersionUpdate = descr.getVersionUpdate();
+        JdkBundleDescriptor latestJdk = versionMap.get(versionUpdate.first);
+        if (latestJdk != null) {
+          Pair<Version, Integer> descrVersionUpdate = latestJdk.getVersionUpdate();
           if (descrVersionUpdate != null && descrVersionUpdate.second >= versionUpdate.second) {
             return; // do not add old jdk builds
           }
@@ -259,8 +258,8 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
       bundleMap.put(bundle.getAbsolutePath(), bundleDescriptor);
       bundleDescriptor.setBundled(bundled);
 
-      if (versionUpdateKey != null) {
-        versionMap.put(versionUpdateKey, bundleDescriptor);
+      if (versionUpdate != null) {
+        versionMap.put(versionUpdate.first, bundleDescriptor);
       }
     }
 
@@ -385,6 +384,9 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
     private static JdkBundlesList findJdkPaths () {
 
       File bootJDK = new File(System.getProperty("java.home")).getParentFile();
+      if (SystemInfo.isMac) {
+        bootJDK = bootJDK.getParentFile().getParentFile();
+      }
 
       JdkBundlesList jdkBundlesList = new JdkBundlesList(bootJDK);
 
@@ -421,7 +423,8 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
       }
 
       for (File jvm : jvms) {
-        if (!new File(jvm, "lib/tools.jar").exists()) continue; // Skip JRE
+        File javaHome = SystemInfo.isMac ? new File(jvm, "Contents/Home") : jvm;
+        if (!new File(javaHome, "lib/tools.jar").exists()) continue; // Skip JRE
 
         try {
           String jvmCanonicalPath = jvm.getCanonicalPath();
@@ -448,7 +451,8 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
 
     private static Pair<String, Pair<Version,Integer>> getJDKNameVersionAndUpdate(String jvmPath) {
       GeneralCommandLine commandLine = new GeneralCommandLine();
-      commandLine.setExePath(jvmPath + File.separator + "jre" + File.separator + "bin" + File.separator + "java");
+      commandLine.setExePath(jvmPath + (SystemInfo.isMac ? "/Contents/Home/" : "") + "jre" +
+                             File.separator + "bin" + File.separator + "java");
       commandLine.addParameter("-version");
 
       String displayVersion = null;

@@ -13,8 +13,4 @@ public abstract class PyConcurrencyService {
   }
 
   public abstract void recordEvent(XDebugSession session, PyConcurrencyEvent event, boolean isAsyncIo);
-
-  public abstract void initSession(XDebugSession session);
-
-  public abstract void removeSession(XDebugSession session);
 }

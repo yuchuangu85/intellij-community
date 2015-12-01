@@ -27,6 +27,9 @@
 package com.intellij.execution.process;
 
 import com.google.common.base.Joiner;
+import org.jetbrains.annotations.NotNull;
+
+import java.io.File;
 
 /**
  * @author traff
@@ -63,5 +66,10 @@ public class ProcessInfo {
 
   public String getArgs() {
     return myArgs;
+  }
+
+  @NotNull
+  public String getProcessName() {
+    return new File(myCommand).getName();
   }
 }

@@ -16,6 +16,7 @@
 package com.intellij.ui;
 
 import com.intellij.ide.StartupProgress;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ex.ApplicationInfoEx;
 import com.intellij.openapi.application.impl.ApplicationInfoImpl;
 import com.intellij.openapi.util.IconLoader;
@@ -179,7 +180,7 @@ public class Splash extends JDialog implements StartupProgress {
         final String licensedToMessage = provider.getLicensedToMessage();
         final List<String> licenseRestrictionsMessages = provider.getLicenseRestrictionsMessages();
         int offsetX = uiScale(15);
-        if (Registry.is("ide.new.about")) {
+        if (Registry.is("ide.new.about") && ApplicationManager.getApplication() != null) {
           ApplicationInfoEx infoEx = ApplicationInfoEx.getInstanceEx();
           if (infoEx instanceof ApplicationInfoImpl) {
             offsetX = ((ApplicationInfoImpl)infoEx).getProgressX();

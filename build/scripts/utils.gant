@@ -44,7 +44,7 @@ binding.setVariable("versionSelector", {
   def versionParts = fullVersion.split("\\.")
 
   def minor = versionParts[1]
-  versionParts[0] + (minor == "0" ? "": "." + minor);
+  versionParts[0] + (minor == "0" ? "": "." + minor)
 })
 
 binding.setVariable("guessJdk", {

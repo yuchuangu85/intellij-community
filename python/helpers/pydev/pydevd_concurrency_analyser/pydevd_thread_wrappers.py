@@ -1,5 +1,5 @@
 
-import _pydev_threading as threading
+from _pydev_imps import _pydev_threading as threading
 import functools
 
 
@@ -72,8 +72,9 @@ def wrap_threads():
 
     # queue patching
     try:
-        import queue
+        import queue  # @UnresolvedImport
         queue.Queue = factory_wrapper(queue.Queue)
     except:
         import Queue
         Queue.Queue = factory_wrapper(Queue.Queue)
+

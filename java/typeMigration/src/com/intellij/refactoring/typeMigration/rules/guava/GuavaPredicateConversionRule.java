@@ -16,15 +16,13 @@
 package com.intellij.refactoring.typeMigration.rules.guava;
 
 import com.intellij.psi.*;
-import com.intellij.psi.util.PsiTypesUtil;
-import com.intellij.refactoring.typeMigration.TypeConversionDescriptor;
 import com.intellij.refactoring.typeMigration.TypeConversionDescriptorBase;
+import com.intellij.refactoring.typeMigration.TypeEvaluator;
 import com.intellij.refactoring.typeMigration.TypeMigrationLabeler;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -33,26 +31,17 @@ import java.util.Set;
 /**
  * @author Dmitry Batkovich
  */
-public class GuavaPredicateConversionRule extends BaseGuavaTypeConversionRule {
-  public static final String GUAVA_PREDICATE = "com.google.common.base.Predicate";
-  public static final String JAVA_PREDICATE = "java.util.function.Predicate";
+public class GuavaPredicateConversionRule extends GuavaLambdaConversionRule {
+  private static final String GUAVA_PREDICATES_UTILITY = "com.google.common.base.Predicates";
+
+  protected GuavaPredicateConversionRule() {
+    super(GuavaLambda.PREDICATE);
+  }
 
   @NotNull
   @Override
   protected Set<String> getAdditionalUtilityClasses() {
-    return Collections.singleton("com.google.common.base.Predicates");
-  }
-
-  @Override
-  protected void fillSimpleDescriptors(Map<String, TypeConversionDescriptorBase> descriptorsMap) {
-    descriptorsMap.put("apply", new FunctionalInterfaceTypeConversionDescriptor("apply", "test"));
-  }
-
-  @Nullable
-  @Override
-  protected TypeConversionDescriptorBase findConversionForVariableReference(@NotNull PsiReferenceExpression referenceExpression,
-                                                                            @NotNull PsiVariable psiVariable, PsiExpression context) {
-    return new TypeConversionDescriptor("$p$", "$p$::test");
+    return Collections.singleton(GUAVA_PREDICATES_UTILITY);
   }
 
   @Nullable
@@ -66,37 +55,30 @@ public class GuavaPredicateConversionRule extends BaseGuavaTypeConversionRule {
     if (!(context instanceof PsiMethodCallExpression)) {
       return null;
     }
-    if (method.getParameterList().getParametersCount() == 1) {
-      final PsiParameter parameter = method.getParameterList().getParameters()[0];
-      final PsiClass psiClass = PsiTypesUtil.getPsiClass(parameter.getType().getDeepComponentType());
-      if (psiClass == null || CommonClassNames.JAVA_LANG_ITERABLE.equals(psiClass.getQualifiedName())) {
-        return null;
+    if (isPredicates((PsiMethodCallExpression)context)) {
+      final TypeConversionDescriptorBase descriptor = GuavaPredicatesUtil.tryConvertIfPredicates(method, context);
+      if (descriptor != null) {
+        return descriptor;
       }
     }
-    if (methodName.equals("or")) {
-      //TODO
-      return null;
-    }
-    else if (methodName.equals("and")) {
-      //TODO
-      return null;
-    }
-    else if (methodName.equals("not")) {
-      //TODO
-      return null;
-    }
-    return null;
+    return new TypeConversionDescriptorBase() {
+      @Override
+      public PsiExpression replace(PsiExpression expression, TypeEvaluator evaluator) throws IncorrectOperationException {
+        return (PsiExpression)expression.replace(JavaPsiFacade.getElementFactory(expression.getProject()).createExpressionFromText(expression.getText() + "::test", expression));
+      }
+    };
   }
 
-  @NotNull
-  @Override
-  public String ruleFromClass() {
-    return GUAVA_PREDICATE;
-  }
-
-  @NotNull
-  @Override
-  public String ruleToClass() {
-    return JAVA_PREDICATE;
+  public static boolean isPredicates(PsiMethodCallExpression expression) {
+    final String methodName = expression.getMethodExpression().getReferenceName();
+    if (GuavaPredicatesUtil.PREDICATES_METHOD_NAMES.contains(methodName)) {
+      final PsiMethod method = expression.resolveMethod();
+      if (method == null) return false;
+      final PsiClass aClass = method.getContainingClass();
+      if (aClass != null && GUAVA_PREDICATES_UTILITY.equals(aClass.getQualifiedName())) {
+        return true;
+      }
+    }
+    return false;
   }
 }

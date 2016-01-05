@@ -86,6 +86,10 @@ public class Restarter {
     if (beforeRestart.length == 0) return;
 
     File restartDir = new File(getRestarterDir());
+    String systemPath = System.getProperty("user.home") + "/." + System.getProperty("idea.paths.selector") + "/system/restart";
+    if (! systemPath.equals(restartDir.getPath())){
+      throw new IOException("idea.system.path was changed. Restart is not supported.");
+    }
     if (!FileUtilRt.createDirectory(restartDir)) {
       throw new IOException("Cannot create dir: " + restartDir);
     }
@@ -159,7 +163,7 @@ public class Restarter {
   }
 
   public static String getRestarterDir() {
-    return PathManager.getLogPath() + "/restart";
+    return PathManager.getSystemPath() + "/restart";
   }
 
   public static File createTempExecutable(File executable) throws IOException {

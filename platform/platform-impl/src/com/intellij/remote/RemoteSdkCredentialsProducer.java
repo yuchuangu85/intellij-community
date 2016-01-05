@@ -31,7 +31,7 @@ public interface RemoteSdkCredentialsProducer<T extends RemoteSdkCredentials> {
    * @deprecated
    */
   @Deprecated
-  T getRemoteSdkCredentials() throws InterruptedException;
+  T getRemoteSdkCredentials() throws InterruptedException, ExecutionException;
 
   /**
    * Returns remote sdk credentials for instances saved on application level,

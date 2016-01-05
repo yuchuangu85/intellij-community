@@ -20,6 +20,7 @@ import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.win32.IdeaWin32;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.WeakStringInterner;
@@ -55,7 +56,10 @@ public class UrlClassLoader extends ClassLoader {
     // todo[r.sh] drop condition in IDEA 15
     // todo[r.sh] drop reflection after migrating to Java 7+
     assert Patches.USE_REFLECTION_TO_ACCESS_JDK7;
-    boolean parallelLoader = Boolean.parseBoolean(System.getProperty("idea.parallel.class.loader", "true"));
+
+    // IBM's classloader breaks when overridden getClassLoadingLock() is called, see https://youtrack.jetbrains.com/issue/IDEA-149187
+    // so disallow parallel loading completely on JBM jdk
+    boolean parallelLoader = !SystemInfo.isIbmJvm && Boolean.parseBoolean(System.getProperty("idea.parallel.class.loader", "true"));
     if (parallelLoader) {
       try {
         Method registerAsParallelCapable = ClassLoader.class.getDeclaredMethod("registerAsParallelCapable");
@@ -273,7 +277,7 @@ public class UrlClassLoader extends ClassLoader {
   @Nullable
   private Resource _getResource(final String name) {
     String n = name;
-    if (n.startsWith("/")) n = n.substring(1);
+    n = StringUtil.trimStart(n, "/");
     return getClassPath().getResource(n, true);
   }
 
@@ -299,7 +303,19 @@ public class UrlClassLoader extends ClassLoader {
 
   public static void loadPlatformLibrary(@NotNull String libName) {
     String libFileName = mapLibraryName(libName);
-    String libPath = PathManager.getBinPath() + "/" + libFileName;
+
+    String libPath = null;
+    String jarPath = PathManager.getJarPathForClass(UrlClassLoader.class);
+    if (jarPath != null) {
+      File jarDirectoryPath = new File(jarPath).getParentFile();
+      File libFile = new File(jarDirectoryPath, libFileName);
+      if (libFile.exists()) {
+        libPath = libFile.getPath();
+      }
+    }
+    if (libPath == null) {
+      libPath = PathManager.getBinPath() + "/" + libFileName;
+    }
 
     if (!new File(libPath).exists()) {
       String platform = getPlatformName();

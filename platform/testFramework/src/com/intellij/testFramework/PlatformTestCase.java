@@ -22,7 +22,10 @@ import com.intellij.idea.IdeaLogger;
 import com.intellij.idea.IdeaTestApplication;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.DataProvider;
-import com.intellij.openapi.application.*;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.PathManager;
+import com.intellij.openapi.application.Result;
+import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.command.CommandProcessor;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.command.impl.UndoManagerImpl;
@@ -65,7 +68,6 @@ import com.intellij.psi.impl.PsiManagerImpl;
 import com.intellij.psi.impl.source.tree.injected.InjectedLanguageManagerImpl;
 import com.intellij.util.*;
 import com.intellij.util.indexing.IndexableSetContributor;
-import com.intellij.util.indexing.IndexedRootsProvider;
 import com.intellij.util.lang.CompoundRuntimeException;
 import com.intellij.util.ui.UIUtil;
 import junit.framework.TestCase;
@@ -381,8 +383,8 @@ public abstract class PlatformTestCase extends UsefulTestCase implements DataPro
 
     Set<VirtualFile> survivors = new HashSet<VirtualFile>();
 
-    for (IndexedRootsProvider provider : IndexedRootsProvider.EP_NAME.getExtensions()) {
-      for (VirtualFile file : IndexableSetContributor.getRootsToIndex(provider)) {
+    for (IndexableSetContributor contributor : IndexableSetContributor.EP_NAME.getExtensions()) {
+      for (VirtualFile file : IndexableSetContributor.getRootsToIndex(contributor)) {
         registerSurvivor(survivors, file);
       }
     }
@@ -525,7 +527,7 @@ public abstract class PlatformTestCase extends UsefulTestCase implements DataPro
     myProject = null;
   }
 
-  public static void closeAndDisposeProjectAndCheckThatNoOpenProjects(@NotNull Project projectToClose, @NotNull List<Throwable> exceptions) {
+  public static void closeAndDisposeProjectAndCheckThatNoOpenProjects(@NotNull final Project projectToClose, @NotNull final List<Throwable> exceptions) {
     try {
       ProjectManagerEx projectManager = ProjectManagerEx.getInstanceEx();
       if (projectManager instanceof ProjectManagerImpl) {
@@ -544,16 +546,17 @@ public abstract class PlatformTestCase extends UsefulTestCase implements DataPro
       exceptions.add(e);
     }
     finally {
-      AccessToken token = WriteAction.start();
-      try {
-        Disposer.dispose(projectToClose);
-      }
-      catch (Throwable e) {
-        exceptions.add(e);
-      }
-      finally {
-        token.finish();
-      }
+      ApplicationManager.getApplication().runWriteAction(new Runnable() {
+        @Override
+        public void run() {
+          try {
+            Disposer.dispose(projectToClose);
+          }
+          catch (Throwable e) {
+            exceptions.add(e);
+          }
+        }
+      });
     }
   }
 
@@ -712,7 +715,7 @@ public abstract class PlatformTestCase extends UsefulTestCase implements DataPro
   }
 
   protected boolean isRunInWriteAction() {
-    return true;
+    return false;
   }
 
   @Override
@@ -934,11 +937,19 @@ public abstract class PlatformTestCase extends UsefulTestCase implements DataPro
     }.execute().throwException();
   }
 
-  public static void setBinaryContent(final VirtualFile file, final byte[] content) {
+  public static void setBinaryContent(@NotNull final VirtualFile file, @NotNull final byte[] content) {
     new WriteAction() {
       @Override
       protected void run(@NotNull Result result) throws Throwable {
         file.setBinaryContent(content);
+      }
+    }.execute().throwException();
+  }
+  public static void setBinaryContent(@NotNull final VirtualFile file, @NotNull final byte[] content, final long newModificationStamp, final long newTimeStamp, final Object requestor) {
+    new WriteAction() {
+      @Override
+      protected void run(@NotNull Result result) throws Throwable {
+        file.setBinaryContent(content,newModificationStamp, newTimeStamp,requestor);
       }
     }.execute().throwException();
   }

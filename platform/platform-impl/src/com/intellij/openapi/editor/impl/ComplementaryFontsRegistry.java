@@ -28,7 +28,6 @@ import org.intellij.lang.annotations.JdkConstants;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.TestOnly;
 
 import java.awt.*;
 import java.util.*;
@@ -180,14 +179,14 @@ public class ComplementaryFontsRegistry {
   }
 
   @NotNull
-  public static FontInfo getFontAbleToDisplay(char c, @JdkConstants.FontStyle int style, @NotNull FontPreferences preferences) {
+  public static FontInfo getFontAbleToDisplay(int codePoint, @JdkConstants.FontStyle int style, @NotNull FontPreferences preferences) {
     boolean tryDefaultFont = true;
     List<String> fontFamilies = preferences.getEffectiveFontFamilies();
     FontInfo result;
     //noinspection ForLoopReplaceableByForEach
     for (int i = 0, len = fontFamilies.size(); i < len; ++i) { // avoid foreach, it instantiates ArrayList$Itr, this traversal happens very often
       final String fontFamily = fontFamilies.get(i);
-      result = doGetFontAbleToDisplay(c, preferences.getSize(fontFamily), style, fontFamily);
+      result = doGetFontAbleToDisplay(codePoint, preferences.getSize(fontFamily), style, fontFamily);
       if (result != null) {
         return result;
       }
@@ -198,26 +197,27 @@ public class ComplementaryFontsRegistry {
       size = preferences.getSize(fontFamilies.get(0));
     }
     if (tryDefaultFont) {
-      result = doGetFontAbleToDisplay(c, size, style, FontPreferences.DEFAULT_FONT_NAME);
+      result = doGetFontAbleToDisplay(codePoint, size, style, FontPreferences.DEFAULT_FONT_NAME);
       if (result != null) {
         return result;
       }
     }
-    return doGetFontAbleToDisplay(c, size, style);
+    return doGetFontAbleToDisplay(codePoint, size, style);
   }
   
   @NotNull
-  public static FontInfo getFontAbleToDisplay(char c, int size, @JdkConstants.FontStyle int style, @NotNull String defaultFontFamily) {
-    FontInfo result = doGetFontAbleToDisplay(c, size, style, defaultFontFamily);
+  public static FontInfo getFontAbleToDisplay(int codePoint, int size, @JdkConstants.FontStyle int style, @NotNull String defaultFontFamily) {
+    FontInfo result = doGetFontAbleToDisplay(codePoint, size, style, defaultFontFamily);
     if (result != null) {
       return result;
     }
-    return doGetFontAbleToDisplay(c, size, style);
+    return doGetFontAbleToDisplay(codePoint, size, style);
   }
 
   @Nullable
-  private static FontInfo doGetFontAbleToDisplay(char c, int size, @JdkConstants.FontStyle int style, @NotNull String defaultFontFamily) {
+  private static FontInfo doGetFontAbleToDisplay(int codePoint, int size, @JdkConstants.FontStyle int originalStyle, @NotNull String defaultFontFamily) {
     synchronized (lock) {
+      @JdkConstants.FontStyle int style = originalStyle;
       if (Patches.JDK_MAC_FONT_STYLE_DETECTION_WORKAROUND && style > 0 && style < 4) {
         Pair<String, Integer>[] replacement = ourStyledFontMap.get(defaultFontFamily);
         if (replacement != null) {
@@ -230,8 +230,8 @@ public class ComplementaryFontsRegistry {
           ourSharedKeyInstance.myFamilyName != null &&
           ourSharedKeyInstance.myFamilyName.equals(defaultFontFamily) &&
           ourSharedDefaultFont != null &&
-          ( c < 128 ||
-            ourSharedDefaultFont.canDisplay(c)
+          ( codePoint < 128 ||
+            ourSharedDefaultFont.canDisplay(codePoint)
           )
         ) {
         return ourSharedDefaultFont;
@@ -243,13 +243,13 @@ public class ComplementaryFontsRegistry {
 
       FontInfo defaultFont = ourUsedFonts.get(ourSharedKeyInstance);
       if (defaultFont == null) {
-        defaultFont = new FontInfo(defaultFontFamily, size, style);
+        defaultFont = new FontInfo(defaultFontFamily, size, style, originalStyle);
         ourUsedFonts.put(ourSharedKeyInstance, defaultFont);
         ourSharedKeyInstance = new FontKey("", 0, 0);
       }
 
       ourSharedDefaultFont = defaultFont;
-      if (c < 128 || defaultFont.canDisplay(c)) {
+      if (codePoint < 128 || defaultFont.canDisplay(codePoint)) {
         return defaultFont;
       }
       else {
@@ -259,13 +259,13 @@ public class ComplementaryFontsRegistry {
   }
   
   @NotNull
-  private static FontInfo doGetFontAbleToDisplay(char c, int size, @JdkConstants.FontStyle int style) {
+  private static FontInfo doGetFontAbleToDisplay(int codePoint, int size, @JdkConstants.FontStyle int style) {
     synchronized (lock) {
-      if (ourUndisplayableChars.contains(c)) return ourSharedDefaultFont;
+      if (ourUndisplayableChars.contains(codePoint)) return ourSharedDefaultFont;
 
       final Collection<FontInfo> descriptors = ourUsedFonts.values();
       for (FontInfo font : descriptors) {
-        if (font.getSize() == size && font.getStyle() == style && font.canDisplay(c)) {
+        if (font.getSize() == size && font.getStyle() == style && font.canDisplay(codePoint)) {
           return font;
         }
       }
@@ -273,21 +273,16 @@ public class ComplementaryFontsRegistry {
       for (int i = 0; i < ourFontNames.size(); i++) {
         String name = ourFontNames.get(i);
         FontInfo font = new FontInfo(name, size, style);
-        if (font.canDisplay(c)) {
+        if (font.canDisplay(codePoint)) {
           ourUsedFonts.put(new FontKey(name, size, style), font);
           ourFontNames.remove(i);
           return font;
         }
       }
 
-      ourUndisplayableChars.add(c);
+      ourUndisplayableChars.add(codePoint);
 
       return ourSharedDefaultFont;
     }
-  }
-  
-  @TestOnly
-  public static void resetCaches() {
-    ourUsedFonts.clear();
   }
 }

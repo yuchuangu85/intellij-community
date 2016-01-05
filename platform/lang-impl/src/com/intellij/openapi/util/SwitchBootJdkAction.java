@@ -58,7 +58,7 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
 
   @NotNull
   private static File getBundledJDKFile() {
-    StringBuilder bundledJDKPath = new StringBuilder(PathManager.getHomePath() + File.separator + "jre");
+    StringBuilder bundledJDKPath = new StringBuilder("jre");
     if (SystemInfo.isMac) {
       bundledJDKPath.append(File.separator).append("jdk");
     }
@@ -75,16 +75,17 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
     e.getPresentation().setText("Switch Boot JDK");
   }
 
-  public static List<JdkBundle> getBundlesFromFile(@NotNull File fileWithBundles) {
+  private static List<JdkBundle> getBundlesFromFile(@NotNull File fileWithBundles) {
     List<JdkBundle> list = new ArrayList<JdkBundle>();
     try {
       for (String line : FileUtil.loadLines(fileWithBundles, "UTF-8")) {
-        File file = new File(line);
-        if (file.exists()) {
-          list.add(JdkBundle.createBundle(file, false, false));
+        File storedFile = new File(line);
+        final boolean isBundled = !storedFile.isAbsolute();
+        File actualFile = isBundled ? new File(PathManager.getHomePath(), storedFile.getPath()) : storedFile;
+        if (actualFile.exists()) {
+          list.add(JdkBundle.createBundle(storedFile, false, isBundled));
         }
       }
-
     } catch (IllegalStateException e) {
       // The device builders can throw IllegalStateExceptions if
       // build gets called before everything is properly setup
@@ -118,7 +119,7 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
       try {
         //noinspection IOResourceOpenedButNotSafelyClosed
         fooWriter = new FileWriter(productJdkConfigFile, false);
-        fooWriter.write(selectedJdkBundleFile.getAbsolutePath());
+        fooWriter.write(selectedJdkBundleFile.getPath());
       }
       catch (IOException e) {
         LOG.error(e);
@@ -141,7 +142,7 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
 
     @NotNull private final ComboBox myComboBox;
 
-    protected SwitchBootJdkDialog(@Nullable Project project, final List<JdkBundle> jdkBundlesList) {
+    private SwitchBootJdkDialog(@Nullable Project project, final List<JdkBundle> jdkBundlesList) {
       super(project, false);
 
       final JdkBundleList pathsList = findJdkPaths();
@@ -223,20 +224,17 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
     }
 
     public File getSelectedFile() {
-      return ((JdkBundle)myComboBox.getSelectedItem()).getBundleAsFile();
+      return ((JdkBundle)myComboBox.getSelectedItem()).getLocation();
     }
   }
 
   private static final String STANDARD_JDK_LOCATION_ON_MAC_OS_X = "/Library/Java/JavaVirtualMachines/";
-  private static final String STANDARD_JDK_6_LOCATION_ON_MAC_OS_X = "/System/Library/Java/JavaVirtualMachines/";
   private static final String [] STANDARD_JVM_LOCATIONS_ON_LINUX = new String[] {
     "/usr/lib/jvm/", // Ubuntu
     "/usr/java/"     // Fedora
   };
 
-  private static final Version JDK6_VERSION = new Version(1, 6, 0);
   private static final Version JDK8_VERSION = new Version(1, 8, 0);
-
 
   @NotNull
   private static JdkBundleList findJdkPaths() {
@@ -247,7 +245,7 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
       jdkBundleList.addBundle(bootJdk, true);
     }
 
-    if (bundledJdkFile.exists()) {
+    if (new File(PathManager.getHomePath() + File.separator + bundledJdkFile).exists()) {
       JdkBundle bundledJdk = JdkBundle.createBundle(bundledJdkFile, false, true);
       if (bundledJdk != null) {
         jdkBundleList.addBundle(bundledJdk, true);
@@ -255,8 +253,6 @@ public class SwitchBootJdkAction extends AnAction implements DumbAware {
     }
 
     if (SystemInfo.isMac) {
-      jdkBundleList.addBundlesFromLocation(STANDARD_JDK_6_LOCATION_ON_MAC_OS_X, JDK6_VERSION, JDK6_VERSION);
-      jdkBundleList.addBundlesFromLocation(STANDARD_JDK_LOCATION_ON_MAC_OS_X, JDK6_VERSION, JDK6_VERSION);
       jdkBundleList.addBundlesFromLocation(STANDARD_JDK_LOCATION_ON_MAC_OS_X, JDK8_VERSION, null);
     }
     else if (SystemInfo.isLinux) {

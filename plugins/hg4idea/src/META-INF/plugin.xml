@@ -27,7 +27,6 @@
     <vcsRepositoryCreator implementation="org.zmlx.hg4idea.repo.HgRepositoryCreator"/>
     <pushSupport implementation="org.zmlx.hg4idea.push.HgPushSupport"/>
     <cherryPicker implementation="org.zmlx.hg4idea.cherrypick.HgCherryPicker"/>
-    <errorHandler implementation="com.intellij.diagnostic.ITNReporter"/>
     <vcsPopupProvider implementation="org.zmlx.hg4idea.provider.HgQuickListProvider"/>
     <logProvider implementation="org.zmlx.hg4idea.log.HgLogProvider"/>
     <vcs.taskHandler implementation="org.zmlx.hg4idea.HgTaskHandler"/>
@@ -65,6 +64,8 @@
 
       <reference ref="Compare.SameVersion"/>
       <reference ref="Compare.Selected"/>
+      <action id="hg4idea.CompareWithBranch" class="org.zmlx.hg4idea.action.HgCompareWithBranchAction"
+              text="Compare with Branch/Bookmark..."/>
       <reference ref="Vcs.ShowTabbedFileHistory"/>
       <reference ref="Vcs.ShowHistoryForBlock"/>
       <reference ref="Annotate"/>

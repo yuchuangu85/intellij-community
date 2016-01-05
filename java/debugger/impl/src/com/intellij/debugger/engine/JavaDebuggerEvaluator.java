@@ -39,6 +39,7 @@ import com.intellij.xdebugger.XSourcePosition;
 import com.intellij.xdebugger.evaluation.EvaluationMode;
 import com.intellij.xdebugger.evaluation.XDebuggerEvaluator;
 import com.intellij.xdebugger.impl.breakpoints.XExpressionImpl;
+import com.intellij.xdebugger.impl.ui.DebuggerUIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -65,7 +66,8 @@ public class JavaDebuggerEvaluator extends XDebuggerEvaluator {
   public void evaluate(@NotNull final XExpression expression,
                        @NotNull final XEvaluationCallback callback,
                        @Nullable XSourcePosition expressionPosition) {
-    myDebugProcess.getManagerThread().schedule(new DebuggerContextCommandImpl(myDebugProcess.getDebuggerContext()) {
+    myDebugProcess.getManagerThread().schedule(new DebuggerContextCommandImpl(myDebugProcess.getDebuggerContext(),
+                                                                              myStackFrame.getStackFrameProxy().threadProxy()) {
       @Override
       public Priority getPriority() {
         return Priority.NORMAL;
@@ -73,6 +75,10 @@ public class JavaDebuggerEvaluator extends XDebuggerEvaluator {
 
       @Override
       public void threadAction() {
+        if (DebuggerUIUtil.isObsolete(callback)) {
+          return;
+        }
+
         JavaDebugProcess process = myDebugProcess.getXdebugProcess();
         if (process == null) {
           callback.errorOccurred("No debug process");

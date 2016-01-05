@@ -59,16 +59,14 @@ import javax.swing.undo.UndoManager;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.font.FontRenderContext;
+import java.awt.font.GlyphVector;
 import java.awt.im.InputContext;
 import java.awt.image.BufferedImage;
 import java.awt.image.BufferedImageOp;
 import java.awt.image.ImageObserver;
 import java.awt.image.PixelGrabber;
 import java.beans.PropertyChangeListener;
-import java.io.BufferedInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -94,11 +92,43 @@ public class UIUtil {
   private static final StyleSheet DEFAULT_HTML_KIT_CSS;
 
   static {
+    blockATKWrapper();
     // save the default JRE CSS and ..
     HTMLEditorKit kit = new HTMLEditorKit();
     DEFAULT_HTML_KIT_CSS = kit.getStyleSheet();
     // .. erase global ref to this CSS so no one can alter it
     kit.setStyleSheet(null);
+  }
+
+  private static void blockATKWrapper() {
+    /*
+     * The method should be called before java.awt.Toolkit.initAssistiveTechnologies()
+     * which is called from Toolkit.getDefaultToolkit().
+     */
+    if (!(SystemInfo.isLinux && Registry.is("linux.jdk.accessibility.atkwrapper.block"))) return;
+
+    String ATK_WRAPPER = "org.GNOME.Accessibility.AtkWrapper";
+
+    Properties properties = new Properties();
+    try {
+      File propsFile = new File(System.getProperty("java.home") + File.separator + "lib" + File.separator + "accessibility.properties");
+      FileInputStream in = new FileInputStream(propsFile);
+      properties.load(in);
+      in.close();
+    } catch (Exception ignore) {
+    }
+    if (!properties.isEmpty()) {
+      String classNames = System.getProperty("javax.accessibility.assistive_technologies");
+      if (classNames == null) {
+        // If the system property is not set, Toolkit will try to use the properties file.
+        classNames = properties.getProperty("assistive_technologies", null);
+        if (classNames != null && classNames.contains(ATK_WRAPPER)) {
+          // Replace AtkWrapper with a dummy Object. It'll be instantiated & GC'ed right away, a NOP.
+          System.setProperty("javax.accessibility.assistive_technologies", "java.lang.Object");
+          LOG.info(ATK_WRAPPER + " is blocked, see IDEA-149219");
+        }
+      }
+    }
   }
 
   public static int getMultiClickInterval() {
@@ -138,7 +168,11 @@ public class UIUtil {
     if (isUnderAquaBasedLookAndFeel()) {
       c.putClientProperty("JComponent.sizeVariant", StringUtil.toLowerCase(componentStyle.name()));
     }
-    FontSize fontSize = componentStyle == ComponentStyle.REGULAR ? FontSize.NORMAL : componentStyle == ComponentStyle.SMALL ? FontSize.SMALL : FontSize.MINI;
+    FontSize fontSize = componentStyle == ComponentStyle.MINI
+                        ? FontSize.MINI
+                        : componentStyle == ComponentStyle.SMALL
+                          ? FontSize.SMALL
+                          : FontSize.NORMAL;
     c.setFont(getFont(fontSize, c.getFont()));
     Container p = c.getParent();
     if (p != null) {
@@ -180,7 +214,7 @@ public class UIUtil {
 
   public enum FontSize {NORMAL, SMALL, MINI}
 
-  public enum ComponentStyle {REGULAR, SMALL, MINI}
+  public enum ComponentStyle {LARGE, REGULAR, SMALL, MINI}
 
   public enum FontColor {NORMAL, BRIGHTER}
 
@@ -547,6 +581,22 @@ public class UIUtil {
     final Rectangle stringBounds = font.getStringBounds(string, frc).getBounds();
 
     return (int)(centerY - stringBounds.height / 2.0 - stringBounds.y);
+  }
+
+  /**
+   * @param string {@code String} to examine
+   * @param font {@code Font} that is used to render the string
+   * @param graphics {@link Graphics} that should be used to render the string
+   * @return height of the tallest glyph in a string. If string is empty, returns 0
+   */
+  public static int getHighestGlyphHeight(@NotNull String string, @NotNull Font font, @NotNull Graphics graphics) {
+    FontRenderContext frc = ((Graphics2D)graphics).getFontRenderContext();
+    GlyphVector gv = font.createGlyphVector(frc, string);
+    int maxHeight = 0;
+    for (int i = 0; i < string.length(); i ++) {
+      maxHeight = Math.max(maxHeight, (int)gv.getGlyphMetrics(i).getBounds2D().getHeight());
+    }
+    return maxHeight;
   }
 
   public static void setEnabled(Component component, boolean enabled, boolean recursively) {
@@ -1804,22 +1854,28 @@ public class UIUtil {
   /** @see #pump() */
   @TestOnly
   public static void dispatchAllInvocationEvents() {
+    //noinspection StatementWithEmptyBody
+    while(dispatchInvocationEvent());
+  }
+
+  @TestOnly
+  public static boolean dispatchInvocationEvent() {
     assert EdtInvocationManager.getInstance().isEventDispatchThread() : Thread.currentThread() + "; EDT: "+getEventQueueThread();
     final EventQueue eventQueue = Toolkit.getDefaultToolkit().getSystemEventQueue();
-    while (true) {
-      AWTEvent event = eventQueue.peekEvent();
-      if (event == null) break;
-      try {
-        AWTEvent event1 = eventQueue.getNextEvent();
-        if (event1 instanceof InvocationEvent) {
-          ((InvocationEvent)event1).dispatch();
-        }
-      }
-      catch (Exception e) {
-        LOG.error(e); //?
+    AWTEvent event = eventQueue.peekEvent();
+    if (event == null) return false;
+    try {
+      AWTEvent event1 = eventQueue.getNextEvent();
+      if (event1 instanceof InvocationEvent) {
+        ((InvocationEvent)event1).dispatch();
       }
     }
+    catch (Exception e) {
+      LOG.error(e);
+    }
+    return true;
   }
+
   private static Thread getEventQueueThread() {
     EventQueue eventQueue = Toolkit.getDefaultToolkit().getSystemEventQueue();
     try {
@@ -2076,7 +2132,7 @@ public class UIUtil {
     for (MouseWheelListener each : mouseWheelListeners) {
       c.removeMouseWheelListener(each);
     }
-    
+
     if (c instanceof AbstractButton) {
       final ActionListener[] listeners = ((AbstractButton)c).getActionListeners();
       for (ActionListener listener : listeners) {
@@ -2188,7 +2244,7 @@ public class UIUtil {
   public static HTMLEditorKit getHTMLEditorKit() {
     return getHTMLEditorKit(true);
   }
-  
+
   public static HTMLEditorKit getHTMLEditorKit(boolean noGapsBetweenParagraphs) {
     Font font = getLabelFont();
     @NonNls String family = !SystemInfo.isWindows && font != null ? font.getFamily() : "Tahoma";
@@ -2888,7 +2944,7 @@ public class UIUtil {
           g.drawString(text, xOffset, yOffset[0]);
           if (!StringUtil.isEmpty(shortcut)) {
             Color oldColor = g.getColor();
-            g.setColor(new JBColor(new Color(82, 99, 155), 
+            g.setColor(new JBColor(new Color(82, 99, 155),
                                    new Color(88, 157, 246)));
             g.drawString(shortcut, xOffset + fm.stringWidth(text + (isUnderDarcula() ? " " : "")), yOffset[0]);
             g.setColor(oldColor);
@@ -3011,9 +3067,9 @@ public class UIUtil {
   public static void setNotOpaqueRecursively(@NotNull Component component) {
     if (!isUnderAquaLookAndFeel()) return;
 
-    if (component.getBackground().equals(getPanelBackground()) 
-        || component instanceof JScrollPane 
-        || component instanceof JViewport 
+    if (component.getBackground().equals(getPanelBackground())
+        || component instanceof JScrollPane
+        || component instanceof JViewport
         || component instanceof JLayeredPane) {
       if (component instanceof JComponent) {
         ((JComponent)component).setOpaque(false);
@@ -3497,5 +3553,22 @@ public class UIUtil {
     }
     Component component = policy.getFirstComponent(container);
     return component instanceof JComponent ? (JComponent)component : null;
+  }
+
+  /**
+   * Calculates a component style from the corresponding client property.
+   * The key "JComponent.sizeVariant" is used by Apple's L&F to scale components.
+   *
+   * @param component a component to process
+   * @return a component style of the specified component
+   */
+  public static ComponentStyle getComponentStyle(Component component) {
+    if (component instanceof JComponent) {
+      Object property = ((JComponent)component).getClientProperty("JComponent.sizeVariant");
+      if ("large".equals(property)) return ComponentStyle.LARGE;
+      if ("small".equals(property)) return ComponentStyle.SMALL;
+      if ("mini".equals(property)) return ComponentStyle.MINI;
+    }
+    return ComponentStyle.REGULAR;
   }
 }

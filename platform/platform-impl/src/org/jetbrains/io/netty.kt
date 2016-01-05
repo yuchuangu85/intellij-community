@@ -18,8 +18,12 @@ package org.jetbrains.io
 import com.intellij.openapi.util.Condition
 import com.intellij.openapi.util.Conditions
 import io.netty.bootstrap.Bootstrap
+import io.netty.bootstrap.ServerBootstrap
 import io.netty.channel.*
+import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.oio.OioEventLoopGroup
+import io.netty.channel.socket.nio.NioServerSocketChannel
+import io.netty.channel.socket.oio.OioServerSocketChannel
 import io.netty.channel.socket.oio.OioSocketChannel
 import io.netty.handler.codec.http.HttpHeaderNames
 import io.netty.handler.codec.http.HttpRequest
@@ -39,6 +43,14 @@ inline fun Bootstrap.handler(crossinline task: (Channel) -> Unit): Bootstrap {
   return this
 }
 
+fun serverBootstrap(group: EventLoopGroup): ServerBootstrap {
+  val bootstrap = ServerBootstrap()
+    .group(group)
+    .channel(if (group is NioEventLoopGroup) NioServerSocketChannel::class.java else OioServerSocketChannel::class.java)
+  bootstrap.childOption(ChannelOption.TCP_NODELAY, true).childOption(ChannelOption.SO_KEEPALIVE, true)
+  return bootstrap
+}
+
 fun oioClientBootstrap(): Bootstrap {
   val bootstrap = Bootstrap().group(OioEventLoopGroup(1, PooledThreadExecutor.INSTANCE)).channel(OioSocketChannel::class.java)
   bootstrap.option(ChannelOption.TCP_NODELAY, true).option(ChannelOption.SO_KEEPALIVE, true)
@@ -46,11 +58,7 @@ fun oioClientBootstrap(): Bootstrap {
 }
 
 inline fun ChannelFuture.addListener(crossinline listener: (future: ChannelFuture) -> Unit) {
-  addListener(object : GenericFutureListener<ChannelFuture> {
-    override fun operationComplete(future: ChannelFuture) {
-      listener(future)
-    }
-  })
+  addListener(GenericFutureListener<io.netty.channel.ChannelFuture> { future -> listener(future) })
 }
 
 // if NIO, so, it is shared and we must not shutdown it

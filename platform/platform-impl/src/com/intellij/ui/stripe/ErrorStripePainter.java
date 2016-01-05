@@ -19,7 +19,6 @@ import com.intellij.util.ui.RegionPainter;
 
 import java.awt.AlphaComposite;
 import java.awt.Composite;
-import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.util.Iterator;
@@ -187,7 +186,6 @@ public class ErrorStripePainter extends RegionPainter.Image {
           currentValue.myModified = value != null && value.myModified;
         }
         else if (value != null) {
-          value.myModified = false;
           ErrorStripe stripe = value.get();
           if (stripe != null && stripe.compareTo(currentValue.myStripe) < 0) {
             currentValue.myStripe = stripe;
@@ -210,8 +208,8 @@ public class ErrorStripePainter extends RegionPainter.Image {
       for (int index = 0; index < myArraySize; index++) {
         Value value = myArray[index];
         if (value != null) {
-          value.myModified = false;
           value.paint(g, 0, myImageHeight, width, max, force);
+          value.myModified = false;
         }
         myImageHeight += max;
       }
@@ -232,12 +230,12 @@ public class ErrorStripePainter extends RegionPainter.Image {
   }
 
   @Override
-  public void paint(Graphics g, int x, int y, int width, int height) {
+  public void paint(Graphics2D g, int x, int y, int width, int height, Object object) {
     myImageY = y;
-    super.paint(g, x, y, width, height);
+    super.paint(g, x, y, width, height, object);
   }
 
-  private abstract static class Value implements RegionPainter {
+  private abstract static class Value {
     boolean myModified;
 
     abstract boolean set(ErrorStripe stripe);
@@ -245,6 +243,8 @@ public class ErrorStripePainter extends RegionPainter.Image {
     abstract boolean add(ErrorStripe stripe);
 
     abstract ErrorStripe get();
+
+    abstract void paint(Graphics2D g, int x, int y, int width, int height);
 
     void paint(Graphics2D g, int x, int y, int width, int height, boolean force) {
       if (force || myModified) {
@@ -284,12 +284,12 @@ public class ErrorStripePainter extends RegionPainter.Image {
     }
 
     @Override
-    public void paint(Graphics g, int x, int y, int width, int height) {
-      myModified = false;
+    void paint(Graphics2D g, int x, int y, int width, int height) {
       if (myStripe != null) {
         int thickness = myAlignment != null ? myMin + myGap : height;
         y += getOffset(height, thickness);
-        myStripe.paint(g, x, y, width, thickness - myGap);
+        g.setColor(myStripe.getColor());
+        g.fillRect(x, y, width, thickness - myGap);
       }
     }
   }
@@ -323,8 +323,7 @@ public class ErrorStripePainter extends RegionPainter.Image {
     }
 
     @Override
-    public void paint(Graphics g, int x, int y, int width, int height) {
-      myModified = false;
+    void paint(Graphics2D g, int x, int y, int width, int height) {
       if (mySet != null) {
         Iterator<ErrorStripe> iterator = mySet.iterator();
         if (iterator.hasNext()) {
@@ -333,13 +332,15 @@ public class ErrorStripePainter extends RegionPainter.Image {
             int count = Math.min(height / thickness, mySet.size());
             y += getOffset(height, thickness * count);
             do {
-              iterator.next().paint(g, x, y, width, thickness - myGap);
+              g.setColor(iterator.next().getColor());
+              g.fillRect(x, y, width, thickness - myGap);
               y += thickness;
             }
             while (--count > 0 && iterator.hasNext());
           }
           else {
-            iterator.next().paint(g, x, y, width, thickness - myGap);
+            g.setColor(iterator.next().getColor());
+            g.fillRect(x, y, width, thickness - myGap);
           }
         }
       }

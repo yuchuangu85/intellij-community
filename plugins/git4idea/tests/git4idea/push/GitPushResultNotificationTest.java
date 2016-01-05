@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2015 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,13 @@
 package git4idea.push;
 
 import com.intellij.notification.NotificationType;
-import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.vcs.update.UpdatedFiles;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.testFramework.EdtTestUtil;
 import com.intellij.util.containers.ContainerUtil;
-import git4idea.GitBranch;
 import git4idea.GitLocalBranch;
 import git4idea.GitRemoteBranch;
 import git4idea.GitStandardRemoteBranch;
@@ -36,7 +33,6 @@ import git4idea.test.MockGitRepository;
 import git4idea.update.GitUpdateResult;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -206,14 +202,14 @@ public class GitPushResultNotificationTest extends GitPlatformTest {
   }
 
   private static GitLocalBranch from(String from) {
-    return new GitLocalBranch(from, GitBranch.DUMMY_HASH);
+    return new GitLocalBranch(from);
   }
 
   private static GitRemoteBranch to(String to) {
     int firstSlash = to.indexOf('/');
     GitRemote remote = new GitRemote(to.substring(0, firstSlash), Collections.<String>emptyList(), Collections.<String>emptyList(),
                                      Collections.<String>emptyList(), Collections.<String>emptyList());
-    return new GitStandardRemoteBranch(remote, to.substring(firstSlash + 1), GitBranch.DUMMY_HASH);
+    return new GitStandardRemoteBranch(remote, to.substring(firstSlash + 1));
   }
 
   private GitPushResultNotification notification(GitPushRepoResult singleResult) {
@@ -239,17 +235,7 @@ public class GitPushResultNotificationTest extends GitPlatformTest {
     EdtTestUtil.runInEdtAndWait(new Runnable() {
       @Override
       public void run() {
-        root.set(ApplicationManager.getApplication().runWriteAction(new Computable<VirtualFile>() {
-          @Override
-          public VirtualFile compute() {
-            try {
-              return ourProject.getBaseDir().createChildData(null, name);
-            }
-            catch (IOException e) {
-              throw new RuntimeException(e);
-            }
-          }
-        }));
+        root.set(createChildData(ourProject.getBaseDir(), name));
       }
     });
     return new MockGitRepository(ourProject, root.get());

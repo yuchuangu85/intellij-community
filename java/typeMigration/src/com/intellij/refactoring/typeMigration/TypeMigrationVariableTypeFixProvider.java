@@ -71,10 +71,9 @@ public class TypeMigrationVariableTypeFixProvider implements ChangeVariableTypeQ
     if (!FileModificationService.getInstance().prepareFileForWrite(variable.getContainingFile())) return;
     try {
       variable.normalizeDeclaration();
-      final TypeMigrationRules rules = new TypeMigrationRules(TypeMigrationLabeler.getElementType(variable));
-      rules.setMigrationRootType(targetType);
+      final TypeMigrationRules rules = new TypeMigrationRules();
       rules.setBoundScope(GlobalSearchScope.projectScope(project));
-      TypeMigrationProcessor.runHighlightingTypeMigration(project, editor, rules, variable, optimizeImports);
+      TypeMigrationProcessor.runHighlightingTypeMigration(project, editor, rules, variable, targetType, optimizeImports);
       JavaCodeStyleManager.getInstance(project).shortenClassReferences(variable);
       UndoUtil.markPsiFileForUndo(variable.getContainingFile());
     }

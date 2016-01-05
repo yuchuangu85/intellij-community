@@ -726,7 +726,7 @@ public class GitUtil {
                                                          @NotNull GitRemote remote,
                                                          @NotNull String branchName) {
     GitRemoteBranch remoteBranch = findRemoteBranch(repository, remote, branchName);
-    return ObjectUtils.notNull(remoteBranch, new GitStandardRemoteBranch(remote, branchName, GitBranch.DUMMY_HASH));
+    return ObjectUtils.notNull(remoteBranch, new GitStandardRemoteBranch(remote, branchName));
   }
 
   @Nullable
@@ -812,16 +812,6 @@ public class GitUtil {
         return remote.getName() + ": [" + StringUtil.join(remote.getUrls(), ", ") + "]";
       }
     }, "\n");
-  }
-
-  @NotNull
-  public static String fileOrFolder(@NotNull VirtualFile file) {
-    if (file.isDirectory()) {
-      return "Folder";
-    }
-    else {
-      return "File";
-    }
   }
 
   /**

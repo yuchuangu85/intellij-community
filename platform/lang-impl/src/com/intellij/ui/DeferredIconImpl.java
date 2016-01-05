@@ -35,7 +35,6 @@ import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.TestOnly;
 import org.jetbrains.ide.PooledThreadExecutor;
 
 import javax.swing.*;
@@ -46,7 +45,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Executor;
 
-public class DeferredIconImpl<T> implements DeferredIcon {
+public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon {
   private static final Logger LOG = Logger.getInstance("#com.intellij.ui.DeferredIconImpl");
   private static final int MIN_AUTO_UPDATE_MILLIS = 950;
   private static final RepaintScheduler ourRepaintScheduler = new RepaintScheduler();
@@ -248,6 +247,12 @@ public class DeferredIconImpl<T> implements DeferredIcon {
     }
   }
 
+  @Nullable
+  @Override
+  public Icon retrieveIcon() {
+    return isDone() ? myDelegateIcon : evaluate();
+  }
+
   @NotNull
   @Override
   public Icon evaluate() {
@@ -370,12 +375,6 @@ public class DeferredIconImpl<T> implements DeferredIcon {
     return icon instanceof DeferredIconImpl &&
            Comparing.equal(myParam, ((DeferredIconImpl)icon).myParam) &&
            equalIcons(myDelegateIcon, ((DeferredIconImpl)icon).myDelegateIcon);
-  }
-
-  @TestOnly
-  @NotNull
-  Icon getDelegateIcon() {
-    return myDelegateIcon;
   }
 
   @Override

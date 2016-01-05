@@ -20,6 +20,7 @@ import com.intellij.codeInsight.completion.CompletionContributor;
 import com.intellij.codeInsight.daemon.*;
 import com.intellij.codeInsight.daemon.impl.quickfix.DeleteCatchFix;
 import com.intellij.codeInsight.daemon.quickFix.LightQuickFixTestCase;
+import com.intellij.codeInsight.folding.CodeFoldingManager;
 import com.intellij.codeInsight.generation.actions.CommentByLineCommentAction;
 import com.intellij.codeInsight.hint.EditorHintListener;
 import com.intellij.codeInsight.intention.AbstractIntentionAction;
@@ -106,7 +107,6 @@ import com.intellij.openapi.util.ProperTextRange;
 import com.intellij.openapi.util.Segment;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.profile.codeInspection.InspectionProfileManager;
 import com.intellij.profile.codeInspection.InspectionProjectProfileManager;
@@ -736,6 +736,55 @@ public class DaemonRespondToChangesTest extends DaemonAnalyzerTestCase {
     assertEmpty(changed);
     List<LineMarkerInfo> lineMarkersAfter = DaemonCodeAnalyzerImpl.getLineMarkers(myEditor.getDocument(), getProject());
     assertEquals(lineMarkersAfter.size(), lineMarkers.size());
+  }
+
+  public void testLineMarkersDoNotBlinkOnBackSpaceRightBeforeMethodIdentifier() throws Throwable {
+    configureByText(JavaFileType.INSTANCE, "package x; \n" +
+                                           "class  <caret>ToRun{\n" +
+                                           "  public static void main(String[] args) {\n"+
+                                           "  }\n"+
+                                           "}");
+
+    List<HighlightInfo> errors = highlightErrors();
+    assertEmpty(errors);
+
+    List<LineMarkerInfo> lineMarkers = DaemonCodeAnalyzerImpl.getLineMarkers(myEditor.getDocument(), getProject());
+    assertSize(2, lineMarkers);
+
+    backspace();
+
+    final Collection<String> changed = new ArrayList<>();
+    MarkupModelEx modelEx = (MarkupModelEx)DocumentMarkupModel.forDocument(getDocument(getFile()), getProject(), true);
+    modelEx.addMarkupModelListener(getTestRootDisposable(), new MarkupModelListener() {
+      @Override
+      public void afterAdded(@NotNull RangeHighlighterEx highlighter) {
+        changed(highlighter, ExceptionUtil.getThrowableText(new Throwable("after added")));
+      }
+
+      @Override
+      public void beforeRemoved(@NotNull RangeHighlighterEx highlighter) {
+        changed(highlighter, ExceptionUtil.getThrowableText(new Throwable("before removed")));
+      }
+
+      @Override
+      public void attributesChanged(@NotNull RangeHighlighterEx highlighter, boolean renderersChanged) {
+        changed(highlighter, ExceptionUtil.getThrowableText(new Throwable("changed")));
+      }
+
+      private void changed(@NotNull RangeHighlighterEx highlighter, String reason) {
+        if (highlighter.getTargetArea() != HighlighterTargetArea.LINES_IN_RANGE) return; // not line marker
+        List<LineMarkerInfo> lineMarkers = DaemonCodeAnalyzerImpl.getLineMarkers(myEditor.getDocument(), getProject());
+        if (ContainerUtil.find(lineMarkers, lm -> lm.highlighter == highlighter) == null) return; // not line marker
+
+        changed.add(highlighter+": \n"+reason);
+      }
+    });
+
+    assertEmpty(highlightErrors());
+
+    assertSize(2, DaemonCodeAnalyzerImpl.getLineMarkers(myEditor.getDocument(), getProject()));
+
+    assertEmpty(changed);
   }
 
   public void testLineMarkersClearWhenTypingAtTheEndOfPsiComment() throws Throwable {
@@ -1370,7 +1419,7 @@ public class DaemonRespondToChangesTest extends DaemonAnalyzerTestCase {
         @Override
         protected void run(@NotNull Result<OpenFileDescriptor> result) throws Throwable {
           VirtualFile alienFile = alienRoot.createChildData(this, "X.java");
-          VfsUtil.saveText(alienFile, "class Alien { }");
+          setFileText(alienFile, "class Alien { }");
           OpenFileDescriptor alienDescriptor = new OpenFileDescriptor(alienProject, alienFile);
           result.setResult(alienDescriptor);
         }
@@ -2077,6 +2126,60 @@ public class DaemonRespondToChangesTest extends DaemonAnalyzerTestCase {
     assertSame(lastHintBeforeDeletion, lastHintAfterDeletion);
 
     assertEmpty(visibleHints);
+  }
+  
+  public void testCodeFoldingPassRestartsOnRegionUnfolding() throws Exception {
+    DaemonCodeAnalyzerSettings settings = DaemonCodeAnalyzerSettings.getInstance();
+    int savedDelay = settings.AUTOREPARSE_DELAY;
+    settings.AUTOREPARSE_DELAY = 0;
+    try {
+      configureByText(StdFileTypes.JAVA, "class Foo {\n" +
+                                         "    void m() {\n" +
+                                         "\n" +
+                                         "    }\n" +
+                                         "}");
+      CodeFoldingManager.getInstance(getProject()).buildInitialFoldings(myEditor);
+      waitForDaemon();
+      EditorTestUtil.executeAction(myEditor, IdeActions.ACTION_COLLAPSE_ALL_REGIONS);
+      waitForDaemon();
+      checkFoldingState("[FoldRegion +(25:33), placeholder='{...}']");
+
+      new WriteCommandAction<Void>(myProject){
+        @Override
+        protected void run(@NotNull Result<Void> result) throws Throwable {
+          myEditor.getDocument().insertString(0, "/*");
+        }
+      }.execute();
+      waitForDaemon();
+      checkFoldingState("[FoldRegion -(0:37), placeholder='/.../', FoldRegion +(27:35), placeholder='{...}']");
+      
+      EditorTestUtil.executeAction(myEditor, IdeActions.ACTION_EXPAND_ALL_REGIONS);
+      waitForDaemon();
+      checkFoldingState("[FoldRegion -(0:37), placeholder='/.../']");
+    }
+    finally {
+      settings.AUTOREPARSE_DELAY = savedDelay;
+    }
+  }
+
+  private void checkFoldingState(String expected) {
+    assertEquals(expected, Arrays.toString(myEditor.getFoldingModel().getAllFoldRegions()));
+  }
+
+  private void waitForDaemon() {
+    long deadline = System.currentTimeMillis() + 60_000;
+    while (!daemonIsWorkingOrPending()) {
+      if (System.currentTimeMillis() > deadline) fail("Too long waiting for daemon to start");
+      UIUtil.dispatchInvocationEvent();
+    }
+    while (daemonIsWorkingOrPending()) {
+      if (System.currentTimeMillis() > deadline) fail("Too long waiting for daemon to finish");
+      UIUtil.dispatchInvocationEvent();
+    }
+  }
+  
+  private boolean daemonIsWorkingOrPending() {
+    return PsiDocumentManager.getInstance(myProject).isUncommited(myEditor.getDocument()) || myDaemonCodeAnalyzer.isRunningOrPending();
   }
 }
 

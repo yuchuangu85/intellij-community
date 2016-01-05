@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2013 JetBrains s.r.o.
+ * Copyright 2000-2015 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -109,11 +109,11 @@ public class MavenProject {
   }
 
   @NotNull
-  private MavenProjectChanges set(@NotNull MavenProjectReaderResult readerResult,
-                                  @NotNull MavenGeneralSettings settings,
-                                  boolean updateLastReadStamp,
-                                  boolean resetArtifacts,
-                                  boolean resetProfiles) {
+  MavenProjectChanges set(@NotNull MavenProjectReaderResult readerResult,
+                          @NotNull MavenGeneralSettings settings,
+                          boolean updateLastReadStamp,
+                          boolean resetArtifacts,
+                          boolean resetProfiles) {
     State newState = myState.clone();
 
     if (updateLastReadStamp) newState.myLastReadStamp = myState.myLastReadStamp + 1;
@@ -462,11 +462,9 @@ public class MavenProject {
 
     Element compilerArguments = compilerConfig.getChild("compilerArguments");
     if (compilerArguments != null) {
-      for (Element e : compilerArguments.getChildren()){
+      for (Element e : compilerArguments.getChildren()) {
         String name = e.getName();
-        if (name.startsWith("-")) {
-          name = name.substring(1);
-        }
+        name = StringUtil.trimStart(name, "-");
 
         if (name.length() > 1 && name.charAt(0) == 'A') {
           res.put(name.substring(1), e.getTextTrim());
@@ -634,11 +632,12 @@ public class MavenProject {
                                                                      @NotNull MavenProjectReaderProjectLocator locator,
                                                                      @NotNull ResolveContext context)
     throws MavenProcessCanceledException {
-    MavenProjectReaderResult result = reader.resolveProject(generalSettings,
+    Collection<MavenProjectReaderResult> results = reader.resolveProject(generalSettings,
                                                             embedder,
-                                                            getFile(),
+                                                            Collections.singleton(getFile()),
                                                             getActivatedProfilesIds(),
                                                             locator);
+    final MavenProjectReaderResult result = results.iterator().next();
     MavenProjectChanges changes = set(result, generalSettings, false, result.readingProblems.isEmpty(), false);
 
     if (result.nativeMavenProject != null) {

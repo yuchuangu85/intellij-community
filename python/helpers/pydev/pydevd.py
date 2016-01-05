@@ -563,8 +563,12 @@ class PyDB:
 
                     elif isThreadAlive(t):
                         if not self._running_thread_ids:
+                            old_thread_id = GetThreadId(t)
                             thread_id = GetThreadId(t, True)
                             curr_thread_id = GetThreadId(threadingCurrentThread())
+                            if pydevd_vars.hasAdditionalFramesById(old_thread_id):
+                                frames_by_id = pydevd_vars.getAdditionalFramesById(old_thread_id)
+                                pydevd_vars.addAdditionalFrameById(thread_id, frames_by_id)
                         else:
                             thread_id = GetThreadId(t)
                         program_threads_alive[thread_id] = t
@@ -2392,7 +2396,7 @@ if __name__ == '__main__':
         if setup['save-threading']:
             debugger.thread_analyser = ThreadingLogger()
         if setup['save-asyncio']:
-            if IS_PY3K:
+            if IS_PY34_OLDER:
                 debugger.asyncio_analyser = AsyncioLogger()
 
         try:

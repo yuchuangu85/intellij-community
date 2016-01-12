@@ -1,4 +1,3 @@
-
 from _pydev_imps import _pydev_threading as threading
 import functools
 

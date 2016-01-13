@@ -1,5 +1,8 @@
 from _pydev_imps import _pydev_threading as threading
-import functools
+try:
+    import functools
+except:
+    pass
 
 
 def wrapper(fun):

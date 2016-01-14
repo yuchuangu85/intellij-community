@@ -29,10 +29,7 @@ import com.intellij.psi.impl.PsiManagerImpl;
 import com.intellij.psi.impl.compiled.ClsFileImpl;
 import com.intellij.psi.impl.file.PsiBinaryFileImpl;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.org.objectweb.asm.ClassReader;
-import org.jetbrains.org.objectweb.asm.ClassVisitor;
-import org.jetbrains.org.objectweb.asm.Label;
-import org.jetbrains.org.objectweb.asm.Opcodes;
+import org.jetbrains.org.objectweb.asm.*;
 
 /**
  * @author max
@@ -63,23 +60,18 @@ public class ClassFileViewProvider extends SingleRootFileViewProvider {
 
   public static boolean isInnerClass(@NotNull VirtualFile file) {
     String name = file.getNameWithoutExtension();
-    int index = name.lastIndexOf('$');
-    if (index > 0 && index < name.length() - 1) {
-      String parentName = name.substring(0, index), childName = name.substring(index + 1);
-      if (file.getParent().findChild(parentName + ".class") != null) {
-        return isInnerClass(file, parentName, childName);
-      }
-    }
-    return false;
+    return name.indexOf('$') >= 0 && detectInnerClass(file);
   }
 
-  private static boolean isInnerClass(VirtualFile file, final String parentName, final String childName) {
+  private static boolean detectInnerClass(VirtualFile file) {
     Boolean isInner = IS_INNER_CLASS.get(file);
     if (isInner != null) return isInner;
 
     final Ref<Boolean> ref = Ref.create(Boolean.FALSE);
     try {
-      new MyClassReader(file.contentsToByteArray(false)).accept(new ClassVisitor(Opcodes.ASM5) {
+      ClassReader reader = new ClassReader(file.contentsToByteArray(false));
+      final String className = reader.getClassName();
+      reader.accept(new ClassVisitor(Opcodes.ASM5) {
         @Override
         public void visitOuterClass(String owner, String name, String desc) {
           ref.set(Boolean.TRUE);
@@ -88,11 +80,15 @@ public class ClassFileViewProvider extends SingleRootFileViewProvider {
 
         @Override
         public void visitInnerClass(String name, String outer, String inner, int access) {
-          if ((inner == null || childName.equals(inner)) && outer != null && parentName.equals(outer.substring(outer.lastIndexOf('/') + 1)) ||
-              inner == null && outer == null && name.substring(name.lastIndexOf('/') + 1).equals(parentName + '$' + childName)) {
+          if (className.equals(name)) {
             ref.set(Boolean.TRUE);
             throw new ProcessCanceledException();
           }
+        }
+
+        @Override
+        public FieldVisitor visitField(int access, String name, String desc, String signature, Object value) {
+          throw new ProcessCanceledException();
         }
       }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
     }
@@ -110,16 +106,5 @@ public class ClassFileViewProvider extends SingleRootFileViewProvider {
   @Override
   public SingleRootFileViewProvider createCopy(@NotNull VirtualFile copy) {
     return new ClassFileViewProvider(getManager(), copy, false);
-  }
-
-  private static class MyClassReader extends ClassReader {
-    public MyClassReader(byte[] b) {
-      super(b);
-    }
-
-    @Override
-    protected Label readLabel(int offset, Label[] labels) {
-      return null;
-    }
   }
 }

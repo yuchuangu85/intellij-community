@@ -18,21 +18,25 @@ package org.jetbrains.jps.model.java.impl;
 import com.intellij.openapi.util.io.FileUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.jps.model.java.impl.runConfiguration.JpsApplicationRunConfigurationPropertiesImpl;
-import org.jetbrains.jps.model.java.runConfiguration.JpsApplicationRunConfigurationProperties;
-import org.jetbrains.jps.model.java.runConfiguration.JpsApplicationRunConfigurationState;
-import org.jetbrains.jps.util.JpsPathUtil;
 import org.jetbrains.jps.model.JpsDummyElement;
 import org.jetbrains.jps.model.JpsGlobal;
 import org.jetbrains.jps.model.JpsProject;
 import org.jetbrains.jps.model.java.*;
 import org.jetbrains.jps.model.java.compiler.JpsJavaCompilerConfiguration;
 import org.jetbrains.jps.model.java.impl.compiler.JpsJavaCompilerConfigurationImpl;
+import org.jetbrains.jps.model.java.impl.runConfiguration.JpsApplicationRunConfigurationPropertiesImpl;
+import org.jetbrains.jps.model.java.runConfiguration.JpsApplicationRunConfigurationProperties;
+import org.jetbrains.jps.model.java.runConfiguration.JpsApplicationRunConfigurationState;
 import org.jetbrains.jps.model.library.JpsOrderRootType;
 import org.jetbrains.jps.model.library.JpsTypedLibrary;
 import org.jetbrains.jps.model.library.sdk.JpsSdk;
 import org.jetbrains.jps.model.library.sdk.JpsSdkReference;
-import org.jetbrains.jps.model.module.*;
+import org.jetbrains.jps.model.module.JpsDependencyElement;
+import org.jetbrains.jps.model.module.JpsModule;
+import org.jetbrains.jps.model.module.JpsModuleReference;
+import org.jetbrains.jps.model.module.JpsTestModuleProperties;
+import org.jetbrains.jps.model.module.impl.JpsTestModulePropertiesImpl;
+import org.jetbrains.jps.util.JpsPathUtil;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -161,6 +165,17 @@ public class JpsJavaExtensionServiceImpl extends JpsJavaExtensionService {
       configuration = project.getContainer().setChild(JpsJavaCompilerConfigurationImpl.ROLE, new JpsJavaCompilerConfigurationImpl());
     }
     return configuration;
+  }
+
+  @Nullable
+  @Override
+  public JpsTestModuleProperties getTestModuleProperties(@NotNull JpsModule module) {
+    return module.getContainer().getChild(JpsTestModulePropertiesImpl.ROLE);
+  }
+
+  @Override
+  public void setTestModuleProperties(@NotNull JpsModule module, @NotNull JpsModuleReference productionModuleReference) {
+    module.getContainer().setChild(JpsTestModulePropertiesImpl.ROLE, new JpsTestModulePropertiesImpl(productionModuleReference));
   }
 
   @NotNull

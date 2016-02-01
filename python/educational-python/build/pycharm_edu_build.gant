@@ -114,7 +114,6 @@ target('default': "Build artifacts") {
   bundledJDKs()
 
   ant.patternset(id: "resources.included") {
-    include(name: "**/*.properties")
     include(name: "fileTemplates/**/*")
     include(name: "inspectionDescriptions/**/*")
     include(name: "intentionDescriptions/**/*")

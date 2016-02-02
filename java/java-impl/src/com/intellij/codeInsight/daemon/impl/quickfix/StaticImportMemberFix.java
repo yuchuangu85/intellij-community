@@ -15,13 +15,17 @@
  */
 package com.intellij.codeInsight.daemon.impl.quickfix;
 
+import com.intellij.codeInsight.CodeInsightSettings;
 import com.intellij.codeInsight.FileModificationService;
+import com.intellij.codeInsight.daemon.impl.DaemonListeners;
 import com.intellij.codeInsight.daemon.impl.ShowAutoImportPass;
 import com.intellij.codeInsight.hint.HintManager;
 import com.intellij.codeInsight.hint.QuestionAction;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInspection.HintAction;
+import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.impl.LaterInvocator;
 import com.intellij.openapi.command.CommandProcessor;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
@@ -30,6 +34,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiJavaFile;
 import com.intellij.psi.PsiMember;
+import com.intellij.psi.util.FileTypeUtils;
 import com.intellij.psi.util.PsiUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -70,11 +75,11 @@ public abstract class StaticImportMemberFix<T extends PsiMember> implements Inte
            && getQualifierExpression() == null
            && resolveRef() == null
            && file.getManager().isInProject(file)
-           && !(candidates == null ? candidates = getMembersToImport() : candidates).isEmpty()
+           && !(candidates == null ? candidates = getMembersToImport(false) : candidates).isEmpty()
       ;
   }
   
-  @NotNull protected abstract List<T> getMembersToImport();
+  @NotNull protected abstract List<T> getMembersToImport(boolean applicableOnly);
   @NotNull protected abstract QuestionAction createQuestionAction(List<T> methodsToImport, @NotNull Project project, Editor editor);
 
   @Nullable protected abstract PsiElement getElement();
@@ -87,7 +92,7 @@ public abstract class StaticImportMemberFix<T extends PsiMember> implements Inte
     ApplicationManager.getApplication().runWriteAction(new Runnable() {
       @Override
       public void run() {
-        final List<T> methodsToImport = getMembersToImport();
+        final List<T> methodsToImport = getMembersToImport(false);
         if (methodsToImport.isEmpty()) return;
         createQuestionAction(methodsToImport, project, editor).execute();
       }
@@ -95,6 +100,10 @@ public abstract class StaticImportMemberFix<T extends PsiMember> implements Inte
   }
 
   private ImportClassFixBase.Result doFix(Editor editor) {
+    if (!CodeInsightSettings.getInstance().ADD_MEMBER_IMPORTS_ON_THE_FLY) {
+      return ImportClassFixBase.Result.POPUP_NOT_SHOWN;
+    }
+    final List<T> candidates = getMembersToImport(true);
     if (candidates.isEmpty()) {
       return ImportClassFixBase.Result.POPUP_NOT_SHOWN;
     }
@@ -105,7 +114,13 @@ public abstract class StaticImportMemberFix<T extends PsiMember> implements Inte
     }
 
     final QuestionAction action = createQuestionAction(candidates, element.getProject(), editor);
-    if (candidates.size() == 1 && ImportClassFixBase.canAddUnambiguousImport(element.getContainingFile())) {
+    PsiFile psiFile = element.getContainingFile();
+    if (candidates.size() == 1 &&
+        (FileTypeUtils.isInServerPageFile(psiFile) ?
+         CodeInsightSettings.getInstance().JSP_ADD_UNAMBIGIOUS_IMPORTS_ON_THE_FLY :
+         CodeInsightSettings.getInstance().ADD_UNAMBIGIOUS_IMPORTS_ON_THE_FLY) &&
+        (ApplicationManager.getApplication().isUnitTestMode() || DaemonListeners.canChangeFileSilently(psiFile)) &&
+        !LaterInvocator.isInModalContext()) {
       CommandProcessor.getInstance().runUndoTransparentAction(new Runnable() {
         @Override
         public void run() {

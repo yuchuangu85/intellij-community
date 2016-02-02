@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,9 +40,10 @@ import com.intellij.util.ui.tree.TreeUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleContext;
 import javax.swing.*;
 import javax.swing.border.Border;
-import javax.swing.border.EmptyBorder;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.table.AbstractTableModel;
@@ -113,7 +114,7 @@ public class UiInspectorAction extends ToggleAction implements DumbAware {
       Window window = findWindow(component);
       setModal(window instanceof JDialog && ((JDialog)window).isModal());
       myComponent = component;
-      getRootPane().setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+      getRootPane().setBorder(JBUI.Borders.empty(5));
 
       setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 
@@ -232,7 +233,7 @@ public class UiInspectorAction extends ToggleAction implements DumbAware {
         return;
       }
       if (enable) {
-        myHighlightComponent = new HighlightComponent(JBColor.GREEN);
+        myHighlightComponent = new HighlightComponent(new JBColor(JBColor.GREEN, JBColor.RED));
 
         Point pt = SwingUtilities.convertPoint(myComponent, new Point(0, 0), rootPane);
         myHighlightComponent.setBounds(pt.x, pt.y, myComponent.getWidth(), myComponent.getHeight());
@@ -254,7 +255,7 @@ public class UiInspectorAction extends ToggleAction implements DumbAware {
     ComponentTreeCellRenderer(Component initialSelection) {
       myInitialSelection = initialSelection;
       setFont(JBUI.Fonts.label(11));
-      setBorder(BorderFactory.createEmptyBorder(0, 3, 0, 3));
+      setBorder(JBUI.Borders.empty(0, 3));
     }
 
     @Override
@@ -279,7 +280,7 @@ public class UiInspectorAction extends ToggleAction implements DumbAware {
             foreground = JBColor.GRAY;
           }
           else if (component.getWidth() == 0 || component.getHeight() == 0) {
-            foreground = new Color(128, 10, 0);
+            foreground = new JBColor(new Color(128, 10, 0), JBColor.BLUE);
           }
           else if (component.getPreferredSize() != null &&
                    (component.getSize().width < component.getPreferredSize().width
@@ -455,12 +456,12 @@ public class UiInspectorAction extends ToggleAction implements DumbAware {
 
       TableColumnModel columnModel = table.getColumnModel();
       TableColumn propertyColumn = columnModel.getColumn(0);
-      propertyColumn.setMinWidth(150);
-      propertyColumn.setMaxWidth(150);
+      propertyColumn.setMinWidth(JBUI.scale(200));
+      propertyColumn.setMaxWidth(JBUI.scale(200));
       propertyColumn.setResizable(false);
 
       TableColumn valueColumn = columnModel.getColumn(1);
-      valueColumn.setMinWidth(200);
+      valueColumn.setMinWidth(JBUI.scale(200));
       valueColumn.setResizable(false);
       valueColumn.setCellRenderer(new ValueCellRenderer());
 
@@ -489,9 +490,9 @@ public class UiInspectorAction extends ToggleAction implements DumbAware {
       myComponent = component;
       setOpaque(true);
       setBackground(JBColor.WHITE);
-      setBorder(new EmptyBorder(5, 0, 5, 0));
+      setBorder(JBUI.Borders.empty(5, 0));
 
-      setFont(new JLabel().getFont().deriveFont(Font.PLAIN, 9));
+      setFont(JBUI.Fonts.label(9));
 
       update();
     }
@@ -569,12 +570,12 @@ public class UiInspectorAction extends ToggleAction implements DumbAware {
 
     @Override
     public Dimension getMinimumSize() {
-      return new Dimension(120, 120);
+      return JBUI.size(120);
     }
 
     @Override
     public Dimension getPreferredSize() {
-      return new Dimension(150, 150);
+      return JBUI.size(150);
     }
   }
 
@@ -737,6 +738,15 @@ public class UiInspectorAction extends ToggleAction implements DumbAware {
       "isValid", "isDisplayable", "isLightweight"
     );
 
+    final List<String> ACCESSIBLE_CONTEXT_PROPERTIES = Arrays.asList(
+      "getAccessibleRole", "getAccessibleName", "getAccessibleDescription",
+      "getAccessibleAction", "getAccessibleChildrenCount",
+      "getAccessibleIndexInParent", "getAccessibleRelationSet",
+      "getAccessibleStateSet", "getAccessibleEditableText",
+      "getAccessibleTable", "getAccessibleText",
+      "getAccessibleValue", "accessibleChangeSupport"
+    );
+
     final Component myComponent;
     final List<PropertyBean> myProperties = ContainerUtil.newArrayList();
 
@@ -747,27 +757,41 @@ public class UiInspectorAction extends ToggleAction implements DumbAware {
     }
 
     void fillTable() {
-      Class<?> clazz0 = myComponent.getClass();
+      addProperties("", myComponent, PROPERTIES);
+      Object addedAt = myComponent instanceof JComponent ? ((JComponent)myComponent).getClientProperty("uiInspector.addedAt") : null;
+      myProperties.add(new PropertyBean("added-at", addedAt));
+
+      // Add properties related to Accessibility support. This is useful for manually
+      // inspecting what kind (if any) of accessibility support components expose.
+      boolean isAccessible = myComponent instanceof Accessible;
+      myProperties.add(new PropertyBean("accessible", isAccessible));
+      AccessibleContext context = myComponent.getAccessibleContext();
+      myProperties.add(new PropertyBean("accessibleContext", context));
+      if (isAccessible) {
+        addProperties("  ", myComponent.getAccessibleContext(), ACCESSIBLE_CONTEXT_PROPERTIES);
+      }
+    }
+
+    private void addProperties(@NotNull String prefix, @NotNull Object component, @NotNull List<String> methodNames) {
+      Class<?> clazz0 = component.getClass();
       Class<?> clazz = clazz0.isAnonymousClass() ? clazz0.getSuperclass() : clazz0;
-      myProperties.add(new PropertyBean("class", clazz.getName()));
-      for (String name: PROPERTIES) {
+      myProperties.add(new PropertyBean(prefix + "class", clazz.getName()));
+      for (String name: methodNames) {
         String propertyName = ObjectUtils.notNull(StringUtil.getPropertyName(name), name);
         Object propertyValue;
         try {
           try {
             //noinspection ConstantConditions
-            propertyValue = ReflectionUtil.findMethod(Arrays.asList(clazz.getMethods()), name).invoke(myComponent);
+            propertyValue = ReflectionUtil.findMethod(Arrays.asList(clazz.getMethods()), name).invoke(component);
           }
           catch (Exception e) {
-            propertyValue = ReflectionUtil.findField(clazz, null, name).get(myComponent);
+            propertyValue = ReflectionUtil.findField(clazz, null, name).get(component);
           }
-          myProperties.add(new PropertyBean(propertyName, propertyValue));
+          myProperties.add(new PropertyBean(prefix + propertyName, propertyValue));
         }
         catch (Exception ignored) {
         }
       }
-      Object addedAt = myComponent instanceof JComponent ? ((JComponent)myComponent).getClientProperty("uiInspector.addedAt") : null;
-      myProperties.add(new PropertyBean("added-at", addedAt));
     }
 
     @Nullable

@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * @author Dmitry Avdeev
  */
-public class GutterIconsConfigurable implements Configurable {
+public class GutterIconsConfigurable implements Configurable, Configurable.NoScroll {
   private JPanel myPanel;
   private CheckBoxList<GutterIconDescriptor> myList;
   private List<GutterIconDescriptor> myDescriptors;
@@ -173,7 +173,7 @@ public class GutterIconsConfigurable implements Configurable {
         if (pluginDescriptor instanceof IdeaPluginDescriptor) {
           SeparatorWithText separator = new SeparatorWithText();
           String name = ((IdeaPluginDescriptor)pluginDescriptor).getName();
-          separator.setCaption("IDEA CORE".equals(name) ? "Platform" : name);
+          separator.setCaption("IDEA CORE".equals(name) ? "Common" : name);
           panel.add(separator, BorderLayout.NORTH);
         }
 

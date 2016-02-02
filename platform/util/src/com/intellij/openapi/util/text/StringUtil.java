@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -499,6 +499,10 @@ public class StringUtil extends StringUtilRt {
               if (!Character.isLetterOrDigit(s.charAt(j))) {
                 break;
               }
+            }
+            if (!title && j > i + 1 && !Character.isLowerCase(s.charAt(i + 1))) {
+              // filter out abbreviations like I18n, SQL and CSS
+              continue;
             }
             if (!isPreposition(s, i, j - 1, prepositions)) {
               if (buffer == null) {
@@ -1004,7 +1008,14 @@ public class StringUtil extends StringUtilRt {
   @NotNull
   @Contract(pure = true)
   public static String trimEnd(@NotNull String s, @NonNls @NotNull String suffix) {
-    if (s.endsWith(suffix)) {
+    return trimEnd(s, suffix, false);
+  }
+
+  @NotNull
+  @Contract(pure = true)
+  public static String trimEnd(@NotNull String s, @NonNls @NotNull String suffix, boolean ignoreCase) {
+    boolean endsWith = ignoreCase ? endsWithIgnoreCase(s, suffix) : s.endsWith(suffix);
+    if (endsWith) {
       return s.substring(0, s.length() - suffix.length());
     }
     return s;
@@ -1061,6 +1072,14 @@ public class StringUtil extends StringUtilRt {
     int index = string.length() - 1;
     while (index >= 0 && Character.isWhitespace(string.charAt(index))) index--;
     return string.subSequence(0, index + 1);
+  }
+
+  @NotNull
+  @Contract(pure = true)
+  public static String trimTrailing(@NotNull String string, char symbol) {
+    int index = string.length() - 1;
+    while (index >= 0 && string.charAt(index) == symbol) index--;
+    return string.substring(0, index + 1);
   }
 
   @Contract(pure = true)
@@ -3100,6 +3119,11 @@ public class StringUtil extends StringUtilRt {
   @Contract(pure = true)
   public static int parseInt(final String string, final int defaultValue) {
     return StringUtilRt.parseInt(string, defaultValue);
+  }
+
+  @Contract(pure = true)
+  public static long parseLong(@Nullable String string, long defaultValue) {
+    return StringUtilRt.parseLong(string, defaultValue);
   }
 
   @Contract(pure = true)

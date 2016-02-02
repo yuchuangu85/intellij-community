@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -921,8 +921,10 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
   }
 
   private static int getInvokePolicy(SuspendContext suspendContext) {
-    //return ThreadReference.INVOKE_SINGLE_THREADED;
-    return suspendContext.getSuspendPolicy() == EventRequest.SUSPEND_EVENT_THREAD ? ObjectReference.INVOKE_SINGLE_THREADED : 0;
+    if (suspendContext.getSuspendPolicy() == EventRequest.SUSPEND_EVENT_THREAD || isResumeOnlyCurrentThread()) {
+      return ObjectReference.INVOKE_SINGLE_THREADED;
+    }
+    return 0;
   }
 
   @Override
@@ -993,6 +995,10 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
 
       if (SuspendManagerUtil.isEvaluating(getSuspendManager(), invokeThread)) {
         throw EvaluateExceptionUtil.NESTED_EVALUATION_ERROR;
+      }
+
+      if (!suspendContext.suspends(invokeThread)) {
+        throw EvaluateExceptionUtil.THREAD_WAS_RESUMED;
       }
 
       Set<SuspendContextImpl> suspendingContexts = SuspendManagerUtil.getSuspendingContexts(getSuspendManager(), invokeThread);
@@ -1690,11 +1696,11 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
     protected void resumeAction() {
       SuspendContextImpl context = getSuspendContext();
       if (context != null &&
-          (context.getSuspendPolicy() == EventRequest.SUSPEND_EVENT_THREAD || Registry.is("debugger.step.resumes.one.thread"))) {
+          (context.getSuspendPolicy() == EventRequest.SUSPEND_EVENT_THREAD || isResumeOnlyCurrentThread())) {
         myThreadBlockedMonitor.startWatching(myContextThread);
       }
       if (context != null
-          && Registry.is("debugger.step.resumes.one.thread")
+          && isResumeOnlyCurrentThread()
           && context.getSuspendPolicy() == EventRequest.SUSPEND_ALL
           && myContextThread != null) {
         getSuspendManager().resumeThread(context, myContextThread);
@@ -2222,5 +2228,9 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
 
   public DebuggerSession getSession() {
     return mySession;
+  }
+
+  static boolean isResumeOnlyCurrentThread() {
+    return DebuggerSettings.getInstance().RESUME_ONLY_CURRENT_THREAD;
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,6 @@ import com.intellij.openapi.components.ServiceKt;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.components.impl.PlatformComponentManagerImpl;
 import com.intellij.openapi.components.impl.ServiceManagerImpl;
-import com.intellij.openapi.components.impl.stores.IComponentStore;
 import com.intellij.openapi.components.impl.stores.StoreUtil;
 import com.intellij.openapi.diagnostic.Attachment;
 import com.intellij.openapi.diagnostic.Logger;
@@ -64,6 +63,8 @@ import com.intellij.openapi.wm.WindowManager;
 import com.intellij.psi.PsiLock;
 import com.intellij.ui.Splash;
 import com.intellij.util.*;
+import com.intellij.util.concurrency.AppExecutorUtil;
+import com.intellij.util.concurrency.AppScheduledExecutorService;
 import com.intellij.util.concurrency.Semaphore;
 import com.intellij.util.containers.Stack;
 import com.intellij.util.io.storage.HeavyProcessLatch;
@@ -163,12 +164,6 @@ public class ApplicationImpl extends PlatformComponentManagerImpl implements App
       return "ANY";
     }
   };
-
-  @NotNull
-  @Deprecated
-  public IComponentStore getStateStore() {
-    return ServiceKt.getStateStore(this);
-  }
 
   public ApplicationImpl(boolean isInternal,
                          boolean isUnitTestMode,
@@ -506,6 +501,7 @@ public class ApplicationImpl extends PlatformComponentManagerImpl implements App
       }
     };
 
+
     if (indicator == null) {
       // no splash, no need to to use progress manager
       task.run();
@@ -554,7 +550,9 @@ public class ApplicationImpl extends PlatformComponentManagerImpl implements App
 
     disposeComponents();
 
-    ourThreadExecutorsService.shutdownNow();
+    AppScheduledExecutorService service = (AppScheduledExecutorService)AppExecutorUtil.getAppScheduledExecutorService();
+    service.shutdownAppScheduledExecutorService();
+
     super.dispose();
     Disposer.dispose(myLastDisposable); // dispose it last
 

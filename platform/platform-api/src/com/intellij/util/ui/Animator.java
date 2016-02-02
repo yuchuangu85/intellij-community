@@ -19,7 +19,7 @@ package com.intellij.util.ui;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.util.ConcurrencyUtil;
+import com.intellij.util.concurrency.AppExecutorUtil;
 import org.jetbrains.annotations.NonNls;
 
 import javax.swing.*;
@@ -30,8 +30,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public abstract class Animator implements Disposable {
-  private static final ScheduledExecutorService scheduler = ConcurrencyUtil.newSingleScheduledThreadExecutor("Animations");
+  // allow only one animation run at a time
+  private final ScheduledExecutorService scheduler = AppExecutorUtil.createBoundedScheduledExecutorService(1);
 
+  private final String myName;
   private final int myTotalFrames;
   private final int myCycleDuration;
   private final boolean myForward;
@@ -49,7 +51,6 @@ public abstract class Animator implements Disposable {
                   final int totalFrames,
                   final int cycleDuration,
                   boolean repeatable) {
-
     this(name, totalFrames, cycleDuration, repeatable, true);
   }
 
@@ -58,6 +59,7 @@ public abstract class Animator implements Disposable {
                   final int cycleDuration,
                   boolean repeatable,
                   boolean forward) {
+    myName = name;
     myTotalFrames = totalFrames;
     myCycleDuration = cycleDuration;
     myRepeatable = repeatable;
@@ -86,7 +88,7 @@ public abstract class Animator implements Disposable {
     long newFrame = (long)(cycleTime * myTotalFrames / myCycleDuration);
 
     if (myRepeatable) {
-      newFrame = newFrame % myTotalFrames;
+      newFrame %= myTotalFrames;
     }
 
     if (newFrame == myCurrentFrame) return;
@@ -96,7 +98,7 @@ public abstract class Animator implements Disposable {
       return;
     }
 
-    myCurrentFrame = (int)(newFrame);
+    myCurrentFrame = (int)newFrame;
 
     paint();
   }
@@ -106,9 +108,14 @@ public abstract class Animator implements Disposable {
   }
 
   private void animationDone() {
-    ApplicationManager.getApplication().assertIsDispatchThread();
     stopTicker();
-    paintCycleEnd();
+
+    SwingUtilities.invokeLater(new Runnable() {
+      @Override
+      public void run() {
+        paintCycleEnd();
+      }
+    });
   }
 
   private void stopTicker() {
@@ -141,7 +148,7 @@ public abstract class Animator implements Disposable {
     }
     else if (myTicker == null) {
       myTicker = scheduler.scheduleWithFixedDelay(new Runnable() {
-        AtomicBoolean scheduled = new AtomicBoolean(false);
+        private final AtomicBoolean scheduled = new AtomicBoolean(false);
 
         @Override
         public void run() {
@@ -154,6 +161,11 @@ public abstract class Animator implements Disposable {
               }
             });
           }
+        }
+
+        @Override
+        public String toString() {
+          return "Scheduled "+Animator.this;
         }
       }, 0, myCycleDuration * 1000 / myTotalFrames, TimeUnit.MICROSECONDS);
     }
@@ -191,5 +203,12 @@ public abstract class Animator implements Disposable {
 
   public boolean isDisposed() {
     return myDisposed;
+  }
+
+  @Override
+  public String toString() {
+    ScheduledFuture<?> future = myTicker;
+    return "Animator '"+myName+"' @" + System.identityHashCode(this) +
+           (future == null || future.isDone() ? " (stopped)": " (running "+myCurrentFrame+"/"+myTotalFrames +" frame)");
   }
 }

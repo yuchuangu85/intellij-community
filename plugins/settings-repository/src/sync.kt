@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ internal class SyncManager(private val icsManager: IcsManager, private val autoS
   @Volatile var writeAndDeleteProhibited = false
     private set
 
-  public fun sync(syncType: SyncType, project: Project? = null, localRepositoryInitializer: (() -> Unit)? = null): UpdateResult? {
+  fun sync(syncType: SyncType, project: Project? = null, localRepositoryInitializer: (() -> Unit)? = null): UpdateResult? {
     var exception: Throwable? = null
     var restartApplication = false
     var updateResult: UpdateResult? = null
@@ -56,7 +56,7 @@ internal class SyncManager(private val icsManager: IcsManager, private val autoS
             val repositoryManager = icsManager.repositoryManager
             if (localRepositoryInitializer == null) {
               try {
-                // we commit before even if sync "RESET_TO_THEIRS" — preserve history and ability to undo
+                // we commit before even if sync "OVERWRITE_LOCAL" — preserve history and ability to undo
                 repositoryManager.commit(indicator, syncType)
                 // well, we cannot commit? No problem, upcoming action must do something smart and solve the situation
               }

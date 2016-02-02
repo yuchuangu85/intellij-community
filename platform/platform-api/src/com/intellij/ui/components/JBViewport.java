@@ -26,6 +26,11 @@ import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import javax.swing.border.AbstractBorder;
+import javax.swing.border.Border;
+import javax.swing.plaf.TreeUI;
+import javax.swing.plaf.UIResource;
+import javax.swing.plaf.basic.BasicTreeUI;
 import java.awt.*;
 import java.awt.event.ContainerEvent;
 import java.awt.event.ContainerListener;
@@ -39,9 +44,9 @@ public class JBViewport extends JViewport implements ZoomableViewport {
         JViewport viewport = (JViewport)parent;
         Component view = viewport.getView();
         if (view != null) {
-          JScrollPane pane = getScrollPane(viewport);
-          if (pane != null) {
-            doLayout(pane, viewport, view);
+          Container grand = viewport.getParent();
+          if (grand instanceof JScrollPane) {
+            doLayout((JScrollPane)grand, viewport, view);
           }
           else {
             super.layoutContainer(parent);
@@ -173,38 +178,10 @@ public class JBViewport extends JViewport implements ZoomableViewport {
     return myPaintingNow;
   }
 
-  @Override
-  public Color getBackground() {
-    Component view = getView();
-    return view != null && view.isBackgroundSet()
-           ? view.getBackground()
-           : super.getBackground();
-  }
-
-  @Override
-  public Dimension getExtentSize() {
-    Dimension size = super.getExtentSize();
-    if (SystemInfo.isMac) return size;
-    JScrollPane pane = getScrollPane(this);
-    if (pane != null) {
-      JScrollBar vsb = pane.getVerticalScrollBar();
-      if (null != getAlignment(vsb)) {
-        int width = vsb.getWidth();
-        if (size.width > width) size.width -= width;
-      }
-      JScrollBar hsb = pane.getHorizontalScrollBar();
-      if (null != getAlignment(hsb)) {
-        int height = hsb.getHeight();
-        if (size.height > height) size.height -= height;
-      }
-    }
-    return size;
-  }
-
   /**
    * Returns the alignment of the specified scroll bar
    * if and only if the specified scroll bar
-   * is located over the corresponding viewport.
+   * is located over the main viewport.
    *
    * @param bar the scroll bar to process
    * @return the scroll bar alignment or {@code null}
@@ -217,25 +194,11 @@ public class JBViewport extends JViewport implements ZoomableViewport {
     return null;
   }
 
-  /**
-   * Returns the parent scroll pane of the specified viewport
-   * if and only if the specified viewport is a main viewport.
-   *
-   * @param viewport the viewport to process
-   * @return the parent scroll pane or {@code null}
-   */
-  private static JScrollPane getScrollPane(JViewport viewport) {
-    Container parent = viewport.getParent();
-    if (parent instanceof JScrollPane) {
-      JScrollPane pane = (JScrollPane)parent;
-      if (viewport == pane.getViewport()) return pane;
-    }
-    return null;
-  }
-
   private static void doLayout(JScrollPane pane, JViewport viewport, Component view) {
+    updateBorder(view);
+
     Dimension actualSize = viewport.getSize();
-    Dimension extentSize = viewport.getExtentSize();
+    Dimension extentSize = viewport.toViewCoordinates(actualSize);
     Dimension viewPreferredSize = view.getPreferredSize();
     Dimension viewSize = new Dimension(viewPreferredSize);
     Point viewPosition = viewport.getViewPosition();
@@ -256,7 +219,6 @@ public class JBViewport extends JViewport implements ZoomableViewport {
       }
     }
     else {
-      // NOT SUPPORTED YET
       viewPosition.x = maxX < 0 ? maxX : Math.max(0, Math.min(maxX, viewPosition.x));
     }
     // If the new viewport size would leave empty space below the view,
@@ -278,14 +240,136 @@ public class JBViewport extends JViewport implements ZoomableViewport {
     if (!(view instanceof TypingTarget)) {
       if (ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER == pane.getHorizontalScrollBarPolicy()) {
         viewPosition.x = 0;
-        viewSize.width = actualSize.width;
+        viewSize.width = extentSize.width;
       }
       if (ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER == pane.getVerticalScrollBarPolicy()) {
         viewPosition.y = 0;
-        viewSize.height = actualSize.height;
+        viewSize.height = extentSize.height;
       }
     }
     viewport.setViewPosition(viewPosition);
     viewport.setViewSize(viewSize);
+  }
+
+  private static void updateBorder(Component view) {
+    if (view instanceof JTable) return; // tables are not supported yet
+    if (view instanceof JComponent) {
+      JComponent component = (JComponent)view;
+      Border border = component.getBorder();
+      if (border instanceof ViewBorder) return; // already set
+      component.setBorder(border == null || border instanceof UIResource
+                          ? new ResourceViewBorder(border)
+                          : new ViewBorder(border));
+    }
+  }
+
+  /**
+   * This border is used to add additional space for a view
+   * and can be changed on UI update.
+   */
+  private static class ResourceViewBorder extends ViewBorder implements UIResource {
+    ResourceViewBorder(Border border) {
+      super(border);
+    }
+  }
+
+  /**
+   * This border is used to add additional space for a view.
+   */
+  private static class ViewBorder extends AbstractBorder {
+    private final Insets myInsets = new Insets(0, 0, 0, 0);
+    private final Border myBorder;
+
+    ViewBorder(Border border) {
+      myBorder = border;
+    }
+
+    @Override
+    public Insets getBorderInsets(Component view, Insets insets) {
+      if (insets == null) {
+        insets = new Insets(0, 0, 0, 0);
+      }
+      else {
+        insets.set(0, 0, 0, 0);
+      }
+      if (myBorder != null) {
+        Insets inner = myBorder.getBorderInsets(view);
+        if (inner != null) insets.set(inner.top, inner.left, inner.bottom, inner.right);
+      }
+      if (view instanceof JComponent) {
+        addViewInsets((JComponent)view, insets);
+      }
+      if (!myInsets.equals(insets)) {
+        myInsets.set(insets.top, insets.left, insets.bottom, insets.right);
+        if (view instanceof JComponent) {
+          JComponent component = (JComponent)view;
+          if (component instanceof JTree) {
+            // invalidate cached preferred size
+            JTree tree = (JTree)component;
+            TreeUI ui = tree.getUI();
+            if (ui instanceof BasicTreeUI) {
+              BasicTreeUI basic = (BasicTreeUI)ui;
+              basic.setLeftChildIndent(basic.getLeftChildIndent());
+            }
+          }
+          component.revalidate();
+        }
+        else {
+          view.invalidate();
+          view.repaint();
+        }
+      }
+      return insets;
+    }
+
+    @Override
+    public void paintBorder(Component view, Graphics g, int x, int y, int width, int height) {
+      if (myBorder != null) {
+        if (view instanceof JComponent) {
+          Insets insets = new Insets(0, 0, 0, 0);
+          addViewInsets((JComponent)view, insets);
+          x += insets.left;
+          y += insets.top;
+          width -= insets.left + insets.right;
+          height -= insets.top + insets.bottom;
+        }
+        myBorder.paintBorder(view, g, x, y, width, height);
+      }
+    }
+
+    private void addViewInsets(JComponent view, Insets insets) {
+      if (this == view.getBorder()) {
+        Container parent = view.getParent();
+        if (parent instanceof JViewport) {
+          JViewport viewport = (JViewport)parent;
+          Container grand = viewport.getParent();
+          if (grand instanceof JScrollPane) {
+            JScrollPane pane = (JScrollPane)grand;
+            // calculate empty border under vertical scroll bar
+            if (viewport == pane.getViewport() || viewport == pane.getColumnHeader()) {
+              JScrollBar vsb = pane.getVerticalScrollBar();
+              Alignment va = getAlignment(vsb);
+              if (va == Alignment.LEFT) {
+                insets.left += vsb.getWidth();
+              }
+              else if (va == Alignment.RIGHT && !SystemInfo.isMac) {
+                insets.right += vsb.getWidth();
+              }
+            }
+            // calculate empty border under horizontal scroll bar
+            if (viewport == pane.getViewport() || viewport == pane.getRowHeader()) {
+              JScrollBar hsb = pane.getHorizontalScrollBar();
+              Alignment ha = getAlignment(hsb);
+              if (ha == Alignment.TOP) {
+                insets.top += hsb.getHeight();
+              }
+              else if (ha == Alignment.BOTTOM && !SystemInfo.isMac) {
+                insets.bottom += hsb.getHeight();
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }

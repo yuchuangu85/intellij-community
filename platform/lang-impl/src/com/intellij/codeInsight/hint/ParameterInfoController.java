@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -323,7 +323,7 @@ public class ParameterInfoController implements Disposable {
     @SuppressWarnings("unchecked") PsiElement[] parameters = handler.getActualParameters(argList);
     int prevOrNextParameterIndex = isNext && currentParameterIndex < parameters.length - 1 ? currentParameterIndex + 1 :
                                    !isNext && currentParameterIndex > 0 ? currentParameterIndex - 1 : -1;
-    return prevOrNextParameterIndex != -1 ? parameters[prevOrNextParameterIndex].getTextRange().getStartOffset() : -1;
+    return prevOrNextParameterIndex != -1 ? parameters[prevOrNextParameterIndex].getTextOffset() : -1;
   }
 
   @Nullable

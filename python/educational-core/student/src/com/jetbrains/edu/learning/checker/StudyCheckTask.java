@@ -14,9 +14,11 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.jetbrains.edu.EduUtils;
 import com.jetbrains.edu.courseFormat.StudyStatus;
 import com.jetbrains.edu.courseFormat.Task;
+import com.jetbrains.edu.learning.StudyPluginConfigurator;
 import com.jetbrains.edu.learning.StudyState;
 import com.jetbrains.edu.learning.StudyTaskManager;
 import com.jetbrains.edu.learning.StudyUtils;
+import com.jetbrains.edu.learning.actions.StudyAfterCheckAction;
 import com.jetbrains.edu.stepic.EduStepicConnector;
 import com.jetbrains.edu.stepic.StudySettings;
 import org.jetbrains.annotations.NotNull;
@@ -110,6 +112,19 @@ public class StudyCheckTask extends com.intellij.openapi.progress.Task.Backgroun
     myTaskManger.setStatus(myTask, StudyStatus.Solved);
     ApplicationManager.getApplication().invokeLater(
       () -> StudyCheckUtils.showTestResultPopUp(testsOutput.getMessage(), MessageType.INFO.getPopupBackground(), myProject));
+    runAfterTaskActions();
+  }
+
+  private void runAfterTaskActions() {
+    StudyPluginConfigurator configurator = StudyUtils.getConfigurator(myProject);
+    if (configurator != null) {
+      StudyAfterCheckAction[] checkActions = configurator.getAfterCheckActions();
+      if (checkActions != null) {
+        for (StudyAfterCheckAction action: checkActions) {
+          action.run(myProject, myTask);
+        }
+      }
+    }
   }
 
   protected void postAttemptToStepic(StudyTestsOutputParser.TestsOutput testsOutput) {

@@ -94,6 +94,11 @@ public class PythonCompletionTest extends PyTestCase {
     doTest();
   }
 
+  // PY-14044
+  public void testNamedTupleInitParams() {
+    doTest();
+  }
+
   public void testSuperInitParams() {      // PY-505
     doTest();
   }
@@ -816,6 +821,11 @@ public class PythonCompletionTest extends PyTestCase {
   // PY-9342
   public void testReassignedMethodSpecialAttributes() {
     assertUnderscoredMethodSpecialAttributesSuggested();
+  }
+
+  // PY-5833
+  public void testPassedNamedTupleAttributes() {
+    doTest();
   }
 
   private void assertUnderscoredFunctionAttributesSuggested() {

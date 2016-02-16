@@ -56,10 +56,8 @@ public class AbstractNewProjectStep extends DefaultActionGroup implements DumbAw
     super("Select Project Type", true);
 
     NullableConsumer<ProjectSettingsStepBase> callback = customization.createCallback();
-
-    final DirectoryProjectGenerator emptyProjectGenerator = customization.createEmptyProjectGenerator();
-    ProjectSpecificAction projectSpecificAction =
-      new ProjectSpecificAction(emptyProjectGenerator, customization.createProjectSpecificSettingsStep(emptyProjectGenerator, callback));
+    ProjectSpecificAction projectSpecificAction = customization.createProjectSpecificAction(callback);
+    
     addAll(projectSpecificAction.getChildren(null));
 
     DirectoryProjectGenerator[] generators = customization.getProjectGenerators();
@@ -70,6 +68,12 @@ public class AbstractNewProjectStep extends DefaultActionGroup implements DumbAw
   }
 
   protected static abstract class Customization {
+    @NotNull
+    protected ProjectSpecificAction createProjectSpecificAction(@NotNull final NullableConsumer<ProjectSettingsStepBase> callback) {
+      DirectoryProjectGenerator emptyProjectGenerator = createEmptyProjectGenerator();
+      return new ProjectSpecificAction(emptyProjectGenerator, createProjectSpecificSettingsStep(emptyProjectGenerator, callback));
+    }
+
     @NotNull
     protected abstract NullableConsumer<ProjectSettingsStepBase> createCallback();
 

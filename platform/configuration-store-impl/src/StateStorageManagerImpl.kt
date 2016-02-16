@@ -36,10 +36,14 @@ import org.jdom.Element
 import org.jetbrains.annotations.TestOnly
 import java.io.File
 import java.io.IOException
+import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.*
 import java.util.concurrent.locks.ReentrantLock
 import java.util.regex.Pattern
 import kotlin.concurrent.withLock
+
+private val MACRO_PATTERN = Pattern.compile("(\\$[^\\$]*\\$)")
 
 /**
  * If componentManager not specified, storage will not add file tracker (see VirtualFileTracker)
@@ -61,9 +65,7 @@ open class StateStorageManagerImpl(private val rootTagName: String,
     get() = true
 
   companion object {
-    private val MACRO_PATTERN = Pattern.compile("(\\$[^\\$]*\\$)")
-
-    fun createDefaultVirtualTracker(componentManager: ComponentManager?) = when (componentManager) {
+    private fun createDefaultVirtualTracker(componentManager: ComponentManager?) = when (componentManager) {
       null -> {
         null
       }
@@ -195,7 +197,7 @@ open class StateStorageManagerImpl(private val rootTagName: String,
     val filePath = expandMacros(collapsedPath)
     @Suppress("DEPRECATION")
     if (stateSplitter != StateSplitter::class.java && stateSplitter != StateSplitterEx::class.java) {
-      val storage = MyDirectoryStorage(this, File(filePath), ReflectionUtil.newInstance(stateSplitter))
+      val storage = MyDirectoryStorage(this, Paths.get(filePath), ReflectionUtil.newInstance(stateSplitter))
       virtualFileTracker?.put(filePath, storage)
       return storage
     }
@@ -212,7 +214,7 @@ open class StateStorageManagerImpl(private val rootTagName: String,
     return storage
   }
 
-  private class MyDirectoryStorage(override val storageManager: StateStorageManagerImpl, file: File, @Suppress("DEPRECATION") splitter: StateSplitter) :
+  private class MyDirectoryStorage(override val storageManager: StateStorageManagerImpl, file: Path, @Suppress("DEPRECATION") splitter: StateSplitter) :
     DirectoryBasedStorage(file, splitter, storageManager.pathMacroSubstitutor), StorageVirtualFileTracker.TrackedStorage
 
   private class MyFileStorage(override val storageManager: StateStorageManagerImpl,
@@ -401,5 +403,5 @@ private fun String.startsWithMacro(macro: String): Boolean {
 fun removeMacroIfStartsWith(path: String, macro: String) = if (path.startsWithMacro(macro)) path.substring(macro.length + 1) else path
 
 @Suppress("DEPRECATION")
-val Storage.path: String
+internal val Storage.path: String
   get() = if (value.isNullOrEmpty()) file else value

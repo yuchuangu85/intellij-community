@@ -35,7 +35,8 @@ public @interface Storage {
    * Relative to component container configuration root path.
    * Consider to use shorthand form - <code>@Storage("yourName.xml")</code> (when you need to specify only file path).
    */
-  @NonNls String value() default "";
+  @NonNls
+  String value() default "";
 
   /**
    * If deprecated: Data will be removed on write. And ignored on read if (and only if) new storage exists.
@@ -43,6 +44,7 @@ public @interface Storage {
   boolean deprecated() default false;
 
   /**
+   * Used by the Settings Repository plugin to determine how application-level settings should be shared between different IDE installations.
    * You must not store components with different roaming types in one file ({@link #value()}).
    */
   RoamingType roamingType() default RoamingType.DEFAULT;

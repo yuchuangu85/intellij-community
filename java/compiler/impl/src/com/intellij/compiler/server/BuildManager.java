@@ -378,7 +378,7 @@ public class BuildManager implements Disposable {
     doNotify(paths, true);
   }
 
-  public void runCommand(Runnable command) {
+  public void runCommand(@NotNull Runnable command) {
     myRequestsProcessor.submit(command);
   }
 
@@ -672,7 +672,7 @@ public class BuildManager implements Disposable {
       return null;
     }
 
-    final DelegateFuture<BuilderMessageHandler> _future = new DelegateFuture<BuilderMessageHandler>();
+    final DelegateFuture<BuilderMessageHandler> _future = new DelegateFuture<>();
     // by using the same queue that processes events we ensure that
     // the build will be aware of all events that have happened before this request
     runCommand(new Runnable() {
@@ -693,7 +693,7 @@ public class BuildManager implements Disposable {
           sessionId = UUID.randomUUID();
         }
 
-        final RequestFuture<? extends BuilderMessageHandler> future = usingPreloadedProcess? preloadedFuture : new RequestFuture<BuilderMessageHandler>(handler, sessionId, new CancelBuildSessionAction<BuilderMessageHandler>());
+        final RequestFuture<? extends BuilderMessageHandler> future = usingPreloadedProcess? preloadedFuture : new RequestFuture<>(handler, sessionId, new CancelBuildSessionAction<BuilderMessageHandler>());
         _future.setDelegate(future);
 
         if (!usingPreloadedProcess && (future.isCancelled() || project.isDisposed())) {
@@ -782,7 +782,7 @@ public class BuildManager implements Disposable {
                       LOG.info(e);
                     }
                   }
-                  
+
                   processHandler = launchBuildProcess(project, myListenPort, sessionId, false);
                   errorsOnLaunch = new StringBuffer();
                   processHandler.addProcessListener(new StdOutputCollector((StringBuffer)errorsOnLaunch));
@@ -840,7 +840,6 @@ public class BuildManager implements Disposable {
                     }
                   });
                 }
-
               }
             }
           });

@@ -351,7 +351,7 @@ public class VariableAccessUtils {
     return false;
   }
 
-  static boolean variableIsAssignedBeforeReference(
+  public static boolean variableIsAssignedBeforeReference(
     @NotNull PsiReferenceExpression referenceExpression,
     @Nullable PsiElement context) {
     if (context == null) {

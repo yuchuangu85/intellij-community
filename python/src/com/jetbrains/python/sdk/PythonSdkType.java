@@ -805,7 +805,7 @@ public class PythonSdkType extends SdkType {
   }
 
   public static List<Sdk> getAllLocalCPythons() {
-    return getAllSdks().stream().filter(REMOTE_SDK_PREDICATE).collect(Collectors.toList());
+    return getAllSdks().stream().filter(REMOTE_SDK_PREDICATE.negate()).collect(Collectors.toList());
   }
 
   @Nullable

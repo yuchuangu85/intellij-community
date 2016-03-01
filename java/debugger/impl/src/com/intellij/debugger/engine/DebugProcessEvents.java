@@ -39,7 +39,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.MessageType;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Pair;
-import com.intellij.openapi.util.registry.Registry;
 import com.intellij.ui.classFilter.ClassFilter;
 import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.breakpoints.XBreakpoint;
@@ -186,7 +185,7 @@ public class DebugProcessEvents extends DebugProcessImpl {
                   // check if there is already one request with policy SUSPEND_ALL
                   for (SuspendContextImpl context : getSuspendManager().getEventContexts()) {
                     if (context.getSuspendPolicy() == EventRequest.SUSPEND_ALL) {
-                      if (isResumeOnlyCurrentThread() && locatableEvent != null) {
+                      if (isResumeOnlyCurrentThread() && locatableEvent != null && !context.isEvaluating()) {
                         // if step event is present - switch context
                         getSuspendManager().resume(context);
                         //((SuspendManagerImpl)getSuspendManager()).popContext(context);

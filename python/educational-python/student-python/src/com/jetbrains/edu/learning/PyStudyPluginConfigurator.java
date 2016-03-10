@@ -68,7 +68,7 @@ public class PyStudyPluginConfigurator extends StudyBasePluginConfigurator {
   @NotNull
   @Override
   public String getTwitterTokenSecret(@NotNull Project project) {
-    return PyStudySettings.getInstance(project).getAccessToken();
+    return PyStudySettings.getInstance(project).getTokenSecret();
   }
 
   @Nullable
@@ -80,7 +80,7 @@ public class PyStudyPluginConfigurator extends StudyBasePluginConfigurator {
   @NotNull
   @Override
   public String getTwitterAccessToken(@NotNull Project project) {
-    return PyStudySettings.getInstance(project).getTokenSecret();
+    return PyStudySettings.getInstance(project).getAccessToken();
   }
 
   @Override

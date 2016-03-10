@@ -4,8 +4,11 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.fileEditor.FileEditorManagerListener;
 import com.intellij.openapi.project.Project;
+import com.jetbrains.edu.courseFormat.StudyStatus;
+import com.jetbrains.edu.courseFormat.Task;
 import com.jetbrains.edu.learning.actions.StudyAfterCheckAction;
 import com.jetbrains.edu.learning.settings.ModifiableSettingsPanel;
+import com.jetbrains.edu.learning.twitter.StudyTwitterUtils;
 import com.jetbrains.edu.learning.ui.StudyToolWindow;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -50,4 +53,38 @@ public interface StudyPluginConfigurator {
 
   @Nullable
   ModifiableSettingsPanel getSettingsPanel();
+
+  /**
+   * The plugin implemented tweeting should define policy when user will be asked to tweet.
+   * @param project
+   * @param solvedTask
+   *@param statusBeforeCheck @return 
+   */
+  boolean askToTweet(@NotNull final Project project, Task solvedTask, StudyStatus statusBeforeCheck);
+  /**
+   * Stores access token and token secret, obtained by authorizing PyCharm.
+   * @param project
+   * @param accessToken
+   * @param tokenSecret
+   */
+  void storeTwitterTokens(@NotNull final Project project, @NotNull final String accessToken, @NotNull final String tokenSecret);
+
+  /**
+   * 
+   * @param project
+   * @return stored access token
+   */
+  @NotNull String getTwitterAccessToken(@NotNull Project project);
+
+  /**
+   * 
+   * @param project
+   * @return stored token secret
+   */
+  @NotNull String getTwitterTokenSecret(@NotNull Project project);
+  
+  @Nullable
+  StudyTwitterUtils.TwitterDialogPanel getTweetDialogPanel(@NotNull Task solvedTask);
+  
+  boolean accept(@NotNull final Project project);
 }

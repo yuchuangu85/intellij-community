@@ -48,8 +48,6 @@ public interface StudyPluginConfigurator {
   StudyAfterCheckAction[] getAfterCheckActions();
   
   @NotNull String getLanguageScriptUrl();
-  
-  boolean accept(@NotNull final Project project);
 
   @Nullable
   ModifiableSettingsPanel getSettingsPanel();

@@ -9,7 +9,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 @SuppressWarnings("MethodMayBeStatic")
-@State(name = "PyStudySettings", storages = @Storage("py_study_settings.xml"))
+@State(name = "PyStudySettings", storages = @Storage("study_twitter_settings.xml"))
 public class PyStudySettings implements PersistentStateComponent<PyStudySettings.State> {
 
   private State myState = new State();
@@ -17,6 +17,8 @@ public class PyStudySettings implements PersistentStateComponent<PyStudySettings
 
   public static class State {
     public boolean askToTweet = true;
+    public String accessToken = "";
+    public String tokenSecret = "";
   }
 
   public static PyStudySettings getInstance(@NotNull final Project project) {
@@ -39,5 +41,23 @@ public class PyStudySettings implements PersistentStateComponent<PyStudySettings
   
   public void setAskToTweet(final boolean askToTweet) {
     myState.askToTweet = askToTweet;
+  }
+  
+  @NotNull
+  public String getAccessToken() {
+    return myState.accessToken;
+  }
+
+  public void setAccessToken(@NotNull String accessToken) {
+    myState.accessToken = accessToken;
+  }
+  
+  @NotNull
+  public String getTokenSecret() {
+    return myState.tokenSecret;
+  }
+  
+  public void setTokenSecret(@NotNull String tokenSecret) {
+    myState.tokenSecret = tokenSecret;
   }
 }

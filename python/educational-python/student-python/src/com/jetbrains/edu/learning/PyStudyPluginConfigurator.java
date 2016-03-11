@@ -10,6 +10,7 @@ import com.jetbrains.edu.learning.settings.ModifiableSettingsPanel;
 import com.jetbrains.edu.learning.settings.PySettingsPanel;
 import com.jetbrains.edu.learning.settings.PyStudySettings;
 import com.jetbrains.edu.learning.twitter.StudyTwitterAction;
+import com.jetbrains.edu.learning.twitter.StudyTwitterConnectorBundle;
 import com.jetbrains.edu.learning.twitter.StudyTwitterUtils;
 import com.jetbrains.edu.learning.twitter.TwitterDialogPanel;
 import org.jetbrains.annotations.NotNull;
@@ -87,5 +88,17 @@ public class PyStudyPluginConfigurator extends StudyBasePluginConfigurator {
   public boolean askToTweet(@NotNull Project project, Task solvedTask, StudyStatus statusBeforeCheck) {
     return solvedTask.getStatus() == StudyStatus.Solved && 
         (statusBeforeCheck == StudyStatus.Failed || statusBeforeCheck == StudyStatus.Unchecked);
+  }
+
+  @NotNull
+  @Override
+  public String getConsumerKey(@NotNull Project project) {
+    return StudyTwitterConnectorBundle.message("consumer_key");
+  }
+
+  @NotNull
+  @Override
+  public String getConsumerSecret(@NotNull Project project) {
+    return StudyTwitterConnectorBundle.message("consumer_secret");
   }
 }

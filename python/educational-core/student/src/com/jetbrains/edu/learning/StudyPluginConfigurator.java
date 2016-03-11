@@ -53,6 +53,22 @@ public interface StudyPluginConfigurator {
   ModifiableSettingsPanel getSettingsPanel();
 
   /**
+   * To implement tweeting you should register you app in twitter. For registered application twitter provide
+   * consumer key and consumer secret, that are used for authorize by OAuth.
+   * @param project
+   * @return consumer key for current educational plugin
+   */
+  @NotNull String getConsumerKey(@NotNull final Project project);
+
+  /**
+   * To implement tweeting you should register you app in twitter. For registered application twitter provide
+   * consumer key and consumer secret, that are used for authorize by OAuth.
+   * @param project
+   * @return consumer secret for current educational plugin
+   */
+  @NotNull String getConsumerSecret(@NotNull final Project project);
+
+  /**
    * The plugin implemented tweeting should define policy when user will be asked to tweet.
    * @param project
    * @param solvedTask
@@ -80,7 +96,12 @@ public interface StudyPluginConfigurator {
    * @return stored token secret
    */
   @NotNull String getTwitterTokenSecret(@NotNull Project project);
-  
+
+  /**
+   * Provide panel that will be shown to user in ask to tweet dialog. 
+   * @param solvedTask
+   * @return
+   */
   @Nullable
   StudyTwitterUtils.TwitterDialogPanel getTweetDialogPanel(@NotNull Task solvedTask);
   

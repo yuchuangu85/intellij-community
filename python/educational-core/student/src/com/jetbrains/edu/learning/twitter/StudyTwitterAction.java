@@ -31,7 +31,7 @@ public class StudyTwitterAction extends StudyAfterCheckAction {
       
       if (configurator.askToTweet(project, solvedTask, statusBeforeCheck)) {
         boolean isAuthorized = !configurator.getTwitterAccessToken(project).isEmpty();
-        Twitter twitter = StudyTwitterUtils.getTwitter();
+        Twitter twitter = StudyTwitterUtils.getTwitter(configurator.getConsumerKey(project), configurator.getConsumerSecret(project));
         StudyTwitterUtils.configureTwitter(twitter, project, isAuthorized);
         StudyTwitterUtils.TwitterDialogPanel panel = configurator.getTweetDialogPanel(solvedTask);
         if (panel != null) {

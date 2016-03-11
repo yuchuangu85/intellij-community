@@ -96,6 +96,18 @@ public abstract class StudyBasePluginConfigurator implements StudyPluginConfigur
     return null;
   }
 
+  @NotNull
+  @Override
+  public String getConsumerKey(@NotNull Project project) {
+    return "";
+  }
+
+  @NotNull
+  @Override
+  public String getConsumerSecret(@NotNull Project project) {
+    return "";
+  }
+
   @Override
   public void storeTwitterTokens(@NotNull Project project, @NotNull String accessToken, @NotNull String tokenSecret) {
     // do nothing

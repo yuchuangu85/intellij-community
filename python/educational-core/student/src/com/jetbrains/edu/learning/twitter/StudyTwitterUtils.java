@@ -55,14 +55,16 @@ public class StudyTwitterUtils {
   }
 
   /**
-   * Set consumer key and secret for Pycharm Educational app. 
-   * @return Twitter instance with consumer key and secret set
+   * Set consumer key and secret. 
+   * @param consumerKey
+   * @param consumerSecret
+   * @return
    */
   @NotNull
-  public static Twitter getTwitter() {
+  public static Twitter getTwitter(@NotNull final String consumerKey, @NotNull final String consumerSecret) {
     ConfigurationBuilder configurationBuilder = new ConfigurationBuilder();
-    configurationBuilder.setOAuthConsumerKey(StudyTwitterConnectorBundle.message("consumer_key"));
-    configurationBuilder.setOAuthConsumerSecret(StudyTwitterConnectorBundle.message("consumer_secret"));
+    configurationBuilder.setOAuthConsumerKey(consumerKey);
+    configurationBuilder.setOAuthConsumerSecret(consumerSecret);
     return new TwitterFactory(configurationBuilder.build()).getInstance();
   }
 

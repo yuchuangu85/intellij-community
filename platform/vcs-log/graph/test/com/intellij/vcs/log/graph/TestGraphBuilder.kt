@@ -123,15 +123,15 @@ public class TestGraphBuilder : BaseTestGraphBuilder {
 
     }
 
-    override fun nodesCount() = nodes.size()
+    override fun nodesCount() = nodes.size
 
     override fun getNodeId(nodeIndex: Int): Int = nodeIndexToId[nodeIndex]!!
 
     override fun getAdjacentEdges(nodeIndex: Int, filter: EdgeFilter)
-        = edges[nodeIndex].filter {
+            = edges[nodeIndex].filter {
       if (it.getType().isNormalEdge()) {
         (LinearGraphUtils.isEdgeUp(it, nodeIndex) && filter.upNormal)
-            || (LinearGraphUtils.isEdgeDown(it, nodeIndex) && filter.downNormal)
+                || (LinearGraphUtils.isEdgeDown(it, nodeIndex) && filter.downNormal)
       } else {
         filter.special
       }
@@ -166,12 +166,12 @@ private fun LinearGraph.assertEdge(nodeIndex: Int, edge: GraphEdge) {
   }
 }
 
-public fun LinearGraph.asTestGraphString(sorted: Boolean = false): String = StringBuilder {
+public fun LinearGraph.asTestGraphString(sorted: Boolean = false): String = StringBuilder().apply {
   for (nodeIndex in 0..nodesCount() - 1) {
     val node = getGraphNode(nodeIndex)
     append(getNodeId(nodeIndex))
     assertEquals(nodeIndex, node.getNodeIndex(),
-        "nodeIndex: $nodeIndex, but for node with this index(nodeId: ${getNodeId(nodeIndex)}) nodeIndex: ${node.getNodeIndex()}"
+            "nodeIndex: $nodeIndex, but for node with this index(nodeId: ${getNodeId(nodeIndex)}) nodeIndex: ${node.getNodeIndex()}"
     )
     when (node.getType()) {
       GraphNodeType.UNMATCHED -> append(".UNM")
@@ -230,9 +230,9 @@ private fun <T, R> Iterable<T>.map2(transform: (Int, T) -> R): List<R> {
 }
 
 class TestPermanentGraphInfo(
-    val graph: LinearGraph,
-    vararg val headsOrder: Int = IntArray(0),
-    val branchNodes: Set<Int> = setOf()
+        val graph: LinearGraph,
+        vararg val headsOrder: Int = IntArray(0),
+        val branchNodes: Set<Int> = setOf()
 ) : PermanentGraphInfo<Int> {
 
   val commitInfo = object : PermanentCommitsInfo<Int> {

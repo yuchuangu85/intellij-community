@@ -2,6 +2,8 @@
   <library name="KotlinJavaRuntime">
     <CLASSES>
       <root url="jar://$PROJECT_DIR$/build/kotlinc/lib/kotlin-runtime.jar!/" />
+      <root url="jar://$PROJECT_DIR$/build/kotlinc/lib/kotlin-test.jar!/" />
+      <root url="jar://$PROJECT_DIR$/build/kotlinc/lib/kotlin-reflect.jar!/" />
     </CLASSES>
     <JAVADOC />
     <SOURCES>

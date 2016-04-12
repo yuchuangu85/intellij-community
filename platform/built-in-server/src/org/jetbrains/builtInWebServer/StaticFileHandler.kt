@@ -4,6 +4,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.text.StringUtilRt
 import com.intellij.openapi.vfs.VFileProperty
 import com.intellij.util.PathUtilRt
+import com.intellij.util.isDirectory
 import io.netty.buffer.ByteBufUtf8Writer
 import io.netty.channel.Channel
 import io.netty.channel.ChannelFutureListener
@@ -14,6 +15,7 @@ import org.jetbrains.builtInWebServer.ssi.SsiProcessor
 import org.jetbrains.io.FileResponses
 import org.jetbrains.io.Responses
 import java.io.File
+import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 
@@ -31,7 +33,7 @@ private class StaticFileHandler : WebServerFileHandler() {
         return true
       }
 
-      sendIoFile(channel, ioFile, Paths.get(pathInfo.root.path), request)
+      sendIoFile(channel, ioFile.toPath(), Paths.get(pathInfo.root.path), request)
     }
     else {
       val file = pathInfo.file!!
@@ -98,27 +100,27 @@ private class StaticFileHandler : WebServerFileHandler() {
   }
 }
 
-private fun sendIoFile(channel: Channel, file: File, root: Path, request: HttpRequest) {
-  if (file.isDirectory) {
+private fun sendIoFile(channel: Channel, file: Path, root: Path, request: HttpRequest) {
+  if (file.isDirectory()) {
     Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request)
   }
   else if (checkAccess(channel, file, request, root)) {
-    FileResponses.sendFile(request, channel, file)
+    FileResponses.sendFile(request, channel, file.toFile())
   }
 }
 
-fun checkAccess(channel: Channel, file: File, request: HttpRequest, root: Path): Boolean {
+fun checkAccess(channel: Channel, file: Path, request: HttpRequest, root: Path): Boolean {
   var parent = file
   do {
     if (!hasAccess(parent)) {
       Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request)
       return false
     }
-    parent = parent.parentFile ?: break
+    parent = parent.parent ?: break
   }
   while (parent != root)
   return true
 }
 
 // deny access to .htaccess files
-private fun hasAccess(result: File) = result.canRead() && !(result.isHidden || result.name.startsWith(".ht"))
+private fun hasAccess(result: Path) = Files.isReadable(result) && !(Files.isHidden(result) || result.fileName.toString().startsWith(".ht"))

@@ -32,7 +32,11 @@ import io.netty.handler.ssl.SslHandler
 import io.netty.util.concurrent.GenericFutureListener
 import org.jetbrains.concurrency.AsyncPromise
 import org.jetbrains.ide.PooledThreadExecutor
+import java.io.IOException
+import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.NetworkInterface
+import java.net.URI
 import java.util.concurrent.TimeUnit
 
 inline fun Bootstrap.handler(crossinline task: (Channel) -> Unit): Bootstrap {
@@ -98,6 +102,12 @@ val Channel.uriScheme: String
 val HttpRequest.host: String
   get() = headers().getAsString(HttpHeaderNames.HOST)
 
+val HttpRequest.origin: String?
+  get() = headers().getAsString(HttpHeaderNames.ORIGIN)
+
+val HttpRequest.referrer: String?
+  get() = headers().getAsString(HttpHeaderNames.REFERER)
+
 inline fun <T> ByteBuf.releaseIfError(task: () -> T): T {
   try {
     return task()
@@ -110,4 +120,27 @@ inline fun <T> ByteBuf.releaseIfError(task: () -> T): T {
       throw e
     }
   }
+}
+
+fun isLocalHost(host: String): Boolean {
+  try {
+    val address = InetAddress.getByName(host)
+    return address.isAnyLocalAddress || address.isLoopbackAddress || NetworkInterface.getByInetAddress(address) != null
+  }
+  catch (ignored: IOException) {
+    return false
+  }
+}
+
+fun HttpRequest.isLocalOrigin() = parseAndCheckIsLocalHost(origin) && parseAndCheckIsLocalHost(referrer)
+
+private fun parseAndCheckIsLocalHost(uri: String?): Boolean {
+  try {
+    if (uri == null || isLocalHost(URI(uri).host)) {
+      return true
+    }
+  }
+  catch (ignored: Exception) {
+  }
+  return false
 }

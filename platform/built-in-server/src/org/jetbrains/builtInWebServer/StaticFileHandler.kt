@@ -2,6 +2,7 @@ package org.jetbrains.builtInWebServer
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.text.StringUtilRt
+import com.intellij.openapi.vfs.VFileProperty
 import com.intellij.util.PathUtilRt
 import io.netty.buffer.ByteBufUtf8Writer
 import io.netty.channel.Channel
@@ -13,6 +14,8 @@ import org.jetbrains.builtInWebServer.ssi.SsiProcessor
 import org.jetbrains.io.FileResponses
 import org.jetbrains.io.Responses
 import java.io.File
+import java.nio.file.Path
+import java.nio.file.Paths
 
 private class StaticFileHandler : WebServerFileHandler() {
   private var ssiProcessor: SsiProcessor? = null
@@ -28,11 +31,16 @@ private class StaticFileHandler : WebServerFileHandler() {
         return true
       }
 
-      sendIoFile(channel, ioFile, request)
+      sendIoFile(channel, ioFile, Paths.get(pathInfo.root.path), request)
     }
     else {
       val file = pathInfo.file!!
-      val response = FileResponses.prepareSend(request, channel, file.timeStamp, file.path) ?: return true
+      if (file.`is`(VFileProperty.HIDDEN)) {
+        Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request)
+        return true
+      }
+
+      val response = FileResponses.prepareSend(request, channel, file.timeStamp, file.name) ?: return true
 
       val keepAlive = Responses.addKeepAliveIfNeed(response, request)
       if (request.method() != HttpMethod.HEAD) {
@@ -90,14 +98,27 @@ private class StaticFileHandler : WebServerFileHandler() {
   }
 }
 
-fun sendIoFile(channel: Channel, ioFile: File, request: HttpRequest) {
-  if (hasAccess(ioFile)) {
-    FileResponses.sendFile(request, channel, ioFile)
-  }
-  else {
+private fun sendIoFile(channel: Channel, file: File, root: Path, request: HttpRequest) {
+  if (file.isDirectory) {
     Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request)
+  }
+  else if (checkAccess(channel, file, request, root)) {
+    FileResponses.sendFile(request, channel, file)
   }
 }
 
+fun checkAccess(channel: Channel, file: File, request: HttpRequest, root: Path): Boolean {
+  var parent = file
+  do {
+    if (!hasAccess(parent)) {
+      Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request)
+      return false
+    }
+    parent = parent.parentFile ?: break
+  }
+  while (parent != root)
+  return true
+}
+
 // deny access to .htaccess files
-private fun hasAccess(result: File) = !result.isDirectory && result.canRead() && !(result.isHidden || result.name.startsWith(".ht"))
+private fun hasAccess(result: File) = result.canRead() && !(result.isHidden || result.name.startsWith(".ht"))

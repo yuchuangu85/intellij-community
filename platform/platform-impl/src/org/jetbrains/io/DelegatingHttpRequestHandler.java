@@ -41,14 +41,25 @@ import java.io.IOException;
 final class DelegatingHttpRequestHandler extends DelegatingHttpRequestHandlerBase {
   private static final AttributeKey<HttpRequestHandler> PREV_HANDLER = AttributeKey.valueOf("DelegatingHttpRequestHandler.handler");
 
+  static boolean checkAndProcess(@NotNull HttpRequestHandler handler,
+                                 @NotNull ChannelHandlerContext context,
+                                 @NotNull FullHttpRequest request,
+                                 @NotNull QueryStringDecoder urlDecoder) throws IOException {
+    if (handler.isAllowRequestOnlyFromLocalOrigin() && !NettyKt.isLocalOrigin(request)) {
+      return false;
+    }
+    return handler.process(urlDecoder, request, context);
+  }
+
   @Override
   protected boolean process(@NotNull ChannelHandlerContext context,
                             @NotNull FullHttpRequest request,
                             @NotNull QueryStringDecoder urlDecoder) throws IOException, ImageWriteException {
     Attribute<HttpRequestHandler> prevHandlerAttribute = context.attr(PREV_HANDLER);
     HttpRequestHandler connectedHandler = prevHandlerAttribute.get();
+
     if (connectedHandler != null) {
-      if (connectedHandler.isSupported(request) && connectedHandler.process(urlDecoder, request, context)) {
+      if (connectedHandler.isSupported(request) && checkAndProcess(connectedHandler, context, request, urlDecoder)) {
         return true;
       }
       // prev cached connectedHandler is not suitable for this request, so, let's find it again
@@ -57,7 +68,7 @@ final class DelegatingHttpRequestHandler extends DelegatingHttpRequestHandlerBas
 
     for (HttpRequestHandler handler : HttpRequestHandler.EP_NAME.getExtensions()) {
       try {
-        if (handler.isSupported(request) && handler.process(urlDecoder, request, context)) {
+        if (handler.isSupported(request) && checkAndProcess(handler, context, request, urlDecoder)) {
           prevHandlerAttribute.set(handler);
           return true;
         }

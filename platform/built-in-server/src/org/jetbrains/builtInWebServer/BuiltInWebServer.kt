@@ -34,8 +34,8 @@ import io.netty.handler.codec.http.QueryStringDecoder
 import org.jetbrains.ide.HttpRequestHandler
 import org.jetbrains.io.host
 import java.io.File
+import java.io.IOException
 import java.net.InetAddress
-import java.net.UnknownHostException
 
 internal val LOG = Logger.getInstance(BuiltInWebServer::class.java)
 
@@ -204,7 +204,9 @@ fun findIndexFile(basedir: File): File? {
   return null
 }
 
-fun isOwnHostName(host: String): Boolean {
+// is host loopback/any or network interface address (i.e. not custom domain)
+// must be not used to check is host on local machine
+internal fun isOwnHostName(host: String): Boolean {
   if (NetUtils.isLocalhost(host)) {
     return true
   }
@@ -220,7 +222,7 @@ fun isOwnHostName(host: String): Boolean {
     // develar.local is own host name: develar. equals to "develar.labs.intellij.net" (canonical host name)
     return localHostName.equals(host, ignoreCase = true) || (host.endsWith(".local") && localHostName.regionMatches(0, host, 0, host.length - ".local".length, true))
   }
-  catch (ignored: UnknownHostException) {
+  catch (ignored: IOException) {
     return false
   }
 }

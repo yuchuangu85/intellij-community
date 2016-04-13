@@ -30,9 +30,11 @@ import com.intellij.util.net.NetUtils
 import io.netty.channel.ChannelHandlerContext
 import io.netty.handler.codec.http.FullHttpRequest
 import io.netty.handler.codec.http.HttpMethod
+import io.netty.handler.codec.http.HttpRequest
 import io.netty.handler.codec.http.QueryStringDecoder
 import org.jetbrains.ide.HttpRequestHandler
 import org.jetbrains.io.host
+import org.jetbrains.io.isLocalOrigin
 import java.io.File
 import java.io.IOException
 import java.net.InetAddress
@@ -40,6 +42,8 @@ import java.net.InetAddress
 internal val LOG = Logger.getInstance(BuiltInWebServer::class.java)
 
 class BuiltInWebServer : HttpRequestHandler() {
+  override fun isAccessible(request: HttpRequest) = request.isLocalOrigin(false)
+
   override fun isSupported(request: FullHttpRequest) = super.isSupported(request) || request.method() == HttpMethod.POST
 
   override fun process(urlDecoder: QueryStringDecoder, request: FullHttpRequest, context: ChannelHandlerContext): Boolean {
@@ -48,7 +52,7 @@ class BuiltInWebServer : HttpRequestHandler() {
       return false
     }
 
-    val portIndex = host.indexOf(':')
+    val portIndex = host!!.indexOf(':')
     if (portIndex > 0) {
       host = host.substring(0, portIndex)
     }

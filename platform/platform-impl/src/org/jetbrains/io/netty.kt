@@ -15,8 +15,10 @@
  */
 package org.jetbrains.io
 
+import com.google.common.net.InetAddresses
 import com.intellij.openapi.util.Condition
 import com.intellij.openapi.util.Conditions
+import com.intellij.util.net.NetUtils
 import io.netty.bootstrap.Bootstrap
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.buffer.ByteBuf
@@ -99,7 +101,7 @@ fun Bootstrap.connect(remoteAddress: InetSocketAddress, promise: AsyncPromise<*>
 val Channel.uriScheme: String
   get() = if (pipeline().get(SslHandler::class.java) == null) "http" else "https"
 
-val HttpRequest.host: String
+val HttpRequest.host: String?
   get() = headers().getAsString(HttpHeaderNames.HOST)
 
 val HttpRequest.origin: String?
@@ -122,7 +124,18 @@ inline fun <T> ByteBuf.releaseIfError(task: () -> T): T {
   }
 }
 
-fun isLocalHost(host: String): Boolean {
+fun isLocalHost(host: String, onlyAnyOrLoopback: Boolean): Boolean {
+  if (onlyAnyOrLoopback) {
+    if (NetUtils.isLocalhost(host)) {
+      return true
+    }
+
+    if (!InetAddresses.isInetAddress(host)) {
+      return false
+    }
+    // if IP address, it is safe to use getByName (not affected by DNS rebinding)
+  }
+
   try {
     val address = InetAddress.getByName(host)
     return address.isAnyLocalAddress || address.isLoopbackAddress || NetworkInterface.getByInetAddress(address) != null
@@ -132,20 +145,22 @@ fun isLocalHost(host: String): Boolean {
   }
 }
 
-fun HttpRequest.isLocalOrigin() = parseAndCheckIsLocalHost(origin) && parseAndCheckIsLocalHost(referrer)
+@JvmOverloads
+fun HttpRequest.isLocalOrigin(onlyAnyOrLoopback: Boolean = true) = parseAndCheckIsLocalHost(origin, onlyAnyOrLoopback) && parseAndCheckIsLocalHost(referrer, onlyAnyOrLoopback)
 
 private fun isTrustedChromeExtension(uri: URI): Boolean {
   return uri.scheme == "chrome-extension" && (uri.host == "hmhgeddbohgjknpmjagkdomcpobmllji" || uri.host == "offnedcbhjldheanlbojaefbfbllddna")
 }
 
-private fun parseAndCheckIsLocalHost(uri: String?): Boolean {
+@JvmOverloads
+fun parseAndCheckIsLocalHost(uri: String?, onlyAnyOrLoopback: Boolean = true): Boolean {
   if (uri == null) {
     return true
   }
 
   try {
     val parsedUri = URI(uri)
-    return isTrustedChromeExtension(parsedUri) || isLocalHost(parsedUri.host)
+    return isTrustedChromeExtension(parsedUri) || isLocalHost(parsedUri.host, onlyAnyOrLoopback)
   }
   catch (ignored: Exception) {
   }

@@ -318,7 +318,7 @@ class OpenFileHttpService extends RestService {
   }
 
   @Override
-  public boolean isAllowRequestOnlyFromLocalOrigin() {
-    return false;
+  public boolean isAccessible(@NotNull HttpRequest request) {
+    return true;
   }
 }

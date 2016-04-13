@@ -45,10 +45,7 @@ final class DelegatingHttpRequestHandler extends DelegatingHttpRequestHandlerBas
                                  @NotNull ChannelHandlerContext context,
                                  @NotNull FullHttpRequest request,
                                  @NotNull QueryStringDecoder urlDecoder) throws IOException {
-    if (handler.isAllowRequestOnlyFromLocalOrigin() && !NettyKt.isLocalOrigin(request)) {
-      return false;
-    }
-    return handler.process(urlDecoder, request, context);
+    return handler.isSupported(request) && handler.isAccessible(request) && handler.process(urlDecoder, request, context);
   }
 
   @Override
@@ -59,7 +56,7 @@ final class DelegatingHttpRequestHandler extends DelegatingHttpRequestHandlerBas
     HttpRequestHandler connectedHandler = prevHandlerAttribute.get();
 
     if (connectedHandler != null) {
-      if (connectedHandler.isSupported(request) && checkAndProcess(connectedHandler, context, request, urlDecoder)) {
+      if (checkAndProcess(connectedHandler, context, request, urlDecoder)) {
         return true;
       }
       // prev cached connectedHandler is not suitable for this request, so, let's find it again
@@ -68,7 +65,7 @@ final class DelegatingHttpRequestHandler extends DelegatingHttpRequestHandlerBas
 
     for (HttpRequestHandler handler : HttpRequestHandler.EP_NAME.getExtensions()) {
       try {
-        if (handler.isSupported(request) && checkAndProcess(handler, context, request, urlDecoder)) {
+        if (checkAndProcess(handler, context, request, urlDecoder)) {
           prevHandlerAttribute.set(handler);
           return true;
         }

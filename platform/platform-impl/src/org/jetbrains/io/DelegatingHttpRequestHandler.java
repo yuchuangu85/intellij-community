@@ -45,7 +45,7 @@ final class DelegatingHttpRequestHandler extends DelegatingHttpRequestHandlerBas
                                  @NotNull ChannelHandlerContext context,
                                  @NotNull FullHttpRequest request,
                                  @NotNull QueryStringDecoder urlDecoder) throws IOException {
-    return handler.isSupported(request) && handler.isAccessible(request) && handler.process(urlDecoder, request, context);
+    return handler.isSupported(request) && !NettyKt.isWriteFromBrowserWithoutOrigin(request) && handler.isAccessible(request) && handler.process(urlDecoder, request, context);
   }
 
   @Override

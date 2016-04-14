@@ -162,7 +162,14 @@ fun isLocalHost(host: String, onlyAnyOrLoopback: Boolean, hostsOnly: Boolean = f
 }
 
 @JvmOverloads
-fun HttpRequest.isLocalOrigin(onlyAnyOrLoopback: Boolean = true, hostsOnly: Boolean = false) = parseAndCheckIsLocalHost(origin, onlyAnyOrLoopback, hostsOnly) && parseAndCheckIsLocalHost(referrer, onlyAnyOrLoopback, hostsOnly)
+fun HttpRequest.isLocalOrigin(onlyAnyOrLoopback: Boolean = true, hostsOnly: Boolean = false): Boolean {
+  userAgent?.let {
+    if (it.startsWith("Mozilla/5.0") && origin.isNullOrEmpty()) {
+      return false
+    }
+  }
+  return parseAndCheckIsLocalHost(origin, onlyAnyOrLoopback, hostsOnly) && parseAndCheckIsLocalHost(referrer, onlyAnyOrLoopback, hostsOnly)
+}
 
 private fun isTrustedChromeExtension(uri: URI): Boolean {
   return uri.scheme == "chrome-extension" && (uri.host == "hmhgeddbohgjknpmjagkdomcpobmllji" || uri.host == "offnedcbhjldheanlbojaefbfbllddna")

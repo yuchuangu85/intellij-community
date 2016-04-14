@@ -14,11 +14,6 @@ import org.jetbrains.builtInWebServer.ssi.SsiProcessor
 import org.jetbrains.io.FileResponses
 import org.jetbrains.io.Responses
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
-
-fun Path.isDirectory() = Files.isDirectory(this)
 
 private class StaticFileHandler : WebServerFileHandler() {
   private var ssiProcessor: SsiProcessor? = null
@@ -34,7 +29,7 @@ private class StaticFileHandler : WebServerFileHandler() {
         return true
       }
 
-      sendIoFile(channel, ioFile.toPath(), Paths.get(pathInfo.root.path), request)
+      sendIoFile(channel, ioFile, File(pathInfo.root.path), request)
     }
     else {
       val file = pathInfo.file!!
@@ -101,27 +96,27 @@ private class StaticFileHandler : WebServerFileHandler() {
   }
 }
 
-private fun sendIoFile(channel: Channel, file: Path, root: Path, request: HttpRequest) {
-  if (file.isDirectory()) {
+private fun sendIoFile(channel: Channel, file: File, root: File, request: HttpRequest) {
+  if (file.isDirectory) {
     Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request)
   }
   else if (checkAccess(channel, file, request, root)) {
-    FileResponses.sendFile(request, channel, file.toFile())
+    FileResponses.sendFile(request, channel, file)
   }
 }
 
-fun checkAccess(channel: Channel, file: Path, request: HttpRequest, root: Path): Boolean {
+fun checkAccess(channel: Channel, file: File, request: HttpRequest, root: File): Boolean {
   var parent = file
   do {
     if (!hasAccess(parent)) {
       Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request)
       return false
     }
-    parent = parent.parent ?: break
+    parent = parent.parentFile ?: break
   }
   while (parent != root)
   return true
 }
 
 // deny access to .htaccess files
-private fun hasAccess(result: Path) = Files.isReadable(result) && !(Files.isHidden(result) || result.fileName.toString().startsWith(".ht"))
+private fun hasAccess(result: File) = result.canRead() && !(result.isHidden || result.name.startsWith(".ht"))

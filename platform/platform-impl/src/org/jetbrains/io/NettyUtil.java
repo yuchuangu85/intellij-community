@@ -31,6 +31,8 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.channel.socket.oio.OioSocketChannel;
 import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.cors.CorsConfig;
+import io.netty.handler.codec.http.cors.CorsHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.resolver.HostsFileEntriesResolver;
 import org.jetbrains.annotations.NotNull;
@@ -234,6 +236,25 @@ public final class NettyUtil {
     // could be added earlier if HTTPS
     if (pipeline.get(ChunkedWriteHandler.class) == null) {
       pipeline.addLast("chunkedWriteHandler", new ChunkedWriteHandler());
+    }
+
+    pipeline.addLast("corsHandler", new CorsHandlerDoNotUseOwnLogger(CorsConfig
+                                                                       .withAnyOrigin()
+                                                                       .allowCredentials()
+                                                                       .allowNullOrigin()
+                                                                       .allowedRequestMethods(HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.HEAD, HttpMethod.PATCH)
+                                                                       .allowedRequestHeaders("origin", "accept", "authorization", "content-type")
+                                                                       .build()));
+  }
+
+  private static final class CorsHandlerDoNotUseOwnLogger extends CorsHandler {
+    public CorsHandlerDoNotUseOwnLogger(@NotNull CorsConfig config) {
+      super(config);
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
+      context.fireExceptionCaught(cause);
     }
   }
 

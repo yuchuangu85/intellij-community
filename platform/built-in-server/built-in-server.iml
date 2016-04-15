@@ -23,5 +23,14 @@
     <orderEntry type="module" module-name="built-in-server-api" exported="" />
     <orderEntry type="module" module-name="vcs-api" />
     <orderEntry type="library" scope="TEST" name="KotlinJavaRuntime" level="project" />
+    <orderEntry type="module-library">
+      <library>
+        <CLASSES>
+          <root url="jar://$MODULE_DIR$/../../lib/dev/assertj-core-3.2.0.jar!/" />
+        </CLASSES>
+        <JAVADOC />
+        <SOURCES />
+      </library>
+    </orderEntry>
   </component>
 </module>

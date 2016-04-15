@@ -22,6 +22,7 @@ import com.intellij.openapi.util.SystemInfoRt;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.util.text.StringUtilRt;
+import com.intellij.openapi.vfs.VFileProperty;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.PathUtilRt;
@@ -42,12 +43,12 @@ import org.jetbrains.builtInWebServer.ssi.SsiExternalResolver;
 import org.jetbrains.builtInWebServer.ssi.SsiProcessor;
 import org.jetbrains.ide.HttpRequestHandler;
 import org.jetbrains.io.FileResponses;
+import org.jetbrains.io.NettyUtil;
 import org.jetbrains.io.Responses;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 
 import static org.jetbrains.io.Responses.addKeepAliveIfNeed;
 
@@ -82,6 +83,8 @@ public final class BuiltInWebServer extends HttpRequestHandler {
     }
     return null;
   }
+
+  public boolean isAccessible(@NotNull HttpRequest request) { return NettyUtil.isLocalOrigin(request, false, true); }
 
   @Override
   public boolean isSupported(@NotNull FullHttpRequest request) {
@@ -135,7 +138,7 @@ public final class BuiltInWebServer extends HttpRequestHandler {
       return localHostName.equalsIgnoreCase(host) ||
              (host.endsWith(".local") && localHostName.regionMatches(true, 0, host, 0, host.length() - ".local".length()));
     }
-    catch (UnknownHostException ignored) {
+    catch (IOException ignored) {
       return false;
     }
   }
@@ -206,14 +209,14 @@ public final class BuiltInWebServer extends HttpRequestHandler {
         }
 
         File ioFile = VfsUtilCore.virtualToIoFile(file);
-        if (hasAccess(ioFile)) {
-          FileResponses.sendFile(request, channel, ioFile);
-        }
-        else {
-          Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request);
-        }
+        PathInfo root = WebServerPathToFileManager.getInstance(project).getRoot(file);
+        sendIoFile(channel, ioFile, new File(root.getPath()), request);
       }
       else {
+        if (file.is(VFileProperty.HIDDEN)) {
+          Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request);
+          return true;
+        }
         HttpResponse response = FileResponses.prepareSend(request, channel, file.getTimeStamp(), file.getPath());
         if (response == null) {
           return true;
@@ -288,9 +291,32 @@ public final class BuiltInWebServer extends HttpRequestHandler {
       }
     }
 
+    private void sendIoFile(Channel channel, File file, File root, HttpRequest request) throws IOException {
+      if (file.isDirectory()) {
+        Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request);
+      }
+      else if (checkAccess(channel, file, request, root)) {
+        FileResponses.sendFile(request, channel, file);
+      }
+    }
+
+    boolean checkAccess(Channel channel, File file, HttpRequest request, File root) {
+      File parent = file;
+      do {
+        if (!hasAccess(parent)) {
+          Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request);
+          return false;
+        }
+        parent = parent.getParentFile();
+        if (parent == null) break;
+      }
+      while (parent != root);
+      return true;
+    }
+
     private static boolean hasAccess(File result) {
       // deny access to .htaccess files
-      return !result.isDirectory() && result.canRead() && !(result.isHidden() || result.getName().startsWith(".ht"));
+      return result.canRead() && !(result.isHidden() || result.getName().startsWith(".ht"));
     }
   }
 

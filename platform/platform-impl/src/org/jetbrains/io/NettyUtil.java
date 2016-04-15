@@ -267,15 +267,13 @@ public final class NettyUtil {
   }
 
   // fun isLocalHost(host: String, onlyAnyOrLoopback: Boolean, hostsOnly: Boolean = false): Boolean {
-  //  if (onlyAnyOrLoopback) {
-  //    if (NetUtils.isLocalhost(host)) {
-  //      return true
-  //    }
+  //  if (NetUtils.isLocalhost(host)) {
+  //    return true
+  //  }
   //
-  //    if (!InetAddresses.isInetAddress(host)) {
-  //      return false
-  //    }
-  //    // if IP address, it is safe to use getByName (not affected by DNS rebinding)
+  //  // if IP address, it is safe to use getByName (not affected by DNS rebinding)
+  //  if (onlyAnyOrLoopback && !InetAddresses.isInetAddress(host)) {
+  //    return false
   //  }
   //
   //  fun InetAddress.isLocal() = isAnyLocalAddress || isLoopbackAddress || NetworkInterface.getByInetAddress(this) != null
@@ -285,6 +283,7 @@ public final class NettyUtil {
   //    if (!address.isLocal()) {
   //      return false
   //    }
+  //    // be aware - on windows hosts file doesn't contain localhost
   //    // hosts can contain remote addresses, so, we check it
   //    if (hostsOnly && !InetAddresses.isInetAddress(host)) {
   //      return HostsFileEntriesResolver.DEFAULT.address(host).let { it != null && it.isLocal() }
@@ -302,15 +301,13 @@ public final class NettyUtil {
   }
 
   static boolean isLocalHost(String host, boolean onlyAnyOrLoopback, boolean hostsOnly) {
-    if (onlyAnyOrLoopback) {
-      if (NetUtils.isLocalhost(host)) {
-        return true;
-      }
+    if (NetUtils.isLocalhost(host)) {
+      return true;
+    }
 
-      if (!InetAddresses.isInetAddress(host)) {
-        return false;
-      }
-      // if IP address, it is safe to use getByName (not affected by DNS rebinding)
+    // if IP address, it is safe to use getByName (not affected by DNS rebinding)
+    if (onlyAnyOrLoopback && !InetAddresses.isInetAddress(host)) {
+      return false;
     }
 
     try {
@@ -318,6 +315,7 @@ public final class NettyUtil {
       if (!isLocal(address)) {
         return false;
       }
+      // be aware - on windows hosts file doesn't contain localhost
       // hosts can contain remote addresses, so, we check it
       if (hostsOnly && !InetAddresses.isInetAddress(host)) {
         InetAddress addressFromHosts = HostsFileEntriesResolver.DEFAULT.address(host);

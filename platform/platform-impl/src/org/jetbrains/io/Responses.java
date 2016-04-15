@@ -102,6 +102,10 @@ public final class Responses {
   public static void addCommonHeaders(@NotNull HttpResponse response) {
     addServer(response);
     setDate(response);
+    if (!response.headers().contains("X-Frame-Options")) {
+      response.headers().set("X-Frame-Options", "SameOrigin");
+    }
+    response.headers().set("X-Content-Type-Options", "nosniff");
   }
 
   public static void send(CharSequence content, Channel channel, @Nullable HttpRequest request) {

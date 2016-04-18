@@ -2,7 +2,6 @@ package org.jetbrains.builtInWebServer
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.text.StringUtilRt
-import com.intellij.openapi.vfs.VFileProperty
 import com.intellij.util.PathUtilRt
 import io.netty.buffer.ByteBufUtf8Writer
 import io.netty.channel.Channel
@@ -33,11 +32,6 @@ private class StaticFileHandler : WebServerFileHandler() {
     }
     else {
       val file = pathInfo.file!!
-      if (file.`is`(VFileProperty.HIDDEN)) {
-        Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request)
-        return true
-      }
-
       val response = FileResponses.prepareSend(request, channel, file.timeStamp, file.name) ?: return true
 
       val keepAlive = Responses.addKeepAliveIfNeed(response, request)
@@ -109,7 +103,7 @@ fun checkAccess(channel: Channel, file: File, request: HttpRequest, root: File):
   var parent = file
   do {
     if (!hasAccess(parent)) {
-      Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request)
+      Responses.sendStatus(Responses.okInSafeMode(HttpResponseStatus.FORBIDDEN), channel, request)
       return false
     }
     parent = parent.parentFile ?: break
@@ -118,5 +112,5 @@ fun checkAccess(channel: Channel, file: File, request: HttpRequest, root: File):
   return true
 }
 
-// deny access to .htaccess files
-private fun hasAccess(result: File) = result.canRead() && !(result.isHidden || result.name.startsWith(".ht"))
+// deny access to any dot prefixed file
+private fun hasAccess(result: File) = result.canRead() && !(result.isHidden || result.name.startsWith('.'))

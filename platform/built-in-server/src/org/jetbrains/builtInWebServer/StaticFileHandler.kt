@@ -15,6 +15,8 @@ import org.jetbrains.io.Responses
 import java.io.File
 
 private class StaticFileHandler : WebServerFileHandler() {
+  override val pageFileExtensions = arrayOf("html", "htm", "shtml")
+
   private var ssiProcessor: SsiProcessor? = null
 
   override fun process(pathInfo: PathInfo, canonicalPath: CharSequence, project: Project, request: FullHttpRequest, channel: Channel, projectNameIfNotCustomHost: String?): Boolean {

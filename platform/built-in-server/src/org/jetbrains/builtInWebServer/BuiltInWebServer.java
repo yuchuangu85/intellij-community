@@ -20,12 +20,14 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.util.SystemInfoRt;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.util.text.StringUtilRt;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.PathUtilRt;
 import com.intellij.util.UriUtil;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.io.URLUtil;
 import com.intellij.util.net.NetUtils;
 import io.netty.buffer.ByteBuf;
@@ -48,6 +50,7 @@ import org.jetbrains.io.Responses;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.List;
 
 import static org.jetbrains.io.Responses.addKeepAliveIfNeed;
 
@@ -181,6 +184,15 @@ public final class BuiltInWebServer extends HttpRequestHandler {
       return true;
     }
 
+    if (NettyUtil.origin(request) == null &&
+        NettyUtil.referrer(request) == null &&
+        NettyUtil.isRegularBrowser(request) &&
+        !canBeAccessedDirectly(path)) {
+      Responses.sendStatus(HttpResponseStatus.NOT_FOUND, context.channel(), request);
+      return true;
+    }
+
+
     for (WebServerPathHandler pathHandler : WebServerPathHandler.EP_NAME.getExtensions()) {
       try {
         if (pathHandler.process(path, project, request, context, projectName, decodedPath, isCustomHost)) {
@@ -189,6 +201,17 @@ public final class BuiltInWebServer extends HttpRequestHandler {
       }
       catch (Throwable e) {
         LOG.error(e);
+      }
+    }
+    return false;
+  }
+
+  private static boolean canBeAccessedDirectly(String path) {
+    for (WebServerFileHandler fileHandler : WebServerFileHandler.EP_NAME.getExtensions()) {
+      for (String ext: fileHandler.pageFileExtensions()) {
+        if (FileUtilRt.extensionEquals(path, ext)) {
+          return true;
+        }
       }
     }
     return false;
@@ -207,6 +230,14 @@ public final class BuiltInWebServer extends HttpRequestHandler {
   static final class StaticFileHandler extends WebServerFileHandler {
     private SsiProcessor ssiProcessor;
 
+    // override val pageFileExtensions = arrayOf("html", "htm", "shtml")
+    private static List<String> ourPageFileExtensions = ContainerUtil.list("html", "htm", "shtml", "stm", "shtm");
+
+    @Override
+    protected List<String> pageFileExtensions() {
+      return ourPageFileExtensions;
+    }
+
     @Override
     public boolean process(@NotNull VirtualFile file,
                            @NotNull CharSequence canonicalRequestPath,
@@ -224,7 +255,7 @@ public final class BuiltInWebServer extends HttpRequestHandler {
 
         File ioFile = VfsUtilCore.virtualToIoFile(file);
         PathInfo root = WebServerPathToFileManager.getInstance(project).getRoot(file);
-        sendIoFile(channel, ioFile, new File(root.getPath()), request);
+        sendIoFile(channel, ioFile, VfsUtilCore.virtualToIoFile(root.getRoot()), request);
       }
       else {
         HttpResponse response = FileResponses.prepareSend(request, channel, file.getTimeStamp(), file.getPath());
@@ -301,7 +332,7 @@ public final class BuiltInWebServer extends HttpRequestHandler {
       }
     }
 
-    private void sendIoFile(Channel channel, File file, File root, HttpRequest request) throws IOException {
+    private static void sendIoFile(Channel channel, File file, File root, HttpRequest request) throws IOException {
       if (file.isDirectory()) {
         Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request);
       }

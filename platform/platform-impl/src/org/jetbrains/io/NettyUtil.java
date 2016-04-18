@@ -266,13 +266,13 @@ public final class NettyUtil {
 
   // val HttpRequest.origin: String?
   //   get() = headers().getAsString(HttpHeaderNames.ORIGIN)
-  static String origin(HttpRequest request) {
+  public static String origin(HttpRequest request) {
     return request.headers().get(HttpHeaderNames.ORIGIN);
   }
 
   //val HttpRequest.referrer: String?
   //  get() = headers().getAsString(HttpHeaderNames.REFERER)
-  static String referrer(HttpRequest request) {
+  public static String referrer(HttpRequest request) {
     return request.headers().get(HttpHeaderNames.REFERER);
   }
 
@@ -407,13 +407,20 @@ public final class NettyUtil {
   //fun HttpRequest.isWriteFromBrowserWithoutOrigin(): Boolean {
   //  val userAgent = userAgent ?: return false
   //  val method = method()
-  //  return origin.isNullOrEmpty() && userAgent.startsWith("Mozilla/5.0") && (method == HttpMethod.POST || method == HttpMethod.PATCH || method == HttpMethod.PUT || method == HttpMethod.DELETE)
+  //  return origin.isNullOrEmpty() && isRegularBrowser() && (method == HttpMethod.POST || method == HttpMethod.PATCH || method == HttpMethod.PUT || method == HttpMethod.DELETE)
   //}
   static boolean isWriteFromBrowserWithoutOrigin(HttpRequest request) {
-    String userAgent = userAgent(request);
     if (request == null) return false;
 
     HttpMethod method = request.getMethod();
-    return isNullOrEmpty(origin(request)) && userAgent.startsWith("Mozilla/5.0") && (method == HttpMethod.POST || method == HttpMethod.PATCH || method == HttpMethod.PUT || method == HttpMethod.DELETE);
+    return isNullOrEmpty(origin(request)) &&
+           isRegularBrowser(request) && (method == HttpMethod.POST || method == HttpMethod.PATCH || method == HttpMethod.PUT || method == HttpMethod.DELETE);
+  }
+
+  // fun HttpRequest.isRegularBrowser() = userAgent?.startsWith("Mozilla/5.0") ?: false
+  public static boolean isRegularBrowser(HttpRequest request) {
+    String userAgent = userAgent(request);
+    if (request == null) return false;
+    return userAgent.startsWith("Mozilla/5.0");
   }
 }

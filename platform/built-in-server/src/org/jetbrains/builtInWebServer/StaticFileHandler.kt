@@ -1,6 +1,7 @@
 package org.jetbrains.builtInWebServer
 
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.text.StringUtilRt
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.util.PathUtilRt
@@ -111,7 +112,7 @@ fun checkAccess(channel: Channel, file: File, request: HttpRequest, root: File):
     }
     parent = parent.parentFile ?: break
   }
-  while (parent != root)
+  while (!FileUtil.filesEqual(parent, root))
   return true
 }
 

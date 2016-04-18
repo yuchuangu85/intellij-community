@@ -16,14 +16,19 @@
 package org.jetbrains.builtInWebServer;
 
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.VFileProperty;
+import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.io.Responses;
+
+import java.io.File;
 
 final class DefaultWebServerPathHandler extends WebServerPathHandler {
   @Override
@@ -78,6 +83,11 @@ final class DefaultWebServerPathHandler extends WebServerPathHandler {
       }
     }
 
+    PathInfo root = WebServerPathToFileManager.getInstance(project).getRoot(result);
+    if (!checkAccess(result, root.getRoot(), channel, request)) {
+      return true;
+    }
+
     StringBuilder canonicalRequestPath = new StringBuilder();
     canonicalRequestPath.append('/');
     if (!isCustomHost) {
@@ -99,5 +109,25 @@ final class DefaultWebServerPathHandler extends WebServerPathHandler {
       }
     }
     return false;
+  }
+
+  private static boolean checkAccess(VirtualFile virtualFile, VirtualFile root, Channel channel, HttpRequest request) {
+    File ioFile = VfsUtilCore.virtualToIoFile(virtualFile);
+
+    if (virtualFile.isInLocalFileSystem()) {
+      if (virtualFile.isDirectory()) {
+        Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, request);
+        return false;
+      }
+      else if (!BuiltInWebServer.StaticFileHandler.checkAccess(channel, ioFile, request, VfsUtilCore.virtualToIoFile(root))) {
+        return false;
+      }
+    }
+    else if (virtualFile.is(VFileProperty.HIDDEN)) {
+      Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, request);
+      return false;
+    }
+
+    return true;
   }
 }

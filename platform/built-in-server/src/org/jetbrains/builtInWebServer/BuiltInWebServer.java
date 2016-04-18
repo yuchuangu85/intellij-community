@@ -22,7 +22,6 @@ import com.intellij.openapi.util.SystemInfoRt;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.util.text.StringUtilRt;
-import com.intellij.openapi.vfs.VFileProperty;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.PathUtilRt;
@@ -175,8 +174,13 @@ public final class BuiltInWebServer extends HttpRequestHandler {
       return true;
     }
 
-    // must be absolute path (relative to DOCUMENT_ROOT, i.e. scheme://authority/) to properly canonicalize
-    final String path = FileUtil.toCanonicalPath(decodedPath.substring(offset), '/').substring(1);
+    final String path = toIdeaPath(decodedPath, offset);
+    if (path == null) {
+      LOG.warn("$decodedPath is not valid");
+      Responses.sendStatus(HttpResponseStatus.NOT_FOUND, context.channel(), request);
+      return true;
+    }
+
     for (WebServerPathHandler pathHandler : WebServerPathHandler.EP_NAME.getExtensions()) {
       try {
         if (pathHandler.process(path, project, request, context, projectName, decodedPath, isCustomHost)) {
@@ -189,6 +193,16 @@ public final class BuiltInWebServer extends HttpRequestHandler {
     }
     return false;
   }
+
+  private static String toIdeaPath(String decodedPath, int offset) {
+    // must be absolute path (relative to DOCUMENT_ROOT, i.e. scheme://authority/) to properly canonicalize
+    String path = decodedPath.substring(offset);
+    if (!path.startsWith("/")) {
+      return null;
+    }
+    return FileUtil.toCanonicalPath(path, '/').substring(1);
+  }
+
 
   static final class StaticFileHandler extends WebServerFileHandler {
     private SsiProcessor ssiProcessor;
@@ -213,10 +227,6 @@ public final class BuiltInWebServer extends HttpRequestHandler {
         sendIoFile(channel, ioFile, new File(root.getPath()), request);
       }
       else {
-        if (file.is(VFileProperty.HIDDEN)) {
-          Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request);
-          return true;
-        }
         HttpResponse response = FileResponses.prepareSend(request, channel, file.getTimeStamp(), file.getPath());
         if (response == null) {
           return true;
@@ -300,11 +310,11 @@ public final class BuiltInWebServer extends HttpRequestHandler {
       }
     }
 
-    boolean checkAccess(Channel channel, File file, HttpRequest request, File root) {
+    static boolean checkAccess(Channel channel, File file, HttpRequest request, File root) {
       File parent = file;
       do {
         if (!hasAccess(parent)) {
-          Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request);
+          Responses.sendStatus(Responses.okInSafeMode(HttpResponseStatus.FORBIDDEN), channel, request);
           return false;
         }
         parent = parent.getParentFile();
@@ -315,8 +325,8 @@ public final class BuiltInWebServer extends HttpRequestHandler {
     }
 
     private static boolean hasAccess(File result) {
-      // deny access to .htaccess files
-      return result.canRead() && !(result.isHidden() || result.getName().startsWith(".ht"));
+      // deny access to any dot prefixed file
+      return result.canRead() && !(result.isHidden() || result.getName().startsWith("."));
     }
   }
 

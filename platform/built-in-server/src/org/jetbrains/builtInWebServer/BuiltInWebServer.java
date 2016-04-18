@@ -351,7 +351,7 @@ public final class BuiltInWebServer extends HttpRequestHandler {
         parent = parent.getParentFile();
         if (parent == null) break;
       }
-      while (parent != root);
+      while (!FileUtil.filesEqual(parent, root));
       return true;
     }
 

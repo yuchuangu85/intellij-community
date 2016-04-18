@@ -21,6 +21,7 @@ import com.intellij.openapi.util.io.endsWithName
 import com.intellij.openapi.util.io.endsWithSlash
 import com.intellij.openapi.util.io.getParentPath
 import com.intellij.openapi.vfs.VFileProperty
+import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.PathUtilRt
 import io.netty.channel.Channel
@@ -115,20 +116,13 @@ private class DefaultWebServerPathHandler : WebServerPathHandler() {
 
 private fun checkAccess(pathInfo: PathInfo, channel: Channel, request: HttpRequest): Boolean {
   if (pathInfo.ioFile != null || pathInfo.file!!.isInLocalFileSystem) {
-    val file:File
-
-    if (pathInfo.ioFile != null) {
-      file = pathInfo.ioFile as File
-    }
-    else {
-      file = File(pathInfo.file!!.path)
-    }
+    val file:File = pathInfo.ioFile ?: VfsUtilCore.virtualToIoFile(pathInfo.file!!)
 
     if (file.isDirectory) {
       Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, request)
       return false
     }
-    else if (!checkAccess(channel, file, request, File(pathInfo.root.path))) {
+    else if (!checkAccess(channel, file, request, VfsUtilCore.virtualToIoFile(pathInfo.root))) {
       return false
     }
   }

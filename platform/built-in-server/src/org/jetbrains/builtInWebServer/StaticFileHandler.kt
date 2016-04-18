@@ -2,6 +2,7 @@ package org.jetbrains.builtInWebServer
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.text.StringUtilRt
+import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.util.PathUtilRt
 import io.netty.buffer.ByteBufUtf8Writer
 import io.netty.channel.Channel
@@ -15,13 +16,13 @@ import org.jetbrains.io.Responses
 import java.io.File
 
 private class StaticFileHandler : WebServerFileHandler() {
-  override val pageFileExtensions = arrayOf("html", "htm", "shtml")
+  override val pageFileExtensions = arrayOf("html", "htm", "shtml", "stm", "shtm")
 
   private var ssiProcessor: SsiProcessor? = null
 
   override fun process(pathInfo: PathInfo, canonicalPath: CharSequence, project: Project, request: FullHttpRequest, channel: Channel, projectNameIfNotCustomHost: String?): Boolean {
     if (pathInfo.ioFile != null || pathInfo.file!!.isInLocalFileSystem) {
-      val ioFile = pathInfo.ioFile ?: File(pathInfo.file!!.path)
+      val ioFile = pathInfo.ioFile ?: VfsUtilCore.virtualToIoFile(pathInfo.file!!)
 
       val nameSequence = pathInfo.name
       //noinspection SpellCheckingInspection
@@ -30,7 +31,7 @@ private class StaticFileHandler : WebServerFileHandler() {
         return true
       }
 
-      sendIoFile(channel, ioFile, File(pathInfo.root.path), request)
+      sendIoFile(channel, ioFile, VfsUtilCore.virtualToIoFile(pathInfo.root), request)
     }
     else {
       val file = pathInfo.file!!

@@ -334,7 +334,7 @@ public final class BuiltInWebServer extends HttpRequestHandler {
       File parent = file;
       do {
         if (!hasAccess(parent)) {
-          Responses.sendStatus(Responses.okInSafeMode(HttpResponseStatus.FORBIDDEN), channel, request);
+          Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, request);
           return false;
         }
         parent = parent.getParentFile();

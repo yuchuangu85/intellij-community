@@ -184,15 +184,6 @@ public final class BuiltInWebServer extends HttpRequestHandler {
       return true;
     }
 
-    if (NettyUtil.origin(request) == null &&
-        NettyUtil.referrer(request) == null &&
-        NettyUtil.isRegularBrowser(request) &&
-        !canBeAccessedDirectly(path)) {
-      Responses.sendStatus(HttpResponseStatus.NOT_FOUND, context.channel(), request);
-      return true;
-    }
-
-
     for (WebServerPathHandler pathHandler : WebServerPathHandler.EP_NAME.getExtensions()) {
       try {
         if (pathHandler.process(path, project, request, context, projectName, decodedPath, isCustomHost)) {
@@ -206,7 +197,7 @@ public final class BuiltInWebServer extends HttpRequestHandler {
     return false;
   }
 
-  private static boolean canBeAccessedDirectly(String path) {
+  static boolean canBeAccessedDirectly(String path) {
     for (WebServerFileHandler fileHandler : WebServerFileHandler.EP_NAME.getExtensions()) {
       for (String ext: fileHandler.pageFileExtensions()) {
         if (FileUtilRt.extensionEquals(path, ext)) {

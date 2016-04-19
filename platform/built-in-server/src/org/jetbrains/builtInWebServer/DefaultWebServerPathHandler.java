@@ -26,9 +26,12 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.io.NettyUtil;
 import org.jetbrains.io.Responses;
 
 import java.io.File;
+
+import static org.jetbrains.builtInWebServer.BuiltInWebServer.canBeAccessedDirectly;
 
 final class DefaultWebServerPathHandler extends WebServerPathHandler {
   @Override
@@ -47,7 +50,7 @@ final class DefaultWebServerPathHandler extends WebServerPathHandler {
       result = pathToFileManager.findByRelativePath(project, path);
       if (result == null) {
         if (path.isEmpty()) {
-          Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, "Index file doesn't exist.", request);
+          Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, request);
           return true;
         }
         else {
@@ -55,22 +58,32 @@ final class DefaultWebServerPathHandler extends WebServerPathHandler {
         }
       }
       else if (result.isDirectory()) {
+        result = BuiltInWebServer.findIndexFile(result);
+        if (result == null) {
+          Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, request);
+          return true;
+        }
+
         if (!endsWithSlash(decodedRawPath)) {
           redirectToDirectory(request, channel, isCustomHost ? path : (projectName + '/' + path));
           return true;
         }
 
-        result = BuiltInWebServer.findIndexFile(result);
-        if (result == null) {
-          Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, "Index file doesn't exist.", request);
-          return true;
-        }
         indexUsed = true;
       }
 
       pathToFileManager.pathToFileCache.put(path, result);
     }
-    else if (!path.endsWith(result.getName())) {
+
+    if (NettyUtil.origin(request) == null &&
+        NettyUtil.referrer(request) == null &&
+        NettyUtil.isRegularBrowser(request) &&
+        !canBeAccessedDirectly(result.getName())) {
+      Responses.sendStatus(HttpResponseStatus.NOT_FOUND, context.channel(), request);
+      return true;
+    }
+
+    if (!indexUsed && !path.endsWith(result.getName())) {
       if (endsWithSlash(decodedRawPath)) {
         indexUsed = true;
       }

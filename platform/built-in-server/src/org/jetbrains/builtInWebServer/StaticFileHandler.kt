@@ -98,7 +98,7 @@ internal fun checkAccess(channel: Channel, file: Path, request: HttpRequest, roo
   var parent = file
   do {
     if (!hasAccess(parent)) {
-      Responses.sendStatus(Responses.okInSafeMode(HttpResponseStatus.FORBIDDEN), channel, request)
+      Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, request)
       return false
     }
     parent = parent.parent ?: break

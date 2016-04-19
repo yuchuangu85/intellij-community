@@ -289,17 +289,19 @@ public final class SocketLock {
             }
 
             if (StringUtil.startsWith(command, ACTIVATE_COMMAND)) {
-              List<String> args = StringUtil.split(command.subSequence(ACTIVATE_COMMAND.length(), command.length()).toString(), "\0");
-              Consumer<List<String>> listener = myActivateListener.get();
-              if (listener != null) {
-                listener.consume(args);
-              }
+              if (command.length() <= 8192) {
+                List<String> args = StringUtil.split(command.subSequence(ACTIVATE_COMMAND.length(), command.length()).toString(), "\0");
+                Consumer<List<String>> listener = myActivateListener.get();
+                if (listener != null) {
+                  listener.consume(args);
+                }
 
-              ByteBuf buffer = context.alloc().ioBuffer(4);
-              ByteBufOutputStream out = new ByteBufOutputStream(buffer);
-              out.writeUTF(OK_RESPONSE);
-              out.close();
-              context.writeAndFlush(buffer);
+                ByteBuf buffer = context.alloc().ioBuffer(4);
+                ByteBufOutputStream out = new ByteBufOutputStream(buffer);
+                out.writeUTF(OK_RESPONSE);
+                out.close();
+                context.writeAndFlush(buffer);
+              }
             }
             context.close();
           }

@@ -30,6 +30,9 @@ import io.netty.handler.codec.http.FullHttpRequest
 import io.netty.handler.codec.http.HttpRequest
 import io.netty.handler.codec.http.HttpResponseStatus
 import org.jetbrains.io.Responses
+import org.jetbrains.io.isRegularBrowser
+import org.jetbrains.io.origin
+import org.jetbrains.io.referrer
 import java.io.File
 
 private class DefaultWebServerPathHandler : WebServerPathHandler() {
@@ -60,11 +63,6 @@ private class DefaultWebServerPathHandler : WebServerPathHandler() {
 
     var indexUsed = false
     if (pathInfo.isDirectory()) {
-      if (!endsWithSlash(decodedRawPath)) {
-        redirectToDirectory(request, channel, if (isCustomHost) path else "$projectName/$path")
-        return true
-      }
-
       var indexVirtualFile: VirtualFile? = null
       var indexFile: File? = null
       if (pathInfo.file == null) {
@@ -75,13 +73,24 @@ private class DefaultWebServerPathHandler : WebServerPathHandler() {
       }
 
       if (indexFile == null && indexVirtualFile == null) {
-        Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, "Index file doesn't exist.", request)
+        Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, request)
+        return true
+      }
+
+      // we must redirect only after index file check to not expose directory status
+      if (!endsWithSlash(decodedRawPath)) {
+        redirectToDirectory(request, channel, if (isCustomHost) path else "$projectName/$path")
         return true
       }
 
       indexUsed = true
       pathInfo = PathInfo(indexFile, indexVirtualFile, pathInfo.root, pathInfo.moduleName, pathInfo.isLibrary)
       pathToFileManager.pathToInfoCache.put(path, pathInfo)
+    }
+
+    if (request.origin == null && request.referrer == null && request.isRegularBrowser() && !canBeAccessedDirectly(pathInfo.name)) {
+      Responses.sendStatus(HttpResponseStatus.NOT_FOUND, context.channel(), request)
+      return true
     }
 
     if (!indexUsed && !endsWithName(path, pathInfo.name)) {

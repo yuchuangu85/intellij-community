@@ -32,7 +32,7 @@ private class StaticFileHandler : WebServerFileHandler() {
         return true
       }
 
-      sendIoFile(channel, ioFile, VfsUtilCore.virtualToIoFile(pathInfo.root), request)
+      FileResponses.sendFile(request, channel, ioFile);
     }
     else {
       val file = pathInfo.file!!
@@ -91,15 +91,6 @@ private class StaticFileHandler : WebServerFileHandler() {
     if (!keepAlive) {
       future.addListener(ChannelFutureListener.CLOSE)
     }
-  }
-}
-
-private fun sendIoFile(channel: Channel, file: File, root: File, request: HttpRequest) {
-  if (file.isDirectory) {
-    Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request)
-  }
-  else if (checkAccess(channel, file, request, root)) {
-    FileResponses.sendFile(request, channel, file)
   }
 }
 

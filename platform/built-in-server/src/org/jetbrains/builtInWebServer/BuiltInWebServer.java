@@ -179,7 +179,7 @@ public final class BuiltInWebServer extends HttpRequestHandler {
 
     final String path = toIdeaPath(decodedPath, offset);
     if (path == null) {
-      LOG.warn("$decodedPath is not valid");
+      LOG.warn(decodedPath + " is not valid");
       Responses.sendStatus(HttpResponseStatus.NOT_FOUND, context.channel(), request);
       return true;
     }
@@ -253,9 +253,7 @@ public final class BuiltInWebServer extends HttpRequestHandler {
           return true;
         }
 
-        File ioFile = VfsUtilCore.virtualToIoFile(file);
-        PathInfo root = WebServerPathToFileManager.getInstance(project).getRoot(file);
-        sendIoFile(channel, ioFile, VfsUtilCore.virtualToIoFile(root.getRoot()), request);
+        FileResponses.sendFile(request, channel, VfsUtilCore.virtualToIoFile(file));
       }
       else {
         HttpResponse response = FileResponses.prepareSend(request, channel, file.getTimeStamp(), file.getPath());
@@ -329,15 +327,6 @@ public final class BuiltInWebServer extends HttpRequestHandler {
       ChannelFuture future = channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
       if (!keepAlive) {
         future.addListener(ChannelFutureListener.CLOSE);
-      }
-    }
-
-    private static void sendIoFile(Channel channel, File file, File root, HttpRequest request) throws IOException {
-      if (file.isDirectory()) {
-        Responses.sendStatus(HttpResponseStatus.FORBIDDEN, channel, request);
-      }
-      else if (checkAccess(channel, file, request, root)) {
-        FileResponses.sendFile(request, channel, file);
       }
     }
 

@@ -173,12 +173,12 @@ class OpenFileHttpService extends RestService {
 
   @NotNull
   Promise<Void> openFile(@NotNull OpenFileRequest request) {
-    String systemIndependentName = FileUtil.toSystemIndependentName(FileUtil.expandUserHome(request.file));
+    final String systemIndependentName = FileUtil.toSystemIndependentName(FileUtil.expandUserHome(request.file));
     final File file = new File(systemIndependentName);
 
     if (file.isAbsolute()) {
       if (com.intellij.ide.impl.ProjectUtil.isRemotePath(systemIndependentName)) {
-        Ref<Boolean> confirmLoadingRemoteFile = new Ref<>();
+        final Ref<Boolean> confirmLoadingRemoteFile = new Ref<Boolean>();
         try {
           SwingUtilities.invokeAndWait(new Runnable() {
             @Override

@@ -40,6 +40,7 @@ public class OpenProjectSetProcessor extends ProjectSetProcessor {
   public void processEntries(@NotNull List<Pair<String, String>> entries, @NotNull final Context context, @NotNull Runnable runNext) {
     for (final Pair<String, String> entry : entries) {
       if ("project".equals(entry.getFirst())) {
+        if (context.directory == null) continue;
         final Project[] projects = ProjectManager.getInstance().getOpenProjects();
         context.project = UIUtil.invokeAndWaitIfNeeded(new Computable<Project>() {
           @Override

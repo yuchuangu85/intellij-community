@@ -345,6 +345,6 @@ class OpenFileHttpService extends RestService {
 
   @Override
   public boolean isAccessible(@NotNull HttpRequest request) {
-    return true;
+    return false;
   }
 }

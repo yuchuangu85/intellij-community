@@ -214,7 +214,7 @@ public class ProjectUtil {
     return answer == Messages.YES;
   }
 
-  private static Window getActiveFrameOrWelcomeScreen() {
+  public static Window getActiveFrameOrWelcomeScreen() {
     Window window = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusedWindow();
     if (window != null)  return window;
 

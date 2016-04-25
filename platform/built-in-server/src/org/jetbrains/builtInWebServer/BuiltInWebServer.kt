@@ -53,6 +53,9 @@ import javax.swing.SwingUtilities
 
 internal val LOG = Logger.getInstance(BuiltInWebServer::class.java)
 
+// name is duplicated in the ConfigImportHelper
+private const val IDE_TOKEN_FILE = "user.token"
+
 class BuiltInWebServer : HttpRequestHandler() {
   override fun isAccessible(request: HttpRequest) = request.isLocalOrigin(onlyAnyOrLoopback = false, hostsOnly = true)
 
@@ -88,13 +91,12 @@ class BuiltInWebServer : HttpRequestHandler() {
   }
 }
 
-const val TOKEN_PARAM_NAME = "__ij-st"
+internal const val TOKEN_PARAM_NAME = "__ij-st"
 
 private val STANDARD_COOKIE by lazy {
   val productName = ApplicationNamesInfo.getInstance().lowercaseProductName
   val configPath = PathManager.getConfigPath()
-  val cookieName = productName + "-" + Integer.toHexString(configPath.hashCode())
-  val file = File(configPath, cookieName)
+  val file = File(configPath, IDE_TOKEN_FILE)
   var token: String? = null
   if (file.exists()) {
     try {
@@ -111,7 +113,7 @@ private val STANDARD_COOKIE by lazy {
 
   // explicit setting domain cookie on localhost doesn't work for chrome
   // http://stackoverflow.com/questions/8134384/chrome-doesnt-create-cookie-for-domain-localhost-in-broken-https
-  val cookie = DefaultCookie(cookieName, token!!)
+  val cookie = DefaultCookie(productName + "-" + Integer.toHexString(configPath.hashCode()), token!!)
   cookie.isHttpOnly = true
   cookie.setMaxAge(TimeUnit.DAYS.toSeconds(365 * 10))
   cookie.setPath("/")

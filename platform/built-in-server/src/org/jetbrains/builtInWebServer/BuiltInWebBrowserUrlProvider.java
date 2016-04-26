@@ -18,6 +18,7 @@ package org.jetbrains.builtInWebServer;
 import com.intellij.ide.browsers.OpenInBrowserRequest;
 import com.intellij.ide.browsers.WebBrowserService;
 import com.intellij.ide.browsers.WebBrowserUrlProvider;
+import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.lang.Language;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
@@ -56,6 +57,11 @@ public class BuiltInWebBrowserUrlProvider extends WebBrowserUrlProvider implemen
     if (currentAuthority != null || defaultPort == effectiveBuiltInServerPort) {
       return Collections.singletonList(url);
     }
+
+    if (BuiltInWebServerKt.isActivatable()) {
+      PropertiesComponent.getInstance().setValue("ide.built.in.web.server.active", true);
+    }
+
     return Arrays.asList(url, Urls.newHttpUrl("localhost:" + defaultPort, '/' + project.getName() + '/' + path, query));
   }
 

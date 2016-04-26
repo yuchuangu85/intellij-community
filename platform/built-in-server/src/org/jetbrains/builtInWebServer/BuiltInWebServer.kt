@@ -18,6 +18,8 @@ package org.jetbrains.builtInWebServer
 import com.google.common.cache.CacheBuilder
 import com.google.common.net.InetAddresses
 import com.intellij.ide.impl.ProjectUtil
+import com.intellij.ide.util.PropertiesComponent
+import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationNamesInfo
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.Logger
@@ -31,6 +33,7 @@ import com.intellij.openapi.util.SystemInfoRt
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.io.FileUtilRt
 import com.intellij.openapi.util.io.endsWithName
+import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.io.URLUtil
@@ -41,8 +44,10 @@ import io.netty.handler.codec.http.*
 import io.netty.handler.codec.http.cookie.DefaultCookie
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder
+import org.jetbrains.ide.BuiltInServerManagerImpl
 import org.jetbrains.ide.HttpRequestHandler
 import org.jetbrains.io.*
+import org.jetbrains.notification.SingletonNotificationManager
 import java.awt.datatransfer.StringSelection
 import java.io.File
 import java.io.IOException
@@ -55,6 +60,10 @@ internal val LOG = Logger.getInstance(BuiltInWebServer::class.java)
 
 // name is duplicated in the ConfigImportHelper
 private const val IDE_TOKEN_FILE = "user.web.token"
+
+private val notificationManager by lazy {
+  SingletonNotificationManager(BuiltInServerManagerImpl.NOTIFICATION_GROUP.getValue(), NotificationType.INFORMATION, null)
+}
 
 class BuiltInWebServer : HttpRequestHandler() {
   override fun isAccessible(request: HttpRequest) = request.isLocalOrigin(onlyAnyOrLoopback = false, hostsOnly = true)
@@ -90,6 +99,8 @@ class BuiltInWebServer : HttpRequestHandler() {
     return doProcess(urlDecoder, request, context, projectName)
   }
 }
+
+internal fun isActivatable() = Registry.`is`("ide.built.in.web.server.activatable", false)
 
 internal const val TOKEN_PARAM_NAME = "__ij-st"
 
@@ -185,6 +196,11 @@ private fun doProcess(urlDecoder: QueryStringDecoder, request: FullHttpRequest, 
     }
     return false
   }) ?: candidateByDirectoryName ?: return false
+
+  if (isActivatable() && !PropertiesComponent.getInstance().getBoolean("ide.built.in.web.server.active")) {
+    notificationManager.notify("Built-in web server is deactivated, to activate, please use Open in Browser", null)
+    return false
+  }
 
   if (isEmptyPath) {
     // we must redirect "jsdebug" to "jsdebug/" as nginx does, otherwise browser will treat it as a file instead of a directory, so, relative path will not work

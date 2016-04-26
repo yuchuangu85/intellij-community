@@ -82,12 +82,19 @@ public final class Responses {
   }
 
   public static void send(@NotNull HttpResponse response, Channel channel, @Nullable HttpRequest request) {
+    send(response, channel, request, null);
+  }
+
+  public static void send(@NotNull HttpResponse response, Channel channel, @Nullable HttpRequest request, @Nullable HttpHeaders extraHeaders) {
     if (response.status() != HttpResponseStatus.NOT_MODIFIED && !HttpUtil.isContentLengthSet(response)) {
       HttpUtil.setContentLength(response,
                                    response instanceof FullHttpResponse ? ((FullHttpResponse)response).content().readableBytes() : 0);
     }
 
     addCommonHeaders(response);
+    if (extraHeaders != null) {
+      response.headers().add(extraHeaders);
+    }
     send(response, channel, request != null && !addKeepAliveIfNeed(response, request));
   }
 
@@ -114,7 +121,7 @@ public final class Responses {
   }
 
   public static void send(CharSequence content, Charset charset, Channel channel, @Nullable HttpRequest request) {
-    send(new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, Unpooled.copiedBuffer(content, charset)), channel, request);
+    send(new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, Unpooled.copiedBuffer(content, charset)), channel, request, null);
   }
 
   public static void send(@NotNull HttpResponse response, @NotNull Channel channel, boolean close) {
@@ -146,7 +153,11 @@ public final class Responses {
   }
 
   public static void sendStatus(@NotNull HttpResponseStatus responseStatus, Channel channel, @Nullable String description, @Nullable HttpRequest request) {
-    send(createStatusResponse(responseStatus, request, description), channel, request);
+    sendStatus(responseStatus, channel, description, request, null);
+  }
+
+  public static void sendStatus(@NotNull HttpResponseStatus responseStatus, Channel channel, @Nullable String description, @Nullable HttpRequest request, @Nullable HttpHeaders extraHeaders) {
+    send(createStatusResponse(responseStatus, request, description), channel, request, extraHeaders);
   }
 
   private static HttpResponse createStatusResponse(HttpResponseStatus responseStatus, @Nullable HttpRequest request, @Nullable String description) {

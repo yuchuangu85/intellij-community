@@ -53,6 +53,9 @@ import java.io.File
 import java.io.IOException
 import java.math.BigInteger
 import java.net.InetAddress
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFileAttributeView
+import java.nio.file.attribute.PosixFilePermission
 import java.security.SecureRandom
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -122,6 +125,15 @@ private val STANDARD_COOKIE by lazy {
   if (token == null) {
     token = UUID.randomUUID().toString()
     FileUtil.writeToFile(file, token!!)
+    val view = Files.getFileAttributeView(file.toPath(), PosixFileAttributeView::class.java)
+    if (view != null) {
+      try {
+        view.setPermissions(setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE))
+      }
+      catch (e: IOException) {
+        LOG.warn(e)
+      }
+    }
   }
 
   // explicit setting domain cookie on localhost doesn't work for chrome

@@ -197,7 +197,7 @@ public class ConfigImportHelper {
     FileUtil.copyDir(src, dest);
 
     // delete old user token - we must not reuse it
-    FileUtil.delete(new File(dest, "user.token"));
+    FileUtil.delete(new File(dest, "user.web.token"));
 
     File oldPluginsDir = new File(src, PLUGINS_PATH);
     if (!oldPluginsDir.isDirectory() && SystemInfo.isMac) {

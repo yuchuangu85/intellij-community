@@ -29,6 +29,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.MessageDialogBuilder
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.SystemInfoRt
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.io.FileUtilRt
@@ -100,6 +101,7 @@ class BuiltInWebServer : HttpRequestHandler() {
   }
 }
 
+internal fun isCookieValidated() = Registry.`is`("ide.built.in.web.server.cookie.validated", false)
 internal fun isActivatable() = Registry.`is`("ide.built.in.web.server.activatable", false)
 
 internal const val TOKEN_PARAM_NAME = "__ij-st"
@@ -120,6 +122,12 @@ private val STANDARD_COOKIE by lazy {
   if (token == null) {
     token = UUID.randomUUID().toString()
     FileUtil.writeToFile(file, token!!)
+    if (SystemInfo.isUnix) {
+      file.setReadable(false, false)
+      file.setWritable(false, false)
+      file.setReadable(true, true)
+      file.setWritable(true, true)
+    }
   }
 
   // explicit setting domain cookie on localhost doesn't work for chrome
@@ -230,6 +238,8 @@ private fun doProcess(urlDecoder: QueryStringDecoder, request: FullHttpRequest, 
 }
 
 private fun validateToken(request: HttpRequest, channel: Channel, urlDecoder: QueryStringDecoder): Boolean {
+  if(!isCookieValidated()) return true
+
   val cookieString = request.headers().get(HttpHeaderNames.COOKIE)
   if (cookieString != null) {
     val cookies = ServerCookieDecoder.STRICT.decode(cookieString)

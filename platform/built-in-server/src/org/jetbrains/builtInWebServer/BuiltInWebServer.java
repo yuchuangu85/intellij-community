@@ -15,12 +15,15 @@
  */
 package org.jetbrains.builtInWebServer;
 
+import com.intellij.ide.util.PropertiesComponent;
+import com.intellij.notification.NotificationType;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.util.SystemInfoRt;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.io.FileUtilRt;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.util.text.StringUtilRt;
 import com.intellij.openapi.vfs.VfsUtilCore;
@@ -42,10 +45,12 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.builtInWebServer.ssi.SsiExternalResolver;
 import org.jetbrains.builtInWebServer.ssi.SsiProcessor;
+import org.jetbrains.ide.BuiltInServerManagerImpl;
 import org.jetbrains.ide.HttpRequestHandler;
 import org.jetbrains.io.FileResponses;
 import org.jetbrains.io.NettyUtil;
 import org.jetbrains.io.Responses;
+import org.jetbrains.notification.SingletonNotificationManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -145,6 +150,14 @@ public final class BuiltInWebServer extends HttpRequestHandler {
     }
   }
 
+  // private val notificationManager by lazy {
+  // SingletonNotificationManager(BuiltInServerManagerImpl.NOTIFICATION_GROUP.getValue(), NotificationType.INFORMATION, null)
+  // }
+  private static final SingletonNotificationManager
+    notificationManager = new SingletonNotificationManager(BuiltInServerManagerImpl.NOTIFICATION_GROUP.getValue(), NotificationType.INFORMATION, null);
+  // internal fun isActivatable() = Registry.`is`("ide.built.in.web.server.activatable", false)
+  static boolean isActivatable() { return Registry.is("ide.built.in.web.server.activatable", true); }
+
   private static boolean doProcess(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @Nullable String projectName) {
     final String decodedPath = URLUtil.unescapePercentSequences(UriUtil.trimParameters(request.uri()));
     int offset;
@@ -163,6 +176,11 @@ public final class BuiltInWebServer extends HttpRequestHandler {
 
     Project project = findProject(projectName, isCustomHost);
     if (project == null) {
+      return false;
+    }
+
+    if (isActivatable() && !PropertiesComponent.getInstance().getBoolean("ide.built.in.web.server.active", false)) {
+      notificationManager.notify("Built-in web server is deactivated, to activate, please use Open in Browser", (Project)null);
       return false;
     }
 

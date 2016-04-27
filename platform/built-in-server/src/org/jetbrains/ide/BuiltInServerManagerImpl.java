@@ -1,16 +1,15 @@
 package org.jetbrains.ide;
 
-import com.intellij.notification.Notification;
-import com.intellij.notification.NotificationDisplayType;
-import com.intellij.notification.NotificationType;
-import com.intellij.notification.Notifications;
+import com.intellij.notification.*;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ApplicationNamesInfo;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Disposer;
+import com.intellij.openapi.util.NotNullLazyValue;
 import com.intellij.openapi.util.ShutDownTracker;
 import org.jetbrains.annotations.NonNls;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.io.BuiltInServer;
 
@@ -20,6 +19,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class BuiltInServerManagerImpl extends BuiltInServerManager {
   private static final Logger LOG = Logger.getInstance(BuiltInServerManager.class);
+
+  public static final NotNullLazyValue<NotificationGroup> NOTIFICATION_GROUP = new NotNullLazyValue<NotificationGroup>() {
+    @NotNull
+    @Override
+    protected NotificationGroup compute() {
+      return new NotificationGroup("Built-in Server", NotificationDisplayType.STICKY_BALLOON, true);
+    }
+  };
 
   @NonNls
   public static final String PROPERTY_RPC_PORT = "rpc.port";

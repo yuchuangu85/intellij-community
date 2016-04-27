@@ -1,6 +1,8 @@
 package org.jetbrains.ide;
 
-import com.intellij.notification.*;
+import com.intellij.notification.NotificationDisplayType;
+import com.intellij.notification.NotificationGroup;
+import com.intellij.notification.NotificationType;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ApplicationNamesInfo;
@@ -100,9 +102,7 @@ public class BuiltInServerManagerImpl extends BuiltInServerManager {
         }
         catch (Exception e) {
           LOG.info(e);
-          String groupDisplayId = "Built-in Server";
-          Notifications.Bus.register(groupDisplayId, NotificationDisplayType.STICKY_BALLOON);
-          new Notification(groupDisplayId, "Internal HTTP server disabled",
+          NOTIFICATION_GROUP.getValue().createNotification(
                            "Cannot start internal HTTP server. Git integration, JavaScript debugger and LiveEdit may operate with errors. " +
                            "Please check your firewall settings and restart " + ApplicationNamesInfo.getInstance().getFullProductName(),
                            NotificationType.ERROR).notify(null);

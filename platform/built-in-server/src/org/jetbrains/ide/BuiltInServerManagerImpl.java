@@ -10,11 +10,18 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.NotNullLazyValue;
 import com.intellij.openapi.util.ShutDownTracker;
+import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.Url;
+import com.intellij.util.net.NetUtils;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.builtInWebServer.BuiltInServerOptions;
 import org.jetbrains.io.BuiltInServer;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -134,5 +141,43 @@ public class BuiltInServerManagerImpl extends BuiltInServerManager {
   @Nullable
   public Disposable getServerDisposable() {
     return server;
+  }
+
+  @Override
+  public boolean isOnBuiltInWebServer(@Nullable Url url) {
+    return url != null && !StringUtil.isEmpty(url.getAuthority()) && isOnBuiltInWebServerByAuthority(url.getAuthority());
+  }
+
+  private static boolean isOnBuiltInWebServerByAuthority(@NotNull String authority) {
+    int portIndex = authority.indexOf(':');
+    if (portIndex < 0 || portIndex == authority.length() - 1) {
+      return false;
+    }
+
+    int port = StringUtil.parseInt(authority.substring(portIndex + 1), -1);
+    if (port == -1) {
+      return false;
+    }
+
+    BuiltInServerOptions options = BuiltInServerOptions.getInstance();
+    int idePort = BuiltInServerManager.getInstance().getPort();
+    if (options.builtInServerPort != port && idePort != port) {
+      return false;
+    }
+
+    String host = authority.substring(0, portIndex);
+    if (NetUtils.isLocalhost(host)) {
+      return true;
+    }
+
+    try {
+      InetAddress inetAddress = InetAddress.getByName(host);
+      return inetAddress.isLoopbackAddress() ||
+             inetAddress.isAnyLocalAddress() ||
+             (options.builtInServerAvailableExternally && idePort != port && NetworkInterface.getByInetAddress(inetAddress) != null);
+    }
+    catch (IOException e) {
+      return false;
+    }
   }
 }

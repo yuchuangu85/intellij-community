@@ -34,10 +34,8 @@ import com.intellij.vcs.log.graph.impl.permanent.GraphLayoutBuilder
 import com.intellij.vcs.log.graph.impl.permanent.PermanentLinearGraphImpl
 import com.intellij.vcs.log.graph.utils.LinearGraphUtils
 import com.intellij.vcs.log.graph.utils.TimestampGetter
+import org.junit.Assert
 import java.util.*
-import kotlin.test.assertEquals
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 public interface BaseTestGraphBuilder {
   public val Int.U: SimpleNode get() = SimpleNode(this, GraphNodeType.USUAL)
@@ -147,20 +145,20 @@ public class TestGraphBuilder : BaseTestGraphBuilder {
 private fun LinearGraph.assertEdge(nodeIndex: Int, edge: GraphEdge) {
   if (edge.getType().isNormalEdge()) {
     if (nodeIndex == edge.getUpNodeIndex()) {
-      assertTrue(getAdjacentEdges(edge.getDownNodeIndex()!!, EdgeFilter.NORMAL_UP).contains(edge))
+      Assert.assertTrue(getAdjacentEdges(edge.getDownNodeIndex()!!, EdgeFilter.NORMAL_UP).contains(edge))
     } else {
-      assertTrue(nodeIndex == edge.getDownNodeIndex())
-      assertTrue(getAdjacentEdges(edge.getUpNodeIndex()!!, EdgeFilter.NORMAL_DOWN).contains(edge))
+      Assert.assertTrue(nodeIndex == edge.getDownNodeIndex())
+      Assert.assertTrue(getAdjacentEdges(edge.getUpNodeIndex()!!, EdgeFilter.NORMAL_DOWN).contains(edge))
     }
   } else {
     when (edge.getType()) {
       GraphEdgeType.NOT_LOAD_COMMIT, GraphEdgeType.DOTTED_ARROW_DOWN -> {
-        assertTrue(nodeIndex == edge.getUpNodeIndex())
-        assertNull(edge.getDownNodeIndex())
+        Assert.assertTrue(nodeIndex == edge.getUpNodeIndex())
+        Assert.assertNull(edge.getDownNodeIndex())
       }
       GraphEdgeType.DOTTED_ARROW_UP -> {
-        assertTrue(nodeIndex == edge.getDownNodeIndex())
-        assertNull(edge.getUpNodeIndex())
+        Assert.assertTrue(nodeIndex == edge.getDownNodeIndex())
+        Assert.assertNull(edge.getUpNodeIndex())
       }
     }
   }
@@ -170,9 +168,8 @@ public fun LinearGraph.asTestGraphString(sorted: Boolean = false): String = Stri
   for (nodeIndex in 0..nodesCount() - 1) {
     val node = getGraphNode(nodeIndex)
     append(getNodeId(nodeIndex))
-    assertEquals(nodeIndex, node.getNodeIndex(),
-            "nodeIndex: $nodeIndex, but for node with this index(nodeId: ${getNodeId(nodeIndex)}) nodeIndex: ${node.getNodeIndex()}"
-    )
+    Assert.assertEquals("nodeIndex: $nodeIndex, but for node with this index(nodeId: ${getNodeId(nodeIndex)}) nodeIndex: ${node.getNodeIndex()}",
+            nodeIndex, node.getNodeIndex())
     when (node.getType()) {
       GraphNodeType.UNMATCHED -> append(".UNM")
       GraphNodeType.NOT_LOAD_COMMIT -> append(".NOT_LOAD")

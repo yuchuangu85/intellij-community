@@ -44,7 +44,8 @@ private class DefaultWebServerPathHandler : WebServerPathHandler() {
                        projectName: String,
                        decodedRawPath: String,
                        isCustomHost: Boolean): Boolean {
-    val extraHttpHeaders = validateToken(request, context.channel()) ?: return true
+    val isSignedRequest = request.isSignedRequest()
+    val extraHttpHeaders = validateToken(request, context.channel(), isSignedRequest) ?: return true
 
     val channel = context.channel()
     val pathToFileManager = WebServerPathToFileManager.getInstance(project)
@@ -92,7 +93,7 @@ private class DefaultWebServerPathHandler : WebServerPathHandler() {
     }
 
     // if extraHttpHeaders is not empty, it means that we get request wih token in the query
-    if (extraHttpHeaders.isEmpty && request.origin == null && request.referrer == null && request.isRegularBrowser() && !canBeAccessedDirectly(pathInfo.name)) {
+    if (!isSignedRequest && request.origin == null && request.referrer == null && request.isRegularBrowser() && !canBeAccessedDirectly(pathInfo.name)) {
       Responses.sendStatus(HttpResponseStatus.NOT_FOUND, context.channel(), request)
       return true
     }

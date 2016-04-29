@@ -44,22 +44,18 @@ private class DefaultWebServerPathHandler : WebServerPathHandler() {
                        projectName: String,
                        decodedRawPath: String,
                        isCustomHost: Boolean): Boolean {
-    val isSignedRequest = request.isSignedRequest()
-    val extraHttpHeaders = validateToken(request, context.channel(), isSignedRequest) ?: return true
-
     val channel = context.channel()
+
+    val isSignedRequest = request.isSignedRequest()
+    val extraHttpHeaders = validateToken(request, channel, isSignedRequest) ?: return true
+
     val pathToFileManager = WebServerPathToFileManager.getInstance(project)
     var pathInfo = pathToFileManager.pathToInfoCache.getIfPresent(path)
     if (pathInfo == null || !pathInfo.isValid) {
       pathInfo = pathToFileManager.doFindByRelativePath(path)
       if (pathInfo == null) {
-        if (path.isEmpty()) {
-          Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, "Index file doesn't exist.", request, extraHttpHeaders)
-          return true
-        }
-        else {
-          return false
-        }
+        Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, if (path.isEmpty()) "Index file doesn't exist." else null, request, extraHttpHeaders)
+        return true
       }
 
       pathToFileManager.pathToInfoCache.put(path, pathInfo)
@@ -94,7 +90,7 @@ private class DefaultWebServerPathHandler : WebServerPathHandler() {
 
     // if extraHttpHeaders is not empty, it means that we get request wih token in the query
     if (!isSignedRequest && request.origin == null && request.referrer == null && request.isRegularBrowser() && !canBeAccessedDirectly(pathInfo.name)) {
-      Responses.sendStatus(HttpResponseStatus.NOT_FOUND, context.channel(), request)
+      Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, request)
       return true
     }
 
@@ -124,7 +120,10 @@ private class DefaultWebServerPathHandler : WebServerPathHandler() {
         }
       }
     }
-    return false
+
+    // we registered as a last handler, so, we should just return 404 and send extra headers
+    Responses.sendStatus(HttpResponseStatus.NOT_FOUND, channel, null, request, extraHttpHeaders)
+    return true
   }
 }
 

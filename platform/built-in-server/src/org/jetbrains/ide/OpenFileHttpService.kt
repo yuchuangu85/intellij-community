@@ -187,7 +187,7 @@ internal class OpenFileHttpService : RestService() {
     return mainTask.promise
   }
 
-  override fun isAccessible(request: HttpRequest) = true
+  override fun isAccessible(request: HttpRequest) = false
 }
 
 internal class OpenFileRequest {

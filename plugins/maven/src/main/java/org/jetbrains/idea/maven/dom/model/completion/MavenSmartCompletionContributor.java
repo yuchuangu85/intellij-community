@@ -51,7 +51,7 @@ public class MavenSmartCompletionContributor extends CompletionContributor {
   private static Collection<?> getVariants(CompletionParameters parameters) {
     if (!MavenDomUtil.isMavenFile(parameters.getOriginalFile())) return Collections.emptyList();
 
-    SmartList<?> result = new SmartList<Object>();
+    SmartList<?> result = new SmartList<>();
 
     for (PsiReference each : getReferences(parameters)) {
       if (each instanceof TagNameReference) continue;
@@ -71,14 +71,12 @@ public class MavenSmartCompletionContributor extends CompletionContributor {
           }
         }
         else if (converter instanceof ResolvingConverter) {
-          //noinspection unchecked
           ResolvingConverter resolvingConverter = (ResolvingConverter)converter;
           Collection variants = resolvingConverter.getVariants(reference.getConvertContext());
           addVariants(resolvingConverter, variants, result);
         }
       }
       else {
-        //noinspection unchecked
         Collections.addAll((Collection)result, each.getVariants());
       }
     }

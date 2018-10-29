@@ -16,6 +16,7 @@
 package com.intellij.util;
 
 import com.intellij.util.concurrency.AppExecutorUtil;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.concurrent.ExecutorService;
@@ -30,12 +31,12 @@ import java.util.concurrent.ExecutorService;
  * @param <T> the type of elements
  */
 public class MergingBackgroundExecutor<T> {
-  private final Consumer<T> myConsumer;
+  private final Consumer<? super T> myConsumer;
   private final ExecutorService myExecutorService;
 
-  public MergingBackgroundExecutor(int maxThreads, @NotNull Consumer<T> consumer) {
+  public MergingBackgroundExecutor(@NotNull @Nls(capitalization = Nls.Capitalization.Title) String name, int maxThreads, @NotNull Consumer<? super T> consumer) {
     myConsumer = consumer;
-    myExecutorService = AppExecutorUtil.createBoundedApplicationPoolExecutor(maxThreads);
+    myExecutorService = AppExecutorUtil.createBoundedApplicationPoolExecutor(name, maxThreads);
   }
 
 
@@ -44,7 +45,7 @@ public class MergingBackgroundExecutor<T> {
   }
 
   @NotNull
-  public static MergingBackgroundExecutor<Runnable> newRunnableExecutor(int maxThreads) {
-    return new MergingBackgroundExecutor<Runnable>(maxThreads, runnable -> runnable.run());
+  public static MergingBackgroundExecutor<Runnable> newRunnableExecutor(@NotNull @Nls(capitalization = Nls.Capitalization.Title) String name, int maxThreads) {
+    return new MergingBackgroundExecutor<>(name,maxThreads, runnable -> runnable.run());
   }
 }

@@ -37,13 +37,6 @@ public class GroovyUnnecessaryContinueInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return CONTROL_FLOW;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Unnecessary 'continue' statement";
   }
@@ -76,12 +69,12 @@ public class GroovyUnnecessaryContinueInspection extends BaseInspection {
 
     @Override
     @NotNull
-    public String getName() {
+    public String getFamilyName() {
       return "Remove unnecessary continue";
     }
 
     @Override
-    public void doFix(Project project, ProblemDescriptor descriptor)
+    public void doFix(@NotNull Project project, @NotNull ProblemDescriptor descriptor)
         throws IncorrectOperationException {
       final PsiElement continueKeywordElement = descriptor.getPsiElement();
       final GrContinueStatement continueStatement = (GrContinueStatement) continueKeywordElement.getParent();
@@ -93,7 +86,7 @@ public class GroovyUnnecessaryContinueInspection extends BaseInspection {
   private static class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitContinueStatement(GrContinueStatement continueStatement) {
+    public void visitContinueStatement(@NotNull GrContinueStatement continueStatement) {
       super.visitContinueStatement(continueStatement);
       if (continueStatement.getContainingFile().getViewProvider() instanceof TemplateLanguageFileViewProvider) {
         return;

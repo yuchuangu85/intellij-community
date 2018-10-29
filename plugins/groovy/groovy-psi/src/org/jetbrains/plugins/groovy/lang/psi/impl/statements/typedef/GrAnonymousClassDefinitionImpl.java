@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package org.jetbrains.plugins.groovy.lang.psi.impl.statements.typedef;
 
@@ -25,25 +11,21 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.lang.parser.GroovyElementTypes;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyElementVisitor;
-import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElementFactory;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.arguments.GrArgumentList;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrAnonymousClassDefinition;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrExtendsClause;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrImplementsClause;
-import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrTypeDefinition;
 import org.jetbrains.plugins.groovy.lang.psi.api.types.GrCodeReferenceElement;
 import org.jetbrains.plugins.groovy.lang.psi.impl.GrClassReferenceType;
-import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyPsiManager;
-import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil;
 import org.jetbrains.plugins.groovy.lang.psi.stubs.GrTypeDefinitionStub;
 import org.jetbrains.plugins.groovy.lang.psi.stubs.elements.GrStubElementType;
-import org.jetbrains.plugins.groovy.lang.psi.util.GroovyCommonClassNames;
 
 /**
  * @author Maxim.Medvedev
  */
 public class GrAnonymousClassDefinitionImpl extends GrTypeDefinitionImpl implements GrAnonymousClassDefinition {
-  private SoftReference<PsiClassType> myCachedBaseType = null;
+
+  private SoftReference<PsiClassType> myCachedBaseType;
 
   public GrAnonymousClassDefinitionImpl(@NotNull ASTNode node) {
     super(node);
@@ -58,18 +40,15 @@ public class GrAnonymousClassDefinitionImpl extends GrTypeDefinitionImpl impleme
   }
 
   @Override
-  public PsiElement getParent() {
-    return getParentByTree();
-  }
-
-  @Override
   @NotNull
   public GrCodeReferenceElement getBaseClassReferenceGroovy() {
     GrTypeDefinitionStub stub = getStub();
     if (stub != null) {
-      return GroovyPsiElementFactory.getInstance(getProject()).createReferenceElementFromText(stub.getBaseClassName(), this);
+      GrCodeReferenceElement reference = stub.getBaseClassReference();
+      assert reference != null;
+      return reference;
     }
-    //noinspection ConstantConditions
+
     return findNotNullChildByClass(GrCodeReferenceElement.class); //not null because of definition =)
   }
 
@@ -81,7 +60,6 @@ public class GrAnonymousClassDefinitionImpl extends GrTypeDefinitionImpl impleme
   @Override
   @Nullable
   public GrArgumentList getArgumentListGroovy() {
-    //noinspection ConstantConditions
     return findChildByClass(GrArgumentList.class); //not null because of definition
   }
 
@@ -103,7 +81,7 @@ public class GrAnonymousClassDefinitionImpl extends GrTypeDefinitionImpl impleme
     if (type != null && type.isValid()) return type;
 
     type = new GrClassReferenceType(getBaseClassReferenceGroovy());
-    myCachedBaseType = new SoftReference<PsiClassType>(type);
+    myCachedBaseType = new SoftReference<>(type);
     return type;
   }
 
@@ -147,11 +125,7 @@ public class GrAnonymousClassDefinitionImpl extends GrTypeDefinitionImpl impleme
   public PsiClass getSuperClass() {
     final PsiClass psiClass = getBaseClass();
     if (psiClass != null && !psiClass.isInterface()) return psiClass;
-    return GroovyPsiManager.getInstance(getProject()).findClassWithCache(GroovyCommonClassNames.GROOVY_OBJECT_SUPPORT, getResolveScope());
-  }
-
-  private PsiClassType createTypeByName(String className) {
-    return TypesUtil.createTypeByFQClassName(className, this);
+    return JavaPsiFacade.getInstance(getProject()).findClass(CommonClassNames.JAVA_LANG_OBJECT, getResolveScope());
   }
 
   @Override
@@ -162,22 +136,7 @@ public class GrAnonymousClassDefinitionImpl extends GrTypeDefinitionImpl impleme
   @NotNull
   @Override
   public PsiClassType[] getExtendsListTypes(boolean includeSynthetic) {
-    final PsiClass baseClass = getBaseClass();
-
-    if (baseClass != null) {
-      if (baseClass.isInterface()) {
-        return new PsiClassType[]{createTypeByName(GroovyCommonClassNames.GROOVY_OBJECT_SUPPORT)};
-      }
-      else {
-        if (baseClass instanceof GrTypeDefinition) {
-          return new PsiClassType[]{getBaseClassType()};
-        }
-        else {
-          return new PsiClassType[]{getBaseClassType(), createTypeByName(GroovyCommonClassNames.GROOVY_OBJECT_SUPPORT)};
-        }
-      }
-    }
-    return super.getExtendsListTypes(includeSynthetic);
+    return PsiClassType.EMPTY_ARRAY;
   }
 
   @Override
@@ -193,11 +152,21 @@ public class GrAnonymousClassDefinitionImpl extends GrTypeDefinitionImpl impleme
   @NotNull
   @Override
   public PsiClassType[] getImplementsListTypes(boolean includeSynthetic) {
-    final PsiClass baseClass = getBaseClass();
-    if (baseClass != null && baseClass.isInterface()) {
-      return new PsiClassType[]{getBaseClassType(), createTypeByName(GroovyCommonClassNames.DEFAULT_BASE_CLASS_NAME)};
+    return PsiClassType.EMPTY_ARRAY;
+  }
+
+  @NotNull
+  @Override
+  public PsiClassType[] getSuperTypes(boolean includeSynthetic) {
+    PsiClassType baseClassType = getBaseClassType();
+    PsiClass baseClass = baseClassType.resolve();
+    if (baseClass == null || !baseClass.isInterface()) {
+      return new PsiClassType[]{baseClassType};
     }
-    return new PsiClassType[]{createTypeByName(GroovyCommonClassNames.DEFAULT_BASE_CLASS_NAME)};
+    else {
+      PsiClassType objectType = PsiType.getJavaLangObject(getManager(), getResolveScope());
+      return new PsiClassType[]{objectType, baseClassType};
+    }
   }
 
   @Override
@@ -234,7 +203,7 @@ public class GrAnonymousClassDefinitionImpl extends GrTypeDefinitionImpl impleme
   }
 
   @Override
-  public void accept(GroovyElementVisitor visitor) {
+  public void accept(@NotNull GroovyElementVisitor visitor) {
     visitor.visitAnonymousClassDefinition(this);
   }
 }

@@ -1,40 +1,33 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.daemon;
 
 import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.markup.GutterIconRenderer;
+import com.intellij.openapi.editor.markup.MarkupEditorFilter;
 import com.intellij.openapi.editor.markup.RangeHighlighter;
 import com.intellij.openapi.editor.markup.SeparatorPlacement;
 import com.intellij.openapi.project.IndexNotReadyException;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.SmartPointerManager;
+import com.intellij.psi.SmartPsiElementPointer;
 import com.intellij.util.Function;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
-import java.lang.ref.WeakReference;
 
 public class LineMarkerInfo<T extends PsiElement> {
+  private static final Logger LOG = Logger.getInstance(LineMarkerInfo.class);
+
   protected final Icon myIcon;
-  private final WeakReference<T> elementRef;
+  private final SmartPsiElementPointer<T> elementRef;
   public final int startOffset;
   public final int endOffset;
   public Color separatorColor;
@@ -43,14 +36,17 @@ public class LineMarkerInfo<T extends PsiElement> {
 
   public final int updatePass;
   @Nullable private final Function<? super T, String> myTooltipProvider;
-  private AnAction myNavigateAction = new NavigateAction<T>(this);
+  private AnAction myNavigateAction = new NavigateAction<>(this);
   @NotNull private final GutterIconRenderer.Alignment myIconAlignment;
   @Nullable private final GutterIconNavigationHandler<T> myNavigationHandler;
 
   /**
    * Creates a line marker info for the element.
+   * See {@link LineMarkerProvider#getLineMarkerInfo(PsiElement)} javadoc
+   * for specific quirks on which elements to use for line markers.
+   *
    * @param element         the element for which the line marker is created.
-   * @param startOffset     the offset (relative to beginning of file) with which the marker is associated
+   * @param range     the range (relative to beginning of file) with which the marker is associated
    * @param icon            the icon to show in the gutter for the line marker
    * @param updatePass      the ID of the daemon pass during which the marker should be recalculated
    * @param tooltipProvider the callback to calculate the tooltip for the gutter icon
@@ -66,17 +62,30 @@ public class LineMarkerInfo<T extends PsiElement> {
     myIcon = icon;
     myTooltipProvider = tooltipProvider;
     myIconAlignment = alignment;
-    elementRef = new WeakReference<T>(element);
+    elementRef = SmartPointerManager.getInstance(element.getProject()).createSmartPsiElementPointer(element);
     myNavigationHandler = navHandler;
     startOffset = range.getStartOffset();
-    this.updatePass = updatePass;
-
     endOffset = range.getEndOffset();
+    this.updatePass = 11; //Pass.LINE_MARKERS;
+    PsiElement firstChild;
+    if (!(element instanceof PsiFile) && (firstChild = element.getFirstChild()) != null) {
+      String msg = "Performance warning: LineMarker is supposed to be registered for leaf elements only, but got: " +
+                   element + " (" + element.getClass() + ") instead. First child: " +
+                   firstChild + " (" + firstChild.getClass() + ")" +
+                   "\nPlease see LineMarkerProvider#getLineMarkerInfo(PsiElement) javadoc for detailed explanations.";
+      if (ApplicationManager.getApplication().isUnitTestMode()) {
+        LOG.error(msg);
+      }
+      else {
+        LOG.warn(msg);
+      }
+    }
   }
 
   /**
    * @deprecated use {@link LineMarkerInfo#LineMarkerInfo(PsiElement, TextRange, Icon, int, Function, GutterIconNavigationHandler, GutterIconRenderer.Alignment)} instead
    */
+  @Deprecated
   public LineMarkerInfo(@NotNull T element,
                         int startOffset,
                         Icon icon,
@@ -90,6 +99,7 @@ public class LineMarkerInfo<T extends PsiElement> {
   /**
    * @deprecated use {@link LineMarkerInfo#LineMarkerInfo(PsiElement, TextRange, Icon, int, Function, GutterIconNavigationHandler, GutterIconRenderer.Alignment)} instead
    */
+  @Deprecated
   public LineMarkerInfo(@NotNull T element,
                         int startOffset,
                         Icon icon,
@@ -100,9 +110,14 @@ public class LineMarkerInfo<T extends PsiElement> {
   }
 
   @Nullable
+  public Icon getIcon() {
+    return myIcon;
+  }
+
+  @Nullable
   public GutterIconRenderer createGutterRenderer() {
     if (myIcon == null) return null;
-    return new LineMarkerGutterIconRenderer<T>(this);
+    return new LineMarkerGutterIconRenderer<>(this);
   }
 
   @Nullable
@@ -114,11 +129,16 @@ public class LineMarkerInfo<T extends PsiElement> {
 
   @Nullable
   public T getElement() {
-    return elementRef.get();
+    return elementRef.getElement();
   }
 
   void setNavigateAction(@NotNull  AnAction navigateAction) {
     myNavigateAction = navigateAction;
+  }
+
+  @NotNull
+  public MarkupEditorFilter getEditorFilter() {
+    return MarkupEditorFilter.EMPTY;
   }
 
   @Nullable
@@ -192,6 +212,6 @@ public class LineMarkerInfo<T extends PsiElement> {
 
   @Override
   public String toString() {
-    return "("+startOffset+","+endOffset+") -> "+elementRef.get();
+    return "("+startOffset+","+endOffset+") -> "+elementRef;
   }
 }

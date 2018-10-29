@@ -32,6 +32,7 @@ public abstract class ComplexPackagingElement<S> extends PackagingElement<S> {
     super(type);
   }
 
+  @NotNull
   @Override
   public List<? extends Generator> computeAntInstructions(@NotNull PackagingElementResolvingContext resolvingContext, @NotNull AntCopyInstructionCreator creator,
                                                           @NotNull ArtifactAntGenerationContext generationContext,
@@ -41,7 +42,7 @@ public abstract class ComplexPackagingElement<S> extends PackagingElement<S> {
       return Collections.emptyList();
     }
 
-    final List<Generator> fileSets = new ArrayList<Generator>();
+    final List<Generator> fileSets = new ArrayList<>();
     for (PackagingElement<?> element : substitution) {
       fileSets.addAll(element.computeAntInstructions(resolvingContext, creator, generationContext, artifactType));
     }

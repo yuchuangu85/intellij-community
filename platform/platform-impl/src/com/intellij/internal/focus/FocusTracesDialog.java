@@ -20,14 +20,15 @@ import com.intellij.execution.ui.ConsoleView;
 import com.intellij.execution.ui.ConsoleViewContentType;
 import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.ui.DialogWrapper;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.wm.impl.FocusRequestInfo;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.JBSplitter;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.table.JBTable;
 import com.intellij.util.ExceptionUtil;
+import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
@@ -87,16 +88,17 @@ public class FocusTracesDialog extends DialogWrapper {
     };
     myRequestsTable.getSelectionModel().addListSelectionListener(selectionListener);
     final TableColumnModel columnModel = myRequestsTable.getColumnModel();
-    columnModel.getColumn(0).setMinWidth(120);
-    columnModel.getColumn(0).setMaxWidth(120);
-    columnModel.getColumn(0).setPreferredWidth(120);
-    columnModel.getColumn(1).setMinWidth(60);
-    columnModel.getColumn(1).setMaxWidth(60);
-    columnModel.getColumn(1).setPreferredWidth(60);
+    columnModel.getColumn(0).setMinWidth(JBUI.scale(120));
+    columnModel.getColumn(0).setMaxWidth(JBUI.scale(120));
+    columnModel.getColumn(0).setPreferredWidth(JBUI.scale(120));
+    columnModel.getColumn(1).setMinWidth(JBUI.scale(60));
+    columnModel.getColumn(1).setMaxWidth(JBUI.scale(60));
+    columnModel.getColumn(1).setPreferredWidth(JBUI.scale(60));
     myRequestsTable.getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     myRequestsTable.changeSelection(0, 0, false, true);
 
-    consoleView = TextConsoleBuilderFactory.getInstance().createBuilder(ProjectManager.getInstance().getDefaultProject()).getConsole();
+    consoleView = TextConsoleBuilderFactory.getInstance().createBuilder(project).getConsole();
+    Disposer.register(getDisposable(), consoleView);
 
     init();
   }
@@ -112,9 +114,12 @@ public class FocusTracesDialog extends DialogWrapper {
     JBSplitter splitter = new JBSplitter(true, .5F, .2F, .8F);
     splitter.setFirstComponent(new JBScrollPane(myRequestsTable, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER));
 
-    final JComponent consoleComponent = new JPanel(new BorderLayout());
+    JComponent consoleComponent = new JPanel(new BorderLayout());
     consoleComponent.add(consoleView.getComponent(), BorderLayout.CENTER);
-    consoleView.print(ExceptionUtil.getThrowableText(myRequests.get(myRequestsTable.getSelectedRow()).trace), ConsoleViewContentType.NORMAL_OUTPUT);
+    int row = myRequestsTable.getSelectedRow();
+    if (row >= 0) {
+      consoleView.print(ExceptionUtil.getThrowableText(myRequests.get(row).trace), ConsoleViewContentType.NORMAL_OUTPUT);
+    }
 
     splitter.setSecondComponent(
       new JBScrollPane(consoleComponent, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER));

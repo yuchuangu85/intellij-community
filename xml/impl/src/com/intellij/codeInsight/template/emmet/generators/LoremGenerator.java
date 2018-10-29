@@ -20,10 +20,6 @@ import com.intellij.util.ArrayUtil;
 
 import java.util.*;
 
-/**
- * User: zolotov
- * Date: 1/31/13
- */
 public class LoremGenerator {
   static final String[] COMMON_P = "lorem ipsum dolor sit amet consectetur adipisicing elit".split(" ");
   private static final String[] WORDS = new String[]{"exercitationem", "perferendis", "perspiciatis", "laborum", "eveniet",
@@ -70,7 +66,7 @@ public class LoremGenerator {
    * @return generated paragraph
    */
   public String generate(int wordsCount, boolean startWithCommon) {
-    Collection<String> sentences = new LinkedList<String>();
+    Collection<String> sentences = new LinkedList<>();
     int totalWords = 0;
     String[] words;
 
@@ -140,7 +136,7 @@ public class LoremGenerator {
   private String[] sample(String[] words, int wordsCount) {
     int len = words.length;
     int iterations = Math.min(len, wordsCount);
-    Set<String> result = new TreeSet<String>();
+    Set<String> result = new TreeSet<>();
     while (result.size() < iterations) {
       int i = rand(0, len - 1);
       result.add(words[i]);

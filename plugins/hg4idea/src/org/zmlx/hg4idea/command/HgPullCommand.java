@@ -12,6 +12,7 @@
 // limitations under the License.
 package org.zmlx.hg4idea.command;
 
+import com.intellij.openapi.progress.util.BackgroundTaskUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -59,7 +60,7 @@ public class HgPullCommand {
   }
 
   public HgCommandExitCode executeInCurrentThread() {
-    List<String> arguments = new LinkedList<String>();
+    List<String> arguments = new LinkedList<>();
     if (update) {
       arguments.add("--update");
     } else if (rebase) {
@@ -89,7 +90,7 @@ public class HgPullCommand {
       return UNRESOLVED;
     }
     else {
-      project.getMessageBus().syncPublisher(HgVcs.REMOTE_TOPIC).update(project, null);
+      BackgroundTaskUtil.syncPublisher(project, HgVcs.REMOTE_TOPIC).update(project, null);
       return SUCCESS;
     }
   }

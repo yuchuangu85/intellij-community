@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ public class MavenGeneralSettingsEditor extends SettingsEditor<MavenRunConfigura
   }
 
   @Override
-  protected void resetEditorFrom(MavenRunConfiguration s) {
+  protected void resetEditorFrom(@NotNull MavenRunConfiguration s) {
     myUseProjectSettings.setSelected(s.getGeneralSettings() == null);
 
     if (s.getGeneralSettings() == null) {
@@ -54,7 +54,7 @@ public class MavenGeneralSettingsEditor extends SettingsEditor<MavenRunConfigura
   }
 
   @Override
-  protected void applyEditorTo(MavenRunConfiguration s) throws ConfigurationException {
+  protected void applyEditorTo(@NotNull MavenRunConfiguration s) throws ConfigurationException {
     if (myUseProjectSettings.isSelected()) {
       s.setGeneralSettings(null);
     }
@@ -78,11 +78,6 @@ public class MavenGeneralSettingsEditor extends SettingsEditor<MavenRunConfigura
 
     myUseProjectSettings = pair.second;
     return pair.first;
-  }
-
-  @Override
-  protected void disposeEditor() {
-    myPanel.disposeUIResources();
   }
 
   public Project getProject() {

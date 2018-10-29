@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015 Bas Leijdekkers
+ * Copyright 2011-2018 Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,24 +15,24 @@
  */
 package com.siyeh.ig.migration;
 
+import com.intellij.codeInsight.Nullability;
+import com.intellij.codeInspection.CommonQuickFixBundle;
 import com.intellij.codeInspection.ProblemDescriptor;
+import com.intellij.codeInspection.ProblemHighlightType;
+import com.intellij.codeInspection.dataFlow.NullabilityUtil;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Comparing;
-import com.intellij.openapi.util.InvalidDataException;
 import com.intellij.openapi.util.WriteExternalException;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.ui.DocumentAdapter;
 import com.intellij.util.ui.CheckBox;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.InspectionGadgetsFix;
-import com.siyeh.ig.psiutils.ControlFlowUtils;
-import com.siyeh.ig.psiutils.EquivalenceChecker;
-import com.siyeh.ig.psiutils.ExpressionUtils;
-import com.siyeh.ig.psiutils.SwitchUtils;
+import com.siyeh.ig.psiutils.*;
 import com.siyeh.ig.psiutils.SwitchUtils.IfStatementBranch;
 import org.jdom.Element;
 import org.jetbrains.annotations.Nls;
@@ -51,8 +51,6 @@ import java.util.List;
 
 public class IfCanBeSwitchInspection extends BaseInspection {
 
-  @NonNls private static final String ONLY_SAFE = "onlySuggestNullSafe";
-  
   @SuppressWarnings("PublicField")
   public int minimumBranches = 3;
 
@@ -62,7 +60,8 @@ public class IfCanBeSwitchInspection extends BaseInspection {
   @SuppressWarnings("PublicField")
   public boolean suggestEnumSwitches = false;
 
-  protected boolean onlySuggestNullSafe = true;
+  @SuppressWarnings("PublicField")
+  public boolean onlySuggestNullSafe = true;
 
   @Override
   public boolean isEnabledByDefault() {
@@ -99,7 +98,7 @@ public class IfCanBeSwitchInspection extends BaseInspection {
     final Document document = valueField.getDocument();
     document.addDocumentListener(new DocumentAdapter() {
       @Override
-      public void textChanged(DocumentEvent e) {
+      public void textChanged(@NotNull DocumentEvent e) {
         try {
           valueField.commitEdit();
           minimumBranches =
@@ -146,18 +145,12 @@ public class IfCanBeSwitchInspection extends BaseInspection {
 
   private static class IfCanBeSwitchFix extends InspectionGadgetsFix {
 
-    public IfCanBeSwitchFix() {}
+    IfCanBeSwitchFix() {}
 
-    @NotNull
     @Override
+    @NotNull
     public String getFamilyName() {
-      return getName();
-    }
-
-    @Override
-    @NotNull
-    public String getName() {
-      return InspectionGadgetsBundle.message("if.can.be.switch.quickfix");
+      return CommonQuickFixBundle.message("fix.replace.x.with.y", PsiKeyword.IF, PsiKeyword.SWITCH);
     }
 
     @Override
@@ -196,7 +189,7 @@ public class IfCanBeSwitchInspection extends BaseInspection {
     if (switchExpression == null) {
       return;
     }
-    final List<IfStatementBranch> branches = new ArrayList<IfStatementBranch>(20);
+    final List<IfStatementBranch> branches = new ArrayList<>(20);
     while (true) {
       final PsiExpression condition = ifStatement.getCondition();
       final PsiStatement thenBranch = ifStatement.getThenBranch();
@@ -259,6 +252,7 @@ public class IfCanBeSwitchInspection extends BaseInspection {
     }
   }
 
+  @SafeVarargs
   @Nullable
   public static <T extends PsiElement> T getPrevSiblingOfType(@Nullable PsiElement element, @NotNull Class<T> aClass,
                                                               @NotNull Class<? extends PsiElement>... stopAt) {
@@ -329,9 +323,8 @@ public class IfCanBeSwitchInspection extends BaseInspection {
       final PsiExpression secondArgument = arguments.length > 1 ? arguments[1] : null;
       final PsiReferenceExpression methodExpression = methodCallExpression.getMethodExpression();
       final PsiExpression qualifierExpression = methodExpression.getQualifierExpression();
-      final boolean stringType = ExpressionUtils.hasStringType(qualifierExpression);
       if (EquivalenceChecker.getCanonicalPsiEquivalence().expressionsAreEquivalent(switchExpression, argument)) {
-        branch.addCaseExpression(stringType? qualifierExpression : secondArgument);
+        branch.addCaseExpression(secondArgument == null ? qualifierExpression : secondArgument);
       }
       else {
         branch.addCaseExpression(argument);
@@ -488,27 +481,8 @@ public class IfCanBeSwitchInspection extends BaseInspection {
 
   @Override
   public void writeSettings(@NotNull Element node) throws WriteExternalException {
-    super.writeSettings(node);
-    if (!onlySuggestNullSafe) {
-      final Element e = new Element("option");
-      e.setAttribute("name", ONLY_SAFE);
-      e.setAttribute("value", Boolean.toString(onlySuggestNullSafe));
-      node.addContent(e);
-    }
-  }
-
-  @Override
-  public void readSettings(@NotNull Element node) throws InvalidDataException {
-    super.readSettings(node);
-    for (Element child : node.getChildren("option")) {
-      if (Comparing.strEqual(child.getAttributeValue("name"), ONLY_SAFE)) {
-        final String value = child.getAttributeValue("value");
-        if (value != null) {
-          onlySuggestNullSafe = Boolean.parseBoolean(value);
-        }
-        break;
-      }
-    }
+    defaultWriteSettings(node, "onlySuggestNullSafe");
+    writeBooleanOption(node, "onlySuggestNullSafe", true);
   }
 
   private class IfCanBeSwitchVisitor extends BaseInspectionVisitor {
@@ -520,10 +494,22 @@ public class IfCanBeSwitchInspection extends BaseInspection {
       if (parent instanceof PsiIfStatement) {
         return;
       }
-      final PsiExpression switchExpression = SwitchUtils.getSwitchExpression(statement, minimumBranches, onlySuggestNullSafe, false);
+      final PsiExpression switchExpression = SwitchUtils.getSwitchExpression(statement, minimumBranches, false, true);
       if (switchExpression == null) {
         return;
       }
+      final ProblemHighlightType highlightType;
+      if (shouldHighlight(switchExpression)) {
+        highlightType = ProblemHighlightType.GENERIC_ERROR_OR_WARNING;
+      }
+      else {
+        if (!isOnTheFly()) return;
+        highlightType = ProblemHighlightType.INFORMATION;
+      }
+      registerError(statement.getFirstChild(), highlightType, switchExpression);
+    }
+
+    private boolean shouldHighlight(PsiExpression switchExpression) {
       final PsiType type = switchExpression.getType();
       if (!suggestIntSwitches) {
         if (type instanceof PsiClassType) {
@@ -531,21 +517,33 @@ public class IfCanBeSwitchInspection extends BaseInspection {
               type.equalsToText(CommonClassNames.JAVA_LANG_SHORT) ||
               type.equalsToText(CommonClassNames.JAVA_LANG_BYTE) ||
               type.equalsToText(CommonClassNames.JAVA_LANG_CHARACTER)) {
-            return;
+            return false;
           }
         }
         else if (PsiType.INT.equals(type) || PsiType.SHORT.equals(type) || PsiType.BYTE.equals(type) || PsiType.CHAR.equals(type)) {
-          return;
+          return false;
         }
       }
-      if (!suggestEnumSwitches && type instanceof PsiClassType) {
-        final PsiClassType classType = (PsiClassType)type;
-        final PsiClass aClass = classType.resolve();
-        if (aClass == null || aClass.isEnum()) {
-          return;
+      if (type instanceof PsiClassType) {
+        if (!suggestEnumSwitches && TypeConversionUtil.isEnumType(type)) {
+          return false;
+        }
+        if (onlySuggestNullSafe && NullabilityUtil.getExpressionNullability(switchExpression, true) != Nullability.NOT_NULL) {
+          final PsiElement parent = ParenthesesUtils.getParentSkipParentheses(switchExpression);
+          if (parent instanceof PsiExpressionList) {
+            final PsiElement grandParent = parent.getParent();
+            if (grandParent instanceof PsiMethodCallExpression) {
+              final PsiMethodCallExpression methodCallExpression = (PsiMethodCallExpression)grandParent;
+              if ("equals".equals(methodCallExpression.getMethodExpression().getReferenceName())) {
+                // Objects.equals(switchExpression, other) or other.equals(switchExpression)
+                return false;
+              }
+            }
+          }
+          return !(parent instanceof PsiPolyadicExpression); // == expression
         }
       }
-      registerStatementError(statement, switchExpression);
+      return !SideEffectChecker.mayHaveSideEffects(switchExpression);
     }
   }
 }

@@ -32,8 +32,8 @@ public class CheckinHandlersManagerImpl extends CheckinHandlersManager {
   private final MultiMap<VcsKey, VcsCheckinHandlerFactory> myVcsMap;
 
   public CheckinHandlersManagerImpl() {
-    myVcsMap = new MultiMap<VcsKey, VcsCheckinHandlerFactory>();
-    myRegisteredBeforeCheckinHandlers = new ArrayList<BaseCheckinHandlerFactory>();
+    myVcsMap = new MultiMap<>();
+    myRegisteredBeforeCheckinHandlers = new ArrayList<>();
     ContainerUtil.addAll(myRegisteredBeforeCheckinHandlers, CheckinHandlerFactory.EP_NAME.getExtensions());
     for (VcsCheckinHandlerFactory factory : VcsCheckinHandlerFactory.EP_NAME.getExtensions()) {
       myVcsMap.putValue(factory.getKey(), factory);
@@ -43,14 +43,14 @@ public class CheckinHandlersManagerImpl extends CheckinHandlersManager {
   @Override
   public List<BaseCheckinHandlerFactory> getRegisteredCheckinHandlerFactories(AbstractVcs<?>[] allActiveVcss) {
     final List<BaseCheckinHandlerFactory> list =
-      new ArrayList<BaseCheckinHandlerFactory>(myRegisteredBeforeCheckinHandlers.size() + allActiveVcss.length);
-    list.addAll(myRegisteredBeforeCheckinHandlers);
+      new ArrayList<>(myRegisteredBeforeCheckinHandlers.size() + allActiveVcss.length);
     for (AbstractVcs vcs : allActiveVcss) {
       final Collection<VcsCheckinHandlerFactory> factories = myVcsMap.get(vcs.getKeyInstanceMethod());
       if (!factories.isEmpty()) {
         list.addAll(factories);
       }
     }
+    list.addAll(myRegisteredBeforeCheckinHandlers);
     return list;
   }
 }

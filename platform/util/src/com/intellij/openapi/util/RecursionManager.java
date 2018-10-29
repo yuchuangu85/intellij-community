@@ -1,24 +1,10 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.util;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.util.containers.SoftHashMap;
-import com.intellij.util.containers.SoftKeySoftValueHashMap;
+import com.intellij.util.ObjectUtils;
+import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.THashMap;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NonNls;
@@ -31,7 +17,7 @@ import java.util.*;
 /**
  * There are moments when a computation A requires the result of computation B, which in turn requires C, which (unexpectedly) requires A.
  * If there are no other ways to solve it, it helps to track all the computations in the thread stack and return some default value when
- * asked to compute A for the second time. {@link RecursionGuard#doPreventingRecursion(Object, Computable)} does precisely this.
+ * asked to compute A for the second time. {@link RecursionGuard#doPreventingRecursion(Object, boolean, Computable)} does precisely this.
  *
  * It's quite useful to cache some computation results to avoid performance problems. But not everyone realises that in the above situation it's
  * incorrect to cache the results of B and C, because they all are based on the default incomplete result of the A calculation. If the actual
@@ -40,17 +26,17 @@ import java.util.*;
  * situation the result of C would depend on the order of invocations of C and A, which can be hardly predictable in multi-threaded environments.
  *
  * Therefore if you use any kind of cache, it probably would make your program safer to cache only when it's safe to do this. See
- * {@link com.intellij.openapi.util.RecursionGuard#markStack()} and {@link com.intellij.openapi.util.RecursionGuard.StackStamp#mayCacheNow()}
+ * {@link RecursionGuard#markStack()} and {@link RecursionGuard.StackStamp#mayCacheNow()}
  * for the advice.
  *
  * @see RecursionGuard
  * @see RecursionGuard.StackStamp
  * @author peter
  */
-@SuppressWarnings({"UtilityClassWithoutPrivateConstructor"})
+@SuppressWarnings("UtilityClassWithoutPrivateConstructor")
 public class RecursionManager {
   private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.util.RecursionManager");
-  private static final Object NULL = new Object();
+  private static final Object NULL = ObjectUtils.sentinel("RecursionManager.NULL");
   private static final ThreadLocal<CalculationStack> ourStack = new ThreadLocal<CalculationStack>() {
     @Override
     protected CalculationStack initialValue() {
@@ -62,7 +48,6 @@ public class RecursionManager {
   /**
    * @see RecursionGuard#doPreventingRecursion(Object, boolean, Computable)
    */
-  @SuppressWarnings("JavaDoc")
   @Nullable
   public static <T> T doPreventingRecursion(@NotNull Object key, boolean memoize, Computable<T> computation) {
     return createGuard(computation.getClass().getName()).doPreventingRecursion(key, memoize, computation);
@@ -72,6 +57,7 @@ public class RecursionManager {
    * @param id just some string to separate different recursion prevention policies from each other
    * @return a helper object which allow you to perform reentrancy-safe computations and check whether caching will be safe.
    */
+  @NotNull
   public static RecursionGuard createGuard(@NonNls final String id) {
     return new RecursionGuard() {
       @Override
@@ -81,7 +67,7 @@ public class RecursionManager {
 
         if (stack.checkReentrancy(realKey)) {
           if (ourAssertOnPrevention) {
-            throw new AssertionError("Endless recursion prevention occurred");
+            throw new StackOverflowPreventedException("Endless recursion prevention occurred");
           }
           return null;
         }
@@ -89,7 +75,7 @@ public class RecursionManager {
         if (memoize) {
           Object o = stack.getMemoizedValue(realKey);
           if (o != null) {
-            SoftKeySoftValueHashMap<MyKey, Object> map = stack.intermediateCache.get(realKey);
+            Map<MyKey, Object> map = stack.intermediateCache.get(realKey);
             if (map != null) {
               for (MyKey noCacheUntil : map.keySet()) {
                 stack.prohibitResultCaching(noCacheUntil);
@@ -172,7 +158,7 @@ public class RecursionManager {
     private final int myHashCode;
     private final boolean myCallEquals;
 
-    public MyKey(String guardId, @NotNull Object userObject, boolean mayCallEquals) {
+    MyKey(String guardId, @NotNull Object userObject, boolean mayCallEquals) {
       this.guardId = guardId;
       this.userObject = userObject;
       // remember user object hashCode to ensure our internal maps consistency
@@ -205,9 +191,9 @@ public class RecursionManager {
     private final LinkedHashMap<MyKey, Integer> progressMap = new LinkedHashMap<MyKey, Integer>();
     private final Set<MyKey> toMemoize = new THashSet<MyKey>();
     private final THashMap<MyKey, MyKey> key2ReentrancyDuringItsCalculation = new THashMap<MyKey, MyKey>();
-    private final SoftHashMap<MyKey, SoftKeySoftValueHashMap<MyKey, Object>> intermediateCache = new SoftHashMap<MyKey, SoftKeySoftValueHashMap<MyKey, Object>>();
-    private int enters = 0;
-    private int exits = 0;
+    private final Map<MyKey, Map<MyKey, Object>> intermediateCache = ContainerUtil.createSoftMap();
+    private int enters;
+    private int exits;
 
     boolean checkReentrancy(MyKey realKey) {
       if (progressMap.containsKey(realKey)) {
@@ -220,7 +206,7 @@ public class RecursionManager {
 
     @Nullable
     Object getMemoizedValue(MyKey realKey) {
-      SoftKeySoftValueHashMap<MyKey, Object> map = intermediateCache.get(realKey);
+      Map<MyKey, Object> map = intermediateCache.get(realKey);
       if (map == null) return null;
 
       if (depth == 0) {
@@ -260,9 +246,9 @@ public class RecursionManager {
 
     final void maybeMemoize(MyKey realKey, @NotNull Object result, int startStamp) {
       if (memoizationStamp == startStamp && toMemoize.contains(realKey)) {
-        SoftKeySoftValueHashMap<MyKey, Object> map = intermediateCache.get(realKey);
+        Map<MyKey, Object> map = intermediateCache.get(realKey);
         if (map == null) {
-          intermediateCache.put(realKey, map = new SoftKeySoftValueHashMap<MyKey, Object>());
+          intermediateCache.put(realKey, map = ContainerUtil.createSoftKeySoftValueMap());
         }
         final MyKey reentered = key2ReentrancyDuringItsCalculation.get(realKey);
         assert reentered != null;
@@ -325,7 +311,7 @@ public class RecursionManager {
 
       Set<MyKey> loop = new THashSet<MyKey>();
       boolean inLoop = false;
-      for (Map.Entry<MyKey, Integer> entry: progressMap.entrySet()) {
+      for (Map.Entry<MyKey, Integer> entry: new ArrayList<Map.Entry<MyKey, Integer>>(progressMap.entrySet())) {
         if (inLoop) {
           entry.setValue(reentrancyCount);
           loop.add(entry.getKey());
@@ -371,4 +357,8 @@ public class RecursionManager {
     });
   }
 
+  @TestOnly
+  public static void disableAssertOnRecursionPrevention() {
+    ourAssertOnPrevention = false;
+  }
 }

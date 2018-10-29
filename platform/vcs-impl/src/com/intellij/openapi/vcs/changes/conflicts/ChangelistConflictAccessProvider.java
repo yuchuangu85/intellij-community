@@ -20,14 +20,14 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.ChangeList;
 import com.intellij.openapi.vcs.changes.ChangeListManagerImpl;
-import com.intellij.openapi.vfs.WritingAccessProvider;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.WritingAccessProvider;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.Collections;
+import java.util.HashSet;
 
 /**
  * @author Dmitry Avdeev
@@ -46,10 +46,10 @@ public class ChangelistConflictAccessProvider extends WritingAccessProvider {
   @Override
   public Collection<VirtualFile> requestWriting(VirtualFile... files) {
     ChangelistConflictTracker.Options options = myManager.getConflictTracker().getOptions();
-    if (!options.TRACKING_ENABLED || !options.SHOW_DIALOG) {
+    if (!options.SHOW_DIALOG) {
       return Collections.emptyList();
     }
-    ArrayList<VirtualFile> denied = new ArrayList<VirtualFile>();
+    ArrayList<VirtualFile> denied = new ArrayList<>();
     for (VirtualFile file : files) {
       if (file != null && !myManager.getConflictTracker().isWritingAllowed(file)) {
         denied.add(file);
@@ -57,8 +57,8 @@ public class ChangelistConflictAccessProvider extends WritingAccessProvider {
     }
 
     if (!denied.isEmpty()) {
-      HashSet<ChangeList> changeLists = new HashSet<ChangeList>();
-      ArrayList<Change> changes = new ArrayList<Change>();
+      HashSet<ChangeList> changeLists = new HashSet<>();
+      ArrayList<Change> changes = new ArrayList<>();
       for (VirtualFile file : denied) {
         changeLists.add(myManager.getChangeList(file));
         changes.add(myManager.getChange(file));
@@ -67,9 +67,9 @@ public class ChangelistConflictAccessProvider extends WritingAccessProvider {
       ChangelistConflictDialog dialog;
       final int savedEventCount = IdeEventQueue.getInstance().getEventCount();
       do {
-        dialog = new ChangelistConflictDialog(myProject, new ArrayList<ChangeList>(changeLists), denied);
+        dialog = new ChangelistConflictDialog(myProject, new ArrayList<>(changeLists), denied);
         dialog.show();
-      } while (dialog.isOK() && !dialog.getResolution().resolveConflict(myProject, changes));
+      } while (dialog.isOK() && !dialog.getResolution().resolveConflict(myProject, changes, null));
       IdeEventQueue.getInstance().setEventCount(savedEventCount);
 
       if (dialog.isOK()) {

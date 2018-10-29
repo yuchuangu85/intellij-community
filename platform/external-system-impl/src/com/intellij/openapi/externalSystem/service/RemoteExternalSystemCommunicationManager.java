@@ -1,21 +1,10 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.externalSystem.service;
 
+import com.fasterxml.jackson.core.JsonFactory;
 import com.intellij.CommonBundle;
+import com.intellij.configurationStore.StorageUtilKt;
+import com.intellij.core.JavaCoreBundle;
 import com.intellij.debugger.ui.DebuggerView;
 import com.intellij.execution.DefaultExecutionResult;
 import com.intellij.execution.ExecutionException;
@@ -31,9 +20,7 @@ import com.intellij.execution.process.ProcessTerminatedListener;
 import com.intellij.execution.rmi.RemoteProcessSupport;
 import com.intellij.execution.runners.ProgramRunner;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.application.PathManager;
-import com.intellij.openapi.components.impl.stores.StorageUtil;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.externalSystem.ExternalSystemManager;
@@ -51,9 +38,6 @@ import com.intellij.openapi.module.JavaModuleType;
 import com.intellij.openapi.module.ModuleType;
 import com.intellij.openapi.module.StdModuleTypes;
 import com.intellij.openapi.project.ProjectBundle;
-import com.intellij.openapi.projectRoots.JavaSdkType;
-import com.intellij.openapi.projectRoots.JdkUtil;
-import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.projectRoots.SimpleJavaSdkType;
 import com.intellij.openapi.roots.DependencyScope;
 import com.intellij.openapi.util.ShutDownTracker;
@@ -66,9 +50,11 @@ import com.intellij.util.SystemProperties;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.ContainerUtilRt;
 import kotlin.Unit;
-import kotlin.reflect.KotlinReflectionInternalError;
+import kotlin.reflect.full.NoSuchPropertyException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.nustaq.serialization.FSTConfiguration;
+import org.objenesis.Objenesis;
 
 import java.io.File;
 import java.rmi.RemoteException;
@@ -79,18 +65,17 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author Denis Zhdanov
- * @since 8/9/13 3:37 PM
  */
 public class RemoteExternalSystemCommunicationManager implements ExternalSystemCommunicationManager, Disposable {
 
-  private static final Logger LOG = Logger.getInstance("#" + RemoteExternalSystemCommunicationManager.class.getName());
+  private static final Logger LOG = Logger.getInstance(RemoteExternalSystemCommunicationManager.class);
 
   private static final String MAIN_CLASS_NAME = RemoteExternalSystemFacadeImpl.class.getName();
 
   private final AtomicReference<RemoteExternalSystemProgressNotificationManager> myExportedNotificationManager
-    = new AtomicReference<RemoteExternalSystemProgressNotificationManager>();
+    = new AtomicReference<>();
 
-  @NotNull private final ThreadLocal<ProjectSystemId> myTargetExternalSystemId = new ThreadLocal<ProjectSystemId>();
+  @NotNull private final ThreadLocal<ProjectSystemId> myTargetExternalSystemId = new ThreadLocal<>();
 
   @NotNull private final ExternalSystemProgressNotificationManagerImpl                    myProgressManager;
   @NotNull private final RemoteProcessSupport<Object, RemoteExternalSystemFacade, String> mySupport;
@@ -103,12 +88,12 @@ public class RemoteExternalSystemCommunicationManager implements ExternalSystemC
       }
 
       @Override
-      protected String getName(Object o) {
+      protected String getName(@NotNull Object o) {
         return RemoteExternalSystemFacade.class.getName();
       }
 
       @Override
-      protected RunProfileState getRunProfileState(Object o, String configuration, Executor executor) throws ExecutionException {
+      protected RunProfileState getRunProfileState(@NotNull Object o, @NotNull String configuration, @NotNull Executor executor) {
         return createRunProfileState(configuration);
       }
     };
@@ -133,41 +118,47 @@ public class RemoteExternalSystemCommunicationManager implements ExternalSystemC
 
         // IDE jars.
         classPath.addAll(PathManager.getUtilClassPath());
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(ProjectBundle.class), classPath);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(PlaceHolder.class), classPath);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(DebuggerView.class), classPath);
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(ProjectBundle.class));
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(PlaceHolder.class));
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(DebuggerView.class));
         ExternalSystemApiUtil.addBundle(params.getClassPath(), "messages.ProjectBundle", ProjectBundle.class);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(PsiBundle.class), classPath);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(Alarm.class), classPath);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(DependencyScope.class), classPath);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(ExtensionPointName.class), classPath);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(StorageUtil.class), classPath);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(ExternalSystemTaskNotificationListener.class), classPath);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(StdModuleTypes.class), classPath);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(JavaModuleType.class), classPath);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(ModuleType.class), classPath);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(EmptyModuleType.class), classPath);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(LanguageLevel.class), classPath);
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(PsiBundle.class));
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(Alarm.class));
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(DependencyScope.class));
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(ExtensionPointName.class));
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(StorageUtilKt.class));
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(ExternalSystemTaskNotificationListener.class));
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(StdModuleTypes.class));
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(JavaModuleType.class));
+        ExternalSystemApiUtil.addBundle(params.getClassPath(), "messages.JavaCoreBundle", JavaCoreBundle.class);
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(ModuleType.class));
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(EmptyModuleType.class));
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(LanguageLevel.class));
 
         // add Kotlin runtime
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(Unit.class), classPath);
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(KotlinReflectionInternalError.class), classPath);
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(Unit.class));
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(NoSuchPropertyException.class));
 
         // External system module jars
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(getClass()), classPath);
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(getClass()));
         // external-system-rt.jar
-        ContainerUtil.addIfNotNull(PathUtil.getJarPathForClass(ExternalSystemException.class), classPath);
+        ContainerUtil.addIfNotNull(classPath, PathUtil.getJarPathForClass(ExternalSystemException.class));
         ExternalSystemApiUtil.addBundle(params.getClassPath(), "messages.CommonBundle", CommonBundle.class);
+        // com.intellij.openapi.externalSystem.model.FSTSerializer dependencies
+        ContainerUtilRt.addIfNotNull(classPath, PathUtil.getJarPathForClass(FSTConfiguration.class));
+        ContainerUtilRt.addIfNotNull(classPath, PathUtil.getJarPathForClass(JsonFactory.class));
+        ContainerUtilRt.addIfNotNull(classPath, PathUtil.getJarPathForClass(Objenesis.class));
+
         params.getClassPath().addAll(classPath);
 
         params.setMainClass(MAIN_CLASS_NAME);
         params.getVMParametersList().addParametersString("-Djava.awt.headless=true");
 
-        // It may take a while for gradle api to resolve external dependencies. Default RMI timeout
+        // It may take a while for external system api to resolve external dependencies. Default RMI timeout
         // is 15 seconds (http://download.oracle.com/javase/6/docs/technotes/guides/rmi/sunrmiproperties.html#connectionTimeout),
         // we don't want to get EOFException because of that.
         params.getVMParametersList().addParametersString(
-          "-Dsun.rmi.transport.connectionTimeout=" + String.valueOf(TimeUnit.HOURS.toMillis(1))
+          "-Dsun.rmi.transport.connectionTimeout=" + TimeUnit.HOURS.toMillis(1)
         );
         final String debugPort = System.getProperty(ExternalSystemConstants.EXTERNAL_SYSTEM_REMOTE_COMMUNICATION_MANAGER_DEBUG_PORT);
         if (debugPort != null) {
@@ -192,19 +183,14 @@ public class RemoteExternalSystemCommunicationManager implements ExternalSystemC
       @NotNull
       public ExecutionResult execute(@NotNull Executor executor, @NotNull ProgramRunner runner) throws ExecutionException {
         ProcessHandler processHandler = startProcess();
-        return new DefaultExecutionResult(null, processHandler, AnAction.EMPTY_ARRAY);
+        return new DefaultExecutionResult(processHandler);
       }
 
+      @Override
       @NotNull
       protected OSProcessHandler startProcess() throws ExecutionException {
         SimpleJavaParameters params = createJavaParameters();
-        Sdk sdk = params.getJdk();
-        if (sdk == null) {
-          throw new ExecutionException("No sdk is defined. Params: " + params);
-        }
-
-        String executablePath = ((JavaSdkType)sdk.getSdkType()).getVMExecutablePath(sdk);
-        GeneralCommandLine commandLine = JdkUtil.setupJVMCommandLine(executablePath, params, false);
+        GeneralCommandLine commandLine = params.toCommandLine();
         OSProcessHandler processHandler = new OSProcessHandler(commandLine);
         ProcessTerminatedListener.attach(processHandler);
         return processHandler;
@@ -249,7 +235,7 @@ public class RemoteExternalSystemCommunicationManager implements ExternalSystemC
   }
 
   @Override
-  public void release(@NotNull String id, @NotNull ProjectSystemId externalSystemId) throws Exception {
+  public void release(@NotNull String id, @NotNull ProjectSystemId externalSystemId) {
     mySupport.release(this, id);
   }
 

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.java.decompiler.modules.decompiler;
 
 import org.jetbrains.java.decompiler.modules.decompiler.exps.Exprent;
@@ -33,7 +19,7 @@ public class LabelHelper {
 
     liftClosures(root);
 
-    lowContinueLabels(root, new HashSet<StatEdge>());
+    lowContinueLabels(root, new HashSet<>());
 
     lowClosures(root);
   }
@@ -63,7 +49,7 @@ public class LabelHelper {
           if (dest.type != Statement.TYPE_DUMMYEXIT) {
             Statement parent = dest.getParent();
 
-            List<Statement> lst = new ArrayList<Statement>();
+            List<Statement> lst = new ArrayList<>();
             if (parent.type == Statement.TYPE_SEQUENCE) {
               lst.addAll(parent.getStats());
             }
@@ -131,14 +117,14 @@ public class LabelHelper {
         lowContinueLabels(st, edges);
       }
       else {
-        lowContinueLabels(st, new HashSet<StatEdge>());
+        lowContinueLabels(st, new HashSet<>());
       }
     }
   }
 
   public static void lowClosures(Statement stat) {
 
-    for (StatEdge edge : new ArrayList<StatEdge>(stat.getLabelEdges())) {
+    for (StatEdge edge : new ArrayList<>(stat.getLabelEdges())) {
 
       if (edge.getType() == StatEdge.TYPE_BREAK) {  // FIXME: ?
         for (Statement st : stat.getStats()) {
@@ -181,7 +167,7 @@ public class LabelHelper {
 
   private static HashMap<Statement, List<StatEdge>> setExplicitEdges(Statement stat) {
 
-    HashMap<Statement, List<StatEdge>> mapEdges = new HashMap<Statement, List<StatEdge>>();
+    HashMap<Statement, List<StatEdge>> mapEdges = new HashMap<>();
 
     if (stat.getExprents() != null) {
       return mapEdges;
@@ -279,7 +265,7 @@ public class LabelHelper {
           Statement stlast = swst.getCaseStatements().get(last);
           if (stlast.getExprents() != null && stlast.getExprents().isEmpty()) {
             StatEdge edge = stlast.getAllSuccessorEdges().get(0);
-            mapEdges.put(edge.getDestination(), new ArrayList<StatEdge>(Arrays.asList(new StatEdge[]{edge})));
+            mapEdges.put(edge.getDestination(), new ArrayList<>(Collections.singletonList(edge)));
           }
           else {
             mapEdges = setExplicitEdges(stlast);
@@ -340,7 +326,7 @@ public class LabelHelper {
             edge.explicit = false;
           }
 
-          mapEdges.put(newedge.getDestination(), new ArrayList<StatEdge>(Arrays.asList(new StatEdge[]{newedge})));
+          mapEdges.put(newedge.getDestination(), new ArrayList<>(Collections.singletonList(newedge)));
         }
       }
     }
@@ -388,7 +374,7 @@ public class LabelHelper {
     }
 
     if (statedge != null) {
-      mapEdges.put(statedge.getDestination(), new ArrayList<StatEdge>(Arrays.asList(new StatEdge[]{statedge})));
+      mapEdges.put(statedge.getDestination(), new ArrayList<>(Collections.singletonList(statedge)));
     }
   }
 
@@ -420,24 +406,26 @@ public class LabelHelper {
     }
   }
 
-  private static HashSet<Statement>[] processStatementLabel(Statement stat) {
+  private static class LabelSets {
+    private final Set<Statement> breaks = new HashSet<>();
+    private final Set<Statement> continues = new HashSet<>();
+  }
 
-    HashSet<Statement> setBreak = new HashSet<Statement>();
-    HashSet<Statement> setContinue = new HashSet<Statement>();
+  private static LabelSets processStatementLabel(Statement stat) {
+    LabelSets sets = new LabelSets();
 
     if (stat.getExprents() == null) {
       for (Statement st : stat.getStats()) {
-        HashSet<Statement>[] arr = processStatementLabel(st);
-
-        setBreak.addAll(arr[0]);
-        setContinue.addAll(arr[1]);
+        LabelSets nested = processStatementLabel(st);
+        sets.breaks.addAll(nested.breaks);
+        sets.continues.addAll(nested.continues);
       }
 
       boolean shieldType = (stat.type == Statement.TYPE_DO || stat.type == Statement.TYPE_SWITCH);
       if (shieldType) {
         for (StatEdge edge : stat.getLabelEdges()) {
-          if (edge.explicit && ((edge.getType() == StatEdge.TYPE_BREAK && setBreak.contains(edge.getSource())) ||
-                                (edge.getType() == StatEdge.TYPE_CONTINUE && setContinue.contains(edge.getSource())))) {
+          if (edge.explicit && ((edge.getType() == StatEdge.TYPE_BREAK && sets.breaks.contains(edge.getSource())) ||
+                                (edge.getType() == StatEdge.TYPE_CONTINUE && sets.continues.contains(edge.getSource())))) {
             edge.labeled = false;
           }
         }
@@ -445,16 +433,16 @@ public class LabelHelper {
 
       switch (stat.type) {
         case Statement.TYPE_DO:
-          setContinue.clear();
+          sets.continues.clear();
         case Statement.TYPE_SWITCH:
-          setBreak.clear();
+          sets.breaks.clear();
       }
     }
 
-    setBreak.add(stat);
-    setContinue.add(stat);
+    sets.breaks.add(stat);
+    sets.continues.add(stat);
 
-    return new HashSet[] { setBreak, setContinue };
+    return sets;
   }
 
   public static void replaceContinueWithBreak(Statement stat) {

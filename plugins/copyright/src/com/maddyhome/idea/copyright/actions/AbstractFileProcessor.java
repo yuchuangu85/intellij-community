@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 package com.maddyhome.idea.copyright.actions;
 
 import com.intellij.codeInsight.FileModificationService;
+import com.intellij.copyright.CopyrightManager;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.Result;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
@@ -26,20 +26,16 @@ import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.roots.ContentIterator;
 import com.intellij.openapi.roots.ModuleFileIndex;
 import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.vfs.ReadonlyStatusHandler;
-import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDirectory;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
 import com.intellij.util.IncorrectOperationException;
-import com.maddyhome.idea.copyright.CopyrightManager;
 import com.maddyhome.idea.copyright.CopyrightProfile;
 import com.maddyhome.idea.copyright.util.FileTypeUtil;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -48,41 +44,13 @@ import java.util.List;
 public abstract class AbstractFileProcessor {
   private final Project myProject;
   private final Module myModule;
-  private PsiDirectory directory = null;
+  private final PsiDirectory directory = null;
   private PsiFile file = null;
   private PsiFile[] files = null;
-  private boolean subdirs = false;
   private final String message;
   private final String title;
 
   protected abstract Runnable preprocessFile(PsiFile file, boolean allowReplacement) throws IncorrectOperationException;
-
-  protected AbstractFileProcessor(Project project, String title, String message) {
-    myProject = project;
-    myModule = null;
-    directory = null;
-    subdirs = true;
-    this.title = title;
-    this.message = message;
-  }
-
-  protected AbstractFileProcessor(Project project, Module module, String title, String message) {
-    myProject = project;
-    myModule = module;
-    directory = null;
-    subdirs = true;
-    this.title = title;
-    this.message = message;
-  }
-
-  protected AbstractFileProcessor(Project project, PsiDirectory dir, boolean subdirs, String title, String message) {
-    myProject = project;
-    myModule = null;
-    directory = dir;
-    this.subdirs = subdirs;
-    this.message = message;
-    this.title = title;
-  }
 
   protected AbstractFileProcessor(Project project, PsiFile file, String title, String message) {
     myProject = project;
@@ -92,7 +60,7 @@ public abstract class AbstractFileProcessor {
     this.title = title;
   }
 
-  protected AbstractFileProcessor(Project project, PsiFile[] files, String title, String message, Runnable runnable) {
+  protected AbstractFileProcessor(Project project, PsiFile[] files, String title, String message) {
     myProject = project;
     myModule = null;
     this.files = files;
@@ -102,7 +70,7 @@ public abstract class AbstractFileProcessor {
 
   public void run() {
     if (directory != null) {
-      process(directory, subdirs);
+      process(directory, false);
     }
     else if (files != null) {
       process(files);
@@ -214,7 +182,7 @@ public abstract class AbstractFileProcessor {
 
   private void process(final PsiFile[] files) {
     final Runnable[] resultRunnable = new Runnable[1];
-    execute(() -> resultRunnable[0] = prepareFiles(new ArrayList<PsiFile>(Arrays.asList(files))), () -> {
+    execute(() -> resultRunnable[0] = prepareFiles(new ArrayList<>(Arrays.asList(files))), () -> {
       if (resultRunnable[0] != null) {
         resultRunnable[0].run();
       }
@@ -222,19 +190,19 @@ public abstract class AbstractFileProcessor {
   }
 
   private void process(final PsiDirectory dir, final boolean subdirs) {
-    final List<PsiFile> pfiles = new ArrayList<PsiFile>();
+    final List<PsiFile> pfiles = new ArrayList<>();
     ProgressManager.getInstance().runProcessWithProgressSynchronously(() -> findFiles(pfiles, dir, subdirs), title, true, myProject);
     handleFiles(pfiles);
   }
 
   private void process(final Project project) {
-    final List<PsiFile> pfiles = new ArrayList<PsiFile>();
+    final List<PsiFile> pfiles = new ArrayList<>();
     ProgressManager.getInstance().runProcessWithProgressSynchronously(() -> findFiles(project, pfiles), title, true, project);
     handleFiles(pfiles);
   }
 
   private void process(final Module module) {
-    final List<PsiFile> pfiles = new ArrayList<PsiFile>();
+    final List<PsiFile> pfiles = new ArrayList<>();
     ProgressManager.getInstance().runProcessWithProgressSynchronously(() -> findFiles(module, pfiles), title, true, myProject);
     handleFiles(pfiles);
   }
@@ -254,29 +222,22 @@ public abstract class AbstractFileProcessor {
 
     for (final VirtualFile root : roots) {
       ApplicationManager.getApplication().runReadAction(() -> {
-        idx.iterateContentUnderDirectory(root, new ContentIterator() {
-          @Override
-          public boolean processFile(final VirtualFile dir) {
-            if (dir.isDirectory()) {
-              final PsiDirectory psiDir = PsiManager.getInstance(module.getProject()).findDirectory(dir);
-              if (psiDir != null) {
-                findFiles(files, psiDir, false);
-              }
+        idx.iterateContentUnderDirectory(root, dir -> {
+          if (dir.isDirectory()) {
+            final PsiDirectory psiDir = PsiManager.getInstance(module.getProject()).findDirectory(dir);
+            if (psiDir != null) {
+              findFiles(files, psiDir, false);
             }
-            return true;
           }
+          return true;
         });
       });
     }
   }
 
   private void handleFiles(final List<PsiFile> files) {
-    final List<VirtualFile> vFiles = new ArrayList<VirtualFile>();
-    for (PsiFile psiFile : files) {
-      vFiles.add(psiFile.getVirtualFile());
-    }
-    if (!ReadonlyStatusHandler.getInstance(myProject).ensureFilesWritable(VfsUtil.toVirtualFileArray(vFiles))
-      .hasReadonlyFiles()) {
+    final VirtualFile[] vFiles = files.stream().map(PsiFile::getVirtualFile).toArray(VirtualFile[]::new);
+    if (!ReadonlyStatusHandler.getInstance(myProject).ensureFilesWritable(vFiles).hasReadonlyFiles()) {
       if (!files.isEmpty()) {
         final Runnable[] resultRunnable = new Runnable[1];
         execute(() -> resultRunnable[0] = prepareFiles(files), () -> {
@@ -296,26 +257,22 @@ public abstract class AbstractFileProcessor {
       if (opts != null && FileTypeUtil.isSupportedFile(local)) {
         files.add(local);
       }
-
     }
 
     if (subdirs) {
-      PsiDirectory[] dirs = directory.getSubdirectories();
-      for (PsiDirectory dir : dirs) {
-        findFiles(files, dir, subdirs);
+      for (PsiDirectory dir : directory.getSubdirectories()) {
+        findFiles(files, dir, true);
       }
-
     }
   }
 
   private void execute(final Runnable readAction, final Runnable writeAction) {
-    ProgressManager.getInstance().runProcessWithProgressSynchronously(() -> ApplicationManager.getApplication().runReadAction(() -> readAction.run()), title, true, myProject);
-    new WriteCommandAction(myProject, title) {
-      @Override
-      protected void run(@NotNull Result result) throws Throwable {
-        writeAction.run();
-      }
-    }.execute();
+    ProgressManager.getInstance()
+                   .runProcessWithProgressSynchronously(() -> ApplicationManager.getApplication().runReadAction(readAction), title, true,
+                                                        myProject);
+    WriteCommandAction.writeCommandAction(myProject).withName(title).run(() -> {
+      writeAction.run();
+    });
   }
 
   private static final Logger logger = Logger.getInstance(AbstractFileProcessor.class.getName());

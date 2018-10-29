@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.options.newEditor;
 
 import com.intellij.ide.ui.search.ConfigurableHit;
@@ -30,14 +16,15 @@ import com.intellij.ui.SearchTextField;
 import com.intellij.ui.speedSearch.ElementFilter;
 import com.intellij.ui.treeStructure.SimpleNode;
 import com.intellij.util.ui.UIUtil;
+import org.jetbrains.annotations.NotNull;
 
 import javax.swing.event.DocumentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.Set;
 
-abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNode> {
-  final OptionsEditorContext myContext = new OptionsEditorContext(this);
+public abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNode> {
+  final OptionsEditorContext myContext = new OptionsEditorContext();
   final Project myProject;
 
   boolean myDocumentWasChanged;
@@ -45,7 +32,7 @@ abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNode> {
   private final SearchTextField mySearch;
   private final ConfigurableGroup[] myGroups;
 
-  private SearchableOptionsRegistrar myRegistrar = SearchableOptionsRegistrar.getInstance();
+  private final SearchableOptionsRegistrar myRegistrar = SearchableOptionsRegistrar.getInstance();
   private Set<Configurable> myFiltered;
   private ConfigurableHit myHits;
 
@@ -58,7 +45,7 @@ abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNode> {
     mySearch = search;
     mySearch.addDocumentListener(new DocumentAdapter() {
       @Override
-      protected void textChanged(DocumentEvent event) {
+      protected void textChanged(@NotNull DocumentEvent event) {
         update(event.getType(), true, false);
         // request focus if needed on changing the filter text
         IdeFocusManager manager = IdeFocusManager.findInstanceByComponent(mySearch);
@@ -115,7 +102,13 @@ abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNode> {
 
   String getFilterText() {
     String text = mySearch.getText();
-    return text == null ? "" : text.trim();
+    if (text != null) {
+      text = text.trim();
+      if (1 < text.length()) {
+        return text;
+      }
+    }
+    return "";
   }
 
   void setHoldingFilter(boolean holding) {
@@ -127,10 +120,6 @@ abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNode> {
     return myHits != null && myHits.getNameHits().contains(configurable);
   }
 
-  ActionCallback update(boolean adjustSelection, boolean now) {
-    return update(DocumentEvent.EventType.CHANGE, adjustSelection, now);
-  }
-
   ActionCallback update(String text, boolean adjustSelection, boolean now) {
     try {
       myUpdateRejected = true;
@@ -139,10 +128,10 @@ abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNode> {
     finally {
       myUpdateRejected = false;
     }
-    return update(adjustSelection, now);
+    return update(DocumentEvent.EventType.CHANGE, adjustSelection, now);
   }
 
-  private ActionCallback update(DocumentEvent.EventType type, boolean adjustSelection, boolean now) {
+  private ActionCallback update(@NotNull DocumentEvent.EventType type, boolean adjustSelection, boolean now) {
     if (myUpdateRejected) {
       return ActionCallback.REJECTED;
     }

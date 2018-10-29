@@ -28,8 +28,6 @@ import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 
-import java.io.IOException;
-
 import static org.easymock.EasyMock.*;
 
 public class SelectionHistoryDialogTest extends LocalHistoryUITestCase {
@@ -47,12 +45,12 @@ public class SelectionHistoryDialogTest extends LocalHistoryUITestCase {
     setBinaryContent(f,"a\nbcd\nc\ne\n".getBytes(), -1, 789,this);
   }
 
-  public void testDialogWorks() throws IOException {
+  public void testDialogWorks() {
     SelectionHistoryDialog d = new SelectionHistoryDialog(myProject, myGateway, f, 0, 0);
     Disposer.dispose(d);
   }
 
-  public void testTitles() throws IOException {
+  public void testTitles() {
     rename(f, "ff.txt");
     setBinaryContent(f,new byte[0]);
 
@@ -84,7 +82,7 @@ public class SelectionHistoryDialogTest extends LocalHistoryUITestCase {
     verify(p);
   }
 
-  public void testDiffContents() throws IOException {
+  public void testDiffContents() {
     initModelOnSecondLineAndSelectRevisions(0, 1);
 
     DiffContent left = dm.getLeftDiffContent(new NullRevisionsProgress());
@@ -94,7 +92,7 @@ public class SelectionHistoryDialogTest extends LocalHistoryUITestCase {
     assertContent("bc", right);
   }
 
-  public void testDiffContentsAndTitleForCurrentRevision() throws IOException {
+  public void testDiffContentsAndTitleForCurrentRevision() {
     initModelOnSecondLineAndSelectRevisions(0, 0);
 
     assertEquals("Current", dm.getRightTitle(new NullRevisionsProgress()));
@@ -118,7 +116,7 @@ public class SelectionHistoryDialogTest extends LocalHistoryUITestCase {
     assertContent("bcd", dm.getRightDiffContent(new NullRevisionsProgress()));
   }
 
-  public void testRevert() throws IOException {
+  public void testRevert() throws Exception {
     initModelOnSecondLineAndSelectRevisions(0, 0);
     Reverter r = m.createReverter();
     r.revert();

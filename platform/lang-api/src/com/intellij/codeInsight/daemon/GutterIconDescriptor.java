@@ -27,9 +27,6 @@ import javax.swing.*;
  * @since 144
  */
 public abstract class GutterIconDescriptor {
-
-  protected static final Option[] NO_OPTIONS = new Option[0];
-
   /**
    * Human-readable provider name for UI.
    *
@@ -51,8 +48,9 @@ public abstract class GutterIconDescriptor {
     return getClass().getName();
   }
 
+  @NotNull
   public Option[] getOptions() {
-    return NO_OPTIONS;
+    return Option.NO_OPTIONS;
   }
 
   @Override
@@ -60,8 +58,8 @@ public abstract class GutterIconDescriptor {
     return getName();
   }
 
-
   public static class Option extends GutterIconDescriptor {
+    private static final Option[] NO_OPTIONS = new Option[0];
 
     private final String myId;
     private final String myName;

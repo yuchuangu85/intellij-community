@@ -26,10 +26,12 @@ import java.util.List;
 
 public class SelectionManager {
   @NotNull private final SearchResults mySearchResults;
-  private final List<FoldRegion> myRegionsToRestore = new ArrayList<FoldRegion>();
+  private final boolean myHadSelectionInitially;
+  private final List<FoldRegion> myRegionsToRestore = new ArrayList<>();
 
   public SelectionManager(@NotNull SearchResults results) {
     mySearchResults = results;
+    myHadSelectionInitially = results.getEditor().getSelectionModel().hasSelection();
   }
 
   public void updateSelection(boolean removePreviousSelection, boolean removeAllPreviousSelections) {
@@ -39,6 +41,7 @@ public class SelectionManager {
     }
     final FindResult cursor = mySearchResults.getCursor();
     if (cursor == null) {
+      if (removePreviousSelection && !myHadSelectionInitially) editor.getSelectionModel().removeSelection();
       return;
     }
     if (mySearchResults.getFindModel().isGlobal()) {
@@ -93,6 +96,10 @@ public class SelectionManager {
 
   public boolean isSelected(@NotNull FindResult result) {
     Editor editor = mySearchResults.getEditor();
-    return editor.getCaretModel().getCaretAt(editor.offsetToVisualPosition(result.getEndOffset())) != null;
+    int endOffset = result.getEndOffset();
+    for (Caret caret : editor.getCaretModel().getAllCarets()) {
+      if (caret.getOffset() == endOffset) return true;
+    }
+    return false;
   }
 }

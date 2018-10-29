@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,18 @@ package com.intellij.xdebugger.impl.ui.tree;
 
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
+import com.intellij.ui.AppUIUtil;
+import com.intellij.ui.SimpleColoredComponent;
+import com.intellij.xdebugger.XDebugSession;
+import com.intellij.xdebugger.XDebugSessionListener;
 import com.intellij.xdebugger.XExpression;
+import com.intellij.xdebugger.impl.frame.XDebugView;
 import com.intellij.xdebugger.impl.ui.XDebuggerExpressionComboBox;
 import com.intellij.xdebugger.impl.ui.tree.nodes.XDebuggerTreeNode;
 import org.jetbrains.annotations.NonNls;
 
 import javax.swing.*;
+import javax.swing.border.Border;
 import javax.swing.plaf.basic.ComboPopup;
 import javax.swing.tree.TreePath;
 
@@ -30,14 +36,20 @@ import javax.swing.tree.TreePath;
  * @author nik
  */
 public abstract class XDebuggerTreeInplaceEditor extends TreeInplaceEditor {
-  private final XDebuggerTreeNode myNode;
+  protected final XDebuggerTreeNode myNode;
   protected final XDebuggerExpressionComboBox myExpressionEditor;
   protected final XDebuggerTree myTree;
 
   public XDebuggerTreeInplaceEditor(final XDebuggerTreeNode node, @NonNls final String historyId) {
     myNode = node;
     myTree = myNode.getTree();
-    myExpressionEditor = new XDebuggerExpressionComboBox(myTree.getProject(), myTree.getEditorsProvider(), historyId, myTree.getSourcePosition(), false);
+    myExpressionEditor = new XDebuggerExpressionComboBox(myTree.getProject(), myTree.getEditorsProvider(), historyId,
+                                                         myTree.getSourcePosition(), false, true);
+  }
+
+  @Override
+  protected JComponent createInplaceEditorComponent() {
+    return myExpressionEditor.getComponent();
   }
 
   @Override
@@ -61,12 +73,55 @@ public abstract class XDebuggerTreeInplaceEditor extends TreeInplaceEditor {
   }
 
   @Override
-  protected JComponent getPreferredFocusedComponent() {
-    return myExpressionEditor.getPreferredFocusedComponent();
+  public void doOKAction() {
+    myExpressionEditor.saveTextInHistory();
+    super.doOKAction();
   }
 
-  public XDebuggerTreeNode getNode() {
-    return myNode;
+  @Override
+  protected void onShown() {
+    XDebugSession session = XDebugView.getSession(myTree);
+    if (session != null) {
+      session.addSessionListener(new XDebugSessionListener() {
+        @Override
+        public void sessionPaused() {
+          cancel();
+        }
+
+        @Override
+        public void sessionResumed() {
+          cancel();
+        }
+
+        @Override
+        public void sessionStopped() {
+          cancel();
+        }
+
+        @Override
+        public void stackFrameChanged() {
+          cancel();
+        }
+
+        @Override
+        public void beforeSessionResume() {
+          cancel();
+        }
+
+        private void cancel() {
+          AppUIUtil.invokeOnEdt(XDebuggerTreeInplaceEditor.this::cancelEditing);
+        }
+      }, myDisposable);
+    }
+  }
+
+  protected XExpression getExpression() {
+    return myExpressionEditor.getExpression();
+  }
+
+  @Override
+  protected JComponent getPreferredFocusedComponent() {
+    return myExpressionEditor.getPreferredFocusedComponent();
   }
 
   @Override
@@ -85,12 +140,25 @@ public abstract class XDebuggerTreeInplaceEditor extends TreeInplaceEditor {
   }
 
   @Override
-  protected JTree getTree() {
-    return myNode.getTree();
+  protected XDebuggerTree getTree() {
+    return myTree;
   }
 
   @Override
   protected Project getProject() {
     return myNode.getTree().getProject();
+  }
+
+  protected final int getAfterIconX() {
+    Icon icon = myNode.getIcon();
+    if (icon != null) {
+      SimpleColoredComponent iconLabel = new SimpleColoredComponent();
+      iconLabel.getIpad().right = 0;
+      iconLabel.getIpad().left = 0;
+      iconLabel.setIcon(myNode.getIcon());
+      Border border = iconLabel.getMyBorder();
+      return iconLabel.getPreferredSize().width - (border != null ? border.getBorderInsets(iconLabel).right : 0);
+    }
+    return 0;
   }
 }

@@ -35,7 +35,7 @@ import java.util.Set;
 public class VcsLogStructureFilterImpl implements VcsLogDetailsFilter, VcsLogStructureFilter {
   @NotNull private final Collection<FilePath> myFiles;
 
-  public VcsLogStructureFilterImpl(@NotNull Set<VirtualFile> files) {
+  public VcsLogStructureFilterImpl(@NotNull Set<? extends VirtualFile> files) {
     this(ContainerUtil.map(files, file -> VcsUtil.getFilePath(file)));
   }
 
@@ -62,19 +62,16 @@ public class VcsLogStructureFilterImpl implements VcsLogDetailsFilter, VcsLogStr
           return true;
         }
       }
-      return false;
     }
-    else {
-      return false;
-    }
+    return false;
   }
 
   private boolean matches(@NotNull final String path) {
-    return ContainerUtil.find(myFiles, new Condition<VirtualFile>() {
-      @Override
-      public boolean value(VirtualFile file) {
-        return FileUtil.isAncestor(file.getPath(), path, false);
-      }
-    }) != null;
+    return ContainerUtil.find(myFiles, (Condition<VirtualFile>)file -> FileUtil.isAncestor(file.getPath(), path, false)) != null;
+  }
+
+  @Override
+  public String toString() {
+    return "files:" + myFiles;
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2010 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,10 @@ package com.intellij.ide.actions;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import org.jetbrains.jps.model.java.JavaModuleSourceRootTypes;
+import org.jetbrains.jps.model.module.JpsModuleSourceRootType;
 
 import javax.swing.*;
+import java.util.Set;
 
 public abstract class JavaCreateTemplateInPackageAction<T extends PsiElement> extends CreateTemplateInPackageAction<T> {
 
@@ -27,8 +29,19 @@ public abstract class JavaCreateTemplateInPackageAction<T extends PsiElement> ex
     super(text, description, icon, inSourceOnly ? JavaModuleSourceRootTypes.SOURCES : null);
   }
 
+  protected JavaCreateTemplateInPackageAction(String text,
+                                              String description,
+                                              Icon icon,
+                                              Set<? extends JpsModuleSourceRootType<?>> rootTypes) {
+    super(text, description, icon, rootTypes);
+  }
+
   @Override
   protected boolean checkPackageExists(PsiDirectory directory) {
+    return doCheckPackageExists(directory);
+  }
+
+  public static boolean doCheckPackageExists(PsiDirectory directory) {
     PsiPackage pkg = JavaDirectoryService.getInstance().getPackage(directory);
     if (pkg == null) {
       return false;

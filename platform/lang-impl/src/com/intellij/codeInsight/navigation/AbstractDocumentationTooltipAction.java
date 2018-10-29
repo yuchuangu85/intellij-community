@@ -31,7 +31,6 @@ import java.lang.ref.WeakReference;
  * Expands {@link AnAction} contract for documentation-related actions that may be called from the IDE tooltip.
  * 
  * @author Denis Zhdanov
- * @since 7/26/12 12:28 PM
  */
 public abstract class AbstractDocumentationTooltipAction extends AnAction {
 
@@ -39,17 +38,17 @@ public abstract class AbstractDocumentationTooltipAction extends AnAction {
   @Nullable private WeakReference<PsiElement> myOriginalElement;
 
   public void setDocInfo(@NotNull PsiElement docAnchor, @NotNull PsiElement originalElement) {
-    myDocAnchor = new PatchedWeakReference<PsiElement>(docAnchor);
-    myOriginalElement = new PatchedWeakReference<PsiElement>(originalElement);
+    myDocAnchor = new PatchedWeakReference<>(docAnchor);
+    myOriginalElement = new PatchedWeakReference<>(originalElement);
   }
   
   @Override
-  public void update(AnActionEvent e) {
+  public void update(@NotNull AnActionEvent e) {
     e.getPresentation().setVisible(getDocInfo() != null);
   }
 
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public void actionPerformed(@NotNull AnActionEvent e) {
     Pair<PsiElement, PsiElement> info = getDocInfo();
     if (info == null) {
       return;

@@ -21,15 +21,10 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiCompiledElement;
-import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.GroovyFileType;
 
-/**
- * User: Dmitry.Krasilschikov
- * Date: 21.05.2008
- */
 public abstract class GrBaseGenerateAction extends BaseGenerateAction {
   public GrBaseGenerateAction(CodeInsightActionHandler handler) {
     super(handler);
@@ -40,8 +35,6 @@ public abstract class GrBaseGenerateAction extends BaseGenerateAction {
     if (file instanceof PsiCompiledElement) return false;
     if (!GroovyFileType.GROOVY_FILE_TYPE.equals(file.getFileType())) return false;
     
-    PsiDocumentManager.getInstance(project).commitAllDocuments();
-
     PsiClass targetClass = getTargetClass(editor, file);
     if (targetClass == null) return false;
     if (targetClass.isInterface()) return false; //?

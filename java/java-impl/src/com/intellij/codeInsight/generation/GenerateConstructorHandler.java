@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.generation;
 
 import com.intellij.CommonBundle;
@@ -21,7 +7,6 @@ import com.intellij.codeInsight.NullableNotNullManager;
 import com.intellij.codeInsight.daemon.ImplicitUsageProvider;
 import com.intellij.ide.util.MemberChooser;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.psi.*;
@@ -30,7 +15,6 @@ import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import com.intellij.psi.codeStyle.VariableKind;
 import com.intellij.psi.javadoc.PsiDocComment;
 import com.intellij.psi.util.TypeConversionUtil;
-import com.intellij.util.Function;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
@@ -52,8 +36,8 @@ public class GenerateConstructorHandler extends GenerateMembersHandlerBase {
   @Override
   protected ClassMember[] getAllOriginalMembers(PsiClass aClass) {
     PsiField[] fields = aClass.getFields();
-    ArrayList<ClassMember> array = new ArrayList<ClassMember>();
-    ImplicitUsageProvider[] implicitUsageProviders = Extensions.getExtensions(ImplicitUsageProvider.EP_NAME);
+    ArrayList<ClassMember> array = new ArrayList<>();
+    List<ImplicitUsageProvider> implicitUsageProviders = ImplicitUsageProvider.EP_NAME.getExtensionList();
     fieldLoop:
     for (PsiField field : fields) {
       if (field.hasModifierProperty(PsiModifier.STATIC)) continue;
@@ -65,7 +49,7 @@ public class GenerateConstructorHandler extends GenerateMembersHandlerBase {
       }
       array.add(new PsiFieldMember(field));
     }
-    return array.toArray(new ClassMember[array.size()]);
+    return array.toArray(ClassMember.EMPTY_ARRAY);
   }
 
   @Override
@@ -83,7 +67,7 @@ public class GenerateConstructorHandler extends GenerateMembersHandlerBase {
     PsiMethod[] baseConstructors = null;
     PsiClass baseClass = aClass.getSuperClass();
     if (baseClass != null) {
-      List<PsiMethod> array = new ArrayList<PsiMethod>();
+      List<PsiMethod> array = new ArrayList<>();
       for (PsiMethod method : baseClass.getConstructors()) {
         if (JavaPsiFacade.getInstance(method.getProject()).getResolveHelper().isAccessible(method, aClass, null)) {
           array.add(method);
@@ -96,15 +80,15 @@ public class GenerateConstructorHandler extends GenerateMembersHandlerBase {
         else {
           final PsiSubstitutor substitutor = TypeConversionUtil.getSuperClassSubstitutor(baseClass, aClass, PsiSubstitutor.EMPTY);
           PsiMethodMember[] constructors = ContainerUtil.map2Array(array, PsiMethodMember.class, s -> new PsiMethodMember(s, substitutor));
-          MemberChooser<PsiMethodMember> chooser = new MemberChooser<PsiMethodMember>(constructors, false, true, project);
+          MemberChooser<PsiMethodMember> chooser = new MemberChooser<>(constructors, false, true, project);
           chooser.setTitle(CodeInsightBundle.message("generate.constructor.super.constructor.chooser.title"));
           chooser.show();
           List<PsiMethodMember> elements = chooser.getSelectedElements();
           if (elements == null || elements.isEmpty()) return null;
           baseConstructors = new PsiMethod[elements.size()];
           for (int i = 0; i < elements.size(); i++) {
-            final ClassMember member = elements.get(i);
-            baseConstructors[i] = ((PsiMethodMember)member).getElement();
+            final PsiMethodMember member = elements.get(i);
+            baseConstructors[i] = member.getElement();
           }
           myCopyJavadoc = chooser.isCopyJavadoc();
         }
@@ -122,12 +106,12 @@ public class GenerateConstructorHandler extends GenerateMembersHandlerBase {
     }
 
     if (baseConstructors != null) {
-      List<ClassMember> array = new ArrayList<ClassMember>();
+      List<ClassMember> array = new ArrayList<>();
       for (PsiMethod baseConstructor : baseConstructors) {
         array.add(new PsiMethodMember(baseConstructor));
       }
       ContainerUtil.addAll(array, members);
-      members = array.toArray(new ClassMember[array.size()]);
+      members = array.toArray(ClassMember.EMPTY_ARRAY);
     }
 
     return members;
@@ -141,13 +125,13 @@ public class GenerateConstructorHandler extends GenerateMembersHandlerBase {
     final MemberChooser<ClassMember> chooser = super.createMembersChooser(members, allowEmptySelection, copyJavadocCheckbox, project);
     final List<ClassMember> preselection = preselect(members);
     if (!preselection.isEmpty()) {
-      chooser.selectElements(preselection.toArray(new ClassMember[preselection.size()]));
+      chooser.selectElements(preselection.toArray(ClassMember.EMPTY_ARRAY));
     }
     return chooser;
   }
 
   protected static List<ClassMember> preselect(ClassMember[] members) {
-    final List<ClassMember> preselection = new ArrayList<ClassMember>();
+    final List<ClassMember> preselection = new ArrayList<>();
     for (ClassMember member : members) {
       if (member instanceof PsiFieldMember) {
         final PsiField psiField = ((PsiFieldMember)member).getElement();
@@ -162,8 +146,8 @@ public class GenerateConstructorHandler extends GenerateMembersHandlerBase {
   @Override
   @NotNull
   protected List<? extends GenerationInfo> generateMemberPrototypes(PsiClass aClass, ClassMember[] members) throws IncorrectOperationException {
-    List<PsiMethod> baseConstructors = new ArrayList<PsiMethod>();
-    List<PsiField> fieldsVector = new ArrayList<PsiField>();
+    List<PsiMethod> baseConstructors = new ArrayList<>();
+    List<PsiField> fieldsVector = new ArrayList<>();
     for (ClassMember member1 : members) {
       PsiElement member = ((PsiElementClassMember)member1).getElement();
       if (member instanceof PsiMethod) {
@@ -173,28 +157,34 @@ public class GenerateConstructorHandler extends GenerateMembersHandlerBase {
         fieldsVector.add((PsiField)member);
       }
     }
-    PsiField[] fields = fieldsVector.toArray(new PsiField[fieldsVector.size()]);
+    PsiField[] fields = fieldsVector.toArray(PsiField.EMPTY_ARRAY);
 
     if (!baseConstructors.isEmpty()) {
-      List<GenerationInfo> constructors = new ArrayList<GenerationInfo>(baseConstructors.size());
+      List<GenerationInfo> constructors = new ArrayList<>(baseConstructors.size());
       final PsiClass superClass = aClass.getSuperClass();
       assert superClass != null;
       PsiSubstitutor substitutor = TypeConversionUtil.getSuperClassSubstitutor(superClass, aClass, PsiSubstitutor.EMPTY);
       for (PsiMethod baseConstructor : baseConstructors) {
         baseConstructor = GenerateMembersUtil.substituteGenericMethod(baseConstructor, substitutor, aClass);
-        constructors.add(new PsiGenerationInfo<PsiMethod>(generateConstructorPrototype(aClass, baseConstructor, myCopyJavadoc, fields)));
+        constructors.add(new PsiGenerationInfo<>(generateConstructorPrototype(aClass, baseConstructor, myCopyJavadoc, fields)));
       }
-      return filterOutAlreadyInsertedConstructors(aClass, constructors);
+      List<? extends GenerationInfo> constructorsToCreate = filterOutAlreadyInsertedConstructors(aClass, constructors);
+      if (!constructorsToCreate.isEmpty()) {
+        //allow to create constructor not matching super
+        return constructorsToCreate;
+      }
     }
     final List<GenerationInfo> constructors =
-      Collections.<GenerationInfo>singletonList(new PsiGenerationInfo<PsiMethod>(generateConstructorPrototype(aClass, null, false, fields)));
+      Collections.singletonList(new PsiGenerationInfo<>(generateConstructorPrototype(aClass, null, false, fields)));
     return filterOutAlreadyInsertedConstructors(aClass, constructors);
   }
 
   private static List<? extends GenerationInfo> filterOutAlreadyInsertedConstructors(PsiClass aClass, List<? extends GenerationInfo> constructors) {
     boolean alreadyExist = true;
     for (GenerationInfo constructor : constructors) {
-      alreadyExist &= aClass.findMethodBySignature((PsiMethod)constructor.getPsiMember(), false) != null;
+      PsiMethod existingMethod = aClass.findMethodBySignature((PsiMethod)constructor.getPsiMember(), false);
+
+      alreadyExist &= existingMethod != null && existingMethod.isPhysical();
     }
     if (alreadyExist) {
       return Collections.emptyList();
@@ -251,7 +241,7 @@ public class GenerateConstructorHandler extends GenerateMembersHandlerBase {
           String name = param.getName();
           assert name != null : param;
           PsiParameter newParam = factory.createParameter(name, param.getType(), aClass);
-          GenerateMembersUtil.copyOrReplaceModifierList(param, newParam);
+          GenerateMembersUtil.copyOrReplaceModifierList(param, aClass, newParam);
           constructor.getParameterList().add(newParam);
         }
       }
@@ -261,7 +251,7 @@ public class GenerateConstructorHandler extends GenerateMembersHandlerBase {
 
     final PsiMethod dummyConstructor = factory.createConstructor(className);
     dummyConstructor.getParameterList().replace(constructor.getParameterList().copy());
-    List<PsiParameter> fieldParams = new ArrayList<PsiParameter>();
+    List<PsiParameter> fieldParams = new ArrayList<>();
     for (PsiField field : fields) {
       String fieldName = field.getName();
       assert fieldName != null : field;
@@ -270,7 +260,7 @@ public class GenerateConstructorHandler extends GenerateMembersHandlerBase {
       parmName = javaStyle.suggestUniqueVariableName(parmName, dummyConstructor, true);
       PsiParameter parm = factory.createParameter(parmName, field.getType(), aClass);
 
-      NullableNotNullManager.getInstance(project).copyNotNullAnnotation(field, parm);
+      NullableNotNullManager.getInstance(project).copyNullableOrNotNullAnnotation(field, parm);
 
       if (constructor.isVarArgs()) {
         final PsiParameterList parameterList = constructor.getParameterList();
@@ -293,7 +283,7 @@ public class GenerateConstructorHandler extends GenerateMembersHandlerBase {
       if (isNotEnum) {
         generator.generateSuperCallIfNeeded(buffer, baseConstructor.getParameterList().getParameters());
       }
-      final PsiParameter[] parameters = fieldParams.toArray(new PsiParameter[fieldParams.size()]);
+      final PsiParameter[] parameters = fieldParams.toArray(PsiParameter.EMPTY_ARRAY);
       final List<String> existingNames = ContainerUtil.map(dummyConstructor.getParameterList().getParameters(), parameter -> parameter.getName());
       if (generator instanceof ConstructorBodyGeneratorEx) {
         ((ConstructorBodyGeneratorEx)generator).generateFieldInitialization(buffer, fields, parameters, existingNames);

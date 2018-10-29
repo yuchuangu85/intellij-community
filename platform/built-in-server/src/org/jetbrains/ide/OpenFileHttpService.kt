@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.ide
 
 import com.intellij.ide.impl.ProjectUtil.focusProjectWindow
@@ -22,7 +8,7 @@ import com.intellij.openapi.application.runWriteAction
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
-import com.intellij.openapi.project.ProjectUtil
+import com.intellij.openapi.project.guessProjectForContentFile
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.util.text.StringUtilRt
@@ -32,16 +18,13 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.newvfs.ManagingFS
 import com.intellij.openapi.vfs.newvfs.RefreshQueue
 import com.intellij.ui.AppUIUtil
-import com.intellij.util.exists
-import com.intellij.util.systemIndependentPath
+import com.intellij.util.io.exists
+import com.intellij.util.io.systemIndependentPath
 import io.netty.channel.ChannelHandlerContext
 import io.netty.handler.codec.http.*
 import org.jetbrains.builtInWebServer.WebServerPathToFileManager
 import org.jetbrains.builtInWebServer.checkAccess
-import org.jetbrains.concurrency.AsyncPromise
-import org.jetbrains.concurrency.Promise
-import org.jetbrains.concurrency.catchError
-import org.jetbrains.concurrency.rejectedPromise
+import org.jetbrains.concurrency.*
 import org.jetbrains.io.orInSafeMode
 import org.jetbrains.io.send
 import java.nio.file.Path
@@ -50,7 +33,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.regex.Pattern
 import javax.swing.SwingUtilities
 
-private val NOT_FOUND = Promise.createError("not found")
+private val NOT_FOUND = createError("not found")
 private val LINE_AND_COLUMN = Pattern.compile("^(.*?)(?::(\\d+))?(?::(\\d+))?$")
 
 /**
@@ -121,8 +104,8 @@ internal class OpenFileHttpService : RestService() {
     }
 
     val promise = openFile(apiRequest, context, request) ?: return null
-    promise.done { sendStatus(HttpResponseStatus.OK, keepAlive, channel) }
-      .rejected {
+    promise.onSuccess { sendStatus(HttpResponseStatus.OK, keepAlive, channel) }
+      .onError {
         if (it === NOT_FOUND) {
           // don't expose file status
           sendStatus(HttpResponseStatus.NOT_FOUND.orInSafeMode(HttpResponseStatus.OK), keepAlive, channel)
@@ -137,7 +120,7 @@ internal class OpenFileHttpService : RestService() {
     return null
   }
 
-  internal fun openFile(request: OpenFileRequest, context: ChannelHandlerContext, httpRequest: HttpRequest?): Promise<Void>? {
+  internal fun openFile(request: OpenFileRequest, context: ChannelHandlerContext, httpRequest: HttpRequest?): Promise<Void?>? {
     val systemIndependentPath = FileUtil.toSystemIndependentName(FileUtil.expandUserHome(request.file!!))
     val file = Paths.get(FileUtil.toSystemDependentName(systemIndependentPath))
     if (file.isAbsolute) {
@@ -201,7 +184,7 @@ internal class OpenFileRequest {
 }
 
 private class OpenFileTask(internal val path: String, internal val request: OpenFileRequest) {
-  internal val promise = AsyncPromise<Void>()
+  internal val promise = AsyncPromise<Void?>()
 }
 
 private fun navigate(project: Project?, file: VirtualFile, request: OpenFileRequest) {
@@ -254,8 +237,8 @@ private fun openRelativePath(path: String, request: OpenFileRequest): Boolean {
   } ?: false
 }
 
-private fun openAbsolutePath(file: Path, request: OpenFileRequest): Promise<Void> {
-  val promise = AsyncPromise<Void>()
+private fun openAbsolutePath(file: Path, request: OpenFileRequest): Promise<Void?> {
+  val promise = AsyncPromise<Void?>()
   ApplicationManager.getApplication().invokeLater {
     promise.catchError {
       val virtualFile = runWriteAction {  LocalFileSystem.getInstance().refreshAndFindFileByPath(file.systemIndependentPath) }
@@ -263,7 +246,7 @@ private fun openAbsolutePath(file: Path, request: OpenFileRequest): Promise<Void
         promise.setError(NOT_FOUND)
       }
       else {
-        navigate(ProjectUtil.guessProjectForContentFile(virtualFile), virtualFile, request)
+        navigate(guessProjectForContentFile(virtualFile), virtualFile, request)
         promise.setResult(null)
       }
     }

@@ -35,8 +35,8 @@ import java.util.BitSet;
 public abstract class PsiBasedStripTrailingSpacesFilter implements StripTrailingSpacesFilter {
   @NotNull private final BitSet myDisabledLinesBitSet;
   @NotNull private final Document myDocument;
-  
-  private static Logger LOG = Logger.getInstance("#" + PsiBasedStripTrailingSpacesFilter.class.getName());
+
+  private static final Logger LOG = Logger.getInstance(PsiBasedStripTrailingSpacesFilter.class);
   
   public abstract static class Factory extends StripTrailingSpacesFilterFactory {
     @NotNull
@@ -101,9 +101,12 @@ public abstract class PsiBasedStripTrailingSpacesFilter implements StripTrailing
     return null;
   }
 
-  protected final void disableRange(@NotNull TextRange range) {
+  protected final void disableRange(@NotNull TextRange range, boolean includeEndLine) {
     int startLine = myDocument.getLineNumber(range.getStartOffset());
     int endLine = myDocument.getLineNumber(range.getEndOffset());
+    if (includeEndLine) {
+      endLine++;
+    }
     myDisabledLinesBitSet.set(startLine, endLine);
   }
 }

@@ -26,11 +26,10 @@ import java.util.List;
 
 /**
  * @author Dmitry Avdeev
- *         Date: 8/2/12
  */
 public class ElementStub extends DomStub {
 
-  private final List<DomStub> myChildren = new SmartList<DomStub>();
+  private final List<DomStub> myChildren = new SmartList<>();
   private final int myIndex;
   private final boolean myCustom;
 

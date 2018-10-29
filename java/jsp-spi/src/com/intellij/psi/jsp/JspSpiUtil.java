@@ -18,8 +18,10 @@ package com.intellij.psi.jsp;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.roots.OrderEnumerator;
+import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -52,7 +54,11 @@ public abstract class JspSpiUtil {
 
   @Nullable
   private static JspSpiUtil getJspSpiUtil() {
-    return ServiceManager.getService(JspSpiUtil.class);
+    Ref<JspSpiUtil> result = Ref.create();
+    ProgressManager.getInstance().executeNonCancelableSection(() -> {
+      result.set(ServiceManager.getService(JspSpiUtil.class));
+    });
+    return result.get();
   }
 
   public static int escapeCharsInJspContext(JspFile file, int offset, String toEscape) throws IncorrectOperationException {
@@ -142,16 +148,16 @@ public abstract class JspSpiUtil {
   }
 
   public static List<URL> buildUrls(@Nullable final VirtualFile virtualFile, @Nullable final Module module, boolean includeModuleOutput) {
-    final List<URL> urls = new ArrayList<URL>();
+    final List<URL> urls = new ArrayList<>();
     processClassPathItems(virtualFile, module, file -> addUrl(urls, file), includeModuleOutput);
     return urls;
   }
 
-  public static void processClassPathItems(final VirtualFile virtualFile, final Module module, final Consumer<VirtualFile> consumer) {
+  public static void processClassPathItems(final VirtualFile virtualFile, final Module module, final Consumer<? super VirtualFile> consumer) {
     processClassPathItems(virtualFile, module, consumer, true);
   }
 
-  public static void processClassPathItems(final VirtualFile virtualFile, final Module module, final Consumer<VirtualFile> consumer,
+  public static void processClassPathItems(final VirtualFile virtualFile, final Module module, final Consumer<? super VirtualFile> consumer,
                                            boolean includeModuleOutput) {
     if (isJarFile(virtualFile)){
       consumer.consume(virtualFile);
@@ -175,7 +181,7 @@ public abstract class JspSpiUtil {
     }
   }
 
-  private static void addUrl(List<URL> urls, VirtualFile file) {
+  private static void addUrl(List<? super URL> urls, VirtualFile file) {
     if (file == null || !file.isValid()) return;
     final URL url = getUrl(file);
     if (url != null) {

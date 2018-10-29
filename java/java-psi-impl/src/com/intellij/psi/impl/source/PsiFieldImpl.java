@@ -104,7 +104,7 @@ public class PsiFieldImpl extends JavaStubPsiElement<PsiFieldStub> implements Ps
   @Override
   @NotNull
   public String getName() {
-    final PsiFieldStub stub = getStub();
+    final PsiFieldStub stub = getGreenStub();
     if (stub != null) {
       return stub.getName();
     }
@@ -129,7 +129,7 @@ public class PsiFieldImpl extends JavaStubPsiElement<PsiFieldStub> implements Ps
         assert typeText != null : stub;
         type = JavaPsiFacade.getInstance(getProject()).getParserFacade().createTypeFromText(typeText, this);
         type = JavaSharedImplUtil.applyAnnotations(type, getModifierList());
-        myCachedType = new SoftReference<PsiType>(type);
+        myCachedType = new SoftReference<>(type);
       }
       return type;
     }
@@ -185,7 +185,7 @@ public class PsiFieldImpl extends JavaStubPsiElement<PsiFieldStub> implements Ps
   private PsiField findFirstFieldInDeclaration() {
     if (getSelfModifierList() != null) return this;
 
-    final PsiFieldStub stub = getStub();
+    final PsiFieldStub stub = getGreenStub();
     if (stub != null) {
       final List siblings = stub.getParentStub().getChildrenStubs();
       final int idx = siblings.indexOf(stub);
@@ -226,7 +226,7 @@ public class PsiFieldImpl extends JavaStubPsiElement<PsiFieldStub> implements Ps
   // avoids stub-to-AST switch if possible,
   // returns the light generated initializer literal expression if stored in stubs, the regular initializer if wasn't
   public PsiExpression getDetachedInitializer() {
-    final PsiFieldStub stub = getStub();
+    final PsiFieldStub stub = getGreenStub();
     PsiExpression initializer;
     if (stub == null) {
       initializer = getInitializer();
@@ -251,7 +251,7 @@ public class PsiFieldImpl extends JavaStubPsiElement<PsiFieldStub> implements Ps
 
   @Override
   public boolean hasInitializer() {
-    PsiFieldStub stub = getStub();
+    PsiFieldStub stub = getGreenStub();
     if (stub != null) {
       return stub.getInitializerText() != null;
     }
@@ -275,19 +275,19 @@ public class PsiFieldImpl extends JavaStubPsiElement<PsiFieldStub> implements Ps
   }
 
   @Nullable
-  private Object _computeConstantValue(Set<PsiVariable> visitedVars) {
+  private Object _computeConstantValue(@Nullable Set<PsiVariable> visitedVars) {
     PsiType type = getType();
     // javac rejects all non primitive and non String constants, although JLS states constants "variables whose initializers are constant expressions"
     if (!(type instanceof PsiPrimitiveType) && !type.equalsToText("java.lang.String")) return null;
 
     PsiExpression initializer = getDetachedInitializer();
-
+    if (initializer == null) return null;
     return PsiConstantEvaluationHelperImpl.computeCastTo(initializer, type, visitedVars);
   }
 
   @Override
   public Object computeConstantValue() {
-    return computeConstantValue(new HashSet<PsiVariable>(2));
+    return computeConstantValue(new HashSet<>(2));
   }
 
   @Override
@@ -299,17 +299,20 @@ public class PsiFieldImpl extends JavaStubPsiElement<PsiFieldStub> implements Ps
 
   @Override
   public boolean isDeprecated() {
-    final PsiFieldStub stub = getStub();
+    return isFieldDeprecated(this, getGreenStub());
+  }
+
+  static boolean isFieldDeprecated(@NotNull PsiField field, @Nullable PsiFieldStub stub) {
     if (stub != null) {
-      return stub.isDeprecated() || stub.hasDeprecatedAnnotation() && PsiImplUtil.isDeprecatedByAnnotation(this);
+      return stub.isDeprecated() || stub.hasDeprecatedAnnotation() && PsiImplUtil.isDeprecatedByAnnotation(field);
     }
 
-    return PsiImplUtil.isDeprecatedByDocTag(this) || PsiImplUtil.isDeprecatedByAnnotation(this);
+    return PsiImplUtil.isDeprecatedByDocTag(field) || PsiImplUtil.isDeprecatedByAnnotation(field);
   }
 
   @Override
   public PsiDocComment getDocComment(){
-    final PsiFieldStub stub = getStub();
+    final PsiFieldStub stub = getGreenStub();
     if (stub != null && !stub.hasDocComment()) return null;
 
     CompositeElement treeElement = getNode();

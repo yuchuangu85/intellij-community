@@ -24,11 +24,12 @@ import java.util.List;
 /**
  * Describes an assignment statement.
  */
-public interface PyAssignmentStatement extends PyStatement, PyNamedElementContainer {
+public interface PyAssignmentStatement extends PyStatement, PyNamedElementContainer, PyAnnotationOwner {
 
   /**
    * @return the left-hand side of the statement; each item may consist of many elements.
    */
+  @NotNull
   PyExpression[] getTargets();
 
   /**

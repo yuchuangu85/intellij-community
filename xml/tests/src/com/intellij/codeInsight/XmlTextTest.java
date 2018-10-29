@@ -33,31 +33,27 @@ import org.jetbrains.annotations.NotNull;
  * @author mike
  */
 public class XmlTextTest extends LightCodeInsightTestCase {
-  public void testInsertAtOffset() throws Exception {
-    new WriteCommandAction(getProject()) {
+  public void testInsertAtOffset() {
+    WriteCommandAction.runWriteCommandAction(getProject(), () -> {
+      String xml = "<root>0123456789</root>";
+      XmlFile file = (XmlFile)PsiFileFactory.getInstance(getProject())
+                                            .createFileFromText("foo.xml", StdFileTypes.XML, xml, (long)1, true, false);
+      //System.out.println(DebugUtil.psiToString(file, false));
+      XmlTag root = file.getDocument().getRootTag();
+      final XmlText text1 = root.getValue().getTextElements()[0];
 
-      @Override
-      protected void run(@NotNull final Result result) throws Throwable {
-        String xml = "<root>0123456789</root>";
-        XmlFile file = (XmlFile)PsiFileFactory.getInstance(getProject())
-          .createFileFromText("foo.xml", StdFileTypes.XML, xml, (long)1, true, false);
-        //System.out.println(DebugUtil.psiToString(file, false));
-        XmlTag root = file.getDocument().getRootTag();
-        final XmlText text1 = root.getValue().getTextElements()[0];
+      assertFalse(CodeEditUtil.isNodeGenerated(root.getNode()));
+      final XmlText text = text1;
 
-        assertFalse(CodeEditUtil.isNodeGenerated(root.getNode()));
-        final XmlText text = text1;
-
-        final XmlElement element = text.insertAtOffset(XmlElementFactory.getInstance(getProject()).createTagFromText("<bar/>"), 5);
-        assertNotNull(element);
-        assertTrue(element instanceof XmlText);
-        assertEquals("01234", element.getText());
-        assertEquals("<root>01234<bar/>56789</root>", text.getContainingFile().getText());
-      }
-    }.execute();
+      final XmlElement element = text.insertAtOffset(XmlElementFactory.getInstance(getProject()).createTagFromText("<bar/>"), 5);
+      assertNotNull(element);
+      assertTrue(element instanceof XmlText);
+      assertEquals("01234", element.getText());
+      assertEquals("<root>01234<bar/>56789</root>", text.getContainingFile().getText());
+    });
   }
 
-  public void testPhysicalToDisplayIfHasGaps2() throws Exception {
+  public void testPhysicalToDisplayIfHasGaps2() {
     String xml = "<div>&amp;abc</div>";
     XmlFile file = (XmlFile)PsiFileFactory.getInstance(getProject()).createFileFromText("foo.xml", xml);
     XmlTag root = file.getDocument().getRootTag();
@@ -71,7 +67,7 @@ public class XmlTextTest extends LightCodeInsightTestCase {
     assertEquals(4, text.physicalToDisplay(8));
   }
 
-  public void testDisplayToPhysical() throws Exception {
+  public void testDisplayToPhysical() {
     String xml = "<div>&amp;abc</div>";
     XmlFile file = (XmlFile)PsiFileFactory.getInstance(getProject()).createFileFromText("foo.xml", xml);
     XmlTag root = file.getDocument().getRootTag();
@@ -85,7 +81,7 @@ public class XmlTextTest extends LightCodeInsightTestCase {
     assertEquals(8, text.displayToPhysical(4));
   }
 
-  public void testDisplayToPhysical2() throws Exception {
+  public void testDisplayToPhysical2() {
     String xml = "<div><![CDATA[ ]]></div>";
     XmlFile file = (XmlFile)PsiFileFactory.getInstance(getProject()).createFileFromText("foo.xml", xml);
     XmlTag root = file.getDocument().getRootTag();

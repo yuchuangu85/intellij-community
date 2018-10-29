@@ -51,7 +51,7 @@ public class PivotalTrackerRepository extends BaseRepositoryImpl {
 
   {
     if (StringUtil.isEmpty(getUrl())) {
-      setUrl("http://www.pivotaltracker.com");
+      setUrl("https://www.pivotaltracker.com");
     }
   }
 
@@ -88,7 +88,7 @@ public class PivotalTrackerRepository extends BaseRepositoryImpl {
     List<Element> children = getStories(query, max);
 
     final List<Task> tasks = ContainerUtil.mapNotNull(children, (NullableFunction<Element, Task>)o -> createIssue(o));
-    return tasks.toArray(new Task[tasks.size()]);
+    return tasks.toArray(Task.EMPTY_ARRAY);
   }
 
   private List<Element> getStories(@Nullable final String query, final int max) throws Exception {
@@ -133,8 +133,8 @@ public class PivotalTrackerRepository extends BaseRepositoryImpl {
                              "delivered".equals(element.getChildText("state")) ||
                              "finished".equals(element.getChildText("state"));
     final String description = element.getChildText("description");
-    final Ref<Date> updated = new Ref<Date>();
-    final Ref<Date> created = new Ref<Date>();
+    final Ref<Date> updated = new Ref<>();
+    final Ref<Date> created = new Ref<>();
     try {
       updated.set(parseDate(element, "updated_at"));
       created.set(parseDate(element, "created_at"));
@@ -166,6 +166,7 @@ public class PivotalTrackerRepository extends BaseRepositoryImpl {
         return summary;
       }
 
+      @Override
       public String getDescription() {
         return description;
       }
@@ -179,7 +180,7 @@ public class PivotalTrackerRepository extends BaseRepositoryImpl {
       @NotNull
       @Override
       public Icon getIcon() {
-        return IconLoader.getIcon(getCustomIcon(), LocalTask.class);
+        return IconLoader.getIcon(getCustomIcon(), PivotalTrackerRepository.class);
       }
 
       @NotNull
@@ -223,12 +224,11 @@ public class PivotalTrackerRepository extends BaseRepositoryImpl {
 
   private static Comment[] parseComments(Element notes) {
     if (notes == null) return Comment.EMPTY_ARRAY;
-    final List<Comment> result = new ArrayList<Comment>();
-    //noinspection unchecked
+    final List<Comment> result = new ArrayList<>();
     for (Element note : (List<Element>)notes.getChildren("note")) {
       final String text = note.getChildText("text");
       if (text == null) continue;
-      final Ref<Date> date = new Ref<Date>();
+      final Ref<Date> date = new Ref<>();
       try {
         date.set(parseDate(note, "noted_at"));
       } catch (ParseException e) {
@@ -237,7 +237,7 @@ public class PivotalTrackerRepository extends BaseRepositoryImpl {
       final String author = note.getChildText("author");
       result.add(new SimpleComment(date.get(), author, text));
     }
-    return result.toArray(new Comment[result.size()]);
+    return result.toArray(Comment.EMPTY_ARRAY);
   }
 
   @Nullable
@@ -277,6 +277,7 @@ public class PivotalTrackerRepository extends BaseRepositoryImpl {
     return Comparing.strEqual(projectId, myProjectId) ? split[1] : null;
   }
 
+  @Override
   @Nullable
   public String extractId(@NotNull final String taskName) {
     Matcher matcher = myPattern.matcher(taskName);
@@ -292,12 +293,13 @@ public class PivotalTrackerRepository extends BaseRepositoryImpl {
   @Override
   protected void configureHttpMethod(final HttpMethod method) {
     method.addRequestHeader("X-TrackerToken", myAPIKey);
+    //method.setFollowRedirects(true);
   }
 
   public String getProjectId() {
     return myProjectId;
   }
-  
+
   public void setProjectId(final String projectId) {
     myProjectId = projectId;
     myPattern = Pattern.compile("(" + projectId + "\\-\\d+):\\s+");
@@ -383,5 +385,13 @@ public class PivotalTrackerRepository extends BaseRepositoryImpl {
   @Override
   protected int getFeatures() {
     return super.getFeatures() | BASIC_HTTP_AUTHORIZATION | STATE_UPDATING;
+  }
+
+  @Override
+  public void setUrl(String url) {
+    if (url.startsWith("http:")) {
+      url = "https:" + StringUtil.trimStart(url, "http:");
+    }
+    super.setUrl(url);
   }
 }

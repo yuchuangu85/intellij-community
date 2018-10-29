@@ -20,9 +20,10 @@ import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.jsp.BaseJspFile;
 import com.intellij.psi.jsp.JspFile;
-import com.intellij.util.containers.HashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.HashSet;
 
 /**
  * @author nik
@@ -48,7 +49,7 @@ public abstract class JspContextManager {
   public
   BaseJspFile getRootContextFile(@NotNull BaseJspFile file) {
     BaseJspFile rootContext = file;
-    HashSet<BaseJspFile> recursionPreventer = new HashSet<BaseJspFile>();
+    HashSet<BaseJspFile> recursionPreventer = new HashSet<>();
     do {
       recursionPreventer.add(rootContext);
       BaseJspFile context = getContextFile(rootContext);

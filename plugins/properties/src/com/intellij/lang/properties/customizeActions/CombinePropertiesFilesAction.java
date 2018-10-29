@@ -33,6 +33,7 @@ import com.intellij.openapi.ui.InputValidatorEx;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.psi.PsiElement;
 import com.intellij.util.containers.ContainerUtil;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -47,10 +48,10 @@ public class CombinePropertiesFilesAction extends AnAction {
   }
 
   @Override
-  public void actionPerformed(final AnActionEvent e) {
+  public void actionPerformed(@NotNull final AnActionEvent e) {
     final List<PropertiesFile> initialPropertiesFiles = getPropertiesFiles(e);
-    final List<PropertiesFile> propertiesFiles = initialPropertiesFiles == null ? new ArrayList<PropertiesFile>()
-                                                                                : new ArrayList<PropertiesFile>(initialPropertiesFiles);
+    final List<PropertiesFile> propertiesFiles = initialPropertiesFiles == null ? new ArrayList<>()
+                                                                                : new ArrayList<>(initialPropertiesFiles);
     final List<ResourceBundle> resourceBundles = getResourceBundles(e);
     if (resourceBundles != null) {
       for (ResourceBundle bundle : resourceBundles) {
@@ -67,7 +68,7 @@ public class CombinePropertiesFilesAction extends AnAction {
     if (newBaseName != null) {
       final Project project = propertiesFiles.get(0).getProject();
 
-      final Set<ResourceBundle> uniqueBundlesToDissociate = new HashSet<ResourceBundle>();
+      final Set<ResourceBundle> uniqueBundlesToDissociate = new HashSet<>();
       for (PropertiesFile file : propertiesFiles) {
         final ResourceBundle resourceBundle = file.getResourceBundle();
         if (resourceBundle.getPropertiesFiles().size() != 1) {
@@ -86,7 +87,7 @@ public class CombinePropertiesFilesAction extends AnAction {
   }
 
   @Override
-  public void update(final AnActionEvent e) {
+  public void update(@NotNull final AnActionEvent e) {
     final Collection<PropertiesFile> propertiesFiles = getPropertiesFiles(e);
     final List<ResourceBundle> resourceBundles = getResourceBundles(e);
     int elementCount = 0;
@@ -100,18 +101,18 @@ public class CombinePropertiesFilesAction extends AnAction {
   }
 
   @Nullable
-  private static List<ResourceBundle> getResourceBundles(AnActionEvent e) {
+  private static List<ResourceBundle> getResourceBundles(@NotNull AnActionEvent e) {
     final ResourceBundle[] resourceBundles = e.getData(ResourceBundle.ARRAY_DATA_KEY);
     return resourceBundles == null ? null : ContainerUtil.newArrayList(resourceBundles);
   }
 
   @Nullable
-  private static List<PropertiesFile> getPropertiesFiles(AnActionEvent e) {
+  private static List<PropertiesFile> getPropertiesFiles(@NotNull AnActionEvent e) {
     final PsiElement[] psiElements = e.getData(LangDataKeys.PSI_ELEMENT_ARRAY);
     if (psiElements == null || psiElements.length == 0) {
       return null;
     }
-    final List<PropertiesFile> files = new ArrayList<PropertiesFile>(psiElements.length);
+    final List<PropertiesFile> files = new ArrayList<>(psiElements.length);
     for (PsiElement psiElement : psiElements) {
       final PropertiesFile propertiesFile = PropertiesImplUtil.getPropertiesFile(psiElement);
       if (propertiesFile == null) {
@@ -128,9 +129,9 @@ public class CombinePropertiesFilesAction extends AnAction {
   }
 
   private static class MyInputValidator implements InputValidatorEx {
-    private final List<PropertiesFile> myPropertiesFiles;
+    private final List<? extends PropertiesFile> myPropertiesFiles;
 
-    private MyInputValidator(final List<PropertiesFile> propertiesFiles) {
+    private MyInputValidator(final List<? extends PropertiesFile> propertiesFiles) {
       myPropertiesFiles = propertiesFiles;
     }
 

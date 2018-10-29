@@ -1,21 +1,7 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.fileEditor.impl;
 
-import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.RoamingType;
 import com.intellij.openapi.components.State;
@@ -30,11 +16,8 @@ import com.intellij.openapi.fileEditor.ex.FileEditorProviderManager;
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Computable;
-import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xmlb.annotations.MapAnnotation;
 import org.jetbrains.annotations.NotNull;
@@ -82,17 +65,14 @@ public final class FileEditorProviderManagerImpl extends FileEditorProviderManag
   @NotNull
   public FileEditorProvider[] getProviders(@NotNull final Project project, @NotNull final VirtualFile file) {
     // Collect all possible editors
-    List<FileEditorProvider> sharedProviders = new ArrayList<FileEditorProvider>();
+    List<FileEditorProvider> sharedProviders = new ArrayList<>();
     boolean doNotShowTextEditor = false;
     for (final FileEditorProvider provider : myProviders) {
-      if (ApplicationManager.getApplication().runReadAction(new Computable<Boolean>() {
-        @Override
-        public Boolean compute() {
-          if (DumbService.isDumb(project) && !DumbService.isDumbAware(provider)) {
-            return false;
-          }
-          return provider.accept(project, file);
+      if (ReadAction.compute(() -> {
+        if (DumbService.isDumb(project) && !DumbService.isDumbAware(provider)) {
+          return false;
         }
+        return provider.accept(project, file);
       })) {
         sharedProviders.add(provider);
         doNotShowTextEditor |= provider.getPolicy() == FileEditorPolicy.HIDE_DEFAULT_EDITOR;
@@ -107,7 +87,7 @@ public final class FileEditorProviderManagerImpl extends FileEditorProviderManag
     // Sort editors according policies
     Collections.sort(sharedProviders, MyComparator.ourInstance);
 
-    return sharedProviders.toArray(new FileEditorProvider[sharedProviders.size()]);
+    return sharedProviders.toArray(new FileEditorProvider[0]);
   }
 
   @Override
@@ -141,14 +121,12 @@ public final class FileEditorProviderManagerImpl extends FileEditorProviderManag
   }
 
   @Override
-  public void loadState(FileEditorProviderManagerImpl state) {
+  public void loadState(@NotNull FileEditorProviderManagerImpl state) {
     mySelectedProviders.clear();
     mySelectedProviders.putAll(state.mySelectedProviders);
   }
 
-  private static final Function<FileEditorProvider, String> EDITOR_PROVIDER_STRING_FUNCTION = provider -> provider.getEditorTypeId();
-
-  private final Map<String, String> mySelectedProviders = new HashMap<String, String>();
+  private final Map<String, String> mySelectedProviders = new HashMap<>();
 
   void providerSelected(EditorComposite composite) {
     if (!(composite instanceof EditorWithProviderComposite)) return;
@@ -159,7 +137,7 @@ public final class FileEditorProviderManagerImpl extends FileEditorProviderManag
   }
 
   private static String computeKey(FileEditorProvider[] providers) {
-    return StringUtil.join(ContainerUtil.map(providers, EDITOR_PROVIDER_STRING_FUNCTION), ",");
+    return StringUtil.join(ContainerUtil.map(providers, FileEditorProvider::getEditorTypeId), ",");
   }
 
   @Nullable
@@ -174,7 +152,7 @@ public final class FileEditorProviderManagerImpl extends FileEditorProviderManag
     return id == null ? null : getProvider(id);
   }
 
-  @MapAnnotation(surroundKeyWithTag = false, surroundValueWithTag = false)
+  @MapAnnotation
   public Map<String, String> getSelectedProviders() {
     return mySelectedProviders;
   }

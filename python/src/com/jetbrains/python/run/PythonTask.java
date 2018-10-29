@@ -17,13 +17,21 @@ package com.jetbrains.python.run;
 
 import com.google.common.collect.Lists;
 import com.intellij.execution.ExecutionException;
+import com.intellij.execution.Output;
+import com.intellij.execution.OutputListener;
 import com.intellij.execution.RunContentExecutor;
 import com.intellij.execution.configurations.EncodingEnvironmentUtil;
 import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.execution.configurations.ParamsGroup;
+import com.intellij.execution.process.ProcessAdapter;
+import com.intellij.execution.process.ProcessEvent;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.process.ProcessTerminatedListener;
 import com.intellij.execution.ui.ConsoleView;
+import com.intellij.openapi.application.Application;
+import com.intellij.openapi.application.ApplicationAdapter;
+import com.intellij.openapi.application.ApplicationListener;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.projectRoots.Sdk;
@@ -39,11 +47,14 @@ import com.jetbrains.python.console.PydevConsoleRunner;
 import com.jetbrains.python.sdk.PySdkUtil;
 import com.jetbrains.python.sdk.PythonEnvUtil;
 import com.jetbrains.python.sdk.PythonSdkType;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * TODO: Use {@link com.jetbrains.python.run.PythonRunner} instead of this class? At already supports rerun and other things
@@ -56,13 +67,14 @@ public class PythonTask {
    * Mils we wait to process to be stopped when "rerun" called
    */
   private static final long TIME_TO_WAIT_PROCESS_STOP = 2000L;
+  private static final int TIMEOUT_TO_WAIT_FOR_TASK = 30000;
   protected final Module myModule;
   private final Sdk mySdk;
   private String myWorkingDirectory;
   private String myRunnerScript;
   private HelperPackage myHelper = null;
 
-  private List<String> myParameters = new ArrayList<String>();
+  private List<String> myParameters = new ArrayList<>();
   private final String myRunTabTitle;
   private String myHelpId;
   private Runnable myAfterCompletion;
@@ -71,11 +83,24 @@ public class PythonTask {
     this(module, runTabTitle, PythonSdkType.findPythonSdk(module));
   }
 
+  @NotNull
+  public static PythonTask create(@NotNull final Module module,
+                                  @NotNull final String runTabTitle,
+                                  @NotNull final Sdk sdk) {
+    // Ctor throws checked exception which is not good, so this wrapper saves user from dumb code
+    try {
+      return new PythonTask(module, runTabTitle, sdk);
+    }
+    catch (final ExecutionException ignored) {
+      throw new AssertionError("Exception thrown file should not be");
+    }
+  }
+
   public PythonTask(final Module module, final String runTabTitle, @Nullable final Sdk sdk) throws ExecutionException {
     myModule = module;
     myRunTabTitle = runTabTitle;
     mySdk = sdk;
-    if (mySdk == null) {
+    if (mySdk == null) { // TODO: Get rid of such a weird contract
       throw new ExecutionException("Cannot find Python interpreter for selected module");
     }
   }
@@ -167,11 +192,11 @@ public class PythonTask {
       NotNullFunction<String, String> escaperFunction = StringUtil.escaper(false, "|>$\"'& ");
       StringBuilder paramString;
       if (myHelper != null) {
-        paramString= new StringBuilder(escaperFunction.fun(homePath) + " " + escaperFunction.fun(myHelper.asParamString()));
+        paramString = new StringBuilder(escaperFunction.fun(homePath) + " " + escaperFunction.fun(myHelper.asParamString()));
         myHelper.addToPythonPath(cmd.getEnvironment());
       }
       else {
-        paramString= new StringBuilder(escaperFunction.fun(homePath) + " " + escaperFunction.fun(myRunnerScript));
+        paramString = new StringBuilder(escaperFunction.fun(homePath) + " " + escaperFunction.fun(myRunnerScript));
       }
       for (String p : myParameters) {
         paramString.append(" ").append(p);
@@ -186,7 +211,7 @@ public class PythonTask {
       else {
         scriptParams.addParameter(myRunnerScript);
       }
-      scriptParams.addParameters(myParameters);
+      scriptParams.addParameters(myParameters.stream().filter( o -> o != null).collect(Collectors.toList()));
     }
 
     PythonEnvUtil.setPythonUnbuffered(env);
@@ -221,6 +246,7 @@ public class PythonTask {
    */
   public void run(@Nullable final Map<String, String> env, @Nullable final ConsoleView consoleView) throws ExecutionException {
     final ProcessHandler process = createProcess(env);
+    stopProcessWhenAppClosed(process);
     final Project project = myModule.getProject();
     new RunContentExecutor(project, process)
       .withFilter(new PythonTracebackFilter(project))
@@ -230,7 +256,7 @@ public class PythonTask {
         try {
           process.destroyProcess(); // Stop process before rerunning it
           if (process.waitFor(TIME_TO_WAIT_PROCESS_STOP)) {
-            PythonTask.this.run(env, consoleView);
+            this.run(env, consoleView);
           }
           else {
             Messages.showErrorDialog(PyBundle.message("unable.to.stop"), myRunTabTitle);
@@ -245,5 +271,53 @@ public class PythonTask {
       .withAfterCompletion(myAfterCompletion)
       .withHelpId(myHelpId)
       .run();
+  }
+
+  /**
+   * Adds process listener that kills process on application shutdown.
+   * Listener is removed from process stopped to prevent leak
+   */
+  private void stopProcessWhenAppClosed(@NotNull final ProcessHandler process) {
+
+    final ApplicationListener processStopper = new ApplicationAdapter() {
+      @Override
+      public void applicationExiting() {
+        super.applicationExiting();
+        process.destroyProcess();
+      }
+    };
+
+    final Application app = ApplicationManager.getApplication();
+    process.addProcessListener(new ProcessAdapter() {
+      @Override
+      public void processTerminated(@NotNull final ProcessEvent event) {
+        super.processTerminated(event);
+        app.removeApplicationListener(processStopper);
+      }
+    }, myModule);
+    app.addApplicationListener(processStopper);
+  }
+
+
+  /**
+   * Runs task with out console
+   * @return stdout
+   * @throws ExecutionException in case of error. Consider using {@link com.intellij.execution.util.ExecutionErrorDialog}
+   */
+  @NotNull
+  public final String runNoConsole() throws ExecutionException {
+
+    final ProcessHandler process = createProcess(new HashMap<>());
+    final OutputListener listener = new OutputListener();
+    process.addProcessListener(listener);
+    process.startNotify();
+    process.waitFor(TIMEOUT_TO_WAIT_FOR_TASK);
+    final Output output = listener.getOutput();
+    final int exitCode = output.getExitCode();
+    if (exitCode == 0) {
+      return output.getStdout();
+    }
+    throw new ExecutionException(String.format("Error on python side. " +
+                                               "Exit code: %s, err: %s out: %s", exitCode, output.getStderr(), output.getStdout()));
   }
 }

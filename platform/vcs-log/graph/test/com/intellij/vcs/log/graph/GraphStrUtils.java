@@ -18,7 +18,6 @@ package com.intellij.vcs.log.graph;
 
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.Function;
-import com.intellij.util.NotNullFunction;
 import com.intellij.vcs.log.graph.api.GraphLayout;
 import com.intellij.vcs.log.graph.api.elements.GraphEdge;
 import com.intellij.vcs.log.graph.api.elements.GraphElement;
@@ -36,13 +35,7 @@ import static com.intellij.vcs.log.graph.parser.EdgeNodeCharConverter.toChar;
 public class GraphStrUtils {
 
   public static final Comparator<GraphElement> GRAPH_ELEMENT_COMPARATOR =
-    new GraphElementComparatorByLayoutIndex(new NotNullFunction<Integer, Integer>() {
-      @NotNull
-      @Override
-      public Integer fun(Integer nodeIndex) {
-        return 0;
-      }
-    });
+    new GraphElementComparatorByLayoutIndex(nodeIndex -> 0);
 
   public static <CommitId> String commitsInfoToStr(PermanentCommitsInfo<CommitId> commitsInfo, int size, Function<CommitId, String> toStr) {
     StringBuilder s = new StringBuilder();
@@ -75,7 +68,7 @@ public class GraphStrUtils {
     for (int nodeIndex = 0; nodeIndex < nodesCount; nodeIndex++) {
       if (nodeIndex != 0) s.append("\n");
 
-      List<Integer> branchNodeIndexes = new ArrayList<Integer>(reachableNodes.getContainingBranches(nodeIndex, branches));
+      List<Integer> branchNodeIndexes = new ArrayList<>(reachableNodes.getContainingBranches(nodeIndex, branches));
       if (branchNodeIndexes.isEmpty()) {
         s.append("none");
         continue;
@@ -110,14 +103,10 @@ public class GraphStrUtils {
   public static String edgesToStr(@NotNull Set<GraphEdge> edges) {
     if (edges.isEmpty()) return "none";
 
-    List<GraphEdge> sortedEdges = new ArrayList<GraphEdge>(edges);
+    List<GraphEdge> sortedEdges = new ArrayList<>(edges);
     Collections.sort(sortedEdges, GRAPH_ELEMENT_COMPARATOR);
 
-    return StringUtil.join(sortedEdges, new Function<GraphEdge, String>() {
-      @Override
-      public String fun(GraphEdge graphEdge) {
-        return graphEdge.getUpNodeIndex() + "_" + graphEdge.getDownNodeIndex() + "_" + toChar(graphEdge.getType());
-      }
-    }, " ");
+    return StringUtil.join(sortedEdges,
+                           graphEdge -> graphEdge.getUpNodeIndex() + "_" + graphEdge.getDownNodeIndex() + "_" + toChar(graphEdge.getType()), " ");
   }
 }

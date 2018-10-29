@@ -18,10 +18,12 @@ package net.sf.cglib.proxy;
 import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.ide.plugins.cl.PluginClassLoader;
 import com.intellij.util.ReflectionUtil;
+import com.intellij.util.containers.ContainerUtil;
 import net.sf.cglib.asm.$ClassVisitor;
 import net.sf.cglib.asm.$Label;
 import net.sf.cglib.asm.$Type;
 import net.sf.cglib.core.*;
+import org.jetbrains.annotations.NotNull;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -43,37 +45,36 @@ import java.util.*;
  * and after the invocation of the "super" method. In addition you can modify the
  * arguments before calling the super method, or not call it at all.
  * <p>
- * Although <code>MethodInterceptor</code> is generic enough to meet any
+ * Although {@code MethodInterceptor} is generic enough to meet any
  * interception need, it is often overkill. For simplicity and performance, additional
  * specialized callback types, such as {@link LazyLoader} are also available.
  * Often a single callback will be used per enhanced class, but you can control
  * which callback is used on a per-method basis with a {@link CallbackFilter}.
  * <p>
  * The most common uses of this class are embodied in the static helper methods. For
- * advanced needs, such as customizing the <code>ClassLoader</code> to use, you should create
- * a new instance of <code>Enhancer</code>. Other classes within CGLIB follow a similar pattern.
+ * advanced needs, such as customizing the {@code ClassLoader} to use, you should create
+ * a new instance of {@code Enhancer}. Other classes within CGLIB follow a similar pattern.
  * <p>
  * All enhanced objects implement the {@link Factory} interface, unless {@link #setUseFactory} is
- * used to explicitly disable this feature. The <code>Factory</code> interface provides an API
+ * used to explicitly disable this feature. The {@code Factory} interface provides an API
  * to change the callbacks of an existing object, as well as a faster and easier way to create
  * new instances of the same type.
  * <p>
  * For an almost drop-in replacement for
- * <code>java.lang.reflect.Proxy</code>, see the {@link Proxy} class.
+ * {@code java.lang.reflect.Proxy}, see the {@link Proxy} class.
  */
 
 @SuppressWarnings("StaticFieldReferencedViaSubclass")
 public class AdvancedEnhancer extends AbstractClassGenerator
 {
   private static final CallbackFilter ALL_ZERO = new CallbackFilter(){
+    @Override
     public int accept(Method method) {
       return 0;
     }
   };
 
   private static final Source SOURCE = new Source(Enhancer.class.getName());
-  private static final EnhancerKey KEY_FACTORY =
-    (EnhancerKey)KeyFactory.create(EnhancerKey.class);
 
   private static final String BOUND_FIELD = "CGLIB$BOUND";
   private static final String THREAD_CALLBACKS_FIELD = "CGLIB$THREAD_CALLBACKS";
@@ -131,17 +132,6 @@ public class AdvancedEnhancer extends AbstractClassGenerator
     }
   };
 
-  /** Internal interface, only public due to ClassLoader issues. */
-  public interface EnhancerKey {
-    Object newInstance(String type,
-                              String[] interfaces,
-                              CallbackFilter filter,
-                              $Type[] callbackTypes,
-                              boolean useFactory,
-                              boolean interceptDuringConstruction,
-                              Long serialVersionUID);
-  }
-
   private Class[] interfaces;
   private CallbackFilter filter;
   private Callback[] callbacks;
@@ -151,14 +141,13 @@ public class AdvancedEnhancer extends AbstractClassGenerator
   private Class[] argumentTypes;
   private Object[] arguments;
   private boolean useFactory = true;
-  private Long serialVersionUID;
   private boolean interceptDuringConstruction = true;
 
   /**
-   * Create a new <code>Enhancer</code>. A new <code>Enhancer</code>
+   * Create a new {@code Enhancer}. A new {@code Enhancer}
    * object should be used for each generated object, and should not
    * be shared across threads. To create additional instances of a
-   * generated class, use the <code>Factory</code> interface.
+   * generated class, use the {@code Factory} interface.
    * @see Factory
    */
   public AdvancedEnhancer() {
@@ -169,7 +158,7 @@ public class AdvancedEnhancer extends AbstractClassGenerator
 
   /**
    * Set the class which the generated class will extend. As a convenience,
-   * if the supplied superclass is actually an interface, <code>setInterfaces</code>
+   * if the supplied superclass is actually an interface, {@code setInterfaces}
    * will be called with the appropriate argument instead.
    * A non-interface argument must not be declared as final, and must have an
    * accessible constructor.
@@ -188,7 +177,7 @@ public class AdvancedEnhancer extends AbstractClassGenerator
   }
 
   /**
-   * Set the interfaces to implement. The <code>Factory</code> interface will
+   * Set the interfaces to implement. The {@code Factory} interface will
    * always be implemented regardless of what is specified here.
    * @param interfaces array of interfaces to implement, or null
    * @see Factory
@@ -241,9 +230,9 @@ public class AdvancedEnhancer extends AbstractClassGenerator
    * the {@link Factory} interface.
    * This was added for tools that need for proxies to be more
    * indistinguishable from their targets. Also, in some cases it may
-   * be necessary to disable the <code>Factory</code> interface to
+   * be necessary to disable the {@code Factory} interface to
    * prevent code from changing the underlying callbacks.
-   * @param useFactory whether to implement <code>Factory</code>; default is <code>true</code>
+   * @param useFactory whether to implement {@code Factory}; default is {@code true}
    */
   public void setUseFactory(boolean useFactory) {
     this.useFactory = useFactory;
@@ -290,7 +279,7 @@ public class AdvancedEnhancer extends AbstractClassGenerator
   /**
    * Generate a new class if necessary and uses the specified
    * callbacks (if any) to create a new object instance.
-   * Uses the constructor of the superclass matching the <code>argumentTypes</code>
+   * Uses the constructor of the superclass matching the {@code argumentTypes}
    * parameter, with the given arguments.
    * @param argumentTypes constructor signature
    * @param arguments compatible wrapped arguments to pass to constructor
@@ -362,15 +351,20 @@ public class AdvancedEnhancer extends AbstractClassGenerator
     } else if (interfaces != null) {
       setNamePrefix(interfaces[ReflectUtils.findPackageProtected(interfaces)].getName());
     }
-    return super.create(KEY_FACTORY.newInstance((superclass != null) ? superclass.getName() : null,
-                                                ReflectUtils.getNames(interfaces),
-                                                filter,
-                                                callbackTypes,
-                                                useFactory,
-                                                interceptDuringConstruction,
-                                                serialVersionUID));
+    return super.create(createKey());
   }
 
+  @NotNull
+  private List<Object> createKey() {
+    List<Object> tuple = ContainerUtil.newArrayList(Arrays.asList(callbackTypes), (useFactory ? 1 : 0) + (interceptDuringConstruction ? 2 : 0));
+    if (superclass != null) tuple.add(superclass.getName());
+    if (interfaces != null) {
+      tuple.addAll(ContainerUtil.map(interfaces, Class::getName));
+    }
+    return tuple;
+  }
+
+  @Override
   protected ClassLoader getDefaultClassLoader() {
     int maxIndex = -1;
     ClassLoader bestLoader = null;
@@ -429,22 +423,23 @@ public class AdvancedEnhancer extends AbstractClassGenerator
     CollectionUtils.filter(methods, new VisibilityPredicate(superclass, true));
   }
 
+  @Override
   public void generateClass($ClassVisitor v) throws Exception {
     Class sc = (superclass == null) ? Object.class : superclass;
 
     if (TypeUtils.isFinal(sc.getModifiers())) {
       throw new IllegalArgumentException("Cannot subclass final class " + sc);
     }
-    List<Constructor> constructors = new ArrayList<Constructor>(Arrays.asList(sc.getDeclaredConstructors()));
+    List<Constructor> constructors = new ArrayList<>(Arrays.asList(sc.getDeclaredConstructors()));
     filterConstructors(sc, constructors);
 
     // Order is very important: must add superclass, then
     // its superclass chain, then each interface and
     // its superinterfaces.
     final Set forcePublic = new HashSet();
-    List<Method> actualMethods = new ArrayList<Method>();
-    final Map<Method, Method> covariantMethods = new HashMap<Method, Method>();
-    getMethods(sc, interfaces, actualMethods, new ArrayList<Method>(), forcePublic);
+    List<Method> actualMethods = new ArrayList<>();
+    final Map<Method, Method> covariantMethods = new HashMap<>();
+    getMethods(sc, interfaces, actualMethods, new ArrayList<>(), forcePublic);
 
     //Changes by Peter Gromov & Gregory Shrago
 
@@ -474,14 +469,11 @@ public class AdvancedEnhancer extends AbstractClassGenerator
     }
     e.declare_field(Constants.PRIVATE_FINAL_STATIC, THREAD_CALLBACKS_FIELD, THREAD_LOCAL, null);
     e.declare_field(Constants.PRIVATE_FINAL_STATIC, STATIC_CALLBACKS_FIELD, CALLBACK_ARRAY, null);
-    if (serialVersionUID != null) {
-      e.declare_field(Constants.PRIVATE_FINAL_STATIC, Constants.SUID_FIELD_NAME, $Type.LONG_TYPE, serialVersionUID);
-    }
 
     for (int i = 0; i < callbackTypes.length; i++) {
       e.declare_field(Constants.ACC_PRIVATE, getCallbackField(i), callbackTypes[i], null);
     }
-    final Map<Method, MethodInfo> methodInfoMap = new HashMap<Method, MethodInfo>();
+    final Map<Method, MethodInfo> methodInfoMap = new HashMap<>();
     for (Method method : actualMethods) {
       if (isJdk8DefaultMethod(method)) {
         continue;
@@ -566,6 +558,7 @@ public class AdvancedEnhancer extends AbstractClassGenerator
     }
   }
 
+  @Override
   protected Object firstInstance(Class type) throws Exception {
     if (classOnly) {
       return type;
@@ -574,6 +567,7 @@ public class AdvancedEnhancer extends AbstractClassGenerator
     }
   }
 
+  @Override
   protected Object nextInstance(Object instance) {
     Class protoclass = (instance instanceof Class) ? (Class) instance : instance.getClass();
     if (classOnly) {
@@ -600,9 +594,7 @@ public class AdvancedEnhancer extends AbstractClassGenerator
       setter.invoke(null, (Object)callbacks);
     } catch (NoSuchMethodException e) {
       throw new IllegalArgumentException(type + " is not an enhanced class");
-    } catch (IllegalAccessException e) {
-      throw new CodeGenerationException(e);
-    } catch (InvocationTargetException e) {
+    } catch (IllegalAccessException | InvocationTargetException e) {
       throw new CodeGenerationException(e);
     }
   }
@@ -670,10 +662,12 @@ public class AdvancedEnhancer extends AbstractClassGenerator
     e.load_this();
     e.load_arg(0);
     e.process_switch(keys, new ProcessSwitchCallback() {
+      @Override
       public void processCase(int key, $Label end) {
         e.getfield(getCallbackField(key));
         e.goTo(end);
       }
+      @Override
       public void processDefault() {
         e.pop(); // stack height
         e.aconst_null();
@@ -689,11 +683,13 @@ public class AdvancedEnhancer extends AbstractClassGenerator
     e.load_arg(1);
     e.load_arg(0);
     e.process_switch(keys, new ProcessSwitchCallback() {
+      @Override
       public void processCase(int key, $Label end) {
         e.checkcast(callbackTypes[key]);
         e.putfield(getCallbackField(key));
         e.goTo(end);
       }
+      @Override
       public void processDefault() {
         final $Type type = $Type.getType(AssertionError.class);
         e.new_instance(type);
@@ -785,9 +781,10 @@ public class AdvancedEnhancer extends AbstractClassGenerator
     e.dup();
     e.load_arg(0);
     EmitUtils.constructor_switch(e, constructors, new ObjectSwitchCallback() {
+      @Override
       public void processCase(Object key, $Label end) {
         MethodInfo constructor = (MethodInfo)key;
-        $Type types[] = constructor.getSignature().getArgumentTypes();
+        $Type[] types = constructor.getSignature().getArgumentTypes();
         for (int i = 0; i < types.length; i++) {
           e.load_arg(1);
           e.push(i);
@@ -797,6 +794,7 @@ public class AdvancedEnhancer extends AbstractClassGenerator
         e.invoke_constructor_this(constructor.getSignature());
         e.goTo(end);
       }
+      @Override
       public void processDefault() {
         e.throw_exception(ILLEGAL_ARGUMENT_EXCEPTION, "Constructor not found");
       }
@@ -809,7 +807,7 @@ public class AdvancedEnhancer extends AbstractClassGenerator
 
   private void emitMethods(final ClassEmitter ce, Map<Method, MethodInfo> methodMap, final Map<Method, Method> covariantMethods) {
     CallbackGenerator[] generators = CallbackInfo.getGenerators(callbackTypes);
-    Map<MethodInfo, MethodInfo> covariantInfoMap = new HashMap<MethodInfo, MethodInfo>();
+    Map<MethodInfo, MethodInfo> covariantInfoMap = new HashMap<>();
     for (Method method : methodMap.keySet()) {
       final Method delegate = covariantMethods.get(method);
       if (delegate != null) {
@@ -818,10 +816,10 @@ public class AdvancedEnhancer extends AbstractClassGenerator
     }
     BridgeMethodGenerator bridgeMethodGenerator = new BridgeMethodGenerator(covariantInfoMap);
 
-    Map<CallbackGenerator,List<MethodInfo>> groups = new HashMap<CallbackGenerator, List<MethodInfo>>();
-    final Map<MethodInfo,Integer> indexes = new HashMap<MethodInfo, Integer>();
-    final Map<MethodInfo,Integer> originalModifiers = new HashMap<MethodInfo, Integer>();
-    final Map positions = CollectionUtils.getIndexMap(new ArrayList<MethodInfo>(methodMap.values()));
+    Map<CallbackGenerator,List<MethodInfo>> groups = new HashMap<>();
+    final Map<MethodInfo,Integer> indexes = new HashMap<>();
+    final Map<MethodInfo,Integer> originalModifiers = new HashMap<>();
+    final Map positions = CollectionUtils.getIndexMap(new ArrayList<>(methodMap.values()));
 
     for (Method actualMethod : methodMap.keySet()) {
       MethodInfo method = methodMap.get(actualMethod);
@@ -834,7 +832,7 @@ public class AdvancedEnhancer extends AbstractClassGenerator
       final CallbackGenerator generator = covariantMethods.containsKey(actualMethod)? bridgeMethodGenerator : generators[index];
       List<MethodInfo> group = groups.get(generator);
       if (group == null) {
-        groups.put(generator, group = new ArrayList<MethodInfo>(methodMap.size()));
+        groups.put(generator, group = new ArrayList<>(methodMap.size()));
       }
       group.add(method);
     }
@@ -846,18 +844,23 @@ public class AdvancedEnhancer extends AbstractClassGenerator
     se.putfield(THREAD_CALLBACKS_FIELD);
 
     CallbackGenerator.Context context = new CallbackGenerator.Context() {
+      @Override
       public ClassLoader getClassLoader() {
   	return AdvancedEnhancer.this.getClassLoader();
       }
+      @Override
       public int getOriginalModifiers(MethodInfo method) {
         return originalModifiers.get(method);
       }
+      @Override
       public int getIndex(MethodInfo method) {
         return indexes.get(method);
       }
+      @Override
       public void emitCallback(CodeEmitter e, int index) {
         emitCurrentCallback(e, index);
       }
+      @Override
       public Signature getImplSignature(MethodInfo method) {
         return rename(method.getSignature(), (Integer)positions.get(method));
       }
@@ -867,6 +870,7 @@ public class AdvancedEnhancer extends AbstractClassGenerator
         codeEmitter.super_invoke(methodInfo.getSignature());
       }
 
+      @Override
       public CodeEmitter beginMethod(ClassEmitter ce, MethodInfo method) {
         CodeEmitter e = EmitUtils.begin_method(ce, method);
         if (!interceptDuringConstruction &&
@@ -884,7 +888,7 @@ public class AdvancedEnhancer extends AbstractClassGenerator
         return e;
       }
     };
-    Set<CallbackGenerator> seenGen = new HashSet<CallbackGenerator>();
+    Set<CallbackGenerator> seenGen = new HashSet<>();
     for (int i = 0; i < callbackTypes.length + 1; i++) {
       CallbackGenerator gen = i == callbackTypes.length? bridgeMethodGenerator : generators[i];
       if (!seenGen.contains(gen)) {

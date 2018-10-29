@@ -1,34 +1,18 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.util.registry;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
-import com.intellij.openapi.application.ApplicationInfo;
-import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.ApplicationNamesInfo;
-import com.intellij.openapi.application.ModalityState;
+import com.intellij.openapi.application.*;
 import com.intellij.openapi.application.ex.ApplicationEx;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.ShadowAction;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.*;
 import com.intellij.ui.table.JBTable;
 import com.intellij.util.PlatformIcons;
@@ -51,6 +35,7 @@ import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.util.*;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @author Kirill Kalishev
@@ -135,7 +120,7 @@ public class RegistryUi implements Disposable {
     tbGroup.add(new EditAction());
     tbGroup.add(new RevertAction());
 
-    final ActionToolbar tb = ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN, tbGroup, true);
+    final ActionToolbar tb = ActionManager.getInstance().createActionToolbar("Registry", tbGroup, true);
     tb.setTargetComponent(myTable);
 
     myContent.add(tb.getComponent(), BorderLayout.NORTH);
@@ -152,7 +137,7 @@ public class RegistryUi implements Disposable {
               rv.setValue(!rv.asBoolean());
               keyChanged(rv.getKey());
               for (int i : new int[]{0, 1, 2}) myModel.fireTableCellUpdated(row, i);
-              revaliateActions();
+              invalidateActions();
               if (search.isPopupActive()) search.hidePopup();
             }
           }
@@ -164,11 +149,11 @@ public class RegistryUi implements Disposable {
   private class RevertAction extends AnAction {
 
     private RevertAction() {
-      new ShadowAction(this, ActionManager.getInstance().getAction("EditorDelete"), myTable);
+      new ShadowAction(this, ActionManager.getInstance().getAction("EditorDelete"), myTable, RegistryUi.this);
     }
 
     @Override
-    public void update(AnActionEvent e) {
+    public void update(@NotNull AnActionEvent e) {
       e.getPresentation().setEnabled(!myTable.isEditing() && myTable.getSelectedRow() >= 0);
       e.getPresentation().setText("Revert to Default");
       e.getPresentation().setIcon(AllIcons.General.Reset);
@@ -180,42 +165,43 @@ public class RegistryUi implements Disposable {
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       final RegistryValue rv = myModel.getRegistryValue(myTable.getSelectedRow());
       rv.resetToDefault();
       myModel.fireTableCellUpdated(myTable.getSelectedRow(), 0);
       myModel.fireTableCellUpdated(myTable.getSelectedRow(), 1);
       myModel.fireTableCellUpdated(myTable.getSelectedRow(), 2);
-      revaliateActions();
+      invalidateActions();
     }
   }
 
   private class EditAction extends AnAction {
     private EditAction() {
-      new ShadowAction(this, ActionManager.getInstance().getAction(IdeActions.ACTION_EDIT_SOURCE), myTable);
+      new ShadowAction(this, ActionManager.getInstance().getAction(IdeActions.ACTION_EDIT_SOURCE), myTable, RegistryUi.this);
     }
 
     @Override
-    public void update(AnActionEvent e) {
+    public void update(@NotNull AnActionEvent e) {
       e.getPresentation().setEnabled(!myTable.isEditing() && myTable.getSelectedRow() >= 0);
       e.getPresentation().setText("Edit");
       e.getPresentation().setIcon(AllIcons.Actions.EditSource);
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       startEditingAtSelection();
     }
   }
 
   private void startEditingAtSelection() {
     myTable.editCellAt(myTable.getSelectedRow(), 2);
-    SwingUtilities.invokeLater(() -> {
-      if (myTable.isEditing()) {
-        myTable.getEditorComponent().requestFocus();
-      }
-    });
+    if (myTable.isEditing()) {
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+        IdeFocusManager.getGlobalInstance().requestFocus(myTable.getEditorComponent(), true);
+      });
+    }
   }
+
 
   private static class MyTableModel extends AbstractTableModel {
 
@@ -223,10 +209,18 @@ public class RegistryUi implements Disposable {
 
     private MyTableModel() {
       myAll = Registry.getAll();
+      myAll.addAll(Experiments.EP_NAME.getExtensionList().stream()
+                     .map(ExperimentalFeatureRegistryValueWrapper::new)
+                     .collect(Collectors.toList()));
       final List<String> recent = getRecent();
 
       Collections.sort(myAll, (o1, o2) -> {
         final String key1 = o1.getKey();
+        boolean changed1 = o1.isChangedFromDefault();
+        boolean changed2 = o2.isChangedFromDefault();
+        if (changed1 && !changed2) return -1;
+        if (!changed1 && changed2) return 1;
+
         final String key2 = o2.getKey();
         final int i1 = recent.indexOf(key1);
         final int i2 = recent.indexOf(key2);
@@ -280,7 +274,7 @@ public class RegistryUi implements Disposable {
 
   private static List<String> getRecent() {
     String value = PropertiesComponent.getInstance().getValue(RECENT_PROPERTIES_KEY);
-    return StringUtil.isEmpty(value) ? new ArrayList<String>(0) : StringUtil.split(value, "=");
+    return StringUtil.isEmpty(value) ? new ArrayList<>(0) : StringUtil.split(value, "=");
   }
 
   private static void keyChanged(String key) {
@@ -296,7 +290,7 @@ public class RegistryUi implements Disposable {
         setTitle("Registry");
         setModal(true);
         init();
-        revaliateActions();
+        invalidateActions();
       }
 
       private AbstractAction myCloseAction;
@@ -322,7 +316,7 @@ public class RegistryUi implements Disposable {
       @Override
       protected void dispose() {
         super.dispose();
-        RegistryUi.this.dispose();
+        Disposer.dispose(RegistryUi.this);
       }
 
       @Override
@@ -371,15 +365,10 @@ public class RegistryUi implements Disposable {
 
   private void processClose() {
     if (Registry.getInstance().isRestartNeeded()) {
-      final ApplicationEx app = (ApplicationEx) ApplicationManager.getApplication();
-      final ApplicationInfo info = ApplicationInfo.getInstance();
-
-      final int r = Messages.showOkCancelDialog(myContent, "You need to restart " + info.getVersionName() + " for the changes to take effect", "Restart Required",
-                                                app.isRestartCapable() ? "Restart Now" : "Shutdown Now",
-                                                app.isRestartCapable() ? "Restart Later": "Shutdown Later"
-          , Messages.getQuestionIcon());
-
-
+      ApplicationEx app = (ApplicationEx) ApplicationManager.getApplication();
+      String message = "You need to restart " + ApplicationNamesInfo.getInstance().getFullProductName() + " for the changes to take effect";
+      String action = app.isRestartCapable() ? "Restart" : "Shutdown";
+      int r = Messages.showOkCancelDialog(myContent, message, "Restart Required", action + " Now", action + " Later", Messages.getQuestionIcon());
       if (r == Messages.OK) {
         ApplicationManager.getApplication().invokeLater(() -> app.restart(true), ModalityState.NON_MODAL);
       }
@@ -387,24 +376,23 @@ public class RegistryUi implements Disposable {
   }
 
   private void restoreDefaults() {
-    final int r = Messages.showYesNoDialog(myContent, "Are you sure you want to revert registry settings to default values?", "Revert To Defaults", Messages.getQuestionIcon());
+    String message = "Are you sure you want to revert registry settings to default values?";
+    int r = Messages.showYesNoDialog(myContent, message, "Revert To Defaults", Messages.getQuestionIcon());
     if (r == Messages.YES) {
       Registry.getInstance().restoreDefaults();
       myModel.fireChanged();
-      revaliateActions();
+      invalidateActions();
     }
   }
 
-  private void revaliateActions() {
+  private void invalidateActions() {
     myRestoreDefaultsAction.setEnabled(!Registry.getInstance().isInDefaultState());
   }
 
   @Override
-  public void dispose() {
-  }
+  public void dispose() { }
 
   private static class MyRenderer implements TableCellRenderer {
-
     private final JLabel myLabel = new JLabel();
 
     @NotNull
@@ -416,7 +404,7 @@ public class RegistryUi implements Disposable {
       myLabel.setHorizontalAlignment(SwingConstants.LEFT);
       Color fg = isSelected ? table.getSelectionForeground() : v.isChangedFromDefault() ? JBColor.blue : table.getForeground();
       Color bg = isSelected ? table.getSelectionBackground() : table.getBackground();
-      
+
       if (v != null) {
         switch (column) {
           case 0:
@@ -450,7 +438,7 @@ public class RegistryUi implements Disposable {
     }
   }
 
-  private static final Map<Color, Icon> icons_cache = new HashMap<Color, Icon>();
+  private static final Map<Color, Icon> icons_cache = new HashMap<>();
   private static Icon createColoredIcon(Color color) {
     Icon icon = icons_cache.get(color);
     if (icon != null) return icon;
@@ -505,7 +493,7 @@ public class RegistryUi implements Disposable {
         }
         keyChanged(myValue.getKey());
       }
-      revaliateActions();
+      invalidateActions();
       return super.stopCellEditing();
     }
 
@@ -516,7 +504,7 @@ public class RegistryUi implements Disposable {
   }
 
   private class RestoreDefaultsAction extends AbstractAction {
-    public RestoreDefaultsAction() {
+    RestoreDefaultsAction() {
       super("Restore Defaults");
     }
 

@@ -105,7 +105,7 @@ public class GrIntroduceParameterProcessor extends BaseRefactoringProcessor impl
   @Override
   protected boolean preprocessUsages(@NotNull Ref<UsageInfo[]> refUsages) {
     UsageInfo[] usagesIn = refUsages.get();
-    MultiMap<PsiElement, String> conflicts = new MultiMap<PsiElement, String>();
+    MultiMap<PsiElement, String> conflicts = new MultiMap<>();
 
     if (!mySettings.generateDelegate()) {
       GroovyIntroduceParameterUtil.detectAccessibilityConflicts(mySettings.getExpression(), usagesIn, conflicts,
@@ -142,7 +142,7 @@ public class GrIntroduceParameterProcessor extends BaseRefactoringProcessor impl
   @NotNull
   @Override
   protected UsageInfo[] findUsages() {
-    ArrayList<UsageInfo> result = new ArrayList<UsageInfo>();
+    ArrayList<UsageInfo> result = new ArrayList<>();
 
     final PsiMethod toSearchFor = ((PsiMethod)mySettings.getToSearchFor());
 
@@ -202,7 +202,7 @@ public class GrIntroduceParameterProcessor extends BaseRefactoringProcessor impl
       result.add(new UsageInfo(overridingMethod));
     }
 
-    final UsageInfo[] usageInfos = result.toArray(new UsageInfo[result.size()]);
+    final UsageInfo[] usageInfos = result.toArray(UsageInfo.EMPTY_ARRAY);
     return UsageViewUtil.removeDuplicatedUsages(usageInfos);
   }
 
@@ -303,6 +303,7 @@ public class GrIntroduceParameterProcessor extends BaseRefactoringProcessor impl
     }
   }
 
+  @NotNull
   @Override
   protected String getCommandName() {
     return RefactoringBundle.message("introduce.parameter.command", DescriptiveNameUtil.getDescriptiveName(mySettings.getToReplaceIn()));

@@ -35,7 +35,6 @@ import java.util.Set;
 
 /**
  * @author Vladislav.Soroka
- * @since 11/7/2014
  */
 @Order(ExternalSystemNode.BUILTIN_RUN_CONFIGURATIONS_DATA_NODE_ORDER)
 public class RunConfigurationsNode extends ExternalSystemNode<Void> {
@@ -48,7 +47,7 @@ public class RunConfigurationsNode extends ExternalSystemNode<Void> {
   }
 
   @Override
-  protected void update(PresentationData presentation) {
+  protected void update(@NotNull PresentationData presentation) {
     super.update(presentation);
     presentation.setIcon(ExternalSystemIcons.TaskGroup);
   }
@@ -70,7 +69,7 @@ public class RunConfigurationsNode extends ExternalSystemNode<Void> {
     final AbstractExternalSystemTaskConfigurationType configurationType = ExternalSystemUtil.findConfigurationType(myModuleData.getOwner());
     if (configurationType == null) return Collections.emptyList();
 
-    Set<RunnerAndConfigurationSettings> settings = new THashSet<RunnerAndConfigurationSettings>(
+    Set<RunnerAndConfigurationSettings> settings = new THashSet<>(
       RunManager.getInstance(myProject).getConfigurationSettingsList(configurationType));
 
 

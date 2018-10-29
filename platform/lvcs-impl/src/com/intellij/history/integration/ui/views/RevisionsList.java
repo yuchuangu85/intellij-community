@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.history.integration.ui.views;
 
@@ -33,9 +19,12 @@ import com.intellij.util.text.DateFormatUtil;
 import com.intellij.util.ui.AbstractLayoutManager;
 import com.intellij.util.ui.JBInsets;
 import com.intellij.util.ui.UIUtil;
+import com.intellij.util.ui.accessibility.AccessibleContextUtil;
 import gnu.trove.THashMap;
 import gnu.trove.THashSet;
 
+import javax.accessibility.AccessibleContext;
+import javax.accessibility.AccessibleRole;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.ListSelectionEvent;
@@ -44,8 +33,8 @@ import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellRenderer;
 import java.awt.*;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 
 public class RevisionsList {
   public static final int RECENT_PERIOD = 12;
@@ -53,7 +42,7 @@ public class RevisionsList {
 
   public RevisionsList(SelectionListener l) {
     table = new JBTable();
-    table.setModel(new MyModel(Collections.<RevisionItem>emptyList(), Collections.<RevisionItem, Period>emptyMap()));
+    table.setModel(new MyModel(Collections.emptyList(), Collections.emptyMap()));
 
     table.setTableHeader(null);
     table.setShowGrid(false);
@@ -81,6 +70,7 @@ public class RevisionsList {
       private int mySelectedRow2 = 0;
       private final SelectionListener mySelectionListener = l;
 
+      @Override
       public void valueChanged(ListSelectionEvent e) {
         if (e.getValueIsAdjusting()) return;
 
@@ -94,7 +84,7 @@ public class RevisionsList {
   }
 
   public void updateData(HistoryDialogModel model) {
-    Set<Long> sel = new THashSet<Long>();
+    Set<Long> sel = new THashSet<>();
     MyModel m = (MyModel)table.getModel();
     for (int i : table.getSelectedRows()) {
       if (i >= m.getRowCount()) continue;
@@ -105,7 +95,7 @@ public class RevisionsList {
 
     Date today = new Date();
 
-    Map<RevisionItem, Period> periods = new THashMap<RevisionItem, Period>();
+    Map<RevisionItem, Period> periods = new THashMap<>();
     for (int i = 0; i < newRevs.size(); i++) {
       RevisionItem each = newRevs.get(i);
       boolean recent = today.getTime() - each.revision.getTimestamp() < 1000 * 60 * 60 * RECENT_PERIOD;
@@ -144,7 +134,7 @@ public class RevisionsList {
 
     private final String myDisplayString;
 
-    private Period(String displayString) {
+    Period(String displayString) {
       myDisplayString = displayString;
     }
 
@@ -154,22 +144,25 @@ public class RevisionsList {
   }
 
   public static class MyModel extends AbstractTableModel {
-    private final List<RevisionItem> myRevisions;
+    private final List<? extends RevisionItem> myRevisions;
     private final Map<RevisionItem, Period> myPeriods;
 
-    public MyModel(List<RevisionItem> revisions, Map<RevisionItem, Period> periods) {
+    public MyModel(List<? extends RevisionItem> revisions, Map<RevisionItem, Period> periods) {
       myRevisions = revisions;
       myPeriods = periods;
     }
 
+    @Override
     public int getColumnCount() {
       return 1;
     }
 
+    @Override
     public int getRowCount() {
       return myRevisions.size();
     }
 
+    @Override
     public RevisionItem getValueAt(int rowIndex, int columnIndex) {
       return myRevisions.get(rowIndex);
     }
@@ -185,7 +178,7 @@ public class RevisionsList {
 
     private final DefaultTableCellRenderer myTemplate = new DefaultTableCellRenderer();
 
-    private final JPanel myWrapperPanel = new JPanel();
+    private final MyWrapperPanel myWrapperPanel = new MyWrapperPanel();
     private final JPanel myItemPanel = new JPanel();
 
     private final MyBorder myBorder = new MyBorder(BORDER_INSETS);
@@ -287,6 +280,7 @@ public class RevisionsList {
       myTitleLabel.setComponentStyle(UIUtil.ComponentStyle.REGULAR);
     }
 
+    @Override
     public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
       if (value == null) return myWrapperPanel; // null erroneously comes from JPanel.getAccessibleChild
 
@@ -366,6 +360,38 @@ public class RevisionsList {
       }
 
       return new LabelsAndColor(named, title, filesCount, label);
+    }
+
+    /**
+     * Given each item in the list of revisions contains multiple strings,
+     * we customize the containing panel to expose an accessible name
+     * combining all these strings so that screen readers announce these
+     * strings as the active list item changes.
+     */
+    private class MyWrapperPanel extends JPanel {
+      @Override
+      public AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+          accessibleContext = new AccessibleMyWrapperPanel();
+        }
+        return accessibleContext;
+      }
+
+      protected class AccessibleMyWrapperPanel extends AccessibleJPanel {
+        @Override
+        public AccessibleRole getAccessibleRole() {
+          return AccessibleRole.LABEL;
+        }
+
+        @Override
+        public String getAccessibleName() {
+          if (myPeriodLabel.isVisible()) {
+            return AccessibleContextUtil.getCombinedName(", ", myPeriodLabel, myTitleLabel, myFilesCountLabel, myDateLabel);
+          } else {
+            return AccessibleContextUtil.getCombinedName(", ", myTitleLabel, myFilesCountLabel, myDateLabel);
+          }
+        }
+      }
     }
 
     private static class LabelsAndColor {

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util;
 
 import com.intellij.openapi.Disposable;
@@ -35,9 +21,9 @@ public class PendingEventDispatcher <T extends EventListener> {
   private final T myMulticaster;
 
   private final List<T> myListeners = ContainerUtil.createLockFreeCopyOnWriteList();
-  private final Map<T, Boolean> myListenersState = new HashMap<T, Boolean>();
+  private final Map<T, Boolean> myListenersState = new HashMap<>();
 
-  private final Stack<T> myDispatchingListeners = new Stack<T>();
+  private final Stack<T> myDispatchingListeners = new Stack<>();
 
   private Method myCurrentDispatchMethod = null;
   private Object[] myCurrentDispatchArgs = null;
@@ -50,7 +36,7 @@ public class PendingEventDispatcher <T extends EventListener> {
   }
 
   public static <T extends EventListener> PendingEventDispatcher<T> create(Class<T> listenerClass, boolean assertDispatchThread) {
-    return new PendingEventDispatcher<T>(listenerClass, assertDispatchThread);
+    return new PendingEventDispatcher<>(listenerClass, assertDispatchThread);
   }
 
   public static boolean isDispatchingAnyEvent(){
@@ -64,6 +50,7 @@ public class PendingEventDispatcher <T extends EventListener> {
   private PendingEventDispatcher(Class<T> listenerClass, boolean assertDispatchThread) {
     myAssertDispatchThread = assertDispatchThread;
     InvocationHandler handler = new InvocationHandler() {
+      @Override
       @NonNls public Object invoke(Object proxy, final Method method, final Object[] args) throws Throwable {
         if (method.getDeclaringClass().getName().equals("java.lang.Object")) {
           @NonNls String methodName = method.getName();
@@ -112,6 +99,7 @@ public class PendingEventDispatcher <T extends EventListener> {
   public synchronized void addListener(final T listener, Disposable parentDisposable) {
     addListener(listener);
     Disposer.register(parentDisposable, new Disposable() {
+      @Override
       public void dispose() {
         removeListener(listener);
       }
@@ -208,10 +196,7 @@ public class PendingEventDispatcher <T extends EventListener> {
     catch(AbstractMethodError e) {
       //Do nothing. This listener just does not implement something newly added yet.
     }
-    catch (InvocationTargetException e) {
-      LOG.error(e.getCause());
-    }
-    catch (IllegalAccessException e) {
+    catch (InvocationTargetException | IllegalAccessException e) {
       LOG.error(e.getCause());
     }
     finally {

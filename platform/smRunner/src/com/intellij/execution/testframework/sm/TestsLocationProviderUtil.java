@@ -1,24 +1,9 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.testframework.sm;
 
 import com.intellij.navigation.ChooseByNameContributor;
 import com.intellij.navigation.NavigationItem;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.roots.ProjectRootManager;
@@ -26,7 +11,6 @@ import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.ex.temp.TempFileSystem;
 import com.intellij.psi.PsiFile;
-import com.intellij.util.io.URLUtil;
 import com.intellij.util.text.StringTokenizer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -44,13 +28,6 @@ public class TestsLocationProviderUtil {
 
   private TestsLocationProviderUtil() { }
 
-  /** @deprecated to be removed in IDEA 16 */
-  @SuppressWarnings("unused")
-  public static String extractPath(@NotNull String locationUrl) {
-    int index = locationUrl.indexOf(URLUtil.SCHEME_SEPARATOR);
-    return index >= 0 ? locationUrl.substring(index + URLUtil.SCHEME_SEPARATOR.length()) : null;
-  }
-
   public static List<VirtualFile> findSuitableFilesFor(final String filePath, final Project project) {
     final ProjectFileIndex index = ProjectRootManager.getInstance(project).getFileIndex();
 
@@ -66,7 +43,7 @@ public class TestsLocationProviderUtil {
     }
 
     //split file by "/" in parts
-    final LinkedList<String> folders = new LinkedList<String>();
+    final LinkedList<String> folders = new LinkedList<>();
     final StringTokenizer st = new StringTokenizer(filePath, "/", false);
     String fileName = null;
     while (st.hasMoreTokens()) {
@@ -93,7 +70,7 @@ public class TestsLocationProviderUtil {
    * @return
    */
   public static List<VirtualFile> findFilesClosestToTarget(@NotNull final List<String> targetParentFolders,
-                                                           final List<FileInfo> candidates,
+                                                           final List<? extends FileInfo> candidates,
                                                            final int minProximityThreshold) {
     // let's find all files with similar relative path
 
@@ -120,7 +97,7 @@ public class TestsLocationProviderUtil {
     }
 
     if (maxProximity >= minProximityThreshold) {
-      final List<VirtualFile> files = new ArrayList<VirtualFile>();
+      final List<VirtualFile> files = new ArrayList<>();
       for (FileInfo info : candidates) {
         if (info.getProximity() == maxProximity) {
           files.add(info.getFile());
@@ -134,9 +111,8 @@ public class TestsLocationProviderUtil {
 
   public static List<FileInfo> collectCandidates(final Project project, final String fileName,
                                                  final boolean includeNonProjectItems) {
-    final List<FileInfo> filesInfo = new ArrayList<FileInfo>();
-    final ChooseByNameContributor[] contributors = Extensions.getExtensions(ChooseByNameContributor.FILE_EP_NAME);
-    for (ChooseByNameContributor contributor : contributors) {
+    final List<FileInfo> filesInfo = new ArrayList<>();
+    for (ChooseByNameContributor contributor : ChooseByNameContributor.FILE_EP_NAME.getExtensionList()) {
       // let's find files with same name in project and libraries
       final NavigationItem[] navigationItems = contributor.getItemsByName(fileName, fileName, project, includeNonProjectItems);
       for (NavigationItem navigationItem : navigationItems) {

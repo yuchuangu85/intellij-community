@@ -18,7 +18,7 @@ package org.jetbrains.plugins.ipnb.editor;
 import com.intellij.openapi.fileEditor.FileEditorState;
 import com.intellij.openapi.fileEditor.FileEditorStateLevel;
 
-final class IpnbEditorState implements FileEditorState{
+public final class IpnbEditorState implements FileEditorState {
   private final transient long myDocumentModificationStamp; // should not be serialized
   private int mySelectedIndex = 0;
 
@@ -44,10 +44,11 @@ final class IpnbEditorState implements FileEditorState{
     return mySelectedIndex;
   }
 
-  public int hashCode(){
+  public int hashCode() {
     return (int)(myDocumentModificationStamp ^ (myDocumentModificationStamp >>> 32));
   }
 
+  @Override
   public boolean canBeMergedWith(FileEditorState otherState, FileEditorStateLevel level) {
     return otherState instanceof IpnbEditorState;
   }

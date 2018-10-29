@@ -1,21 +1,8 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.maddyhome.idea.copyright.ui;
 
+import com.intellij.copyright.CopyrightManager;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.EditorFontType;
 import com.intellij.openapi.fileTypes.FileType;
@@ -27,8 +14,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.ui.DocumentAdapter;
 import com.intellij.uiDesigner.core.GridConstraints;
 import com.intellij.util.ui.UIUtil;
-import com.maddyhome.idea.copyright.CopyrightManager;
-import com.maddyhome.idea.copyright.CopyrightProfile;
+import com.maddyhome.idea.copyright.CopyrightProfileKt;
 import com.maddyhome.idea.copyright.options.LanguageOptions;
 import com.maddyhome.idea.copyright.options.Options;
 import com.maddyhome.idea.copyright.pattern.EntityUtil;
@@ -44,10 +30,10 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
 public class TemplateCommentPanel implements SearchableConfigurable {
-  private final CopyrightManager myManager;
 
   private final FileType fileType;
   private final TemplateCommentPanel parentPanel;
+  private final Project myProject;
   private JRadioButton[] fileLocations = null;
 
   private JTextArea preview;
@@ -82,10 +68,7 @@ public class TemplateCommentPanel implements SearchableConfigurable {
 
   private void updateBox() {
     boolean enable = true;
-    if (!cbSeparatorBefore.isSelected()) {
-      enable = false;
-    }
-    else if (!cbSeparatorAfter.isSelected()) {
+    if (!cbSeparatorBefore.isSelected() || !cbSeparatorAfter.isSelected()) {
       enable = false;
     }
     else {
@@ -102,13 +85,13 @@ public class TemplateCommentPanel implements SearchableConfigurable {
   }
 
   private final EventListenerList listeners = new EventListenerList();
-  private boolean allowBlock = false;
+  private final boolean allowBlock;
 
 
   public TemplateCommentPanel(FileType fileType, TemplateCommentPanel parentPanel, String[] locations, Project project) {
     this.parentPanel = parentPanel;
+    myProject = project;
 
-    myManager = CopyrightManager.getInstance(project);
     if (fileType == null) {
       myUseDefaultSettingsRadioButton.setVisible(false);
       myUseCustomFormattingOptionsRadioButton.setVisible(false);
@@ -120,6 +103,7 @@ public class TemplateCommentPanel implements SearchableConfigurable {
 
     if (parentPanel != null) {
       parentPanel.addOptionChangeListener(new TemplateOptionsPanelListener() {
+        @Override
         public void optionChanged() {
           updateOverride();
         }
@@ -149,6 +133,7 @@ public class TemplateCommentPanel implements SearchableConfigurable {
 
 
     addOptionChangeListener(new TemplateOptionsPanelListener() {
+      @Override
       public void optionChanged() {
         showPreview(getOptions());
       }
@@ -160,6 +145,7 @@ public class TemplateCommentPanel implements SearchableConfigurable {
     myUseDefaultSettingsRadioButton.setSelected(true);
 
     final ActionListener listener = new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent e) {
         updateOverride();
       }
@@ -172,6 +158,7 @@ public class TemplateCommentPanel implements SearchableConfigurable {
     txtLengthAfter.setText("80");
 
     rbBlockComment.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent actionEvent) {
         cbPrefixLines.setEnabled(rbBlockComment.isSelected());
         fireChangeEvent();
@@ -179,6 +166,7 @@ public class TemplateCommentPanel implements SearchableConfigurable {
     });
 
     rbLineComment.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent actionEvent) {
         cbPrefixLines.setEnabled(rbBlockComment.isSelected());
         fireChangeEvent();
@@ -186,12 +174,14 @@ public class TemplateCommentPanel implements SearchableConfigurable {
     });
 
     cbPrefixLines.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent actionEvent) {
         fireChangeEvent();
       }
     });
 
     cbSeparatorBefore.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent actionEvent) {
         lblLengthBefore.setEnabled(cbSeparatorBefore.isSelected());
         txtLengthBefore.setEnabled(cbSeparatorBefore.isSelected());
@@ -201,6 +191,7 @@ public class TemplateCommentPanel implements SearchableConfigurable {
     });
 
     cbSeparatorAfter.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent actionEvent) {
         lblLengthAfter.setEnabled(cbSeparatorAfter.isSelected());
         txtLengthAfter.setEnabled(cbSeparatorAfter.isSelected());
@@ -210,7 +201,8 @@ public class TemplateCommentPanel implements SearchableConfigurable {
     });
 
     final DocumentAdapter documentAdapter = new DocumentAdapter() {
-      protected void textChanged(DocumentEvent e) {
+      @Override
+      protected void textChanged(@NotNull DocumentEvent e) {
         fireChangeEvent();
         updateBox();
       }
@@ -220,6 +212,7 @@ public class TemplateCommentPanel implements SearchableConfigurable {
     txtFiller.getDocument().addDocumentListener(documentAdapter);
 
     cbBox.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent actionEvent) {
         fireChangeEvent();
       }
@@ -236,14 +229,8 @@ public class TemplateCommentPanel implements SearchableConfigurable {
     res.setSeparateAfter(cbSeparatorAfter.isSelected());
     res.setSeparateBefore(cbSeparatorBefore.isSelected());
     try {
-      Object val = Integer.parseInt(txtLengthBefore.getText());
-      if (val instanceof Number) {
-        res.setLenBefore(((Number)val).intValue());
-      }
-      val = Integer.parseInt(txtLengthAfter.getText());
-      if (val instanceof Number) {
-        res.setLenAfter(((Number)val).intValue());
-      }
+      res.setLenBefore(Integer.parseInt(txtLengthBefore.getText()));
+      res.setLenAfter(Integer.parseInt(txtLengthAfter.getText()));
     }
     catch (NumberFormatException e) {
       //leave blank
@@ -336,14 +323,14 @@ public class TemplateCommentPanel implements SearchableConfigurable {
       mySeparatorCharLabel.setEnabled(true);
       updateBox();
     } else {
-      UIUtil.setEnabled(myCommentTypePanel, enable, true);
-      UIUtil.setEnabled(myBorderPanel, enable, true);
+      UIUtil.setEnabled(myCommentTypePanel, false, true);
+      UIUtil.setEnabled(myBorderPanel, false, true);
     }
   }
 
   private void showPreview(LanguageOptions options) {
     final String defaultCopyrightText = myNoCopyright.isSelected() ? "" : FileTypeUtil
-      .buildComment(fileType, VelocityHelper.evaluate(null, null, null, EntityUtil.decode(CopyrightProfile.DEFAULT_COPYRIGHT_NOTICE)), options);
+      .buildComment(fileType, VelocityHelper.evaluate(null, null, null, EntityUtil.decode(CopyrightProfileKt.DEFAULT_COPYRIGHT_NOTICE)), options);
     SwingUtilities.invokeLater(() -> preview.setText(defaultCopyrightText));
   }
 
@@ -352,28 +339,38 @@ public class TemplateCommentPanel implements SearchableConfigurable {
     return fileType;
   }
 
+  @Override
   @Nls
   public String getDisplayName() {
-    return fileType instanceof LanguageFileType 
-           ? ((LanguageFileType)fileType).getLanguage().getDisplayName() 
+    return fileType instanceof LanguageFileType
+           ? ((LanguageFileType)fileType).getLanguage().getDisplayName()
            : fileType.getName();
   }
 
+  @Override
   public String getHelpTopic() {
     return "copyright.filetypes";
   }
 
+  @Override
   public JComponent createComponent() {
     return mainPanel;
   }
 
+  @Override
   public boolean isModified() {
-    if (parentPanel == null) return !myManager.getOptions().getTemplateOptions().equals(getOptions());
-    return !myManager.getOptions().getOptions(fileType.getName()).equals(getOptions());
+    if (parentPanel == null) return !getCopyrightOptions().getTemplateOptions().equals(getOptions());
+    return !getCopyrightOptions().getOptions(fileType.getName()).equals(getOptions());
   }
 
+  @NotNull
+  private Options getCopyrightOptions() {
+    return CopyrightManager.getInstance(myProject).getOptions();
+  }
+
+  @Override
   public void apply() throws ConfigurationException {
-    final Options options = myManager.getOptions();
+    final Options options = getCopyrightOptions();
     if (parentPanel == null) {
       options.setTemplateOptions(getOptions());
     }
@@ -382,9 +379,10 @@ public class TemplateCommentPanel implements SearchableConfigurable {
     }
   }
 
+  @Override
   public void reset() {
     final LanguageOptions options =
-      parentPanel == null ? myManager.getOptions().getTemplateOptions() : myManager.getOptions().getOptions(fileType.getName());
+      parentPanel == null ? getCopyrightOptions().getTemplateOptions() : getCopyrightOptions().getOptions(fileType.getName());
     boolean isBlock = options.isBlock();
     if (isBlock) {
       rbBlockComment.setSelected(true);
@@ -422,10 +420,6 @@ public class TemplateCommentPanel implements SearchableConfigurable {
     updateOverride();
   }
 
-  public void disposeUIResources() {
-
-  }
-
   public void addOptionChangeListener(TemplateOptionsPanelListener listener) {
     listeners.add(TemplateOptionsPanelListener.class, listener);
   }
@@ -439,6 +433,7 @@ public class TemplateCommentPanel implements SearchableConfigurable {
     }
   }
 
+  @Override
   @NotNull
   public String getId() {
     return getHelpTopic() + "." + fileType.getName();

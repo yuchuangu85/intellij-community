@@ -1,3 +1,4 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.console.pydev;
 
 import com.intellij.openapi.project.Project;
@@ -51,6 +52,7 @@ public abstract class AbstractConsoleCommunication implements ConsoleCommunicati
     return waitingForInput;
   }
 
+
   @Override
   public void addCommunicationListener(ConsoleCommunicationListener listener) {
     communicationListeners.add(listener);
@@ -76,5 +78,15 @@ public abstract class AbstractConsoleCommunication implements ConsoleCommunicati
 
   public void setConsoleFile(VirtualFile consoleFile) {
     myConsoleFile = consoleFile;
+  }
+
+  @Override
+  public void notifyInputReceived() {
+    if (waitingForInput) {
+      waitingForInput = false;
+      for (ConsoleCommunicationListener listener : communicationListeners) {
+        listener.commandExecuted(false);
+      }
+    }
   }
 }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.diff.impl.external;
 
 import com.intellij.execution.ExecutionException;
@@ -46,6 +32,7 @@ abstract class BaseExternalTool implements DiffTool {
     myToolProperty = toolProperty;
   }
 
+  @Override
   public final boolean canShow(@NotNull DiffRequest request) {
     if (!isEnabled() || StringUtil.isEmpty(getToolPath())) return false;
     return isAvailable(request);
@@ -85,12 +72,13 @@ abstract class BaseExternalTool implements DiffTool {
   protected List<String> getParameters(@NotNull DiffRequest request) throws Exception {
     final String p1 = convertToPath(request, 0);
     final String p2 = convertToPath(request, 1);
-    final List<String> params = new ArrayList<String>();
+    final List<String> params = new ArrayList<>();
     if (p1 != null) params.add(p1);
     if (p2 != null) params.add(p2);
     return params;
   }
 
+  @Override
   public void show(DiffRequest request) {
     saveContents(request);
 

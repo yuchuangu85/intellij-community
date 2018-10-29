@@ -49,7 +49,7 @@ public class PsiCodeFragmentImpl extends PsiFileImpl implements JavaCodeFragment
   private boolean myPhysical;
   private PsiType myThisType;
   private PsiType mySuperType;
-  private LinkedHashMap<String, String> myPseudoImports = new LinkedHashMap<String, String>();
+  private LinkedHashMap<String, String> myPseudoImports = new LinkedHashMap<>();
   private VisibilityChecker myVisibilityChecker;
   private ExceptionHandler myExceptionHandler;
   private GlobalSearchScope myResolveScope;
@@ -82,7 +82,7 @@ public class PsiCodeFragmentImpl extends PsiFileImpl implements JavaCodeFragment
     final PsiCodeFragmentImpl clone = (PsiCodeFragmentImpl)cloneImpl((FileElement)calcTreeElement().clone());
     clone.myPhysical = false;
     clone.myOriginalFile = this;
-    clone.myPseudoImports = new LinkedHashMap<String, String>(myPseudoImports);
+    clone.myPseudoImports = new LinkedHashMap<>(myPseudoImports);
     FileManager fileManager = ((PsiManagerEx)getManager()).getFileManager();
     SingleRootFileViewProvider cloneViewProvider = (SingleRootFileViewProvider)fileManager.createFileViewProvider(new LightVirtualFile(
       getName(),
@@ -224,12 +224,13 @@ public class PsiCodeFragmentImpl extends PsiFileImpl implements JavaCodeFragment
     }
   }
 
+  @Override
   public String toString() {
     return "PsiCodeFragment:" + getName();
   }
 
   @Override
-  public boolean importClass(PsiClass aClass) {
+  public boolean importClass(@NotNull PsiClass aClass) {
     final String className = aClass.getName();
     final String qName = aClass.getQualifiedName();
     if (qName == null) return false;
@@ -253,7 +254,7 @@ public class PsiCodeFragmentImpl extends PsiFileImpl implements JavaCodeFragment
     private final String myQName;
     private final LinkedHashMap<String, String> myPseudoImports;
 
-    public ImportClassUndoableAction(final String className,
+    ImportClassUndoableAction(final String className,
                                      final String qName,
                                      final Document document,
                                      final LinkedHashMap<String, String> pseudoImportsMap) {

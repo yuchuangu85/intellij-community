@@ -18,7 +18,6 @@ package org.jetbrains.plugins.groovy.codeInspection.assignment;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiReference;
 import com.intellij.psi.tree.IElementType;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.codeInspection.BaseInspection;
@@ -34,24 +33,9 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.params.GrParameter;
 public class GroovyAssignmentToMethodParameterInspection extends BaseInspection {
 
   @Override
-  @Nls
-  @NotNull
-  public String getGroupDisplayName() {
-    return ASSIGNMENT_ISSUES;
-  }
-
-  @Override
-  @Nls
-  @NotNull
-  public String getDisplayName() {
-    return "Assignment to method parameter";
-  }
-
-  @Override
   @Nullable
   protected String buildErrorString(Object... args) {
     return "Assignment to method parameter '#ref' #loc";
-
   }
 
   @Override
@@ -63,7 +47,7 @@ public class GroovyAssignmentToMethodParameterInspection extends BaseInspection 
   private static class Visitor extends BaseInspectionVisitor {
     
     @Override
-    public void visitAssignmentExpression(GrAssignmentExpression expr) {
+    public void visitAssignmentExpression(@NotNull GrAssignmentExpression expr) {
       super.visitAssignmentExpression(expr);
 
       check(expr.getLValue());
@@ -87,7 +71,7 @@ public class GroovyAssignmentToMethodParameterInspection extends BaseInspection 
     }
 
     @Override
-    public void visitUnaryExpression(GrUnaryExpression expression) {
+    public void visitUnaryExpression(@NotNull GrUnaryExpression expression) {
       super.visitUnaryExpression(expression);
 
       final IElementType op = expression.getOperationTokenType();

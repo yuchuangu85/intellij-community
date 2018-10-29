@@ -35,10 +35,18 @@ public interface PsiParameterList extends PsiElement {
    * @param parameter the parameter to search for (must belong to this parameter list).
    * @return the index of the parameter.
    */
-  int getParameterIndex(PsiParameter parameter);
+  int getParameterIndex(@NotNull PsiParameter parameter);
 
   /**
    * Returns the number of parameters (excluding type annotation receiver).
    */
   int getParametersCount();
+
+  /**
+   * @return true if this parameter list has no parameters (excluding type annotation receiver).
+   * @since 2018.1
+   */
+  default boolean isEmpty() {
+    return getParametersCount() == 0;
+  }
 }

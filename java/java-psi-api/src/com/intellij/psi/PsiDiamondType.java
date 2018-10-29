@@ -19,6 +19,7 @@ import com.intellij.openapi.util.RecursionGuard;
 import com.intellij.openapi.util.RecursionManager;
 import com.intellij.psi.util.PsiUtil;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -98,7 +99,7 @@ public abstract class PsiDiamondType extends PsiType {
       }
     };
 
-    private final List<PsiType> myInferredTypes = new ArrayList<PsiType>();
+    private final List<PsiType> myInferredTypes = new ArrayList<>();
     private String myErrorMessage;
     private String myNewExpressionPresentableText;
 
@@ -180,5 +181,18 @@ public abstract class PsiDiamondType extends PsiType {
     return null;
   }
 
+  public static JavaResolveResult getDiamondsAwareResolveResult(PsiCall expression) {
+    if (expression instanceof PsiNewExpression) {
+      PsiDiamondType diamondType = getDiamondType((PsiNewExpression)expression);
+      if (diamondType != null) {
+        JavaResolveResult factory = diamondType.getStaticFactory();
+        return factory != null ? factory : JavaResolveResult.EMPTY;
+      }
+    }
+
+    return expression.resolveMethodGenerics();
+  }
+
+  @Nullable
   public abstract JavaResolveResult getStaticFactory();
 }

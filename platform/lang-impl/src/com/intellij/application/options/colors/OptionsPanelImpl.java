@@ -1,31 +1,18 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.application.options.colors;
 
 import com.intellij.ide.DataManager;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
+import com.intellij.openapi.editor.colors.EditorSchemeAttributeDescriptor;
 import com.intellij.openapi.options.SearchableConfigurable;
 import com.intellij.openapi.options.ex.Settings;
 import com.intellij.openapi.util.ActionCallback;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.util.EventDispatcher;
-import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import javax.swing.event.HyperlinkEvent;
@@ -35,6 +22,7 @@ import javax.swing.text.BadLocationException;
 import javax.swing.text.Element;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.util.EventListener;
 import java.util.HashSet;
 import java.util.Set;
@@ -72,19 +60,20 @@ public class OptionsPanelImpl extends JPanel implements OptionsPanel {
     myOptionsPanel = optionsPanel;
     myOptionsPanel.addListener(new ColorDescriptionPanel.Listener() {
       @Override
-      public void onSettingsChanged(ActionEvent e) {
+      public void onSettingsChanged(@NotNull ActionEvent e) {
         myDispatcher.getMulticaster().settingsChanged();
+        myOptions.stateChanged();
       }
 
       @Override
-      public void onHyperLinkClicked(HyperlinkEvent e) {
+      public void onHyperLinkClicked(@NotNull HyperlinkEvent e) {
         if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
           Settings settings = Settings.KEY.getData(DataManager.getInstance().getDataContext(OptionsPanelImpl.this));
-          String attrName = e.getDescription();
+          String pageName = e.getDescription();
           Element element = e.getSourceElement();
-          String pageName;
+          String attrName;
           try {
-            pageName = element.getDocument().getText(element.getStartOffset(), element.getEndOffset() - element.getStartOffset());
+            attrName = element.getDocument().getText(element.getStartOffset(), element.getEndOffset() - element.getStartOffset());
           }
           catch (BadLocationException e1) {
             return;
@@ -95,6 +84,17 @@ public class OptionsPanelImpl extends JPanel implements OptionsPanel {
             ActionCallback callback = settings.select(page);
             if (runnable != null) callback.doWhenDone(runnable);
           }
+        }
+      }
+    });
+
+    myOptions.addListener(new ColorAndFontSettingsListener.Abstract() {
+      @Override
+      public void settingsChanged() {
+        if (!mySchemesProvider.areSchemesLoaded()) return;
+        if (myOptionsTree.getSelectedValue() != null) {
+          // update options & preview after global state change
+          processListValueChanged();
         }
       }
     });
@@ -122,7 +122,9 @@ public class OptionsPanelImpl extends JPanel implements OptionsPanel {
 
   private void processListValueChanged() {
     Object selectedValue = myOptionsTree.getSelectedValue();
-    ColorAndFontDescription description = selectedValue instanceof ColorAndFontDescription ? (ColorAndFontDescription)selectedValue : null;
+    EditorSchemeAttributeDescriptor description = selectedValue instanceof EditorSchemeAttributeDescriptor
+                                                  ? (EditorSchemeAttributeDescriptor)selectedValue
+                                                  : null;
     if (description == null) {
       if (selectedValue == null) {
         String preselectedType = myProperties.getValue(SELECTED_COLOR_OPTION_PROPERTY);
@@ -164,7 +166,7 @@ public class OptionsPanelImpl extends JPanel implements OptionsPanel {
 
   @Override
   public void applyChangesToScheme() {
-    ColorAndFontDescription descriptor = myOptionsTree.getSelectedDescriptor();
+    EditorSchemeAttributeDescriptor descriptor = myOptionsTree.getSelectedDescriptor();
     if (descriptor != null) {
       myOptionsPanel.apply(descriptor, myOptions.getSelectedScheme());
     }
@@ -177,7 +179,7 @@ public class OptionsPanelImpl extends JPanel implements OptionsPanel {
 
   @Override
   public Set<String> processListOptions() {
-    HashSet<String> result = new HashSet<String>();
+    HashSet<String> result = new HashSet<>();
     EditorSchemeAttributeDescriptor[] descriptions = myOptions.getCurrentDescriptions();
     for (EditorSchemeAttributeDescriptor description : descriptions) {
       if (description.getGroup().equals(myCategoryName)) {
@@ -193,16 +195,21 @@ public class OptionsPanelImpl extends JPanel implements OptionsPanel {
 
     void resetDefault();
 
-    void reset(@NotNull ColorAndFontDescription description);
+    void reset(@NotNull EditorSchemeAttributeDescriptor description);
 
-    void apply(@NotNull ColorAndFontDescription descriptor, EditorColorsScheme scheme);
+    void apply(@NotNull EditorSchemeAttributeDescriptor descriptor, EditorColorsScheme scheme);
 
     void addListener(@NotNull Listener listener);
 
     interface Listener extends EventListener {
-      void onSettingsChanged(ActionEvent e);
+      void onSettingsChanged(@NotNull ActionEvent e);
 
-      void onHyperLinkClicked(HyperlinkEvent e);
+      void onHyperLinkClicked(@NotNull HyperlinkEvent e);
     }
+  }
+
+  @Override
+  public void setEmptyText(@NotNull String text, @Nullable ActionListener linkListener) {
+    myOptionsTree.setEmptyText(text, linkListener);
   }
 }

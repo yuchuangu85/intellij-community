@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +31,8 @@ import com.intellij.openapi.externalSystem.model.project.Identifiable;
 import com.intellij.openapi.externalSystem.model.project.ModuleData;
 import com.intellij.openapi.externalSystem.model.project.ModuleDependencyData;
 import com.intellij.openapi.externalSystem.model.project.ProjectData;
-import com.intellij.openapi.externalSystem.service.project.manage.ProjectDataManager;
+import com.intellij.openapi.externalSystem.service.project.ProjectDataManager;
+import com.intellij.openapi.externalSystem.service.project.manage.ProjectDataManagerImpl;
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
 import com.intellij.openapi.externalSystem.util.ExternalSystemBundle;
 import com.intellij.openapi.externalSystem.util.ExternalSystemUiUtil;
@@ -54,6 +55,7 @@ import com.intellij.ui.treeStructure.Tree;
 import com.intellij.util.CachedValueImpl;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
+import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.tree.TreeUtil;
 import gnu.trove.TObjectHashingStrategy;
 import org.jetbrains.annotations.NotNull;
@@ -69,7 +71,6 @@ import java.util.List;
 
 /**
  * @author Vladislav.Soroka
- * @since 5/12/2015
  */
 public class ExternalProjectDataSelectorDialog extends DialogWrapper {
 
@@ -79,7 +80,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
   private static final com.intellij.openapi.util.Key<DataNodeCheckedTreeNode> CONNECTED_UI_NODE_KEY =
     com.intellij.openapi.util.Key.create("connectedUiNode");
   @NotNull
-  private Project myProject;
+  private final Project myProject;
   private JBLoadingPanel loadingPanel;
   private JPanel mainPanel;
   private JPanel contentPanel;
@@ -99,7 +100,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
     MultiMap.create(TObjectHashingStrategy.IDENTITY);
 
   private final SimpleModificationTracker myModificationTracker = new SimpleModificationTracker();
-  private final CachedValue<SelectionState> selectionState = new CachedValueImpl<SelectionState>(
+  private final CachedValue<SelectionState> selectionState = new CachedValueImpl<>(
     () -> CachedValueProvider.Result.createSingleDependency(getSelectionStatus(), myModificationTracker));
 
   private boolean myShowSelectedRowsOnly;
@@ -123,7 +124,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
   }
 
   private void init(@NotNull ExternalProjectInfo projectInfo) {
-    ProjectDataManager.getInstance().ensureTheDataIsReadyToUse(projectInfo.getExternalProjectStructure());
+    ProjectDataManagerImpl.getInstance().ensureTheDataIsReadyToUse(projectInfo.getExternalProjectStructure());
     myProjectInfo = projectInfo;
     myExternalSystemUiAware = ExternalSystemUiUtil.getUiAware(myProjectInfo.getProjectSystemId());
     myTree = createTree();
@@ -163,7 +164,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
       addExtraAction(new ShowSelectedOnlyButton()).
       addExtraAction(new SelectRequiredButton()).
       setToolbarPosition(ActionToolbarPosition.BOTTOM).
-      setToolbarBorder(IdeBorderFactory.createEmptyBorder());
+      setToolbarBorder(JBUI.Borders.empty());
 
     contentPanel.add(decorator.createPanel());
     loadingPanel = new JBLoadingPanel(new BorderLayout(), getDisposable());
@@ -181,7 +182,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
     final Couple<CheckedTreeNode> rootAndPreselectedNode = createRoot();
     final CheckedTreeNode rootCopy = rootAndPreselectedNode.first;
 
-    List<TreeNode> nodes = TreeUtil.childrenToArray(rootCopy);
+    List<TreeNode> nodes = TreeUtil.listChildren(rootCopy);
     rootNode.removeAllChildren();
     TreeUtil.addChildrenTo(rootNode, nodes);
     treeModel.reload();
@@ -236,11 +237,6 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
     });
 
     super.doCancelAction();
-  }
-
-  @Override
-  public void dispose() {
-    super.dispose();
   }
 
   private CheckboxTree createTree() {
@@ -396,7 +392,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
       }
     }
 
-    List<TreeNode> nodes = projectNode != null ? TreeUtil.childrenToArray(projectNode) : ContainerUtil.emptyList();
+    List<TreeNode> nodes = projectNode != null ? TreeUtil.listChildren(projectNode) : ContainerUtil.emptyList();
     Collections.sort(nodes, (o1, o2) -> {
       if(o1 instanceof DataNodeCheckedTreeNode && o2 instanceof DataNodeCheckedTreeNode) {
         if (rootModuleComment.equals(((DataNodeCheckedTreeNode)o1).comment)) return -1;
@@ -440,7 +436,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
   private class DataNodeCheckedTreeNode extends CheckedTreeNode {
     private final DataNode myDataNode;
     @Nullable
-    private Icon icon;
+    private final Icon icon;
     private String text;
     @Nullable
     private String comment;
@@ -636,16 +632,13 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
 
       final int[] selectedModulesCount = {0};
 
-      TreeUtil.traverse((CheckedTreeNode)root, new TreeUtil.Traverse() {
-        @Override
-        public boolean accept(Object node) {
-          if (node instanceof DataNodeCheckedTreeNode &&
-              ((DataNodeCheckedTreeNode)node).isChecked() &&
-              myDependencyAwareDataKeys.contains((((DataNodeCheckedTreeNode)node).myDataNode.getKey()))) {
-            selectedModulesCount[0]++;
-          }
-          return true;
+      TreeUtil.traverse((CheckedTreeNode)root, node -> {
+        if (node instanceof DataNodeCheckedTreeNode &&
+            ((DataNodeCheckedTreeNode)node).isChecked() &&
+            myDependencyAwareDataKeys.contains((((DataNodeCheckedTreeNode)node).myDataNode.getKey()))) {
+          selectedModulesCount[0]++;
         }
+        return true;
       });
       stateMessage = String.format("%1$d Modules. %2$d selected", myModulesCount, selectedModulesCount[0]);
     }
@@ -672,19 +665,19 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
     boolean isRequiredSelectionEnabled;
     @Nullable String message;
 
-    public SelectionState(boolean isRequiredSelectionEnabled, @Nullable String message) {
+    SelectionState(boolean isRequiredSelectionEnabled, @Nullable String message) {
       this.isRequiredSelectionEnabled = isRequiredSelectionEnabled;
       this.message = message;
     }
   }
 
   private class SelectAllButton extends AnActionButton {
-    public SelectAllButton() {
+    SelectAllButton() {
       super("Select All", AllIcons.Actions.Selectall);
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       final DefaultTreeModel treeModel = (DefaultTreeModel)myTree.getModel();
       final Object root = treeModel.getRoot();
       if (!(root instanceof CheckedTreeNode)) return;
@@ -702,12 +695,12 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
   }
 
   private class UnselectAllButton extends AnActionButton {
-    public UnselectAllButton() {
+    UnselectAllButton() {
       super("Unselect All", AllIcons.Actions.Unselectall);
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       final DefaultTreeModel treeModel = (DefaultTreeModel)myTree.getModel();
       final Object root = treeModel.getRoot();
       if (!(root instanceof CheckedTreeNode)) return;
@@ -727,7 +720,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
 
   private class ShowSelectedOnlyButton extends ToggleActionButton {
 
-    public ShowSelectedOnlyButton() {
+    ShowSelectedOnlyButton() {
       super("Show Selected Only", AllIcons.Actions.ShowHiddens);
     }
 
@@ -744,19 +737,19 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
   }
 
   private class SelectRequiredButton extends AnActionButton {
-    public SelectRequiredButton() {
+    SelectRequiredButton() {
       super("Select Required", "select modules depended on currently selected modules", AllIcons.Actions.IntentionBulb);
 
       addCustomUpdater(new AnActionButtonUpdater() {
         @Override
-        public boolean isEnabled(AnActionEvent e) {
+        public boolean isEnabled(@NotNull AnActionEvent e) {
           return selectionState.getValue().isRequiredSelectionEnabled;
         }
       });
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       boolean showSelectedRowsOnly = myShowSelectedRowsOnly;
       if (showSelectedRowsOnly) {
         myShowSelectedRowsOnly = false;

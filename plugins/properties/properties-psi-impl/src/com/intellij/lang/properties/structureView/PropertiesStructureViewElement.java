@@ -17,18 +17,13 @@ package com.intellij.lang.properties.structureView;
 
 import com.intellij.ide.structureView.StructureViewTreeElement;
 import com.intellij.lang.properties.IProperty;
-import com.intellij.lang.properties.PropertiesHighlighter;
 import com.intellij.lang.properties.editor.ResourceBundleEditorViewElement;
 import com.intellij.lang.properties.editor.ResourceBundlePropertyStructureViewElement;
-import com.intellij.lang.properties.psi.Property;
 import com.intellij.navigation.ColoredItemPresentation;
 import com.intellij.navigation.ItemPresentation;
-import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.TextAttributesKey;
 import com.intellij.openapi.editor.markup.TextAttributes;
-import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
-import com.intellij.ui.JBColor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -54,22 +49,27 @@ public class PropertiesStructureViewElement implements StructureViewTreeElement,
     myProperty = element;
   }
 
+  @Override
   public IProperty getValue() {
     return myProperty;
   }
 
+  @Override
   public void navigate(boolean requestFocus) {
     myProperty.navigate(requestFocus);
   }
 
+  @Override
   public boolean canNavigate() {
     return myProperty.canNavigate();
   }
 
+  @Override
   public boolean canNavigateToSource() {
     return myProperty.canNavigateToSource();
   }
 
+  @Override
   @NotNull
   public StructureViewTreeElement[] getChildren() {
     return EMPTY_ARRAY;
@@ -87,6 +87,7 @@ public class PropertiesStructureViewElement implements StructureViewTreeElement,
     return new IProperty[] {getValue()};
   }
 
+  @Override
   @NotNull
   public ItemPresentation getPresentation() {
     return new ColoredItemPresentation() {
@@ -96,16 +97,19 @@ public class PropertiesStructureViewElement implements StructureViewTreeElement,
         return (myPresentableName != null && myPresentableName.isEmpty()) ? GROUP_KEY :null;
       }
 
+      @Override
       public String getPresentableText() {
         return myPresentableName == null
                ? myProperty.getUnescapedKey()
                : (myPresentableName.isEmpty() ? ResourceBundlePropertyStructureViewElement.PROPERTY_GROUP_KEY_TEXT : myPresentableName);
       }
 
+      @Override
       public String getLocationString() {
         return null;
       }
 
+      @Override
       public Icon getIcon(boolean open) {
         return myProperty.getIcon(0);
       }

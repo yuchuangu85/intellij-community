@@ -58,7 +58,7 @@ public abstract class GitXmlRpcHandlerService<T> {
   @Nullable private File myScriptPath;
   @NotNull private final Object SCRIPT_FILE_LOCK = new Object();
 
-  @NotNull private final THashMap<UUID, T> handlers = new THashMap<UUID, T>();
+  @NotNull private final THashMap<UUID, T> handlers = new THashMap<>();
   @NotNull private final Object HANDLERS_LOCK = new Object();
 
   /**
@@ -111,6 +111,7 @@ public abstract class GitXmlRpcHandlerService<T> {
    * @param parentDisposable a disposable to unregister the handler if it doesn't get unregistered manually
    * @return an identifier to pass to the environment variable
    */
+  @NotNull
   public UUID registerHandler(@NotNull T handler, @NotNull Disposable parentDisposable) {
     synchronized (HANDLERS_LOCK) {
       XmlRpcServer xmlRpcServer = XmlRpcServer.SERVICE.getInstance();

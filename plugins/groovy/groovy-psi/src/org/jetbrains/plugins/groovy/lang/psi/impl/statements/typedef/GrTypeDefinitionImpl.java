@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package org.jetbrains.plugins.groovy.lang.psi.impl.statements.typedef;
 
@@ -75,7 +61,7 @@ import java.util.List;
 public abstract class GrTypeDefinitionImpl extends GrStubElementBase<GrTypeDefinitionStub>
   implements GrTypeDefinition, StubBasedPsiElement<GrTypeDefinitionStub> {
 
-  private final GrTypeDefinitionMembersCache<GrTypeDefinition> myCache = new GrTypeDefinitionMembersCache<GrTypeDefinition>(this);
+  private final GrTypeDefinitionMembersCache<GrTypeDefinition> myCache = new GrTypeDefinitionMembersCache<>(this);
 
   public GrTypeDefinitionImpl(@NotNull ASTNode node) {
     super(node);
@@ -86,12 +72,7 @@ public abstract class GrTypeDefinitionImpl extends GrStubElementBase<GrTypeDefin
   }
 
   @Override
-  public PsiElement getParent() {
-    return getDefinitionParent();
-  }
-
-  @Override
-  public void accept(GroovyElementVisitor visitor) {
+  public void accept(@NotNull GroovyElementVisitor visitor) {
     visitor.visitTypeDefinition(this);
   }
 
@@ -254,6 +235,7 @@ public abstract class GrTypeDefinitionImpl extends GrStubElementBase<GrTypeDefin
     return GrClassImplUtil.getSuperClass(this);
   }
 
+  @NotNull
   @Override
   public PsiClass[] getInterfaces() {
     return GrClassImplUtil.getInterfaces(this);
@@ -298,12 +280,6 @@ public abstract class GrTypeDefinitionImpl extends GrStubElementBase<GrTypeDefin
   @Override
   public GrMethod[] getCodeMethods() {
     return myCache.getCodeMethods();
-  }
-
-  @Override
-  public void subtreeChanged() {
-    myCache.dropCaches();
-    super.subtreeChanged();
   }
 
   @NotNull
@@ -702,7 +678,7 @@ public abstract class GrTypeDefinitionImpl extends GrStubElementBase<GrTypeDefin
   }
 
   @Nullable
-  private static PsiMember getAnyMember(@Nullable PsiElement psiElement) {
+  protected static PsiMember getAnyMember(@Nullable PsiElement psiElement) {
     if (psiElement instanceof PsiMember) {
       return (PsiMember)psiElement;
     }
@@ -739,7 +715,7 @@ public abstract class GrTypeDefinitionImpl extends GrStubElementBase<GrTypeDefin
   }
 
   @Nullable
-  private PsiElement getDefaultAnchor(GrTypeDefinitionBody body, PsiMember member) {
+  protected PsiElement getDefaultAnchor(GrTypeDefinitionBody body, PsiMember member) {
     GroovyCodeStyleSettingsFacade settings = GroovyCodeStyleSettingsFacade.getInstance(getProject());
 
     int order = getMemberOrderWeight(member, settings);

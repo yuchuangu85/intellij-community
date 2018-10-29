@@ -15,7 +15,6 @@
  */
 package com.intellij.openapi.vfs.impl.http;
 
-import com.intellij.openapi.application.Result;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileTypes.FileType;
@@ -35,6 +34,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.jetbrains.concurrency.Promises.rejectedPromise;
 
 /**
  * @author nik
@@ -139,16 +140,13 @@ public class RemoteFileInfoImpl implements RemoteContentProvider.DownloadingCall
       localIOFile = myLocalFile;
     }
 
-    VirtualFile localFile = new WriteAction<VirtualFile>() {
-      @Override
-      protected void run(@NotNull final Result<VirtualFile> result) {
-        final VirtualFile file = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(localIOFile);
-        if (file != null) {
-          file.refresh(false, false);
-        }
-        result.setResult(file);
+    VirtualFile localFile = WriteAction.computeAndWait(() -> {
+      final VirtualFile file = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(localIOFile);
+      if (file != null) {
+        file.refresh(false, false);
       }
-    }.execute().getResultObject();
+      return file;
+    });
     LOG.assertTrue(localFile != null, "Virtual local file not found for " + localIOFile.getAbsolutePath());
     LOG.debug("Virtual local file: " + localFile + ", size = " + localFile.getLength());
     synchronized (myLock) {
@@ -262,7 +260,7 @@ public class RemoteFileInfoImpl implements RemoteContentProvider.DownloadingCall
   private class MyRefreshingDownloadingListener extends FileDownloadingAdapter {
     private final Runnable myPostRunnable;
 
-    public MyRefreshingDownloadingListener(final Runnable postRunnable) {
+    MyRefreshingDownloadingListener(final Runnable postRunnable) {
       myPostRunnable = postRunnable;
     }
 
@@ -275,7 +273,7 @@ public class RemoteFileInfoImpl implements RemoteContentProvider.DownloadingCall
     }
 
     @Override
-    public void fileDownloaded(final VirtualFile localFile) {
+    public void fileDownloaded(@NotNull final VirtualFile localFile) {
       removeDownloadingListener(this);
       if (myPostRunnable != null) {
         myPostRunnable.run();
@@ -305,17 +303,17 @@ public class RemoteFileInfoImpl implements RemoteContentProvider.DownloadingCall
 
         case ERROR_OCCURRED:
         default:
-          return Promise.reject("errorOccured");
+          return rejectedPromise("errorOccurred");
       }
     }
   }
 
   @NotNull
   private static Promise<VirtualFile> createDownloadedCallback(@NotNull final RemoteFileInfo remoteFileInfo) {
-    final AsyncPromise<VirtualFile> promise = new AsyncPromise<VirtualFile>();
+    final AsyncPromise<VirtualFile> promise = new AsyncPromise<>();
     remoteFileInfo.addDownloadingListener(new FileDownloadingAdapter() {
       @Override
-      public void fileDownloaded(VirtualFile localFile) {
+      public void fileDownloaded(@NotNull VirtualFile localFile) {
         try {
           remoteFileInfo.removeDownloadingListener(this);
         }

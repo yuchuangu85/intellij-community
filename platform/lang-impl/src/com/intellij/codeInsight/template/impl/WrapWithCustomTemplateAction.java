@@ -26,15 +26,10 @@ import com.intellij.openapi.vfs.ReadonlyStatusHandler;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Set;
 
-/**
- * Created by IntelliJ IDEA.
- * User: Eugene.Kudelevsky
- * Date: 25.03.2010
- * Time: 1:50:53
- */
 public class WrapWithCustomTemplateAction extends AnAction {
   private final CustomLiveTemplate myTemplate;
   private final Editor myEditor;
@@ -52,7 +47,11 @@ public class WrapWithCustomTemplateAction extends AnAction {
 
 
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public void actionPerformed(@NotNull AnActionEvent e) {
+    perform();
+  }
+
+  public void perform() {
     final Document document = myEditor.getDocument();
     final VirtualFile file = FileDocumentManager.getInstance().getFile(document);
     if (file != null) {

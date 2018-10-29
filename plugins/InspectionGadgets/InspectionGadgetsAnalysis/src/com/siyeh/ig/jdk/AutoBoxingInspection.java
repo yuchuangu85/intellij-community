@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2015 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2016 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 package com.siyeh.ig.jdk;
 
-import com.intellij.codeInsight.AnnotationUtil;
 import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.codeInspection.ui.SingleCheckboxOptionsPanel;
 import com.intellij.openapi.project.Project;
@@ -33,7 +32,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 public class AutoBoxingInspection extends BaseInspection {
 
@@ -41,9 +41,8 @@ public class AutoBoxingInspection extends BaseInspection {
   public boolean ignoreAddedToCollection = false;
 
   /**
-   * @noinspection StaticCollection
    */
-  @NonNls static final Map<String, String> s_boxingClasses = new HashMap<String, String>(8);
+  @NonNls static final Map<String, String> s_boxingClasses = new HashMap<>(8);
 
   static {
     s_boxingClasses.put("byte", CommonClassNames.JAVA_LANG_BYTE);
@@ -54,14 +53,6 @@ public class AutoBoxingInspection extends BaseInspection {
     s_boxingClasses.put("double", CommonClassNames.JAVA_LANG_DOUBLE);
     s_boxingClasses.put("boolean", CommonClassNames.JAVA_LANG_BOOLEAN);
     s_boxingClasses.put("char", CommonClassNames.JAVA_LANG_CHARACTER);
-  }
-
-  @NonNls static final Set<String> convertableBoxedClassNames = new HashSet<String>();
-
-  static {
-    convertableBoxedClassNames.add(CommonClassNames.JAVA_LANG_BYTE);
-    convertableBoxedClassNames.add(CommonClassNames.JAVA_LANG_CHARACTER);
-    convertableBoxedClassNames.add(CommonClassNames.JAVA_LANG_SHORT);
   }
 
   @Override
@@ -109,14 +100,8 @@ public class AutoBoxingInspection extends BaseInspection {
   private static class AutoBoxingFix extends InspectionGadgetsFix {
     @Override
     @NotNull
-    public String getName() {
-      return InspectionGadgetsBundle.message("auto.boxing.make.boxing.explicit.quickfix");
-    }
-
-    @NotNull
-    @Override
     public String getFamilyName() {
-      return getName();
+      return InspectionGadgetsBundle.message("auto.boxing.make.boxing.explicit.quickfix");
     }
 
     @Override
@@ -146,6 +131,7 @@ public class AutoBoxingInspection extends BaseInspection {
       if (strippedExpression == null) {
         return;
       }
+      CommentTracker commentTracker = new CommentTracker();
       @NonNls final String expressionText = strippedExpression.getText();
       @NonNls final String newExpression;
       if ("true".equals(expressionText)) {
@@ -155,14 +141,15 @@ public class AutoBoxingInspection extends BaseInspection {
         newExpression = "java.lang.Boolean.FALSE";
       }
       else {
+        commentTracker.markUnchanged(strippedExpression);
         newExpression = classToConstruct + ".valueOf(" + expressionText + ')';
       }
       final PsiElement parent = expression.getParent();
       if (parent instanceof PsiTypeCastExpression) {
         final PsiTypeCastExpression typeCastExpression = (PsiTypeCastExpression)parent;
-        PsiReplacementUtil.replaceExpression(typeCastExpression, newExpression);
+        PsiReplacementUtil.replaceExpression(typeCastExpression, newExpression, commentTracker);
       } else {
-        PsiReplacementUtil.replaceExpression(expression, newExpression);
+        PsiReplacementUtil.replaceExpression(expression, newExpression, commentTracker);
       }
     }
 
@@ -273,14 +260,8 @@ public class AutoBoxingInspection extends BaseInspection {
     }
 
     @Override
-    public void visitPostfixExpression(PsiPostfixExpression expression) {
-      super.visitPostfixExpression(expression);
-      checkExpression(expression);
-    }
-
-    @Override
-    public void visitPrefixExpression(PsiPrefixExpression expression) {
-      super.visitPrefixExpression(expression);
+    public void visitUnaryExpression(PsiUnaryExpression expression) {
+      super.visitUnaryExpression(expression);
       checkExpression(expression);
     }
 
@@ -329,49 +310,8 @@ public class AutoBoxingInspection extends BaseInspection {
     }
 
     private void checkExpression(@NotNull PsiExpression expression) {
-      final PsiElement parent = expression.getParent();
-      if (parent instanceof PsiParenthesizedExpression) {
+      if (!ExpressionUtils.isAutoBoxed(expression)) {
         return;
-      }
-      if (parent instanceof PsiExpressionList) {
-        final PsiElement grandParent = parent.getParent();
-        if (grandParent instanceof PsiMethodCallExpression) {
-          final PsiMethodCallExpression methodCallExpression = (PsiMethodCallExpression)grandParent;
-          final PsiMethod method = methodCallExpression.resolveMethod();
-          if (method != null &&
-              AnnotationUtil.isAnnotated(method, Collections.singletonList("java.lang.invoke.MethodHandle.PolymorphicSignature"))) {
-            return;
-          }
-        }
-      }
-      final PsiType expressionType = expression.getType();
-      if (expressionType == null || expressionType.equals(PsiType.VOID) || !TypeConversionUtil.isPrimitiveAndNotNull(expressionType)) {
-        return;
-      }
-      final PsiPrimitiveType primitiveType = (PsiPrimitiveType)expressionType;
-      final PsiClassType boxedType = primitiveType.getBoxedType(expression);
-      if (boxedType == null) {
-        return;
-      }
-      final PsiType expectedType = ExpectedTypeUtils.findExpectedType(expression, false, true);
-      if (expectedType == null || ClassUtils.isPrimitive(expectedType)) {
-        return;
-      }
-      if (!expectedType.isAssignableFrom(boxedType)) {
-        // JLS 5.2 Assignment Conversion
-        // check if a narrowing primitive conversion is applicable
-        if (!(expectedType instanceof PsiClassType) || !PsiUtil.isConstantExpression(expression)) {
-          return;
-        }
-        final PsiClassType classType = (PsiClassType)expectedType;
-        final String className = classType.getCanonicalText();
-        if (!convertableBoxedClassNames.contains(className)) {
-          return;
-        }
-        if (!PsiType.BYTE.equals(expressionType) && !PsiType.CHAR.equals(expressionType) &&
-            !PsiType.SHORT.equals(expressionType) && !PsiType.INT.equals(expressionType)) {
-          return;
-        }
       }
       if (ignoreAddedToCollection && isAddedToCollection(expression)) {
         return;

@@ -22,11 +22,11 @@ import com.intellij.openapi.project.Project;
 import com.intellij.remoteServer.ServerType;
 import com.intellij.remoteServer.configuration.RemoteServer;
 import com.intellij.remoteServer.util.CloudAccountSelectionEditor;
-import com.intellij.util.containers.HashSet;
 
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -41,18 +41,18 @@ public class CloudModuleWizardStep extends ModuleWizardStep {
   private final Project myProject;
   private final Disposable myParentDisposable;
 
-  private CloudAccountSelectionEditor myAccountSelectionPanel;
+  private final CloudAccountSelectionEditor myAccountSelectionPanel;
 
-  private Set<ServerType<?>> myApplicationConfigurableTypes;
+  private final Set<ServerType<?>> myApplicationConfigurableTypes;
 
   public CloudModuleWizardStep(CloudModuleBuilder moduleBuilder, Project project, Disposable parentDisposable) {
     myModuleBuilder = moduleBuilder;
     myProject = project;
     myParentDisposable = parentDisposable;
 
-    myApplicationConfigurableTypes = new HashSet<ServerType<?>>();
+    myApplicationConfigurableTypes = new HashSet<>();
 
-    List<ServerType<?>> cloudTypes = new ArrayList<ServerType<?>>();
+    List<ServerType<?>> cloudTypes = new ArrayList<>();
     for (CloudModuleBuilderContributionFactory contribution : CloudModuleBuilderContributionFactory.EP_NAME.getExtensions()) {
       cloudTypes.add(contribution.getCloudType());
     }

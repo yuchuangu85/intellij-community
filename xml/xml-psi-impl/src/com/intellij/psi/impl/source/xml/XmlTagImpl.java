@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.source.xml;
 
 import com.intellij.javaee.ExternalResourceManager;
@@ -20,7 +6,6 @@ import com.intellij.javaee.ExternalResourceManagerEx;
 import com.intellij.javaee.ImplicitNamespaceDescriptorProvider;
 import com.intellij.lang.ASTNode;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.progress.ProgressManager;
@@ -39,19 +24,17 @@ import com.intellij.pom.xml.impl.events.XmlTagNameChangedImpl;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.meta.MetaRegistry;
 import com.intellij.psi.impl.source.resolve.reference.ReferenceProvidersRegistry;
-import com.intellij.psi.impl.source.tree.*;
 import com.intellij.psi.impl.source.tree.Factory;
+import com.intellij.psi.impl.source.tree.*;
 import com.intellij.psi.meta.PsiMetaData;
 import com.intellij.psi.meta.PsiMetaOwner;
 import com.intellij.psi.search.PsiElementProcessor;
 import com.intellij.psi.tree.ChildRoleBase;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.*;
+import com.intellij.psi.util.CachedValueProvider.Result;
 import com.intellij.psi.xml.*;
-import com.intellij.util.ArrayUtil;
-import com.intellij.util.CharTable;
-import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.PlatformIcons;
+import com.intellij.util.*;
 import com.intellij.util.containers.BidirectionalMap;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.xml.XmlAttributeDescriptor;
@@ -59,6 +42,7 @@ import com.intellij.xml.XmlElementDescriptor;
 import com.intellij.xml.XmlExtension;
 import com.intellij.xml.XmlNSDescriptor;
 import com.intellij.xml.impl.schema.AnyXmlElementDescriptor;
+import com.intellij.xml.impl.schema.MultiFileNsDescriptor;
 import com.intellij.xml.impl.schema.XmlNSDescriptorImpl;
 import com.intellij.xml.index.XmlNamespaceIndex;
 import com.intellij.xml.util.XmlTagUtil;
@@ -70,6 +54,7 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * @author Mike
@@ -81,20 +66,13 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
   private static final RecursionGuard ourGuard = RecursionManager.createGuard("xmlTag");
   private static final Key<ParameterizedCachedValue<XmlTag[], XmlTagImpl>> SUBTAGS_KEY = Key.create("subtags");
   private static final ParameterizedCachedValueProvider<XmlTag[],XmlTagImpl> CACHED_VALUE_PROVIDER =
-    new ParameterizedCachedValueProvider<XmlTag[], XmlTagImpl>() {
-      @Override
-      public CachedValueProvider.Result<XmlTag[]> compute(XmlTagImpl tag) {
-        final List<XmlTag> result = new ArrayList<XmlTag>();
-
-        tag.fillSubTags(result);
-
-        final int s = result.size();
-        XmlTag[] tags = s > 0 ? ContainerUtil.toArray(result, new XmlTag[s]) : EMPTY;
-        return CachedValueProvider.Result
-          .create(tags, PsiModificationTracker.OUT_OF_CODE_BLOCK_MODIFICATION_COUNT, tag.getContainingFile());
-      }
+    tag -> {
+      List<XmlTag> result = new ArrayList<>();
+      tag.fillSubTags(result);
+      XmlTag[] tags = result.toArray(EMPTY);
+      return Result.create(tags, PsiModificationTracker.OUT_OF_CODE_BLOCK_MODIFICATION_COUNT, tag);
     };
-  private static final Comparator<TextRange> RANGE_COMPARATOR = (range1, range2) -> range1.getStartOffset() - range2.getStartOffset();
+  private static final Comparator<TextRange> RANGE_COMPARATOR = Comparator.comparingInt(TextRange::getStartOffset);
   private final int myHC = ourHC++;
   private volatile String myName;
   private volatile String myLocalName;
@@ -170,10 +148,22 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
   @Override
   public PsiReference[] getReferences(@NotNull PsiReferenceService.Hints hints) {
     ProgressManager.checkCanceled();
+    if (hints == PsiReferenceService.Hints.NO_HINTS) {
+      return CachedValuesManager
+        .getCachedValue(this, () -> Result.create(getReferencesImpl(PsiReferenceService.Hints.NO_HINTS),
+                                                  PsiModificationTracker.MODIFICATION_COUNT,
+                                                  externalResourceModificationTracker()));
+    }
+
+    return getReferencesImpl(hints);
+  }
+
+  @NotNull
+  private PsiReference[] getReferencesImpl(@NotNull PsiReferenceService.Hints hints) {
     final ASTNode startTagName = XmlChildRole.START_TAG_NAME_FINDER.findChild(this);
     if (startTagName == null) return PsiReference.EMPTY_ARRAY;
     final ASTNode endTagName = XmlChildRole.CLOSING_TAG_NAME_FINDER.findChild(this);
-    List<PsiReference> refs = new ArrayList<PsiReference>();
+    List<PsiReference> refs = new SmartList<>();
     String prefix = getNamespacePrefix();
 
     boolean inStartTag = hints.offsetInElement == null || childContainsOffset(startTagName.getPsi(), hints.offsetInElement);
@@ -183,7 +173,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
         refs.add(startTagRef);
       }
       if (!prefix.isEmpty()) {
-        refs.add(createPrefixReference(startTagName, prefix, startTagRef));
+        refs.addAll(createPrefixReferences(startTagName, prefix, startTagRef));
       }
     }
     boolean inEndTag = endTagName != null && (hints.offsetInElement == null || childContainsOffset(endTagName.getPsi(), hints.offsetInElement));
@@ -192,9 +182,9 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
       if (endTagRef != null) {
         refs.add(endTagRef);
       }
-      prefix = XmlUtil.findPrefixByQualifiedName(endTagName.getText());
+      prefix = getNamespacePrefix(endTagName.getText());
       if (StringUtil.isNotEmpty(prefix)) {
-        refs.add(createPrefixReference(endTagName, prefix, endTagRef));
+        refs.addAll(createPrefixReferences(endTagName, prefix, endTagRef));
       }
     }
 
@@ -202,7 +192,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
       Collections.addAll(refs, ReferenceProvidersRegistry.getReferencesFromProviders(this, hints));
     }
 
-    return ContainerUtil.toArray(refs, new PsiReference[refs.size()]);
+    return refs.toArray(PsiReference.EMPTY_ARRAY);
   }
 
   private static boolean childContainsOffset(PsiElement child, int offsetInTag) {
@@ -230,14 +220,17 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
           list.add(TextRange.from(psi.getStartOffsetInParent(), psi.getTextLength()));
         }
       }
-      myTextElements = elements = list.toArray(new TextRange[list.size()]);
+      myTextElements = elements = list.toArray(TextRange.EMPTY_ARRAY);
     }
     return elements;
   }
 
-  private SchemaPrefixReference createPrefixReference(ASTNode startTagName, String prefix, TagNameReference tagRef) {
-    return new SchemaPrefixReference(this, TextRange.from(startTagName.getStartOffset() - getStartOffset(), prefix.length()), prefix,
-                                     tagRef);
+  @NotNull
+  protected Collection<PsiReference> createPrefixReferences(@NotNull ASTNode startTagName,
+                                                            @NotNull String prefix,
+                                                            @NotNull TagNameReference tagRef) {
+    return Collections.singleton(new SchemaPrefixReference(this, TextRange.from(startTagName.getStartOffset() - getStartOffset(), prefix.length()), prefix,
+                                     tagRef));
   }
 
   @Override
@@ -320,8 +313,8 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
 
   protected final Map<String, CachedValue<XmlNSDescriptor>> getNSDescriptorsMap() {
     return CachedValuesManager.getCachedValue(this, () ->
-      CachedValueProvider.Result.create(computeNsDescriptorMap(),
-                                        PsiModificationTracker.MODIFICATION_COUNT, externalResourceModificationTracker()));
+      Result.create(computeNsDescriptorMap(),
+                    PsiModificationTracker.MODIFICATION_COUNT, externalResourceModificationTracker()));
   }
 
   @NotNull
@@ -333,14 +326,14 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
     final String schemaLocationDeclaration = getAttributeValue("schemaLocation", XmlUtil.XML_SCHEMA_INSTANCE_URI);
 
     if (noNamespaceDeclaration != null) {
-      map = initializeSchema(XmlUtil.EMPTY_URI, null, noNamespaceDeclaration, null, myHasNamespaceDeclarations);
+      map = initializeSchema(XmlUtil.EMPTY_URI, null, Collections.singleton(noNamespaceDeclaration), null, myHasNamespaceDeclarations);
     }
     if (schemaLocationDeclaration != null) {
       final StringTokenizer tokenizer = new StringTokenizer(schemaLocationDeclaration);
       while (tokenizer.hasMoreTokens()) {
         final String uri = tokenizer.nextToken();
         if (tokenizer.hasMoreTokens()) {
-          map = initializeSchema(uri, getNSVersion(uri, this), tokenizer.nextToken(), map, myHasNamespaceDeclarations);
+          map = initializeSchema(uri, getNSVersion(uri, this), Collections.singleton(tokenizer.nextToken()), map, myHasNamespaceDeclarations);
         }
       }
     }
@@ -354,67 +347,83 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
           ns = getRealNs(ns);
 
           if (map == null || !map.containsKey(ns)) {
-            map = initializeSchema(ns, getNSVersion(ns, this), getNsLocation(ns), map, true);
+            Set<String> locations = getNsLocations(ns);
+            map = initializeSchema(ns, getNSVersion(ns, this), locations, map, true);
           }
         }
       }
     }
-    return map == null ? Collections.<String, CachedValue<XmlNSDescriptor>>emptyMap() : map;
+    return map == null ? Collections.emptyMap() : map;
   }
 
   private Map<String, CachedValue<XmlNSDescriptor>> initializeSchema(@NotNull final String namespace,
                                                                      @Nullable final String version,
-                                                                     final String fileLocation,
+                                                                     Set<String> fileLocations,
                                                                      Map<String, CachedValue<XmlNSDescriptor>> map,
                                                                      final boolean nsDecl) {
-    if (map == null) map = new THashMap<String, CachedValue<XmlNSDescriptor>>();
+    if (map == null) map = new THashMap<>();
 
     // We put cached value in any case to cause its value update on e.g. mapping change
     map.put(namespace, CachedValuesManager.getManager(getManager().getProject()).createCachedValue(() -> {
-      XmlNSDescriptor descriptor = getImplicitNamespaceDescriptor(fileLocation);
-      if (descriptor != null) {
-        return new CachedValueProvider.Result<XmlNSDescriptor>(descriptor, ArrayUtil.append(descriptor.getDependences(), XmlTagImpl.this));
+      final XmlFile[] file = new XmlFile[1];
+      List<XmlNSDescriptor> descriptors = fileLocations.stream().map(s -> {
+        file[0] = retrieveFile(s, version, namespace, nsDecl);
+        return getDescriptor(file[0], s, namespace);
+      }).filter(Objects::nonNull).collect(Collectors.toList());
+
+      XmlNSDescriptor descriptor = null;
+      if (descriptors.size() == 1) {
+        descriptor = descriptors.get(0);
       }
+      else if (descriptors.size() > 1) {
+        descriptor = new MultiFileNsDescriptor(descriptors.stream().map(descriptor1 -> (XmlNSDescriptorImpl)descriptor1).collect(Collectors.toList()));
+      }
+      if (descriptor == null) {
+        return new Result<>(null, this, file[0] == null ? this : file[0],
+                                                ExternalResourceManager.getInstance());
+      }
+      return new Result<>(descriptor, descriptor.getDependencies(), this);
+    }, false));
 
-      XmlFile currentFile = retrieveFile(fileLocation, version, namespace, nsDecl);
-      if (currentFile == null) {
-        final XmlDocument document = XmlUtil.getContainingFile(XmlTagImpl.this).getDocument();
-        if (document != null) {
-          final String uri = XmlUtil.getDtdUri(document);
-          if (uri != null) {
-            final XmlFile containingFile = XmlUtil.getContainingFile(document);
-            final XmlFile xmlFile = XmlUtil.findNamespace(containingFile, uri);
-            descriptor = xmlFile == null ? null : (XmlNSDescriptor)xmlFile.getDocument().getMetaData();
-          }
+    return map;
+  }
 
-          // We want to get fixed xmlns attr from dtd and check its default with requested namespace
-          if (descriptor instanceof com.intellij.xml.impl.dtd.XmlNSDescriptorImpl) {
-            final XmlElementDescriptor elementDescriptor = descriptor.getElementDescriptor(XmlTagImpl.this);
-            if (elementDescriptor != null) {
-              final XmlAttributeDescriptor attributeDescriptor = elementDescriptor.getAttributeDescriptor("xmlns", XmlTagImpl.this);
-              if (attributeDescriptor != null && attributeDescriptor.isFixed()) {
-                final String defaultValue = attributeDescriptor.getDefaultValue();
-                if (defaultValue != null && defaultValue.equals(namespace)) {
-                  return new CachedValueProvider.Result<XmlNSDescriptor>(descriptor, descriptor.getDependences(), XmlTagImpl.this,
-                                                                         ExternalResourceManager.getInstance());
-                }
+  private XmlNSDescriptor getDescriptor(@Nullable XmlFile currentFile, String fileLocation, String namespace) {
+    XmlNSDescriptor descriptor = getImplicitNamespaceDescriptor(fileLocation);
+    if (descriptor != null) {
+      return descriptor;
+    }
+
+    if (currentFile == null) {
+      final XmlDocument document = XmlUtil.getContainingFile(this).getDocument();
+      if (document != null) {
+        final String uri = XmlUtil.getDtdUri(document);
+        if (uri != null) {
+          final XmlFile containingFile = XmlUtil.getContainingFile(document);
+          final XmlFile xmlFile = XmlUtil.findNamespace(containingFile, uri);
+          descriptor = xmlFile == null ? null : (XmlNSDescriptor)xmlFile.getDocument().getMetaData();
+        }
+
+        // We want to get fixed xmlns attr from dtd and check its default with requested namespace
+        if (descriptor instanceof com.intellij.xml.impl.dtd.XmlNSDescriptorImpl) {
+          final XmlElementDescriptor elementDescriptor = descriptor.getElementDescriptor(this);
+          if (elementDescriptor != null) {
+            final XmlAttributeDescriptor attributeDescriptor = elementDescriptor.getAttributeDescriptor("xmlns", this);
+            if (attributeDescriptor != null && attributeDescriptor.isFixed()) {
+              final String defaultValue = attributeDescriptor.getDefaultValue();
+              if (defaultValue != null && defaultValue.equals(namespace)) {
+                return descriptor;
               }
             }
           }
         }
       }
-      PsiMetaOwner currentOwner = retrieveOwner(currentFile, namespace);
-      if (currentOwner != null) {
-        descriptor = (XmlNSDescriptor)currentOwner.getMetaData();
-        if (descriptor != null) {
-          return new CachedValueProvider.Result<XmlNSDescriptor>(descriptor, descriptor.getDependences(), XmlTagImpl.this,
-                                                                 ExternalResourceManager.getInstance());
-        }
-      }
-      return new CachedValueProvider.Result<XmlNSDescriptor>(null, XmlTagImpl.this, currentFile == null ? XmlTagImpl.this : currentFile, ExternalResourceManager.getInstance());
-    }, false));
-
-    return map;
+    }
+    PsiMetaOwner currentOwner = retrieveOwner(currentFile, namespace);
+    if (currentOwner != null) {
+      return (XmlNSDescriptor)currentOwner.getMetaData();
+    }
+    return null;
   }
 
   @Nullable
@@ -423,7 +432,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
     if (file == null) return null;
     Module module = ModuleUtilCore.findModuleForPsiElement(file);
     if (module != null) {
-      for (ImplicitNamespaceDescriptorProvider provider : Extensions.getExtensions(ImplicitNamespaceDescriptorProvider.EP_NAME)) {
+      for (ImplicitNamespaceDescriptorProvider provider : ImplicitNamespaceDescriptorProvider.EP_NAME.getExtensionList()) {
         XmlNSDescriptor nsDescriptor = provider.getNamespaceDescriptor(module, ns, file);
         if (nsDescriptor != null) return nsDescriptor;
       }
@@ -439,12 +448,13 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
     }
 
     final XmlFile file = XmlUtil.getContainingFile(this);
+    if (file == null) return null;
     final PsiFile psiFile = ExternalResourceManager.getInstance().getResourceLocation(fileLocation, file, version);
     if (psiFile instanceof XmlFile) {
       return (XmlFile)psiFile;
     }
 
-    return XmlNamespaceIndex.guessSchema(namespace, nsDecl ? null : myLocalName, version, fileLocation, file);
+    return XmlNamespaceIndex.guessSchema(namespace, nsDecl ? null : getLocalName(), version, fileLocation, file);
   }
 
   @Nullable
@@ -452,7 +462,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
     if (file == null) {
       return namespace.equals(XmlUtil.getTargetSchemaNsFromTag(this)) ? this : null;
     }
-    return file.getDocument();
+    return AstLoadingFilter.forceAllowTreeLoading(file, () -> file.getDocument());
   }
 
   @Override
@@ -462,9 +472,15 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
 
   @Override
   public XmlElementDescriptor getDescriptor() {
-    return CachedValuesManager.getCachedValue(this, () ->
-      CachedValueProvider.Result.create(computeElementDescriptor(),
-                                        PsiModificationTracker.MODIFICATION_COUNT, externalResourceModificationTracker()));
+    return CachedValuesManager.getCachedValue(this, () -> {
+      final RecursionGuard.StackStamp stamp = ourGuard.markStack();
+      final XmlElementDescriptor descriptor = ourGuard.doPreventingRecursion(this, true, this::computeElementDescriptor);
+      if (stamp.mayCacheNow()) {
+        return Result.create(descriptor, PsiModificationTracker.MODIFICATION_COUNT, externalResourceModificationTracker());
+      }
+      // = do not cache
+      return Result.create(descriptor, ModificationTracker.EVER_CHANGED);
+    });
   }
 
   private ModificationTracker externalResourceModificationTracker() {
@@ -475,7 +491,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
 
   @Nullable
   protected XmlElementDescriptor computeElementDescriptor() {
-    for (XmlElementDescriptorProvider provider : Extensions.getExtensions(XmlElementDescriptorProvider.EP_NAME)) {
+    for (XmlElementDescriptorProvider provider : XmlElementDescriptorProvider.EP_NAME.getExtensionList()) {
       XmlElementDescriptor elementDescriptor = provider.getDescriptor(this);
       if (elementDescriptor != null) {
         return elementDescriptor;
@@ -517,7 +533,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
   }
 
   @Override
-  public int getChildRole(ASTNode child) {
+  public int getChildRole(@NotNull ASTNode child) {
     LOG.assertTrue(child.getTreeParent() == this);
     IElementType i = child.getElementType();
     if (i == XmlTokenType.XML_NAME || i == XmlTokenType.XML_TAG_NAME) {
@@ -591,14 +607,14 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
 
   @NotNull
   private XmlAttribute[] calculateAttributes() {
-    final List<XmlAttribute> result = new ArrayList<XmlAttribute>(10);
+    final List<XmlAttribute> result = new ArrayList<>(10);
     processChildren(new PsiElementProcessor() {
       @Override
       public boolean execute(@NotNull PsiElement element) {
         if (element instanceof XmlAttribute) {
           XmlAttribute attribute = (XmlAttribute)element;
           result.add(attribute);
-          myHasNamespaceDeclarations = myHasNamespaceDeclarations || attribute.isNamespaceDeclaration();
+          if (!myHasNamespaceDeclarations && attribute.isNamespaceDeclaration()) myHasNamespaceDeclarations = true;
         }
         else if (element instanceof XmlToken && ((XmlToken)element).getTokenType() == XmlTokenType.XML_TAG_END) {
           return false;
@@ -606,12 +622,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
         return true;
       }
     });
-    if (result.isEmpty()) {
-      return XmlAttribute.EMPTY_ARRAY;
-    }
-    else {
-      return ContainerUtil.toArray(result, new XmlAttribute[result.size()]);
-    }
+    return result.toArray(XmlAttribute.EMPTY_ARRAY);
   }
 
   protected void cacheOneAttributeValue(String name, String value, final Map<String, String> attributesValueMap) {
@@ -622,7 +633,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
   public String getAttributeValue(String qname) {
     Map<String, String> map = myAttributeValueMap;
     if (map == null) {
-      map = new THashMap<String, String>();
+      map = new THashMap<>();
       for (XmlAttribute attribute : getAttributes()) {
         cacheOneAttributeValue(attribute.getName(), attribute.getValue(), map);
       }
@@ -672,12 +683,12 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
     return CachedValuesManager.getManager(getProject()).getParameterizedCachedValue(this, SUBTAGS_KEY, CACHED_VALUE_PROVIDER, false, this);
   }
 
-  protected void fillSubTags(final List<XmlTag> result) {
+  protected void fillSubTags(final List<? super XmlTag> result) {
     processElements(new PsiElementProcessor() {
       @Override
       public boolean execute(@NotNull PsiElement element) {
         if (element instanceof XmlTag) {
-          assert element.isValid();
+          PsiUtilCore.ensureValid(element);
           result.add((XmlTag)element);
         }
         return true;
@@ -695,7 +706,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
   @NotNull
   public XmlTag[] findSubTags(final String name, @Nullable final String namespace) {
     final XmlTag[] subTags = getSubTags();
-    final List<XmlTag> result = new ArrayList<XmlTag>();
+    final List<XmlTag> result = new ArrayList<>();
     for (final XmlTag subTag : subTags) {
       if (namespace == null) {
         if (name.equals(subTag.getName())) result.add(subTag);
@@ -704,7 +715,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
         result.add(subTag);
       }
     }
-    return ContainerUtil.toArray(result, new XmlTag[result.size()]);
+    return result.toArray(XmlTag.EMPTY);
   }
 
   @Override
@@ -748,7 +759,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
     return null;
   }
 
-  protected boolean isCaseSensitive() {
+  public boolean isCaseSensitive() {
     return true;
   }
 
@@ -756,13 +767,18 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
   @NotNull
   public String getNamespace() {
     return CachedValuesManager.getCachedValue(this, () ->
-      CachedValueProvider.Result.create(getNamespaceByPrefix(getNamespacePrefix()), PsiModificationTracker.MODIFICATION_COUNT));
+      Result.create(getNamespaceByPrefix(getNamespacePrefix()), PsiModificationTracker.MODIFICATION_COUNT));
   }
 
   @Override
   @NotNull
   public String getNamespacePrefix() {
-    return XmlUtil.findPrefixByQualifiedName(getName());
+    return getNamespacePrefix(getName());
+  }
+
+  @NotNull
+  protected String getNamespacePrefix(@NotNull String name) {
+    return XmlUtil.findPrefixByQualifiedName(name);
   }
 
   @Override
@@ -787,7 +803,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
       String result = ourGuard.doPreventingRecursion("getNsByPrefix", true, () -> {
         final String nsFromEmptyPrefix = getNamespaceByPrefix("");
         final XmlNSDescriptor nsDescriptor = getNSDescriptor(nsFromEmptyPrefix, false);
-        final XmlElementDescriptor descriptor = nsDescriptor != null ? nsDescriptor.getElementDescriptor(XmlTagImpl.this) : null;
+        final XmlElementDescriptor descriptor = nsDescriptor != null ? nsDescriptor.getElementDescriptor(this) : null;
         final String nameFromRealDescriptor =
           descriptor != null && descriptor.getDeclaration() != null && descriptor.getDeclaration().isPhysical()
           ? descriptor.getName()
@@ -823,7 +839,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
     BidirectionalMap<String, String> map = getNamespaceMap();
     Set<String> known = Collections.emptySet();
     if (map != null) {
-      known = new HashSet<String>(map.values());
+      known = new HashSet<>(map.values());
     }
     if (parentElement instanceof XmlTag) {
       if (known.isEmpty()) return ((XmlTag)parentElement).knownNamespaces();
@@ -848,7 +864,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
   @Nullable
   private BidirectionalMap<String, String> getNamespaceMap() {
     return CachedValuesManager.getCachedValue(this, () ->
-      CachedValueProvider.Result.create(computeNamespaceMap(getParent()), PsiModificationTracker.MODIFICATION_COUNT));
+      Result.create(computeNamespaceMap(getParent()), PsiModificationTracker.MODIFICATION_COUNT));
   }
 
   @Nullable
@@ -856,7 +872,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
     BidirectionalMap<String, String> map = null;
     boolean hasNamespaceDeclarations = hasNamespaceDeclarations();
     if (hasNamespaceDeclarations) {
-      map = new BidirectionalMap<String, String>();
+      map = new BidirectionalMap<>();
       final XmlAttribute[] attributes = getAttributes();
 
       for (final XmlAttribute attribute : attributes) {
@@ -883,9 +899,10 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
         final String[][] namespacesFromDocument = extension.getNamespacesFromDocument((XmlDocument)parent, hasNamespaceDeclarations);
         if (namespacesFromDocument != null) {
           if (map == null) {
-            map = new BidirectionalMap<String, String>();
+            map = new BidirectionalMap<>();
           }
           for (final String[] prefix2ns : namespacesFromDocument) {
+            if (map.containsKey(prefix2ns[0])) continue;
             map.put(prefix2ns[0], getRealNs(prefix2ns[1]));
           }
         }
@@ -894,22 +911,25 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
     return map;
   }
 
-  private String getNsLocation(String ns) {
+  private Set<String> getNsLocations(String ns) {
     if (XmlUtil.XHTML_URI.equals(ns)) {
-      return XmlUtil.getDefaultXhtmlNamespace(getProject());
+      return Collections.singleton(XmlUtil.getDefaultXhtmlNamespace(getProject()));
     }
+    Set<String> locations = new HashSet<>();
     if (XmlNSDescriptorImpl.equalsToSchemaName(this, XmlNSDescriptorImpl.SCHEMA_TAG_NAME)) {
       for (XmlTag subTag : getSubTags()) {
         if (XmlNSDescriptorImpl.equalsToSchemaName(subTag, XmlNSDescriptorImpl.IMPORT_TAG_NAME) &&
             ns.equals(subTag.getAttributeValue("namespace"))) {
           String location = subTag.getAttributeValue("schemaLocation");
-          if (location != null) {
-            return location;
-          }
+          ContainerUtil.addIfNotNull(locations, location);
         }
       }
     }
-    return XmlUtil.getSchemaLocation(this, ns);
+    if (locations.isEmpty()) {
+      locations.add(XmlUtil.getSchemaLocation(this, ns));
+    }
+
+    return locations;
   }
 
   protected String getRealNs(final String value) {
@@ -936,7 +956,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
   @Override
   @NotNull
   public Map<String, String> getLocalNamespaceDeclarations() {
-    Map<String, String> namespaces = new THashMap<String, String>();
+    Map<String, String> namespaces = new THashMap<>();
     for (final XmlAttribute attribute : getAttributes()) {
       if (!attribute.isNamespaceDeclaration() || attribute.getValue() == null) continue;
       // xmlns -> "", xmlns:a -> a
@@ -1019,6 +1039,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
     }
   }
 
+  @Override
   public String toString() {
     return "XmlTag:" + getName();
   }
@@ -1122,11 +1143,13 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
     else {
       final ASTNode treePrev = child.getTreePrev();
       final ASTNode treeNext = child.getTreeNext();
-      XmlTagImpl.super.deleteChildInternal(child);
+      super.deleteChildInternal(child);
       if (treePrev != null &&
           treeNext != null &&
           treePrev.getElementType() == XmlElementType.XML_TEXT &&
-          treeNext.getElementType() == XmlElementType.XML_TEXT) {
+          treeNext.getElementType() == XmlElementType.XML_TEXT &&
+          !TreeUtil.containsOuterLanguageElements(treePrev) &&
+          !TreeUtil.containsOuterLanguageElements(treeNext)) {
         final XmlText prevText = (XmlText)treePrev.getPsi();
         final XmlText nextText = (XmlText)treeNext.getPsi();
 
@@ -1135,7 +1158,7 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
         // merging two XmlText-s should be done in one transaction to preserve smart pointers
         ChangeUtil.prepareAndRunChangeAction(new ChangeUtil.ChangeAction() {
           @Override
-          public void makeChange(TreeChangeEvent destinationTreeChange) {
+          public void makeChange(@NotNull TreeChangeEvent destinationTreeChange) {
             PsiElement anchor = prevText.getPrevSibling();
             prevText.delete();
             nextText.delete();
@@ -1191,10 +1214,12 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
   protected class BodyInsertTransaction extends InsertTransaction {
     private final TreeElement myChild;
     private ASTNode myNewElement;
+    private final XmlElementDescriptor myParentDescriptor;
 
     public BodyInsertTransaction(TreeElement child) {
       super(XmlTagImpl.this);
       myChild = child;
+      myParentDescriptor = myChild.getElementType() == XmlElementType.XML_TAG ? getDescriptor() : null;
     }
 
     @Override
@@ -1202,15 +1227,14 @@ public class XmlTagImpl extends XmlElementImpl implements XmlTag, HintedReferenc
       final ASTNode anchor = expandTag();
       if (myChild.getElementType() == XmlElementType.XML_TAG) {
         // compute where to insert tag according to DTD or XSD
-        final XmlElementDescriptor parentDescriptor = getDescriptor();
         final XmlTag[] subTags = getSubTags();
-        final PsiElement declaration = parentDescriptor != null ? parentDescriptor.getDeclaration() : null;
+        final PsiElement declaration = myParentDescriptor != null ? myParentDescriptor.getDeclaration() : null;
         // filtering out generated dtds
         if (declaration != null &&
             declaration.getContainingFile() != null &&
             declaration.getContainingFile().isPhysical() &&
             subTags.length > 0) {
-          final XmlElementDescriptor[] childElementDescriptors = parentDescriptor.getElementsDescriptors(XmlTagImpl.this);
+          final XmlElementDescriptor[] childElementDescriptors = myParentDescriptor.getElementsDescriptors(XmlTagImpl.this);
           int subTagNum = -1;
           for (final XmlElementDescriptor childElementDescriptor : childElementDescriptors) {
             final String childElementName = childElementDescriptor.getName();

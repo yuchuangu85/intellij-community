@@ -14,10 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * User: anna
- * Date: 14-Jan-2008
- */
 package com.intellij.analysis;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -39,16 +35,14 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class JavaAnalysisScope extends AnalysisScope {
-  public static final int PACKAGE = 5;
-
-  public JavaAnalysisScope(PsiPackage pack, Module module) {
+  public JavaAnalysisScope(@NotNull PsiPackage pack, Module module) {
     super(pack.getProject());
     myModule = module;
     myElement = pack;
     myType = PACKAGE;
   }
 
-  public JavaAnalysisScope(final PsiJavaFile psiFile) {
+  JavaAnalysisScope(@NotNull PsiJavaFile psiFile) {
     super(psiFile);
   }
 
@@ -56,7 +50,6 @@ public class JavaAnalysisScope extends AnalysisScope {
   @NotNull
   public AnalysisScope getNarrowedComplementaryScope(@NotNull Project defaultProject) {
     final ProjectFileIndex fileIndex = ProjectRootManager.getInstance(defaultProject).getFileIndex();
-    final HashSet<Module> modules = new HashSet<Module>();
     if (myType == FILE) {
       if (myElement instanceof PsiJavaFile && !FileTypeUtils.isInServerPageFile(myElement)) {
         PsiJavaFile psiJavaFile = (PsiJavaFile)myElement;
@@ -77,6 +70,7 @@ public class JavaAnalysisScope extends AnalysisScope {
     }
     else if (myType == PACKAGE) {
       final PsiDirectory[] directories = ((PsiPackage)myElement).getDirectories();
+      final HashSet<Module> modules = new HashSet<>();
       for (PsiDirectory directory : directories) {
         modules.addAll(getAllInterestingModules(fileIndex, directory.getVirtualFile()));
       }
@@ -107,7 +101,7 @@ public class JavaAnalysisScope extends AnalysisScope {
   @Override
   protected void initFilesSet() {
     if (myType == PACKAGE) {
-      myFilesSet = new HashSet<VirtualFile>();
+      myFilesSet = new HashSet<>();
       accept(createFileSearcher());
       return;
     }
@@ -118,7 +112,7 @@ public class JavaAnalysisScope extends AnalysisScope {
   public boolean accept(@NotNull Processor<VirtualFile> processor) {
     if (myElement instanceof PsiPackage) {
       final PsiPackage pack = (PsiPackage)myElement;
-      final Set<PsiDirectory> dirs = new HashSet<PsiDirectory>();
+      final Set<PsiDirectory> dirs = new HashSet<>();
       ApplicationManager.getApplication().runReadAction(() -> {
         ContainerUtil.addAll(dirs, pack.getDirectories(GlobalSearchScope.projectScope(myElement.getProject())));
       });

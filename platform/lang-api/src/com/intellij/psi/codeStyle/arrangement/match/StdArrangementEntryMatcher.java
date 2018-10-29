@@ -32,7 +32,6 @@ import java.util.List;
  * Implementations of this interface are expected to be thread-safe.
  *
  * @author Denis Zhdanov
- * @since 8/26/12 11:07 PM
  */
 public class StdArrangementEntryMatcher implements ArrangementEntryMatcher {
 
@@ -127,7 +126,7 @@ public class StdArrangementEntryMatcher implements ArrangementEntryMatcher {
      * {@link #onCondition(ArrangementAtomMatchCondition) onCondition} calls.
      */
     @NotNull protected final MultiValuesMap<StdArrangementTokenType, ArrangementAtomMatchCondition> context =
-      new MultiValuesMap<StdArrangementTokenType, ArrangementAtomMatchCondition>();
+      new MultiValuesMap<>();
     @Nullable private String myNamePattern;
     @Nullable private String myNamespacePattern;
     @Nullable private String myText;

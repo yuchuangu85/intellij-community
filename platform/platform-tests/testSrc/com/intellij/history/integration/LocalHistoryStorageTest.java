@@ -16,6 +16,7 @@
 package com.intellij.history.integration;
 
 import com.intellij.history.core.LocalHistoryStorage;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.util.io.storage.AbstractStorage;
 
 import java.io.DataInputStream;
@@ -34,7 +35,7 @@ public class LocalHistoryStorageTest extends IntegrationTestCase {
 
   @Override
   protected void tearDown() throws Exception {
-    myStorage.dispose();
+    Disposer.dispose(myStorage);
     super.tearDown();
   }
 
@@ -51,7 +52,7 @@ public class LocalHistoryStorageTest extends IntegrationTestCase {
 
   public void testWritingAfterClose() throws Exception {
     createRecord();
-    myStorage.dispose();
+    Disposer.dispose(myStorage);
 
     try {
       createRecord();
@@ -93,7 +94,7 @@ public class LocalHistoryStorageTest extends IntegrationTestCase {
 
     myStorage.deleteRecordsUpTo(r2);
 
-    myStorage.dispose();
+    Disposer.dispose(myStorage);
     myStorage = new LocalHistoryStorage(myRoot.getPath() + "/storage");
 
     assertFirstAndLast(r3, r4);
@@ -102,7 +103,7 @@ public class LocalHistoryStorageTest extends IntegrationTestCase {
 
     myStorage.deleteRecordsUpTo(r3);
 
-    myStorage.dispose();
+    Disposer.dispose(myStorage);
     myStorage = new LocalHistoryStorage(myRoot.getPath() + "/storage");
 
     assertFirstAndLast(r4, r4);
@@ -110,7 +111,7 @@ public class LocalHistoryStorageTest extends IntegrationTestCase {
 
     int r5 = createRecord();
 
-    myStorage.dispose();
+    Disposer.dispose(myStorage);
     myStorage = new LocalHistoryStorage(myRoot.getPath() + "/storage");
 
     assertFirstAndLast(r4, r5);
@@ -120,7 +121,7 @@ public class LocalHistoryStorageTest extends IntegrationTestCase {
 
   public void testWritingChangesOfDifferentSize() throws Exception {
     final int MAX = 100;
-    List<Integer> records = new ArrayList<Integer>(MAX);
+    List<Integer> records = new ArrayList<>(MAX);
     for (int i = 0; i < MAX; i++) {
       if (i > MAX / 2) {
         myStorage.deleteRecordsUpTo(records.get(records.size() - MAX / 2));
@@ -137,11 +138,11 @@ public class LocalHistoryStorageTest extends IntegrationTestCase {
 
   private int createRecord(int size) throws IOException {
     int r = myStorage.createNextRecord();
-    AbstractStorage.StorageDataOutput s = myStorage.writeStream(r, true);
-    for (int i = 0; i < size; i++) {
-      s.writeInt(r);
+    try (AbstractStorage.StorageDataOutput s = myStorage.writeStream(r, true)) {
+      for (int i = 0; i < size; i++) {
+        s.writeInt(r);
+      }
     }
-    s.close();
     return r;
   }
 
@@ -153,14 +154,10 @@ public class LocalHistoryStorageTest extends IntegrationTestCase {
   private void assertRecord(int id, int prev, int next) throws IOException {
     assertEquals(prev, myStorage.getPrevRecord(id));
     assertEquals(next, myStorage.getNextRecord(id));
-    DataInputStream s = myStorage.readStream(id);
-    try {
+    try (DataInputStream s = myStorage.readStream(id)) {
       for (int i = 0; i < 1000; i++) {
         assertEquals(id, s.readInt());
       }
-    }
-    finally {
-      s.close();
     }
   }
 }

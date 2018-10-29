@@ -15,13 +15,10 @@
  */
 package com.intellij.rt.execution.junit;
 
-import com.intellij.rt.execution.junit.segments.SegmentedOutputStream;
-
 import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Vector;
 
@@ -47,18 +44,7 @@ public class JUnitStarter {
   private static String ourCommandFileName;
   private static String ourWorkingDirs;
   protected static int    ourCount = 1;
-  public static boolean SM_RUNNER = isSmRunner();
   public static String ourRepeatCount = null;
-
-  private static boolean isSmRunner() {
-    try {
-      final String property = System.getProperty("idea.junit.sm_runner");
-      return property != null;
-    }
-    catch (SecurityException e) {
-      return false;
-    }
-  }
 
   public static void main(String[] args) throws IOException {
     Vector argList = new Vector();
@@ -191,15 +177,20 @@ public class JUnitStarter {
 
   public static boolean isJUnit5Preferred() {
     final String useJUnit5 = System.getProperty(JUNIT5_KEY);
-    final Boolean boolValue = useJUnit5 == null ? null : Boolean.valueOf(useJUnit5);
-    return boolValue != null && boolValue.booleanValue();
+    if (useJUnit5 == null) {
+      return false;
+    }
+    else {
+      final Boolean boolValue = Boolean.valueOf(useJUnit5);
+      return boolValue != null && boolValue.booleanValue();
+    }
   }
 
   public static boolean checkVersion(String[] args, PrintStream printStream) {
     for (int i = 0; i < args.length; i++) {
       String arg = args[i];
       if (arg.startsWith(IDE_VERSION)) {
-        int ideVersion = Integer.parseInt(arg.substring(IDE_VERSION.length(), arg.length()));
+        int ideVersion = Integer.parseInt(arg.substring(IDE_VERSION.length()));
         if (ideVersion != VERSION) {
           printStream.println("Wrong agent version: " + VERSION + ". IDE expects version: " + ideVersion);
           printStream.flush();
@@ -237,50 +228,37 @@ public class JUnitStarter {
                                             final String agentName,
                                             ArrayList listeners,
                                             String name) {
-    PrintStream oldOut = System.out;
-    PrintStream oldErr = System.err;
     try {
       IdeaTestRunner testRunner = (IdeaTestRunner)getAgentClass(agentName).newInstance();
-      Object out = SM_RUNNER ? System.out : (Object)new SegmentedOutputStream(System.out);
-      Object err = SM_RUNNER ? System.err : (Object)new SegmentedOutputStream(System.err);
-      if (!SM_RUNNER) {
-        System.setOut(new PrintStream((OutputStream)out));
-        System.setErr(new PrintStream((OutputStream)err));
-      }
       if (ourCommandFileName != null) {
         if (!"none".equals(ourForkMode) || ourWorkingDirs != null && new File(ourWorkingDirs).length() > 0) {
           final List newArgs = new ArrayList();
           newArgs.add(agentName);
           newArgs.addAll(listeners);
-          PrintStream printOutputStream = SM_RUNNER ? ((PrintStream)out) : ((SegmentedOutputStream)out).getPrintStream();
-          PrintStream printErrStream = SM_RUNNER ? ((PrintStream)err) : ((SegmentedOutputStream)err).getPrintStream();
-          return new JUnitForkedSplitter(ourWorkingDirs, ourForkMode, printOutputStream, printErrStream, newArgs)
+          return new JUnitForkedSplitter(ourWorkingDirs, ourForkMode, newArgs)
             .startSplitting(args, name, ourCommandFileName, ourRepeatCount);
         }
       }
-      testRunner.setStreams(out, err, 0);
-      return testRunner.startRunnerWithArgs(args, listeners, name, ourCount, true);
+      return IdeaTestRunner.Repeater.startRunnerWithArgs(testRunner, args, listeners, name, ourCount, true);
     }
     catch (Exception e) {
       e.printStackTrace(System.err);
       return -2;
     }
-    finally {
-      System.setOut(oldOut);
-      System.setErr(oldErr);
-    }
+
   }
 
   static Class getAgentClass(String agentName) throws ClassNotFoundException {
     return Class.forName(agentName);
   }
 
-  public static void printClassesList(List classNames, String packageName, String category, File tempFile) throws IOException {
+  public static void printClassesList(List classNames, String packageName, String category, String filters, File tempFile) throws IOException {
     final PrintWriter writer = new PrintWriter(new OutputStreamWriter(new FileOutputStream(tempFile), "UTF-8"));
 
     try {
       writer.println(packageName); //package name
       writer.println(category); //category
+      writer.println(filters); //patterns
       for (int i = 0; i < classNames.size(); i++) {
         writer.println(classNames.get(i));
       }

@@ -127,6 +127,7 @@ public abstract class AbstractTreeBuilderCrashTest extends BaseTreeTestCase  {
 
   private void initTree(final Node root) throws Exception {
     myStructure = new BaseStructure() {
+      @NotNull
       @Override
       public Object getRootElement() {
         return root;
@@ -138,7 +139,7 @@ public abstract class AbstractTreeBuilderCrashTest extends BaseTreeTestCase  {
       }
 
       @Override
-      public Object getParentElement(final Object element) {
+      public Object getParentElement(@NotNull final Object element) {
         return ((Node)element).getParent();
       }
 
@@ -235,7 +236,7 @@ public abstract class AbstractTreeBuilderCrashTest extends BaseTreeTestCase  {
   }
 
   class CachedNode extends Node {
-    private final ArrayList<CachedNode> myChildren = new ArrayList<CachedNode>();
+    private final ArrayList<CachedNode> myChildren = new ArrayList<>();
 
     CachedNode(final String id) {
       super(id, null);
@@ -258,7 +259,7 @@ public abstract class AbstractTreeBuilderCrashTest extends BaseTreeTestCase  {
 
     @Override
     final Node[] getChildren() {
-      return myChildren.toArray(new Node[myChildren.size()]);
+      return myChildren.toArray(new Node[0]);
     }
   }
 

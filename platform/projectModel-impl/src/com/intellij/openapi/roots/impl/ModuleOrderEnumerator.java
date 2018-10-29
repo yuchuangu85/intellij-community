@@ -32,19 +32,19 @@ import java.util.List;
 public class ModuleOrderEnumerator extends OrderEnumeratorBase {
   private final ModuleRootModel myRootModel;
 
-  public ModuleOrderEnumerator(ModuleRootModel rootModel, final OrderRootsCache cache) {
+  ModuleOrderEnumerator(@NotNull ModuleRootModel rootModel, OrderRootsCache cache) {
     super(cache);
     myRootModel = rootModel;
   }
 
   @Override
-  public void processRootModules(@NotNull Processor<Module> processor) {
+  public void processRootModules(@NotNull Processor<? super Module> processor) {
     processor.process(myRootModel.getModule());
   }
 
   @Override
-  protected void forEach(@NotNull PairProcessor<OrderEntry, List<OrderEnumerationHandler>> processor) {
-    processEntries(myRootModel, processor, myRecursively ? new THashSet<Module>() : null, true, getCustomHandlers(myRootModel.getModule()));
+  protected void forEach(@NotNull PairProcessor<? super OrderEntry, ? super List<OrderEnumerationHandler>> processor) {
+    processEntries(myRootModel, processor, myRecursively ? new THashSet<>() : null, true, getCustomHandlers(myRootModel.getModule()));
   }
 
   @Override

@@ -25,16 +25,25 @@ import com.jetbrains.python.psi.PyClass;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 public interface PyClassStub extends NamedStub<PyClass> {
 
   /**
-  * @return a {@code Map} which contains imported class names as keys and their original names as values
+  * @return a {@code Map} which contains imported class names as keys and their original names as values.
+  * <i>Note: the returned {@code Map} could contain nulls as keys and as values.</i>
   */
   @NotNull
   Map<QualifiedName, QualifiedName> getSuperClasses();
+
+  /**
+   * Returns literal text of the subscription expressions in the base classes list.
+   * It's intended to be used for resolving generic types and type parameters in PEP 484 notation.
+   */
+  @NotNull
+  List<String> getSubscriptedSuperClasses();
 
   @Nullable
   QualifiedName getMetaClass();
@@ -44,4 +53,9 @@ public interface PyClassStub extends NamedStub<PyClass> {
 
   @Nullable
   String getDocString();
+
+  @NotNull
+  default List<String> getSuperClassesText() {
+    return Collections.emptyList();
+  }
 }

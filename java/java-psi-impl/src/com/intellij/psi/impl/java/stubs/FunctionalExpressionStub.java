@@ -19,19 +19,16 @@ import com.intellij.psi.PsiFunctionalExpression;
 import com.intellij.psi.stubs.IStubElementType;
 import com.intellij.psi.stubs.StubBase;
 import com.intellij.psi.stubs.StubElement;
-import org.jetbrains.annotations.NotNull;
 
 public class FunctionalExpressionStub<T extends PsiFunctionalExpression> extends StubBase<T> {
-  @NotNull private final FunctionalExpressionKey myIndexKey;
+  private final String myPresentableText;
 
-  protected FunctionalExpressionStub(StubElement parent,
-                                     IStubElementType elementType, @NotNull FunctionalExpressionKey indexKey) {
+  protected FunctionalExpressionStub(StubElement parent, IStubElementType elementType, String presentableTextRef) {
     super(parent, elementType);
-    myIndexKey = indexKey;
+    myPresentableText = presentableTextRef;
   }
 
-  @NotNull
-  public FunctionalExpressionKey getIndexKey() {
-    return myIndexKey;
+  public String getPresentableText() {
+    return myPresentableText;
   }
 }

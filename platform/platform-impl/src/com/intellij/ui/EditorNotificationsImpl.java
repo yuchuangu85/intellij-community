@@ -1,24 +1,12 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
-import com.intellij.openapi.extensions.ExtensionPointName;
-import com.intellij.openapi.fileEditor.*;
+import com.intellij.openapi.fileEditor.FileEditor;
+import com.intellij.openapi.fileEditor.FileEditorManager;
+import com.intellij.openapi.fileEditor.FileEditorManagerListener;
+import com.intellij.openapi.fileEditor.TextEditor;
 import com.intellij.openapi.fileEditor.impl.text.AsyncEditorLoader;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
@@ -29,7 +17,13 @@ import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFile;
+import com.intellij.refactoring.listeners.RefactoringElementAdapter;
+import com.intellij.refactoring.listeners.RefactoringElementListener;
+import com.intellij.refactoring.listeners.RefactoringElementListenerProvider;
 import com.intellij.reference.SoftReference;
+import com.intellij.util.SmartList;
 import com.intellij.util.concurrency.SequentialTaskExecutor;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.messages.MessageBusConnection;
@@ -48,16 +42,17 @@ import java.util.concurrent.ExecutorService;
  * @author peter
  */
 public class EditorNotificationsImpl extends EditorNotifications {
-  private static final ExtensionPointName<Provider> EXTENSION_POINT_NAME = ExtensionPointName.create("com.intellij.editorNotificationProvider");
   private static final Key<WeakReference<ProgressIndicator>> CURRENT_UPDATES = Key.create("CURRENT_UPDATES");
-  private static final ExecutorService ourExecutor = SequentialTaskExecutor.createSequentialApplicationPoolExecutor();
+  private static final ExecutorService ourExecutor = SequentialTaskExecutor.createSequentialApplicationPoolExecutor(
+    "EditorNotificationsImpl Pool");
   private final MergingUpdateQueue myUpdateMerger;
+  @NotNull private final Project myProject;
 
-  public EditorNotificationsImpl(Project project) {
-    super(project);
+  public EditorNotificationsImpl(@NotNull Project project) {
     myUpdateMerger = new MergingUpdateQueue("EditorNotifications update merger", 100, true, null, project);
+    myProject = project;
     MessageBusConnection connection = project.getMessageBus().connect(project);
-    connection.subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, new FileEditorManagerAdapter() {
+    connection.subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, new FileEditorManagerListener() {
       @Override
       public void fileOpened(@NotNull FileEditorManager source, @NotNull VirtualFile file) {
         updateNotifications(file);
@@ -74,7 +69,6 @@ public class EditorNotificationsImpl extends EditorNotifications {
         updateAllNotifications();
       }
     });
-
   }
 
   @Override
@@ -109,9 +103,8 @@ public class EditorNotificationsImpl extends EditorNotifications {
 
   @Nullable
   private ReadTask createTask(@NotNull final ProgressIndicator indicator, @NotNull final VirtualFile file) {
-    List<FileEditor> editors = ContainerUtil.filter(
-      FileEditorManager.getInstance(myProject).getAllEditors(file),
-      editor -> !(editor instanceof TextEditor) || AsyncEditorLoader.isEditorLoaded(((TextEditor) editor).getEditor()));
+    List<FileEditor> editors = ContainerUtil.filter(FileEditorManager.getInstance(myProject).getAllEditors(file),
+                                                    editor -> !(editor instanceof TextEditor) || AsyncEditorLoader.isEditorLoaded(((TextEditor)editor).getEditor()));
     if (editors.isEmpty()) return null;
 
     return new ReadTask() {
@@ -135,9 +128,9 @@ public class EditorNotificationsImpl extends EditorNotifications {
         if (isOutdated()) return null;
 
         final List<Provider> providers = DumbService.getInstance(myProject).
-          filterByDumbAwareness(EXTENSION_POINT_NAME.getExtensions(myProject));
+          filterByDumbAwareness(EXTENSION_POINT_NAME.getExtensionList(myProject));
 
-        final List<Runnable> updates = ContainerUtil.newArrayList();
+        final List<Runnable> updates = new SmartList<>();
         for (final FileEditor editor : editors) {
           for (final Provider<?> provider : providers) {
             final JComponent component = provider.createNotificationPanel(file, editor);
@@ -168,7 +161,6 @@ public class EditorNotificationsImpl extends EditorNotifications {
     return SoftReference.dereference(file.getUserData(CURRENT_UPDATES));
   }
 
-
   private void updateNotification(@NotNull FileEditor editor, @NotNull Key<? extends JComponent> key, @Nullable JComponent component) {
     JComponent old = editor.getUserData(key);
     if (old != null) {
@@ -194,5 +186,31 @@ public class EditorNotificationsImpl extends EditorNotifications {
         }
       }
     });
+  }
+
+  public static class RefactoringListenerProvider implements RefactoringElementListenerProvider {
+    @Nullable
+    @Override
+    public RefactoringElementListener getListener(@NotNull final PsiElement element) {
+      if (element instanceof PsiFile) {
+        return new RefactoringElementAdapter() {
+          @Override
+          protected void elementRenamedOrMoved(@NotNull final PsiElement newElement) {
+            if (newElement instanceof PsiFile) {
+              final VirtualFile vFile = newElement.getContainingFile().getVirtualFile();
+              if (vFile != null) {
+                EditorNotifications.getInstance(element.getProject()).updateNotifications(vFile);
+              }
+            }
+          }
+
+          @Override
+          public void undoElementMovedOrRenamed(@NotNull final PsiElement newElement, @NotNull final String oldQualifiedName) {
+            elementRenamedOrMoved(newElement);
+          }
+        };
+      }
+      return null;
+    }
   }
 }

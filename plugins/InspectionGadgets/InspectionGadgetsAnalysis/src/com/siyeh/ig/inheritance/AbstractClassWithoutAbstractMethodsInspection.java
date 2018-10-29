@@ -23,6 +23,7 @@ import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -83,7 +84,7 @@ public class AbstractClassWithoutAbstractMethodsInspection
     private static Set<PsiMethod> calculateOverriddenMethods(
       PsiMethod[] methods) {
       final Set<PsiMethod> overriddenMethods =
-        new HashSet<PsiMethod>(methods.length);
+        new HashSet<>(methods.length);
       for (final PsiMethod method : methods) {
         calculateOverriddenMethods(method, overriddenMethods);
       }
@@ -91,11 +92,9 @@ public class AbstractClassWithoutAbstractMethodsInspection
     }
 
     private static void calculateOverriddenMethods(
-      PsiMethod method, Set<PsiMethod> overriddenMethods) {
+      PsiMethod method, Set<? super PsiMethod> overriddenMethods) {
       final PsiMethod[] superMethods = method.findSuperMethods();
-      for (final PsiMethod superMethod : superMethods) {
-        overriddenMethods.add(superMethod);
-      }
+      Collections.addAll(overriddenMethods, superMethods);
     }
   }
 }

@@ -6,9 +6,6 @@ import org.jetbrains.annotations.NotNull;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
-* User: ktisha
-*/
 public class SimpleMatch {
   PsiElement myStartElement;
   PsiElement myEndElement;
@@ -18,7 +15,7 @@ public class SimpleMatch {
   public SimpleMatch(@NotNull final PsiElement start, @NotNull final PsiElement endElement) {
     myStartElement = start;
     myEndElement = endElement;
-    myChangedParameters = new HashMap<String, String>();
+    myChangedParameters = new HashMap<>();
   }
 
   public PsiElement getStartElement() {

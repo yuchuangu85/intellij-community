@@ -14,14 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * Created by IntelliJ IDEA.
- * User: max
- * Date: Nov 15, 2001
- * Time: 5:17:38 PM
- * To change template for new class use
- * Code Style | Class Templates options (Tools | IDE Options).
- */
 package com.intellij.codeInspection.reference;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -32,20 +24,20 @@ import javax.swing.*;
 
 
 public class RefPackageImpl extends RefEntityImpl implements RefPackage {
-  public RefPackageImpl(@NotNull String name, @NotNull RefManager refManager) {
+  RefPackageImpl(@NotNull String name, @NotNull RefManager refManager) {
     super(name, refManager);
   }
 
   @Override
   public void accept(@NotNull final RefVisitor visitor) {
     if (visitor instanceof RefJavaVisitor) {
-      ApplicationManager.getApplication().runReadAction(() -> ((RefJavaVisitor)visitor).visitPackage(RefPackageImpl.this));
+      ApplicationManager.getApplication().runReadAction(() -> ((RefJavaVisitor)visitor).visitPackage(this));
     } else {
       super.accept(visitor);
     }
   }
 
-  public static RefEntity packageFromFQName(final RefManager manager, final String name) {
+  static RefEntity packageFromFQName(final RefManager manager, final String name) {
     return manager.getExtension(RefJavaManager.MANAGER).getPackage(name);
   }
 

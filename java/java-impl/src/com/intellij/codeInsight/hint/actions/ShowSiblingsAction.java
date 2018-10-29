@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package com.intellij.codeInsight.hint.actions;
 
 import com.intellij.codeInsight.TargetElementUtil;
 import com.intellij.codeInsight.daemon.impl.PsiElementListNavigator;
+import com.intellij.codeInsight.navigation.BackgroundUpdaterTask;
 import com.intellij.ide.util.MethodCellRenderer;
 import com.intellij.ide.util.PsiClassListCellRenderer;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
@@ -30,6 +31,8 @@ import com.intellij.psi.presentation.java.SymbolPresentationUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
+
+import javax.swing.*;
 
 public class ShowSiblingsAction extends ShowImplementationsAction {
   @Override
@@ -61,9 +64,12 @@ public class ShowSiblingsAction extends ShowImplementationsAction {
 
     final boolean isMethod = superElements[0] instanceof PsiMethod;
     NavigatablePsiElement[] navigatablePsiElements = ContainerUtil.findAllAsArray(superElements, NavigatablePsiElement.class);
-    final JBPopup popup = PsiElementListNavigator.navigateOrCreatePopup(navigatablePsiElements, "Choose super " + (isMethod ? "method" : "class or interface"), "Super " + (isMethod ? "methods" : "classes/interfaces"),
-                                                                       isMethod ? new MethodCellRenderer(false) : PsiClassListCellRenderer.INSTANCE, null,
-                                                                        objects -> showSiblings(invokedByShortcut, project, editor, file, editor != null, (PsiElement)objects[0]));
+    final String title = "Choose super " + (isMethod ? "method" : "class or interface");
+    final String findUsagesTitle = "Super " + (isMethod ? "methods" : "classes/interfaces");
+    final ListCellRenderer listRenderer = isMethod ? new MethodCellRenderer(false) : new PsiClassListCellRenderer();
+    final JBPopup popup = PsiElementListNavigator
+      .navigateOrCreatePopup(navigatablePsiElements, title, findUsagesTitle, listRenderer, (BackgroundUpdaterTask)null,
+                             objects -> showSiblings(invokedByShortcut, project, editor, file, editor != null, (PsiElement)objects[0]));
     if (popup != null) {
       if (editor != null) {
         popup.showInBestPositionFor(editor);
@@ -71,6 +77,11 @@ public class ShowSiblingsAction extends ShowImplementationsAction {
         popup.showCenteredInCurrentWindow(project);
       }
     }
+  }
+
+  @Override
+  protected boolean isSearchDeep() {
+    return true;
   }
 
   private void showSiblings(boolean invokedByShortcut,

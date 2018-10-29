@@ -17,7 +17,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.ObjectsConvertor;
-import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.VcsNotifier;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.vcsUtil.VcsFileUtil;
@@ -59,10 +58,10 @@ public class HgStatusCommand {
   }
 
   public static class Builder {
-    private boolean includeAdded;
-    private boolean includeModified;
+    private final boolean includeAdded;
+    private final boolean includeModified;
     private boolean includeRemoved;
-    private boolean includeDeleted;
+    private final boolean includeDeleted;
     private boolean includeUnknown;
     private boolean includeIgnored;
     private boolean includeCopySource;
@@ -143,7 +142,7 @@ public class HgStatusCommand {
     HgCommandExecutor executor = new HgCommandExecutor(myProject);
     executor.setSilent(true);
 
-    List<String> options = new LinkedList<String>();
+    List<String> options = new LinkedList<>();
     if (myIncludeAdded) {
       options.add("--added");
     }
@@ -168,6 +167,7 @@ public class HgStatusCommand {
     if (myCleanStatus) {
       options.add("--clean");
     }
+    executor.setOutputAlwaysSuppressed(myCleanStatus || myIncludeUnknown || myIncludeIgnored);
     if (myBaseRevision != null && (!myBaseRevision.getRevision().isEmpty() || !myBaseRevision.getChangeset().isEmpty())) {
       options.add("--rev");
       options.add(StringUtil.isEmptyOrSpaces(myBaseRevision.getChangeset()) ? myBaseRevision.getRevision() : myBaseRevision.getChangeset());
@@ -177,12 +177,12 @@ public class HgStatusCommand {
       }
     }
 
-    final Set<HgChange> changes = new HashSet<HgChange>();
+    final Set<HgChange> changes = new HashSet<>();
 
     if (paths != null) {
       final List<List<String>> chunked = VcsFileUtil.chunkPaths(repo, paths);
       for (List<String> chunk : chunked) {
-        List<String> args = new ArrayList<String>();
+        List<String> args = new ArrayList<>();
         args.addAll(options);
         args.addAll(chunk);
         HgCommandResult result = executor.executeInCurrentThread(repo, "status", args);
@@ -196,13 +196,13 @@ public class HgStatusCommand {
   }
 
   private  Collection<HgChange> parseChangesFromResult(VirtualFile repo, HgCommandResult result, List<String> args) {
-    final Set<HgChange> changes = new HashSet<HgChange>();
+    final Set<HgChange> changes = new HashSet<>();
     HgChange previous = null;
     if (result == null) {
       return changes;
     }
     List<String> errors = result.getErrorLines();
-    if (errors != null && !errors.isEmpty()) {
+    if (!errors.isEmpty()) {
       if (result.getExitValue() != 0 && !myProject.isDisposed()) {
         String title = "Could not execute hg status command ";
         LOG.warn(title + errors.toString());
@@ -237,13 +237,12 @@ public class HgStatusCommand {
   }
 
   @NotNull
-  public Collection<VirtualFile> getHgUntrackedFiles(@NotNull VirtualFile repo, @NotNull List<VirtualFile> files) throws VcsException {
-    Collection<VirtualFile> untrackedFiles = new HashSet<VirtualFile>();
-    List<FilePath> filePaths = ObjectsConvertor.vf2fp(files);
-    Set<HgChange> change = executeInCurrentThread(repo, filePaths);
+  public Collection<VirtualFile> getFiles(@NotNull VirtualFile repo, @Nullable List<VirtualFile> files) {
+    Collection<VirtualFile> resultFiles = new HashSet<>();
+    Set<HgChange> change = executeInCurrentThread(repo, files != null ? ObjectsConvertor.vf2fp(files) : null);
     for (HgChange hgChange : change) {
-      untrackedFiles.add(hgChange.afterFile().toFilePath().getVirtualFile());
+      resultFiles.add(hgChange.afterFile().toFilePath().getVirtualFile());
     }
-    return untrackedFiles;
+    return resultFiles;
   }
 }

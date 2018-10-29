@@ -42,11 +42,11 @@ class PackagePrefixFileSystemItemImpl extends PsiElementBase implements PsiFileS
   private final PsiPackage[] myPackages;
 
   public static PackagePrefixFileSystemItemImpl create(@NotNull PsiDirectory directory) {
-    final ArrayList<PsiPackage> packages = new ArrayList<PsiPackage>();
+    final ArrayList<PsiPackage> packages = new ArrayList<>();
     for (PsiPackage cur = JavaDirectoryService.getInstance().getPackage(directory); cur != null; cur = cur.getParentPackage()) {
       packages.add(0, cur);
     }
-    return new PackagePrefixFileSystemItemImpl(directory, 0, packages.toArray(new PsiPackage[packages.size()]));
+    return new PackagePrefixFileSystemItemImpl(directory, 0, packages.toArray(PsiPackage.EMPTY_ARRAY));
   }
 
   private PackagePrefixFileSystemItemImpl(@NotNull PsiDirectory directory, int index, final PsiPackage[] packages) {

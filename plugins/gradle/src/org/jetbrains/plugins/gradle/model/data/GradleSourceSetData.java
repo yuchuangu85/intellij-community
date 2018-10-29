@@ -18,13 +18,12 @@ package org.jetbrains.plugins.gradle.model.data;
 import com.intellij.openapi.externalSystem.model.Key;
 import com.intellij.openapi.externalSystem.model.ProjectKeys;
 import com.intellij.openapi.externalSystem.model.project.ModuleData;
-import com.intellij.openapi.module.StdModuleTypes;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.plugins.gradle.service.project.GradleProjectResolverUtil;
 import org.jetbrains.plugins.gradle.util.GradleConstants;
 
 /**
  * @author Vladislav.Soroka
- * @since 8/5/2015
  */
 public class GradleSourceSetData extends ModuleData {
 
@@ -36,7 +35,7 @@ public class GradleSourceSetData extends ModuleData {
                              @NotNull String internalName,
                              @NotNull String moduleFileDirectoryPath,
                              @NotNull String externalConfigPath) {
-    super(id, GradleConstants.SYSTEM_ID, StdModuleTypes.JAVA.getId(),
+    super(id, GradleConstants.SYSTEM_ID, GradleProjectResolverUtil.getDefaultModuleTypeId(),
           externalName, internalName,
           moduleFileDirectoryPath, externalConfigPath);
   }

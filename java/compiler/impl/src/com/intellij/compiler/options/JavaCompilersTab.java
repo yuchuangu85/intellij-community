@@ -1,20 +1,7 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.compiler.options;
 
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.compiler.CompilerConfiguration;
 import com.intellij.compiler.CompilerConfigurationImpl;
 import com.intellij.compiler.impl.javaCompiler.BackendCompiler;
@@ -25,7 +12,9 @@ import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.SearchableConfigurable;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
+import com.intellij.psi.PsiManager;
 import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.components.JBCheckBox;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -38,13 +27,13 @@ import java.util.Vector;
 
 /**
  * @author Eugene Zhuravlev
- *         Date: Mar 30, 2004
  */
 public class JavaCompilersTab implements SearchableConfigurable, Configurable.NoScroll {
   private JPanel myPanel;
   private JPanel myContentPanel;
   private JComboBox myCompiler;
   private JPanel myTargetOptionsPanel;
+  private JBCheckBox myCbUseReleaseOption;
   private final CardLayout myCardLayout;
 
   private final Project myProject;
@@ -59,11 +48,11 @@ public class JavaCompilersTab implements SearchableConfigurable, Configurable.No
          ((CompilerConfigurationImpl)CompilerConfiguration.getInstance(project)).getDefaultCompiler());
   }
 
-  public JavaCompilersTab(final Project project, Collection<BackendCompiler> compilers, BackendCompiler defaultCompiler) {
+  public JavaCompilersTab(final Project project, Collection<? extends BackendCompiler> compilers, BackendCompiler defaultCompiler) {
     myProject = project;
     myDefaultCompiler = defaultCompiler;
     myCompilerConfiguration = (CompilerConfigurationImpl)CompilerConfiguration.getInstance(project);
-    myConfigurables = new ArrayList<Configurable>(compilers.size());
+    myConfigurables = new ArrayList<>(compilers.size());
 
     myCardLayout = new CardLayout();
     myContentPanel.setLayout(myCardLayout);
@@ -86,6 +75,7 @@ public class JavaCompilersTab implements SearchableConfigurable, Configurable.No
       }
     });
     myCompiler.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent e) {
         final BackendCompiler compiler = (BackendCompiler)myCompiler.getSelectedItem();
         if (compiler != null) {
@@ -95,25 +85,33 @@ public class JavaCompilersTab implements SearchableConfigurable, Configurable.No
     });
   }
 
+  @Override
   public String getDisplayName() {
     return CompilerBundle.message("java.compiler.description");
   }
 
+  @Override
   public String getHelpTopic() {
     return "reference.projectsettings.compiler.javacompiler";
   }
 
+  @Override
   @NotNull
   public String getId() {
     return getHelpTopic();
   }
 
+  @Override
   public JComponent createComponent() {
     return myPanel;
   }
 
+  @Override
   public boolean isModified() {
     if (!Comparing.equal(mySelectedCompiler, myCompilerConfiguration.getDefaultCompiler())) {
+      return true;
+    }
+    if (myCbUseReleaseOption.isSelected() != myCompilerConfiguration.useReleaseOption()) {
       return true;
     }
     for (Configurable configurable : myConfigurables) {
@@ -130,8 +128,11 @@ public class JavaCompilersTab implements SearchableConfigurable, Configurable.No
     return false;
   }
 
+  @Override
   public void apply() throws ConfigurationException {
     try {
+      myCompilerConfiguration.setUseReleaseOption(myCbUseReleaseOption.isSelected());
+
       for (Configurable configurable : myConfigurables) {
         if (configurable.isModified()) {
           configurable.apply();
@@ -147,19 +148,21 @@ public class JavaCompilersTab implements SearchableConfigurable, Configurable.No
     }
     finally {
       BuildManager.getInstance().clearState(myProject);
+      PsiManager.getInstance(myProject).dropPsiCaches();
+      DaemonCodeAnalyzer.getInstance(myProject).restart();
     }
   }
 
+  @Override
   public void reset() {
+    myCbUseReleaseOption.setSelected(myCompilerConfiguration.useReleaseOption());
+
     for (Configurable configurable : myConfigurables) {
       configurable.reset();
     }
     selectCompiler(myCompilerConfiguration.getDefaultCompiler());
     myTargetLevelComponent.setProjectBytecodeTargetLevel(myCompilerConfiguration.getProjectBytecodeTarget());
     myTargetLevelComponent.setModuleTargetLevels(myCompilerConfiguration.getModulesBytecodeTargetMap());
-  }
-
-  public void disposeUIResources() {
   }
 
   private void selectCompiler(BackendCompiler compiler) {

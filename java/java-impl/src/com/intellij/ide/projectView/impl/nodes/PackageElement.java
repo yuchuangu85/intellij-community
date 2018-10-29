@@ -32,8 +32,6 @@ import java.util.Set;
 
 /**
  * @author Eugene Zhuravlev
- * Date: Sep 19, 2003
- * Time: 3:51:02 PM
  */
 public final class PackageElement implements Queryable, RootsProvider {
   public static final DataKey<PackageElement> DATA_KEY =  DataKey.create("package.element");
@@ -61,7 +59,7 @@ public final class PackageElement implements Queryable, RootsProvider {
   @NotNull
   @Override
   public Collection<VirtualFile> getRoots() {
-    Set<VirtualFile> roots= new HashSet<VirtualFile>();
+    Set<VirtualFile> roots= new HashSet<>();
     final PsiDirectory[] dirs = PackageUtil.getDirectories(getPackage(), myModule, isLibraryElement());
     for (PsiDirectory each : dirs) {
       roots.add(each.getVirtualFile());

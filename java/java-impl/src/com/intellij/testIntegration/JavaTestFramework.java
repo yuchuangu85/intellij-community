@@ -16,6 +16,7 @@
 package com.intellij.testIntegration;
 
 import com.intellij.codeInsight.daemon.impl.quickfix.OrderEntryFix;
+import com.intellij.execution.configurations.ConfigurationType;
 import com.intellij.ide.fileTemplates.FileTemplate;
 import com.intellij.ide.fileTemplates.FileTemplateDescriptor;
 import com.intellij.ide.fileTemplates.FileTemplateManager;
@@ -33,10 +34,13 @@ import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.concurrency.Promise;
+import org.jetbrains.concurrency.Promises;
 
 import java.util.Collections;
 
 public abstract class JavaTestFramework implements TestFramework {
+  @Override
   public boolean isLibraryAttached(@NotNull Module module) {
     GlobalSearchScope scope = GlobalSearchScope.moduleWithDependenciesAndLibrariesScope(module);
     PsiClass c = JavaPsiFacade.getInstance(module.getProject()).findClass(getMarkerClassFQName(), scope);
@@ -59,6 +63,7 @@ public abstract class JavaTestFramework implements TestFramework {
 
   protected abstract String getMarkerClassFQName();
 
+  @Override
   public boolean isTestClass(@NotNull PsiElement clazz) {
     return clazz instanceof PsiClass && isTestClass((PsiClass)clazz, false);
   }
@@ -113,7 +118,7 @@ public abstract class JavaTestFramework implements TestFramework {
 
   @Nullable
   protected abstract PsiMethod findOrCreateSetUpMethod(PsiClass clazz) throws IncorrectOperationException;
-  
+
   public boolean isParameterized(PsiClass clazz) {
     return false;
   }
@@ -127,7 +132,7 @@ public abstract class JavaTestFramework implements TestFramework {
   public FileTemplateDescriptor getParametersMethodFileTemplateDescriptor() {
     return null;
   }
-  
+
   public abstract char getMnemonic();
 
   public PsiMethod createSetUpPatternMethod(JVMElementFactory factory) {
@@ -139,21 +144,30 @@ public abstract class JavaTestFramework implements TestFramework {
   public FileTemplateDescriptor getTestClassFileTemplateDescriptor() {
     return null;
   }
-  
-  public void setupLibrary(Module module) {
+
+  public Promise<Void> setupLibrary(Module module) {
     ExternalLibraryDescriptor descriptor = getFrameworkLibraryDescriptor();
     if (descriptor != null) {
-      JavaProjectModelModificationService.getInstance(module.getProject()).addDependency(module, descriptor, DependencyScope.TEST);
+      return JavaProjectModelModificationService.getInstance(module.getProject()).addDependency(module, descriptor, DependencyScope.TEST);
     }
     else {
       String path = getLibraryPath();
       if (path != null) {
         OrderEntryFix.addJarsToRoots(Collections.singletonList(path), null, module, null);
+        return Promise.resolve(null);
       }
     }
+    return Promises.rejectedPromise();
   }
 
   public boolean isSingleConfig() {
+    return false;
+  }
+
+  /**
+   * @return true for junit 3 classes with suite method and for junit 4 tests with @Suite annotation
+   */
+  public boolean isSuiteClass(PsiClass psiClass) {
     return false;
   }
 
@@ -162,4 +176,16 @@ public abstract class JavaTestFramework implements TestFramework {
   }
 
 
+  public boolean acceptNestedClasses() {
+    return false;
+  }
+
+  @Override
+  public boolean isTestMethod(PsiElement element) {
+    return isTestMethod(element, true);
+  }
+
+  public boolean isMyConfigurationType(ConfigurationType type) {
+    return false;
+  }
 }

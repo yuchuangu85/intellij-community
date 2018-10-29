@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,13 +51,6 @@ public class GrPackageInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return CONFUSING_CODE_CONSTRUCTS;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Package name mismatch";
   }
@@ -84,7 +77,7 @@ public class GrPackageInspection extends BaseInspection {
   protected BaseInspectionVisitor buildVisitor() {
     return new BaseInspectionVisitor() {
       @Override
-      public void visitFile(GroovyFileBase file) {
+      public void visitFile(@NotNull GroovyFileBase file) {
         if (!(file instanceof GroovyFile)) return;
 
         if (!myCheckScripts && file.isScript()) return;
@@ -127,21 +120,11 @@ public class GrPackageInspection extends BaseInspection {
     return null;
   }
 
-  /**
-   * User: Dmitry.Krasilschikov
-   * Date: 01.11.2007
-   */
   public static class ChangePackageQuickFix implements LocalQuickFix {
     private final String myNewPackageName;
 
     public ChangePackageQuickFix(String newPackageName) {
       myNewPackageName = newPackageName;
-    }
-
-    @NotNull
-    @Override
-    public String getName() {
-      return GroovyBundle.message("fix.package.name");
     }
 
     @Override

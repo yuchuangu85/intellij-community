@@ -47,11 +47,9 @@ public class GoToChangePopupBuilder {
 
   public static abstract class BaseGoToChangePopupAction<Chain extends DiffRequestChain> extends GoToChangePopupAction {
     @NotNull protected final Chain myChain;
-    @NotNull protected final Consumer<Integer> myOnSelected;
 
-    public BaseGoToChangePopupAction(@NotNull Chain chain, @NotNull Consumer<Integer> onSelected) {
+    public BaseGoToChangePopupAction(@NotNull Chain chain) {
       myChain = chain;
-      myOnSelected = onSelected;
     }
 
     @Override
@@ -76,7 +74,7 @@ public class GoToChangePopupBuilder {
       myChain.putUserData(POPUP_KEY, popup);
       popup.addListener(new JBPopupAdapter() {
         @Override
-        public void onClosed(LightweightWindowEvent event) {
+        public void onClosed(@NotNull LightweightWindowEvent event) {
           if (myChain.getUserData(POPUP_KEY) == popup) {
             myChain.putUserData(POPUP_KEY, null);
           }
@@ -97,8 +95,11 @@ public class GoToChangePopupBuilder {
   }
 
   private static class SimpleGoToChangePopupAction extends BaseGoToChangePopupAction<DiffRequestChain> {
-    public SimpleGoToChangePopupAction(@NotNull DiffRequestChain chain, @NotNull Consumer<Integer> onSelected) {
-      super(chain, onSelected);
+    @NotNull protected final Consumer<Integer> myOnSelected;
+
+    SimpleGoToChangePopupAction(@NotNull DiffRequestChain chain, @NotNull Consumer<Integer> onSelected) {
+      super(chain);
+      myOnSelected = onSelected;
     }
 
     @NotNull
@@ -108,7 +109,7 @@ public class GoToChangePopupBuilder {
     }
 
     private class MyListPopupStep extends BaseListPopupStep<DiffRequestProducer> {
-      public MyListPopupStep() {
+      MyListPopupStep() {
         super("Go To Change", myChain.getRequests());
         setDefaultOptionIndex(myChain.getIndex());
       }

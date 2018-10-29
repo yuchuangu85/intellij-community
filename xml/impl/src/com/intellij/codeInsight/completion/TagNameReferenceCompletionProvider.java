@@ -16,18 +16,14 @@
 package com.intellij.codeInsight.completion;
 
 import com.intellij.codeInsight.TailType;
-import com.intellij.codeInsight.lookup.AutoCompletionPolicy;
-import com.intellij.codeInsight.lookup.LookupElement;
-import com.intellij.codeInsight.lookup.LookupElementBuilder;
-import com.intellij.codeInsight.lookup.TailTypeDecorator;
+import com.intellij.codeInsight.lookup.*;
 import com.intellij.lang.ASTNode;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiReference;
 import com.intellij.psi.impl.source.xml.SchemaPrefixReference;
 import com.intellij.psi.impl.source.xml.TagNameReference;
+import com.intellij.psi.xml.XmlChildRole;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.util.Consumer;
-import com.intellij.util.PairConsumer;
 import com.intellij.util.ProcessingContext;
 import com.intellij.xml.XmlTagNameProvider;
 import org.jetbrains.annotations.NotNull;
@@ -40,16 +36,16 @@ import java.util.List;
  */
 public class TagNameReferenceCompletionProvider extends CompletionProvider<CompletionParameters> {
   public static LookupElement[] getTagNameVariants(final @NotNull XmlTag tag, final String prefix) {
-    List<LookupElement> elements = new ArrayList<LookupElement>();
+    List<LookupElement> elements = new ArrayList<>();
     for (XmlTagNameProvider tagNameProvider : XmlTagNameProvider.EP_NAME.getExtensions()) {
       tagNameProvider.addTagNameVariants(elements, tag, prefix);
     }
-    return elements.toArray(new LookupElement[elements.size()]);
+    return elements.toArray(LookupElement.EMPTY_ARRAY);
   }
 
   @Override
   protected void addCompletions(@NotNull CompletionParameters parameters,
-                                ProcessingContext context,
+                                @NotNull ProcessingContext context,
                                 @NotNull final CompletionResultSet result) {
     LegacyCompletionContributor.processReferences(parameters, result, (reference, set) -> {
       if (reference instanceof TagNameReference) {
@@ -58,18 +54,20 @@ public class TagNameReferenceCompletionProvider extends CompletionProvider<Compl
       else if (reference instanceof SchemaPrefixReference) {
         TagNameReference tagNameReference = ((SchemaPrefixReference)reference).getTagNameReference();
         if (tagNameReference != null && !tagNameReference.isStartTagFlag()) {
-          set.consume(createClosingTagLookupElement((XmlTag)tagNameReference.getElement(), true, tagNameReference.getNameElement()));
+          set.consume(createClosingTagLookupElements((XmlTag)tagNameReference.getElement(), true, tagNameReference.getNameElement()).get(0));
         }
       }
     });
   }
 
   public static void collectCompletionVariants(TagNameReference tagNameReference,
-                                               Consumer<LookupElement> consumer) {
+                                               Consumer<? super LookupElement> consumer) {
     PsiElement element = tagNameReference.getElement();
     if (element instanceof XmlTag) {
       if (!tagNameReference.isStartTagFlag()) {
-        consumer.consume(createClosingTagLookupElement((XmlTag)element, false, tagNameReference.getNameElement()));
+        for (LookupElement variant : createClosingTagLookupElements((XmlTag)element, false, tagNameReference.getNameElement())) {
+          consumer.consume(variant);
+        }
       }
       else {
         XmlTag tag = (XmlTag) element;
@@ -80,11 +78,24 @@ public class TagNameReferenceCompletionProvider extends CompletionProvider<Compl
     }
   }
 
-  public static LookupElement createClosingTagLookupElement(XmlTag tag, boolean includePrefix, ASTNode nameElement) {
-    LookupElementBuilder
-      builder = LookupElementBuilder.create(includePrefix || !nameElement.getText().contains(":") ? tag.getName() : tag.getLocalName());
-    return TailTypeDecorator.withTail(AutoCompletionPolicy.GIVE_CHANCE_TO_OVERWRITE.applyPolicy(builder),
-                                      TailType.createSimpleTailType('>'));
+  public static List<LookupElement> createClosingTagLookupElements(XmlTag tag, boolean includePrefix, ASTNode nameElement) {
+    List<LookupElement> result = new ArrayList<>();
+    while (tag != null) {
+      LookupElementBuilder
+        builder = LookupElementBuilder.create(includePrefix || !nameElement.getText().contains(":") ? tag.getName() : tag.getLocalName());
+      result.add(LookupElementDecorator.withInsertHandler(
+        TailTypeDecorator.withTail(AutoCompletionPolicy.GIVE_CHANCE_TO_OVERWRITE.applyPolicy(builder),
+                                   TailType.createSimpleTailType('>')),
+        XmlClosingTagInsertHandler.INSTANCE));
+      if (includePrefix) break;
+      tag = tag.getParentTag();
+      if (tag != null &&
+          (XmlChildRole.CLOSING_TAG_NAME_FINDER.findChild(tag.getNode()) != null ||
+           XmlChildRole.START_TAG_START_FINDER.findChild(tag.getNode()) == null)) {
+        break;
+      }
+    }
+    return result;
   }
 
 }

@@ -24,31 +24,25 @@ import com.intellij.vcs.log.graph.api.elements.GraphEdgeType;
 import com.intellij.vcs.log.graph.api.elements.GraphNode;
 import com.intellij.vcs.log.graph.utils.Flags;
 import com.intellij.vcs.log.graph.utils.IntList;
-import com.intellij.vcs.log.graph.utils.impl.BitSetFlags;
 import com.intellij.vcs.log.graph.utils.impl.CompressedIntList;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
 import static com.intellij.vcs.log.graph.api.elements.GraphEdgeType.USUAL;
 
 public class PermanentLinearGraphImpl implements LinearGraph {
-  private final Flags mySimpleNodes;
+  @NotNull private final Flags mySimpleNodes;
 
   // myNodeToEdgeIndex.length = nodesCount() + 1.
-  private final IntList myNodeToEdgeIndex;
-  private final IntList myLongEdges;
+  @NotNull private final IntList myNodeToEdgeIndex;
+  @NotNull private final IntList myLongEdges;
 
-  /*package*/ PermanentLinearGraphImpl(Flags simpleNodes, int[] nodeToEdgeIndex, int[] longEdges) {
+  /*package*/ PermanentLinearGraphImpl(@NotNull Flags simpleNodes, int[] nodeToEdgeIndex, int[] longEdges) {
     mySimpleNodes = simpleNodes;
     myNodeToEdgeIndex = CompressedIntList.newInstance(nodeToEdgeIndex);
     myLongEdges = CompressedIntList.newInstance(longEdges);
-  }
-
-  @TestOnly
-  public PermanentLinearGraphImpl() {
-    this(new BitSetFlags(0), new int[0], new int[0]);
   }
 
   @Override
@@ -59,7 +53,7 @@ public class PermanentLinearGraphImpl implements LinearGraph {
   @NotNull
   @Override
   public List<GraphEdge> getAdjacentEdges(int nodeIndex, @NotNull EdgeFilter filter) {
-    List<GraphEdge> result = new SmartList<GraphEdge>();
+    List<GraphEdge> result = new SmartList<>();
 
     boolean hasUpSimpleEdge = nodeIndex != 0 && mySimpleNodes.get(nodeIndex - 1);
     if (hasUpSimpleEdge && filter.upNormal) result.add(new GraphEdge(nodeIndex - 1, nodeIndex, null, USUAL));
@@ -94,12 +88,11 @@ public class PermanentLinearGraphImpl implements LinearGraph {
   }
 
   @Override
+  @Nullable
   public Integer getNodeIndex(int nodeId) {
     if (nodeId >= 0 && nodeId < nodesCount()) {
       return nodeId;
     }
-    else {
-      return null;
-    }
+    return null;
   }
 }

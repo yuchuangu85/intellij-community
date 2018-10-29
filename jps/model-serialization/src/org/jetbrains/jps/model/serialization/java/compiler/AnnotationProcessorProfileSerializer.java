@@ -16,7 +16,6 @@
 package org.jetbrains.jps.model.serialization.java.compiler;
 
 import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
@@ -29,12 +28,7 @@ import java.util.*;
  * @author nik
  */
 public class AnnotationProcessorProfileSerializer {
-  private static final Comparator<String> ALPHA_COMPARATOR = new Comparator<String>() {
-    @Override
-    public int compare(String o1, String o2) {
-      return o1.compareToIgnoreCase(o2);
-    }
-  };
+  private static final Comparator<String> ALPHA_COMPARATOR = (o1, o2) -> o1.compareToIgnoreCase(o2);
   private static final String ENTRY = "entry";
   private static final String NAME = "name";
   private static final String VALUE = "value";
@@ -104,7 +98,7 @@ public class AnnotationProcessorProfileSerializer {
 
   public static void writeExternal(@NotNull ProcessorConfigProfile profile, @NotNull Element element) {
     element.setAttribute(NAME, profile.getName());
-    if (!Registry.is("saving.state.in.new.format.is.allowed", true) || profile.isEnabled()) {
+    if (profile.isEnabled()) {
       element.setAttribute(ENABLED, Boolean.toString(profile.isEnabled()));
     }
 
@@ -123,8 +117,8 @@ public class AnnotationProcessorProfileSerializer {
 
     final Map<String, String> options = profile.getProcessorOptions();
     if (!options.isEmpty()) {
-      final List<String> keys = new ArrayList<String>(options.keySet());
-      Collections.sort(keys, ALPHA_COMPARATOR);
+      final List<String> keys = new ArrayList<>(options.keySet());
+      keys.sort(ALPHA_COMPARATOR);
       for (String key : keys) {
         addChild(element, OPTION).setAttribute(NAME, key).setAttribute(VALUE, options.get(key));
       }
@@ -132,8 +126,8 @@ public class AnnotationProcessorProfileSerializer {
 
     final Set<String> processors = profile.getProcessors();
     if (!processors.isEmpty()) {
-      final List<String> processorList = new ArrayList<String>(processors);
-      Collections.sort(processorList, ALPHA_COMPARATOR);
+      final List<String> processorList = new ArrayList<>(processors);
+      processorList.sort(ALPHA_COMPARATOR);
       for (String proc : processorList) {
         addChild(element, "processor").setAttribute(NAME, proc);
       }
@@ -141,7 +135,7 @@ public class AnnotationProcessorProfileSerializer {
 
 
     Element pathElement = null;
-    if (!Registry.is("saving.state.in.new.format.is.allowed", true) || !profile.isObtainProcessorsFromClasspath()) {
+    if (!profile.isObtainProcessorsFromClasspath()) {
       pathElement = addChild(element, "processorPath");
       pathElement.setAttribute("useClasspath", Boolean.toString(profile.isObtainProcessorsFromClasspath()));
     }
@@ -160,8 +154,8 @@ public class AnnotationProcessorProfileSerializer {
 
     final Set<String> moduleNames = profile.getModuleNames();
     if (!moduleNames.isEmpty()) {
-      final List<String> names = new ArrayList<String>(moduleNames);
-      Collections.sort(names, ALPHA_COMPARATOR);
+      final List<String> names = new ArrayList<>(moduleNames);
+      names.sort(ALPHA_COMPARATOR);
       for (String name : names) {
         addChild(element, MODULE).setAttribute(NAME, name);
       }

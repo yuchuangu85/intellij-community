@@ -57,10 +57,10 @@ class ClassFieldsManager extends FieldsManager {
    * @return newly created assignments
    */
   static Collection<PyElement> moveAssignmentsImpl(@NotNull final PyClass from,
-                                                   @NotNull final Collection<PyAssignmentStatement> statements,
+                                                   @NotNull final Collection<? extends PyAssignmentStatement> statements,
                                                    @NotNull final PyClass... to) {
     //TODO: Copy/paste with InstanceFieldsManager. Move to parent?
-    final Collection<PyElement> result = new ArrayList<PyElement>();
+    final Collection<PyElement> result = new ArrayList<>();
     for (final PyClass destClass : to) {
       result.addAll(PyClassRefactoringUtil.copyFieldDeclarationToStatement(statements, destClass.getStatementList(), destClass));
     }

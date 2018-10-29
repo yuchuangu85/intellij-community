@@ -17,8 +17,6 @@ package com.intellij.openapi.vcs;
 
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.vcs.changes.Change;
-import com.intellij.openapi.vcs.changes.ChangeListManager;
-import com.intellij.openapi.vcs.changes.ChangeListManagerImpl;
 import com.intellij.openapi.vcs.changes.ContentRevision;
 import com.intellij.openapi.vcs.changes.committed.MockAbstractVcs;
 import com.intellij.openapi.vcs.changes.ui.ChangesComparator;
@@ -33,12 +31,8 @@ import com.intellij.testFramework.vcs.MockChangeListManager;
 import com.intellij.testFramework.vcs.MockContentRevision;
 import com.intellij.vcsUtil.VcsUtil;
 
-import java.lang.reflect.Field;
 import java.util.*;
 
-/**
- * @author Kirill Likhodedov
- */
 public class LocalChangesUnderRootsTest extends PlatformTestCase {
 
   private LocalChangesUnderRoots myLocalChangesUnderRoots;
@@ -51,23 +45,7 @@ public class LocalChangesUnderRootsTest extends PlatformTestCase {
 
     myChangeListManager = new MockChangeListManager();
     myBaseDir = myProject.getBaseDir();
-    myLocalChangesUnderRoots = new LocalChangesUnderRoots(ChangeListManager.getInstance(myProject),
-                                                          ProjectLevelVcsManager.getInstance(myProject));
-
-    substituteChangeListManager();
-  }
-
-  @Override
-  protected void tearDown() throws Exception {
-    ((ChangeListManagerImpl) ChangeListManager.getInstance(myProject)).stopEveryThingIfInTestMode();
-    super.tearDown();
-  }
-
-  // This is not good, but declaring MockChangeListManager might break other tests
-  private void substituteChangeListManager() throws NoSuchFieldException, IllegalAccessException {
-    Field myChangeManager = LocalChangesUnderRoots.class.getDeclaredField("myChangeManager");
-    myChangeManager.setAccessible(true);
-    myChangeManager.set(myLocalChangesUnderRoots, myChangeListManager);
+    myLocalChangesUnderRoots = new LocalChangesUnderRoots(myChangeListManager, ProjectLevelVcsManager.getInstance(myProject));
   }
 
   public void testChangesInTwoGitRoots() {
@@ -84,7 +62,7 @@ public class LocalChangesUnderRootsTest extends PlatformTestCase {
     Change changeInCommunity = createChangeForPath("community/com.txt");
     myChangeListManager.addChanges(changeBeforeCommunity, changeAfterCommunity, changeInCommunity);
     
-    Map<VirtualFile, Collection<Change>> expected = new HashMap<VirtualFile, Collection<Change>>();
+    Map<VirtualFile, Collection<Change>> expected = new HashMap<>();
     expected.put(roots.get(0), Arrays.asList(changeBeforeCommunity, changeAfterCommunity));
     expected.put(roots.get(1), Collections.singletonList(changeInCommunity));
 
@@ -99,8 +77,8 @@ public class LocalChangesUnderRootsTest extends PlatformTestCase {
       if (!actual.containsKey(root)) {
         fail("Didn't find root [" + root + "]. " + expectedActualMessage(expected, actual));
       }
-      List<Change> expectedChanges = new ArrayList<Change>(expectedEntry.getValue());
-      List<Change> actualChanges = new ArrayList<Change>(actual.get(root));
+      List<Change> expectedChanges = new ArrayList<>(expectedEntry.getValue());
+      List<Change> actualChanges = new ArrayList<>(actual.get(root));
       Collections.sort(expectedChanges, ChangesComparator.getInstance(false));
       Collections.sort(actualChanges, ChangesComparator.getInstance(false));
       assertEquals("Changes not equal for root [" + root + "]. " + expectedActualMessage(expected, actual), expectedChanges, actualChanges);
@@ -112,8 +90,8 @@ public class LocalChangesUnderRootsTest extends PlatformTestCase {
   }
 
   private List<VirtualFile> createRootStructure(Pair<String, String>... pathAndVcs) {
-    List<VirtualFile> roots = new ArrayList<VirtualFile>();
-    List<VcsDirectoryMapping> mappings = new ArrayList<VcsDirectoryMapping>();
+    List<VirtualFile> roots = new ArrayList<>();
+    List<VcsDirectoryMapping> mappings = new ArrayList<>();
     for (Pair<String, String> pathAndVc : pathAndVcs) {
       String path = pathAndVc.first;
       String vcs = pathAndVc.second;

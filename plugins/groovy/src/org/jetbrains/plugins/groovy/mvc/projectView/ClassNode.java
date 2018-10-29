@@ -35,7 +35,7 @@ import java.util.List;
 public class ClassNode extends AbstractMvcPsiNodeDescriptor {
   public ClassNode(@NotNull final Module module,
                    @NotNull final GrTypeDefinition rClass,
-                   @Nullable final ViewSettings viewSettings) {
+                   final ViewSettings viewSettings) {
     super(module, viewSettings, rClass, CLASS);
   }
 
@@ -52,7 +52,7 @@ public class ClassNode extends AbstractMvcPsiNodeDescriptor {
   @Override
   @Nullable
   protected Collection<AbstractTreeNode> getChildrenImpl() {
-    final List<AbstractTreeNode> children = new ArrayList<AbstractTreeNode>();
+    final List<AbstractTreeNode> children = new ArrayList<>();
     final Module module = getModule();
 
     final GrTypeDefinition grTypeDefinition = extractPsiFromValue();

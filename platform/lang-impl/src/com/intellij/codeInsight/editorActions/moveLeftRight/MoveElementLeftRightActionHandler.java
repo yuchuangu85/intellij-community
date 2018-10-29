@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.editorActions.moveLeftRight;
 
 import com.intellij.featureStatistics.FeatureUsageTracker;
@@ -31,7 +17,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.Range;
-import com.intellij.util.containers.HashSet;
+import java.util.HashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -43,7 +29,7 @@ import java.util.Set;
 public class MoveElementLeftRightActionHandler extends EditorWriteActionHandler {
   private static final Comparator<PsiElement> BY_OFFSET = (o1, o2) -> o1.getTextOffset() - o2.getTextOffset();
 
-  private static final Set<String> OUR_ACTIONS = new HashSet<String>(Arrays.asList(
+  private static final Set<String> OUR_ACTIONS = new HashSet<>(Arrays.asList(
     IdeActions.MOVE_ELEMENT_LEFT,
     IdeActions.MOVE_ELEMENT_RIGHT
   ));
@@ -61,10 +47,9 @@ public class MoveElementLeftRightActionHandler extends EditorWriteActionHandler 
     if (project == null) return false;
     Document document = editor.getDocument();
     if (!(document instanceof DocumentEx)) return false;
-    PsiDocumentManager psiDocumentManager = PsiDocumentManager.getInstance(project);
-    psiDocumentManager.commitDocument(document);
-    PsiFile file = psiDocumentManager.getPsiFile(document);
-    if (file == null || !file.isValid()) return false;
+
+    PsiFile file = PsiDocumentManager.getInstance(project).getPsiFile(document);
+    if (file == null) return false;
     PsiElement[] elementList = getElementList(file, caret.getSelectionStart(), caret.getSelectionEnd());
     return elementList != null;
   }
@@ -89,16 +74,17 @@ public class MoveElementLeftRightActionHandler extends EditorWriteActionHandler 
   @Nullable
   private static PsiElement[] getElementList(PsiElement element, int rangeStart, int rangeEnd) {
     while (element != null) {
-      List<MoveElementLeftRightHandler> handlers = MoveElementLeftRightHandler.EXTENSION.allForLanguage(element.getLanguage());
+      List<MoveElementLeftRightHandler> handlers = MoveElementLeftRightHandler.EXTENSION.allForLanguageOrAny(element.getLanguage());
       for (MoveElementLeftRightHandler handler : handlers) {
         PsiElement[] elementList = handler.getMovableSubElements(element);
         if (elementList.length > 1) {
-          Arrays.sort(elementList, BY_OFFSET);
-          PsiElement first = elementList[0];
-          PsiElement last = elementList[elementList.length - 1];
+          PsiElement[] elements = elementList.clone();
+          Arrays.sort(elements, BY_OFFSET);
+          PsiElement first = elements[0];
+          PsiElement last = elements[elements.length - 1];
           if (rangeStart >= first.getTextRange().getStartOffset() && rangeEnd <= last.getTextRange().getEndOffset() &&
               (rangeStart >= first.getTextRange().getEndOffset() || rangeEnd <= last.getTextRange().getStartOffset())) {
-            return elementList;
+            return elements;
           }
         }
       }
@@ -176,7 +162,7 @@ public class MoveElementLeftRightActionHandler extends EditorWriteActionHandler 
     }
     return startIndex > endIndex || (myIsLeft ? startIndex == 0 : endIndex == elements.length - 1) 
            ? null 
-           : new Range<Integer>(startIndex, endIndex);
+           : new Range<>(startIndex, endIndex);
   }
 
   private static int trim(int offset, int rangeStart, int rangeEnd) {

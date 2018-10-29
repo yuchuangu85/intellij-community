@@ -154,9 +154,9 @@ public abstract class PsiElementFinder {
       return Collections.emptySet();
     }
 
-    final HashSet<String> names = new HashSet<String>();
+    final HashSet<String> names = new HashSet<>();
     for (PsiClass aClass : classes) {
-      ContainerUtil.addIfNotNull(aClass.getName(), names);
+      ContainerUtil.addIfNotNull(names, aClass.getName());
     }
     return names;
   }
@@ -196,13 +196,13 @@ public abstract class PsiElementFinder {
     if (classes.length == 1) {
       return className.equals(classes[0].getName()) ? classes : PsiClass.EMPTY_ARRAY;
     }
-    List<PsiClass> foundClasses = new SmartList<PsiClass>();
+    List<PsiClass> foundClasses = new SmartList<>();
     for (PsiClass psiClass : classes) {
       if (className.equals(psiClass.getName())) {
         foundClasses.add(psiClass);
       }
     }
-    return foundClasses.isEmpty() ? PsiClass.EMPTY_ARRAY : foundClasses.toArray(new PsiClass[foundClasses.size()]);
+    return foundClasses.isEmpty() ? PsiClass.EMPTY_ARRAY : foundClasses.toArray(PsiClass.EMPTY_ARRAY);
   }
 
 }

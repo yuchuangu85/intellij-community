@@ -30,8 +30,8 @@ public class IntSLRUCache<Entry extends IntObjectLinkedMap.MapEntry> {
   private int misses = 0;
 
   public IntSLRUCache(int protectedQueueSize, int probationalQueueSize) {
-    myProtectedQueue = new IntObjectLinkedMap<Entry>(protectedQueueSize);
-    myProbationalQueue = new IntObjectLinkedMap<Entry>(probationalQueueSize);
+    myProtectedQueue = new IntObjectLinkedMap<>(protectedQueueSize);
+    myProbationalQueue = new IntObjectLinkedMap<>(probationalQueueSize);
   }
 
   public Entry cacheEntry(final Entry entry) {
@@ -80,7 +80,6 @@ public class IntSLRUCache<Entry extends IntObjectLinkedMap.MapEntry> {
   }
 
   private void printStatistics(int hits) {
-    //noinspection ConstantConditions
     if (ourPrintDebugStatistics && hits % 1000 == 0) {
       //noinspection UseOfSystemOutOrSystemErr
       System.out.println("IntSLRUCache.getCachedEntry time " + System.currentTimeMillis() +

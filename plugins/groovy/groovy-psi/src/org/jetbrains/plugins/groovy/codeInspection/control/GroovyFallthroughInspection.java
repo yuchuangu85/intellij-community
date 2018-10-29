@@ -36,13 +36,6 @@ public class GroovyFallthroughInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return CONTROL_FLOW;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Fallthrough in switch statement";
   }
@@ -69,7 +62,7 @@ public class GroovyFallthroughInspection extends BaseInspection {
     private static final Pattern commentPattern = Pattern.compile("(?i)falls?\\s*thro?u");
 
     @Override
-    public void visitSwitchStatement(GrSwitchStatement switchStatement) {
+    public void visitSwitchStatement(@NotNull GrSwitchStatement switchStatement) {
       super.visitSwitchStatement(switchStatement);
       final GrCaseSection[] caseSections = switchStatement.getCaseSections();
       for (int i = 1; i < caseSections.length; i++) {
@@ -92,7 +85,7 @@ public class GroovyFallthroughInspection extends BaseInspection {
     }
 
     private static boolean isCommented(GrCaseSection caseClause) {
-      final PsiElement element = PsiTreeUtil.skipSiblingsBackward(caseClause, PsiWhiteSpace.class);
+      final PsiElement element = PsiTreeUtil.skipWhitespacesBackward(caseClause);
       if (!(element instanceof PsiComment)) {
         return false;
       }

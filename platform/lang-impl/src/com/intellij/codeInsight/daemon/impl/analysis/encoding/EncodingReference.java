@@ -15,6 +15,8 @@
  */
 package com.intellij.codeInsight.daemon.impl.analysis.encoding;
 
+import com.intellij.codeInsight.CodeInsightBundle;
+import com.intellij.codeInsight.daemon.EmptyResolveMessageProvider;
 import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.LookupElementBuilder;
 import com.intellij.openapi.util.TextRange;
@@ -32,7 +34,7 @@ import java.util.List;
 /**
  * @author peter
  */
-public class EncodingReference implements PsiReference {
+public class EncodingReference implements PsiReference, EmptyResolveMessageProvider {
   private final PsiElement myElement;
 
   private final String myCharsetName;
@@ -44,11 +46,13 @@ public class EncodingReference implements PsiReference {
     myRangeInElement = rangeInElement;
   }
 
+  @NotNull
   @Override
   public PsiElement getElement() {
     return myElement;
   }
 
+  @NotNull
   @Override
   public TextRange getRangeInElement() {
     return myRangeInElement;
@@ -70,7 +74,7 @@ public class EncodingReference implements PsiReference {
   }
 
   @Override
-  public PsiElement handleElementRename(String newElementName) throws IncorrectOperationException {
+  public PsiElement handleElementRename(@NotNull String newElementName) throws IncorrectOperationException {
     return null;
   }
 
@@ -80,7 +84,7 @@ public class EncodingReference implements PsiReference {
   }
 
   @Override
-  public boolean isReferenceTo(PsiElement element) {
+  public boolean isReferenceTo(@NotNull PsiElement element) {
     return false;
   }
 
@@ -88,11 +92,11 @@ public class EncodingReference implements PsiReference {
   @NotNull
   public Object[] getVariants() {
     Charset[] charsets = CharsetToolkit.getAvailableCharsets();
-    List<LookupElement> suggestions = new ArrayList<LookupElement>(charsets.length);
+    List<LookupElement> suggestions = new ArrayList<>(charsets.length);
     for (Charset charset : charsets) {
       suggestions.add(LookupElementBuilder.create(charset.name()).withCaseSensitivity(false));
     }
-    return suggestions.toArray(new LookupElement[suggestions.size()]);
+    return suggestions.toArray(LookupElement.EMPTY_ARRAY);
   }
 
   @Override
@@ -100,4 +104,10 @@ public class EncodingReference implements PsiReference {
     return false;
   }
 
+  @Override
+  @NotNull
+  public String getUnresolvedMessagePattern() {
+    //noinspection UnresolvedPropertyKey
+    return CodeInsightBundle.message("unknown.encoding.0");
+  }
 }

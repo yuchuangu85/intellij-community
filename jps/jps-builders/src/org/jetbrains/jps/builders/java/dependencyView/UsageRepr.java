@@ -1,24 +1,9 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.jps.builders.java.dependencyView;
 
 import com.intellij.util.io.DataExternalizer;
 import com.intellij.util.io.DataInputOutputUtil;
 import gnu.trove.TIntHashSet;
-import gnu.trove.TIntProcedure;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.jps.builders.storage.BuildDataCorruptedException;
 import org.jetbrains.org.objectweb.asm.Type;
@@ -31,7 +16,6 @@ import java.util.*;
 
 /**
  * @author: db
- * Date: 14.02.11
  */
 class UsageRepr {
   private static final byte FIELD_USAGE = 0x0;
@@ -43,6 +27,7 @@ class UsageRepr {
   private static final byte ANNOTATION_USAGE = 0x6;
   private static final byte METAMETHOD_USAGE = 0x7;
   private static final byte CLASS_AS_GENERIC_BOUND_USAGE = 0x8;
+  private static final byte MODULE_USAGE = 0x9;
 
   private static final int DEFAULT_SET_CAPACITY = 32;
   private static final float DEFAULT_SET_LOAD_FACTOR = 0.98f;
@@ -136,6 +121,7 @@ class UsageRepr {
       }
     }
 
+    @Override
     protected void kindToStream(final PrintStream stream) {
       stream.println("FieldUsage:");
     }
@@ -246,10 +232,7 @@ class UsageRepr {
       if (myName != that.myName) return false;
       if (myOwner != that.myOwner) return false;
 
-      return Arrays.equals(myArgumentTypes, that.myArgumentTypes) &&
-             myReturnType.equals(that.myReturnType) &&
-             myName == that.myName &&
-             myOwner == that.myOwner;
+      return true;
     }
 
     @Override
@@ -353,6 +336,59 @@ class UsageRepr {
     @Override
     public void toStream(final DependencyContext context, final PrintStream stream) {
       stream.println("ClassUsage: " + context.getValue(myClassName));
+    }
+  }
+
+  public static class ModuleUsage extends Usage {
+    final int myModuleName;
+
+    @Override
+    public int getOwner() {
+      return myModuleName;
+    }
+
+    private ModuleUsage(final int moduleName) {
+      this.myModuleName = moduleName;
+    }
+
+    private ModuleUsage(final DataInput in) {
+      try {
+        myModuleName = DataInputOutputUtil.readINT(in);
+      }
+      catch (IOException e) {
+        throw new BuildDataCorruptedException(e);
+      }
+    }
+
+    @Override
+    public void save(final DataOutput out) {
+      try {
+        out.writeByte(MODULE_USAGE);
+        DataInputOutputUtil.writeINT(out, myModuleName);
+      }
+      catch (IOException e) {
+        throw new BuildDataCorruptedException(e);
+      }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      final ModuleUsage that = (ModuleUsage)o;
+
+      return myModuleName == that.myModuleName;
+    }
+
+    @Override
+    public int hashCode() {
+      return myModuleName;
+    }
+
+    @Override
+    public void toStream(final DependencyContext context, final PrintStream stream) {
+      stream.println("ModuleUsage: " + context.getValue(myModuleName));
     }
   }
 
@@ -496,38 +532,32 @@ class UsageRepr {
     final TIntHashSet myUsedArguments;
     final Set<ElemType> myUsedTargets;
 
-    public boolean satisfies(final Usage usage) {
-      if (usage instanceof AnnotationUsage) {
-        final AnnotationUsage annotationUsage = (AnnotationUsage)usage;
-
-        if (!myType.equals(annotationUsage.myType)) {
-          return false;
-        }
-
-        boolean argumentsSatisfy = false;
-
-        if (myUsedArguments != null) {
-          final TIntHashSet arguments = new TIntHashSet(myUsedArguments.toArray());
-
-          arguments.removeAll(annotationUsage.myUsedArguments.toArray());
-
-          argumentsSatisfy = !arguments.isEmpty();
-        }
-
-        boolean targetsSatisfy = false;
-
-        if (myUsedTargets != null) {
-          final Collection<ElemType> targets = EnumSet.copyOf(myUsedTargets);
-
-          targets.retainAll(annotationUsage.myUsedTargets);
-
-          targetsSatisfy = !targets.isEmpty();
-        }
-
-        return argumentsSatisfy || targetsSatisfy;
+    public boolean satisfies(final AnnotationUsage annotationUsage) {
+      if (!myType.equals(annotationUsage.myType)) {
+        return false;
       }
 
-      return false;
+      boolean argumentsSatisfy = false;
+
+      if (myUsedArguments != null) {
+        final TIntHashSet arguments = new TIntHashSet(myUsedArguments.toArray());
+
+        arguments.removeAll(annotationUsage.myUsedArguments.toArray());
+
+        argumentsSatisfy = !arguments.isEmpty();
+      }
+
+      boolean targetsSatisfy = false;
+
+      if (myUsedTargets != null) {
+        final Collection<ElemType> targets = EnumSet.copyOf(myUsedTargets);
+
+        targets.retainAll(annotationUsage.myUsedTargets);
+
+        targetsSatisfy = !targets.isEmpty();
+      }
+
+      return argumentsSatisfy || targetsSatisfy;
     }
 
     private AnnotationUsage(final TypeRepr.ClassType type, final TIntHashSet usedArguments, final Set<ElemType> targets) {
@@ -542,7 +572,7 @@ class UsageRepr {
       try {
         myType = (TypeRepr.ClassType)externalizer.read(in);
         myUsedArguments = RW.read(new TIntHashSet(DEFAULT_SET_CAPACITY, DEFAULT_SET_LOAD_FACTOR), in);
-        myUsedTargets = (EnumSet<ElemType>)RW.read(elementTypeExternalizer, EnumSet.noneOf(ElemType.class), in);
+        myUsedTargets = RW.read(elementTypeExternalizer, EnumSet.noneOf(ElemType.class), in);
       }
       catch (IOException e) {
         throw new BuildDataCorruptedException(e);
@@ -594,21 +624,18 @@ class UsageRepr {
       stream.println("    AnnotationUsage:");
       stream.println("      Type     : " + myType.getDescr(context));
 
-      final List<String> arguments = new LinkedList<String>();
+      final List<String> arguments = new LinkedList<>();
 
       if (myUsedArguments != null) {
-        myUsedArguments.forEach(new TIntProcedure() {
-          @Override
-          public boolean execute(final int value) {
-            arguments.add(context.getValue(value));
-            return true;
-          }
+        myUsedArguments.forEach(value -> {
+          arguments.add(context.getValue(value));
+          return true;
         });
       }
 
       Collections.sort(arguments);
 
-      final List<String> targets = new LinkedList<String>();
+      final List<String> targets = new LinkedList<>();
 
       if (myUsedTargets != null) {
         for (final ElemType e : myUsedTargets) {
@@ -667,6 +694,10 @@ class UsageRepr {
     return context.getUsage(new AnnotationUsage(type, usedArguments, targets));
   }
 
+  public static Usage createModuleUsage(final DependencyContext context, final int name) {
+    return context.getUsage(new ModuleUsage(name));
+  }
+
   public static DataExternalizer<Usage> externalizer(final DependencyContext context) {
     return new DataExternalizer<Usage>() {
       @Override
@@ -704,6 +735,9 @@ class UsageRepr {
 
           case METAMETHOD_USAGE:
             return context.getUsage(new MetaMethodUsage(in));
+
+          case MODULE_USAGE:
+            return context.getUsage(new ModuleUsage(in));
         }
 
         assert (false);

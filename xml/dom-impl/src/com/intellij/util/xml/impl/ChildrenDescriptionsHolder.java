@@ -27,11 +27,11 @@ import java.util.*;
  * @author peter
  */
 public class ChildrenDescriptionsHolder<T extends DomChildDescriptionImpl> {
-  private final Map<XmlName, T> myMap = new THashMap<XmlName, T>();
-  private final ChildrenDescriptionsHolder<T> myDelegate;
+  private final Map<XmlName, T> myMap = new THashMap<>();
+  private final ChildrenDescriptionsHolder<? extends T> myDelegate;
   private volatile List<T> myCached = null;
 
-  public ChildrenDescriptionsHolder(@Nullable final ChildrenDescriptionsHolder<T> delegate) {
+  public ChildrenDescriptionsHolder(@Nullable final ChildrenDescriptionsHolder<? extends T> delegate) {
     myDelegate = delegate;
   }
 
@@ -45,7 +45,7 @@ public class ChildrenDescriptionsHolder<T extends DomChildDescriptionImpl> {
     return t;
   }
 
-  final void addDescriptions(@NotNull Collection<T> collection) {
+  final void addDescriptions(@NotNull Collection<? extends T> collection) {
     for (final T t : collection) {
       addDescription(t);
     }
@@ -73,7 +73,7 @@ public class ChildrenDescriptionsHolder<T extends DomChildDescriptionImpl> {
 
   @NotNull
   final List<T> getDescriptions() {
-    final ArrayList<T> result = new ArrayList<T>();
+    final ArrayList<T> result = new ArrayList<>();
     dumpDescriptions(result);
     return result;
   }
@@ -85,7 +85,7 @@ public class ChildrenDescriptionsHolder<T extends DomChildDescriptionImpl> {
     }
 
     if (!myMap.isEmpty()) {
-      cached = new SmartList<T>(myMap.values());
+      cached = new SmartList<>(myMap.values());
       Collections.sort(cached);
     } else {
       cached = Collections.emptyList();

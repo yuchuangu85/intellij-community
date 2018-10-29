@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2013 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -149,10 +149,10 @@ public class GrTypeComboBox extends ComboBox {
       min = null;
     }
 
-    Map<String, PsiType> map = new LinkedHashMap<String, PsiType>();
+    Map<String, PsiType> map = new LinkedHashMap<>();
     final PsiPrimitiveType unboxed = PsiPrimitiveType.getUnboxedType(type);
     if (unboxed != null) type = unboxed;
-    final Set<PsiType> set = new LinkedHashSet<PsiType>();
+    final Set<PsiType> set = new LinkedHashSet<>();
     set.add(type);
     while (!set.isEmpty()) {
       PsiType cur = set.iterator().next();
@@ -190,7 +190,7 @@ public class GrTypeComboBox extends ComboBox {
   public static void registerUpDownHint(JComponent component, final GrTypeComboBox combo) {
     final AnAction arrow = new AnAction() {
       @Override
-      public void actionPerformed(AnActionEvent e) {
+      public void actionPerformed(@NotNull AnActionEvent e) {
         if (e.getInputEvent() instanceof KeyEvent) {
           final int code = ((KeyEvent)e.getInputEvent()).getKeyCode();
           scrollBy(code == KeyEvent.VK_DOWN ? 1 : code == KeyEvent.VK_UP ? -1 : 0, combo);
@@ -207,7 +207,7 @@ public class GrTypeComboBox extends ComboBox {
     final int size = combo.getModel().getSize();
     int next = combo.getSelectedIndex() + delta;
     if (next < 0 || next >= size) {
-      if (!UISettings.getInstance().CYCLE_SCROLLING) {
+      if (!UISettings.getInstance().getCycleScrolling()) {
         return;
       }
       next = (next + size) % size;
@@ -225,7 +225,7 @@ public class GrTypeComboBox extends ComboBox {
       this(type, false);
     }
 
-    private PsiTypeItem(final PsiType type, boolean closure) {
+    private PsiTypeItem(@Nullable final PsiType type, boolean closure) {
       myType = type;
       isClosure = closure;
     }

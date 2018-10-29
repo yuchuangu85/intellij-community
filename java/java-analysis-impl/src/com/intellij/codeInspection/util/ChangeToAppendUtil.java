@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package com.intellij.codeInspection.util;
 
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiUtil;
+import com.siyeh.ig.psiutils.CommentTracker;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.Nullable;
 
@@ -26,8 +27,9 @@ public class ChangeToAppendUtil {
     if (concatenation == null) return null;
     final PsiType type = appendable.getType();
     if (type == null) return null;
-    final StringBuilder result =
-      buildAppendExpression(concatenation, type.equalsToText("java.lang.Appendable"), new StringBuilder(appendable.getText()));
+    final boolean useStringValueOf = !type.equalsToText(CommonClassNames.JAVA_LANG_STRING_BUFFER) &&
+                                     !type.equalsToText(CommonClassNames.JAVA_LANG_STRING_BUILDER);
+    final StringBuilder result = buildAppendExpression(concatenation, useStringValueOf, new StringBuilder(appendable.getText()));
     if (result == null) return null;
     final PsiElementFactory factory = JavaPsiFacade.getElementFactory(appendable.getProject());
     return factory.createExpressionFromText(result.toString(), appendable);
@@ -52,9 +54,9 @@ public class ChangeToAppendUtil {
           if (operandType != null && operandType.equalsToText(CommonClassNames.JAVA_LANG_STRING)) {
             isString = true;
           }
-          builder.append(operand.getText());
+          builder.append(CommentTracker.textWithSurroundingComments(operand));
         }
-        else {
+        else if (!operand.textMatches("\"\"")) {
           isConstant = false;
           if (builder.length() != 0) {
             append(builder, useStringValueOf && !isString, out);
@@ -75,7 +77,8 @@ public class ChangeToAppendUtil {
       }
     }
     else {
-      append(concatenation.getText(), useStringValueOf && (type == null || !type.equalsToText(CommonClassNames.JAVA_LANG_STRING)), out);
+      append(CommentTracker.textWithSurroundingComments(concatenation),
+             useStringValueOf && (type == null || !type.equalsToText(CommonClassNames.JAVA_LANG_STRING)), out);
     }
     return out;
   }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.inspections.quickfix;
 
 import com.intellij.codeInspection.LocalQuickFix;
@@ -28,7 +14,6 @@ import com.jetbrains.python.PyNames;
 import com.jetbrains.python.PyTokenTypes;
 import com.jetbrains.python.psi.*;
 import com.jetbrains.python.psi.impl.PyPsiUtils;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -45,17 +30,13 @@ import java.util.*;
  */
 public class AddCallSuperQuickFix implements LocalQuickFix {
 
+  @Override
   @NotNull
-  public String getName() {
+  public String getFamilyName() {
     return PyBundle.message("QFIX.add.super");
   }
 
-  @NonNls
-  @NotNull
-  public String getFamilyName() {
-    return getName();
-  }
-
+  @Override
   public void applyFix(@NotNull final Project project, @NotNull final ProblemDescriptor descriptor) {
     final PyFunction problemFunction = PsiTreeUtil.getParentOfType(descriptor.getPsiElement(), PyFunction.class);
     if (problemFunction == null) return;
@@ -118,8 +99,8 @@ public class AddCallSuperQuickFix implements LocalQuickFix {
   private static Couple<List<String>> buildNewFunctionParamsAndSuperInitCallArgs(@NotNull ParametersInfo origInfo,
                                                                                  @NotNull ParametersInfo superInfo,
                                                                                  boolean addSelfToCall) {
-    final List<String> newFunctionParams = new ArrayList<String>();
-    final List<String> superCallArgs = new ArrayList<String>();
+    final List<String> newFunctionParams = new ArrayList<>();
+    final List<String> superCallArgs = new ArrayList<>();
 
     final PyParameter selfParameter = origInfo.getSelfParameter();
     if (selfParameter != null && StringUtil.isNotEmpty(selfParameter.getName())) {
@@ -167,7 +148,7 @@ public class AddCallSuperQuickFix implements LocalQuickFix {
       newFunctionParams.add(param.getText());
     }
 
-    // Pass parameters with default values to super class constructor, only if both functions contain them  
+    // Pass parameters with default values to super class constructor, only if both functions contain them
     for (PyParameter param : superInfo.getOptionalParameters()) {
       final PyTupleParameter tupleParam = param.getAsTuple();
       if (tupleParam != null) {
@@ -226,8 +207,8 @@ public class AddCallSuperQuickFix implements LocalQuickFix {
       newFunctionParams.add(param.getText());
       newSignatureContainsKeywordParams = true;
     }
-    
-    // If '*' param is followed by nothing in result signature, remove it altogether 
+
+    // If '*' param is followed by nothing in result signature, remove it altogether
     if (starredParam instanceof PySingleStarParameter && !newSignatureContainsKeywordParams) {
       newFunctionParams.remove(newFunctionParams.size() - 1);
     }
@@ -261,11 +242,11 @@ public class AddCallSuperQuickFix implements LocalQuickFix {
     /**
      * Parameters without default value that come before first "*..." parameter.
      */
-    private final List<PyParameter> myRequiredParams = new ArrayList<PyParameter>();
+    private final List<PyParameter> myRequiredParams = new ArrayList<>();
     /**
      * Parameters with default value that come before first "*..." parameter.
      */
-    private final List<PyParameter> myOptionalParams = new ArrayList<PyParameter>();
+    private final List<PyParameter> myOptionalParams = new ArrayList<>();
     /**
      * Parameter of form "*args" (positional vararg), not the same as single "*".
      */
@@ -277,19 +258,19 @@ public class AddCallSuperQuickFix implements LocalQuickFix {
     /**
      * Parameters without default value that come after first "*..." parameter.
      */
-    private final List<PyParameter> myRequiredKwOnlyParams = new ArrayList<PyParameter>();
+    private final List<PyParameter> myRequiredKwOnlyParams = new ArrayList<>();
     /**
      * Parameters with default value that come after first "*..." parameter.
      */
-    private final List<PyParameter> myOptionalKwOnlyParams = new ArrayList<PyParameter>();
+    private final List<PyParameter> myOptionalKwOnlyParams = new ArrayList<>();
     /**
      * Parameter of form "**kwargs" (keyword vararg).
      */
     private final PyParameter myKeywordContainerParam;
 
-    private final Set<String> myAllParameterNames = new LinkedHashSet<String>();
+    private final Set<String> myAllParameterNames = new LinkedHashSet<>();
 
-    public ParametersInfo(@NotNull PyParameterList parameterList) {
+    ParametersInfo(@NotNull PyParameterList parameterList) {
       PyParameter positionalContainer = null;
       PyParameter singleStarParam = null;
       PyParameter keywordContainer = null;
@@ -382,7 +363,7 @@ public class AddCallSuperQuickFix implements LocalQuickFix {
 
   @NotNull
   private static List<String> collectParameterNames(@NotNull PyParameter param) {
-    final List<String> result = new ArrayList<String>();
+    final List<String> result = new ArrayList<>();
     collectParameterNames(param, result);
     return result;
   }

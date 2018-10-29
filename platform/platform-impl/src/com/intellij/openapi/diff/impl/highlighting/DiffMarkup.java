@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.diff.impl.highlighting;
 
 import com.intellij.openapi.Disposable;
@@ -35,8 +21,6 @@ import com.intellij.openapi.editor.markup.*;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.TextRange;
-import com.intellij.util.Consumer;
-import com.intellij.util.containers.HashSet;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -44,17 +28,18 @@ import org.jetbrains.annotations.Nullable;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 
 public abstract class DiffMarkup implements EditorSource, Disposable {
   private static final Logger LOG = Logger.getInstance(DiffMarkup.class);
   private static final int LAYER = HighlighterLayer.SELECTION - 1;
 
-  private final ArrayList<RangeHighlighter> myExtraHighLighters = new ArrayList<RangeHighlighter>();
-  private final ArrayList<RangeHighlighter> myHighLighters = new ArrayList<RangeHighlighter>();
-  private final HashSet<RangeHighlighter> myActionHighlighters = new HashSet<RangeHighlighter>();
+  private final ArrayList<RangeHighlighter> myExtraHighLighters = new ArrayList<>();
+  private final ArrayList<RangeHighlighter> myHighLighters = new ArrayList<>();
+  private final HashSet<RangeHighlighter> myActionHighlighters = new HashSet<>();
   @Nullable private final Project myProject;
-  private final List<Disposable> myDisposables = new ArrayList<Disposable>();
+  private final List<Disposable> myDisposables = new ArrayList<>();
   private boolean myDisposed = false;
 
   protected DiffMarkup(@Nullable Project project, @NotNull Disposable parentDisposable) {
@@ -233,6 +218,7 @@ public abstract class DiffMarkup implements EditorSource, Disposable {
     myDisposables.clear();
   }
 
+  @Override
   public void addDisposable(@NotNull Disposable disposable) {
     Disposer.register(this, disposable);
     myDisposables.add(disposable);
@@ -248,6 +234,7 @@ public abstract class DiffMarkup implements EditorSource, Disposable {
     return myDisposed;
   }
 
+  @Override
   public final void dispose() {
     if (isDisposed()) {
       return;

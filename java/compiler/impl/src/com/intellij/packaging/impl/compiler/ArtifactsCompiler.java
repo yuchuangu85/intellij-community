@@ -38,6 +38,7 @@ public class ArtifactsCompiler implements Compiler {
   public ArtifactsCompiler() {
   }
 
+  @Override
   public boolean validateConfiguration(CompileScope scope) {
     return false;
   }
@@ -51,7 +52,7 @@ public class ArtifactsCompiler implements Compiler {
   public static void addChangedArtifact(final CompileContext context, Artifact artifact) {
     Set<Artifact> artifacts = context.getUserData(CHANGED_ARTIFACTS);
     if (artifacts == null) {
-      artifacts = new THashSet<Artifact>();
+      artifacts = new THashSet<>();
       context.putUserData(CHANGED_ARTIFACTS, artifacts);
     }
     artifacts.add(artifact);
@@ -60,12 +61,13 @@ public class ArtifactsCompiler implements Compiler {
   public static void addWrittenPaths(final CompileContext context, Set<String> writtenPaths) {
     Set<String> paths = context.getUserData(WRITTEN_PATHS_KEY);
     if (paths == null) {
-      paths = new THashSet<String>();
+      paths = new THashSet<>();
       context.putUserData(WRITTEN_PATHS_KEY, paths);
     }
     paths.addAll(writtenPaths);
   }
 
+  @Override
   @NotNull
   public String getDescription() {
     return "Artifacts Packaging Compiler";

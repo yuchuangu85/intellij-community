@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -120,20 +120,20 @@ public class GrIntroduceConstantHandler extends GrIntroduceFieldHandlerBase<GrIn
 
     GrVariable localVar = resolveLocalVar(context);
     if (localVar != null) {
-      map.put(OccurrencesChooser.ReplaceChoice.ALL, Arrays.<Object>asList(context.getOccurrences()));
+      map.put(OccurrencesChooser.ReplaceChoice.ALL, Arrays.asList(context.getOccurrences()));
       return map;
     }
 
     if (context.getExpression() != null) {
-      map.put(OccurrencesChooser.ReplaceChoice.NO, Collections.<Object>singletonList(context.getExpression()));
+      map.put(OccurrencesChooser.ReplaceChoice.NO, Collections.singletonList(context.getExpression()));
     }
     else if (context.getStringPart() != null) {
-      map.put(OccurrencesChooser.ReplaceChoice.NO, Collections.<Object>singletonList(context.getStringPart()));
+      map.put(OccurrencesChooser.ReplaceChoice.NO, Collections.singletonList(context.getStringPart()));
     }
 
     PsiElement[] occurrences = context.getOccurrences();
     if (occurrences.length > 1) {
-      map.put(OccurrencesChooser.ReplaceChoice.ALL, Arrays.<Object>asList(occurrences));
+      map.put(OccurrencesChooser.ReplaceChoice.ALL, Arrays.asList(occurrences));
     }
     return map;
   }
@@ -143,7 +143,7 @@ public class GrIntroduceConstantHandler extends GrIntroduceFieldHandlerBase<GrIn
     private final GrExpression expr;
 
     @Override
-    public void visitReferenceExpression(GrReferenceExpression referenceExpression) {
+    public void visitReferenceExpression(@NotNull GrReferenceExpression referenceExpression) {
       final PsiElement resolved = referenceExpression.resolve();
       if (resolved instanceof PsiVariable) {
         if (!isStaticFinalField((PsiVariable)resolved)) {
@@ -173,7 +173,7 @@ public class GrIntroduceConstantHandler extends GrIntroduceFieldHandlerBase<GrIn
     }
 
     @Override
-    public void visitClosure(GrClosableBlock closure) {
+    public void visitClosure(@NotNull GrClosableBlock closure) {
       if (closure == expr) {
         super.visitClosure(closure);
       }

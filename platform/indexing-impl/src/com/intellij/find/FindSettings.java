@@ -19,8 +19,6 @@ package com.intellij.find;
 import com.intellij.openapi.components.ServiceManager;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.List;
-
 public abstract class FindSettings{
 
   public static FindSettings getInstance() {
@@ -79,15 +77,27 @@ public abstract class FindSettings{
 
   public abstract void setLocalRegularExpressions(boolean regularExpressions);
 
+  /**
+   * FindInProjectSettings.addDirectory
+   */
+  @Deprecated
   public abstract void addStringToFind(@NotNull String s);
 
+  /**
+   * Use FindInProjectSettings.addDirectory
+   */
+  @Deprecated
   public abstract void addStringToReplace(@NotNull String s);
 
-  public abstract void addDirectory(@NotNull String s);
-
+  /**
+   * FindInProjectSettings.addDirectory
+   */
   @NotNull
   public abstract String[] getRecentFindStrings();
 
+  /**
+   * FindInProjectSettings.addDirectory
+   */
   @NotNull
   public abstract String[] getRecentReplaceStrings();
 
@@ -100,9 +110,6 @@ public abstract class FindSettings{
    */
   @NotNull
   public abstract String[] getRecentFileMasks();
-
-  @NotNull
-  public abstract List<String> getRecentDirectories();
 
   public abstract void setWithSubdirectories(boolean b);
 

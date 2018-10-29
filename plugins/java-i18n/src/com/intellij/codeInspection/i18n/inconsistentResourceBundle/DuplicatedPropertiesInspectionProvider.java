@@ -47,7 +47,7 @@ public class DuplicatedPropertiesInspectionProvider implements InconsistentResou
 
   @Override
   public void check(BidirectionalMap<PropertiesFile, PropertiesFile> parents,
-                    List<PropertiesFile> files,
+                    List<? extends PropertiesFile> files,
                     Map<PropertiesFile, Set<String>> keysUpToParent,
                     Map<PropertiesFile, Map<String, String>> propertiesFilesNamesMaps,
                     InspectionManager manager,
@@ -57,7 +57,7 @@ public class DuplicatedPropertiesInspectionProvider implements InconsistentResou
       PropertiesFile parent = parents.get(file);
       if (parent == null) continue;
       Set<String> parentKeys = keysUpToParent.get(parent);
-      Set<String> overriddenKeys = new THashSet<String>(propertiesFilesNamesMaps.get(file).keySet());
+      Set<String> overriddenKeys = new THashSet<>(propertiesFilesNamesMaps.get(file).keySet());
       overriddenKeys.retainAll(parentKeys);
       for (String overriddenKey : overriddenKeys) {
         IProperty property = file.findPropertyByKey(overriddenKey);

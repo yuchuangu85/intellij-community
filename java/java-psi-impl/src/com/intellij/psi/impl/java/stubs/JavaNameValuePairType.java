@@ -37,7 +37,6 @@ import java.util.List;
 
 /**
  * @author Dmitry Avdeev
- *         Date: 7/27/12
  */
 public class JavaNameValuePairType extends JavaStubElementType<PsiNameValuePairStub, PsiNameValuePair> {
 
@@ -56,8 +55,9 @@ public class JavaNameValuePairType extends JavaStubElementType<PsiNameValuePairS
     return new NameValuePairElement();
   }
 
+  @NotNull
   @Override
-  public PsiNameValuePairStub createStub(LighterAST tree, LighterASTNode node, StubElement parentStub) {
+  public PsiNameValuePairStub createStub(@NotNull LighterAST tree, @NotNull LighterASTNode node, @NotNull StubElement parentStub) {
     String name = null;
     String value = null;
     List<LighterASTNode> children = tree.getChildren(node);
@@ -79,7 +79,7 @@ public class JavaNameValuePairType extends JavaStubElementType<PsiNameValuePairS
 
   @Override
   public void serialize(@NotNull PsiNameValuePairStub stub, @NotNull StubOutputStream dataStream) throws IOException {
-    dataStream.writeUTFFast(stub.getName());
+    dataStream.writeName(stub.getName());
 
     String value = stub.getValue();
     boolean hasValue = value != null;
@@ -92,7 +92,7 @@ public class JavaNameValuePairType extends JavaStubElementType<PsiNameValuePairS
   @NotNull
   @Override
   public PsiNameValuePairStub deserialize(@NotNull StubInputStream dataStream, StubElement parentStub) throws IOException {
-    String name = dataStream.readUTFFast();
+    String name = dataStream.readNameString();
     boolean hasValue = dataStream.readBoolean();
     return new PsiNameValuePairStubImpl(parentStub, name, hasValue ? dataStream.readUTFFast() : null);
   }

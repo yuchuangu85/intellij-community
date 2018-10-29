@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.debugger;
 
 import com.intellij.debugger.engine.evaluation.CodeFragmentFactory;
@@ -28,7 +14,6 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.util.ClassUtil;
 import com.intellij.psi.util.PsiTreeUtil;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.THashMap;
 import org.jetbrains.annotations.NotNull;
@@ -50,7 +35,6 @@ import org.jetbrains.plugins.groovy.lang.psi.api.toplevel.imports.GrImportStatem
 import org.jetbrains.plugins.groovy.lang.psi.api.types.GrCodeReferenceElement;
 import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.ClosureSyntheticParameter;
 import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.GrBindingVariable;
-import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.GrLightVariable;
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 
 import java.util.*;
@@ -79,7 +63,7 @@ public class GroovyCodeFragmentFactory extends CodeFragmentFactory {
     GroovyFile toEval = pair.second;
     final Map<String, String> parameters = pair.first;
 
-    List<String> names = new ArrayList<String>(parameters.keySet());
+    List<String> names = new ArrayList<>(parameters.keySet());
     List<String> values = ContainerUtil.map(names, name -> parameters.get(name));
 
     String text = toEval.getText();
@@ -191,11 +175,11 @@ public class GroovyCodeFragmentFactory extends CodeFragmentFactory {
     final GroovyFile toEval = factory.createGroovyFile(text, false, context);
 
     final GrClosableBlock closure = PsiTreeUtil.getParentOfType(context, GrClosableBlock.class);
-    final Map<String, String> parameters = new THashMap<String, String>();
-    final Map<GrExpression, String> replacements = new HashMap<GrExpression, String>();
+    final Map<String, String> parameters = new THashMap<>();
+    final Map<GrExpression, String> replacements = new HashMap<>();
     toEval.accept(new GroovyRecursiveElementVisitor() {
       @Override
-      public void visitReferenceExpression(GrReferenceExpression referenceExpression) {
+      public void visitReferenceExpression(@NotNull GrReferenceExpression referenceExpression) {
         super.visitReferenceExpression(referenceExpression);
 
         if (PsiUtil.isThisReference(referenceExpression) || PsiUtil.isSuperReference(referenceExpression)) {
@@ -261,12 +245,10 @@ public class GroovyCodeFragmentFactory extends CodeFragmentFactory {
 
         if (resolved instanceof PsiMethod) {
           String methodName = ((PsiMethod)resolved).getName();
-          if (closure != null && "getDelegate".equals(methodName) || "call".equals(methodName)) {
-            return true;
-          }
+          return closure != null && ("getDelegate".equals(methodName) || "getOwner".equals(methodName)) || "call".equals(methodName);
         }
 
-        return closure != null && resolved instanceof GrLightVariable && "owner".equals(((GrLightVariable)resolved).getName());
+        return false;
       }
 
       private void replaceWithReference(GrExpression expr, final String exprText) {
@@ -274,7 +256,7 @@ public class GroovyCodeFragmentFactory extends CodeFragmentFactory {
       }
 
       @Override
-      public void visitCodeReferenceElement(GrCodeReferenceElement refElement) {
+      public void visitCodeReferenceElement(@NotNull GrCodeReferenceElement refElement) {
         super.visitCodeReferenceElement(refElement);
         if (refElement.getQualifier() == null) {
           PsiElement resolved = refElement.resolve();
@@ -302,7 +284,7 @@ public class GroovyCodeFragmentFactory extends CodeFragmentFactory {
     GrImportStatement[] imports = toEval.getImportStatements();
     for (int i = imports.length - 1; i >= 0; i--) {
       TextRange range = imports[i].getTextRange();
-      text = text.substring(0, range.getStartOffset()) + text.substring(range.getEndOffset(), text.length());
+      text = text.substring(0, range.getStartOffset()) + text.substring(range.getEndOffset());
     }
     return StringUtil.escapeStringCharacters(text);
   }

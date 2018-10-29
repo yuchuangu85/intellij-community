@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,7 +35,9 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.SplitterProportionsData;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
-import com.intellij.openapi.util.*;
+import com.intellij.openapi.util.Comparing;
+import com.intellij.openapi.util.Factory;
+import com.intellij.openapi.util.NullableFactory;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileWrapper;
@@ -45,7 +47,6 @@ import com.intellij.ui.speedSearch.SpeedSearchSupply;
 import com.intellij.ui.table.TableView;
 import com.intellij.util.*;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.Convertor;
 import com.intellij.util.ui.ColumnInfo;
 import com.intellij.util.ui.ListTableModel;
 import gnu.trove.THashSet;
@@ -56,7 +57,6 @@ import org.intellij.plugins.intelliLang.inject.InjectorUtils;
 import org.intellij.plugins.intelliLang.inject.LanguageInjectionSupport;
 import org.intellij.plugins.intelliLang.inject.config.BaseInjection;
 import org.intellij.plugins.intelliLang.inject.config.InjectionPlace;
-import org.jdom.Document;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -68,8 +68,8 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 
 /**
  * @author Gregory.Shrago
@@ -86,7 +86,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
   private final List<AnAction> myAddActions = ContainerUtil.newArrayList();
   private final JLabel myCountLabel;
 
-  private Configuration myConfiguration;
+  private final Configuration myConfiguration;
 
   public InjectionsSettingsUI(final Project project, final Configuration configuration) {
     myProject = project;
@@ -109,7 +109,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
     myRoot.add(decorator.createPanel(), BorderLayout.CENTER);
     myCountLabel = new JLabel();
     myCountLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-    myCountLabel.setForeground(SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES.getFgColor());
+    myCountLabel.setForeground(SimpleTextAttributes.GRAYED_ITALIC_ATTRIBUTES.getFgColor());
     myRoot.add(myCountLabel, BorderLayout.SOUTH);
     updateCountLabel();
   }
@@ -132,7 +132,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
     decorator.disableUpDownActions();
     decorator.setAddActionUpdater(new AnActionButtonUpdater() {
       @Override
-      public boolean isEnabled(AnActionEvent e) {
+      public boolean isEnabled(@NotNull AnActionEvent e) {
         return !myAddActions.isEmpty();
       }
     });
@@ -144,7 +144,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
     });
     decorator.setRemoveActionUpdater(new AnActionButtonUpdater() {
       @Override
-      public boolean isEnabled(AnActionEvent e) {
+      public boolean isEnabled(@NotNull AnActionEvent e) {
         boolean enabled = false;
         for (InjInfo info : getSelectedInjections()) {
           if (!info.bundled) {
@@ -164,7 +164,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
 
     decorator.setEditActionUpdater(new AnActionButtonUpdater() {
       @Override
-      public boolean isEnabled(AnActionEvent e) {
+      public boolean isEnabled(@NotNull AnActionEvent e) {
         AnAction edit = getEditAction();
         if (edit != null) edit.update(e);
         return edit != null && edit.getTemplatePresentation().isEnabled();
@@ -226,7 +226,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
         {
           addCustomUpdater(new AnActionButtonUpdater() {
             @Override
-            public boolean isEnabled(AnActionEvent e) {
+            public boolean isEnabled(@NotNull AnActionEvent e) {
               CfgInfo cfg = getTargetCfgInfo(getSelectedInjections());
               e.getPresentation().setText(cfg == getDefaultCfgInfo() ? "Move to IDE Scope" : "Move to Project Scope");
               return cfg != null;
@@ -251,7 +251,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
         }
 
         @Nullable
-        private CfgInfo getTargetCfgInfo(final List<InjInfo> injections) {
+        private CfgInfo getTargetCfgInfo(final List<? extends InjInfo> injections) {
           CfgInfo cfg = null;
           for (InjInfo info : injections) {
             if (info.bundled) {
@@ -278,7 +278,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
         updateCountLabel();
       }
     });
-    decorator.addExtraAction(new DumbAwareActionButton("Export", "Export", AllIcons.Actions.Export) {
+    decorator.addExtraAction(new DumbAwareActionButton("Export", "Export", AllIcons.ToolbarDecorator.Export) {
 
       @Override
       public void actionPerformed(@NotNull final AnActionEvent e) {
@@ -288,9 +288,8 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
         if (wrapper == null) return;
         final Configuration configuration = new Configuration();
         configuration.setInjections(injections);
-        final Document document = new Document(configuration.getState());
         try {
-          JDOMUtil.writeDocument(document, wrapper.getFile(), "\n");
+          JdomKt.write(configuration.getState(), wrapper.getFile().toPath());
         }
         catch (IOException ex) {
           final String msg = ex.getLocalizedMessage();
@@ -363,12 +362,12 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
 
   @Override
   protected Configurable[] buildConfigurables() {
-      final ArrayList<Configurable> configurables = new ArrayList<Configurable>();
+      final ArrayList<Configurable> configurables = new ArrayList<>();
       for (LanguageInjectionSupport support : InjectorUtils.getActiveInjectionSupports()) {
         ContainerUtil.addAll(configurables, support.createSettings(myProject, myConfiguration));
       }
       Collections.sort(configurables, (o1, o2) -> Comparing.compare(o1.getDisplayName(), o2.getDisplayName()));
-      return configurables.toArray(new Configurable[configurables.size()]);
+      return configurables.toArray(new Configurable[0]);
   }
 
   @NotNull
@@ -377,7 +376,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
     return "IntelliLang.Configuration";
   }
 
-  private static void sortInjections(final List<BaseInjection> injections) {
+  private static void sortInjections(final List<? extends BaseInjection> injections) {
     Collections.sort(injections, (o1, o2) -> {
       final int support = Comparing.compare(o1.getSupportId(), o2.getSupportId());
       if (support != 0) return support;
@@ -387,10 +386,12 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
     });
   }
 
+  @Override
   public JComponent createComponent() {
     return myRoot;
   }
 
+  @Override
   public void reset() {
     for (CfgInfo info : myInfos) {
       info.reset();
@@ -399,6 +400,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
     updateCountLabel();
   }
 
+  @Override
   public void apply() {
     for (CfgInfo info : myInfos) {
       info.apply();
@@ -406,11 +408,9 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
     reset();
   }
 
+  @Override
   public boolean isModified() {
-    for (CfgInfo info : myInfos) {
-      if (info.isModified()) return true;
-    }
-    return false;
+    return Arrays.stream(myInfos).anyMatch(CfgInfo::isModified);
   }
 
   private void performSelectedInjectionsEnabled(final boolean enabled) {
@@ -450,7 +450,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
   }
 
   private List<InjInfo> getSelectedInjections() {
-    final ArrayList<InjInfo> toRemove = new ArrayList<InjInfo>();
+    final ArrayList<InjInfo> toRemove = new ArrayList<>();
     for (int row : myInjectionsTable.getSelectedRows()) {
       toRemove.add(myInjectionsTable.getItems().get(myInjectionsTable.convertRowIndexToModel(row)));
     }
@@ -470,18 +470,20 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
                                                         () -> updateCountLabel(), -1).show(e.getPreferredPopupPoint());
   }
 
+  @Override
   @Nls
   public String getDisplayName() {
     return "Language Injections";
   }
 
+  @Override
   public String getHelpTopic() {
     return "reference.settings.injection.language.injection.settings";
   }
 
   private class InjectionsTable extends TableView<InjInfo> {
     private InjectionsTable(final List<InjInfo> injections) {
-      super(new ListTableModel<InjInfo>(createInjectionColumnInfos(), injections, 1));
+      super(new ListTableModel<>(createInjectionColumnInfos(), injections, 1));
       setAutoResizeMode(AUTO_RESIZE_LAST_COLUMN);
       getColumnModel().getColumn(2).setCellRenderer(createLanguageCellRenderer());
       getColumnModel().getColumn(1).setCellRenderer(createDisplayNameCellRenderer());
@@ -489,7 +491,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
       setShowGrid(false);
       setShowVerticalLines(false);
       setGridColor(getForeground());
-      TableUtil.setupCheckboxColumn(getColumnModel().getColumn(0));
+      TableUtil.setupCheckboxColumn(this, 0);
 
       new DoubleClickListener() {
         @Override
@@ -644,6 +646,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
     return new TableCellRenderer() {
       final JLabel myLabel = new JLabel();
 
+      @Override
       public Component getTableCellRendererComponent(final JTable table, final Object value, final boolean isSelected, final boolean hasFocus,
                                                      final int row,
                                                      final int column) {
@@ -666,6 +669,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
       final SimpleColoredComponent myLabel = new SimpleColoredComponent();
       final SimpleColoredText myText = new SimpleColoredText();
 
+      @Override
       public Component getTableCellRendererComponent(final JTable table, final Object value, final boolean isSelected, final boolean hasFocus,
                                                      final int row,
                                                      final int column) {
@@ -673,7 +677,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
         final InjInfo info = (InjInfo)value;
         // fix for a marvellous Swing peculiarity: AccessibleJTable likes to pass null here
         if (info == null) return myLabel;
-        final SimpleTextAttributes grayAttrs = isSelected ? SimpleTextAttributes.REGULAR_ATTRIBUTES : SimpleTextAttributes.GRAY_ATTRIBUTES;
+        final SimpleTextAttributes grayAttrs = isSelected ? SimpleTextAttributes.REGULAR_ATTRIBUTES : SimpleTextAttributes.GRAYED_ATTRIBUTES;
         final String supportId = info.injection.getSupportId();
         myText.append(supportId + ": ", grayAttrs);
         mySupports.get(supportId).setupPresentation(info.injection, myText, isSelected);
@@ -689,13 +693,14 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
     return new TableCellRenderer() {
       final SimpleColoredComponent myLabel = new SimpleColoredComponent();
 
+      @Override
       public Component getTableCellRendererComponent(final JTable table, final Object value, final boolean isSelected, final boolean hasFocus,
                                                      final int row,
                                                      final int column) {
         myLabel.clear();
         final String info = (String)value;
         if (info == null) return myLabel;
-        final SimpleTextAttributes grayAttrs = isSelected ? SimpleTextAttributes.REGULAR_ATTRIBUTES : SimpleTextAttributes.GRAY_ATTRIBUTES;
+        final SimpleTextAttributes grayAttrs = isSelected ? SimpleTextAttributes.REGULAR_ATTRIBUTES : SimpleTextAttributes.GRAYED_ATTRIBUTES;
         myLabel.append(info, grayAttrs);
         setLabelColors(myLabel, table, isSelected, row);
         return myLabel;
@@ -713,7 +718,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
   }
 
   private void doImportAction(final DataContext dataContext) {
-    final FileChooserDescriptor descriptor = new FileChooserDescriptor(true, false, true, false, true, false) {
+    final FileChooserDescriptor descriptor = new FileChooserDescriptor(true, false, false, false, true, false) {
       @Override
       public boolean isFileVisible(VirtualFile file, boolean showHiddenFiles) {
         return super.isFileVisible(file, showHiddenFiles) &&
@@ -743,13 +748,9 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
       }
       final CfgInfo info = getDefaultCfgInfo();
       final Map<String,Set<InjInfo>> currentMap =
-        ContainerUtil.classify(info.injectionInfos.iterator(), new Convertor<InjInfo, String>() {
-          public String convert(final InjInfo o) {
-            return o.injection.getSupportId();
-          }
-        });
-      final List<BaseInjection> originalInjections = new ArrayList<BaseInjection>();
-      final List<BaseInjection> newInjections = new ArrayList<BaseInjection>();
+        ContainerUtil.classify(info.injectionInfos.iterator(), o -> o.injection.getSupportId());
+      final List<BaseInjection> originalInjections = new ArrayList<>();
+      final List<BaseInjection> newInjections = new ArrayList<>();
       //// remove duplicates
       //for (String supportId : InjectorUtils.getActiveInjectionSupportIds()) {
       //  final Set<BaseInjection> currentInjections = currentMap.get(supportId);
@@ -762,7 +763,7 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
       //myInjections.addAll(newInjections);
 
       for (String supportId : InjectorUtils.getActiveInjectionSupportIds()) {
-        ArrayList<InjInfo> list = new ArrayList<InjInfo>(ObjectUtils.notNull(currentMap.get(supportId), Collections.<InjInfo>emptyList()));
+        ArrayList<InjInfo> list = new ArrayList<>(ObjectUtils.notNull(currentMap.get(supportId), Collections.emptyList()));
         final List<BaseInjection> currentInjections = getInjectionList(list);
         final List<BaseInjection> importingInjections = cfg.getInjections(supportId);
         if (currentInjections == null) {
@@ -796,24 +797,26 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
   private static class CfgInfo {
     final Configuration cfg;
     final List<BaseInjection> originalInjections;
-    final List<InjInfo> injectionInfos = new ArrayList<InjInfo>();
-    final THashSet<BaseInjection> bundledInjections = new THashSet<BaseInjection>(new SameParamsAndPlacesStrategy());
+    final List<InjInfo> injectionInfos = new ArrayList<>();
+    final THashSet<BaseInjection> bundledInjections = new THashSet<>(new SameParamsAndPlacesStrategy());
     final String title;
 
-    public CfgInfo(Configuration cfg, final String title) {
+    CfgInfo(Configuration cfg, final String title) {
       this.cfg = cfg;
       this.title = title;
       bundledInjections.addAll(cfg.getDefaultInjections());
-      originalInjections = new ArrayList<BaseInjection>(ContainerUtil
-        .concat(InjectorUtils.getActiveInjectionSupportIds(), s -> {
-          List<BaseInjection> injections =
-            CfgInfo.this.cfg instanceof Configuration.Prj ? ((Configuration.Prj)CfgInfo.this.cfg).getOwnInjections(s) : CfgInfo.this.cfg
-              .getInjections(s);
-          return ContainerUtil.findAll(injections, injection -> {
-            String id = injection.getInjectedLanguageId();
-            return InjectedLanguage.findLanguageById(id) != null || ReferenceInjector.findById(id) != null;
-          });
-        }));
+      originalInjections = new ArrayList<>(ContainerUtil
+                                             .concat(InjectorUtils.getActiveInjectionSupportIds(), s -> {
+                                               List<BaseInjection> injections =
+                                                 this.cfg instanceof Configuration.Prj ? ((Configuration.Prj)this.cfg)
+                                                   .getOwnInjections(s) : this.cfg
+                                                   .getInjections(s);
+                                               return ContainerUtil.findAll(injections, injection -> {
+                                                 String id = injection.getInjectedLanguageId();
+                                                 return InjectedLanguage.findLanguageById(id) != null ||
+                                                        ReferenceInjector.findById(id) != null;
+                                               });
+                                             }));
       sortInjections(originalInjections);
       reset();
     }
@@ -841,12 +844,12 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
     }
 
     public boolean isModified() {
-      final List<BaseInjection> copy = new ArrayList<BaseInjection>(getInjectionList(injectionInfos));
+      final List<BaseInjection> copy = new ArrayList<>(getInjectionList(injectionInfos));
       sortInjections(copy);
       return !originalInjections.equals(copy);
     }
 
-    public void replace(final List<BaseInjection> originalInjections, final List<BaseInjection> newInjections) {
+    public void replace(final List<? extends BaseInjection> originalInjections, final List<? extends BaseInjection> newInjections) {
       for (Iterator<InjInfo> it = injectionInfos.iterator(); it.hasNext(); ) {
         final InjInfo info = it.next();
         if (originalInjections.contains(info.injection)) it.remove();
@@ -883,15 +886,10 @@ public class InjectionsSettingsUI extends SearchableConfigurable.Parent.Abstract
   }
 
   private static List<InjInfo> getInjInfoList(final CfgInfo[] infos) {
-    return ContainerUtil.concat(infos, new Function<CfgInfo, Collection<? extends InjInfo>>() {
-      @Override
-      public Collection<InjInfo> fun(final CfgInfo cfgInfo) {
-        return cfgInfo.injectionInfos;
-      }
-    });
+    return ContainerUtil.concat(infos, cfgInfo -> cfgInfo.injectionInfos);
   }
 
-  private static List<BaseInjection> getInjectionList(final List<InjInfo> list) {
+  private static List<BaseInjection> getInjectionList(final List<? extends InjInfo> list) {
     return new AbstractList<BaseInjection>() {
       @Override
       public BaseInjection get(final int index) {

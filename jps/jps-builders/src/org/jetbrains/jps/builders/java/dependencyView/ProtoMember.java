@@ -1,22 +1,7 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.jps.builders.java.dependencyView;
 
 import com.intellij.util.io.DataInputOutputUtil;
-import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.builders.storage.BuildDataCorruptedException;
@@ -31,14 +16,11 @@ import java.util.Set;
 
 /**
  * @author: db
- * Date: 07.03.11
  */
 abstract class ProtoMember extends Proto {
 
   @NotNull
   public final TypeRepr.AbstractType myType;
-  @NotNull
-  public final Set<TypeRepr.ClassType> myAnnotations;
   public final Object myValue;
 
   private static abstract class DataDescriptor<T> {
@@ -203,18 +185,16 @@ abstract class ProtoMember extends Proto {
                         @NotNull
                         Set<TypeRepr.ClassType> annotations,
                         final Object value) {
-    super(access, signature, name);
+    super(access, signature, name, annotations);
     myType = t;
     myValue = value;
-    myAnnotations = annotations;
   }
 
   protected ProtoMember(final DependencyContext context, final DataInput in) {
-    super(in);
+    super(context, in);
     try {
       myType = TypeRepr.externalizer(context).read(in);
       myValue = loadTyped(in);
-      myAnnotations = (Set<TypeRepr.ClassType>)RW.read(TypeRepr.classTypeExternalizer(context), new THashSet<TypeRepr.ClassType>(), in);
     }
     catch (IOException e) {
       throw new BuildDataCorruptedException(e);
@@ -241,6 +221,7 @@ abstract class ProtoMember extends Proto {
     }
   }
 
+  @Override
   public void save(final DataOutput out) {
     super.save(out);
     myType.save(out);
@@ -275,26 +256,16 @@ abstract class ProtoMember extends Proto {
     catch (Exception e) {
       throw new RuntimeException(e);
     }
-    RW.save(myAnnotations, out);
   }
 
-  public abstract static class Diff extends Difference {
-    public abstract Specifier<TypeRepr.ClassType, Difference> annotations();
-  }
-
-  public Diff difference(final Proto past) {
+  @Override
+  public Difference difference(final Proto past) {
     final ProtoMember m = (ProtoMember)past;
     final Difference diff = super.difference(past);
     int base = diff.base();
 
     if (!m.myType.equals(myType)) {
       base |= Difference.TYPE;
-    }
-
-    final Difference.Specifier<TypeRepr.ClassType, Difference> annotations = Difference.make(m.myAnnotations, myAnnotations);
-
-    if (!annotations.unchanged()) {
-      base |= Difference.ANNOTATIONS;
     }
 
     switch ((myValue == null ? 0 : 1) + (m.myValue == null ? 0 : 2)) {
@@ -318,12 +289,7 @@ abstract class ProtoMember extends Proto {
 
     final int newBase = base;
 
-    return new Diff() {
-      @Override
-      public Specifier<TypeRepr.ClassType, Difference> annotations() {
-        return annotations;
-      }
-
+    return new DifferenceImpl(diff) {
       @Override
       public int base() {
         return newBase;
@@ -331,36 +297,17 @@ abstract class ProtoMember extends Proto {
 
       @Override
       public boolean no() {
-        return newBase == NONE && diff.no();
-      }
-
-      @Override
-      public int addedModifiers() {
-        return diff.addedModifiers();
-      }
-
-      @Override
-      public int removedModifiers() {
-        return diff.removedModifiers();
-      }
-
-      @Override
-      public boolean packageLocalOn() {
-        return diff.packageLocalOn();
+        return newBase == NONE && super.no();
       }
 
       @Override
       public boolean hadValue() {
         return ((ProtoMember)past).hasValue();
       }
-
-      @Override
-      public boolean weakedAccess() {
-        return diff.weakedAccess();
-      }
     };
   }
 
+  @Override
   public void toStream(final DependencyContext context, final PrintStream stream) {
     super.toStream(context, stream);
     stream.print("          Type       : ");

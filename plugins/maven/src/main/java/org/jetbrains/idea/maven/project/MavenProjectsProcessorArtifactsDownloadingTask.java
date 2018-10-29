@@ -15,7 +15,6 @@
  */
 package org.jetbrains.idea.maven.project;
 
-import com.intellij.openapi.application.AccessToken;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ex.ProjectRootManagerEx;
@@ -34,14 +33,14 @@ public class MavenProjectsProcessorArtifactsDownloadingTask implements MavenProj
   private final MavenProjectsTree myTree;
   private final boolean myDownloadSources;
   private final boolean myDownloadDocs;
-  private final AsyncResult<MavenArtifactDownloader.DownloadResult> myCallbackResult;
+  private final AsyncResult<? super MavenArtifactDownloader.DownloadResult> myCallbackResult;
 
   public MavenProjectsProcessorArtifactsDownloadingTask(Collection<MavenProject> projects,
                                                         Collection<MavenArtifact> artifacts,
                                                         MavenProjectsTree tree,
                                                         boolean downloadSources,
                                                         boolean downloadDocs,
-                                                        AsyncResult<MavenArtifactDownloader.DownloadResult> callbackResult) {
+                                                        AsyncResult<? super MavenArtifactDownloader.DownloadResult> callbackResult) {
     myProjects = projects;
     myArtifacts = artifacts;
     myTree = tree;
@@ -50,6 +49,7 @@ public class MavenProjectsProcessorArtifactsDownloadingTask implements MavenProj
     myCallbackResult = callbackResult;
   }
 
+  @Override
   public void perform(final Project project, MavenEmbeddersManager embeddersManager, MavenConsole console, MavenProgressIndicator indicator)
     throws MavenProcessCanceledException {
     MavenArtifactDownloader.DownloadResult result =
@@ -57,14 +57,7 @@ public class MavenProjectsProcessorArtifactsDownloadingTask implements MavenProj
     if (myCallbackResult != null) myCallbackResult.setDone(result);
 
     // todo: hack to update all file pointers.
-    MavenUtil.invokeLater(project, () -> {
-      AccessToken accessToken = WriteAction.start();
-      try {
-        ProjectRootManagerEx.getInstanceEx(project).makeRootsChange(EmptyRunnable.getInstance(), false, true);
-      }
-      finally {
-        accessToken.finish();
-      }
-    });
+    MavenUtil.invokeLater(project, () -> WriteAction.run(
+      () -> ProjectRootManagerEx.getInstanceEx(project).makeRootsChange(EmptyRunnable.getInstance(), false, true)));
   }
 }

@@ -1,6 +1,6 @@
 package com.siyeh.igtest.jdk.auto_boxing;
 
-
+import java.util.Arrays;
 
 
 public class AutoBoxing {
@@ -8,7 +8,7 @@ public class AutoBoxing {
     static {
         Long someNumber = <warning descr="Auto-boxing '0L'">0L</warning>;
         Long aLong = <warning descr="Auto-boxing 'someNumber << 2'">someNumber << 2</warning>;
-        Long other = someNumber++;
+        Long other = <warning descr="Auto-boxing 'someNumber'">someNumber</warning>++;
         someNumber = <warning descr="Auto-boxing '~someNumber'">~someNumber</warning>;
         someNumber = <warning descr="Auto-boxing '-someNumber'">-someNumber</warning>;
         someNumber = <warning descr="Auto-boxing '+someNumber'">+someNumber</warning>;
@@ -80,5 +80,15 @@ public class AutoBoxing {
 
   interface R {
     Integer box();
+  }
+
+  enum NumberedLetter {
+    A(<warning descr="Auto-boxing '3'">3</warning>);
+    NumberedLetter(Integer i) {
+    }
+  }
+
+  void varargs() {
+      Arrays.asList(<warning descr="Auto-boxing ''a''">'a'</warning>, <warning descr="Auto-boxing ''b''">'b'</warning>, <warning descr="Auto-boxing ''c''">'c'</warning>);
   }
 }

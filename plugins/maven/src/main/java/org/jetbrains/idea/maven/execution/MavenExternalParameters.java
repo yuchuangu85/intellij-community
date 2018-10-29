@@ -45,15 +45,16 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.encoding.EncodingManager;
 import com.intellij.openapi.vfs.encoding.EncodingProjectManager;
+import com.intellij.util.EnvironmentUtil;
 import com.intellij.util.PathUtil;
 import com.intellij.util.io.ZipUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.idea.maven.artifactResolver.MavenArtifactResolvedM2RtMarker;
 import org.jetbrains.idea.maven.artifactResolver.MavenArtifactResolvedM31RtMarker;
 import org.jetbrains.idea.maven.artifactResolver.MavenArtifactResolvedM3RtMarker;
 import org.jetbrains.idea.maven.artifactResolver.common.MavenModuleMap;
+import org.jetbrains.idea.maven.model.MavenConstants;
 import org.jetbrains.idea.maven.project.MavenGeneralSettings;
 import org.jetbrains.idea.maven.project.MavenProject;
 import org.jetbrains.idea.maven.project.MavenProjectsManager;
@@ -66,6 +67,8 @@ import javax.swing.event.HyperlinkListener;
 import java.io.*;
 import java.util.*;
 import java.util.zip.ZipOutputStream;
+
+import static org.jetbrains.idea.maven.server.MavenServerManager.verifyMavenSdkRequirements;
 
 /**
  * @author Ralf Quebbemann
@@ -118,10 +121,13 @@ public class MavenExternalParameters {
 
     params.setWorkingDirectory(parameters.getWorkingDirFile());
 
-    params.setJdk(getJdk(project, runnerSettings, project != null && MavenRunner.getInstance(project).getState() == runnerSettings));
+    Sdk jdk = getJdk(project, runnerSettings, project != null && MavenRunner.getInstance(project).getState() == runnerSettings);
+    params.setJdk(jdk);
 
     final String mavenHome = resolveMavenHome(coreSettings, project, runConfiguration);
     final String mavenVersion = MavenUtil.getMavenVersion(mavenHome);
+    String sdkConfigLocation = "Settings | Build, Execution, Deployment | Build Tools | Maven | Runner | JRE";
+    verifyMavenSdkRequirements(jdk, mavenVersion, sdkConfigLocation);
 
     params.getProgramParametersList().add("-Didea.version=" + MavenUtil.getIdeaVersionToPassToMavenProcess());
     if (StringUtil.compareVersionNumbers(mavenVersion, "3.3") >= 0) {
@@ -156,7 +162,7 @@ public class MavenExternalParameters {
       params.getClassPath().add(path);
     }
 
-    params.setEnv(new HashMap<String, String>(runnerSettings.getEnvironmentProperties()));
+    params.setEnv(new HashMap<>(runnerSettings.getEnvironmentProperties()));
     params.setPassParentEnvs(runnerSettings.isPassParentEnv());
 
     params.setMainClass(MAVEN_LAUNCHER_CLASS);
@@ -220,7 +226,13 @@ public class MavenExternalParameters {
       marker = MavenArtifactResolvedM3RtMarker.class;
     }
     else {
-      marker = MavenArtifactResolvedM2RtMarker.class;
+      try {
+        marker = Class.forName("org.jetbrains.idea.maven.artifactResolver.MavenArtifactResolvedM2RtMarker");
+      }
+      catch (ClassNotFoundException e) {
+        LOG.error("Cannot find Maven2 artifact resolved, falling back to Maven3", e);
+        marker = MavenArtifactResolvedM3RtMarker.class;
+      }
     }
 
     File classDirOrJar = new File(PathUtil.getJarPathForClass(marker));
@@ -344,15 +356,11 @@ public class MavenExternalParameters {
     }
 
     if (name.equals(MavenRunnerSettings.USE_JAVA_HOME)) {
-      final String javaHome = System.getenv("JAVA_HOME");
+      final String javaHome = EnvironmentUtil.getEnvironmentMap().get("JAVA_HOME");
       if (StringUtil.isEmptyOrSpaces(javaHome)) {
         throw new ExecutionException(RunnerBundle.message("maven.java.home.undefined"));
       }
-      final Sdk jdk = JavaSdk.getInstance().createJdk("", javaHome);
-      if (jdk == null) {
-        throw new ExecutionException(RunnerBundle.message("maven.java.home.invalid", javaHome));
-      }
-      return jdk;
+      return JavaSdk.getInstance().createJdk("", javaHome);
     }
 
     for (Sdk projectJdk : ProjectJdkTable.getInstance().getAllJdks()) {
@@ -396,6 +404,11 @@ public class MavenExternalParameters {
 
     for (String goal : parameters.getGoals()) {
       parametersList.add(goal);
+    }
+
+    if (parameters.getPomFileName() != null && !FileUtil.namesEqual(MavenConstants.POM_XML, parameters.getPomFileName())) {
+      parametersList.add("-f");
+      parametersList.add(parameters.getPomFileName());
     }
 
     addOption(parametersList, "P", encodeProfiles(parameters.getProfilesMap()));
@@ -489,7 +502,7 @@ public class MavenExternalParameters {
       mavenHomeBootAsFile = new File(mavenHome, "boot");
     }
 
-    List<String> classpathEntries = new ArrayList<String>();
+    List<String> classpathEntries = new ArrayList<>();
 
     File[] files = mavenHomeBootAsFile.listFiles();
     if (files != null) {
@@ -570,7 +583,7 @@ public class MavenExternalParameters {
 
     private final Project myProject;
 
-    public ProjectSettingsOpenerExecutionException(final String s, Project project) {
+    ProjectSettingsOpenerExecutionException(final String s, Project project) {
       super(s);
       myProject = project;
     }
@@ -585,7 +598,7 @@ public class MavenExternalParameters {
 
     private final Project myProject;
 
-    public ProjectJdkSettingsOpenerExecutionException(final String s, Project project) {
+    ProjectJdkSettingsOpenerExecutionException(final String s, Project project) {
       super(s);
       myProject = project;
     }
@@ -600,7 +613,7 @@ public class MavenExternalParameters {
 
     private final MavenRunConfiguration myRunConfiguration;
 
-    public RunConfigurationOpenerExecutionException(final String s, MavenRunConfiguration runConfiguration) {
+    RunConfigurationOpenerExecutionException(final String s, MavenRunConfiguration runConfiguration) {
       super(s);
       myRunConfiguration = runConfiguration;
     }
@@ -616,7 +629,7 @@ public class MavenExternalParameters {
   private static abstract class WithHyperlinkExecutionException extends ExecutionException
     implements HyperlinkListener, NotificationListener {
 
-    public WithHyperlinkExecutionException(String s) {
+    WithHyperlinkExecutionException(String s) {
       super(s);
     }
 

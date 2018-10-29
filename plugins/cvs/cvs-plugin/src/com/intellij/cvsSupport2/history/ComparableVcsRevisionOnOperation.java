@@ -28,6 +28,7 @@ import com.intellij.openapi.vcs.RepositoryLocation;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.history.VcsFileRevision;
 import com.intellij.openapi.vcs.history.VcsRevisionNumber;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
@@ -48,11 +49,13 @@ public class ComparableVcsRevisionOnOperation implements VcsFileRevision {
     return myOperation.isDeleted();
   }
 
-  public byte[] getContent() throws IOException, VcsException {
+  @Override
+  public byte[] getContent() {
     LOG.assertTrue(myOperation.isLoaded());
     return myOperation.getFileBytes();
   }
 
+  @Override
   public byte[] loadContent() throws IOException, VcsException {
     if (!myOperation.isLoaded()) {
       CvsOperationExecutor executor = new CvsOperationExecutor(myProject);
@@ -81,22 +84,28 @@ public class ComparableVcsRevisionOnOperation implements VcsFileRevision {
     return myOperation.isLoaded();
   }
 
+  @Override
+  @NotNull
   public VcsRevisionNumber getRevisionNumber() {
     return getRevision();
   }
 
+  @Override
   public Date getRevisionDate() {
     return null;
   }
 
+  @Override
   public String getAuthor() {
     return null;
   }
 
+  @Override
   public String getCommitMessage() {
     return null;
   }
 
+  @Override
   public String getBranchName() {
     return null;
   }

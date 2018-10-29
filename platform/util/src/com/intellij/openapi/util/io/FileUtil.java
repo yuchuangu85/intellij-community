@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,8 @@ import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.util.*;
 import com.intellij.util.concurrency.FixedFuture;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.Convertor;
+import com.intellij.util.containers.JBIterable;
+import com.intellij.util.containers.JBTreeTraverser;
 import com.intellij.util.io.URLUtil;
 import com.intellij.util.text.FilePathHashingStrategy;
 import com.intellij.util.text.StringFactory;
@@ -44,7 +45,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.RunnableFuture;
 import java.util.regex.Pattern;
 
-@SuppressWarnings({"UtilityClassWithoutPrivateConstructor", "MethodOverridesStaticMethodOfSuperclass"})
+@SuppressWarnings({"MethodOverridesStaticMethodOfSuperclass"})
 public class FileUtil extends FileUtilRt {
   static {
     if (!Patches.USE_REFLECTION_TO_ACCESS_JDK7) throw new RuntimeException("Please migrate FileUtilRt to JDK8");
@@ -57,7 +58,7 @@ public class FileUtil extends FileUtilRt {
   public static final TObjectHashingStrategy<String> PATH_HASHING_STRATEGY = FilePathHashingStrategy.create();
 
   public static final TObjectHashingStrategy<File> FILE_HASHING_STRATEGY =
-    SystemInfo.isFileSystemCaseSensitive ? ContainerUtil.<File>canonicalStrategy() : new TObjectHashingStrategy<File>() {
+    new TObjectHashingStrategy<File>() {
       @Override
       public int computeHashCode(File object) {
         return fileHashCode(object);
@@ -76,6 +77,15 @@ public class FileUtil extends FileUtilRt {
     return StringUtil.join(parts, File.separator);
   }
 
+  /**
+   * Gets the relative path from the {@code base} to the {@code file} regardless existence or the type of the {@code base}.
+   * <p>
+   * NOTE: if the file(not directory) passed as the {@code base} the result can not be used as a relative path from the {@code base} parent directory to the {@code file}
+   *
+   * @param base the base
+   * @param file the file
+   * @return the relative path from the {@code base} to the {@code file} or {@code null}
+   */
   @Nullable
   public static String getRelativePath(File base, File file) {
     return FileUtilRt.getRelativePath(base, file);
@@ -95,7 +105,7 @@ public class FileUtil extends FileUtilRt {
   }
 
   public static boolean isAbsolute(@NotNull String path) {
-    return new File(path).isAbsolute();
+    return !path.isEmpty() && new File(path).isAbsolute();
   }
 
   public static boolean exists(@Nullable String path) {
@@ -175,43 +185,6 @@ public class FileUtil extends FileUtilRt {
     }
   }
 
-  /**
-   * @param removeProcessor parent, child
-   */
-  public static <T> Collection<T> removeAncestors(final Collection<T> files,
-                                                  final Convertor<T, String> convertor,
-                                                  final PairProcessor<T, T> removeProcessor) {
-    if (files.isEmpty()) return files;
-    final TreeMap<String, T> paths = new TreeMap<String, T>();
-    for (T file : files) {
-      final String path = convertor.convert(file);
-      assert path != null;
-      final String canonicalPath = toCanonicalPath(path);
-      paths.put(canonicalPath, file);
-    }
-    final List<Map.Entry<String, T>> ordered = new ArrayList<Map.Entry<String, T>>(paths.entrySet());
-    final List<T> result = new ArrayList<T>(ordered.size());
-    result.add(ordered.get(0).getValue());
-    for (int i = 1; i < ordered.size(); i++) {
-      final Map.Entry<String, T> entry = ordered.get(i);
-      final String child = entry.getKey();
-      boolean parentNotFound = true;
-      for (int j = i - 1; j >= 0; j--) {
-        // possible parents
-        final String parent = ordered.get(j).getKey();
-        if (parent == null) continue;
-        if (startsWith(child, parent) && removeProcessor.process(ordered.get(j).getValue(), entry.getValue())) {
-          parentNotFound = false;
-          break;
-        }
-      }
-      if (parentNotFound) {
-        result.add(entry.getValue());
-      }
-    }
-    return result;
-  }
-
   @Nullable
   public static File findAncestor(@NotNull File f1, @NotNull File f2) {
     File ancestor = f1;
@@ -249,16 +222,19 @@ public class FileUtil extends FileUtilRt {
   }
 
   @NotNull
-  public static byte[] loadFirst(@NotNull InputStream stream, int maxLength) throws IOException {
+  public static byte[] loadFirstAndClose(@NotNull InputStream stream, int maxLength) throws IOException {
     ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-    copy(stream, maxLength, buffer);
-    buffer.close();
+    try {
+      copy(stream, maxLength, buffer);
+    }
+    finally {
+      stream.close();
+    }
     return buffer.toByteArray();
   }
 
   @NotNull
   public static String loadTextAndClose(@NotNull InputStream stream) throws IOException {
-    //noinspection IOResourceOpenedButNotSafelyClosed
     return loadTextAndClose(new InputStreamReader(stream));
   }
 
@@ -344,7 +320,7 @@ public class FileUtil extends FileUtilRt {
   }
 
   @NotNull
-  public static Future<Void> asyncDelete(@NotNull Collection<File> files) {
+  public static Future<Void> asyncDelete(@NotNull Collection<? extends File> files) {
     List<File> tempFiles = new ArrayList<File>();
     for (File file : files) {
       final File tempFile = renameToTempFileOrDelete(file);
@@ -353,7 +329,7 @@ public class FileUtil extends FileUtilRt {
       }
     }
     if (!tempFiles.isEmpty()) {
-      return startDeletionThread(tempFiles.toArray(new File[tempFiles.size()]));
+      return startDeletionThread(tempFiles.toArray(new File[0]));
     }
     return new FixedFuture<Void>(null);
   }
@@ -470,20 +446,9 @@ public class FileUtil extends FileUtilRt {
     performCopy(fromFile, toFile, false);
   }
 
-  @SuppressWarnings("Duplicates")
   private static void performCopy(@NotNull File fromFile, @NotNull File toFile, final boolean syncTimestamp) throws IOException {
     if (filesEqual(fromFile, toFile)) return;
-    final FileOutputStream fos;
-    try {
-      fos = openOutputStream(toFile);
-    }
-    catch (IOException e) {
-      if (SystemInfo.isWindows && e.getMessage() != null && e.getMessage().contains("denied") &&
-          WinUACTemporaryFix.nativeCopy(fromFile, toFile, syncTimestamp)) {
-        return;
-      }
-      throw e;
-    }
+    final FileOutputStream fos = openOutputStream(toFile);
 
     try {
       final FileInputStream fis = new FileInputStream(fromFile);
@@ -532,10 +497,14 @@ public class FileUtil extends FileUtilRt {
   }
 
   public static void copy(@NotNull InputStream inputStream, int maxSize, @NotNull OutputStream outputStream) throws IOException {
+    copy(inputStream, (long)maxSize, outputStream);
+  }
+
+  public static void copy(@NotNull InputStream inputStream, long maxSize, @NotNull OutputStream outputStream) throws IOException {
     final byte[] buffer = getThreadLocalBuffer();
-    int toRead = maxSize;
+    long toRead = maxSize;
     while (toRead > 0) {
-      int read = inputStream.read(buffer, 0, Math.min(buffer.length, toRead));
+      int read = inputStream.read(buffer, 0, (int)Math.min(buffer.length, toRead));
       if (read < 0) break;
       toRead -= read;
       outputStream.write(buffer, 0, read);
@@ -625,13 +594,14 @@ public class FileUtil extends FileUtilRt {
     return findSequentNonexistentFile(aParentFolder, aFilePrefix, aExtension).getName();
   }
 
+  @NotNull
   public static File findSequentNonexistentFile(@NotNull File parentFolder, @NotNull  String filePrefix, @NotNull String extension) {
     int postfix = 0;
     String ext = extension.isEmpty() ? "" : '.' + extension;
     File candidate = new File(parentFolder, filePrefix + ext);
     while (candidate.exists()) {
       postfix++;
-      candidate = new File(parentFolder, filePrefix + Integer.toString(postfix) + ext);
+      candidate = new File(parentFolder, filePrefix + postfix + ext);
     }
     return candidate;
   }
@@ -644,12 +614,6 @@ public class FileUtil extends FileUtilRt {
   @NotNull
   public static String toSystemIndependentName(@NotNull String aFileName) {
     return FileUtilRt.toSystemIndependentName(aFileName);
-  }
-
-  /** @deprecated to be removed in IDEA 17 */
-  @SuppressWarnings({"unused", "StringToUpperCaseOrToLowerCaseWithoutLocale"})
-  public static String nameToCompare(@NotNull String name) {
-    return (SystemInfo.isFileSystemCaseSensitive ? name : name.toLowerCase()).replace('\\', '/');
   }
 
   /**
@@ -732,7 +696,7 @@ public class FileUtil extends FileUtilRt {
       if (removeLastSlash) {
         int start = processRoot(path, NullAppendable.INSTANCE);
         int slashIndex = path.lastIndexOf('/');
-        return slashIndex != -1 && slashIndex > start ? StringUtil.trimEnd(path, '/') : path;
+        return slashIndex != -1 && slashIndex > start ? StringUtil.trimTrailing(path, '/') : path;
       }
       return path;
     }
@@ -1019,6 +983,7 @@ public class FileUtil extends FileUtilRt {
    *             Use {@link FileUtilRt#getExtension(String)} instead to get the unchanged extension.
    *             If you need to check whether a file has a specified extension use {@link FileUtilRt#extensionEquals(String, String)}
    */
+  @Deprecated
   @SuppressWarnings("StringToUpperCaseOrToLowerCaseWithoutLocale")
   @NotNull
   public static String getExtension(@NotNull String fileName) {
@@ -1054,14 +1019,14 @@ public class FileUtil extends FileUtilRt {
     return false;
   }
 
-  public static void collectMatchedFiles(@NotNull File root, @NotNull Pattern pattern, @NotNull List<File> outFiles) {
+  public static void collectMatchedFiles(@NotNull File root, @NotNull Pattern pattern, @NotNull List<? super File> outFiles) {
     collectMatchedFiles(root, root, pattern, outFiles);
   }
 
   private static void collectMatchedFiles(@NotNull File absoluteRoot,
                                           @NotNull File root,
                                           @NotNull Pattern pattern,
-                                          @NotNull List<File> files) {
+                                          @NotNull List<? super File> files) {
     final File[] dirs = root.listFiles();
     if (dirs == null) return;
     for (File dir : dirs) {
@@ -1193,14 +1158,13 @@ public class FileUtil extends FileUtilRt {
     return sanitizeFileName(name, true);
   }
 
-  /** @deprecated use {@link #sanitizeFileName(String, boolean)} (to be removed in IDEA 17) */
-  @SuppressWarnings("unused")
-  public static String sanitizeName(@NotNull String name) {
-    return sanitizeFileName(name, false);
-  }
-
   @NotNull
   public static String sanitizeFileName(@NotNull String name, boolean strict) {
+    return sanitizeFileName(name, strict, "_");
+  }
+  
+  @NotNull
+  public static String sanitizeFileName(@NotNull String name, boolean strict, String replacement) {
     StringBuilder result = null;
 
     int last = 0;
@@ -1209,7 +1173,9 @@ public class FileUtil extends FileUtilRt {
       char c = name.charAt(i);
       boolean appendReplacement = true;
       if (c > 0 && c < 255) {
-        if (strict ? Character.isLetterOrDigit(c) || c == '_' : Character.isJavaIdentifierPart(c) || c == ' ' || c == '@' || c == '-') {
+        if (strict
+            ? Character.isLetterOrDigit(c) || c == '_'
+            : Character.isJavaIdentifierPart(c) || c == ' ' || c == '@' || c == '-') {
           continue;
         }
       }
@@ -1224,7 +1190,7 @@ public class FileUtil extends FileUtilRt {
         result.append(name, last, i);
       }
       if (appendReplacement) {
-        result.append('_');
+        result.append(replacement);
       }
       last = i + 1;
     }
@@ -1291,12 +1257,28 @@ public class FileUtil extends FileUtilRt {
     }
   }
 
-  public static boolean processFilesRecursively(@NotNull File root, @NotNull Processor<File> processor) {
-    return processFilesRecursively(root, processor, null);
+  @NotNull
+  public static JBTreeTraverser<File> fileTraverser(@Nullable File root) {
+    return FILE_TRAVERSER.withRoot(root);
   }
 
-  public static boolean processFilesRecursively(@NotNull File root, @NotNull Processor<File> processor,
-                                                @Nullable final Processor<File> directoryFilter) {
+  private static final JBTreeTraverser<File> FILE_TRAVERSER = JBTreeTraverser.from(new Function<File, Iterable<File>>() {
+    @Override
+    public Iterable<File> fun(File file) {
+      return file != null && file.isDirectory() ? JBIterable.of(file.listFiles()) : JBIterable.<File>empty();
+    }
+  });
+
+  public static boolean processFilesRecursively(@NotNull File root, @NotNull Processor<? super File> processor) {
+    return fileTraverser(root).bfsTraversal().processEach(processor);
+  }
+
+  /**
+   * @see FileUtil#fileTraverser(File)
+   */
+  @Deprecated
+  public static boolean processFilesRecursively(@NotNull File root, @NotNull Processor<? super File> processor,
+                                                @Nullable final Processor<? super File> directoryFilter) {
     final LinkedList<File> queue = new LinkedList<File>();
     queue.add(root);
     while (!queue.isEmpty()) {
@@ -1408,8 +1390,13 @@ public class FileUtil extends FileUtilRt {
     return path.startsWith("/");
   }
 
-  public static boolean isWindowsAbsolutePath(@NotNull String pathString) {
-    return pathString.length() >= 2 && Character.isLetter(pathString.charAt(0)) && pathString.charAt(1) == ':';
+  public static boolean isWindowsAbsolutePath(@NotNull String path) {
+    boolean ok = path.length() >= 2 && Character.isLetter(path.charAt(0)) && path.charAt(1) == ':';
+    if (ok && path.length() > 2) {
+      char separatorChar = path.charAt(2);
+      ok = separatorChar == '/' || separatorChar == '\\';
+    }
+    return ok;
   }
 
   @Contract("null -> null; !null -> !null")
@@ -1450,16 +1437,16 @@ public class FileUtil extends FileUtilRt {
     return files == null ? defaultFiles : files;
   }
 
-  public static boolean isHashBangLine(CharSequence firstCharsIfText, String marker) {
+  public static boolean isHashBangLine(@Nullable CharSequence firstCharsIfText, @NotNull String marker) {
     if (firstCharsIfText == null) {
       return false;
     }
-    final int lineBreak = StringUtil.indexOf(firstCharsIfText, '\n');
-    if (lineBreak < 0) {
+    if (!StringUtil.startsWith(firstCharsIfText, "#!")) {
       return false;
     }
-    String firstLine = firstCharsIfText.subSequence(0, lineBreak).toString();
-    return firstLine.startsWith("#!") && firstLine.contains(marker);
+
+    final int lineBreak = StringUtil.indexOf(firstCharsIfText, '\n', 2);
+    return lineBreak >= 0 && StringUtil.indexOf(firstCharsIfText, marker, 2, lineBreak) != -1;
   }
 
   @NotNull
@@ -1626,7 +1613,7 @@ public class FileUtil extends FileUtilRt {
       list.add(path.substring(index, nextSeparator));
       index = nextSeparator + 1;
     }
-    list.add(path.substring(index, path.length()));
+    list.add(path.substring(index));
     return list;
   }
 
@@ -1638,7 +1625,7 @@ public class FileUtil extends FileUtilRt {
     return StringUtil.endsWithIgnoreCase(name, ".jar") || StringUtil.endsWithIgnoreCase(name, ".zip");
   }
 
-  public static boolean visitFiles(@NotNull File root, @NotNull Processor<File> processor) {
+  public static boolean visitFiles(@NotNull File root, @NotNull Processor<? super File> processor) {
     if (!processor.process(root)) {
       return false;
     }

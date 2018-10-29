@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes.committed;
 
 import com.intellij.ide.util.treeView.TreeState;
@@ -27,6 +13,7 @@ import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.ChangesUtil;
 import com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode;
 import com.intellij.openapi.vcs.changes.ui.ChangesBrowserNodeRenderer;
+import com.intellij.openapi.vcs.changes.ui.DirectoryChangesGroupingPolicy;
 import com.intellij.openapi.vcs.changes.ui.TreeModelBuilder;
 import com.intellij.openapi.vcs.versionBrowser.CommittedChangeList;
 import com.intellij.ui.ScrollPaneFactory;
@@ -42,7 +29,6 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
-import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -54,7 +40,7 @@ public class StructureFilteringStrategy implements ChangeListFilteringStrategy {
   private final List<ChangeListener> myListeners = ContainerUtil.createLockFreeCopyOnWriteList();
   private MyUI myUI;
   private final Project myProject;
-  private final List<FilePath> mySelection = new ArrayList<FilePath>();
+  private final List<FilePath> mySelection = new ArrayList<>();
 
   public StructureFilteringStrategy(final Project project) {
     myProject = project;
@@ -69,6 +55,7 @@ public class StructureFilteringStrategy implements ChangeListFilteringStrategy {
     return VcsBundle.message("filter.structure.name");
   }
 
+  @Override
   @Nullable
   public JComponent getFilterUI() {
     if (myUI == null) {
@@ -77,6 +64,7 @@ public class StructureFilteringStrategy implements ChangeListFilteringStrategy {
     return myUI.getComponent();
   }
 
+  @Override
   public void setFilterBase(List<CommittedChangeList> changeLists) {
     // todo cycle here
     if (myUI == null) {
@@ -86,28 +74,33 @@ public class StructureFilteringStrategy implements ChangeListFilteringStrategy {
     myUI.append(changeLists);
   }
 
+  @Override
   public void addChangeListener(ChangeListener listener) {
     myListeners.add(listener);
   }
 
+  @Override
   public void removeChangeListener(ChangeListener listener) {
     myListeners.remove(listener);
   }
 
+  @Override
   public void resetFilterBase() {
     myUI.reset();
   }
 
+  @Override
   public void appendFilterBase(List<CommittedChangeList> changeLists) {
     myUI.append(changeLists);
   }
 
+  @Override
   @NotNull
   public List<CommittedChangeList> filterChangeLists(List<CommittedChangeList> changeLists) {
     if (mySelection.size() == 0) {
       return changeLists;
     }
-    final ArrayList<CommittedChangeList> result = new ArrayList<CommittedChangeList>();
+    final ArrayList<CommittedChangeList> result = new ArrayList<>();
     for (CommittedChangeList list : changeLists) {
       if (listMatchesSelection(list)) {
         result.add(list);
@@ -132,16 +125,17 @@ public class StructureFilteringStrategy implements ChangeListFilteringStrategy {
     private final JComponent myScrollPane;
     private final Tree myStructureTree;
     private boolean myRendererInitialized;
-    private final TreeModelBuilder myBuilder;
+    private final Set<FilePath> myFilePaths = new HashSet<>();
     private TreeState myState;
 
-    public MyUI() {
+    MyUI() {
       myStructureTree = new Tree();
       myStructureTree.setRootVisible(false);
       myStructureTree.setShowsRootHandles(true);
       myStructureTree.getSelectionModel().addTreeSelectionListener(new TreeSelectionListener() {
+        @Override
         public void valueChanged(final TreeSelectionEvent e) {
-          final List<FilePath> filePaths = new ArrayList<FilePath>(mySelection);
+          final List<FilePath> filePaths = new ArrayList<>(mySelection);
 
           mySelection.clear();
           final TreePath[] selectionPaths = myStructureTree.getSelectionPaths();
@@ -159,7 +153,6 @@ public class StructureFilteringStrategy implements ChangeListFilteringStrategy {
         }
       });
       myScrollPane = ScrollPaneFactory.createScrollPane(myStructureTree);
-      myBuilder = new TreeModelBuilder(myProject, false);
     }
 
     @NotNull
@@ -191,27 +184,27 @@ public class StructureFilteringStrategy implements ChangeListFilteringStrategy {
     }
 
     public void reset() {
+      myFilePaths.clear();
       myState = TreeState.createOn(myStructureTree, (DefaultMutableTreeNode)myStructureTree.getModel().getRoot());
-      myStructureTree.setModel(myBuilder.clearAndGetModel());
+      myStructureTree.setModel(TreeModelBuilder.buildEmpty());
     }
 
     public void append(final List<CommittedChangeList> changeLists) {
-      final TreeState localState = (myState != null) && myBuilder.isEmpty()
+      final TreeState localState = myState != null && myFilePaths.isEmpty()
                                    ? myState
                                    : TreeState.createOn(myStructureTree, (DefaultMutableTreeNode)myStructureTree.getModel().getRoot());
 
-      final Set<FilePath> filePaths = new HashSet<FilePath>();
       for (CommittedChangeList changeList : changeLists) {
         for (Change change : changeList.getChanges()) {
           final FilePath path = ChangesUtil.getFilePath(change);
           if (path.getParentPath() != null) {
-            filePaths.add(path.getParentPath());
+            myFilePaths.add(path.getParentPath());
           }
         }
       }
 
-      final DefaultTreeModel model = myBuilder.buildModelFromFilePaths(filePaths);
-      myStructureTree.setModel(model);
+      myStructureTree
+        .setModel(TreeModelBuilder.buildFromFilePaths(myProject, new DirectoryChangesGroupingPolicy.Factory(myProject), myFilePaths));
       localState.applyTo(myStructureTree, (DefaultMutableTreeNode)myStructureTree.getModel().getRoot());
       myStructureTree.revalidate();
       myStructureTree.repaint();

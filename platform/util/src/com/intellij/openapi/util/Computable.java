@@ -39,7 +39,11 @@ public interface Computable <T> {
     }
   }
 
-  abstract class NotNullCachedComputable<T> implements Computable<T> {
+  /**
+   * @deprecated Use {@link NotNullLazyValue}::getValue instead
+   */
+  @Deprecated
+  abstract class NotNullCachedComputable<T> implements NotNullComputable<T> {
     private T myValue;
 
     @NotNull
@@ -52,24 +56,6 @@ public interface Computable <T> {
         myValue = internalCompute();
       }
       return myValue;
-    }
-  }
-
-  abstract class NullableCachedComputable<T> implements Computable<T> {
-    private static final Object NULL_VALUE = new Object();
-    private Object myValue;
-
-    @Nullable
-    protected abstract T internalCompute();
-
-    @Nullable
-    @Override
-    public final T compute() {
-      if (myValue == null) {
-        final T value = internalCompute();
-        myValue = value != null ? value : NULL_VALUE;
-      }
-      return myValue != NULL_VALUE ? (T)myValue : null;
     }
   }
 }

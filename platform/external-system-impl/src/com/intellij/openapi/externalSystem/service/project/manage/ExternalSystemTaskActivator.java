@@ -19,6 +19,7 @@ import com.intellij.execution.RunManager;
 import com.intellij.execution.RunnerAndConfigurationSettings;
 import com.intellij.execution.configurations.RunConfiguration;
 import com.intellij.execution.executors.DefaultRunExecutor;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.compiler.CompileContext;
 import com.intellij.openapi.compiler.CompileTask;
 import com.intellij.openapi.compiler.CompilerManager;
@@ -29,20 +30,18 @@ import com.intellij.openapi.externalSystem.model.task.TaskData;
 import com.intellij.openapi.externalSystem.service.execution.AbstractExternalSystemTaskConfigurationType;
 import com.intellij.openapi.externalSystem.service.execution.ExternalSystemRunConfiguration;
 import com.intellij.openapi.externalSystem.service.execution.ProgressExecutionMode;
-import com.intellij.openapi.externalSystem.service.project.manage.ExternalProjectsManager.ExternalProjectsStateProvider;
+import com.intellij.openapi.externalSystem.service.project.manage.ExternalProjectsManagerImpl.ExternalProjectsStateProvider;
 import com.intellij.openapi.externalSystem.settings.AbstractExternalSystemSettings;
 import com.intellij.openapi.externalSystem.settings.ExternalProjectSettings;
 import com.intellij.openapi.externalSystem.task.TaskCallback;
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
 import com.intellij.openapi.externalSystem.util.ExternalSystemBundle;
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil;
-import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.ArrayUtil;
-import com.intellij.util.Function;
 import com.intellij.util.concurrency.Semaphore;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.FactoryMap;
@@ -53,7 +52,6 @@ import java.util.*;
 
 /**
  * @author Vladislav.Soroka
- * @since 10/28/2014
  */
 public class ExternalSystemTaskActivator {
   private static final Logger LOG = Logger.getInstance(ExternalSystemTaskActivator.class);
@@ -73,6 +71,10 @@ public class ExternalSystemTaskActivator {
 
   public void init() {
     CompilerManager compilerManager = CompilerManager.getInstance(myProject);
+    // todo extract to "java" external system module
+    if (compilerManager == null) {
+      return;
+    }
 
     class MyCompileTask implements CompileTask {
       private final boolean myBefore;
@@ -94,11 +96,13 @@ public class ExternalSystemTaskActivator {
   }
 
   public String getDescription(ProjectSystemId systemId, String projectPath, String taskName) {
-    List<String> result = new ArrayList<String>();
+    List<String> result = new ArrayList<>();
     final ExternalProjectsStateProvider stateProvider =
-      ExternalProjectsManager.getInstance(myProject).getStateProvider();
+      ExternalProjectsManagerImpl.getInstance(myProject).getStateProvider();
     final TaskActivationState taskActivationState = stateProvider.getTasksActivation(systemId, projectPath);
-    if (taskActivationState == null) return null;
+    if (taskActivationState == null) {
+      return null;
+    }
 
     for (Phase phase : Phase.values()) {
       if (taskActivationState.getTasks(phase).contains(taskName)) {
@@ -109,8 +113,9 @@ public class ExternalSystemTaskActivator {
   }
 
   private boolean doExecuteCompileTasks(boolean myBefore, @NotNull CompileContext context) {
-    final List<String> modules = ContainerUtil.map(context.getCompileScope().getAffectedModules(),
-                                                   module -> ExternalSystemApiUtil.getExternalProjectPath(module));
+    List<String> modules = ReadAction.compute(
+      () -> ContainerUtil.mapNotNull(context.getCompileScope().getAffectedModules(),
+                                     module -> ExternalSystemApiUtil.getExternalProjectPath(module)));
 
     final Collection<Phase> phases = ContainerUtil.newArrayList();
     if (myBefore) {
@@ -133,35 +138,37 @@ public class ExternalSystemTaskActivator {
   }
 
   public boolean runTasks(@NotNull Collection<String> modules, @NotNull Phase... phases) {
-    final ExternalProjectsStateProvider stateProvider = ExternalProjectsManager.getInstance(myProject).getStateProvider();
+    final ExternalProjectsStateProvider stateProvider =
+      ExternalProjectsManagerImpl.getInstance(myProject).getStateProvider();
 
     final Queue<Pair<ProjectSystemId, ExternalSystemTaskExecutionSettings>> tasksQueue =
-      new LinkedList<Pair<ProjectSystemId, ExternalSystemTaskExecutionSettings>>();
+      new LinkedList<>();
 
-    //noinspection MismatchedQueryAndUpdateOfCollection
     Map<ProjectSystemId, Map<String, RunnerAndConfigurationSettings>> lazyConfigurationsMap =
-      new FactoryMap<ProjectSystemId, Map<String, RunnerAndConfigurationSettings>>() {
-        @Nullable
-        @Override
-        protected Map<String, RunnerAndConfigurationSettings> create(ProjectSystemId key) {
-          final AbstractExternalSystemTaskConfigurationType configurationType =
-            ExternalSystemUtil.findConfigurationType(key);
-          if (configurationType == null) return null;
-          return ContainerUtil.map2Map(RunManager.getInstance(myProject).getConfigurationSettingsList(configurationType),
-                                       configurationSettings -> Pair.create(configurationSettings.getName(), configurationSettings));
+      FactoryMap.create(key -> {
+        final AbstractExternalSystemTaskConfigurationType configurationType =
+          ExternalSystemUtil.findConfigurationType(key);
+        if (configurationType == null) {
+          return null;
         }
-      };
+        return ContainerUtil.map2Map(RunManager.getInstance(myProject).getConfigurationSettingsList(configurationType),
+                                     configurationSettings1 -> Pair.create(configurationSettings1.getName(), configurationSettings1));
+      });
 
     for (final ExternalProjectsStateProvider.TasksActivation activation : stateProvider.getAllTasksActivation()) {
       final boolean hashPath = modules.contains(activation.projectPath);
 
       final Set<String> tasks = ContainerUtil.newLinkedHashSet();
       for (Phase phase : phases) {
-        if (hashPath || (phase.isSyncPhase() && isShareSameRootPath(modules, activation)))
-        ContainerUtil.addAll(tasks, activation.state.getTasks(phase));
+        List<String> activationTasks = activation.state.getTasks(phase);
+        if (hashPath || (phase.isSyncPhase() && !activationTasks.isEmpty() &&  isShareSameRootPath(modules, activation))) {
+          ContainerUtil.addAll(tasks, activationTasks);
+        }
       }
 
-      if (tasks.isEmpty()) continue;
+      if (tasks.isEmpty()) {
+        continue;
+      }
 
       for (Iterator<String> iterator = tasks.iterator(); iterator.hasNext(); ) {
         String task = iterator.next();
@@ -170,10 +177,14 @@ public class ExternalSystemTaskActivator {
           final String configurationName = task.substring(RUN_CONFIGURATION_TASK_PREFIX.length());
 
           Map<String, RunnerAndConfigurationSettings> settings = lazyConfigurationsMap.get(activation.systemId);
-          if (settings == null) continue;
+          if (settings == null) {
+            continue;
+          }
 
           RunnerAndConfigurationSettings configurationSettings = settings.get(configurationName);
-          if (configurationSettings == null) continue;
+          if (configurationSettings == null) {
+            continue;
+          }
 
           final RunConfiguration runConfiguration = configurationSettings.getConfiguration();
           if (configurationName.equals(configurationSettings.getName()) && runConfiguration instanceof ExternalSystemRunConfiguration) {
@@ -182,9 +193,13 @@ public class ExternalSystemTaskActivator {
         }
       }
 
-      if (tasks.isEmpty()) continue;
+      if (tasks.isEmpty()) {
+        continue;
+      }
 
-      if (ExternalProjectsManager.getInstance(myProject).isIgnored(activation.systemId, activation.projectPath)) continue;
+      if (ExternalProjectsManager.getInstance(myProject).isIgnored(activation.systemId, activation.projectPath)) {
+        continue;
+      }
 
       ExternalSystemTaskExecutionSettings executionSettings = new ExternalSystemTaskExecutionSettings();
       executionSettings.setExternalSystemIdString(activation.systemId.toString());
@@ -212,14 +227,16 @@ public class ExternalSystemTaskActivator {
 
   private boolean runTasksQueue(final Queue<Pair<ProjectSystemId, ExternalSystemTaskExecutionSettings>> tasksQueue) {
     final Pair<ProjectSystemId, ExternalSystemTaskExecutionSettings> pair = tasksQueue.poll();
-    if (pair == null) return true;
+    if (pair == null) {
+      return true;
+    }
 
     final ProjectSystemId systemId = pair.first;
     final ExternalSystemTaskExecutionSettings executionSettings = pair.getSecond();
 
     final Semaphore targetDone = new Semaphore();
     targetDone.down();
-    final Ref<Boolean> result = new Ref<Boolean>(false);
+    final Ref<Boolean> result = new Ref<>(false);
     ExternalSystemUtil.runTask(executionSettings, DefaultRunExecutor.EXECUTOR_ID, myProject, systemId,
                                new TaskCallback() {
                                  @Override
@@ -233,7 +250,7 @@ public class ExternalSystemTaskActivator {
                                    targetDone.up();
                                  }
                                },
-                               ProgressExecutionMode.IN_BACKGROUND_ASYNC);
+                               ProgressExecutionMode.IN_BACKGROUND_ASYNC, false);
     targetDone.waitFor();
     return result.get();
   }
@@ -243,25 +260,31 @@ public class ExternalSystemTaskActivator {
   }
 
   public boolean isTaskOfPhase(@NotNull TaskData taskData, @NotNull Phase phase) {
-    final ExternalProjectsStateProvider stateProvider = ExternalProjectsManager.getInstance(myProject).getStateProvider();
+    final ExternalProjectsStateProvider stateProvider = ExternalProjectsManagerImpl.getInstance(myProject).getStateProvider();
     final TaskActivationState taskActivationState =
       stateProvider.getTasksActivation(taskData.getOwner(), taskData.getLinkedExternalProjectPath());
-    if (taskActivationState == null) return false;
+    if (taskActivationState == null) {
+      return false;
+    }
 
     return taskActivationState.getTasks(phase).contains(taskData.getName());
   }
 
   public void addTasks(@NotNull Collection<TaskData> tasks, @NotNull final Phase phase) {
-    if (tasks.isEmpty()) return;
+    if (tasks.isEmpty()) {
+      return;
+    }
     addTasks(ContainerUtil.map(tasks,
                                data -> new TaskActivationEntry(data.getOwner(), phase, data.getLinkedExternalProjectPath(), data.getName())));
     fireTasksChanged();
   }
 
   public void addTasks(@NotNull Collection<TaskActivationEntry> entries) {
-    if (entries.isEmpty()) return;
+    if (entries.isEmpty()) {
+      return;
+    }
 
-    final ExternalProjectsStateProvider stateProvider = ExternalProjectsManager.getInstance(myProject).getStateProvider();
+    final ExternalProjectsStateProvider stateProvider = ExternalProjectsManagerImpl.getInstance(myProject).getStateProvider();
     for (TaskActivationEntry entry : entries) {
       final TaskActivationState taskActivationState = stateProvider.getTasksActivation(entry.systemId, entry.projectPath);
       taskActivationState.getTasks(entry.phase).add(entry.taskName);
@@ -271,13 +294,17 @@ public class ExternalSystemTaskActivator {
   }
 
   public void removeTasks(@NotNull Collection<TaskData> tasks, @NotNull final Phase phase) {
-    if (tasks.isEmpty()) return;
+    if (tasks.isEmpty()) {
+      return;
+    }
     removeTasks(ContainerUtil.map(tasks, data -> new TaskActivationEntry(data.getOwner(), phase, data.getLinkedExternalProjectPath(), data.getName())));
   }
 
   public void removeTasks(@NotNull Collection<TaskActivationEntry> entries) {
-    if (entries.isEmpty()) return;
-    final ExternalProjectsStateProvider stateProvider = ExternalProjectsManager.getInstance(myProject).getStateProvider();
+    if (entries.isEmpty()) {
+      return;
+    }
+    final ExternalProjectsStateProvider stateProvider = ExternalProjectsManagerImpl.getInstance(myProject).getStateProvider();
     for (TaskActivationEntry activationEntry : entries) {
       final TaskActivationState taskActivationState =
         stateProvider.getTasksActivation(activationEntry.systemId, activationEntry.projectPath);
@@ -298,7 +325,7 @@ public class ExternalSystemTaskActivator {
   public void moveTasks(@NotNull Collection<TaskActivationEntry> entries, int increment) {
     LOG.assertTrue(increment == -1 || increment == 1);
 
-    final ExternalProjectsStateProvider stateProvider = ExternalProjectsManager.getInstance(myProject).getStateProvider();
+    final ExternalProjectsStateProvider stateProvider = ExternalProjectsManagerImpl.getInstance(myProject).getStateProvider();
     for (TaskActivationEntry activationEntry : entries) {
       final TaskActivationState taskActivationState =
         stateProvider.getTasksActivation(activationEntry.systemId, activationEntry.projectPath);
@@ -317,7 +344,7 @@ public class ExternalSystemTaskActivator {
                            int increment) {
     LOG.assertTrue(increment == -1 || increment == 1);
 
-    final ExternalProjectsStateProvider stateProvider = ExternalProjectsManager.getInstance(myProject).getStateProvider();
+    final ExternalProjectsStateProvider stateProvider = ExternalProjectsManagerImpl.getInstance(myProject).getStateProvider();
     final Map<String, TaskActivationState> activationMap = stateProvider.getProjectsTasksActivationMap(systemId);
     final List<String> currentPaths = ContainerUtil.newArrayList(activationMap.keySet());
     if (pathsGroup != null) {
@@ -348,6 +375,7 @@ public class ExternalSystemTaskActivator {
   }
 
   public enum Phase {
+    BEFORE_RUN("external.system.task.before.run"),
     BEFORE_SYNC("external.system.task.before.sync"),
     AFTER_SYNC("external.system.task.after.sync"),
     BEFORE_COMPILE("external.system.task.before.compile"),

@@ -21,20 +21,14 @@ import com.intellij.openapi.vfs.VirtualFile;
 
 import java.util.Set;
 
-/**
- * Created by IntelliJ IDEA.
- * User: Irina.Chernushina
- * Date: 10/7/11
- * Time: 6:40 PM
- */
 public class VcsFileListenerContextHelper {
   // to ignore by listeners
   private final Set<FilePath> myDeletedContext;
   private final Set<VirtualFile> myAddContext;
 
   VcsFileListenerContextHelper(final Project project) {
-    myDeletedContext = new java.util.HashSet<FilePath>();
-    myAddContext = new java.util.HashSet<VirtualFile>();
+    myDeletedContext = new java.util.HashSet<>();
+    myAddContext = new java.util.HashSet<>();
   }
 
   public static VcsFileListenerContextHelper getInstance(final Project project) {

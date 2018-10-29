@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package org.jetbrains.plugins.groovy.transformations;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrField;
@@ -27,17 +28,31 @@ import org.jetbrains.plugins.groovy.transformations.dsl.MemberBuilder;
 import java.util.Collection;
 import java.util.List;
 
-@SuppressWarnings("unused")
 public interface TransformationContext {
 
   @NotNull
+  Project getProject();
+
+  @NotNull
+  PsiManager getManager();
+
+  @NotNull
+  JavaPsiFacade getPsiFacade();
+
+  @NotNull
   GrTypeDefinition getCodeClass();
+
+  @NotNull
+  PsiClassType getClassType();
 
   @NotNull
   Collection<PsiMethod> getMethods();
 
   @NotNull
   Collection<GrField> getFields();
+
+  @NotNull
+  Collection<PsiField> getAllFields(boolean includeSynthetic);
 
   @NotNull
   Collection<PsiClass> getInnerClasses();
@@ -49,18 +64,8 @@ public interface TransformationContext {
   List<PsiClassType> getExtendsTypes();
 
   @NotNull
-  default Project getProject() {
-    return getCodeClass().getProject();
-  }
-
-  @NotNull
-  default JavaPsiFacade getPsiFacade() {
-    return JavaPsiFacade.getInstance(getProject());
-  }
-
-  @NotNull
-  default PsiManager getManager() {
-    return getCodeClass().getManager();
+  default List<PsiClassType> getSuperTypes() {
+    return ContainerUtil.concat(getExtendsTypes(), getImplementsTypes());
   }
 
   @NotNull
@@ -77,9 +82,12 @@ public interface TransformationContext {
   @Nullable
   PsiAnnotation getAnnotation(@NotNull String fqn);
 
-  default boolean hasAnnotation(@NotNull String fqn) {
-    return getAnnotation(fqn) != null;
+  default boolean isInheritor(@NotNull String fqn) {
+    PsiClass baseClass = getPsiFacade().findClass(fqn, getResolveScope());
+    return baseClass != null && isInheritor(baseClass);
   }
+
+  boolean isInheritor(@NotNull PsiClass baseClass);
 
   @NotNull
   Collection<PsiMethod> findMethodsByName(@NotNull String name, boolean checkBases);

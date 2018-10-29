@@ -27,6 +27,7 @@ import com.intellij.ui.components.JBList;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.text.Matcher;
 import com.intellij.util.ui.GraphicsUtil;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
@@ -50,7 +51,7 @@ public class VariantsCompletionAction extends AnAction {
   }
 
   @Override
-  public void actionPerformed(final AnActionEvent e) {
+  public void actionPerformed(@NotNull final AnActionEvent e) {
     final Editor editor = e.getData(CommonDataKeys.EDITOR_EVEN_IF_INACTIVE);
     if (editor == null) return;
     final String prefix = myTextField.getText().substring(0, myTextField.getCaretPosition());
@@ -79,7 +80,7 @@ public class VariantsCompletionAction extends AnAction {
 
   private static String[] calcWords(final String prefix, Editor editor) {
     final Matcher matcher = NameUtil.buildMatcher(prefix, 0, true, true);
-    final Set<String> words = new HashSet<String>();
+    final Set<String> words = new HashSet<>();
     CharSequence chars = editor.getDocument().getCharsSequence();
 
     IdTableBuilding.scanWords(new IdTableBuilding.ScanWordProcessor() {
@@ -93,7 +94,7 @@ public class VariantsCompletionAction extends AnAction {
       }, chars, 0, chars.length());
 
 
-    ArrayList<String> sortedWords = new ArrayList<String>(words);
+    ArrayList<String> sortedWords = new ArrayList<>(words);
     Collections.sort(sortedWords);
 
     return ArrayUtil.toStringArray(sortedWords);

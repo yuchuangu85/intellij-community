@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import com.intellij.debugger.engine.evaluation.CodeFragmentKind;
 import com.intellij.debugger.engine.evaluation.TextWithImports;
 import com.intellij.debugger.engine.evaluation.TextWithImportsImpl;
 import com.intellij.debugger.impl.DebuggerUtilsEx;
+import com.intellij.debugger.impl.DebuggerUtilsImpl;
 import com.intellij.debugger.ui.JavaDebuggerSupport;
 import com.intellij.debugger.ui.tree.render.*;
 import com.intellij.openapi.Disposable;
@@ -30,13 +31,11 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Pair;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.source.PsiTypeCodeFragmentImpl;
-import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.*;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.table.JBTable;
 import com.intellij.util.ui.AbstractTableCellEditor;
 import com.intellij.util.ui.JBUI;
-import com.intellij.xdebugger.impl.XSourcePositionImpl;
 import com.intellij.xdebugger.impl.breakpoints.XExpressionImpl;
 import com.intellij.xdebugger.impl.ui.XDebuggerExpressionEditor;
 import org.jetbrains.annotations.NonNls;
@@ -60,6 +59,7 @@ class CompoundRendererConfigurable extends JPanel {
   private final JRadioButton myRbDefaultLabel;
   private final JRadioButton myRbExpressionLabel;
   private final JBCheckBox myShowTypeCheckBox;
+  private final JBCheckBox myOnDemandCheckBox;
   private final JRadioButton myRbDefaultChildrenRenderer;
   private final JRadioButton myRbExpressionChildrenRenderer;
   private final JRadioButton myRbListChildrenRenderer;
@@ -74,8 +74,9 @@ class CompoundRendererConfigurable extends JPanel {
   @NonNls private static final String DATA_PANEL_ID = "DATA";
   private static final int NAME_TABLE_COLUMN = 0;
   private static final int EXPRESSION_TABLE_COLUMN = 1;
+  private static final int ONDEMAND_TABLE_COLUMN = 2;
 
-  public CompoundRendererConfigurable(@NotNull Disposable parentDisposable) {
+  CompoundRendererConfigurable(@NotNull Disposable parentDisposable) {
     super(new CardLayout());
 
     if (myProject == null) {
@@ -89,6 +90,7 @@ class CompoundRendererConfigurable extends JPanel {
     labelButtonsGroup.add(myRbExpressionLabel);
 
     myShowTypeCheckBox = new JBCheckBox(DebuggerBundle.message("label.compound.renderer.configurable.show.type"));
+    myOnDemandCheckBox = new JBCheckBox(DebuggerBundle.message("label.compound.renderer.configurable.ondemand"));
 
     myRbDefaultChildrenRenderer = new JRadioButton(DebuggerBundle.message("label.compound.renderer.configurable.use.default.renderer"));
     myRbExpressionChildrenRenderer = new JRadioButton(DebuggerBundle.message("label.compound.renderer.configurable.use.expression"));
@@ -157,6 +159,8 @@ class CompoundRendererConfigurable extends JPanel {
                                      JBUI.insetsLeft(10), 0, 0));
     panel.add(myLabelEditor.getComponent(), new GridBagConstraints(0, GridBagConstraints.RELATIVE, 1, 1, 1.0, 0.0, GridBagConstraints.NORTHWEST,
                                                                    GridBagConstraints.HORIZONTAL, JBUI.insetsLeft(30), 0, 0));
+    panel.add(myOnDemandCheckBox, new GridBagConstraints(0, GridBagConstraints.RELATIVE, 1, 1, 1.0, 0.0, GridBagConstraints.NORTHWEST,
+                                                         GridBagConstraints.HORIZONTAL, JBUI.insetsLeft(30), 0, 0));
 
     panel.add(new JLabel(DebuggerBundle.message("label.compound.renderer.configurable.when.expanding")),
               new GridBagConstraints(0, GridBagConstraints.RELATIVE, 1, 1, 1.0, 0.0, GridBagConstraints.NORTHWEST, GridBagConstraints.NONE,
@@ -205,20 +209,23 @@ class CompoundRendererConfigurable extends JPanel {
   private void updateContext(final String qName) {
     ApplicationManager.getApplication().runReadAction(() -> {
       Project project = myProject;
-      PsiClass psiClass = project != null ? DebuggerUtils.findClass(qName, project, GlobalSearchScope.allScope(project)) : null;
-      if (psiClass != null) {
-        psiClass = (PsiClass)psiClass.getNavigationElement();
+      if (project != null) {
+        Pair<PsiElement, PsiType>pair = DebuggerUtilsImpl.getPsiClassAndType(qName, project);
+        PsiElement context = pair.first;
+        if (context != null) {
+          myLabelEditor.setContext(context);
+          myChildrenEditor.setContext(context);
+          myChildrenExpandedEditor.setContext(context);
+          myListChildrenEditor.setContext(context);
+        }
       }
-      XSourcePositionImpl position = XSourcePositionImpl.createByElement(psiClass);
-      myLabelEditor.setSourcePosition(position);
-      myChildrenEditor.setSourcePosition(position);
-      myChildrenExpandedEditor.setSourcePosition(position);
-      myListChildrenEditor.setSourcePosition(position);
     });
   }
 
   private void updateEnabledState() {
-    myLabelEditor.setEnabled(myRbExpressionLabel.isSelected());
+    boolean isLabelRenderer = myRbExpressionLabel.isSelected();
+    myLabelEditor.setEnabled(isLabelRenderer);
+    myOnDemandCheckBox.setEnabled(isLabelRenderer);
 
     final boolean isChildrenExpression = myRbExpressionChildrenRenderer.isSelected();
     myChildrenExpandedEditor.setEnabled(isChildrenExpression);
@@ -321,6 +328,7 @@ class CompoundRendererConfigurable extends JPanel {
     if (myRbExpressionLabel.isSelected()) {
       labelRenderer = new LabelRenderer();
       labelRenderer.setLabelExpression(TextWithImportsImpl.fromXExpression(myLabelEditor.getExpression()));
+      labelRenderer.setOnDemand(myOnDemandCheckBox.isSelected());
     }
     renderer.setLabelRenderer(labelRenderer);
     // children
@@ -353,23 +361,25 @@ class CompoundRendererConfigurable extends JPanel {
 
     final ValueLabelRenderer labelRenderer = myRenderer.getLabelRenderer();
     final ChildrenRenderer childrenRenderer = myRenderer.getChildrenRenderer();
-    final NodeRendererSettings rendererSettings = NodeRendererSettings.getInstance();
 
     myShowTypeCheckBox.setSelected(myRenderer.isShowType());
 
-    if (rendererSettings.isBase(labelRenderer)) {
+    if (myRenderer.isBaseRenderer(labelRenderer)) {
       myLabelEditor.setExpression(TextWithImportsImpl.toXExpression(emptyExpressionFragment));
       myRbDefaultLabel.setSelected(true);
+      myOnDemandCheckBox.setSelected(false);
     }
     else {
       myRbExpressionLabel.setSelected(true);
-      myLabelEditor.setExpression(TextWithImportsImpl.toXExpression(((LabelRenderer)labelRenderer).getLabelExpression()));
+      LabelRenderer lr = (LabelRenderer)labelRenderer;
+      myLabelEditor.setExpression(TextWithImportsImpl.toXExpression(lr.getLabelExpression()));
+      myOnDemandCheckBox.setSelected(lr.isOnDemand());
     }
 
     getTableModel().clear();
     myAppendDefaultChildren.setSelected(false);
 
-    if (rendererSettings.isBase(childrenRenderer)) {
+    if (myRenderer.isBaseRenderer(childrenRenderer)) {
       myRbDefaultChildrenRenderer.setSelected(true);
       myChildrenEditor.setExpression(TextWithImportsImpl.toXExpression(emptyExpressionFragment));
       myChildrenExpandedEditor.setExpression(TextWithImportsImpl.toXExpression(emptyExpressionFragment));
@@ -399,22 +409,22 @@ class CompoundRendererConfigurable extends JPanel {
   }
 
   private static final class MyTableModel extends AbstractTableModel {
-    private final List<Row> myData = new ArrayList<>();
+    private final List<EnumerationChildrenRenderer.ChildInfo> myData = new ArrayList<>();
 
-    public MyTableModel() {
+    MyTableModel() {
     }
 
-    public void init(List<Pair<String, TextWithImports>> data) {
+    public void init(List<EnumerationChildrenRenderer.ChildInfo> data) {
       myData.clear();
-      for (final Pair<String, TextWithImports> pair : data) {
-        myData.add(new Row(pair.getFirst(), pair.getSecond()));
+      for (EnumerationChildrenRenderer.ChildInfo childInfo : data) {
+        myData.add(new EnumerationChildrenRenderer.ChildInfo(childInfo.myName, childInfo.myExpression, childInfo.myOnDemand));
       }
       fireTableDataChanged();
     }
 
     @Override
     public int getColumnCount() {
-      return 2;
+      return 3;
     }
 
     @Override
@@ -435,6 +445,8 @@ class CompoundRendererConfigurable extends JPanel {
           return String.class;
         case EXPRESSION_TABLE_COLUMN:
           return TextWithImports.class;
+        case ONDEMAND_TABLE_COLUMN:
+          return Boolean.class;
         default:
           return super.getColumnClass(columnIndex);
       }
@@ -445,12 +457,14 @@ class CompoundRendererConfigurable extends JPanel {
       if (rowIndex >= getRowCount()) {
         return null;
       }
-      final Row row = myData.get(rowIndex);
+      final EnumerationChildrenRenderer.ChildInfo row = myData.get(rowIndex);
       switch (columnIndex) {
         case NAME_TABLE_COLUMN:
-          return row.name;
+          return row.myName;
         case EXPRESSION_TABLE_COLUMN:
-          return row.value;
+          return row.myExpression;
+        case ONDEMAND_TABLE_COLUMN:
+          return row.myOnDemand;
         default:
           return null;
       }
@@ -461,13 +475,16 @@ class CompoundRendererConfigurable extends JPanel {
       if (rowIndex >= getRowCount()) {
         return;
       }
-      final Row row = myData.get(rowIndex);
+      final EnumerationChildrenRenderer.ChildInfo row = myData.get(rowIndex);
       switch (columnIndex) {
         case NAME_TABLE_COLUMN:
-          row.name = (String)aValue;
+          row.myName = (String)aValue;
           break;
         case EXPRESSION_TABLE_COLUMN:
-          row.value = (TextWithImports)aValue;
+          row.myExpression = (TextWithImports)aValue;
+          break;
+        case ONDEMAND_TABLE_COLUMN:
+          row.myOnDemand = (Boolean)aValue;
           break;
       }
     }
@@ -480,13 +497,15 @@ class CompoundRendererConfigurable extends JPanel {
           return DebuggerBundle.message("label.compound.renderer.configurable.table.header.name");
         case EXPRESSION_TABLE_COLUMN:
           return DebuggerBundle.message("label.compound.renderer.configurable.table.header.expression");
+        case ONDEMAND_TABLE_COLUMN:
+          return DebuggerBundle.message("label.compound.renderer.configurable.table.header.ondemand");
         default:
           return "";
       }
     }
 
     public void addRow(final String name, final TextWithImports expressionWithImports) {
-      myData.add(new Row(name, expressionWithImports));
+      myData.add(new EnumerationChildrenRenderer.ChildInfo(name, expressionWithImports, false));
       final int lastRow = myData.size() - 1;
       fireTableRowsInserted(lastRow, lastRow);
     }
@@ -503,19 +522,15 @@ class CompoundRendererConfigurable extends JPanel {
       fireTableDataChanged();
     }
 
-    public List<Pair<String, TextWithImports>> getExpressions() {
-      final ArrayList<Pair<String, TextWithImports>> pairs = new ArrayList<>(myData.size());
-      for (final Row row : myData) {
-        pairs.add(Pair.create(row.name, row.value));
-      }
-      return pairs;
+    public List<EnumerationChildrenRenderer.ChildInfo> getExpressions() {
+      return myData;
     }
 
     private static final class Row {
       public String name;
       public TextWithImports value;
 
-      public Row(final String name, final TextWithImports value) {
+      Row(final String name, final TextWithImports value) {
         this.name = name;
         this.value = value;
       }
@@ -528,7 +543,7 @@ class CompoundRendererConfigurable extends JPanel {
             s -> {
               JavaCodeFragment fragment = new PsiTypeCodeFragmentImpl(project, true, "fragment.java", s, 0, null) {
                 @Override
-                public boolean importClass(PsiClass aClass) {
+                public boolean importClass(@NotNull PsiClass aClass) {
                   return false;
                 }
               };

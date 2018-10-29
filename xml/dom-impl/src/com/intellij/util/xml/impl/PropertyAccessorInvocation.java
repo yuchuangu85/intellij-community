@@ -29,7 +29,7 @@ class PropertyAccessorInvocation implements Invocation {
   final int myLastElement;
   private final JavaMethod[] myMethods;
 
-  public PropertyAccessorInvocation(final JavaMethod[] methods) {
+  PropertyAccessorInvocation(final JavaMethod[] methods) {
     myMethods = methods;
     myLastElement = myMethods.length - 1;
   }
@@ -44,7 +44,7 @@ class PropertyAccessorInvocation implements Invocation {
     if (i == myLastElement) return o;
 
     if (o instanceof List) {
-      List<Object> result = new ArrayList<Object>();
+      List<Object> result = new ArrayList<>();
       for (Object o1 : (List)o) {
         result.add(invoke(i + 1, o1));
       }

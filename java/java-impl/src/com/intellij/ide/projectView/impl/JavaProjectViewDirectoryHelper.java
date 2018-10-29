@@ -19,6 +19,7 @@ import com.intellij.ide.projectView.ViewSettings;
 import com.intellij.ide.projectView.impl.nodes.PackageElement;
 import com.intellij.ide.projectView.impl.nodes.PackageUtil;
 import com.intellij.ide.projectView.impl.nodes.ProjectViewDirectoryHelper;
+import com.intellij.ide.projectView.impl.nodes.PsiFileSystemItemFilter;
 import com.intellij.ide.util.treeView.TreeViewUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.impl.DirectoryIndex;
@@ -34,7 +35,6 @@ import java.util.Arrays;
 
 /**
  * @author anna
- * @since 23-Jan-2008
  */
 public class JavaProjectViewDirectoryHelper extends ProjectViewDirectoryHelper {
   public JavaProjectViewDirectoryHelper(Project project, DirectoryIndex index) {
@@ -91,8 +91,11 @@ public class JavaProjectViewDirectoryHelper extends ProjectViewDirectoryHelper {
   }
 
   @Override
-  public boolean isEmptyMiddleDirectory(final PsiDirectory directory, final boolean strictlyEmpty) {
-    return JavaDirectoryService.getInstance().getPackage(directory) != null && TreeViewUtil.isEmptyMiddlePackage(directory, strictlyEmpty);
+  public boolean isEmptyMiddleDirectory(final PsiDirectory directory,
+                                        final boolean strictlyEmpty,
+                                        @Nullable PsiFileSystemItemFilter filter) {
+    return JavaDirectoryService.getInstance().getPackage(directory) != null &&
+           TreeViewUtil.isEmptyMiddlePackage(directory, strictlyEmpty, filter);
   }
 
   @Override

@@ -44,9 +44,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.TreeSet;
 
-/**
- * User: anna
- */
 public class AvailablePluginsManagerMain extends PluginManagerMain {
   public static final String MANAGE_REPOSITORIES = "Manage repositories...";
   public static final String N_A = "N/A";
@@ -207,7 +204,7 @@ public class AvailablePluginsManagerMain extends PluginManagerMain {
 
   private class MyFilterCategoryAction extends ComboBoxAction implements DumbAware{
     @Override
-    public void update(AnActionEvent e) {
+    public void update(@NotNull AnActionEvent e) {
       super.update(e);
       String category = ((AvailablePluginsTableModel)pluginsModel).getCategory();
       if (category == null) {
@@ -235,7 +232,7 @@ public class AvailablePluginsManagerMain extends PluginManagerMain {
     private AnAction createFilterByCategoryAction(final String availableCategory) {
       return new DumbAwareAction(availableCategory) {
         @Override
-        public void actionPerformed(AnActionEvent e) {
+        public void actionPerformed(@NotNull AnActionEvent e) {
           final String filter = myFilter.getFilter().toLowerCase(Locale.ENGLISH);
           ((AvailablePluginsTableModel)pluginsModel).setCategory(availableCategory, filter);
         }
@@ -248,7 +245,7 @@ public class AvailablePluginsManagerMain extends PluginManagerMain {
     private static final int LENGTH = 15;
 
     @Override
-    public void update(AnActionEvent e) {
+    public void update(@NotNull AnActionEvent e) {
       super.update(e);
       boolean empty = UpdateSettings.getInstance().getPluginHosts().isEmpty();
       e.getPresentation().setVisible(!empty || ApplicationInfoEx.getInstanceEx().getBuiltinPluginsUrl() != null);
@@ -278,7 +275,7 @@ public class AvailablePluginsManagerMain extends PluginManagerMain {
     private AnAction createFilterByRepositoryAction(final String host) {
       return new DumbAwareAction(host) {
         @Override
-        public void actionPerformed(AnActionEvent e) {
+        public void actionPerformed(@NotNull AnActionEvent e) {
           final String filter = myFilter.getFilter().toLowerCase(Locale.ENGLISH);
           ((AvailablePluginsTableModel)pluginsModel).setRepository(host, filter);
           TableUtil.ensureSelectionExists(getPluginTable());

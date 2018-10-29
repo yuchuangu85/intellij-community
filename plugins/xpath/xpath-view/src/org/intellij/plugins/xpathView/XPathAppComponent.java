@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2002-2005 Sascha Weinreuter
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +21,7 @@ import com.intellij.codeInsight.hint.HintUtil;
 import com.intellij.codeInsight.template.impl.DefaultLiveTemplatesProvider;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.components.ApplicationComponent;
+import com.intellij.openapi.components.BaseComponent;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
@@ -49,14 +49,8 @@ import java.util.List;
  * <p/>
  * Also used to manage highlighters.
  */
-@State(
-  name = "XPathView.XPathViewPlugin",
-  storages = {
-    @Storage("xpath.xml"),
-    @Storage(value = "other.xml", deprecated = true)
-  }
-)
-public class XPathAppComponent implements ApplicationComponent, PersistentStateComponent<Config>, DefaultLiveTemplatesProvider {
+@State(name = "XPathView.XPathViewPlugin", storages = @Storage("xpath.xml"))
+public class XPathAppComponent implements PersistentStateComponent<Config>, DefaultLiveTemplatesProvider, BaseComponent {
   private static final String ACTION_FIND_NEXT = "FindNext";
   private static final String ACTION_FIND_PREVIOUS = "FindPrevious";
 
@@ -64,12 +58,6 @@ public class XPathAppComponent implements ApplicationComponent, PersistentStateC
   private AnAction prevAction;
 
   private Config configuration = new Config();
-
-  @Override
-  @NotNull
-  public String getComponentName() {
-    return "XPathView.XPathViewPlugin";
-  }
 
   @Override
   public void initComponent() {
@@ -85,15 +73,15 @@ public class XPathAppComponent implements ApplicationComponent, PersistentStateC
     }
   }
 
-  @Override
-  public void disposeComponent() {
+  //@Override
+  //public void dispose() {
     // IDEA-97697
     //    final ActionManager actionManager = ActionManager.getInstance();
     //    actionManager.unregisterAction(ACTION_FIND_NEXT);
     //    actionManager.unregisterAction(ACTION_FIND_PREVIOUS);
     //    actionManager.registerAction(ACTION_FIND_NEXT, nextAction);
     //    actionManager.registerAction(ACTION_FIND_PREVIOUS, prevAction);
-  }
+  //}
 
   @Nullable
   @Override
@@ -102,7 +90,7 @@ public class XPathAppComponent implements ApplicationComponent, PersistentStateC
   }
 
   @Override
-  public void loadState(Config state) {
+  public void loadState(@NotNull Config state) {
     configuration = state;
   }
 
@@ -130,7 +118,7 @@ public class XPathAppComponent implements ApplicationComponent, PersistentStateC
     private final boolean isPrev;
     private boolean wrapAround;
 
-    public MyFindAction(AnAction origAction, boolean isPrev) {
+    MyFindAction(AnAction origAction, boolean isPrev) {
       this.origAction = origAction;
       this.isPrev = isPrev;
 
@@ -139,7 +127,7 @@ public class XPathAppComponent implements ApplicationComponent, PersistentStateC
     }
 
     @Override
-    public void actionPerformed(AnActionEvent event) {
+    public void actionPerformed(@NotNull AnActionEvent event) {
       final Editor editor = CommonDataKeys.EDITOR.getData(event.getDataContext());
       if (editor != null) {
         if (HighlighterUtil.hasHighlighters(editor)) {
@@ -191,7 +179,7 @@ public class XPathAppComponent implements ApplicationComponent, PersistentStateC
     }
 
     @Override
-    public void update(AnActionEvent event) {
+    public void update(@NotNull AnActionEvent event) {
       super.update(event);
       origAction.update(event);
     }
@@ -218,7 +206,7 @@ public class XPathAppComponent implements ApplicationComponent, PersistentStateC
       BorderFactory.createBevelBorder(BevelBorder.RAISED, Color.WHITE, Gray._128),
       BorderFactory.createEmptyBorder(3, 5, 3, 5)));
     label.setForeground(JBColor.foreground());
-    label.setBackground(HintUtil.INFORMATION_COLOR);
+    label.setBackground(HintUtil.getInformationColor());
     label.setOpaque(true);
     label.setFont(label.getFont().deriveFont(Font.BOLD));
 

@@ -25,10 +25,6 @@ import java.lang.ref.SoftReference;
 
 import com.intellij.CommonBundle;
 
-/**
- * User: Dmitry.Krasilschikov
- * Date: 02.06.2008
- */
 public class GroovyCodeInsightBundle {
 
   public static String message(@NotNull @PropertyKey(resourceBundle = BUNDLE) String key, @NotNull Object... params) {
@@ -44,7 +40,7 @@ public class GroovyCodeInsightBundle {
 
     if (bundle == null) {
       bundle = ResourceBundle.getBundle(BUNDLE);
-      ourBundle = new SoftReference<ResourceBundle>(bundle);
+      ourBundle = new SoftReference<>(bundle);
     }
     return bundle;
   }

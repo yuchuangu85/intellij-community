@@ -93,10 +93,10 @@ public class ScopesAndSeveritiesHintTable extends JBTable {
     private final String myDefaultScopeName;
     private final List<String> myScopes;
 
-    public MyModel(final LinkedHashMap<String, HighlightDisplayLevel> scopeToAverageSeverityMap, String defaultScopeName) {
+    MyModel(final LinkedHashMap<String, HighlightDisplayLevel> scopeToAverageSeverityMap, String defaultScopeName) {
       myScopeToAverageSeverityMap = scopeToAverageSeverityMap;
       myDefaultScopeName = defaultScopeName;
-      myScopes = new ArrayList<String>(myScopeToAverageSeverityMap.keySet());
+      myScopes = new ArrayList<>(myScopeToAverageSeverityMap.keySet());
     }
 
     @Override

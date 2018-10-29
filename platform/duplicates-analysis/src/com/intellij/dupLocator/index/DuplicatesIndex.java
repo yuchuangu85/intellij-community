@@ -26,7 +26,6 @@ import com.intellij.lang.LighterAST;
 import com.intellij.lang.LighterASTNode;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.LanguageFileType;
-import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.SystemProperties;
 import com.intellij.util.indexing.*;
 import com.intellij.util.io.DataExternalizer;
@@ -58,14 +57,17 @@ public class DuplicatesIndex extends FileBasedIndexExtension<Integer, TIntArrayL
   @NonNls public static final ID<Integer, TIntArrayList> NAME = ID.create("DuplicatesIndex");
   private static final int myBaseVersion = 25;
 
-  private final FileBasedIndex.InputFilter myInputFilter = new FileBasedIndex.InputFilter() {
-    @Override
-    public boolean acceptInput(@NotNull final VirtualFile file) {
-      return ourEnabled &&
-             findDuplicatesProfile(file.getFileType()) != null &&
-             file.isInLocalFileSystem() // skip library sources
-        ;
+  private final FileBasedIndex.InputFilter myInputFilter = file -> {
+    if (!ourEnabled ||
+        !file.isInLocalFileSystem()  // skip library sources
+       ) {
+      return false;
     }
+    DuplicatesProfile duplicatesProfile = findDuplicatesProfile(file.getFileType());
+    if (duplicatesProfile instanceof LightDuplicateProfile) {
+      return ((LightDuplicateProfile)duplicatesProfile).acceptsFile(file);
+    }
+    return duplicatesProfile != null;
   };
 
   private final DataExternalizer<TIntArrayList> myValueExternalizer = new DataExternalizer<TIntArrayList>() {
@@ -123,7 +125,7 @@ public class DuplicatesIndex extends FileBasedIndexExtension<Integer, TIntArrayL
         FileContentImpl fileContent = (FileContentImpl)inputData;
 
         if (profile instanceof LightDuplicateProfile && ourEnabledLightProfiles) {
-          final THashMap<Integer, TIntArrayList> result = new THashMap<Integer, TIntArrayList>();
+          final THashMap<Integer, TIntArrayList> result = new THashMap<>();
           LighterAST ast = fileContent.getLighterASTForPsiDependentIndex();
 
           ((LightDuplicateProfile)profile).process(ast, new LightDuplicateProfile.Callback() {
@@ -163,7 +165,7 @@ public class DuplicatesIndex extends FileBasedIndexExtension<Integer, TIntArrayL
 
   @Override
   public int getVersion() {
-    return myBaseVersion + (ourEnabled ? 0xFF : 0) + (ourEnabledLightProfiles ? 0x7F : 0) + (ourEnabledOldProfiles ? 0x21 : 0);
+    return myBaseVersion + (ourEnabled ? 0xFF : 0) + (ourEnabledLightProfiles ? 0x80 : 0) + (ourEnabledOldProfiles ? 0x21 : 0);
   }
 
   @Override
@@ -205,11 +207,11 @@ public class DuplicatesIndex extends FileBasedIndexExtension<Integer, TIntArrayL
   private static final TracingData myTracingData = null;
 
   private static class MyFragmentsCollector implements FragmentsCollector {
-    private final THashMap<Integer, TIntArrayList> myMap = new THashMap<Integer, TIntArrayList>();
+    private final THashMap<Integer, TIntArrayList> myMap = new THashMap<>();
     private final DuplicatesProfile myProfile;
     private final DuplocatorState myDuplocatorState;
 
-    public MyFragmentsCollector(DuplicatesProfile profile, Language language) {
+    MyFragmentsCollector(DuplicatesProfile profile, Language language) {
       myProfile = profile;
       myDuplocatorState = profile.getDuplocatorState(language);
     }

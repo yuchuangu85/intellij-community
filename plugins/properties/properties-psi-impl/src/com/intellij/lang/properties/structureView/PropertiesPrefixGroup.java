@@ -20,7 +20,6 @@ import com.intellij.ide.structureView.StructureViewTreeElement;
 import com.intellij.ide.util.treeView.smartTree.Group;
 import com.intellij.ide.util.treeView.smartTree.TreeElement;
 import com.intellij.lang.properties.IProperty;
-import com.intellij.lang.properties.editor.PropertiesAnchorizer;
 import com.intellij.lang.properties.editor.ResourceBundleEditorViewElement;
 import com.intellij.lang.properties.editor.ResourceBundlePropertyStructureViewElement;
 import com.intellij.navigation.ItemPresentation;
@@ -41,12 +40,12 @@ import java.util.List;
  * @author cdr
  */
 public class PropertiesPrefixGroup implements Group, ResourceBundleEditorViewElement {
-  private final Collection<TreeElement> myProperties;
+  private final Collection<? extends TreeElement> myProperties;
   private final @NotNull String myPrefix;
   private final String myPresentableName;
   private final @NotNull String mySeparator;
 
-  public PropertiesPrefixGroup(final Collection<TreeElement> properties,
+  public PropertiesPrefixGroup(final Collection<? extends TreeElement> properties,
                                final @NotNull String prefix,
                                final String presentableName,
                                final @NotNull String separator) {
@@ -70,35 +69,37 @@ public class PropertiesPrefixGroup implements Group, ResourceBundleEditorViewEle
     return myPrefix;
   }
 
+  @Override
   @NotNull
   public ItemPresentation getPresentation() {
     return new ItemPresentation() {
+      @Override
       public String getPresentableText() {
         return myPresentableName;
       }
 
+      @Override
       public String getLocationString() {
         return null;
       }
 
+      @Override
       public Icon getIcon(boolean open) {
         return AllIcons.Nodes.Advice;
       }
     };
   }
 
+  @Override
   @NotNull
   public Collection<TreeElement> getChildren() {
-    Collection<TreeElement> result = new ArrayList<TreeElement>();
+    Collection<TreeElement> result = new ArrayList<>();
     List<String> prefixWords = StringUtil.split(myPrefix, mySeparator);
     for (TreeElement treeElement : myProperties) {
       if (!(treeElement instanceof StructureViewTreeElement)) {
         continue;
       }
       Object value = ((StructureViewTreeElement)treeElement).getValue();
-      if (value instanceof PropertiesAnchorizer.PropertyAnchor) {
-        value = ((PropertiesAnchorizer.PropertyAnchor)value).getRepresentative();
-      }
       if (!(value instanceof IProperty)) {
         continue;
       }
@@ -151,7 +152,7 @@ public class PropertiesPrefixGroup implements Group, ResourceBundleEditorViewEle
       }
       return null;
     });
-    return elements.toArray(new IProperty[elements.size()]);
+    return elements.toArray(IProperty.EMPTY_ARRAY);
   }
 
   @Nullable

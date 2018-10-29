@@ -30,7 +30,6 @@ import java.util.*;
 
 /**
  * @author anna
- * Date: 25-Mar-2008
  */
 public class MigrationNode extends AbstractTreeNode<TypeMigrationUsageInfo> implements DuplicateNodeRenderer.DuplicatableNode<MigrationNode> {
   private final TypeMigrationUsageInfo myInfo;
@@ -39,13 +38,13 @@ public class MigrationNode extends AbstractTreeNode<TypeMigrationUsageInfo> impl
   private final TypeMigrationLabeler myLabeler;
   private final PsiType myMigrationType;
   private final HashMap<TypeMigrationUsageInfo, Set<MigrationNode>> myProcessed;
-  private final HashSet<TypeMigrationUsageInfo> myParents;
+  private final HashSet<? extends TypeMigrationUsageInfo> myParents;
 
   public MigrationNode(final Project project,
                        final TypeMigrationUsageInfo info,
                        final PsiType migrationType,
                        final TypeMigrationLabeler labeler,
-                       final HashSet<TypeMigrationUsageInfo> parents,
+                       final HashSet<? extends TypeMigrationUsageInfo> parents,
                        final HashMap<TypeMigrationUsageInfo, Set<MigrationNode>> processed) {
     super(project, info);
     myLabeler = labeler;
@@ -55,7 +54,7 @@ public class MigrationNode extends AbstractTreeNode<TypeMigrationUsageInfo> impl
 
     Set<MigrationNode> alreadyAdded = myProcessed.get(info);
     if (alreadyAdded == null) {
-      alreadyAdded = new HashSet<MigrationNode>();
+      alreadyAdded = new HashSet<>();
       myProcessed.put(info, alreadyAdded);
       myInfo = info;
     }
@@ -71,11 +70,12 @@ public class MigrationNode extends AbstractTreeNode<TypeMigrationUsageInfo> impl
     return myInfo;
   }
 
+  @Override
   @NotNull
   public Collection<? extends AbstractTreeNode> getChildren() {
     if (myCachedChildren == null) {
-      myCachedChildren = new ArrayList<MigrationNode>();
-      
+      myCachedChildren = new ArrayList<>();
+
       final PsiElement element = myInfo.getElement();
       if (element != null) {
         try {
@@ -92,7 +92,7 @@ public class MigrationNode extends AbstractTreeNode<TypeMigrationUsageInfo> impl
             final TypeMigrationUsageInfo info = root.getFirst();
 
             if (myParents.contains(info)) continue;
-            final HashSet<TypeMigrationUsageInfo> parents = new HashSet<TypeMigrationUsageInfo>(myParents);
+            final HashSet<TypeMigrationUsageInfo> parents = new HashSet<>(myParents);
             parents.add(info);
 
             final MigrationNode migrationNode =
@@ -114,15 +114,13 @@ public class MigrationNode extends AbstractTreeNode<TypeMigrationUsageInfo> impl
     return myCachedChildren != null;
   }
 
-  protected void update(final PresentationData presentation) {
+  @Override
+  protected void update(@NotNull final PresentationData presentation) {
 
   }
 
+  @Override
   public MigrationNode getDuplicate() {
     return myDuplicatedNode;
-  }
-
-  public boolean hasDuplicate() {
-    return myDuplicatedNode != null;
   }
 }

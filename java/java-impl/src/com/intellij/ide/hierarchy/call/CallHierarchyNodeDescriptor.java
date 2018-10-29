@@ -1,22 +1,7 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.hierarchy.call;
 
 import com.intellij.codeInsight.highlighting.HighlightManager;
-import com.intellij.icons.AllIcons;
 import com.intellij.ide.IdeBundle;
 import com.intellij.ide.hierarchy.HierarchyNodeDescriptor;
 import com.intellij.ide.hierarchy.JavaHierarchyUtil;
@@ -29,13 +14,11 @@ import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ui.util.CompositeAppearance;
 import com.intellij.openapi.util.Comparing;
-import com.intellij.openapi.util.Iconable;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.pom.Navigatable;
 import com.intellij.psi.*;
 import com.intellij.psi.presentation.java.ClassPresentationUtil;
 import com.intellij.psi.util.*;
-import com.intellij.ui.LayeredIcon;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -45,7 +28,7 @@ import java.util.List;
 
 public final class CallHierarchyNodeDescriptor extends HierarchyNodeDescriptor implements Navigatable {
   private int myUsageCount = 1;
-  private final List<PsiReference> myReferences = new ArrayList<PsiReference>();
+  private final List<PsiReference> myReferences = new ArrayList<>();
   private final boolean myNavigateToReference;
 
   public CallHierarchyNodeDescriptor(@NotNull Project project,
@@ -80,39 +63,25 @@ public final class CallHierarchyNodeDescriptor extends HierarchyNodeDescriptor i
     return getPsiElement();
   }
 
+  @Override
   public final boolean isValid(){
     return getEnclosingElement() != null;
   }
 
+  @Override
   public final boolean update(){
     final CompositeAppearance oldText = myHighlightedText;
     final Icon oldIcon = getIcon();
-
-    int flags = Iconable.ICON_FLAG_VISIBILITY;
-    if (isMarkReadOnly()) {
-      flags |= Iconable.ICON_FLAG_READ_STATUS;
-    }
 
     boolean changes = super.update();
 
     final PsiElement enclosingElement = getEnclosingElement();
 
     if (enclosingElement == null) {
-      final String invalidPrefix = IdeBundle.message("node.hierarchy.invalid");
-      if (!myHighlightedText.getText().startsWith(invalidPrefix)) {
-        myHighlightedText.getBeginning().addText(invalidPrefix, HierarchyNodeDescriptor.getInvalidPrefixAttributes());
-      }
-      return true;
+      return invalidElement();
     }
 
-    Icon newIcon = enclosingElement.getIcon(flags);
-    if (changes && myIsBase) {
-      final LayeredIcon icon = new LayeredIcon(2);
-      icon.setIcon(newIcon, 0);
-      icon.setIcon(AllIcons.Hierarchy.Base, 1, -AllIcons.Hierarchy.Base.getIconWidth() / 2, 0);
-      newIcon = icon;
-    }
-    setIcon(newIcon);
+    installIcon(enclosingElement, changes);
 
     myHighlightedText = new CompositeAppearance();
     TextAttributes mainTextAttributes = null;
@@ -180,6 +149,7 @@ public final class CallHierarchyNodeDescriptor extends HierarchyNodeDescriptor i
     return myReferences.contains(reference);
   }
 
+  @Override
   public void navigate(boolean requestFocus) {
     if (!myNavigateToReference) {
       PsiElement element = getPsiElement();
@@ -208,7 +178,7 @@ public final class CallHierarchyNodeDescriptor extends HierarchyNodeDescriptor i
       HighlightManager highlightManager = HighlightManager.getInstance(myProject);
       EditorColorsManager colorManager = EditorColorsManager.getInstance();
       TextAttributes attributes = colorManager.getGlobalScheme().getAttributes(EditorColors.SEARCH_RESULT_ATTRIBUTES);
-      ArrayList<RangeHighlighter> highlighters = new ArrayList<RangeHighlighter>();
+      ArrayList<RangeHighlighter> highlighters = new ArrayList<>();
       for (PsiReference psiReference : myReferences) {
         final PsiElement eachElement = psiReference.getElement();
         if (eachElement != null) {
@@ -222,6 +192,7 @@ public final class CallHierarchyNodeDescriptor extends HierarchyNodeDescriptor i
     }
   }
 
+  @Override
   public boolean canNavigate() {
     if (!myNavigateToReference) {
       PsiElement element = getPsiElement();
@@ -238,6 +209,7 @@ public final class CallHierarchyNodeDescriptor extends HierarchyNodeDescriptor i
     return true;
   }
 
+  @Override
   public boolean canNavigateToSource() {
     return canNavigate();
   }

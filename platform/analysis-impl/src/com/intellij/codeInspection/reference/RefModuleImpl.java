@@ -25,10 +25,6 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.util.ArrayList;
 
-/**
- * User: anna
- * Date: 09-Jan-2006
- */
 class RefModuleImpl extends RefEntityImpl implements RefModule {
   private final Module myModule;
 
@@ -41,7 +37,7 @@ class RefModuleImpl extends RefEntityImpl implements RefModule {
   @Override
   public synchronized void add(@NotNull final RefEntity child) {
     if (myChildren == null) {
-      myChildren = new ArrayList<RefEntity>();
+      myChildren = new ArrayList<>();
     }
     myChildren.add(child);
 
@@ -51,7 +47,7 @@ class RefModuleImpl extends RefEntityImpl implements RefModule {
   }
 
   @Override
-  protected synchronized void removeChild(@NotNull final RefEntity child) {
+  public synchronized void removeChild(@NotNull final RefEntity child) {
     if (myChildren != null) {
       myChildren.remove(child);
     }
@@ -59,7 +55,7 @@ class RefModuleImpl extends RefEntityImpl implements RefModule {
 
   @Override
   public void accept(@NotNull final RefVisitor refVisitor) {
-    ApplicationManager.getApplication().runReadAction(() -> refVisitor.visitModule(RefModuleImpl.this));
+    ApplicationManager.getApplication().runReadAction(() -> refVisitor.visitModule(this));
   }
 
   @Override

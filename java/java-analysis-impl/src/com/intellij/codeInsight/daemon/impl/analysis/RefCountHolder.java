@@ -29,7 +29,6 @@ import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.UserDataHolderEx;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiMatcherImpl;
 import com.intellij.psi.util.PsiMatchers;
@@ -44,7 +43,10 @@ import org.jetbrains.annotations.Nullable;
 
 import java.lang.ref.Reference;
 import java.lang.ref.SoftReference;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 class RefCountHolder {
@@ -110,15 +112,15 @@ class RefCountHolder {
   GlobalUsageHelper getGlobalUsageHelper(@NotNull PsiFile file,
                                          @Nullable final UnusedDeclarationInspectionBase deadCodeInspection,
                                          boolean isUnusedToolEnabled) {
-    final FileViewProvider viewProvider = file.getViewProvider();
+    FileViewProvider viewProvider = file.getViewProvider();
     Project project = file.getProject();
 
     ProjectFileIndex fileIndex = ProjectRootManager.getInstance(project).getFileIndex();
     VirtualFile virtualFile = viewProvider.getVirtualFile();
     boolean inLibrary = fileIndex.isInLibraryClasses(virtualFile) || fileIndex.isInLibrarySource(virtualFile);
 
-    final boolean myDeadCodeEnabled = deadCodeInspection != null && isUnusedToolEnabled && deadCodeInspection.isGlobalEnabledInEditor();
-    @NotNull final Predicate<PsiElement> myIsEntryPointPredicate = member -> !myDeadCodeEnabled || deadCodeInspection.isEntryPoint(member);
+    boolean myDeadCodeEnabled = deadCodeInspection != null && isUnusedToolEnabled && deadCodeInspection.isGlobalEnabledInEditor();
+    Predicate<PsiElement> myIsEntryPointPredicate = (@NotNull PsiElement member) -> !myDeadCodeEnabled || deadCodeInspection.isEntryPoint(member);
 
     return new GlobalUsageHelper() {
       @Override
@@ -173,8 +175,20 @@ class RefCountHolder {
   }
 
   private void registerLocalRef(@NotNull PsiReference ref, PsiElement refElement) {
-    if (refElement instanceof PsiMethod && PsiTreeUtil.isAncestor(refElement, ref.getElement(), true)) return; // filter self-recursive calls
-    if (refElement instanceof PsiClass && PsiTreeUtil.isAncestor(refElement, ref.getElement(), true)) return; // filter inner use of itself
+    PsiElement element = ref.getElement();
+    if (refElement instanceof PsiMethod && PsiTreeUtil.isAncestor(refElement, element, true)) return; // filter self-recursive calls
+    if (refElement instanceof PsiClass) {
+      if (PsiTreeUtil.isAncestor(refElement, element, true)) {
+        return; // filter inner use of itself
+      }
+      PsiImportStatementBase importStmt = PsiTreeUtil.getParentOfType(element, PsiImportStatementBase.class);
+      if (importStmt != null) {
+        PsiElement resolve = importStmt.resolve();
+        if (resolve != null && PsiTreeUtil.isAncestor(refElement, resolve, false)) {
+          return;//filter refs on inner members in imports
+        }
+      }
+    }
     synchronized (myLocalRefsMap) {
       myLocalRefsMap.putValue(refElement, ref);
     }
@@ -195,20 +209,12 @@ class RefCountHolder {
         myLocalRefsMap.remove(pair.first, pair.second);
       }
     }
-    for (Iterator<PsiReference> iterator = myImportStatements.keySet().iterator(); iterator.hasNext();) {
-      PsiReference ref = iterator.next();
-      if (!ref.getElement().isValid()) {
-        iterator.remove();
-      }
-    }
+    myImportStatements.keySet().removeIf(ref -> !ref.getElement().isValid());
     removeInvalidFrom(myDclsUsedMap.keySet());
   }
 
   private static void removeInvalidFrom(@NotNull Collection<? extends PsiAnchor> collection) {
-    for (Iterator<? extends PsiAnchor> it = collection.iterator(); it.hasNext();) {
-      PsiAnchor element = it.next();
-      if (element.retrieve() == null) it.remove();
-    }
+    collection.removeIf(element -> element.retrieve() == null);
   }
 
   boolean isReferenced(@NotNull PsiElement element) {
@@ -216,13 +222,17 @@ class RefCountHolder {
     synchronized (myLocalRefsMap) {
       array = myLocalRefsMap.get(element);
     }
-    if (!array.isEmpty() && !isParameterUsedRecursively(element, array)) return true;
+    if (!array.isEmpty() && !isParameterUsedRecursively(element, array)) {
+      for (PsiReference reference : array) {
+        if (reference.isReferenceTo(element)) return true;
+      }
+    }
 
     Boolean usedStatus = myDclsUsedMap.get(PsiAnchor.create(element));
     return usedStatus == Boolean.TRUE;
   }
 
-  private static boolean isParameterUsedRecursively(@NotNull PsiElement element, @NotNull Collection<PsiReference> array) {
+  private static boolean isParameterUsedRecursively(@NotNull PsiElement element, @NotNull Collection<? extends PsiReference> array) {
     if (!(element instanceof PsiParameter)) return false;
     PsiParameter parameter = (PsiParameter)element;
     PsiElement scope = parameter.getDeclarationScope();
@@ -282,13 +292,10 @@ class RefCountHolder {
 
   // "var++;"
   private static boolean isJustIncremented(@NotNull ReadWriteAccessDetector.Access access, @NotNull PsiElement refElement) {
-    if (access == ReadWriteAccessDetector.Access.ReadWrite  &&
-        refElement instanceof PsiExpression &&
-        refElement.getParent() instanceof PsiExpression &&
-        refElement.getParent().getParent() instanceof PsiExpressionStatement) {
-      return true;
-    }
-    return false;
+    return access == ReadWriteAccessDetector.Access.ReadWrite &&
+           refElement instanceof PsiExpression &&
+           refElement.getParent() instanceof PsiExpression &&
+           refElement.getParent().getParent() instanceof PsiExpressionStatement;
   }
 
   boolean isReferencedForWrite(@NotNull PsiVariable variable) {
@@ -316,6 +323,7 @@ class RefCountHolder {
     ProgressIndicator result;
     if (myState.compareAndSet(EMPTY, indicator)) {
       if (!file.getTextRange().equals(dirtyScope)) {
+        log(" RefCountHolder: invalid scope " + dirtyScope);
         // empty holder needs filling before it can be used, so restart daemon to re-analyze the whole file
         myState.set(EMPTY);
         return false;

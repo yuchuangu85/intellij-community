@@ -168,7 +168,7 @@ public abstract class DomInvocationHandler<T extends AbstractDomChildDescription
 
       final DomGenericInfoEx genericInfo = otherInvocationHandler.getGenericInfo();
       for (final AttributeChildDescriptionImpl description : genericInfo.getAttributeChildrenDescriptions()) {
-        description.getDomAttributeValue(DomInvocationHandler.this).setStringValue(description.getDomAttributeValue(other).getStringValue());
+        description.getDomAttributeValue(this).setStringValue(description.getDomAttributeValue(other).getRawText());
       }
       for (final DomFixedChildDescription description : genericInfo.getFixedChildrenDescriptions()) {
         final List<? extends DomElement> list = description.getValues(getProxy());
@@ -448,7 +448,7 @@ public abstract class DomInvocationHandler<T extends AbstractDomChildDescription
   protected final Converter getScalarConverter() {
     Converter converter = myScalarConverter;
     if (converter == null) {
-      converter = myScalarConverter = createConverter(ourGetValue);
+      myScalarConverter = converter = createConverter(ourGetValue);
     }
     return converter;
   }
@@ -606,7 +606,7 @@ public abstract class DomInvocationHandler<T extends AbstractDomChildDescription
   }
 
   @NotNull
-  final IndexedElementInvocationHandler getFixedChild(final Pair<FixedChildDescriptionImpl, Integer> info) {
+  final IndexedElementInvocationHandler getFixedChild(final Pair<? extends FixedChildDescriptionImpl, Integer> info) {
     final FixedChildDescriptionImpl description = info.first;
     XmlName xmlName = description.getXmlName();
     final EvaluatedXmlName evaluatedXmlName = createEvaluatedXmlName(xmlName);
@@ -853,7 +853,7 @@ public abstract class DomInvocationHandler<T extends AbstractDomChildDescription
     final List<XmlTag> subTags = getCollectionSubTags(description, tag);
     if (subTags.isEmpty()) return Collections.emptyList();
 
-    List<DomElement> elements = new ArrayList<DomElement>(subTags.size());
+    List<DomElement> elements = new ArrayList<>(subTags.size());
     for (XmlTag subTag : subTags) {
       final SemKey<? extends DomInvocationHandler> key = description instanceof CustomDomChildrenDescription ? DomManagerImpl.DOM_CUSTOM_HANDLER_KEY : DomManagerImpl.DOM_COLLECTION_HANDLER_KEY;
       final DomInvocationHandler semElement = myManager.getSemService().getSemElement(key, subTag);
@@ -880,11 +880,11 @@ public abstract class DomInvocationHandler<T extends AbstractDomChildDescription
   }
 
   private static class StableCopyFactory<T extends DomElement> implements NullableFactory<T> {
-    private final SmartPsiElementPointer<XmlTag> myPointer;
+    private final SmartPsiElementPointer<? extends XmlTag> myPointer;
     private final Type myType;
     private final Class<? extends DomInvocationHandler> myHandlerClass;
 
-    public StableCopyFactory(final SmartPsiElementPointer<XmlTag> pointer,
+    StableCopyFactory(final SmartPsiElementPointer<? extends XmlTag> pointer,
                              final Type type, final Class<? extends DomInvocationHandler> aClass) {
       myPointer = pointer;
       myType = type;

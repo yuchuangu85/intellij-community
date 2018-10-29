@@ -21,7 +21,6 @@ import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.execution.process.ProcessOutput;
 import com.intellij.openapi.application.ReadAction;
-import com.intellij.openapi.application.Result;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtilCore;
@@ -61,7 +60,7 @@ import java.util.List;
  * @author yole
  */
 public class GenerateBinaryStubsFix implements LocalQuickFix {
-  private static final Logger LOG = Logger.getInstance("#" + GenerateBinaryStubsFix.class.getName());
+  private static final Logger LOG = Logger.getInstance(GenerateBinaryStubsFix.class);
 
   private final String myQualifiedName;
   private final Sdk mySdk;
@@ -76,7 +75,7 @@ public class GenerateBinaryStubsFix implements LocalQuickFix {
   @NotNull
   public static Collection<GenerateBinaryStubsFix> generateFixes(@NotNull final PyImportStatementBase importStatementBase) {
     final List<String> names = importStatementBase.getFullyQualifiedObjectNames();
-    final List<GenerateBinaryStubsFix> result = new ArrayList<GenerateBinaryStubsFix>(names.size());
+    final List<GenerateBinaryStubsFix> result = new ArrayList<>(names.size());
     if (importStatementBase instanceof PyFromImportStatement && names.isEmpty()) {
       final QualifiedName qName = ((PyFromImportStatement)importStatementBase).getImportSourceQName();
       if (qName != null) {
@@ -111,6 +110,11 @@ public class GenerateBinaryStubsFix implements LocalQuickFix {
   }
 
   @Override
+  public boolean startInWriteAction() {
+    return false;
+  }
+
+  @Override
   public void applyFix(@NotNull final Project project, @NotNull final ProblemDescriptor descriptor) {
     final PsiFile file = descriptor.getPsiElement().getContainingFile();
     final Backgroundable backgroundable = getFixTask(file);
@@ -135,12 +139,7 @@ public class GenerateBinaryStubsFix implements LocalQuickFix {
         indicator.setIndeterminate(true);
 
 
-        final List<String> assemblyRefs = new ReadAction<List<String>>() {
-          @Override
-          protected void run(@NotNull Result<List<String>> result) throws Throwable {
-            result.setResult(collectAssemblyReferences(fileToRunTaskIn));
-          }
-        }.execute().getResultObject();
+        final List<String> assemblyRefs = ReadAction.compute(() -> collectAssemblyReferences(fileToRunTaskIn));
 
 
         try {
@@ -192,7 +191,7 @@ public class GenerateBinaryStubsFix implements LocalQuickFix {
           final PySkeletonRefresher.PyBinaryItem item = binaries.modules.get(name);
           final String modulePath = item != null ? item.getPath() : "";
           //noinspection unchecked
-          refresher.generateSkeleton(name, modulePath, new ArrayList<String>(), Consumer.EMPTY_CONSUMER);
+          refresher.generateSkeleton(name, modulePath, new ArrayList<>(), Consumer.EMPTY_CONSUMER);
         }
       }
     }
@@ -207,7 +206,7 @@ public class GenerateBinaryStubsFix implements LocalQuickFix {
     if (!(PythonSdkFlavor.getFlavor(mySdk) instanceof IronPythonSdkFlavor)) {
       return Collections.emptyList();
     }
-    final List<String> result = new ArrayList<String>();
+    final List<String> result = new ArrayList<>();
     file.accept(new PyRecursiveElementVisitor() {
       @Override
       public void visitPyCallExpression(PyCallExpression node) {

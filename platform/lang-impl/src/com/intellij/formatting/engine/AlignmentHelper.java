@@ -1,21 +1,7 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.formatting.engine;
 
-import com.intellij.diagnostic.LogMessageEx;
+import com.intellij.diagnostic.AttachmentFactory;
 import com.intellij.formatting.*;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.Language;
@@ -32,7 +18,7 @@ import java.util.Set;
 public class AlignmentHelper {
   private static final Logger LOG = Logger.getInstance(AlignmentHelper.class);
 
-  private static final Map<Alignment.Anchor, BlockAlignmentProcessor> ALIGNMENT_PROCESSORS = new EnumMap<Alignment.Anchor, BlockAlignmentProcessor>(Alignment.Anchor.class);
+  private static final Map<Alignment.Anchor, BlockAlignmentProcessor> ALIGNMENT_PROCESSORS = new EnumMap<>(Alignment.Anchor.class);
   static {
     ALIGNMENT_PROCESSORS.put(Alignment.Anchor.LEFT, new LeftEdgeAlignmentProcessor());
     ALIGNMENT_PROCESSORS.put(Alignment.Anchor.RIGHT, new RightEdgeAlignmentProcessor());
@@ -57,9 +43,8 @@ public class AlignmentHelper {
   private static void reportAlignmentProcessingError(BlockAlignmentProcessor.Context context) {
     ASTNode node = context.targetBlock.getNode();
     Language language = node != null ? node.getPsi().getLanguage() : null;
-    LogMessageEx.error(LOG,
-                       (language != null ? language.getDisplayName() + ": " : "") +
-                       "Can't align block " + context.targetBlock, context.document.getText());
+    String message = (language != null ? language.getDisplayName() + ": " : "") + "Can't align block " + context.targetBlock;
+    LOG.error(message, new Throwable(), AttachmentFactory.createAttachment(context.document));
   }
 
   public LeafBlockWrapper applyAlignment(final AlignmentImpl alignment, final LeafBlockWrapper currentBlock) {
@@ -73,7 +58,9 @@ public class AlignmentHelper {
       myDocument, alignment, currentBlock, myAlignmentMappings, myBackwardShiftedAlignedBlocks,
       myBlockIndentOptions.getIndentOptions(currentBlock));
     final LeafBlockWrapper offsetResponsibleBlock = alignment.getOffsetRespBlockBefore(currentBlock);
-    myCyclesDetector.registerOffsetResponsibleBlock(offsetResponsibleBlock);
+    if (offsetResponsibleBlock != null) {
+      myCyclesDetector.registerOffsetResponsibleBlock(offsetResponsibleBlock);
+    }
     BlockAlignmentProcessor.Result result = alignmentProcessor.applyAlignment(context);
     switch (result) {
       case TARGET_BLOCK_PROCESSED_NOT_ALIGNED:
@@ -85,7 +72,7 @@ public class AlignmentHelper {
         if (offsetResponsibleBlock == null) {
           return null;
         }
-        Set<LeafBlockWrapper> blocksCausedRealignment = new HashSet<LeafBlockWrapper>();
+        Set<LeafBlockWrapper> blocksCausedRealignment = new HashSet<>();
         myBackwardShiftedAlignedBlocks.clear();
         myBackwardShiftedAlignedBlocks.put(offsetResponsibleBlock, blocksCausedRealignment);
         blocksCausedRealignment.add(currentBlock);
@@ -119,7 +106,7 @@ public class AlignmentHelper {
   private void doStoreAlignmentMapping(AbstractBlockWrapper key, AbstractBlockWrapper value) {
     Set<AbstractBlockWrapper> wrappers = myAlignmentMappings.get(key);
     if (wrappers == null) {
-      myAlignmentMappings.put(key, wrappers = new HashSet<AbstractBlockWrapper>());
+      myAlignmentMappings.put(key, wrappers = new HashSet<>());
     }
     wrappers.add(value);
   }

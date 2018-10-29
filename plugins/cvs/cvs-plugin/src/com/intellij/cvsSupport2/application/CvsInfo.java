@@ -150,7 +150,7 @@ public class CvsInfo {
   }
 
   public synchronized Collection<Entry> getEntries() {
-    return new HashSet<Entry>(getCvsEntries().getEntries());
+    return new HashSet<>(getCvsEntries().getEntries());
   }
 
   @Nullable
@@ -253,7 +253,7 @@ public class CvsInfo {
   }
 
   private static class MyInvalidCvsConnectionSettings extends CvsConnectionSettings {
-    public MyInvalidCvsConnectionSettings() {
+    MyInvalidCvsConnectionSettings() {
       super(CvsApplicationLevelConfiguration.createNewConfiguration(CvsApplicationLevelConfiguration.getInstance()));
     }
 
@@ -317,7 +317,7 @@ public class CvsInfo {
 
   @SuppressWarnings({"NonSynchronizedMethodOverridesSynchronizedMethod"})
   private static class DummyCvsInfo extends CvsInfo {
-    public DummyCvsInfo() {
+    DummyCvsInfo() {
       super(null);
     }
 
@@ -333,7 +333,7 @@ public class CvsInfo {
 
     @Override
     public Collection<Entry> getEntries() {
-      return new ArrayList<Entry>();
+      return new ArrayList<>();
     }
 
     @Override

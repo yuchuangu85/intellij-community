@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,33 +16,24 @@
 package com.intellij.openapi.project;
 
 import com.intellij.openapi.fileTypes.FileType;
+import com.intellij.openapi.fileTypes.FileTypeRegistry;
 import com.intellij.openapi.fileTypes.InternalFileType;
-import com.intellij.openapi.util.Comparing;
-import com.intellij.openapi.util.SystemInfoRt;
+import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * @author dmitrylomov
- */
 public class ProjectCoreUtil {
-  /** @deprecated use {@link Project#DIRECTORY_STORE_FOLDER} (to be removed in IDEA 17) */
-  @SuppressWarnings("unused")
-  public static final String DIRECTORY_BASED_PROJECT_DIR = Project.DIRECTORY_STORE_FOLDER;
+  public static volatile Project theProject;
 
   public static boolean isProjectOrWorkspaceFile(@NotNull VirtualFile file) {
-    return isProjectOrWorkspaceFile(file, file.getFileType());
+    // do not use file.getFileType() to avoid autodetection by content loading for arbitrary files
+    return isProjectOrWorkspaceFile(file, FileTypeRegistry.getInstance().getFileTypeByFileName(file.getNameSequence()));
   }
 
   public static boolean isProjectOrWorkspaceFile(@NotNull VirtualFile file, @Nullable FileType fileType) {
-    if (fileType instanceof InternalFileType) return true;
-    VirtualFile parent = file.isDirectory() ? file: file.getParent();
-    while (parent != null) {
-      if (Comparing.equal(parent.getNameSequence(), Project.DIRECTORY_STORE_FOLDER, SystemInfoRt.isFileSystemCaseSensitive)) return true;
-      parent = parent.getParent();
-    }
-    return false;
+    return fileType instanceof InternalFileType ||
+           VfsUtilCore.findContainingDirectory(file, Project.DIRECTORY_STORE_FOLDER) != null;
   }
 
   /**
@@ -52,5 +43,4 @@ public class ProjectCoreUtil {
   public static Project theOnlyOpenProject() {
     return theProject;
   }
-  public static volatile Project theProject;
 }

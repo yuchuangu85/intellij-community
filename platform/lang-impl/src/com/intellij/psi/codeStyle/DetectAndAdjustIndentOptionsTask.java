@@ -15,12 +15,15 @@
  */
 package com.intellij.psi.codeStyle;
 
+import com.intellij.application.options.CodeStyle;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.progress.DumbProgressIndicator;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.util.ProgressIndicatorUtils;
 import com.intellij.openapi.progress.util.ReadTask;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.EmptyRunnable;
@@ -35,26 +38,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.concurrent.ExecutorService;
 
-import static com.intellij.openapi.progress.util.ProgressIndicatorUtils.scheduleWithWriteActionPriority;
-
-
-class TimeStampedIndentOptions extends IndentOptions {
-  private long myTimeStamp;
-
-  public TimeStampedIndentOptions(IndentOptions toCopyFrom, long timeStamp) {
-    copyFrom(toCopyFrom);
-    myTimeStamp = timeStamp;
-  }
-  
-  void setTimeStamp(long timeStamp) {
-    myTimeStamp = timeStamp;
-  }
-
-  long getTimeStamp() {
-    return myTimeStamp;
-  }
-  
-}
 
 class DetectAndAdjustIndentOptionsTask extends ReadTask {
   private static final Logger LOG = Logger.getInstance(DetectAndAdjustIndentOptionsTask.class);
@@ -62,14 +45,14 @@ class DetectAndAdjustIndentOptionsTask extends ReadTask {
 
   private final Document myDocument;
   private final Project myProject;
-  private final IndentOptions myOptionsToAdjust;
+  private final TimeStampedIndentOptions myOptionsToAdjust;
   private final ExecutorService myExecutor;
   
   private volatile long myComputationStarted = 0;
 
-  public DetectAndAdjustIndentOptionsTask(@NotNull Project project, 
+  DetectAndAdjustIndentOptionsTask(@NotNull Project project,
                                           @NotNull Document document, 
-                                          @NotNull IndentOptions toAdjust,
+                                          @NotNull TimeStampedIndentOptions toAdjust,
                                           @NotNull ExecutorService executor) {
     myProject = project;
     myDocument = document;
@@ -106,10 +89,19 @@ class DetectAndAdjustIndentOptionsTask extends ReadTask {
   }
 
   private void adjustOptions(IndentOptionsAdjuster adjuster) {
-    long stamp = myDocument.getModificationStamp();
+    final PsiFile file = getFile();
+    if (file == null) return;
+
+    final IndentOptions currentDefault = getDefaultIndentOptions(file, myDocument);
+    myOptionsToAdjust.copyFrom(currentDefault);
+
     adjuster.adjust(myOptionsToAdjust);
-    if (myOptionsToAdjust instanceof TimeStampedIndentOptions) {
-      ((TimeStampedIndentOptions)myOptionsToAdjust).setTimeStamp(stamp);
+    myOptionsToAdjust.setTimeStamp(myDocument.getModificationStamp());
+    myOptionsToAdjust.setOriginalIndentOptionsHash(currentDefault.hashCode());
+
+    if (!currentDefault.equals(myOptionsToAdjust)) {
+      myOptionsToAdjust.setDetected(true);
+      CodeStyleSettingsManager.getInstance(myProject).fireCodeStyleSettingsChanged(file);
     }
   }
 
@@ -126,7 +118,7 @@ class DetectAndAdjustIndentOptionsTask extends ReadTask {
   private void logTooLongComputation() {
     PsiFile file = getFile();
     String fileName = file != null ? file.getName() : "";
-    LOG.warn("Indent detection is too long for: " + fileName);
+    LOG.debug("Indent detection is too long for: " + fileName);
   }
 
   private boolean isComputingForTooLong() {
@@ -137,6 +129,7 @@ class DetectAndAdjustIndentOptionsTask extends ReadTask {
     if (myProject.isDisposed()) return;
     
     if (ApplicationManager.getApplication().isUnitTestMode()) {
+      PsiDocumentManager.getInstance(myProject).commitDocument(myDocument);
       Continuation continuation = performInReadAction(new DumbProgressIndicator());
       if (continuation != null) {
         continuation.getAction().run();
@@ -144,8 +137,16 @@ class DetectAndAdjustIndentOptionsTask extends ReadTask {
     }
     else {
       PsiDocumentManager manager = PsiDocumentManager.getInstance(myProject);
-      manager.performForCommittedDocument(myDocument, () -> scheduleWithWriteActionPriority(myExecutor, this));
+      manager.performForCommittedDocument(myDocument, () -> ProgressIndicatorUtils.scheduleWithWriteActionPriority(myExecutor, this));
     }
   }
+
+  @NotNull
+  public static TimeStampedIndentOptions getDefaultIndentOptions(@NotNull PsiFile file, @NotNull Document document) {
+    FileType fileType = file.getFileType();
+    CodeStyleSettings settings = CodeStyle.getSettings(file);
+    return new TimeStampedIndentOptions(settings.getIndentOptions(fileType), document.getModificationStamp());
+  }
+
   
 }

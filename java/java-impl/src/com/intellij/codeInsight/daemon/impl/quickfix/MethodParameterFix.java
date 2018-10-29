@@ -74,8 +74,7 @@ public class MethodParameterFix extends LocalQuickFixAndIntentionActionOnPsiElem
                              @NotNull PsiElement startElement,
                              @NotNull PsiElement endElement) {
     final PsiMethod myMethod = (PsiMethod)startElement;
-    return myMethod.isValid()
-        && myMethod.getManager().isInProject(myMethod)
+    return myMethod.getManager().isInProject(myMethod)
         && myParameterType != null
         && !TypeConversionUtil.isNullType(myParameterType)
         && myMethod.getReturnType() != null
@@ -120,10 +119,11 @@ public class MethodParameterFix extends LocalQuickFixAndIntentionActionOnPsiElem
     return false;
   }
 
+  @NotNull
   private ParameterInfoImpl[] getNewParametersInfo(PsiMethod method) throws IncorrectOperationException {
-    List<ParameterInfoImpl> result = new ArrayList<ParameterInfoImpl>();
+    List<ParameterInfoImpl> result = new ArrayList<>();
     PsiParameter[] parameters = method.getParameterList().getParameters();
-    PsiElementFactory factory = JavaPsiFacade.getInstance(method.getProject()).getElementFactory();
+    PsiElementFactory factory = JavaPsiFacade.getElementFactory(method.getProject());
     JavaCodeStyleManager codeStyleManager = JavaCodeStyleManager.getInstance(method.getProject());
     SuggestedNameInfo nameInfo = codeStyleManager.suggestVariableName(VariableKind.PARAMETER, null, null, myParameterType);
     PsiParameter newParameter = factory.createParameter(nameInfo.names[0], myParameterType);
@@ -142,6 +142,6 @@ public class MethodParameterFix extends LocalQuickFixAndIntentionActionOnPsiElem
     if (parameters.length == myIndex) {
       result.add(new ParameterInfoImpl(-1, newParameter.getName(), newParameter.getType()));
     }
-    return result.toArray(new ParameterInfoImpl[result.size()]);
+    return result.toArray(new ParameterInfoImpl[0]);
   }
 }

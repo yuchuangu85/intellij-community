@@ -41,11 +41,11 @@ class ResolvingVisitor extends XmlElementVisitor implements PsiElementProcessor 
   private final ProcessingContext myProcessingContext;
   private XmlNamedElementPattern myIncludePattern;
 
-  public ResolvingVisitor(XmlAttributeValuePattern pattern, ProcessingContext context) {
+  ResolvingVisitor(XmlAttributeValuePattern pattern, ProcessingContext context) {
     myPattern = pattern;
     myProcessingContext = context;
 
-    myProcessingContext.put(VISITED_KEY, new THashSet<XmlFile>());
+    myProcessingContext.put(VISITED_KEY, new THashSet<>());
   }
 
   @Override
@@ -82,7 +82,6 @@ class ResolvingVisitor extends XmlElementVisitor implements PsiElementProcessor 
   }
 
   @Override
-  @SuppressWarnings({ "ForLoopReplaceableByForEach" })
   public void visitXmlTag(XmlTag tag) {
     visitAttributes(tag);
   }

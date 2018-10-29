@@ -16,15 +16,30 @@
 
 package com.intellij.util.containers;
 
+import com.intellij.util.Function;
 import org.jetbrains.annotations.NotNull;
+
+import java.util.Map;
 
 /**
  * @author peter
  */
-public class ConcurrentInstanceMap<T> extends ConcurrentFactoryMap<Class<? extends T>,T>{
-  @Override
+public class ConcurrentInstanceMap {
+  private ConcurrentInstanceMap() {
+  }
+
   @NotNull
-  protected T create(final Class<? extends T> key) {
+  public static <T> Map<Class<? extends T>,T> create() {
+    return ConcurrentFactoryMap.createMap(new Function<Class<? extends T>, T>() {
+      @Override
+      public T fun(Class<? extends T> key) {
+        return calculate(key);
+      }
+    });
+  }
+
+  @NotNull
+  public static <T> T calculate(@NotNull Class<? extends T> key) {
     try {
       return key.newInstance();
     }

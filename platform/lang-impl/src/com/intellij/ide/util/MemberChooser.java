@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.ide.util;
 
@@ -21,22 +7,20 @@ import com.intellij.icons.AllIcons;
 import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.keymap.KeymapManager;
+import com.intellij.openapi.application.TransactionGuard;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.VerticalFlowLayout;
+import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.Ref;
 import com.intellij.psi.PsiCompiledElement;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.codeStyle.CodeStyleSettings;
-import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
 import com.intellij.ui.*;
 import com.intellij.ui.treeStructure.Tree;
 import com.intellij.util.PlatformIcons;
-import com.intellij.util.containers.Convertor;
 import com.intellij.util.containers.FactoryMap;
-import com.intellij.util.containers.HashMap;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.tree.TreeUtil;
@@ -50,33 +34,35 @@ import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.*;
 import java.awt.*;
 import java.awt.event.*;
-import java.util.*;
 import java.util.List;
+import java.util.*;
+
+import static com.intellij.openapi.keymap.KeymapUtil.getActiveKeymapShortcuts;
 
 public class MemberChooser<T extends ClassMember> extends DialogWrapper implements TypeSafeDataProvider {
+  private static final Logger LOG = Logger.getInstance("#com.intellij.ide.util.MemberChooser");
   protected Tree myTree;
   private DefaultTreeModel myTreeModel;
   protected JComponent[] myOptionControls;
   private JCheckBox myCopyJavadocCheckbox;
   private JCheckBox myInsertOverrideAnnotationCheckbox;
-  private final ArrayList<MemberNode> mySelectedNodes = new ArrayList<MemberNode>();
+  private final ArrayList<MemberNode> mySelectedNodes = new ArrayList<>();
 
   private final SortEmAction mySortAction;
 
   private boolean myAlphabeticallySorted = false;
   private boolean myShowClasses = true;
-  protected boolean myAllowEmptySelection = false;
+  protected boolean myAllowEmptySelection;
   private final boolean myAllowMultiSelection;
-  private final Project myProject;
   private final boolean myIsInsertOverrideVisible;
   private final JComponent myHeaderPanel;
 
   protected T[] myElements;
   protected Comparator<ElementNode> myComparator = new OrderComparator();
 
-  protected final HashMap<MemberNode,ParentNode> myNodeToParentMap = new HashMap<MemberNode, ParentNode>();
-  protected final HashMap<ClassMember, MemberNode> myElementToNodeMap = new HashMap<ClassMember, MemberNode>();
-  protected final ArrayList<ContainerNode> myContainerNodes = new ArrayList<ContainerNode>();
+  protected final HashMap<MemberNode,ParentNode> myNodeToParentMap = new HashMap<>();
+  protected final HashMap<ClassMember, MemberNode> myElementToNodeMap = new HashMap<>();
+  protected final ArrayList<ContainerNode> myContainerNodes = new ArrayList<>();
 
   protected LinkedHashSet<T> mySelectedElements;
 
@@ -128,7 +114,6 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
     super(project, true);
     myAllowEmptySelection = allowEmptySelection;
     myAllowMultiSelection = allowMultiSelection;
-    myProject = project;
     myIsInsertOverrideVisible = isInsertOverrideVisible;
     myHeaderPanel = headerPanel;
     myTree = createTree();
@@ -137,9 +122,9 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
     mySortAction.registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_A, InputEvent.ALT_MASK)), myTree);
   }
 
-  protected void resetElementsWithDefaultComparator(T[] elements, final boolean restoreSelectedElements) {
+  protected void resetElementsWithDefaultComparator(T[] elements) {
     myComparator = myAlphabeticallySorted ? new AlphaComparator() : new OrderComparator();
-    resetElements(elements, null, restoreSelectedElements);
+    resetElements(elements, null, true);
   }
 
   public void resetElements(T[] elements) {
@@ -148,7 +133,7 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
 
   @SuppressWarnings("unchecked")
   public void resetElements(T[] elements, final @Nullable Comparator<T> sortComparator, final boolean restoreSelectedElements) {
-    final List<T> selectedElements  = restoreSelectedElements && mySelectedElements != null ? new ArrayList<T>(mySelectedElements) : null;
+    final List<T> selectedElements  = restoreSelectedElements && mySelectedElements != null ? new ArrayList<>(mySelectedElements) : null;
     myElements = elements;
     if (sortComparator != null) {
       myComparator = new ElementNodeComparatorWrapper(sortComparator);
@@ -188,7 +173,7 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
     setOKActionEnabled(myAllowEmptySelection || myElements != null && myElements.length > 0);
 
     if (selectedElements != null) {
-      selectElements(selectedElements.toArray(new ClassMember[selectedElements.size()]));
+      selectElements(selectedElements.toArray(ClassMember.EMPTY_ARRAY));
     }
     if (mySelectedElements == null || mySelectedElements.isEmpty()) {
       expandFirst();
@@ -200,32 +185,30 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
    */
   private DefaultTreeModel buildModel() {
     final DefaultMutableTreeNode rootNode = new DefaultMutableTreeNode();
-    final Ref<Integer> count = new Ref<Integer>(0);
-    final FactoryMap<MemberChooserObject, ParentNode> map = new FactoryMap<MemberChooserObject, ParentNode>() {
-      @Override
-      protected ParentNode create(final MemberChooserObject key) {
-        ParentNode node = null;
-        DefaultMutableTreeNode parentNode = rootNode;
+    final Ref<Integer> count = new Ref<>(0);
+    Ref<Map<MemberChooserObject, ParentNode>> mapRef = new Ref<>();
+    mapRef.set(FactoryMap.create(key -> {
+      ParentNode node = null;
+      DefaultMutableTreeNode parentNode1 = rootNode;
 
-        if (supportsNestedContainers() && key instanceof ClassMember) {
-          MemberChooserObject parentNodeDelegate = ((ClassMember)key).getParentNodeDelegate();
+      if (supportsNestedContainers() && key instanceof ClassMember) {
+        MemberChooserObject parentNodeDelegate = ((ClassMember)key).getParentNodeDelegate();
 
-          if (parentNodeDelegate != null) {
-            parentNode = get(parentNodeDelegate);
-          }
+        if (parentNodeDelegate != null) {
+          parentNode1 = mapRef.get().get(parentNodeDelegate);
         }
-        if (isContainerNode(key)) {
-            final ContainerNode containerNode = new ContainerNode(parentNode, key, count);
-            node = containerNode;
-            myContainerNodes.add(containerNode);
-        }
-        if (node == null) {
-          node = new ParentNode(parentNode, key, count);
-        }
-        return node;
       }
-    };
-
+      if (isContainerNode(key)) {
+        final ContainerNode containerNode = new ContainerNode(parentNode1, key, count);
+        node = containerNode;
+        myContainerNodes.add(containerNode);
+      }
+      if (node == null) {
+        node = new ParentNode(parentNode1, key, count);
+      }
+      return node;
+    }));
+    final Map<MemberChooserObject, ParentNode> map = mapRef.get();
     for (T object : myElements) {
       final ParentNode parentNode = map.get(object.getParentNodeDelegate());
       final MemberNode elementNode = createMemberNode(count, object, parentNode);
@@ -252,14 +235,14 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
   }
 
   public void selectElements(ClassMember[] elements) {
-    ArrayList<TreePath> selectionPaths = new ArrayList<TreePath>();
+    ArrayList<TreePath> selectionPaths = new ArrayList<>();
     for (ClassMember element : elements) {
       MemberNode treeNode = myElementToNodeMap.get(element);
       if (treeNode != null) {
         selectionPaths.add(new TreePath(((DefaultMutableTreeNode)treeNode).getPath()));
       }
     }
-    final TreePath[] paths = selectionPaths.toArray(new TreePath[selectionPaths.size()]);
+    final TreePath[] paths = selectionPaths.toArray(new TreePath[0]);
     myTree.setSelectionPaths(paths);
 
     if (paths.length > 0) {
@@ -271,7 +254,7 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
   @Override
   @NotNull
   protected Action[] createActions() {
-    final List<Action> actions = new ArrayList<Action>();
+    final List<Action> actions = new ArrayList<>();
     actions.add(getOKAction());
     if (myAllowEmptySelection) {
       actions.add(new SelectNoneAction());
@@ -280,23 +263,20 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
     if (getHelpId() != null) {
       actions.add(getHelpAction());
     }
-    return actions.toArray(new Action[actions.size()]);
-  }
-
-  @Override
-  protected void doHelpAction() {
-    if (getHelpId() == null) return;
-    super.doHelpAction();
+    return actions.toArray(new Action[0]);
   }
 
   protected void customizeOptionsPanel() {
     if (myInsertOverrideAnnotationCheckbox != null && myIsInsertOverrideVisible) {
-      CodeStyleSettings styleSettings = CodeStyleSettingsManager.getInstance(myProject).getCurrentSettings();
-      myInsertOverrideAnnotationCheckbox.setSelected(styleSettings.INSERT_OVERRIDE_ANNOTATION);
+      myInsertOverrideAnnotationCheckbox.setSelected(isInsertOverrideAnnotationSelected());
     }
     if (myCopyJavadocCheckbox != null) {
       myCopyJavadocCheckbox.setSelected(PropertiesComponent.getInstance().isTrueValue(PROP_COPYJAVADOC));
     }
+  }
+
+  protected boolean isInsertOverrideAnnotationSelected() {
+    return false;
   }
 
   @Override
@@ -321,7 +301,7 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
     panel.add(
       super.createSouthPanel(),
       new GridBagConstraints(1, 0, 1, 1, 0, 0, GridBagConstraints.SOUTH, GridBagConstraints.NONE,
-                             new Insets(0, 0, 0, 0), 0, 0)
+                             JBUI.emptyInsets(), 0, 0)
     );
     return panel;
   }
@@ -344,18 +324,14 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
     group.addSeparator();
 
     ExpandAllAction expandAllAction = new ExpandAllAction();
-    expandAllAction.registerCustomShortcutSet(
-      new CustomShortcutSet(KeymapManager.getInstance().getActiveKeymap().getShortcuts(IdeActions.ACTION_EXPAND_ALL)),
-      myTree);
+    expandAllAction.registerCustomShortcutSet(getActiveKeymapShortcuts(IdeActions.ACTION_EXPAND_ALL), myTree);
     group.add(expandAllAction);
 
     CollapseAllAction collapseAllAction = new CollapseAllAction();
-    collapseAllAction.registerCustomShortcutSet(
-      new CustomShortcutSet(KeymapManager.getInstance().getActiveKeymap().getShortcuts(IdeActions.ACTION_COLLAPSE_ALL)),
-      myTree);
+    collapseAllAction.registerCustomShortcutSet(getActiveKeymapShortcuts(IdeActions.ACTION_COLLAPSE_ALL), myTree);
     group.add(collapseAllAction);
 
-    panel.add(ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN, group, true).getComponent(),
+    panel.add(ActionManager.getInstance().createActionToolbar("MemberChooser", group, true).getComponent(),
               BorderLayout.NORTH);
 
     // Tree
@@ -409,7 +385,7 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
   protected TreeCellRenderer getTreeCellRenderer() {
     return new ColoredTreeCellRenderer() {
       @Override
-      public void customizeCellRenderer(JTree tree, Object value, boolean selected, boolean expanded,
+      public void customizeCellRenderer(@NotNull JTree tree, Object value, boolean selected, boolean expanded,
                                         boolean leaf, int row, boolean hasFocus) {
         if (value instanceof ElementNode) {
           ((ElementNode) value).getDelegate().renderTreeNode(this, tree);
@@ -420,33 +396,18 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
 
   @NotNull
   protected String convertElementText(@NotNull String originalElementText) {
-    String res = originalElementText;
-
-    int i = res.indexOf(':');
-    if (i >= 0) {
-      res = res.substring(0, i);
-    }
-    i = res.indexOf('(');
-    if (i >= 0) {
-      res = res.substring(0, i);
-    }
-
-    return res;
+    return originalElementText;
   }
 
   protected void installSpeedSearch() {
-    final TreeSpeedSearch treeSpeedSearch = new TreeSpeedSearch(myTree, new Convertor<TreePath, String>() {
-      @Override
-      @Nullable
-      public String convert(TreePath path) {
-        final ElementNode lastPathComponent = (ElementNode)path.getLastPathComponent();
-        if (lastPathComponent == null) return null;
-        String text = lastPathComponent.getDelegate().getText();
-        if (text != null) {
-          text = convertElementText(text);
-        }
-        return text;
+    final TreeSpeedSearch treeSpeedSearch = new TreeSpeedSearch(myTree, path -> {
+      final ElementNode lastPathComponent = (ElementNode)path.getLastPathComponent();
+      if (lastPathComponent == null) return null;
+      String text = lastPathComponent.getDelegate().getText();
+      if (text != null) {
+        text = convertElementText(text);
       }
+      return text;
     });
     treeSpeedSearch.setComparator(getSpeedSearchComparator());
   }
@@ -455,7 +416,7 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
     return new SpeedSearchComparator(false);
   }
 
-  protected void disableAlphabeticalSorting(final AnActionEvent event) {
+  protected void disableAlphabeticalSorting(@NotNull AnActionEvent event) {
     mySortAction.setSelected(event, false);
   }
 
@@ -502,7 +463,7 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
   @Nullable
   public List<T> getSelectedElements() {
     final LinkedHashSet<T> list = getSelectedElementsList();
-    return list == null ? null : new ArrayList<T>(list);
+    return list == null ? null : new ArrayList<>(list);
   }
 
   @Nullable
@@ -558,8 +519,8 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
     restoreSelection(pair);
   }
 
-  private static void sortNode(ParentNode node, final Comparator<ElementNode> sortComparator) {
-    ArrayList<ElementNode> arrayList = new ArrayList<ElementNode>();
+  private static void sortNode(ParentNode node, final Comparator<? super ElementNode> sortComparator) {
+    ArrayList<ElementNode> arrayList = new ArrayList<>();
     Enumeration<TreeNode> children = node.children();
     while (children.hasMoreElements()) {
       arrayList.add((ElementNode)children.nextElement());
@@ -582,15 +543,15 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
 
     DefaultMutableTreeNode root = getRootNode();
     if (!myShowClasses || myContainerNodes.isEmpty()) {
-      List<ParentNode> otherObjects = new ArrayList<ParentNode>();
+      List<ParentNode> otherObjects = new ArrayList<>();
       Enumeration<TreeNode> children = getRootNodeChildren();
-      ParentNode newRoot = new ParentNode(null, new MemberChooserObjectBase(getAllContainersNodeName()), new Ref<Integer>(0));
+      ParentNode newRoot = new ParentNode(null, new MemberChooserObjectBase(getAllContainersNodeName()), new Ref<>(0));
       while (children.hasMoreElements()) {
         final ParentNode nextElement = (ParentNode)children.nextElement();
         if (nextElement instanceof ContainerNode) {
           final ContainerNode containerNode = (ContainerNode)nextElement;
           Enumeration<TreeNode> memberNodes = containerNode.children();
-          List<MemberNode> memberNodesList = new ArrayList<MemberNode>();
+          List<MemberNode> memberNodesList = new ArrayList<>();
           while (memberNodes.hasMoreElements()) {
             memberNodesList.add((MemberNode)memberNodes.nextElement());
           }
@@ -611,7 +572,7 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
       while (children.hasMoreElements()) {
         ParentNode allClassesNode = (ParentNode)children.nextElement();
         Enumeration<TreeNode> memberNodes = allClassesNode.children();
-        ArrayList<MemberNode> arrayList = new ArrayList<MemberNode>();
+        ArrayList<MemberNode> arrayList = new ArrayList<>();
         while (memberNodes.hasMoreElements()) {
           arrayList.add((MemberNode)memberNodes.nextElement());
         }
@@ -629,7 +590,7 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
     restoreSelection(selection);
   }
 
-  private void setShowClasses(boolean showClasses) {
+  protected void setShowClasses(boolean showClasses) {
     myShowClasses = showClasses;
     restoreTree();
   }
@@ -647,7 +608,7 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
   }
 
   private Pair<ElementNode,List<ElementNode>> storeSelection() {
-    List<ElementNode> selectedNodes = new ArrayList<ElementNode>();
+    List<ElementNode> selectedNodes = new ArrayList<>();
     TreePath[] paths = myTree.getSelectionPaths();
     if (paths != null) {
       for (TreePath path : paths) {
@@ -659,12 +620,12 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
   }
 
 
-  private void restoreSelection(Pair<ElementNode,List<ElementNode>> pair) {
+  private void restoreSelection(Pair<? extends ElementNode, ? extends List<ElementNode>> pair) {
     List<ElementNode> selectedNodes = pair.second;
 
     DefaultMutableTreeNode root = getRootNode();
 
-    ArrayList<TreePath> toSelect = new ArrayList<TreePath>();
+    ArrayList<TreePath> toSelect = new ArrayList<>();
     for (ElementNode node : selectedNodes) {
       DefaultMutableTreeNode treeNode = (DefaultMutableTreeNode)node;
       if (root.isNodeDescendant(treeNode)) {
@@ -673,13 +634,19 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
     }
 
     if (!toSelect.isEmpty()) {
-      myTree.setSelectionPaths(toSelect.toArray(new TreePath[toSelect.size()]));
+      myTree.setSelectionPaths(toSelect.toArray(new TreePath[0]));
     }
 
     ElementNode leadNode = pair.first;
     if (leadNode != null) {
       myTree.setLeadSelectionPath(new TreePath(((DefaultMutableTreeNode)leadNode).getPath()));
     }
+  }
+
+  @Override
+  public void show() {
+    LOG.assertTrue(TransactionGuard.getInstance().getContextTransaction() != null, "Member Chooser should be shown in a transaction, see AnAction#startInTransaction");
+    super.show();
   }
 
   @Override
@@ -702,7 +669,7 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
   }
 
   @Override
-  public void calcData(final DataKey key, final DataSink sink) {
+  public void calcData(@NotNull final DataKey key, @NotNull final DataSink sink) {
     if (key.equals(CommonDataKeys.PSI_ELEMENT)) {
       if (mySelectedElements != null && !mySelectedElements.isEmpty()) {
         T selectedElement = mySelectedElements.iterator().next();
@@ -733,7 +700,7 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
         }
       }
       mySelectedNodes.sort(new OrderComparator());
-      mySelectedElements = new LinkedHashSet<T>();
+      mySelectedElements = new LinkedHashSet<>();
       for (MemberNode selectedNode : mySelectedNodes) {
         mySelectedElements.add((T)selectedNode.getDelegate());
       }
@@ -793,7 +760,7 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
   }
 
   private class SelectNoneAction extends AbstractAction {
-    public SelectNoneAction() {
+    SelectNoneAction() {
       super(IdeBundle.message("action.select.none"));
     }
 
@@ -837,18 +804,18 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
   }
 
   private class SortEmAction extends ToggleAction {
-    public SortEmAction() {
+    SortEmAction() {
       super(IdeBundle.message("action.sort.alphabetically"),
             IdeBundle.message("action.sort.alphabetically"), AllIcons.ObjectBrowser.Sorted);
     }
 
     @Override
-    public boolean isSelected(AnActionEvent event) {
+    public boolean isSelected(@NotNull AnActionEvent event) {
       return isAlphabeticallySorted();
     }
 
     @Override
-    public void setSelected(AnActionEvent event, boolean flag) {
+    public void setSelected(@NotNull AnActionEvent event, boolean flag) {
       myAlphabeticallySorted = flag;
       setSortComparator(flag ? new AlphaComparator() : new OrderComparator());
       if (flag) {
@@ -867,17 +834,17 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
     }
 
     @Override
-    public boolean isSelected(AnActionEvent event) {
+    public boolean isSelected(@NotNull AnActionEvent event) {
       return myShowClasses;
     }
 
     @Override
-    public void setSelected(AnActionEvent event, boolean flag) {
+    public void setSelected(@NotNull AnActionEvent event, boolean flag) {
       setShowClasses(flag);
     }
 
     @Override
-    public void update(AnActionEvent e) {
+    public void update(@NotNull AnActionEvent e) {
       super.update(e);
       Presentation presentation = e.getPresentation();
       presentation.setEnabled(myContainerNodes.size() > 1);
@@ -885,25 +852,25 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
   }
 
   private class ExpandAllAction extends AnAction {
-    public ExpandAllAction() {
+    ExpandAllAction() {
       super(IdeBundle.message("action.expand.all"), IdeBundle.message("action.expand.all"),
             AllIcons.Actions.Expandall);
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       TreeUtil.expandAll(myTree);
     }
   }
 
   private class CollapseAllAction extends AnAction {
-    public CollapseAllAction() {
+    CollapseAllAction() {
       super(IdeBundle.message("action.collapse.all"), IdeBundle.message("action.collapse.all"),
             AllIcons.Actions.Collapseall);
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       TreeUtil.collapseAll(myTree, 1);
     }
   }
@@ -924,7 +891,8 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
       if (n1.getDelegate() instanceof ClassMemberWithElement && n2.getDelegate() instanceof ClassMemberWithElement) {
         PsiElement element1 = ((ClassMemberWithElement)n1.getDelegate()).getElement();
         PsiElement element2 = ((ClassMemberWithElement)n2.getDelegate()).getElement();
-        if (!(element1 instanceof PsiCompiledElement) && !(element2 instanceof PsiCompiledElement)) {
+        if (Comparing.equal(element1.getContainingFile(), element2.getContainingFile()) &&
+            !(element1 instanceof PsiCompiledElement) && !(element2 instanceof PsiCompiledElement)) {
           return element1.getTextOffset() - element2.getTextOffset();
         }
       }
@@ -933,9 +901,9 @@ public class MemberChooser<T extends ClassMember> extends DialogWrapper implemen
   }
 
   private static class ElementNodeComparatorWrapper<T> implements Comparator<ElementNode> {
-    private final Comparator<T> myDelegate;
+    private final Comparator<? super T> myDelegate;
 
-    public ElementNodeComparatorWrapper(final Comparator<T> delegate) {
+    ElementNodeComparatorWrapper(final Comparator<? super T> delegate) {
       myDelegate = delegate;
     }
 

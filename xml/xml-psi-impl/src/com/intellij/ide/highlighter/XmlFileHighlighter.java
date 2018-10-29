@@ -35,8 +35,8 @@ public class XmlFileHighlighter extends SyntaxHighlighterBase {
   private static final Map<IElementType, TextAttributesKey> keys2;
 
   static {
-    keys1 = new HashMap<IElementType, TextAttributesKey>();
-    keys2 = new HashMap<IElementType, TextAttributesKey>();
+    keys1 = new HashMap<>();
+    keys2 = new HashMap<>();
 
     keys1.put(XmlTokenType.XML_DATA_CHARACTERS, XmlHighlighterColors.XML_TAG_DATA);
 
@@ -64,7 +64,7 @@ public class XmlFileHighlighter extends SyntaxHighlighterBase {
     keys1.put(XmlTokenType.XML_TAG_CHARACTERS, XmlHighlighterColors.XML_TAG);
 
     keys2.put(XmlTokenType.XML_TAG_NAME, XmlHighlighterColors.XML_TAG_NAME);
-    keys2.put(XmlTokenType.XML_CONDITIONAL_INCLUDE, XmlHighlighterColors.XML_TAG_NAME);
+    keys2.put(XmlTokenType.XML_CONDITIONAL_IGNORE, XmlHighlighterColors.XML_TAG_NAME);
     keys2.put(XmlTokenType.XML_CONDITIONAL_INCLUDE, XmlHighlighterColors.XML_TAG_NAME);
     keys2.put(XmlTokenType.XML_NAME, XmlHighlighterColors.XML_ATTRIBUTE_NAME);
     keys2.put(XmlTokenType.XML_ATTRIBUTE_VALUE_TOKEN, XmlHighlighterColors.XML_ATTRIBUTE_VALUE);

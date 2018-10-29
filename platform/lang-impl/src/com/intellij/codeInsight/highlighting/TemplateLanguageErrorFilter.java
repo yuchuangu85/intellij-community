@@ -20,6 +20,7 @@ import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.util.Key;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.TokenSet;
+import com.intellij.util.ArrayUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -42,7 +43,7 @@ public abstract class TemplateLanguageErrorFilter extends HighlightErrorFilter {
     @NotNull final TokenSet templateExpressionStartTokens,
     @NotNull final Class templateFileViewProviderClass)
   {
-    this(templateExpressionStartTokens, templateFileViewProviderClass, new String[0]);
+    this(templateExpressionStartTokens, templateFileViewProviderClass, ArrayUtil.EMPTY_STRING_ARRAY);
   }
 
   protected TemplateLanguageErrorFilter(@NotNull final TokenSet templateExpressionStartTokens,
@@ -51,10 +52,10 @@ public abstract class TemplateLanguageErrorFilter extends HighlightErrorFilter {
     myTemplateExpressionStartTokens = TokenSet.create(templateExpressionStartTokens.getTypes());
     myTemplateFileViewProviderClass = templateFileViewProviderClass;
 
-    List<String> knownSubLanguageList = new ArrayList<String>(Arrays.asList(knownSubLanguageNames));
+    List<String> knownSubLanguageList = new ArrayList<>(Arrays.asList(knownSubLanguageNames));
     knownSubLanguageList.add("JavaScript");
     knownSubLanguageList.add("CSS");
-    knownLanguageSet = new HashSet<Language>();
+    knownLanguageSet = new HashSet<>();
     for (String name : knownSubLanguageList) {
       final Language language = Language.findLanguageByID(name);
       if (language != null) {

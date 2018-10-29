@@ -37,7 +37,6 @@ public class LibraryDetectionManagerImpl extends LibraryDetectionManager {
   @Override
   public boolean processProperties(@NotNull List<VirtualFile> files, @NotNull LibraryPropertiesProcessor processor) {
     for (Pair<LibraryKind, LibraryProperties> pair : getOrComputeKinds(files)) {
-      //noinspection unchecked
       if (!processor.processProperties(pair.getFirst(), pair.getSecond())) {
         return false;
       }
@@ -55,7 +54,7 @@ public class LibraryDetectionManagerImpl extends LibraryDetectionManager {
         if (result != null) {
           return null;
         }
-        result = Pair.<LibraryType<?>, LibraryProperties<?>>create(type, properties);
+        result = Pair.create(type, properties);
       }
     }
     return result;
@@ -71,7 +70,7 @@ public class LibraryDetectionManagerImpl extends LibraryDetectionManager {
   }
 
   private static List<Pair<LibraryKind, LibraryProperties>> computeKinds(List<VirtualFile> files) {
-    final SmartList<Pair<LibraryKind, LibraryProperties>> result = new SmartList<Pair<LibraryKind, LibraryProperties>>();
+    final SmartList<Pair<LibraryKind, LibraryProperties>> result = new SmartList<>();
     final LibraryType<?>[] libraryTypes = LibraryType.EP_NAME.getExtensions();
     final LibraryPresentationProvider[] presentationProviders = LibraryPresentationProvider.EP_NAME.getExtensions();
     for (LibraryPresentationProvider provider : ContainerUtil.concat(libraryTypes, presentationProviders)) {

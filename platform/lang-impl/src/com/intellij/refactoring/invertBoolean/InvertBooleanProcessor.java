@@ -31,7 +31,7 @@ import com.intellij.refactoring.util.MoveRenameUsageInfo;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.usageView.UsageViewDescriptor;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.containers.HashMap;
+import java.util.HashMap;
 import com.intellij.util.containers.MultiMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -51,7 +51,7 @@ public class InvertBooleanProcessor extends BaseRefactoringProcessor {
   private PsiElement myElement;
   private final String myNewName;
   private final RenameProcessor myRenameProcessor;
-  private final Map<UsageInfo, SmartPsiElementPointer> myToInvert = new HashMap<UsageInfo, SmartPsiElementPointer>();
+  private final Map<UsageInfo, SmartPsiElementPointer> myToInvert = new HashMap<>();
   private final SmartPointerManager mySmartPointerManager;
 
   public InvertBooleanProcessor(final PsiElement namedElement, final String newName) {
@@ -86,7 +86,7 @@ public class InvertBooleanProcessor extends BaseRefactoringProcessor {
 
   @Override
   protected boolean preprocessUsages(@NotNull Ref<UsageInfo[]> refUsages) {
-    final MultiMap<PsiElement, String> conflicts = new MultiMap<PsiElement, String>();
+    final MultiMap<PsiElement, String> conflicts = new MultiMap<>();
     final UsageInfo[] usageInfos = refUsages.get();
     myDelegate.findConflicts(usageInfos, conflicts);
     
@@ -104,9 +104,9 @@ public class InvertBooleanProcessor extends BaseRefactoringProcessor {
   @Override
   @NotNull
   protected UsageInfo[] findUsages() {
-    final List<SmartPsiElementPointer> toInvert = new ArrayList<SmartPsiElementPointer>();
+    final List<SmartPsiElementPointer> toInvert = new ArrayList<>();
 
-    final LinkedHashSet<PsiElement> elementsToInvert = new LinkedHashSet<PsiElement>();
+    final LinkedHashSet<PsiElement> elementsToInvert = new LinkedHashSet<>();
     myDelegate.collectRefElements(myElement, myRenameProcessor, myNewName, elementsToInvert);
     for (PsiElement element : elementsToInvert) {
       toInvert.add(mySmartPointerManager.createSmartPsiElementPointer(element));
@@ -114,11 +114,11 @@ public class InvertBooleanProcessor extends BaseRefactoringProcessor {
 
     final UsageInfo[] renameUsages = myRenameProcessor != null ? myRenameProcessor.findUsages() : UsageInfo.EMPTY_ARRAY;
 
-    final SmartPsiElementPointer[] usagesToInvert = toInvert.toArray(new SmartPsiElementPointer[toInvert.size()]);
+    final SmartPsiElementPointer[] usagesToInvert = toInvert.toArray(new SmartPsiElementPointer[0]);
 
     //merge rename and invert usages
-    Map<PsiElement, UsageInfo> expressionsToUsages = new HashMap<PsiElement, UsageInfo>();
-    List<UsageInfo> result = new ArrayList<UsageInfo>();
+    Map<PsiElement, UsageInfo> expressionsToUsages = new HashMap<>();
+    List<UsageInfo> result = new ArrayList<>();
     for (UsageInfo renameUsage : renameUsages) {
       expressionsToUsages.put(renameUsage.getElement(), renameUsage);
       result.add(renameUsage);
@@ -136,7 +136,7 @@ public class InvertBooleanProcessor extends BaseRefactoringProcessor {
       }
     }
 
-    return result.toArray(new UsageInfo[result.size()]);
+    return result.toArray(UsageInfo.EMPTY_ARRAY);
   }
 
   @Override
@@ -145,7 +145,7 @@ public class InvertBooleanProcessor extends BaseRefactoringProcessor {
   }
 
   private static UsageInfo[] extractUsagesForElement(PsiElement element, UsageInfo[] usages) {
-    final ArrayList<UsageInfo> extractedUsages = new ArrayList<UsageInfo>(usages.length);
+    final ArrayList<UsageInfo> extractedUsages = new ArrayList<>(usages.length);
     for (UsageInfo usage : usages) {
       if (usage instanceof MoveRenameUsageInfo) {
         MoveRenameUsageInfo usageInfo = (MoveRenameUsageInfo)usage;
@@ -154,7 +154,7 @@ public class InvertBooleanProcessor extends BaseRefactoringProcessor {
         }
       }
     }
-    return extractedUsages.toArray(new UsageInfo[extractedUsages.size()]);
+    return extractedUsages.toArray(UsageInfo.EMPTY_ARRAY);
   }
 
   @Override
@@ -190,6 +190,7 @@ public class InvertBooleanProcessor extends BaseRefactoringProcessor {
     myDelegate.invertElementInitializer(myElement);
   }
 
+  @NotNull
   @Override
   protected String getCommandName() {
     return InvertBooleanHandler.REFACTORING_NAME;

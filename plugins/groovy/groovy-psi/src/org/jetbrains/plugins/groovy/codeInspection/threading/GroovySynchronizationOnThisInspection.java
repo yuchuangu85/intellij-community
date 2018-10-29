@@ -30,13 +30,6 @@ public class GroovySynchronizationOnThisInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return THREADING_ISSUES;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Synchronization on 'this'";
   }
@@ -56,7 +49,7 @@ public class GroovySynchronizationOnThisInspection extends BaseInspection {
 
   private static class Visitor extends BaseInspectionVisitor {
     @Override
-    public void visitSynchronizedStatement(GrSynchronizedStatement synchronizedStatement) {
+    public void visitSynchronizedStatement(@NotNull GrSynchronizedStatement synchronizedStatement) {
       super.visitSynchronizedStatement(synchronizedStatement);
       final GrExpression lock = synchronizedStatement.getMonitor();
       if (lock == null || !(lock instanceof GrReferenceExpression && PsiUtil.isThisReference(lock))) {

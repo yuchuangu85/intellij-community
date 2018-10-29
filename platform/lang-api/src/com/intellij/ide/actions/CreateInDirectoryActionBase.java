@@ -20,6 +20,7 @@ import com.intellij.ide.IdeView;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
+import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 
@@ -37,7 +38,7 @@ public abstract class CreateInDirectoryActionBase extends AnAction {
   }
 
   @Override
-  public void update(final AnActionEvent e) {
+  public void update(@NotNull final AnActionEvent e) {
     final DataContext dataContext = e.getDataContext();
     final Presentation presentation = e.getPresentation();
 
@@ -45,6 +46,11 @@ public abstract class CreateInDirectoryActionBase extends AnAction {
 
     presentation.setVisible(enabled);
     presentation.setEnabled(enabled);
+  }
+
+  @Override
+  public boolean startInTransaction() {
+    return true;
   }
 
   @Override

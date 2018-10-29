@@ -20,7 +20,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.util.IncorrectOperationException;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.codeInspection.BaseInspection;
@@ -34,13 +33,6 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrUnaryE
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 
 public class GroovyDoubleNegationInspection extends BaseInspection {
-
-  @Override
-  @Nls
-  @NotNull
-  public String getGroupDisplayName() {
-    return CONFUSING_CODE_CONSTRUCTS;
-  }
 
   @Override
   @NotNull
@@ -69,12 +61,12 @@ public class GroovyDoubleNegationInspection extends BaseInspection {
 
     @Override
     @NotNull
-    public String getName() {
+    public String getFamilyName() {
       return "Remove double negation";
     }
 
     @Override
-    protected void doFix(Project project, ProblemDescriptor descriptor)
+    protected void doFix(@NotNull Project project, @NotNull ProblemDescriptor descriptor)
         throws IncorrectOperationException {
       final GrUnaryExpression expression =
           (GrUnaryExpression) descriptor.getPsiElement();
@@ -114,7 +106,7 @@ public class GroovyDoubleNegationInspection extends BaseInspection {
   private static class DoubleNegationVisitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitUnaryExpression(GrUnaryExpression expression) {
+    public void visitUnaryExpression(@NotNull GrUnaryExpression expression) {
       super.visitUnaryExpression(expression);
       final IElementType tokenType = expression.getOperationTokenType();
       if (!GroovyTokenTypes.mLNOT.equals(tokenType)) {
@@ -124,7 +116,7 @@ public class GroovyDoubleNegationInspection extends BaseInspection {
     }
 
     @Override
-    public void visitBinaryExpression(GrBinaryExpression expression) {
+    public void visitBinaryExpression(@NotNull GrBinaryExpression expression) {
       super.visitBinaryExpression(expression);
       final IElementType tokenType = expression.getOperationTokenType();
       if (!GroovyTokenTypes.mNOT_EQUAL.equals(tokenType)) {

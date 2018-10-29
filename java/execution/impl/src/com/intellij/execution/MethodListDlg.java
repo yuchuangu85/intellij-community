@@ -39,7 +39,7 @@ public class MethodListDlg extends DialogWrapper {
   private final PsiClass myClass;
   private static final Comparator<PsiMethod> METHOD_NAME_COMPARATOR =
     (psiMethod, psiMethod1) -> psiMethod.getName().compareToIgnoreCase(psiMethod1.getName());
-  private final SortedListModel<PsiMethod> myListModel = new SortedListModel<PsiMethod>(METHOD_NAME_COMPARATOR);
+  private final SortedListModel<PsiMethod> myListModel = new SortedListModel<>(METHOD_NAME_COMPARATOR);
   private final JList myList = new JBList(myListModel);
   private final JPanel myWholePanel = new JPanel(new BorderLayout());
 
@@ -49,6 +49,7 @@ public class MethodListDlg extends DialogWrapper {
     createList(psiClass.getAllMethods(), filter);
     myWholePanel.add(ScrollPaneFactory.createScrollPane(myList));
     myList.setCellRenderer(new ColoredListCellRenderer() {
+      @Override
       protected void customizeCellRenderer(@NotNull final JList list, final Object value, final int index, final boolean selected, final boolean hasFocus) {
         final PsiMethod psiMethod = (PsiMethod)value;
         append(PsiFormatUtil.formatMethod(psiMethod, PsiSubstitutor.EMPTY, PsiFormatUtil.SHOW_NAME, 0),
@@ -74,13 +75,13 @@ public class MethodListDlg extends DialogWrapper {
     init();
   }
 
-  private void createList(final PsiMethod[] allMethods, final Condition<PsiMethod> filter) {
-    for (int i = 0; i < allMethods.length; i++) {
-      final PsiMethod method = allMethods[i];
+  private void createList(final PsiMethod[] allMethods, final Condition<? super PsiMethod> filter) {
+    for (final PsiMethod method : allMethods) {
       if (filter.value(method)) myListModel.add(method);
     }
   }
 
+  @Override
   protected JComponent createCenterPanel() {
     return myWholePanel;
   }

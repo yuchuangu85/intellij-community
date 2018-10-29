@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.actions;
 
 import com.intellij.codeInsight.CodeInsightUtilCore;
@@ -30,13 +16,14 @@ import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.PsiShortNamesCache;
+import com.intellij.psi.util.MethodSignatureUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
-import com.intellij.util.Function;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.LogicalRoot;
 import com.intellij.util.LogicalRootsManager;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -47,6 +34,7 @@ import java.util.List;
 public class JavaQualifiedNameProvider implements QualifiedNameProvider {
   private static final Logger LOG = Logger.getInstance("#com.intellij.ide.actions.JavaQualifiedNameProvider");
 
+  @Override
   @Nullable
   public PsiElement adjustElementToCopy(final PsiElement element) {
     if (element instanceof PsiPackage) return element;
@@ -60,28 +48,54 @@ public class JavaQualifiedNameProvider implements QualifiedNameProvider {
     return null;
   }
 
+  @Override
   @Nullable
   public String getQualifiedName(PsiElement element) {
-    if (element instanceof PsiPackage) return ((PsiPackage)element).getQualifiedName();
+    if (element instanceof PsiPackage) {
+      return ((PsiPackage)element).getQualifiedName();
+    }
+
+    if (element instanceof PsiJavaModule) {
+      return ((PsiJavaModule)element).getName();
+    }
+
+    if (element instanceof PsiJavaModuleReferenceElement) {
+      PsiReference reference = element.getReference();
+      if (reference != null) {
+        PsiElement target = reference.resolve();
+        if (target instanceof PsiJavaModule) {
+          return ((PsiJavaModule)target).getName();
+        }
+      }
+    }
+
     element = getMember(element);
     if (element instanceof PsiClass) {
       return ((PsiClass)element).getQualifiedName();
     }
     else if (element instanceof PsiMember) {
       final PsiMember member = (PsiMember)element;
-      PsiClass containingClass = member.getContainingClass();
-      if (containingClass instanceof PsiAnonymousClass) containingClass = ((PsiAnonymousClass)containingClass).getBaseClassType().resolve();
-      if (containingClass == null) return null;
-      String classFqn = containingClass.getQualifiedName();
-      if (classFqn == null) return member.getName();  // refer to member of anonymous class by simple name
-      if (member instanceof PsiMethod && containingClass.findMethodsByName(member.getName(), false).length > 1) {
-        return classFqn + "#" + member.getName() + getParameterString((PsiMethod)member);
+      String memberFqn = getMethodOrFieldQualifiedName(member);
+      if (memberFqn == null) return null;
+      if (member instanceof PsiMethod && MethodSignatureUtil.hasOverloads((PsiMethod)member)) {
+        return memberFqn + getParameterString((PsiMethod)member);
       }
-      return classFqn + "#" + member.getName();
+      return memberFqn;
     }
+
     return null;
   }
 
+  private static String getMethodOrFieldQualifiedName(@NotNull PsiMember member) {
+    PsiClass containingClass = member.getContainingClass();
+    if (containingClass instanceof PsiAnonymousClass) containingClass = ((PsiAnonymousClass)containingClass).getBaseClassType().resolve();
+    if (containingClass == null) return null;
+    String classFqn = containingClass.getQualifiedName();
+    if (classFqn == null) return member.getName();  // refer to member of anonymous class by simple name
+    return classFqn + "#" + member.getName();
+  }
+
+  @Override
   public PsiElement qualifiedNameToElement(final String fqn, final Project project) {
     final PsiPackage psiPackage = JavaPsiFacade.getInstance(project).findPackage(fqn);
     if (psiPackage != null) {
@@ -142,6 +156,7 @@ public class JavaQualifiedNameProvider implements QualifiedNameProvider {
     return null;
   }
 
+  @Override
   public void insertQualifiedName(String fqn, final PsiElement element, final Editor editor, final Project project) {
     final PsiDocumentManager documentManager = PsiDocumentManager.getInstance(project);
     Document document = editor.getDocument();
@@ -172,7 +187,8 @@ public class JavaQualifiedNameProvider implements QualifiedNameProvider {
     }
     else if (elementAtCaret == null ||
              PsiTreeUtil.getNonStrictParentOfType(elementAtCaret, PsiLiteralExpression.class, PsiComment.class) != null ||
-             PsiTreeUtil.getNonStrictParentOfType(elementAtCaret, PsiJavaFile.class) == null) {
+             PsiTreeUtil.getNonStrictParentOfType(elementAtCaret, PsiJavaFile.class) == null ||
+             isEndOfLineComment(elementAtCaret)) {
       toInsert = fqn;
     }
     else {
@@ -180,9 +196,12 @@ public class JavaQualifiedNameProvider implements QualifiedNameProvider {
 
       toInsert = targetElement.getName();
       if (targetElement instanceof PsiMethod) {
-        if (!fqn.contains("(")) {
-          suffix = "()";
+        suffix = "()";
+        int parenthIdx = fqn.indexOf('(');
+        if (parenthIdx >= 0) {
+          fqn = fqn.substring(0, parenthIdx);
         }
+
         if (((PsiMethod)targetElement).isConstructor()) {
           targetElement = targetElement.getContainingClass();
           fqn = StringUtil.getPackageName(fqn);
@@ -198,34 +217,31 @@ public class JavaQualifiedNameProvider implements QualifiedNameProvider {
           suffix = " ";
         }
       }
-      final PsiElementFactory factory = JavaPsiFacade.getInstance(project).getElementFactory();
+      final PsiElementFactory factory = JavaPsiFacade.getElementFactory(project);
       final PsiExpression expression;
       try {
         expression = factory.createExpressionFromText(toInsert + suffix, elementAtCaret);
-      }
-      catch (IncorrectOperationException e) {
-        LOG.error(e);
-        return;
-      }
-      final PsiReferenceExpression referenceExpression = expression instanceof PsiMethodCallExpression
-                                                         ? ((PsiMethodCallExpression)expression).getMethodExpression()
-                                                         : expression instanceof PsiReferenceExpression
-                                                           ? (PsiReferenceExpression)expression
-                                                           : null;
-      if (referenceExpression == null || !referenceExpression.isValid()) {
-        toInsert = fqn;
-      }
-      else if (!isReferencedTo(referenceExpression, targetElement)) {
-        try {
-          referenceExpression.bindToElement(targetElement);
-        }
-        catch (IncorrectOperationException e) {
-          // failed to bind
-        }
-        if (!referenceExpression.isValid() || !isReferencedTo(referenceExpression, targetElement)) {
+        final PsiReferenceExpression referenceExpression = expression instanceof PsiMethodCallExpression
+                                                           ? ((PsiMethodCallExpression)expression).getMethodExpression()
+                                                           : expression instanceof PsiReferenceExpression
+                                                             ? (PsiReferenceExpression)expression
+                                                             : null;
+        if (referenceExpression == null || !referenceExpression.isValid()) {
           toInsert = fqn;
         }
+        else if (!isReferencedTo(referenceExpression, targetElement)) {
+          try {
+            referenceExpression.bindToElement(targetElement);
+          }
+          catch (IncorrectOperationException e) {
+            // failed to bind
+          }
+          if (!referenceExpression.isValid() || !isReferencedTo(referenceExpression, targetElement)) {
+            toInsert = fqn;
+          }
+        }
       }
+      catch (IncorrectOperationException ignored) {}
     }
     if (toInsert == null) toInsert = "";
 
@@ -237,7 +253,7 @@ public class JavaQualifiedNameProvider implements QualifiedNameProvider {
 
     if (elementAtCaret != null && elementAtCaret.isValid()) {
       try {
-        shortenReference(elementAtCaret, element);
+        shortenReference(elementAtCaret);
       }
       catch (IncorrectOperationException e) {
         LOG.error(e);
@@ -252,10 +268,15 @@ public class JavaQualifiedNameProvider implements QualifiedNameProvider {
     }
 
     int caretOffset = rangeMarker.getEndOffset();
-    if (element instanceof PsiMethod && ((PsiMethod)element).getParameterList().getParametersCount() != 0 && StringUtil.endsWithChar(suffix,')')) {
+    if (element instanceof PsiMethod && !((PsiMethod)element).getParameterList().isEmpty() && StringUtil.endsWithChar(suffix,')')) {
       caretOffset --;
     }
     editor.getCaretModel().moveToOffset(caretOffset);
+  }
+
+  private static boolean isEndOfLineComment(PsiElement elementAtCaret) {
+    PsiElement prevElement = PsiTreeUtil.prevLeaf(elementAtCaret);
+    return prevElement instanceof PsiComment && JavaTokenType.END_OF_LINE_COMMENT.equals(((PsiComment)prevElement).getTokenType());
   }
 
   private static String getParameterString(PsiMethod method, final boolean erasure) {
@@ -287,14 +308,17 @@ public class JavaQualifiedNameProvider implements QualifiedNameProvider {
   }
 
   @Nullable
-  private static PsiElement getMember(final PsiElement element) {
+  private static PsiElement getMember(PsiElement element) {
     if (element instanceof PsiMember) return element;
+
     if (element instanceof PsiReference) {
       PsiElement resolved = ((PsiReference)element).resolve();
       if (resolved instanceof PsiMember) return resolved;
     }
+
     if (!(element instanceof PsiIdentifier)) return null;
-    final PsiElement parent = element.getParent();
+
+    PsiElement parent = element.getParent();
     PsiMember member = null;
     if (parent instanceof PsiJavaCodeReferenceElement) {
       PsiElement resolved = ((PsiJavaCodeReferenceElement)parent).resolve();
@@ -304,10 +328,6 @@ public class JavaQualifiedNameProvider implements QualifiedNameProvider {
     }
     else if (parent instanceof PsiMember) {
       member = (PsiMember)parent;
-    }
-    else {
-      //todo show error
-      //return;
     }
     return member;
   }
@@ -320,20 +340,18 @@ public class JavaQualifiedNameProvider implements QualifiedNameProvider {
     return PsiTreeUtil.getParentOfType(prevElement, PsiNewExpression.class) != null;
   }
 
-  private static void shortenReference(PsiElement element, PsiElement elementToInsert) throws IncorrectOperationException {
+  private static void shortenReference(PsiElement element) throws IncorrectOperationException {
     while (element.getParent() instanceof PsiJavaCodeReferenceElement) {
       element = element.getParent();
-      if (element == null) return;
     }
-    //if (element instanceof PsiJavaCodeReferenceElement && elementToInsert != null) {
-    //  try {
-    //    element = ((PsiJavaCodeReferenceElement)element).bindToElement(elementToInsert);
-    //  }
-    //  catch (IncorrectOperationException e) {
-    //    // failed to bind
-    //  }
-    //}
-    final JavaCodeStyleManager codeStyleManagerEx = JavaCodeStyleManager.getInstance(element.getProject());
+    JavaCodeStyleManager codeStyleManagerEx = JavaCodeStyleManager.getInstance(element.getProject());
     codeStyleManagerEx.shortenClassReferences(element, JavaCodeStyleManager.INCOMPLETE_CODE);
+  }
+
+  public static boolean hasQualifiedName(@NotNull String qName, @NotNull PsiMethod member) {
+    String memberName = getMethodOrFieldQualifiedName(member);
+    if (memberName == null || !qName.startsWith(memberName + "(")) return false;
+    return qName.equals(memberName + getParameterString(member, false)) ||
+           qName.equals(memberName + getParameterString(member, true));
   }
 }

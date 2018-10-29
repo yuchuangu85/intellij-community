@@ -28,7 +28,7 @@ import static org.junit.Assert.assertEquals;
 public abstract class UpdatableIntToIntMapTest {
 
   private static Set<Integer> parseSet(String visibility) {
-    Set<Integer> visibleNodes = new HashSet<Integer>();
+    Set<Integer> visibleNodes = new HashSet<>();
     if (visibility.length() == 0) return visibleNodes;
 
     for (String number : visibility.split("\\|")) {
@@ -43,7 +43,7 @@ public abstract class UpdatableIntToIntMapTest {
     private final Set<Integer> myVisibleNodes;
     private final UpdatableIntToIntMap myUpdatableIntToIntMap;
 
-    public Tester(UpdatableIntToIntMap updatableIntToIntMap, Set<Integer> visibleNodes) {
+    Tester(UpdatableIntToIntMap updatableIntToIntMap, Set<Integer> visibleNodes) {
       myVisibleNodes = visibleNodes;
       myUpdatableIntToIntMap = updatableIntToIntMap;
     }
@@ -88,12 +88,7 @@ public abstract class UpdatableIntToIntMapTest {
 
   public Tester getTest(int longSize, String initVisibility) {
     final Set<Integer> visibleNodes = parseSet(initVisibility);
-    UpdatableIntToIntMap updatableIntToIntMap = createUpdatableIntToIntMap(new BooleanFunction<Integer>() {
-      @Override
-      public boolean fun(Integer integer) {
-        return visibleNodes.contains(integer);
-      }
-    }, longSize);
+    UpdatableIntToIntMap updatableIntToIntMap = createUpdatableIntToIntMap(integer -> visibleNodes.contains(integer), longSize);
     Tester tester = new Tester(updatableIntToIntMap, visibleNodes);
 
     assertEquals(initVisibility, tester.mapToString());

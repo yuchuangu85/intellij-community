@@ -28,7 +28,6 @@ import java.util.List;
 
 /**
  * @author Vladislav.Soroka
- * @since 11/7/2014
  */
 @Order(ExternalSystemNode.BUILTIN_MODULE_DATA_NODE_ORDER)
 public class ModuleNode extends ExternalSystemNode<ModuleData> {
@@ -46,7 +45,7 @@ public class ModuleNode extends ExternalSystemNode<ModuleData> {
   }
 
   @Override
-  protected void update(PresentationData presentation) {
+  protected void update(@NotNull PresentationData presentation) {
     super.update(presentation);
     presentation.setIcon(getUiAware().getProjectIcon());
 
@@ -69,20 +68,10 @@ public class ModuleNode extends ExternalSystemNode<ModuleData> {
     return myChildNodes;
   }
 
-  @Override
-  public String getName() {
-    return myData.getId();
-  }
-
   @Nullable
   @Override
   protected String getMenuId() {
     return "ExternalSystemView.ModuleMenu";
-  }
-
-  @Override
-  public boolean isVisible() {
-    return super.isVisible();
   }
 
   @Override

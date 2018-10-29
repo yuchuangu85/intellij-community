@@ -149,7 +149,7 @@ public class DetailsComponent {
   }
 
   public void update() {
-    ArrayList<String> strings = new ArrayList<String>();
+    ArrayList<String> strings = new ArrayList<>();
     if (myPrefix != null) {
       ContainerUtil.addAll(strings, myPrefix);
     }
@@ -214,7 +214,7 @@ public class DetailsComponent {
   }
 
   private class MyWrapper extends Wrapper implements NullableComponent {
-    public MyWrapper(final JComponent c) {
+    MyWrapper(final JComponent c) {
       super(c == null || NullableComponent.Check.isNull(c) ? myEmptyContentLabel : c);
     }
 

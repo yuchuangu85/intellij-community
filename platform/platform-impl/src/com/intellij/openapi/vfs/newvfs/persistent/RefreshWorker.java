@@ -1,31 +1,19 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vfs.newvfs.persistent;
 
-import com.intellij.openapi.application.AccessToken;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.FileAttributes;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.vfs.VFileProperty;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.ex.temp.TempFileSystem;
 import com.intellij.openapi.vfs.newvfs.NewVirtualFile;
 import com.intellij.openapi.vfs.newvfs.NewVirtualFileSystem;
 import com.intellij.openapi.vfs.newvfs.events.*;
@@ -57,47 +45,45 @@ public class RefreshWorker {
   private static final Logger LOG_ATTRIBUTES = Logger.getInstance("#com.intellij.openapi.vfs.newvfs.persistent.RefreshWorker_Attributes");
 
   private final boolean myIsRecursive;
-  private final Queue<Pair<NewVirtualFile, FileAttributes>> myRefreshQueue = new Queue<Pair<NewVirtualFile, FileAttributes>>(100);
-  private final List<VFileEvent> myEvents = new ArrayList<VFileEvent>();
+  private final Queue<Pair<NewVirtualFile, FileAttributes>> myRefreshQueue = new Queue<>(100);
+  private final List<VFileEvent> myEvents = new ArrayList<>();
   private volatile boolean myCancelled;
+  private final LocalFileSystemRefreshWorker myLocalFileSystemRefreshWorker;
 
   public RefreshWorker(@NotNull NewVirtualFile refreshRoot, boolean isRecursive) {
+    boolean canUseNioRefresher = refreshRoot.isInLocalFileSystem() && !(refreshRoot.getFileSystem() instanceof TempFileSystem);
+    myLocalFileSystemRefreshWorker = canUseNioRefresher && Registry.is("vfs.use.nio-based.local.refresh.worker") ?
+                                     new LocalFileSystemRefreshWorker(refreshRoot, isRecursive) : null;
     myIsRecursive = isRecursive;
     myRefreshQueue.addLast(pair(refreshRoot, null));
   }
 
   @NotNull
   public List<VFileEvent> getEvents() {
+    if (myLocalFileSystemRefreshWorker != null) return myLocalFileSystemRefreshWorker.getEvents();
     return myEvents;
   }
 
   public void cancel() {
+    if (myLocalFileSystemRefreshWorker != null) myLocalFileSystemRefreshWorker.cancel();
     myCancelled = true;
   }
 
   public void scan() {
-    NewVirtualFile root = myRefreshQueue.pullFirst().first;
-    boolean rootDirty = root.isDirty();
-    if (LOG.isDebugEnabled()) LOG.debug("root=" + root + " dirty=" + rootDirty);
-    if (!rootDirty) return;
-
-    NewVirtualFileSystem fs = root.getFileSystem();
-    FileAttributes rootAttributes = fs.getAttributes(root);
-    if (rootAttributes == null) {
-      scheduleDeletion(root);
-      root.markClean();
+    if (myLocalFileSystemRefreshWorker != null) {
+      myLocalFileSystemRefreshWorker.scan();
       return;
     }
-    else if (rootAttributes.isDirectory()) {
+    NewVirtualFile root = myRefreshQueue.peekFirst().first;
+    NewVirtualFileSystem fs = root.getFileSystem();
+    if (root.isDirectory()) {
       fs = PersistentFS.replaceWithNativeFS(fs);
     }
-
-    myRefreshQueue.addLast(pair(root, rootAttributes));
     try {
       processQueue(fs, PersistentFS.getInstance());
     }
     catch (RefreshCancelledException e) {
-      LOG.debug("refresh cancelled");
+      LOG.trace("refresh cancelled");
     }
   }
 
@@ -116,6 +102,7 @@ public class RefreshWorker {
       FileAttributes attributes = pair.second != null ? pair.second : fs.getAttributes(file);
       if (attributes == null) {
         scheduleDeletion(file);
+        file.markClean();
         continue;
       }
 
@@ -148,8 +135,8 @@ public class RefreshWorker {
 
       boolean currentWritable = persistence.isWritable(file);
       boolean upToDateWritable = attributes.isWritable();
-      if (LOG_ATTRIBUTES.isDebugEnabled()) {
-        LOG_ATTRIBUTES.debug("file=" + file + " writable vfs=" + file.isWritable() + " persistence=" + currentWritable + " real=" + upToDateWritable);
+      if (LOG_ATTRIBUTES.isTraceEnabled()) {
+        LOG_ATTRIBUTES.trace("file=" + file + " writable vfs=" + file.isWritable() + " persistence=" + currentWritable + " real=" + upToDateWritable);
       }
       if (currentWritable != upToDateWritable) {
         scheduleAttributeChange(file, VirtualFile.PROP_WRITABLE, currentWritable, upToDateWritable);
@@ -181,17 +168,10 @@ public class RefreshWorker {
   private void fullDirRefresh(NewVirtualFileSystem fs, PersistentFS persistence, TObjectHashingStrategy<String> strategy, VirtualDirectoryImpl dir) {
     while (true) {
       // obtaining directory snapshot
-      String[] currentNames;
-      VirtualFile[] children;
-
-      AccessToken token = ApplicationManager.getApplication().acquireReadActionLock();
-      try {
-        currentNames = persistence.list(dir);
-        children = dir.getChildren();
-      }
-      finally {
-        token.finish();
-      }
+      Pair<String[], VirtualFile[]> result = LocalFileSystemRefreshWorker.getDirectorySnapshot(persistence, dir);
+      if (result == null) return;
+      String[] currentNames = result.getFirst();
+      VirtualFile[] children = result.getSecond();
 
       // reading children attributes
       String[] upToDateNames = VfsUtil.filterNames(fs.list(dir));
@@ -200,10 +180,7 @@ public class RefreshWorker {
       Set<String> deletedNames = newTroveSet(strategy, currentNames);
       ContainerUtil.removeAll(deletedNames, upToDateNames);
 
-      OpenTHashSet<String> actualNames = null;
-      if (!fs.isCaseSensitive()) {
-        actualNames = new OpenTHashSet<String>(strategy, upToDateNames);
-      }
+      OpenTHashSet<String> actualNames = fs.isCaseSensitive() ? null : new OpenTHashSet<>(strategy, upToDateNames);
       if (LOG.isTraceEnabled()) LOG.trace("current=" + Arrays.toString(currentNames) + " +" + newNames + " -" + deletedNames);
 
       List<Pair<String, FileAttributes>> addedMap = ContainerUtil.newArrayListWithCapacity(newNames.size());
@@ -220,11 +197,10 @@ public class RefreshWorker {
       }
 
       // generating events unless a directory was changed in between
-      token = ApplicationManager.getApplication().acquireReadActionLock();
-      try {
+      boolean hasEvents = ReadAction.compute(() -> {
         if (!Arrays.equals(currentNames, persistence.list(dir)) || !Arrays.equals(children, dir.getChildren())) {
-          if (LOG.isDebugEnabled()) LOG.debug("retry: " + dir);
-          continue;
+          if (LOG.isTraceEnabled()) LOG.trace("retry: " + dir);
+          return false;
         }
 
         for (String name : deletedNames) {
@@ -235,10 +211,10 @@ public class RefreshWorker {
           String name = pair.first;
           FileAttributes childAttributes = pair.second;
           if (childAttributes != null) {
-            scheduleCreation(dir, name, childAttributes.isDirectory(), false);
+            scheduleCreation(dir, name, childAttributes.isDirectory());
           }
           else {
-            LOG.warn("[+] fs=" + fs + " dir=" + dir + " name=" + name);
+            if (LOG.isTraceEnabled()) LOG.trace("[+] fs=" + fs + " dir=" + dir + " name=" + name);
           }
         }
 
@@ -250,15 +226,15 @@ public class RefreshWorker {
             checkAndScheduleFileNameChange(actualNames, child);
           }
           else {
-            LOG.warn("[x] fs=" + fs + " dir=" + dir + " name=" + child.getName());
+            if (LOG.isTraceEnabled()) LOG.warn("[x] fs=" + fs + " dir=" + dir + " name=" + child.getName());
             scheduleDeletion(child);
           }
         }
 
+        return true;
+      });
+      if (hasEvents) {
         break;
-      }
-      finally {
-        token.finish();
       }
     }
   }
@@ -266,22 +242,14 @@ public class RefreshWorker {
   private void partialDirRefresh(NewVirtualFileSystem fs, TObjectHashingStrategy<String> strategy, VirtualDirectoryImpl dir) {
     while (true) {
       // obtaining directory snapshot
-      List<VirtualFile> cached;
-      List<String> wanted;
+      Pair<List<VirtualFile>, List<String>> result =
+        ReadAction.compute(() -> pair(dir.getCachedChildren(), dir.getSuspiciousNames()));
 
-      AccessToken token = ApplicationManager.getApplication().acquireReadActionLock();
-      try {
-        cached = dir.getCachedChildren();
-        wanted = dir.getSuspiciousNames();
-      }
-      finally {
-        token.finish();
-      }
+      List<VirtualFile> cached = result.getFirst();
+      List<String> wanted = result.getSecond();
 
-      OpenTHashSet<String> actualNames = null;
-      if (!fs.isCaseSensitive()) {
-        actualNames = new OpenTHashSet<String>(strategy, VfsUtil.filterNames(fs.list(dir)));
-      }
+      OpenTHashSet<String> actualNames =
+        fs.isCaseSensitive() || cached.isEmpty() ? null : new OpenTHashSet<>(strategy, VfsUtil.filterNames(fs.list(dir)));
 
       if (LOG.isTraceEnabled()) {
         LOG.trace("cached=" + cached + " actual=" + actualNames);
@@ -303,11 +271,10 @@ public class RefreshWorker {
       }
 
       // generating events unless a directory was changed in between
-      token = ApplicationManager.getApplication().acquireReadActionLock();
-      try {
+      boolean hasEvents = ReadAction.compute(() -> {
         if (!cached.equals(dir.getCachedChildren()) || !wanted.equals(dir.getSuspiciousNames())) {
-          if (LOG.isDebugEnabled()) LOG.debug("retry: " + dir);
-          continue;
+          if (LOG.isTraceEnabled()) LOG.trace("retry: " + dir);
+          return false;
         }
 
         for (Pair<VirtualFile, FileAttributes> pair : existingMap) {
@@ -326,14 +293,14 @@ public class RefreshWorker {
           String name = pair.first;
           FileAttributes childAttributes = pair.second;
           if (childAttributes != null) {
-            scheduleCreation(dir, name, childAttributes.isDirectory(), false);
+            scheduleCreation(dir, name, childAttributes.isDirectory());
           }
         }
 
+        return true;
+      });
+      if (hasEvents) {
         break;
-      }
-      finally {
-        token.finish();
       }
     }
   }
@@ -352,6 +319,7 @@ public class RefreshWorker {
 
   private void checkCancelled(@NotNull NewVirtualFile stopAt) {
     if (myCancelled || ourCancellingCondition != null && ourCancellingCondition.fun(stopAt)) {
+      if (LOG.isTraceEnabled()) LOG.trace("cancelled at: " + stopAt);
       forceMarkDirty(stopAt);
       while (!myRefreshQueue.isEmpty()) {
         NewVirtualFile next = myRefreshQueue.pullFirst().first;
@@ -389,14 +357,14 @@ public class RefreshWorker {
 
     if (currentIsDirectory != upToDateIsDirectory || currentIsSymlink != upToDateIsSymlink || currentIsSpecial != upToDateIsSpecial) {
       scheduleDeletion(child);
-      scheduleCreation(parent, child.getName(), upToDateIsDirectory, true);
+      scheduleCreation(parent, child.getName(), upToDateIsDirectory);
       return true;
     }
 
     return false;
   }
 
-  private void scheduleAttributeChange(@NotNull VirtualFile file, @NotNull String property, Object current, Object upToDate) {
+  private void scheduleAttributeChange(@NotNull VirtualFile file, @VirtualFile.PropName @NotNull String property, Object current, Object upToDate) {
     if (LOG.isTraceEnabled()) LOG.trace("update '" + property + "' file=" + file);
     myEvents.add(new VFilePropertyChangeEvent(null, file, property, current, upToDate, true));
   }
@@ -406,9 +374,9 @@ public class RefreshWorker {
     myEvents.add(new VFileContentChangeEvent(null, file, file.getModificationStamp(), -1, true));
   }
 
-  private void scheduleCreation(@NotNull VirtualFile parent, @NotNull String childName, boolean isDirectory, boolean isReCreation) {
+  private void scheduleCreation(@NotNull VirtualFile parent, @NotNull String childName, boolean isDirectory) {
     if (LOG.isTraceEnabled()) LOG.trace("create parent=" + parent + " name=" + childName + " dir=" + isDirectory);
-    myEvents.add(new VFileCreateEvent(null, parent, childName, isDirectory, true, isReCreation));
+    myEvents.add(new VFileCreateEvent(null, parent, childName, isDirectory, true));
   }
 
   private void scheduleDeletion(@Nullable VirtualFile file) {
@@ -418,11 +386,12 @@ public class RefreshWorker {
     }
   }
 
-  private static Function<VirtualFile, Boolean> ourCancellingCondition;
+  private static Function<? super VirtualFile, Boolean> ourCancellingCondition;
 
   @TestOnly
-  public static void setCancellingCondition(@Nullable Function<VirtualFile, Boolean> condition) {
+  public static void setCancellingCondition(@Nullable Function<? super VirtualFile, Boolean> condition) {
     assert ApplicationManager.getApplication().isUnitTestMode();
+    LocalFileSystemRefreshWorker.setCancellingCondition(condition);
     ourCancellingCondition = condition;
   }
 }

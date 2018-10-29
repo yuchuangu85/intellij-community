@@ -1,34 +1,25 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.configurationStore
 
+import com.intellij.configurationStore.schemeManager.SchemeChangeEvent
+import com.intellij.configurationStore.schemeManager.SchemeFileTracker
+import com.intellij.configurationStore.schemeManager.useSchemeLoader
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ApplicationNamesInfo
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.ex.ApplicationManagerEx
-import com.intellij.openapi.application.runBatchUpdate
 import com.intellij.openapi.components.ComponentManager
 import com.intellij.openapi.components.StateStorage
-import com.intellij.openapi.components.impl.stores.*
+import com.intellij.openapi.components.impl.stores.IComponentStore
+import com.intellij.openapi.components.impl.stores.IProjectStore
 import com.intellij.openapi.components.stateStore
 import com.intellij.openapi.diagnostic.debug
+import com.intellij.openapi.diagnostic.runAndLogException
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectBundle
+import com.intellij.openapi.project.ex.ProjectManagerEx
 import com.intellij.openapi.project.impl.ProjectManagerImpl
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.Key
@@ -40,11 +31,11 @@ import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import com.intellij.util.SingleAlarm
 import com.intellij.util.containers.MultiMap
 import gnu.trove.THashSet
-import org.jetbrains.annotations.TestOnly
 import java.util.*
 import java.util.concurrent.atomic.AtomicInteger
 
 private val CHANGED_FILES_KEY = Key.create<MultiMap<ComponentStoreImpl, StateStorage>>("CHANGED_FILES_KEY")
+private val CHANGED_SCHEMES_KEY = Key.create<MultiMap<SchemeFileTracker, SchemeChangeEvent>>("CHANGED_SCHEMES_KEY")
 
 /**
  * Should be a separate service, not closely related to ProjectManager, but it requires some cleanup/investigation.
@@ -64,12 +55,35 @@ class StoreAwareProjectManager(virtualFileManager: VirtualFileManager, progressM
         continue
       }
 
-      val changes = CHANGED_FILES_KEY.get(project) ?: continue
-      CHANGED_FILES_KEY.set(project, null)
-      if (!changes.isEmpty) {
-        runBatchUpdate(project.messageBus) {
-          for ((store, storages) in changes.entrySet()) {
-            if ((store.storageManager as? StateStorageManagerImpl)?.componentManager?.isDisposed ?: false) {
+      val changedSchemes = project.getUserData(CHANGED_SCHEMES_KEY)
+      if (changedSchemes != null) {
+        CHANGED_SCHEMES_KEY.set(project, null)
+      }
+
+      val changedStorages = project.getUserData(CHANGED_FILES_KEY)
+      if (changedStorages != null) {
+        CHANGED_FILES_KEY.set(project, null)
+      }
+
+      if ((changedSchemes == null || changedSchemes.isEmpty) && (changedStorages == null || changedStorages.isEmpty)) {
+        continue
+      }
+
+      runBatchUpdate(project.messageBus) {
+        // reload schemes first because project file can refer to scheme (e.g. inspection profile)
+        if (changedSchemes != null) {
+          useSchemeLoader { schemeLoaderRef ->
+            for ((tracker, files) in changedSchemes.entrySet()) {
+              LOG.runAndLogException {
+                tracker.reload(files, schemeLoaderRef)
+              }
+            }
+          }
+        }
+
+        if (changedStorages != null) {
+          for ((store, storages) in changedStorages.entrySet()) {
+            if ((store.storageManager as? StateStorageManagerImpl)?.componentManager?.isDisposed == true) {
               continue
             }
 
@@ -90,14 +104,14 @@ class StoreAwareProjectManager(virtualFileManager: VirtualFileManager, progressM
   private val changedFilesAlarm = SingleAlarm(restartApplicationOrReloadProjectTask, 300, this)
 
   init {
-    ApplicationManager.getApplication().messageBus.connect().subscribe(StateStorageManager.STORAGE_TOPIC, object : StorageManagerListener {
+    ApplicationManager.getApplication().messageBus.connect().subscribe(STORAGE_TOPIC, object : StorageManagerListener {
       override fun storageFileChanged(event: VFileEvent, storage: StateStorage, componentManager: ComponentManager) {
         if (event is VFilePropertyChangeEvent) {
           // ignore because doesn't affect content
           return
         }
 
-        if (event.requestor is StateStorage.SaveSession || event.requestor is StateStorage || event.requestor is ProjectManagerImpl) {
+        if (event.requestor is StateStorage.SaveSession || event.requestor is StateStorage || event.requestor is ProjectManagerEx) {
           return
         }
 
@@ -147,8 +161,8 @@ class StoreAwareProjectManager(virtualFileManager: VirtualFileManager, progressM
     }
   }
 
-  @TestOnly fun flushChangedAlarm() {
-    changedFilesAlarm.flush()
+  override fun flushChangedProjectFileAlarm() {
+    changedFilesAlarm.drainRequestsInTest()
   }
 
   override fun reloadProject(project: Project) {
@@ -187,6 +201,26 @@ class StoreAwareProjectManager(virtualFileManager: VirtualFileManager, progressM
 
     if (storage is StateStorageBase<*>) {
       storage.disableSaving()
+    }
+
+    if (isReloadUnblocked()) {
+      changedFilesAlarm.cancelAndRequest()
+    }
+  }
+
+  internal fun registerChangedScheme(event: SchemeChangeEvent, schemeFileTracker: SchemeFileTracker, project: Project) {
+    if (LOG.isDebugEnabled) {
+      LOG.debug("[RELOAD] Registering scheme to reload: $event", Exception())
+    }
+
+    var changes = CHANGED_SCHEMES_KEY.get(project)
+    if (changes == null) {
+      changes = MultiMap.createLinkedSet()
+      CHANGED_SCHEMES_KEY.set(project, changes)
+    }
+
+    synchronized(changes) {
+      changes.putValue(schemeFileTracker, event)
     }
 
     if (isReloadUnblocked()) {

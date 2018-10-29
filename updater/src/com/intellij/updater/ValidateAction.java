@@ -18,13 +18,9 @@ package com.intellij.updater;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
 public class ValidateAction extends PatchAction {
-  // Only used on patch creation
-  protected transient File myOlderDir;
-
   public ValidateAction(Patch patch, String path, long checksum) {
     super(patch, path, checksum);
   }
@@ -34,23 +30,10 @@ public class ValidateAction extends PatchAction {
   }
 
   @Override
-  protected void doBuildPatchFile(File olderFile, File newerFile, ZipOutputStream patchOutput) throws IOException {
-  }
+  protected void doBuildPatchFile(File olderFile, File newerFile, ZipOutputStream patchOutput) { }
 
   @Override
   public ValidationResult validate(File toDir) throws IOException {
-    return doValidateNotChanged(getFile(toDir), ValidationResult.Kind.ERROR, ValidationResult.Action.VALIDATE);
-  }
-
-  @Override
-  protected void doApply(ZipFile patchFile, File backupDir, File toFile) throws IOException {
-  }
-
-  @Override
-  protected void doBackup(File toFile, File backupFile) throws IOException {
-  }
-
-  @Override
-  protected void doRevert(File toFile, File backupFile) throws IOException {
+    return doValidateNotChanged(getFile(toDir), ValidationResult.Action.VALIDATE);
   }
 }

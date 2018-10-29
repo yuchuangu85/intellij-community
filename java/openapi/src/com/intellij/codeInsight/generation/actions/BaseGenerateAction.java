@@ -49,6 +49,7 @@ public class BaseGenerateAction extends CodeInsightAction implements GenerateAct
     }
   }
 
+  @Override
   @Nullable
   public AnAction createEditTemplateAction(DataContext dataContext) {
     return null;
@@ -73,8 +74,6 @@ public class BaseGenerateAction extends CodeInsightAction implements GenerateAct
   protected boolean isValidForFile(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file) {
     if (!(file instanceof PsiJavaFile)) return false;
     if (file instanceof PsiCompiledElement) return false;
-
-    PsiDocumentManager.getInstance(project).commitAllDocuments();
 
     PsiClass targetClass = getTargetClass(editor, file);
     return targetClass != null && isValidForClass(targetClass);

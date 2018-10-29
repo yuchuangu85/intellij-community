@@ -40,7 +40,6 @@ import static org.codehaus.plexus.archiver.jar.Manifest.Attribute;
 
 /**
  * @author Vladislav.Soroka
- * @since 5/22/2014
  */
 public class ManifestBuilder {
 
@@ -71,7 +70,7 @@ public class ManifestBuilder {
       final Element mavenArchiveConfiguration =
         mavenPackagingPluginConfiguration != null ? mavenPackagingPluginConfiguration.getChild("archive") : null;
 
-      if (mavenArchiveConfiguration == null) return getDefaultManifest(Collections.<String, String>emptyMap());
+      if (mavenArchiveConfiguration == null) return getDefaultManifest(Collections.emptyMap());
 
       final Element manifestEntries = mavenArchiveConfiguration.getChild("manifestEntries");
       Map<String, String> entries = getManifestEntries(manifestEntries);
@@ -138,8 +137,8 @@ public class ManifestBuilder {
   private static Map<String, String> getManifestEntries(Element manifestEntries) {
     boolean hasManifestEntries = manifestEntries != null && manifestEntries.getContentSize() > 0;
     Map<String, String> entries = hasManifestEntries ?
-                                  new LinkedHashMap<String, String>(manifestEntries.getContentSize()) :
-                                  Collections.<String, String>emptyMap();
+                                  new LinkedHashMap<>(manifestEntries.getContentSize()) :
+                                  Collections.emptyMap();
     if (hasManifestEntries) {
       for (Element element : manifestEntries.getChildren()) {
         entries.put(element.getName(), element.getTextTrim());
@@ -211,7 +210,6 @@ public class ManifestBuilder {
       if (manifestFile.isFile()) {
         FileInputStream fis = null;
         try {
-          //noinspection IOResourceOpenedButNotSafelyClosed
           fis = new FileInputStream(manifestFile);
           manifest = new Manifest(fis);
         }

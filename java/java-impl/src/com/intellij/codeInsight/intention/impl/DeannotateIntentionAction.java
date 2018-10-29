@@ -14,17 +14,12 @@
  * limitations under the License.
  */
 
-/*
- * User: anna
- * Date: 08-Jul-2007
- */
 package com.intellij.codeInsight.intention.impl;
 
 import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInsight.ExternalAnnotationsManager;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInsight.intention.LowPriorityAction;
-import com.intellij.openapi.application.Result;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.command.undo.UndoUtil;
 import com.intellij.openapi.diagnostic.Logger;
@@ -43,13 +38,13 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 
 public class DeannotateIntentionAction implements IntentionAction, LowPriorityAction {
-  private static final Logger LOG = Logger.getInstance("#" + DeannotateIntentionAction.class.getName());
+  private static final Logger LOG = Logger.getInstance(DeannotateIntentionAction.class);
   private String myAnnotationName;
 
   @Override
   @NotNull
   public String getText() {
-    return CodeInsightBundle.message("deannotate.intention.action.text") + (myAnnotationName != null ? " " + myAnnotationName : "...");
+    return CodeInsightBundle.message("deannotate.intention.action.text") + (myAnnotationName != null ? " @" + myAnnotationName : "...");
   }
 
   @Override
@@ -163,17 +158,14 @@ public class DeannotateIntentionAction implements IntentionAction, LowPriorityAc
                           final PsiFile file,
                           final ExternalAnnotationsManager annotationsManager,
                           final PsiModifierListOwner listOwner) {
-    new WriteCommandAction(project, getText()) {
-      @Override
-      protected void run(@NotNull final Result result) throws Throwable {
-        final VirtualFile virtualFile = file.getVirtualFile();
-        String qualifiedName = annotation.getQualifiedName();
-        LOG.assertTrue(qualifiedName != null);
-        if (annotationsManager.deannotate(listOwner, qualifiedName) && virtualFile != null && virtualFile.isInLocalFileSystem()) {
-          UndoUtil.markPsiFileForUndo(file);
-        }
+    WriteCommandAction.writeCommandAction(project).withName(getText()).run(() -> {
+      final VirtualFile virtualFile = file.getVirtualFile();
+      String qualifiedName = annotation.getQualifiedName();
+      LOG.assertTrue(qualifiedName != null);
+      if (annotationsManager.deannotate(listOwner, qualifiedName) && virtualFile != null && virtualFile.isInLocalFileSystem()) {
+        UndoUtil.markPsiFileForUndo(file);
       }
-    }.execute();
+    });
   }
 
   @Override

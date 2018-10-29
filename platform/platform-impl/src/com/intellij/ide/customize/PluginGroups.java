@@ -1,21 +1,8 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.customize;
 
 import com.intellij.ide.WelcomeWizardUtil;
+import com.intellij.ide.cloudConfig.CloudConfigProvider;
 import com.intellij.ide.plugins.IdeaPluginDescriptor;
 import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.ide.plugins.RepositoryHelper;
@@ -32,6 +19,7 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.io.File;
 import java.util.*;
+import java.util.Map.Entry;
 import java.util.concurrent.ExecutionException;
 
 public class PluginGroups {
@@ -40,20 +28,20 @@ public class PluginGroups {
   
   public static final String IDEA_VIM_PLUGIN_ID = "IdeaVIM";
 
-  final Map<String, Pair<Icon, List<String>>> myTree = new LinkedHashMap<String, Pair<Icon, List<String>>>();
-  final Map<String, String> myFeaturedPlugins = new LinkedHashMap<String, String>();
+  final Map<String, Pair<Icon, List<String>>> myTree = new LinkedHashMap<>();
+  final Map<String, String> myFeaturedPlugins = new LinkedHashMap<>();
 
-  private final Map<String, List<IdSet>> myGroups = new LinkedHashMap<String, List<IdSet>>();
-  private final Map<String, String> myDescriptions = new LinkedHashMap<String, String>();
-  private final List<IdeaPluginDescriptor> myPluginsFromRepository = new ArrayList<IdeaPluginDescriptor>();
-  private Collection<String> myDisabledPluginIds = new HashSet<String>();
-  private IdeaPluginDescriptor[] myAllPlugins;
+  private final Map<String, List<IdSet>> myGroups = new LinkedHashMap<>();
+  private final Map<String, String> myDescriptions = new LinkedHashMap<>();
+  private final List<IdeaPluginDescriptor> myPluginsFromRepository = new ArrayList<>();
+  private final Collection<String> myDisabledPluginIds = new HashSet<>();
+  private final IdeaPluginDescriptor[] myAllPlugins;
   private boolean myInitialized = false;
-  private Set<String> myFeaturedIds = new HashSet<String>();
+  private final Set<String> myFeaturedIds = new HashSet<>();
   private Runnable myLoadingCallback = null;
 
   public PluginGroups() {
-    myAllPlugins = PluginManagerCore.loadDescriptors(null, ContainerUtil.<String>newArrayList());
+    myAllPlugins = PluginManagerCore.loadDescriptors(null, ContainerUtil.newArrayList());
     SwingWorker worker = new SwingWorker<List<IdeaPluginDescriptor>, Object>() {
       @Override
       protected List<IdeaPluginDescriptor> doInBackground() throws Exception {
@@ -72,10 +60,7 @@ public class PluginGroups {
           myPluginsFromRepository.addAll(get());
           if (myLoadingCallback != null) myLoadingCallback.run();
         }
-        catch (InterruptedException e) {
-          if (myLoadingCallback != null) myLoadingCallback.run();
-        }
-        catch (ExecutionException e) {
+        catch (InterruptedException | ExecutionException e) {
           if (myLoadingCallback != null) myLoadingCallback.run();
         }
       }
@@ -84,6 +69,7 @@ public class PluginGroups {
     PluginManagerCore.loadDisabledPlugins(new File(PathManager.getConfigPath()).getPath(), myDisabledPluginIds);
 
     initGroups(myTree, myFeaturedPlugins);
+    initCloudPlugins();
   }
 
   public void setLoadingCallback(Runnable loadingCallback) {
@@ -93,9 +79,32 @@ public class PluginGroups {
     }
   }
 
+  private void initCloudPlugins() {
+    CloudConfigProvider provider = CloudConfigProvider.getProvider();
+    if (provider == null) {
+      return;
+    }
+
+    List<String> plugins = provider.getInstalledPlugins();
+    if (plugins.isEmpty()) {
+      return;
+    }
+
+    for (Iterator<Entry<String, String>> I = myFeaturedPlugins.entrySet().iterator(); I.hasNext(); ) {
+      String value = I.next().getValue();
+      if (ContainerUtil.find(plugins, plugin -> value.endsWith(":" + plugin)) != null) {
+        I.remove();
+      }
+    }
+
+    for (String plugin : plugins) {
+      myFeaturedPlugins.put(plugin, "#Cloud:#Cloud:" + plugin);
+    }
+  }
+
   protected void
   initGroups(Map<String, Pair<Icon, List<String>>> tree, Map<String, String> featuredPlugins) {
-    tree.put(CORE, Pair.create((Icon)null, Arrays.asList(
+    tree.put(CORE, Pair.create(null, Arrays.asList(
       "com.intellij.copyright",
       "com.intellij.java-i18n",
       "org.intellij.intelliLang",
@@ -145,7 +154,7 @@ public class PluginGroups {
       "org.jetbrains.plugins.gradle"
     )));
     tree.put("Web Development", Pair.create(PlatformImplIcons.WebDevelopment, Arrays.asList(
-      "HTML:HtmlTools,QuirksMode,W3Validators",
+      "HTML:HtmlTools,W3Validators",
       "org.jetbrains.plugins.haml",
       "com.jetbrains.plugins.jade",
       "com.intellij.css",
@@ -202,6 +211,7 @@ public class PluginGroups {
       "ByteCodeViewer",
       "com.intellij.dsm",
       "org.jetbrains.idea.eclipse",
+      "org.jetbrains.debugger.streams",
       "Remote Access:com.jetbrains.plugins.webDeployment,org.jetbrains.plugins.remote-run",
       "Task Management:com.intellij.tasks,com.intellij.tasks.timeTracking",
       "org.jetbrains.plugins.terminal",
@@ -211,19 +221,22 @@ public class PluginGroups {
     )));
     tree.put("Plugin Development", Pair.create(PlatformImplIcons.PluginDevelopment, Arrays.asList("DevKit")));
 
+    initFeaturedPlugins(featuredPlugins);
+  }
+
+  protected void initFeaturedPlugins(Map<String, String> featuredPlugins) {
     featuredPlugins.put("Scala", "Custom Languages:Plugin for Scala language support:org.intellij.scala");
     featuredPlugins.put("Live Edit Tool",
                         "Web Development:Provides live edit HTML/CSS/JavaScript:com.intellij.plugins.html.instantEditing");
     addVimPlugin(featuredPlugins);
     featuredPlugins.put("NodeJS", "JavaScript:Node.js integration:NodeJS");
-    featuredPlugins.put("Angular", "Web Development:Angular 1&2 support:AngularJS");
     featuredPlugins.put("Atlassian Connector",
                         "Tools Integration:Integration for Atlassian JIRA, Bamboo, Crucible, FishEye:atlassian-idea-plugin");
+    addTrainingPlugin(featuredPlugins);
   }
 
   public static void addVcsGroup(Map<String, Pair<Icon, List<String>>> tree) {
     tree.put("Version Controls", Pair.create(PlatformImplIcons.VersionControls, Arrays.asList(
-      "ClearcasePlugin",
       "CVS",
       "Git4Idea",
       "org.jetbrains.plugins.github",
@@ -238,12 +251,16 @@ public class PluginGroups {
     featuredPlugins.put("IdeaVim", "Editor:Emulates Vim editor:" + IDEA_VIM_PLUGIN_ID);
   }
 
+  public static void addTrainingPlugin(Map<String, String> featuredPlugins) {
+    featuredPlugins.put("IDE Features Trainer", "Code tools:Learn basic shortcuts and essential IDE features with quick interactive exercises:training");
+  }
+
   public static void addLuaPlugin(Map<String, String> featuredPlugins) {
     featuredPlugins.put("Lua", "Custom Languages:Lua language support:Lua");
   }
 
   public static void addGoPlugin(Map<String, String> featuredPlugins) {
-    featuredPlugins.put("Go", "Custom Languages:Go language support:ro.redeul.google.go");
+    featuredPlugins.put("Go", "Custom Languages:Go language support:org.jetbrains.plugins.go");
   }
 
   public static void addMarkdownPlugin(Map<String, String> featuredPlugins) {
@@ -263,11 +280,11 @@ public class PluginGroups {
   private void initIfNeed() {
     if (myInitialized) return;
     myInitialized = true;
-    for (Map.Entry<String, Pair<Icon, List<String>>> entry : myTree.entrySet()) {
+    for (Entry<String, Pair<Icon, List<String>>> entry : myTree.entrySet()) {
       final String group = entry.getKey();
       if (CORE.equals(group)) continue;
 
-      List<IdSet> idSets = new ArrayList<IdSet>();
+      List<IdSet> idSets = new ArrayList<>();
       StringBuilder description = new StringBuilder();
       for (String idDescription : entry.getValue().getSecond()) {
         IdSet idSet = new IdSet(this, idDescription);
@@ -371,9 +388,9 @@ public class PluginGroups {
 
   void setPluginEnabledWithDependencies(final String pluginId, boolean enabled) {
     initIfNeed();
-    Set<String> ids = new HashSet<String>();
+    Set<String> ids = new HashSet<>();
     collectInvolvedIds(pluginId, enabled, ids);
-    Set<IdSet> sets = new HashSet<IdSet>();
+    Set<IdSet> sets = new HashSet<>();
     for (String id : ids) {
       IdSet set = getSet(id);
       if (set != null) {
@@ -412,7 +429,7 @@ public class PluginGroups {
   }
 
   private List<String> getNonOptionalDependencies(final String id) {
-    List<String> result = new ArrayList<String>();
+    List<String> result = new ArrayList<>();
     IdeaPluginDescriptor descriptor = findPlugin(id);
     if (descriptor != null) {
       for (PluginId pluginId : descriptor.getDependentPluginIds()) {

@@ -24,25 +24,33 @@ import java.util.List;
 
 /**
  * {@link RollbackEnvironment} implementation should notify about starting change processing
- * using this interface; change processing can be reported using any <code>accept()</code> method signature,
+ * using this interface; change processing can be reported using any {@code accept()} method signature,
  * should be reported once per change
  */
 public interface RollbackProgressListener {
   RollbackProgressListener EMPTY = new RollbackProgressListener() {
+    @Override
     public void accept(final Change change) {
     }
+    @Override
     public void accept(final FilePath filePath) {
     }
+    @Override
     public void accept(final List<FilePath> paths) {
     }
+    @Override
     public void accept(final File file) {
     }
+    @Override
     public void accept(final VirtualFile file) {
     }
+    @Override
     public void checkCanceled() {
     }
+    @Override
     public void indeterminate() {
     }
+    @Override
     public void determinate() {
     }
   };

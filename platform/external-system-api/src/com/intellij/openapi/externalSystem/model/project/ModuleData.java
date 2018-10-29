@@ -1,6 +1,5 @@
 package com.intellij.openapi.externalSystem.model.project;
 
-import com.intellij.ide.highlighter.ModuleFileType;
 import com.intellij.openapi.externalSystem.model.ProjectSystemId;
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
 import com.intellij.util.containers.ContainerUtil;
@@ -14,13 +13,13 @@ import java.util.Map;
 
 /**
  * @author Denis Zhdanov
- * @since 8/8/11 12:11 PM
  */
 public class ModuleData extends AbstractNamedData implements Named, ExternalConfigPathAware, Identifiable {
 
   private static final long serialVersionUID = 1L;
 
   @NotNull private final Map<ExternalSystemSourceType, String> myCompileOutputPaths = ContainerUtil.newHashMap();
+  @Nullable private Map<String, String> myProperties;
   @NotNull private final String myId;
   @NotNull private final String myModuleTypeId;
   @NotNull private final String myExternalConfigPath;
@@ -30,9 +29,11 @@ public class ModuleData extends AbstractNamedData implements Named, ExternalConf
   @Nullable private String myDescription;
   @NotNull private List<File> myArtifacts;
   @Nullable private String[] myIdeModuleGroup;
-  @Nullable  private String mySourceCompatibility;
+  @Nullable private String mySourceCompatibility;
   @Nullable private String myTargetCompatibility;
+  @Nullable private String mySdkName;
   @Nullable private String myProductionModuleId;
+  @Nullable private ProjectCoordinate myPublication;
 
   private boolean myInheritProjectCompileOutputPath = true;
 
@@ -83,18 +84,8 @@ public class ModuleData extends AbstractNamedData implements Named, ExternalConf
   }
 
   @NotNull
-  public String getModuleFilePath() {
-    return ExternalSystemApiUtil
-      .toCanonicalPath(myModuleFileDirectoryPath + "/" + getInternalName() + ModuleFileType.DOT_DEFAULT_EXTENSION);
-  }
-
-  @NotNull
   public String getModuleFileDirectoryPath() {
     return myModuleFileDirectoryPath;
-  }
-
-  public void setModuleFileDirectoryPath(@NotNull String path) {
-    myModuleFileDirectoryPath = path;
   }
 
   /**
@@ -146,6 +137,15 @@ public class ModuleData extends AbstractNamedData implements Named, ExternalConf
 
   public void setGroup(@Nullable String group) {
     this.myGroup = group;
+  }
+
+  @Nullable
+  public ProjectCoordinate getPublication() {
+    return myPublication;
+  }
+
+  public void setPublication(@Nullable ProjectCoordinate publication) {
+    myPublication = publication;
   }
 
   @Nullable
@@ -202,6 +202,27 @@ public class ModuleData extends AbstractNamedData implements Named, ExternalConf
     myTargetCompatibility = targetCompatibility;
   }
 
+  @Nullable
+  public String getSdkName() {
+    return mySdkName;
+  }
+
+  public void setSdkName(@Nullable String sdkName) {
+    mySdkName = sdkName;
+  }
+
+  @Nullable
+  public String getProperty(String key) {
+    return myProperties != null ? myProperties.get(key) : null;
+  }
+
+  public void setProperty(String key, String value) {
+    if (myProperties == null) {
+      myProperties = ContainerUtil.newHashMap();
+    }
+    myProperties.put(key, value);
+  }
+
   @Override
   public boolean equals(Object o) {
     if (!(o instanceof ModuleData)) return false;
@@ -209,10 +230,13 @@ public class ModuleData extends AbstractNamedData implements Named, ExternalConf
 
     ModuleData that = (ModuleData)o;
 
+    if (!myId.equals(that.myId)) return false;
+    if (!myExternalConfigPath.equals(that.myExternalConfigPath)) return false;
     if (myGroup != null ? !myGroup.equals(that.myGroup) : that.myGroup != null) return false;
     if (!myModuleTypeId.equals(that.myModuleTypeId)) return false;
     if (myVersion != null ? !myVersion.equals(that.myVersion) : that.myVersion != null) return false;
     if (myDescription != null ? !myDescription.equals(that.myDescription) : that.myDescription != null) return false;
+    if (mySdkName != null ? !mySdkName.equals(that.mySdkName) : that.mySdkName != null) return false;
 
     return true;
   }
@@ -220,18 +244,18 @@ public class ModuleData extends AbstractNamedData implements Named, ExternalConf
   @Override
   public int hashCode() {
     int result = super.hashCode();
+    result = 31 * result + myId.hashCode();
+    result = 31 * result + myExternalConfigPath.hashCode();
     result = 31 * result + myModuleTypeId.hashCode();
     result = 31 * result + (myGroup != null ? myGroup.hashCode() : 0);
     result = 31 * result + (myVersion != null ? myVersion.hashCode() : 0);
     result = 31 * result + (myDescription != null ? myDescription.hashCode() : 0);
+    result = 31 * result + (mySdkName != null ? mySdkName.hashCode() : 0);
     return result;
   }
 
   @Override
   public String toString() {
-    return String.format("module '%s:%s:%s'",
-                         myGroup == null ? "" : myGroup,
-                         getExternalName(),
-                         myVersion == null ? "" : myVersion);
+    return getId();
   }
 }

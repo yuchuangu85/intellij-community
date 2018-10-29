@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,36 +32,42 @@ import java.util.List;
  */
 public class WatchersPanel extends JPanel{
 
-  private final ListTableModel<WatcherInfo> myModel = new ListTableModel<WatcherInfo>(COLUMNS);
-  private final TableView<WatcherInfo> myTable = new TableView<WatcherInfo>(myModel);
+  private final ListTableModel<WatcherInfo> myModel = new ListTableModel<>(COLUMNS);
+  private final TableView<WatcherInfo> myTable = new TableView<>(myModel);
 
   private final static ColumnInfo<WatcherInfo, String> USER = new ColumnInfo<WatcherInfo, String>(CvsBundle.message("view.watchers.user.column.name")){
+    @Override
     public String valueOf(WatcherInfo object) {
       return object.getUser();
     }
 
+    @Override
     public Comparator<WatcherInfo> getComparator() {
-      return (o, o1) -> o.getUser().compareTo(o1.getUser());
+      return Comparator.comparing(WatcherInfo::getUser);
     }
   };
 
   private final static ColumnInfo<WatcherInfo, String> ACTIONS = new ColumnInfo<WatcherInfo, String>(CvsBundle.message("view.watchers.actions.column.name")){
+    @Override
     public String valueOf(WatcherInfo object) {
       return object.getActions();
     }
 
+    @Override
     public Comparator<WatcherInfo> getComparator() {
-      return (o, o1) -> o.getActions().compareTo(o1.getActions());
+      return Comparator.comparing(WatcherInfo::getActions);
     }
   };
 
   private final static ColumnInfo<WatcherInfo, String> FILE = new ColumnInfo<WatcherInfo, String>(CvsBundle.message("view.watchers.file.column.name")){
+    @Override
     public String valueOf(WatcherInfo object) {
       return object.getFile();
     }
 
+    @Override
     public Comparator<WatcherInfo> getComparator() {
-      return (o, o1) -> o.getFile().compareTo(o1.getFile());
+      return Comparator.comparing(WatcherInfo::getFile);
     }
   };
 

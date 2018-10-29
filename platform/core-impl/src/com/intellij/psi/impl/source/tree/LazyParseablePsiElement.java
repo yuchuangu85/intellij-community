@@ -78,7 +78,7 @@ public class LazyParseablePsiElement extends LazyParseableElement implements Psi
 
   @NotNull
   protected <T> T[] findChildrenByClass(Class<T> aClass) {
-    List<T> result = new ArrayList<T>();
+    List<T> result = new ArrayList<>();
     for (PsiElement cur = getFirstChild(); cur != null; cur = cur.getNextSibling()) {
       if (aClass.isInstance(cur)) result.add((T)cur);
     }
@@ -253,6 +253,7 @@ public class LazyParseablePsiElement extends LazyParseableElement implements Psi
     return true;
   }
 
+  @Override
   public String toString() {
     return "PsiElement" + "(" + getElementType().toString() + ")";
   }

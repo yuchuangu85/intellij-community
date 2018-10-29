@@ -19,10 +19,10 @@ import com.intellij.lang.properties.editor.PropertiesGroupingStructureViewCompon
 import com.intellij.lang.properties.psi.PropertiesFile;
 import com.intellij.lang.properties.psi.impl.PropertiesFileImpl;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
-import com.intellij.openapi.actionSystem.LangDataKeys;
-import com.intellij.openapi.actionSystem.PlatformDataKeys;
+import com.intellij.openapi.editor.ex.util.EditorUtil;
 import com.intellij.openapi.fileEditor.FileEditor;
 import com.intellij.openapi.project.Project;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * @author cdr
@@ -31,11 +31,12 @@ public class PropertiesFileStructureViewComponent extends PropertiesGroupingStru
   private final PropertiesFile myPropertiesFile;
 
   public PropertiesFileStructureViewComponent(Project project, PropertiesFileImpl propertiesFile, FileEditor editor) {
-    super(project, editor, new PropertiesFileStructureViewModel(propertiesFile));
+    super(project, editor, new PropertiesFileStructureViewModel(propertiesFile, EditorUtil.getEditorEx(editor)));
     myPropertiesFile = propertiesFile;
   }
 
-  public Object getData(String dataId) {
+  @Override
+  public Object getData(@NotNull String dataId) {
     if (CommonDataKeys.VIRTUAL_FILE.is(dataId)) {
       return myPropertiesFile.getVirtualFile();
     }

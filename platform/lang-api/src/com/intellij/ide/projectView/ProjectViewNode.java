@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ import java.util.List;
 /**
  * A node in the project view tree.
  *
- * @see TreeStructureProvider#modify(com.intellij.ide.util.treeView.AbstractTreeNode, java.util.Collection, com.intellij.ide.projectView.ViewSettings)
+ * @see TreeStructureProvider#modify(AbstractTreeNode, Collection, ViewSettings)
  */
 
 public abstract class ProjectViewNode <Value> extends AbstractTreeNode<Value> implements RootsProvider, SettingsProvider {
@@ -58,7 +58,7 @@ public abstract class ProjectViewNode <Value> extends AbstractTreeNode<Value> im
    * @param value        the object (for example, a PSI element) represented by the project view node
    * @param viewSettings the settings of the project view.
    */
-  protected ProjectViewNode(Project project, Value value, ViewSettings viewSettings) {
+  protected ProjectViewNode(Project project, @NotNull Value value, ViewSettings viewSettings) {
     super(project, value);
     mySettings = viewSettings;
   }
@@ -92,7 +92,7 @@ public abstract class ProjectViewNode <Value> extends AbstractTreeNode<Value> im
                                             Class<? extends AbstractTreeNode> nodeClass,
                                             ViewSettings settings) {
     try {
-      ArrayList<AbstractTreeNode> result = new ArrayList<AbstractTreeNode>();
+      ArrayList<AbstractTreeNode> result = new ArrayList<>();
       for (Object object : objects) {
         result.add(createTreeNode(nodeClass, project, object, settings));
       }
@@ -100,28 +100,22 @@ public abstract class ProjectViewNode <Value> extends AbstractTreeNode<Value> im
     }
     catch (Exception e) {
       LOG.error(e);
-      return new ArrayList<AbstractTreeNode>();
+      return new ArrayList<>();
     }
   }
 
+  @NotNull
   public static AbstractTreeNode createTreeNode(Class<? extends AbstractTreeNode> nodeClass,
                                                 Project project,
                                                 Object value,
-                                                ViewSettings settings) throws
-                                                                       InstantiationException {
+                                                ViewSettings settings) throws InstantiationException {
     Object[] parameters = {project, value, settings};
     for (Constructor<? extends AbstractTreeNode> constructor : (Constructor<? extends AbstractTreeNode>[])nodeClass.getConstructors()) {
       if (constructor.getParameterTypes().length != 3) continue;
       try {
         return constructor.newInstance(parameters);
       }
-      catch (InstantiationException ignored) {
-      }
-      catch (IllegalAccessException ignored) {
-      }
-      catch (IllegalArgumentException ignored) {
-      }
-      catch (InvocationTargetException ignored) {
+      catch (InstantiationException | InvocationTargetException | IllegalArgumentException | IllegalAccessException ignored) {
       }
     }
     throw new InstantiationException("no constructor found in " + nodeClass);
@@ -172,14 +166,18 @@ public abstract class ProjectViewNode <Value> extends AbstractTreeNode<Value> im
 
     if (value instanceof RootsProvider) {
       return ((RootsProvider)value).getRoots();
-    } else if (value instanceof PsiFile) {
+    }
+    if (value instanceof PsiFile) {
       PsiFile vFile = ((PsiFile)value).getContainingFile();
       if (vFile != null && vFile.getVirtualFile() != null) {
         return Collections.singleton(vFile.getVirtualFile());
       }
-    } else if (value instanceof VirtualFile) {
-      return Collections.singleton(((VirtualFile)value));
-    } else if (value instanceof PsiFileSystemItem) {
+      return EMPTY_ROOTS;
+    }
+    if (value instanceof VirtualFile) {
+      return Collections.singleton((VirtualFile)value);
+    }
+    if (value instanceof PsiFileSystemItem) {
       return Collections.singleton(((PsiFileSystemItem)value).getVirtualFile());
     }
 

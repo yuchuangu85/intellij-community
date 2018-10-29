@@ -104,12 +104,12 @@ public class SliderSelectorAction extends DumbAwareAction {
       int value = slider.getModel().getValue();
       myConfiguration.getResultConsumer().consume(value);
     };
-    final Ref<JBPopup> popupRef = new Ref<JBPopup>(null);
+    final Ref<JBPopup> popupRef = new Ref<>(null);
     final JBPopup popup = JBPopupFactory.getInstance().createComponentPopupBuilder(result, slider)
       .setMovable(true)
       .setCancelOnWindowDeactivation(true)
       .setCancelKeyEnabled(myConfiguration.isShowOk())
-      .setKeyboardActions(Collections.singletonList(Pair.<ActionListener, KeyStroke>create(new ActionListener() {
+      .setKeyboardActions(Collections.singletonList(Pair.create(new ActionListener() {
         @Override
         public void actionPerformed(ActionEvent e) {
           saveSelection.run();

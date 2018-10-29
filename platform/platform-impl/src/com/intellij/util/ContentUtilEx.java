@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -106,7 +106,7 @@ public class ContentUtilEx extends ContentsUtil {
     }
     else {
       Object disposableByKey = contentComponent.getClientProperty(DISPOSABLE_KEY);
-      if (disposableByKey != null && disposableByKey instanceof Disposable) {
+      if (disposableByKey instanceof Disposable) {
         Disposer.register(content, (Disposable)disposableByKey);
       }
     }
@@ -167,7 +167,7 @@ public class ContentUtilEx extends ContentsUtil {
    * trying to find the first one which matches the given condition.
    */
   @Nullable
-  public static JComponent findContentComponent(@NotNull ContentManager manager, @NotNull Condition<JComponent> condition) {
+  public static JComponent findContentComponent(@NotNull ContentManager manager, @NotNull Condition<? super JComponent> condition) {
     for (Content content : manager.getContents()) {
       if (content instanceof TabbedContentImpl) {
         List<Pair<String, JComponent>> tabs = ((TabbedContentImpl)content).getTabs();
@@ -184,7 +184,44 @@ public class ContentUtilEx extends ContentsUtil {
     return null;
   }
 
+  @Nullable
+  private static JComponent findContentComponent(@NotNull TabbedContent tabbedContent, @NotNull Condition<? super JComponent> condition) {
+    for (Pair<String, JComponent> tab : tabbedContent.getTabs()) {
+      if (condition.value(tab.second)) {
+        return tab.second;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Closes content with component that matches specified condition.
+   *
+   * @return true if content was found and closed
+   */
+  public static boolean closeContentTab(@NotNull ContentManager manager, @NotNull Condition<? super JComponent> condition) {
+    for (Content content : manager.getContents()) {
+      if (content instanceof TabbedContent && ((TabbedContent)content).hasMultipleTabs()) {
+        TabbedContent tabbedContent = (TabbedContent)content;
+        JComponent component = findContentComponent(tabbedContent, condition);
+        if (component != null) {
+          tabbedContent.removeContent(component);
+          dispose(component);
+          return true;
+        }
+      }
+      else if (condition.value(content.getComponent())) {
+        manager.removeContent(content, true);
+        return true;
+      }
+    }
+    return false;
+  }
+
   public static int getSelectedTab(@NotNull TabbedContent content) {
+    int selectedIndex = content.getSelectedIndex();
+    if (selectedIndex != -1) return selectedIndex;
+
     final JComponent current = content.getComponent();
     int index = 0;
     for (Pair<String, JComponent> tab : content.getTabs()) {

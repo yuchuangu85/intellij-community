@@ -33,6 +33,8 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
+import static com.intellij.openapi.vcs.changes.ChangeListUtil.createSystemShelvedChangeListName;
+
 public class GitShelveChangesSaver extends GitChangesSaver {
   private static final Logger LOG = Logger.getInstance(GitShelveChangesSaver.class);
 
@@ -57,18 +59,19 @@ public class GitShelveChangesSaver extends GitChangesSaver {
 
     String oldProgressTitle = myProgressIndicator.getText();
     myProgressIndicator.setText(GitBundle.getString("update.shelving.changes"));
-    List<VcsException> exceptions = new ArrayList<VcsException>(1);
-    myShelvedLists = new HashMap<String, ShelvedChangeList>();
+    List<VcsException> exceptions = new ArrayList<>(1);
+    myShelvedLists = new HashMap<>();
 
     for (Map.Entry<String, Map<VirtualFile, Collection<Change>>> entry : lists.entrySet()) {
       final Map<VirtualFile, Collection<Change>> map = entry.getValue();
-      final Set<Change> changes = new HashSet<Change>();
+      final Set<Change> changes = new HashSet<>();
       for (Collection<Change> changeCollection : map.values()) {
         changes.addAll(changeCollection);
       }
-      if (! changes.isEmpty()) {
-        final ShelvedChangeList list = GitShelveUtils.shelveChanges(myProject, myShelveManager, changes,
-                                                                    myStashMessage + " [" + entry.getKey() + "]", exceptions, false, true);
+      if (!changes.isEmpty()) {
+        final ShelvedChangeList list = GitShelveUtils
+          .shelveChanges(myProject, myShelveManager, changes, createSystemShelvedChangeListName(myStashMessage, entry.getKey()), exceptions,
+                         false, true);
         myShelvedLists.put(entry.getKey(), list);
       }
     }

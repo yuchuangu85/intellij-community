@@ -1,19 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.move.moveClassesOrPackages;
 
 import com.intellij.history.LocalHistory;
@@ -45,40 +30,31 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Stream;
 
 public class MoveClassesOrPackagesImpl {
   private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.move.moveClassesOrPackages.MoveClassesOrPackagesImpl");
 
-  public static void doMove(final Project project,
-                            PsiElement[] adjustedElements,
-                            PsiElement initialTargetElement,
-                            final MoveCallback moveCallback) {
+  public static void doMove(Project project, PsiElement[] adjustedElements, PsiElement initialTargetElement, MoveCallback moveCallback) {
     if (!CommonRefactoringUtil.checkReadOnlyStatusRecursively(project, Arrays.asList(adjustedElements), true)) {
       return;
     }
 
-    final String initialTargetPackageName = getInitialTargetPackageName(initialTargetElement, adjustedElements);
-    final PsiDirectory initialTargetDirectory = getInitialTargetDirectory(initialTargetElement, adjustedElements);
-    final boolean isTargetDirectoryFixed = initialTargetDirectory == null;
-
-    boolean searchTextOccurences = false;
-    for (int i = 0; i < adjustedElements.length && !searchTextOccurences; i++) {
-      PsiElement psiElement = adjustedElements[i];
-      searchTextOccurences = TextOccurrencesUtil.isSearchTextOccurencesEnabled(psiElement);
-    }
-    final MoveClassesOrPackagesDialog moveDialog =
-      new MoveClassesOrPackagesDialog(project, searchTextOccurences, adjustedElements, initialTargetElement, moveCallback);
+    String initialTargetPackageName = getInitialTargetPackageName(initialTargetElement, adjustedElements);
+    PsiDirectory initialTargetDirectory = getInitialTargetDirectory(initialTargetElement, adjustedElements);
+    boolean searchTextOccurrences = Stream.of(adjustedElements).anyMatch(TextOccurrencesUtil::isSearchTextOccurencesEnabled);
     boolean searchInComments = JavaRefactoringSettings.getInstance().MOVE_SEARCH_IN_COMMENTS;
-    boolean searchForTextOccurences = JavaRefactoringSettings.getInstance().MOVE_SEARCH_FOR_TEXT;
-    moveDialog.setData(adjustedElements, initialTargetPackageName, initialTargetDirectory, isTargetDirectoryFixed, initialTargetElement == null, searchInComments,
-                       searchForTextOccurences, HelpID.getMoveHelpID(adjustedElements[0]));
-    moveDialog.show();
+    boolean searchForTextOccurrences = JavaRefactoringSettings.getInstance().MOVE_SEARCH_FOR_TEXT;
+    new MoveClassesOrPackagesDialog(
+      project, searchTextOccurrences, adjustedElements, initialTargetElement, moveCallback, initialTargetPackageName,
+      initialTargetDirectory, searchInComments, searchForTextOccurrences
+    ).show();
   }
 
   @Nullable
   public static PsiElement[] adjustForMove(final Project project, final PsiElement[] elements, final PsiElement targetElement) {
     final PsiElement[] psiElements = new PsiElement[elements.length];
-    List<String> names = new ArrayList<String>();
+    List<String> names = new ArrayList<>();
     for (int idx = 0; idx < elements.length; idx++) {
       PsiElement element = elements[idx];
       if (element instanceof PsiDirectory) {
@@ -312,13 +288,13 @@ public class MoveClassesOrPackagesImpl {
     List<PsiDirectory> sourceRootDirectories = buildRearrangeTargetsList(project, directories);
     DirectoryChooser chooser = new DirectoryChooser(project);
     chooser.setTitle(RefactoringBundle.message("select.source.root.chooser.title"));
-    chooser.fillList(sourceRootDirectories.toArray(new PsiDirectory[sourceRootDirectories.size()]), null, project, "");
+    chooser.fillList(sourceRootDirectories.toArray(PsiDirectory.EMPTY_ARRAY), null, project, "");
     if (!chooser.showAndGet()) {
       return;
     }
     final PsiDirectory selectedTarget = chooser.getSelectedDirectory();
     if (selectedTarget == null) return;
-    final MultiMap<PsiElement, String> conflicts = new MultiMap<PsiElement, String>();
+    final MultiMap<PsiElement, String> conflicts = new MultiMap<>();
     final Runnable analyzeConflicts = () -> ApplicationManager.getApplication().runReadAction(() -> RefactoringConflictsUtil
       .analyzeModuleConflicts(project, Arrays.asList(directories), UsageInfo.EMPTY_ARRAY, selectedTarget, conflicts));
     if (!ProgressManager.getInstance()
@@ -358,7 +334,7 @@ public class MoveClassesOrPackagesImpl {
 
   private static List<PsiDirectory> buildRearrangeTargetsList(final Project project, final PsiDirectory[] directories) {
     final List<VirtualFile> sourceRoots = JavaProjectRootsUtil.getSuitableDestinationSourceRoots(project);
-    List<PsiDirectory> sourceRootDirectories = new ArrayList<PsiDirectory>();
+    List<PsiDirectory> sourceRootDirectories = new ArrayList<>();
     sourceRoots:
     for (final VirtualFile sourceRoot : sourceRoots) {
       PsiDirectory sourceRootDirectory = PsiManager.getInstance(project).findDirectory(sourceRoot);
@@ -387,5 +363,4 @@ public class MoveClassesOrPackagesImpl {
       MoveClassesOrPackagesUtil.moveDirectoryRecursively(directory, moveTarget);
     }
   }
-
 }

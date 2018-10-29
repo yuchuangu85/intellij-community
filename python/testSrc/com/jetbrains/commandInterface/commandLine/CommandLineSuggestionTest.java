@@ -16,7 +16,7 @@
 package com.jetbrains.commandInterface.commandLine;
 
 import com.intellij.codeInsight.lookup.LookupElement;
-import com.intellij.util.containers.HashSet;
+import java.util.HashSet;
 import com.jetbrains.python.fixtures.PyTestCase;
 import org.hamcrest.Matchers;
 import org.jetbrains.annotations.NotNull;
@@ -34,7 +34,7 @@ public final class CommandLineSuggestionTest extends PyTestCase {
   /**
    * Ensures suggestions are correct
    */
-  public void testSuggestions() throws Exception {
+  public void testSuggestions() {
     CommandTestTools.initFileType();
     CommandTestTools.createFileByText(myFixture, "command positional_ar --a");
 
@@ -49,7 +49,7 @@ public final class CommandLineSuggestionTest extends PyTestCase {
    */
   private void ensureSuggestions(@NotNull final String initialPositionText, @NotNull final String... expectedSuggestions) {
     moveByText(initialPositionText);
-    final Set<String> completions = new HashSet<String>();
+    final Set<String> completions = new HashSet<>();
     for (final LookupElement element : myFixture.completeBasic()) {
       completions.add(element.getLookupString());
     }

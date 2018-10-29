@@ -1,22 +1,8 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.cvsSupport2;
 
 import com.intellij.CvsBundle;
-import com.intellij.codeStyle.CodeStyleFacade;
+import com.intellij.application.options.CodeStyle;
 import com.intellij.cvsSupport2.application.CvsEntriesManager;
 import com.intellij.cvsSupport2.application.CvsInfo;
 import com.intellij.cvsSupport2.config.CvsApplicationLevelConfiguration;
@@ -43,7 +29,6 @@ import org.netbeans.lib.cvsclient.admin.Entry;
 
 import javax.swing.*;
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
@@ -55,11 +40,11 @@ import java.util.regex.Pattern;
  */
 public class CvsUtil {
 
-  private static final SyncDateFormat DATE_FORMATTER = new SyncDateFormat(new SimpleDateFormat(Entry.getLastModifiedDateFormatter().toPattern(), Locale.US));
-
+  private static final SyncDateFormat DATE_FORMATTER;
   static {
-    //noinspection HardCodedStringLiteral
-    DATE_FORMATTER.setTimeZone(TimeZone.getTimeZone("GMT+0000"));
+    SimpleDateFormat delegate = new SimpleDateFormat(Entry.getLastModifiedDateFormatter().toPattern(), Locale.US);
+    delegate.setTimeZone(TimeZone.getTimeZone("GMT+0000"));
+    DATE_FORMATTER = new SyncDateFormat(delegate);
   }
 
   @NonNls public static final String CVS_IGNORE_FILE = ".cvsignore";
@@ -183,6 +168,7 @@ public class CvsUtil {
 
   private static FileCondition fileIsUnderCvsCondition() {
     return new FileCondition() {
+      @Override
       public boolean verify(File file) {
         return fileIsUnderCvs(file);
       }
@@ -202,6 +188,7 @@ public class CvsUtil {
 
   public static boolean filesHaveParentUnderCvs(File[] files) {
     return allSatisfy(files, new FileCondition() {
+      @Override
       public boolean verify(File file) {
         return fileHasParentUnderCvs(file);
       }
@@ -273,7 +260,7 @@ public class CvsUtil {
   }
 
   private static String getLineSeparator() {
-    return CodeStyleFacade.getInstance().getLineSeparator();
+    return CodeStyle.getDefaultSettings().getLineSeparator();
   }
 
   public static boolean fileIsLocallyRemoved(File file) {
@@ -435,6 +422,7 @@ public class CvsUtil {
 
   public static boolean filesExistInCvs(File[] files) {
     return allSatisfy(files, new FileCondition() {
+      @Override
       public boolean verify(File file) {
         return fileIsUnderCvs(file) && !fileIsLocallyAdded(file);
       }
@@ -443,6 +431,7 @@ public class CvsUtil {
 
   public static boolean filesAreNotDeleted(File[] files) {
     return allSatisfy(files, new FileCondition() {
+      @Override
       public boolean verify(File file) {
         return fileIsUnderCvs(file)
                && !fileIsLocallyAdded(file)
@@ -745,10 +734,11 @@ public class CvsUtil {
   private static class ReverseFileCondition implements FileCondition {
     private final FileCondition myCondition;
 
-    public ReverseFileCondition(FileCondition condition) {
+    ReverseFileCondition(FileCondition condition) {
       myCondition = condition;
     }
 
+    @Override
     public boolean verify(File file) {
       return !myCondition.verify(file);
     }
@@ -762,7 +752,7 @@ public class CvsUtil {
 
     private Conflict(String name, String originalRevision, List<String> revisions, long time) {
       myName = name;
-      myRevisions = new ArrayList<String>();
+      myRevisions = new ArrayList<>();
       myRevisions.add(originalRevision);
       myRevisions.addAll(revisions);
       myPreviousTime = time;
@@ -770,16 +760,16 @@ public class CvsUtil {
 
     private Conflict(String name, List<String> revisions, long time) {
       myName = name;
-      myRevisions = new ArrayList<String>();
+      myRevisions = new ArrayList<>();
       myRevisions.addAll(revisions);
       myPreviousTime = time;
     }
 
     public String toString() {
-      StringBuffer result = new StringBuffer();
+      StringBuilder result = new StringBuilder();
       result.append(myName);
       result.append(DELIM);
-      result.append(String.valueOf(myPreviousTime));
+      result.append(myPreviousTime);
       result.append(DELIM);
       for (int i = 0; i < myRevisions.size(); i++) {
         if (i > 0) {
@@ -819,7 +809,7 @@ public class CvsUtil {
     }
 
     public List<String> getRevisions() {
-      return new ArrayList<String>(myRevisions);
+      return new ArrayList<>(myRevisions);
     }
 
     public void setOriginalRevision(final String originalRevision) {
@@ -840,7 +830,7 @@ public class CvsUtil {
   }
 
   private static class Conflicts {
-    private final Map<String, Conflict> myNameToConflict = new com.intellij.util.containers.HashMap<String, Conflict>();
+    private final Map<String, Conflict> myNameToConflict = new HashMap<>();
 
     @NotNull
     public static Conflicts readFrom(File file) throws IOException {
@@ -862,7 +852,7 @@ public class CvsUtil {
     }
 
     private List<String> getConflictLines() {
-      ArrayList<String> result = new ArrayList<String>();
+      ArrayList<String> result = new ArrayList<>();
       for (final Conflict conflict : myNameToConflict.values()) {
         result.add((conflict).toString());
       }
@@ -886,7 +876,7 @@ public class CvsUtil {
 
     public void addConflictForFile(String name) {
       if (!myNameToConflict.containsKey(name)) {
-        myNameToConflict.put(name, new Conflict(name, "", new ArrayList<String>(), -1));
+        myNameToConflict.put(name, new Conflict(name, "", new ArrayList<>(), -1));
       }
     }
 
@@ -895,7 +885,7 @@ public class CvsUtil {
     }
 
     public List<String> getRevisionsFor(String name) {
-      if (!myNameToConflict.containsKey(name)) return new ArrayList<String>();
+      if (!myNameToConflict.containsKey(name)) return new ArrayList<>();
       return (myNameToConflict.get(name)).getRevisions();
     }
 

@@ -15,10 +15,10 @@
  */
 package org.jetbrains.plugins.github.api.data;
 
-import com.intellij.tasks.impl.gson.Mandatory;
-import com.intellij.tasks.impl.gson.RestModel;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.io.mandatory.Mandatory;
+import org.jetbrains.io.mandatory.RestModel;
 
 import java.util.Date;
 import java.util.List;
@@ -33,6 +33,7 @@ public class GithubCommit extends GithubCommitSha {
 
   @Mandatory private List<GithubCommitSha> parents;
 
+  @RestModel
   public static class GitCommit {
     private String url;
     @Mandatory private String message;
@@ -56,6 +57,7 @@ public class GithubCommit extends GithubCommitSha {
     }
   }
 
+  @RestModel
   public static class GitUser {
     @Mandatory private String name;
     @Mandatory private String email;

@@ -39,13 +39,13 @@ public class HgShowConfigCommand {
     final HgCommandExecutor executor = new HgCommandExecutor(project);
     executor.setSilent(true);
     //force override debug option while initialize hg configs
-    HgCommandResult result = executor.executeInCurrentThread(repo, "showconfig", Arrays.asList("--config", "ui.debug=false"));
+    HgCommandResult result = executor.executeInCurrentThread(repo, "showconfig", Arrays.asList("--config", "ui.debug=false"), true);
 
     if (result == null) {
       return Collections.emptyMap();
     }
 
-    Map<String, Map<String, String>> configMap = new HashMap<String, Map<String, String>>();
+    Map<String, Map<String, String>> configMap = new HashMap<>();
     for (String line : result.getOutputLines()) {
       List<String> option = StringUtil.split(line, "=", true, false);
       if (option.size() == 2) {
@@ -55,12 +55,12 @@ public class HgShowConfigCommand {
 
         if (dotIndex > 0) {
           String sectionName = sectionAndName.substring(0, dotIndex);
-          String optionName = sectionAndName.substring(dotIndex + 1, sectionAndName.length());
+          String optionName = sectionAndName.substring(dotIndex + 1);
           if (configMap.containsKey(sectionName)) {
             configMap.get(sectionName).put(optionName, value);
           }
           else {
-            HashMap<String, String> sectionMap = new HashMap<String, String>();
+            HashMap<String, String> sectionMap = new HashMap<>();
             sectionMap.put(optionName, value);
             configMap.put(sectionName, sectionMap);
           }

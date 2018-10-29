@@ -143,6 +143,11 @@ public class EqualsHashCodeTemplatesManager extends TemplatesManager {
     }
   }
 
+  @Override
+  protected String getInitialTemplateName() {
+    return toEqualsName(JAVA_UTIL_OBJECTS_EQUALS_AND_HASH_CODE);
+  }
+
   public String getDefaultTemplateBaseName() {
     return getTemplateBaseName(getDefaultTemplate());
   }
@@ -156,7 +161,7 @@ public class EqualsHashCodeTemplatesManager extends TemplatesManager {
   }
 
   public Collection<Couple<TemplateResource>> getTemplateCouples() {
-    final LinkedHashMap<String, Couple<TemplateResource>> resources = new LinkedHashMap<String, Couple<TemplateResource>>();
+    final LinkedHashMap<String, Couple<TemplateResource>> resources = new LinkedHashMap<>();
     for (TemplateResource resource : getAllTemplates()) {
       final String baseName = getTemplateBaseName(resource);
       TemplateResource eq = toEqualsName(baseName).equals(resource.getFileName()) ? resource : null;

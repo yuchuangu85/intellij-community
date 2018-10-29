@@ -28,14 +28,12 @@ import java.util.Set;
 public class FormatUtils {
 
   /**
-   * @noinspection StaticCollection
    */
   @NonNls
-  public static final Set<String> formatMethodNames = new HashSet<String>(2);
+  public static final Set<String> formatMethodNames = new HashSet<>(2);
   /**
-   * @noinspection StaticCollection
    */
-  public static final Set<String> formatClassNames = new HashSet<String>(4);
+  public static final Set<String> formatClassNames = new HashSet<>(4);
 
   static {
     formatMethodNames.add("format");
@@ -51,7 +49,7 @@ public class FormatUtils {
   private FormatUtils() {}
 
   public static boolean isFormatCall(PsiMethodCallExpression expression) {
-    return isFormatCall(expression, Collections.<String>emptyList(), Collections.<String>emptyList());
+    return isFormatCall(expression, Collections.emptyList(), Collections.emptyList());
   }
 
   public static boolean isFormatCall(PsiMethodCallExpression expression, List<String> optionalMethods, List<String> optionalClasses) {

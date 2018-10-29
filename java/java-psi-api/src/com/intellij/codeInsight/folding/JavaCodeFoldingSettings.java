@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -66,12 +66,6 @@ public abstract class JavaCodeFoldingSettings {
   public abstract boolean isCollapseEndOfLineComments();
   public abstract void setCollapseEndOfLineComments(boolean value);
 
-  public abstract boolean isInlineParameterNamesForLiteralCallArguments();
-  public abstract void setInlineParameterNamesForLiteralCallArguments(boolean value);
-
-  public abstract int getInlineLiteralParameterMinNameLength();
-  public abstract void setInlineLiteralParameterMinNameLength(int value);
-
-  public abstract int getInlineLiteralParameterMinArgumentsToFold();
-  public abstract void setInlineLiteralParameterMinArgumentsToFold(int value);
+  public abstract boolean isReplaceVarWithInferredType();
+  public abstract void setReplaceVarWithInferredType(boolean value);
 }

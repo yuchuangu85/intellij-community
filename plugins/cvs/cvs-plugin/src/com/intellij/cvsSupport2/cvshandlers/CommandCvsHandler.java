@@ -76,7 +76,7 @@ public class CommandCvsHandler extends CvsHandler {
 
   protected final CvsOperation myCvsOperation;
 
-  private final List<CvsOperation> myPostActivities = new ArrayList<CvsOperation>();
+  private final List<CvsOperation> myPostActivities = new ArrayList<>();
 
   private final boolean myCanBeCanceled;
   protected boolean myIsCanceled = false;
@@ -191,7 +191,7 @@ public class CommandCvsHandler extends CvsHandler {
                                                Project project,
                                                final boolean tagFilesAfterCommit,
                                                final String tagName,
-                                               @NotNull final List<File> dirsToPrune) {
+                                               @NotNull final List<? extends File> dirsToPrune) {
     final CommitFilesOperation operation = new CommitFilesOperation(commitMessage, makeNewFilesReadOnly);
     if (selectedFiles != null) {
       for (FilePath selectedFile : selectedFiles) {
@@ -218,15 +218,15 @@ public class CommandCvsHandler extends CvsHandler {
     return result;
   }
 
-  public static CvsHandler createAddFilesHandler(final Project project, Collection<AddedFileInfo> addedRoots) {
+  public static CvsHandler createAddFilesHandler(final Project project, Collection<? extends AddedFileInfo> addedRoots) {
     final AddFilesOperation operation = new AddFilesOperation();
-    final ArrayList<AddedFileInfo> addedFileInfo = new ArrayList<AddedFileInfo>();
+    final ArrayList<AddedFileInfo> addedFileInfo = new ArrayList<>();
     for (final AddedFileInfo info : addedRoots) {
       info.clearAllCvsAdminDirectoriesInIncludedDirectories();
       addedFileInfo.addAll(info.collectAllIncludedFiles());
     }
 
-    final ArrayList<VirtualFile> addedFiles = new ArrayList<VirtualFile>();
+    final ArrayList<VirtualFile> addedFiles = new ArrayList<>();
 
     for (AddedFileInfo info : addedFileInfo) {
       addedFiles.add(info.getFile());
@@ -248,7 +248,7 @@ public class CommandCvsHandler extends CvsHandler {
   }
 
   private static VirtualFile[] getAdminDirectoriesFor(Collection<File> files) {
-    final Collection<VirtualFile> result = new HashSet<VirtualFile>();
+    final Collection<VirtualFile> result = new HashSet<>();
     for (File file : files) {
       final File parentFile = file.getParentFile();
       final VirtualFile cvsAdminDirectory = CvsVfsUtil.findFileByIoFile(new File(parentFile, CvsUtil.CVS));
@@ -326,7 +326,7 @@ public class CommandCvsHandler extends CvsHandler {
   }
 
   private boolean loginAll(Project project) {
-    final Set<CvsEnvironment> allRoots = new HashSet<CvsEnvironment>();
+    final Set<CvsEnvironment> allRoots = new HashSet<>();
     try {
       myCvsOperation.appendSelfCvsRootProvider(allRoots);
       for (CvsOperation postActivity : myPostActivities) {

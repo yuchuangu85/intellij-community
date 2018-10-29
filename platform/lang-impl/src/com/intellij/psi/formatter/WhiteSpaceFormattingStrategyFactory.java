@@ -32,16 +32,15 @@ import java.util.concurrent.atomic.AtomicReference;
  * Contains utility methods for working with {@link WhiteSpaceFormattingStrategy}.
  *
  * @author Denis Zhdanov
- * @since 10/1/10 3:31 PM
  */
 public class WhiteSpaceFormattingStrategyFactory {
 
-  private static final List<WhiteSpaceFormattingStrategy> SHARED_STRATEGIES = Arrays.<WhiteSpaceFormattingStrategy>asList(
+  private static final List<WhiteSpaceFormattingStrategy> SHARED_STRATEGIES = Arrays.asList(
     new StaticSymbolWhiteSpaceDefinitionStrategy(' ', '\t', '\n')
   );
 
   private static final AtomicReference<PatchedWeakReference<Collection<WhiteSpaceFormattingStrategy>>> myCachedStrategies
-    = new AtomicReference<PatchedWeakReference<Collection<WhiteSpaceFormattingStrategy>>>();
+    = new AtomicReference<>();
   
   private WhiteSpaceFormattingStrategyFactory() {
   }
@@ -82,11 +81,11 @@ public class WhiteSpaceFormattingStrategyFactory {
     final Collection<Language> languages = Language.getRegisteredLanguages();
     if (languages == null) {
       final List<WhiteSpaceFormattingStrategy> result = Collections.emptyList();
-      myCachedStrategies.set(new PatchedWeakReference<Collection<WhiteSpaceFormattingStrategy>>(result));
+      myCachedStrategies.set(new PatchedWeakReference<>(result));
       return result;
     }
 
-    Set<WhiteSpaceFormattingStrategy> result = new HashSet<WhiteSpaceFormattingStrategy>(SHARED_STRATEGIES);
+    Set<WhiteSpaceFormattingStrategy> result = new HashSet<>(SHARED_STRATEGIES);
     final LanguageWhiteSpaceFormattingStrategy languageStrategy = LanguageWhiteSpaceFormattingStrategy.INSTANCE;
     for (Language language : languages) {
       final WhiteSpaceFormattingStrategy strategy = languageStrategy.forLanguage(language);
@@ -94,7 +93,7 @@ public class WhiteSpaceFormattingStrategyFactory {
         result.add(strategy);
       }
     }
-    myCachedStrategies.set(new PatchedWeakReference<Collection<WhiteSpaceFormattingStrategy>>(result));
+    myCachedStrategies.set(new PatchedWeakReference<>(result));
     return result;
   }
 

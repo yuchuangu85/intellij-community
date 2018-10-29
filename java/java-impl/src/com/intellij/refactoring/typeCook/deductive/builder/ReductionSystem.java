@@ -31,7 +31,7 @@ import java.util.*;
  * @author db
  */
 public class ReductionSystem {
-  final Set<Constraint> myConstraints = new HashSet<Constraint>();
+  final Set<Constraint> myConstraints = new HashSet<>();
   final Set<PsiElement> myElements;
   final Map<PsiTypeCastExpression, PsiType> myCastToOperandType;
   final Map<PsiElement, PsiType> myTypes;
@@ -52,7 +52,7 @@ public class ReductionSystem {
     myTypeVariableFactory = factory;
     myBoundVariables = null;
     mySettings = settings;
-    myCastToOperandType = new HashMap<PsiTypeCastExpression, PsiType>();
+    myCastToOperandType = new HashMap<>();
   }
 
   public Project getProject() {
@@ -95,7 +95,7 @@ public class ReductionSystem {
 
   @SuppressWarnings({"StringConcatenationInsideStringBufferAppend"})
   public String toString() {
-    @NonNls StringBuffer buffer = new StringBuffer();
+    @NonNls StringBuilder buffer = new StringBuilder();
 
     buffer.append("Victims:\n");
 
@@ -165,13 +165,13 @@ public class ReductionSystem {
     class Node {
       int myComponent = -1;
       Constraint myConstraint;
-      Set<Node> myNeighbours = new HashSet<Node>();
+      Set<Node> myNeighbours = new HashSet<>();
 
-      public Node() {
+      Node() {
         myConstraint = null;
       }
 
-      public Node(final Constraint c) {
+      Node(final Constraint c) {
         myConstraint = c;
       }
 
@@ -189,7 +189,7 @@ public class ReductionSystem {
 
     final Node[] typeVariableNodes = new Node[myTypeVariableFactory.getNumber()];
     final Node[] constraintNodes = new Node[myConstraints.size()];
-    final Map<Constraint, Set<PsiTypeVariable>> boundVariables = new HashMap<Constraint, Set<PsiTypeVariable>>();
+    final Map<Constraint, Set<PsiTypeVariable>> boundVariables = new HashMap<>();
 
     for (int i = 0; i < typeVariableNodes.length; i++) {
       typeVariableNodes[i] = new Node();
@@ -207,7 +207,7 @@ public class ReductionSystem {
       int l = 0;
 
       for (final Constraint constraint : myConstraints) {
-        final Set<PsiTypeVariable> boundVars = new LinkedHashSet<PsiTypeVariable>();
+        final Set<PsiTypeVariable> boundVars = new LinkedHashSet<>();
         final Node constraintNode = constraintNodes[l++];
 
         new Object() {
@@ -289,7 +289,7 @@ public class ReductionSystem {
         final int component = currComponent;
         new Object() {
           void selectComponent(final Node n) {
-            final LinkedList<Node> frontier = new LinkedList<Node>();
+            final LinkedList<Node> frontier = new LinkedList<>();
 
             frontier.addFirst(n);
 
@@ -359,7 +359,7 @@ public class ReductionSystem {
                 (x, y) -> x.compareTo(y));
 
 
-    final StringBuffer repr = new StringBuffer();
+    final StringBuilder repr = new StringBuilder();
 
     for (String aData : data) {
       repr.append(aData);
@@ -447,7 +447,7 @@ public class ReductionSystem {
             theSubst = theSubst.put(parm, substitute(type));
           }
 
-          return JavaPsiFacade.getInstance(aClass.getProject()).getElementFactory().createType(aClass, theSubst);
+          return JavaPsiFacade.getElementFactory(aClass.getProject()).createType(aClass, theSubst);
         }
         else {
           return t;
@@ -472,7 +472,7 @@ public class ReductionSystem {
                 (x, y) -> x.compareTo(y));
 
 
-    final StringBuffer repr = new StringBuffer();
+    final StringBuilder repr = new StringBuilder();
 
     for (String aData : data) {
       repr.append(aData);

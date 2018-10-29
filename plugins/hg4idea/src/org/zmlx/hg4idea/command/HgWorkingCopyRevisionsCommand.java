@@ -17,9 +17,9 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Couple;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.FilePath;
-import com.intellij.openapi.vcs.ObjectsConvertor;
 import com.intellij.openapi.vcs.changes.ChangeListManager;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.zmlx.hg4idea.HgRevisionNumber;
@@ -76,7 +76,7 @@ public class HgWorkingCopyRevisionsCommand {
    */
   @NotNull
   public Couple<HgRevisionNumber> parents(@NotNull VirtualFile repo, @Nullable VirtualFile file, @Nullable HgRevisionNumber revision) {
-    return parents(repo, ObjectsConvertor.VIRTUAL_FILEPATH.convert(file), revision);
+    return parents(repo, VcsUtil.getFilePath(file), revision);
   }
 
   /**
@@ -144,11 +144,11 @@ public class HgWorkingCopyRevisionsCommand {
     }
 
     final List<String> lines = result.getOutputLines();
-    if (lines != null && !lines.isEmpty()) {
+    if (!lines.isEmpty()) {
       List<String> parts = StringUtil.split(lines.get(0), " ");
-      String changesets = parts.get(0);
-      String revisions = parts.get(1);
       if (parts.size() >= 2) {
+        String changesets = parts.get(0);
+        String revisions = parts.get(1);
         if (changesets.indexOf('+') != changesets.lastIndexOf('+')) {
           // in the case of unresolved merge we have 2 revisions at once, both current, so with "+"
           // 9f2e6c02913c+b311eb4eb004+ 186+183+
@@ -182,7 +182,7 @@ public class HgWorkingCopyRevisionsCommand {
                                               @Nullable FilePath file,
                                               @Nullable HgRevisionNumber revision,
                                               boolean silent) {
-    final List<String> args = new LinkedList<String>();
+    final List<String> args = new LinkedList<>();
     args.add("--template");
     args.add(HgChangesetUtil.makeTemplate("{rev}", "{node}"));
     if (revision != null) {
@@ -197,20 +197,20 @@ public class HgWorkingCopyRevisionsCommand {
     final HgCommandResult result = executor.executeInCurrentThread(repo, command, args);
 
     if (result == null) {
-      return new ArrayList<HgRevisionNumber>(0);
+      return new ArrayList<>(0);
     }
 
-    final List<String> lines = new ArrayList<String>();
+    final List<String> lines = new ArrayList<>();
     for (String line : result.getRawOutput().split(HgChangesetUtil.CHANGESET_SEPARATOR)) {
       if (!line.trim().isEmpty()) {     // filter out empty lines
         lines.add(line);
       }
     }
     if (lines.isEmpty()) {
-      return new ArrayList<HgRevisionNumber>();
+      return new ArrayList<>();
     }
 
-    final List<HgRevisionNumber> revisions = new ArrayList<HgRevisionNumber>(lines.size());
+    final List<HgRevisionNumber> revisions = new ArrayList<>(lines.size());
     for(String line: lines) {
       final List<String> parts = StringUtil.split(line, HgChangesetUtil.ITEM_SEPARATOR);
       if (parts.size() < 2) {

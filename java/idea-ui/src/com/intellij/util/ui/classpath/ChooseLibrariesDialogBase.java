@@ -80,7 +80,7 @@ public abstract class ChooseLibrariesDialogBase extends DialogWrapper {
   private final SimpleTree myTree = new SimpleTree();
   private AbstractTreeBuilder myBuilder;
   private List<Library> myResult;
-  private final Map<Object, Object> myParentsMap = new THashMap<Object, Object>();
+  private final Map<Object, Object> myParentsMap = new THashMap<>();
 
   protected ChooseLibrariesDialogBase(final JComponent parentComponent, final String title) {
     super(parentComponent, false);
@@ -117,12 +117,12 @@ public abstract class ChooseLibrariesDialogBase extends DialogWrapper {
 
   @Override
   protected void doOKAction() {
-    processSelection(new CommonProcessors.CollectProcessor<Library>(myResult = new ArrayList<Library>()));
+    processSelection(new CommonProcessors.CollectProcessor<>(myResult = new ArrayList<>()));
     super.doOKAction();
   }
 
   private void updateOKAction() {
-    setOKActionEnabled(!processSelection(new CommonProcessors.FindFirstProcessor<Library>()));
+    setOKActionEnabled(!processSelection(new CommonProcessors.FindFirstProcessor<>()));
   }
 
   @Override
@@ -132,14 +132,14 @@ public abstract class ChooseLibrariesDialogBase extends DialogWrapper {
 
   @NotNull
   public List<Library> getSelectedLibraries() {
-    return myResult == null? Collections.<Library>emptyList() : myResult;
+    return myResult == null ? Collections.emptyList() : myResult;
   }
 
   protected void queueUpdateAndSelect(@NotNull final Library library) {
     myBuilder.queueUpdate().doWhenDone(() -> myBuilder.select(library));
   }
 
-  private boolean processSelection(final Processor<Library> processor) {
+  private boolean processSelection(final Processor<? super Library> processor) {
     for (Object element : myBuilder.getSelectedElements()) {
       if (element instanceof Library) {
         if (!processor.process((Library)element)) return false;
@@ -169,7 +169,9 @@ public abstract class ChooseLibrariesDialogBase extends DialogWrapper {
   protected JComponent createCenterPanel() {
     myBuilder = new SimpleTreeBuilder(myTree, new DefaultTreeModel(new DefaultMutableTreeNode()),
                                         new MyStructure(getProject()),
-                                        WeightBasedComparator.FULL_INSTANCE);
+                                        WeightBasedComparator.FULL_INSTANCE) {
+      // unique class to simplify search through the logs
+    };
     myBuilder.initRootNode();
 
     myTree.setDragEnabled(false);
@@ -257,6 +259,7 @@ public abstract class ChooseLibrariesDialogBase extends DialogWrapper {
       return myElement;
     }
 
+    @NotNull
     @Override
     public SimpleNode[] getChildren() {
       return NO_CHILDREN;
@@ -274,7 +277,7 @@ public abstract class ChooseLibrariesDialogBase extends DialogWrapper {
     }
 
     @Override
-    protected void update(PresentationData presentation) {
+    protected void update(@NotNull PresentationData presentation) {
       //todo[nik] this is workaround for bug in getTemplatePresentation().setIcons()
       presentation.setIcon(getTemplatePresentation().getIcon(false));
     }
@@ -322,7 +325,7 @@ public abstract class ChooseLibrariesDialogBase extends DialogWrapper {
 
   private static class LibraryTableDescriptor extends LibrariesTreeNodeBase<LibraryTable> {
     private final int myWeight;
-    private boolean myAutoExpand;
+    private final boolean myAutoExpand;
 
     protected LibraryTableDescriptor(final Project project,
                                      final NodeDescriptor parentDescriptor,
@@ -349,7 +352,7 @@ public abstract class ChooseLibrariesDialogBase extends DialogWrapper {
   }
 
   public boolean isEmpty() {
-    List<Object> children = new ArrayList<Object>();
+    List<Object> children = new ArrayList<>();
     collectChildren(myBuilder.getTreeStructure().getRootElement(), children);
     return children.isEmpty();
   }
@@ -357,18 +360,20 @@ public abstract class ChooseLibrariesDialogBase extends DialogWrapper {
   private class MyStructure extends AbstractTreeStructure {
     private final Project myProject;
 
-    public MyStructure(Project project) {
+    MyStructure(Project project) {
       myProject = project;
     }
 
+    @NotNull
     @Override
     public Object getRootElement() {
       return ApplicationManager.getApplication();
     }
 
+    @NotNull
     @Override
-    public Object[] getChildElements(Object element) {
-      final List<Object> result = new ArrayList<Object>();
+    public Object[] getChildElements(@NotNull Object element) {
+      final List<Object> result = new ArrayList<>();
       collectChildren(element, result);
       final Iterator<Object> it = result.iterator();
       while (it.hasNext()) {
@@ -381,7 +386,7 @@ public abstract class ChooseLibrariesDialogBase extends DialogWrapper {
     }
 
     @Override
-    public Object getParentElement(Object element) {
+    public Object getParentElement(@NotNull Object element) {
       if (element instanceof Application) return null;
       if (element instanceof Project) return ApplicationManager.getApplication();
       if (element instanceof Module) return ((Module)element).getProject();
@@ -392,7 +397,7 @@ public abstract class ChooseLibrariesDialogBase extends DialogWrapper {
 
     @NotNull
     @Override
-    public NodeDescriptor createDescriptor(Object element, NodeDescriptor parentDescriptor) {
+    public NodeDescriptor createDescriptor(@NotNull Object element, NodeDescriptor parentDescriptor) {
       if (element instanceof Application) return new RootDescriptor(myProject);
       if (element instanceof Project) return new ProjectDescriptor(myProject, (Project)element);
       if (element instanceof Module) return new ModuleDescriptor(myProject, parentDescriptor, (Module)element);

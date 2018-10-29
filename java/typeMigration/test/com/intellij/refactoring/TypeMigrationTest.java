@@ -11,7 +11,6 @@ import org.jetbrains.annotations.NotNull;
 
 /**
  * @author db
- * @since 22.07.2003
  */
 public class TypeMigrationTest extends TypeMigrationTestBase {
   private PsiElementFactory myFactory;
@@ -675,7 +674,7 @@ public class TypeMigrationTest extends TypeMigrationTestBase {
 
   // Checking preserving method parameters alignment
   public void testT127() {
-    CommonCodeStyleSettings javaSettings = getCurrentCodeStyleSettings().getCommonSettings(JavaLanguage.INSTANCE);
+    CommonCodeStyleSettings javaSettings = getCurrentCodeStyleSettings(myProject).getCommonSettings(JavaLanguage.INSTANCE);
     javaSettings.ALIGN_MULTILINE_PARAMETERS = true;
     javaSettings.ALIGN_MULTILINE_PARAMETERS_IN_CALLS = true;
     doTestMethodType("test234",
@@ -846,10 +845,38 @@ public class TypeMigrationTest extends TypeMigrationTestBase {
     doTestFieldsType("Test", myFactory.createTypeFromText(CommonClassNames.JAVA_LANG_OBJECT, null), "a", "b");
   }
 
+  public void testVoidMigrationInVarDecl() {
+    doTestMethodType("migrationMethod", PsiType.VOID);
+  }
+
+  public void testVoidMigrationInVarDeclFailed() {
+    doTestMethodType("migrationMethod", PsiType.VOID);
+  }
+
+  public void testVoidMigrationInAssignment() {
+    doTestMethodType("migrationMethod", PsiType.VOID);
+  }
+
+  public void testVoidMigrationInAssignmentFailed() {
+    doTestMethodType("migrationMethod", PsiType.VOID);
+  }
+
+  public void testGenericEllipsis() {
+    doTestFieldType("migrationField", myJavaFacade.getElementFactory().createTypeFromText("Test<Short>", null));
+  }
+
+  public void testGenericEllipsis2() {
+    doTestFieldType("migrationField", myJavaFacade.getElementFactory().createTypeFromText("Test<Short>", null));
+  }
+
+  public void testTypeParameterMigrationInInvalidCode() {
+    doTestFieldType("migrationField", myJavaFacade.getElementFactory().createTypeFromText("Test<Short>", null));
+  }
+
   private void doTestReturnType(final String methodName, final String migrationType) {
     start(new RulesProvider() {
       @Override
-      public PsiType migrationType(PsiElement context) throws Exception {
+      public PsiType migrationType(PsiElement context) {
         return myFactory.createTypeFromText(migrationType, context);
       }
 

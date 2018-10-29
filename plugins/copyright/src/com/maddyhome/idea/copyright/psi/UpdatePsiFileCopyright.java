@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2013 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package com.maddyhome.idea.copyright.psi;
 
+import com.intellij.copyright.CopyrightManager;
 import com.intellij.lang.Commenter;
 import com.intellij.lang.LanguageCommenters;
 import com.intellij.openapi.command.WriteCommandAction;
@@ -31,7 +32,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.util.IncorrectOperationException;
-import com.maddyhome.idea.copyright.CopyrightManager;
 import com.maddyhome.idea.copyright.CopyrightProfile;
 import com.maddyhome.idea.copyright.options.LanguageOptions;
 import com.maddyhome.idea.copyright.util.FileTypeUtil;
@@ -46,7 +46,7 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 public abstract class UpdatePsiFileCopyright extends AbstractUpdateCopyright {
-  private static final Logger LOG = Logger.getInstance("#" + UpdatePsiFileCopyright.class.getName());
+  private static final Logger LOG = Logger.getInstance(UpdatePsiFileCopyright.class);
   private final CopyrightProfile myOptions;
 
   protected UpdatePsiFileCopyright(Project project, Module module, VirtualFile root, CopyrightProfile options) {
@@ -94,7 +94,7 @@ public abstract class UpdatePsiFileCopyright extends AbstractUpdateCopyright {
   protected abstract void scanFile();
 
   protected void checkComments(PsiElement first, PsiElement last, boolean commentHere) {
-    List<PsiComment> comments = new ArrayList<PsiComment>();
+    List<PsiComment> comments = new ArrayList<>();
     collectComments(first, last, comments);
     checkComments(last, commentHere, comments);
   }
@@ -118,10 +118,10 @@ public abstract class UpdatePsiFileCopyright extends AbstractUpdateCopyright {
   protected void checkComments(PsiElement last, boolean commentHere, List<PsiComment> comments) {
     try {
       final String keyword = myOptions.getKeyword();
-      final LinkedHashSet<CommentRange> found = new LinkedHashSet<CommentRange>();
+      final LinkedHashSet<CommentRange> found = new LinkedHashSet<>();
       Document doc = null;
       if (!StringUtil.isEmpty(keyword)) {
-        Pattern pattern = Pattern.compile(StringUtil.escapeToRegexp(keyword), Pattern.CASE_INSENSITIVE);
+        Pattern pattern = Pattern.compile(keyword, Pattern.CASE_INSENSITIVE);
         doc = FileDocumentManager.getInstance().getDocument(getFile().getVirtualFile());
         for (int i = 0; i < comments.size(); i++) {
           PsiComment comment = comments.get(i);
@@ -148,23 +148,24 @@ public abstract class UpdatePsiFileCopyright extends AbstractUpdateCopyright {
           // Check to see if current copyright comment matches new one.
           String newComment = getCommentText("", "");
           resetCommentText();
-          String oldComment = doc.getCharsSequence()
-            .subSequence(range.getFirst().getTextRange().getStartOffset(), range.getLast().getTextRange().getEndOffset()).toString().trim();
-          if (!StringUtil.isEmptyOrSpaces(myOptions.getAllowReplaceKeyword()) &&
-              !oldComment.contains(myOptions.getAllowReplaceKeyword())) {
-            return;
-          }
+          String oldComment = getCommentText(doc, range);
+          if (!allowToReplaceRegexp(oldComment)) return;
           if (newComment.trim().equals(oldComment)) {
             if (!getLanguageOptions().isAddBlankAfter()) {
               // TODO - do we need option to remove blank line after?
               return; // Nothing to do since the comment is the same
             }
+            int totalNewline = 0;
             PsiElement next = getNextSibling(range.getLast());
-            if (next != null) {
+            while (next != null && totalNewline <= 1) {
               final String text = next.getText();
-              if (StringUtil.isEmptyOrSpaces(text) && countNewline(text) > 1) {
-                return;
+              if (!StringUtil.isEmptyOrSpaces(text)) {
+                break;
               }
+              totalNewline += countNewline(text); 
+            }
+            if (totalNewline > 1) {
+              return;
             }
             point = range.getFirst();
           }
@@ -199,17 +200,12 @@ public abstract class UpdatePsiFileCopyright extends AbstractUpdateCopyright {
             end = getNextSibling(range.getLast()).getTextRange().getEndOffset();
           }
         }
-        // If this is the last comment then remove the whitespace before the comment
-        else if (range.getLast() == comments.get(comments.size() - 1)) {
-          if (getPreviousSibling(range.getFirst()) instanceof PsiWhiteSpace &&
-              countNewline(getPreviousSibling(range.getFirst()).getText()) > 1) {
-            start = getPreviousSibling(range.getFirst()).getTextRange().getStartOffset();
-          }
-        }
         // If this is the first or middle comment then remove the whitespace after the comment
         else if (getNextSibling(range.getLast()) instanceof PsiWhiteSpace) {
           end = getNextSibling(range.getLast()).getTextRange().getEndOffset();
         }
+
+        if (!allowToReplaceRegexp(getCommentText(doc, range))) continue;
 
         addAction(new CommentAction(CommentAction.ACTION_DELETE, start, end));
       }
@@ -260,6 +256,23 @@ public abstract class UpdatePsiFileCopyright extends AbstractUpdateCopyright {
     catch (Exception e) {
       logger.error(e);
     }
+  }
+
+  private static String getCommentText(Document doc, CommentRange range) {
+    return doc.getCharsSequence()
+      .subSequence(range.getFirst().getTextRange().getStartOffset(), range.getLast().getTextRange().getEndOffset()).toString().trim();
+  }
+
+  private boolean allowToReplaceRegexp(String oldComment) {
+    final String replaceRegexp = myOptions.getAllowReplaceRegexp();
+    if (!StringUtil.isEmptyOrSpaces(replaceRegexp)) {
+      final Pattern pattern = Pattern.compile(replaceRegexp);
+      final Matcher matcher = pattern.matcher(oldComment);
+      if (!matcher.find()) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private static CommentRange getLineCopyrightComments(List<PsiComment> comments, Document doc, int i, PsiComment comment) {
@@ -324,35 +337,32 @@ public abstract class UpdatePsiFileCopyright extends AbstractUpdateCopyright {
   }
 
   protected void processActions(final boolean allowReplacement) throws IncorrectOperationException {
-    new WriteCommandAction.Simple(file.getProject(), "Update copyright") {
-      @Override
-      protected void run() throws Throwable {
-        Document doc = FileDocumentManager.getInstance().getDocument(getRoot());
-        if (doc != null) {
-          PsiDocumentManager.getInstance(file.getProject()).doPostponedOperationsAndUnblockDocument(doc);
-          for (CommentAction action : actions) {
-            int start = action.getStart();
-            int end = action.getEnd();
-  
-            switch (action.getType()) {
-              case CommentAction.ACTION_INSERT:
-                String comment = getCommentText(action.getPrefix(), action.getSuffix());
-                if (!comment.isEmpty()) {
-                  doc.insertString(start, comment);
-                }
-                break;
-              case CommentAction.ACTION_REPLACE:
-                if (allowReplacement) doc.replaceString(start, end, getCommentText("", ""));
-                break;
-              case CommentAction.ACTION_DELETE:
-                if (allowReplacement) doc.deleteString(start, end);
-                break;
-            }
+    WriteCommandAction.writeCommandAction(file.getProject()).withName("Update copyright").run(() -> {
+      Document doc = FileDocumentManager.getInstance().getDocument(getRoot());
+      if (doc != null) {
+        PsiDocumentManager.getInstance(file.getProject()).doPostponedOperationsAndUnblockDocument(doc);
+        for (CommentAction action : actions) {
+          int start = action.getStart();
+          int end = action.getEnd();
+
+          switch (action.getType()) {
+            case CommentAction.ACTION_INSERT:
+              String comment = getCommentText(action.getPrefix(), action.getSuffix());
+              if (!comment.isEmpty()) {
+                doc.insertString(start, comment);
+              }
+              break;
+            case CommentAction.ACTION_REPLACE:
+              if (allowReplacement) doc.replaceString(start, end, getCommentText("", ""));
+              break;
+            case CommentAction.ACTION_DELETE:
+              if (allowReplacement) doc.deleteString(start, end);
+              break;
           }
-          PsiDocumentManager.getInstance(getProject()).commitDocument(doc);
         }
+        PsiDocumentManager.getInstance(file.getProject()).commitDocument(doc);
       }
-    }.execute();
+    });
   }
 
   public boolean hasUpdates() {
@@ -360,7 +370,7 @@ public abstract class UpdatePsiFileCopyright extends AbstractUpdateCopyright {
   }
 
   private static class CommentRange {
-    public CommentRange(@NotNull PsiElement first, @NotNull PsiElement last) {
+    CommentRange(@NotNull PsiElement first, @NotNull PsiElement last) {
       this.first = first;
       this.last = last;
       LOG.assertTrue(first.getContainingFile() == last.getContainingFile());
@@ -457,7 +467,7 @@ public abstract class UpdatePsiFileCopyright extends AbstractUpdateCopyright {
 
   private final PsiFile file;
   private final LanguageOptions langOpts;
-  private final TreeSet<CommentAction> actions = new TreeSet<CommentAction>();
+  private final TreeSet<CommentAction> actions = new TreeSet<>();
 
   private static final Logger logger = Logger.getInstance(UpdatePsiFileCopyright.class.getName());
 }

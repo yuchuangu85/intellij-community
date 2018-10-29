@@ -29,7 +29,7 @@ import com.intellij.psi.PsiElementVisitor;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.util.PsiTreeUtil;
-import com.intellij.util.containers.HashSet;
+import java.util.HashSet;
 import com.jetbrains.python.ReSTService;
 import com.jetbrains.python.psi.*;
 import com.jetbrains.rest.RestBundle;
@@ -73,9 +73,9 @@ public class RestRoleInspection extends RestInspection {
 
   private class Visitor extends RestInspectionVisitor {
     private final ImmutableSet<String> myIgnoredRoles;
-    Set<String> mySphinxRoles = new HashSet<String>();
+    Set<String> mySphinxRoles = new HashSet<>();
 
-    public Visitor(final ProblemsHolder holder, List<String> ignoredRoles) {
+    Visitor(final ProblemsHolder holder, List<String> ignoredRoles) {
       super(holder);
       myIgnoredRoles = ImmutableSet.copyOf(ignoredRoles);
       Project project = holder.getProject();
@@ -126,7 +126,7 @@ public class RestRoleInspection extends RestInspection {
       if (RestUtil.SPHINX_ROLES.contains(node.getText()) || RestUtil.SPHINX_ROLES.contains(":py"+node.getText())
           || mySphinxRoles.contains(node.getRoleName())) return;
 
-      Set<String> definedRoles = new HashSet<String>();
+      Set<String> definedRoles = new HashSet<>();
 
       RestDirectiveBlock[] directives = PsiTreeUtil.getChildrenOfType(file, RestDirectiveBlock.class);
       if (directives != null) {

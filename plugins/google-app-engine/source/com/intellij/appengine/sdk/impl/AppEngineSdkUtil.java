@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.appengine.sdk.impl;
 
 import com.intellij.facet.ui.FacetConfigurationQuickFix;
@@ -38,7 +24,7 @@ import java.util.Set;
  */
 public class AppEngineSdkUtil {
   private static final Logger LOG = Logger.getInstance("#com.intellij.appengine.sdk.impl.AppEngineSdkUtil");
-  @NonNls public static final String APP_ENGINE_DOWNLOAD_URL = "http://code.google.com/appengine/downloads.html#Google_App_Engine_SDK_for_Java";
+  @NonNls public static final String APP_ENGINE_DOWNLOAD_URL = "https://code.google.com/appengine/downloads.html#Google_App_Engine_SDK_for_Java";
   private static final FacetConfigurationQuickFix DOWNLOAD_SDK_QUICK_FIX = new FacetConfigurationQuickFix("Download...") {
     @Override
     public void run(JComponent place) {
@@ -72,16 +58,16 @@ public class AppEngineSdkUtil {
   }
 
   public static Map<String, Set<String>> loadWhiteList(File input) throws IOException {
-    final THashMap<String, Set<String>> map = new THashMap<String, Set<String>>();
+    final THashMap<String, Set<String>> map = new THashMap<>();
     BufferedReader reader = new BufferedReader(new FileReader(input));
     try {
       String line;
-      Set<String> currentClasses = new THashSet<String>();
+      Set<String> currentClasses = new THashSet<>();
       map.put("", currentClasses);
       while ((line = reader.readLine()) != null) {
         if (line.startsWith(".")) {
           String packageName = line.substring(1);
-          currentClasses = new THashSet<String>();
+          currentClasses = new THashSet<>();
           map.put(packageName, currentClasses);
         }
         else {
@@ -97,7 +83,7 @@ public class AppEngineSdkUtil {
 
   public static Map<String, Set<String>> computeWhiteList(final File toolsApiJarFile) {
     try {
-      final THashMap<String, Set<String>> map = new THashMap<String, Set<String>>();
+      final THashMap<String, Set<String>> map = new THashMap<>();
       final ClassLoader loader = UrlClassLoader.build().urls(toolsApiJarFile.toURI().toURL()).parent(
         AppEngineSdkUtil.class.getClassLoader()).get();
       final Class<?> whiteListClass = Class.forName("com.google.apphosting.runtime.security.WhiteList", true, loader);
@@ -106,7 +92,7 @@ public class AppEngineSdkUtil {
         final String packageName = StringUtil.getPackageName(qualifiedName);
         Set<String> classNames = map.get(packageName);
         if (classNames == null) {
-          classNames = new THashSet<String>();
+          classNames = new THashSet<>();
           map.put(packageName, classNames);
         }
         classNames.add(StringUtil.getShortName(qualifiedName));

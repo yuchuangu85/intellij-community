@@ -18,17 +18,13 @@ package com.intellij.codeInspection.java18StreamApi;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Condition;
 import com.intellij.ui.*;
 import com.intellij.ui.components.JBList;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.ui.EditableModel;
-import com.intellij.util.ui.UIUtil;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
-import javax.swing.event.ListDataListener;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -47,18 +43,21 @@ public class StaticPseudoFunctionalStyleMethodOptions {
   private final List<PipelineElement> myElements;
 
   public StaticPseudoFunctionalStyleMethodOptions() {
-    myElements = new ArrayList<PipelineElement>();
+    myElements = new ArrayList<>();
     restoreDefault(myElements);
   }
 
   private static void restoreDefault(final List<PipelineElement> elements) {
     elements.clear();
-    final String guavaIterables = "com.google.common.collect.Iterables";
+    String guavaIterables = "com.google.common.collect.Iterables";
     elements.add(new PipelineElement(guavaIterables, "transform", PseudoLambdaReplaceTemplate.MAP));
     elements.add(new PipelineElement(guavaIterables, "filter", PseudoLambdaReplaceTemplate.FILTER));
     elements.add(new PipelineElement(guavaIterables, "find", PseudoLambdaReplaceTemplate.FIND));
     elements.add(new PipelineElement(guavaIterables, "all", PseudoLambdaReplaceTemplate.ALL_MATCH));
     elements.add(new PipelineElement(guavaIterables, "any", PseudoLambdaReplaceTemplate.ANY_MATCH));
+
+    String guavaLists = "com.google.common.collect.Lists";
+    elements.add(new PipelineElement(guavaLists, "transform", PseudoLambdaReplaceTemplate.MAP));
   }
 
   @NotNull
@@ -87,7 +86,7 @@ public class StaticPseudoFunctionalStyleMethodOptions {
   }
 
   public void writeExternal(final @NotNull Element xmlElement) {
-    final List<PipelineElement> toRemoveElements = new ArrayList<PipelineElement>();
+    final List<PipelineElement> toRemoveElements = new ArrayList<>();
     restoreDefault(toRemoveElements);
     toRemoveElements.removeAll(myElements);
 
@@ -95,7 +94,7 @@ public class StaticPseudoFunctionalStyleMethodOptions {
       xmlElement.addContent(createXmlElement(element)
                               .setAttribute(DELETE_ATTR, ""));
     }
-    final List<PipelineElement> defaultElements = new ArrayList<PipelineElement>();
+    final List<PipelineElement> defaultElements = new ArrayList<>();
     restoreDefault(defaultElements);
     for (PipelineElement element : myElements) {
       if (!defaultElements.contains(element)) {
@@ -153,7 +152,7 @@ public class StaticPseudoFunctionalStyleMethodOptions {
       @Override
       public void run(AnActionButton button) {
         final int[] indices = list.getSelectedIndices();
-        final List<PipelineElement> toRemove = new ArrayList<PipelineElement>(indices.length);
+        final List<PipelineElement> toRemove = new ArrayList<>(indices.length);
         for (int idx : indices) {
           toRemove.add(myElements.get(idx));
         }

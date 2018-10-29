@@ -40,6 +40,8 @@ public interface JBTabsPresentation {
 
   JBTabsPresentation setSideComponentOnTabs(boolean onTabs);
 
+  JBTabsPresentation setSideComponentBefore(boolean before);
+
   JBTabsPresentation setSingleRow(boolean singleRow);
 
   boolean isSingleRow();
@@ -77,7 +79,4 @@ public interface JBTabsPresentation {
   JBTabsPosition getTabsPosition();
 
   JBTabsPresentation setTabDraggingEnabled(boolean enabled);
-
-  JBTabsPresentation setProvideSwitchTargets(boolean provide);
-
 }

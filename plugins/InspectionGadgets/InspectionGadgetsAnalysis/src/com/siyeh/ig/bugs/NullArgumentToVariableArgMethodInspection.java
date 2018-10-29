@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2015 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2017 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.DelegatingFix;
 import com.siyeh.ig.InspectionGadgetsFix;
+import com.siyeh.ig.psiutils.TypeUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -82,9 +83,22 @@ public class NullArgumentToVariableArgMethodInspection extends BaseInspection {
   private static class NullArgumentToVariableArgVisitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitMethodCallExpression(@NotNull PsiMethodCallExpression call) {
-      super.visitMethodCallExpression(call);
+    public void visitEnumConstant(PsiEnumConstant enumConstant) {
+      super.visitEnumConstant(enumConstant);
+      visitCall(enumConstant);
+    }
+
+    @Override
+    public void visitCallExpression(PsiCallExpression call) {
+      super.visitCallExpression(call);
+      visitCall(call);
+    }
+
+    private void visitCall(PsiCall call) {
       final PsiExpressionList argumentList = call.getArgumentList();
+      if (argumentList == null) {
+        return;
+      }
       final PsiExpression[] arguments = argumentList.getExpressions();
       if (arguments.length == 0) {
         return;
@@ -120,12 +134,16 @@ public class NullArgumentToVariableArgMethodInspection extends BaseInspection {
       }
       final PsiEllipsisType ellipsisType = (PsiEllipsisType)type1;
       final PsiType arrayType = ellipsisType.toArrayType();
+      final PsiType componentType = ellipsisType.getComponentType();
       if (checkArray) {
+        if (!componentType.equals(TypeUtils.getObjectType(call))) {
+          return;
+        }
         if (type.isAssignableFrom(arrayType) || !arrayType.isAssignableFrom(type)) {
           return;
         }
       }
-      registerError(lastArgument, lastArgument, ellipsisType.getComponentType(), arrayType);
+      registerError(lastArgument, lastArgument, componentType, arrayType);
     }
   }
 }

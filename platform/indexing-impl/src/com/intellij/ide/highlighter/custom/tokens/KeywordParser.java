@@ -35,7 +35,7 @@ import java.util.Set;
  */
 public class KeywordParser {
   private static final Logger LOG = Logger.getInstance("#com.intellij.ide.highlighter.custom.tokens.KeywordParser");
-  private final List<Set<String>> myKeywordSets = new ArrayList<Set<String>>();
+  private final List<Set<String>> myKeywordSets = new ArrayList<>();
   private final CharTrie myTrie = new CharTrie();
   private final TIntHashSet myHashCodes = new TIntHashSet();
   private final boolean myIgnoreCase;
@@ -54,10 +54,10 @@ public class KeywordParser {
 
   private Set<String> normalizeKeywordSet(Set<String> keywordSet) {
     if (!myIgnoreCase) {
-      return new THashSet<String>(keywordSet);
+      return new THashSet<>(keywordSet);
     }
 
-    final Set<String> result = new THashSet<String>();
+    final Set<String> result = new THashSet<>();
     for (String s : keywordSet) {
       result.add(StringUtil.toUpperCase(s));
     }
@@ -67,6 +67,8 @@ public class KeywordParser {
   public boolean hasToken(int position, CharSequence myBuffer, @Nullable TokenInfo tokenInfo) {
     int index = 0;
     int offset = position;
+    String longestKeyword = null;
+    IElementType longestKeywordType = null;
     while (offset < myBuffer.length()) {
       char c = myBuffer.charAt(offset++);
       int nextIndex = myTrie.findSubNode(index, myIgnoreCase ? Character.toUpperCase(c) : c);
@@ -79,16 +81,19 @@ public class KeywordParser {
         String testKeyword = myIgnoreCase ? StringUtil.toUpperCase(keyword) : keyword;
         for (int i = 0; i < CustomHighlighterTokenType.KEYWORD_TYPE_COUNT; i++) {
           if (myKeywordSets.get(i).contains(testKeyword)) {
-            if (tokenInfo != null) {
-              tokenInfo.updateData(position, position + keyword.length(), getToken(i));
-            }
-            return true;
+            longestKeyword = testKeyword;
+            longestKeywordType = getToken(i);
+            break;
           }
         }
       }
     }
 
-    return false;
+    if (longestKeyword != null && tokenInfo != null) {
+      tokenInfo.updateData(position, position + longestKeyword.length(), longestKeywordType);
+    }
+
+    return longestKeyword != null;
   }
 
   private static boolean isWordEnd(int offset, CharSequence sequence) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,18 +16,25 @@
 package com.intellij.execution.process;
 
 import com.intellij.openapi.util.Key;
-import com.intellij.util.containers.ContainerUtil;
-
-import java.util.Set;
 
 public interface ProcessOutputTypes {
-  String SYSTEM_STRING = "system";
-  String STDOUT_STRING = "stdout";
-  String STDERR_STRING = "stderr";
-  
-  Key SYSTEM = new Key(SYSTEM_STRING);
-  Key STDOUT = new Key(STDOUT_STRING);
-  Key STDERR = new Key(STDERR_STRING);
+  Key SYSTEM = new ProcessOutputType("system");
 
-  Set<Key> TYPES = ContainerUtil.newHashSet(SYSTEM, STDOUT, STDERR);
+  /**
+   * Represents process standard output stream.<p>
+   * Please note that stdout colored output type doesn't equal to this instance: use
+   * <pre>{@code ProcessOutputType.isStdout(key)}</pre>
+   * instead of
+   * <pre>{@code ProcessOutputTypes.STDOUT.equals(key)} or ProcessOutputTypes.STDOUT == key</pre>
+   */
+  Key STDOUT = new ProcessOutputType("stdout");
+
+  /**
+   * Represents process standard error stream.<p>
+   * Please note that stderr colored output type doesn't equal to this instance: use
+   * <pre>{@code ProcessOutputType.isStderr(key)}</pre>
+   * instead of
+   * <pre>{@code ProcessOutputTypes.STDERR.equals(key) or ProcessOutputTypes.STDERR == key}</pre>
+   */
+  Key STDERR = new ProcessOutputType("stderr");
 }

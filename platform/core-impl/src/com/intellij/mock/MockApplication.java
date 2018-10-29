@@ -17,6 +17,8 @@ package com.intellij.mock;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.*;
+import com.intellij.openapi.application.impl.AnyModalityState;
+import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.ThrowableComputable;
@@ -220,6 +222,11 @@ public class MockApplication extends MockComponentManager implements Application
   public void invokeAndWait(@NotNull Runnable runnable, @NotNull ModalityState modalityState) {
   }
 
+  @Override
+  public void invokeAndWait(@NotNull Runnable runnable) throws ProcessCanceledException {
+    invokeAndWait(runnable, getDefaultModalityState());
+  }
+
   @NotNull
   @Override
   public ModalityState getCurrentModalityState() {
@@ -229,7 +236,7 @@ public class MockApplication extends MockComponentManager implements Application
   @NotNull
   @Override
   public ModalityState getAnyModalityState() {
-    return getNoneModalityState();
+    return AnyModalityState.ANY;
   }
 
   @NotNull

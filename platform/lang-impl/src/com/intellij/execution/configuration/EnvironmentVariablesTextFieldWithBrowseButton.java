@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.configuration;
 
 import com.google.common.collect.ImmutableMap;
@@ -20,12 +6,14 @@ import com.intellij.execution.ExecutionBundle;
 import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.execution.util.EnvVariablesTable;
 import com.intellij.execution.util.EnvironmentVariable;
+import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.ui.DialogBuilder;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.TextFieldWithBrowseButton;
+import com.intellij.openapi.ui.ValidationInfo;
 import com.intellij.ui.HyperlinkLabel;
 import com.intellij.ui.UserActivityProviderComponent;
-import com.intellij.util.Function;
+import com.intellij.util.EnvironmentUtil;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -38,8 +26,10 @@ import javax.swing.event.HyperlinkListener;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.util.*;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 public class EnvironmentVariablesTextFieldWithBrowseButton extends TextFieldWithBrowseButton implements UserActivityProviderComponent {
 
@@ -82,7 +72,7 @@ public class EnvironmentVariablesTextFieldWithBrowseButton extends TextFieldWith
     EnvironmentVariablesData oldData = myData;
     myData = data;
     setText(stringifyEnvs(data.getEnvs()));
-    if (oldData.isPassParentEnvs() != data.isPassParentEnvs()) {
+    if (!oldData.equals(data)) {
       fireStateChanged();
     }
   }
@@ -111,12 +101,12 @@ public class EnvironmentVariablesTextFieldWithBrowseButton extends TextFieldWith
   }
 
   @Override
-  public void addChangeListener(ChangeListener changeListener) {
+  public void addChangeListener(@NotNull ChangeListener changeListener) {
     myListeners.add(changeListener);
   }
 
   @Override
-  public void removeChangeListener(ChangeListener changeListener) {
+  public void removeChangeListener(@NotNull ChangeListener changeListener) {
     myListeners.remove(changeListener);
   }
 
@@ -128,7 +118,7 @@ public class EnvironmentVariablesTextFieldWithBrowseButton extends TextFieldWith
 
   public static void showParentEnvironmentDialog(@NotNull Component parent) {
     EnvVariablesTable table = new EnvVariablesTable();
-    table.setValues(convertToVariables(new TreeMap<String, String>(new GeneralCommandLine().getParentEnvironment()), true));
+    table.setValues(convertToVariables(new TreeMap<>(new GeneralCommandLine().getParentEnvironment()), true));
     table.getActionsPanel().setVisible(false);
     DialogBuilder builder = new DialogBuilder(parent);
     builder.setTitle(ExecutionBundle.message("environment.variables.system.dialog.title"));
@@ -176,16 +166,27 @@ public class EnvironmentVariablesTextFieldWithBrowseButton extends TextFieldWith
       init();
     }
 
-    @Override
     @Nullable
+    @Override
     protected JComponent createCenterPanel() {
       return myWholePanel;
+    }
+
+    @Nullable
+    @Override
+    protected ValidationInfo doValidate() {
+      for (EnvironmentVariable variable : myEnvVariablesTable.getEnvironmentVariables()) {
+        String name = variable.getName(), value = variable.getValue();
+        if (!EnvironmentUtil.isValidName(name)) return new ValidationInfo(IdeBundle.message("run.configuration.invalid.env.name", name));
+        if (!EnvironmentUtil.isValidValue(value)) return new ValidationInfo(IdeBundle.message("run.configuration.invalid.env.value", name, value));
+      }
+      return super.doValidate();
     }
 
     @Override
     protected void doOKAction() {
       myEnvVariablesTable.stopEditing();
-      final Map<String, String> envs = new LinkedHashMap<String, String>();
+      final Map<String, String> envs = new LinkedHashMap<>();
       for (EnvironmentVariable variable : myEnvVariablesTable.getEnvironmentVariables()) {
         envs.put(variable.getName(), variable.getValue());
       }

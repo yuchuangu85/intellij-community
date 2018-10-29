@@ -59,9 +59,9 @@ public class PyCodeFragmentTest extends LightMarkedTestCase {
     assertTrue(resultMarker != -1);
 
     final StringBuilder builder = new StringBuilder();
-    builder.append(fileText.substring(0, beginMarker));
-    builder.append(fileText.substring(beginMarker + BEGIN_MARKER.length(), endMarker));
-    builder.append((fileText.substring(endMarker + END_MARKER.length(), resultMarker)));
+    builder.append(fileText, 0, beginMarker);
+    builder.append(fileText, beginMarker + BEGIN_MARKER.length(), endMarker);
+    builder.append(fileText, endMarker + END_MARKER.length(), resultMarker);
 
     final String result = fileText.substring(resultMarker + RESULT_MARKER.length());
 
@@ -81,18 +81,18 @@ public class PyCodeFragmentTest extends LightMarkedTestCase {
     if (!(context instanceof ScopeOwner)) {
       context = PsiTreeUtil.getParentOfType(context, ScopeOwner.class);
     }
-    final StringBuffer buffer = new StringBuffer();
+    final StringBuilder buffer = new StringBuilder();
     try {
       final CodeFragment fragment = PyCodeFragmentUtil.createCodeFragment((ScopeOwner)context, startElement, endElement);
       if (fragment.isReturnInstructionInside()) {
         buffer.append("Return instruction inside found").append("\n");
       }
       buffer.append("In:\n");
-      for (String inputVariable : new TreeSet<String>(fragment.getInputVariables())) {
+      for (String inputVariable : new TreeSet<>(fragment.getInputVariables())) {
         buffer.append(inputVariable).append('\n');
       }
       buffer.append("Out:\n");
-      for (String outputVariable : new TreeSet<String>(fragment.getOutputVariables())) {
+      for (String outputVariable : new TreeSet<>(fragment.getOutputVariables())) {
         buffer.append(outputVariable).append('\n');
       }
     }

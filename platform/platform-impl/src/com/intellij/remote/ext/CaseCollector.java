@@ -38,7 +38,7 @@ public abstract class CaseCollector {
   }
 
   public CredentialsCase[] collectCases(CredentialsCase... cases) {
-    List<CredentialsCase> exCases = new ArrayList<CredentialsCase>();
+    List<CredentialsCase> exCases = new ArrayList<>();
     for (final CredentialsTypeEx typeEx : CredentialsManager.getInstance().getExTypes()) {
       exCases.add(new CredentialsCase() {
         @Override
@@ -52,7 +52,7 @@ public abstract class CaseCollector {
         }
       });
     }
-    return ArrayUtil.mergeArrays(cases, exCases.toArray(new CredentialsCase[exCases.size()]));
+    return ArrayUtil.mergeArrays(cases, exCases.toArray(new CredentialsCase[0]));
   }
 
   protected abstract void processWithType(CredentialsTypeEx typeEx, Object credentials);

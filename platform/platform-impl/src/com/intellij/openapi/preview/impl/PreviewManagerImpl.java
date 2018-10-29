@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.preview.impl;
 
 import com.intellij.icons.AllIcons;
@@ -44,7 +30,6 @@ import com.intellij.ui.content.ContentManager;
 import com.intellij.ui.content.ContentManagerAdapter;
 import com.intellij.ui.content.ContentManagerEvent;
 import com.intellij.util.Alarm;
-import com.intellij.util.PairFunction;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
@@ -67,21 +52,20 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
   private Content myEmptyStateContent;
   private final JPanel myEmptyStatePanel;
 
-  private ArrayList<PreviewInfo> myHistory = new ArrayList<PreviewInfo>();
+  private final ArrayList<PreviewInfo> myHistory = new ArrayList<>();
 
 
-  private TreeSet<PreviewPanelProvider> myProviders = new TreeSet<PreviewPanelProvider>((o1, o2) -> {
+  private final TreeSet<PreviewPanelProvider> myProviders = new TreeSet<>((o1, o2) -> {
     int result = Float.compare(o1.getMenuOrder(), o2.getMenuOrder());
     return result != 0 ? result : o1.toString().compareTo(o2.toString());
   });
-  private Set<PreviewProviderId> myActiveProviderIds = new HashSet<PreviewProviderId>();
-  private Set<PreviewProviderId> myLockedProviderIds = new HashSet<PreviewProviderId>();
+  private final Set<PreviewProviderId> myActiveProviderIds = new HashSet<>();
+  private final Set<PreviewProviderId> myLockedProviderIds = new HashSet<>();
   private boolean myInnerSelectionChange;
 
   private static boolean isAvailable() {
-    return UISettings.getInstance().NAVIGATE_TO_PREVIEW;
+    return UISettings.getInstance().getNavigateToPreview();
   }
-
 
   public PreviewManagerImpl(Project project) {
     myProject = project;
@@ -93,12 +77,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
       Disposer.register(project, provider);
     }
 
-    UISettings.getInstance().addUISettingsListener(new UISettingsListener() {
-      @Override
-      public void uiSettingsChanged(UISettings source) {
-        checkGlobalState();
-      }
-    }, myProject);
+    project.getMessageBus().connect().subscribe(UISettingsListener.TOPIC, uiSettings -> checkGlobalState());
     checkGlobalState();
     checkEmptyState();
   }
@@ -107,7 +86,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
   @Override
   public PreviewManagerState getState() {
     PreviewManagerState state = new PreviewManagerState();
-    state.myArtifactFilesMap = new HashMap<String, Boolean>();
+    state.myArtifactFilesMap = new HashMap<>();
     for (PreviewPanelProvider provider : myProviders) {
       state.myArtifactFilesMap.put(provider.toString(), myActiveProviderIds.contains(provider.getId()));
     }
@@ -115,7 +94,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
   }
 
   @Override
-  public void loadState(PreviewManagerState state) {
+  public void loadState(@NotNull PreviewManagerState state) {
     if (state == null) return;
     for (Map.Entry<String, Boolean> entry : state.myArtifactFilesMap.entrySet()) {
       if (!entry.getValue()) {
@@ -158,7 +137,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
       final MoveToStandardViewAction moveToStandardViewAction = new MoveToStandardViewAction();
       myContentManager.addContentManagerListener(new ContentManagerAdapter() {
         @Override
-        public void selectionChanged(ContentManagerEvent event) {
+        public void selectionChanged(@NotNull ContentManagerEvent event) {
           if (myInnerSelectionChange || event.getOperation() != ContentManagerEvent.ContentOperation.add) return;
           PreviewInfo previewInfo = event.getContent().getUserData(INFO_KEY);
           if (previewInfo != null) {
@@ -178,7 +157,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
       }, myToolWindow.getComponent());
 
       myToolWindow.setTitleActions(moveToStandardViewAction);
-      ArrayList<AnAction> myGearActions = new ArrayList<AnAction>();
+      ArrayList<AnAction> myGearActions = new ArrayList<>();
       for (PreviewPanelProvider provider : myProviders) {
         myGearActions.add(new ContentTypeToggleAction(provider));
       }
@@ -327,8 +306,8 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
 
   private class MoveToStandardViewAction extends AnAction {
 
-    public MoveToStandardViewAction() {
-      super("Move to standard view", "Move to standard view", AllIcons.Actions.MoveToStandardPlace);
+    MoveToStandardViewAction() {
+      super("Move to standard view", "Move to standard view", AllIcons.Actions.MoveTo2);
     }
 
     @Override
@@ -352,12 +331,12 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
     }
 
     @Override
-    public boolean isSelected(AnActionEvent e) {
+    public boolean isSelected(@NotNull AnActionEvent e) {
       return myActiveProviderIds.contains(myProvider.getId());
     }
 
     @Override
-    public void setSelected(AnActionEvent e, boolean state) {
+    public void setSelected(@NotNull AnActionEvent e, boolean state) {
       if (state) {
         myActiveProviderIds.add(myProvider.getId());
       }
@@ -379,7 +358,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
   }
 
   private static class EmptyStatePanel extends JPanel {
-    public EmptyStatePanel() {
+    EmptyStatePanel() {
       setOpaque(true);
     }
 
@@ -387,15 +366,15 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
     public void paint(Graphics g) {
       boolean isDarkBackground = UIUtil.isUnderDarcula();
       UISettings.setupAntialiasing(g);
-      g.setColor(new JBColor(isDarkBackground ? Gray._230 : Gray._80, Gray._160));
-      g.setFont(JBUI.Fonts.label(isDarkBackground ? 24f : 20f));
-
-      UIUtil.TextPainter painter = new UIUtil.TextPainter().withLineSpacing(1.5f);
-      painter.withShadow(true, new JBColor(Gray._200.withAlpha(100), Gray._0.withAlpha(255)));
+      UIUtil.TextPainter painter = new UIUtil.TextPainter()
+        .withLineSpacing(1.5f)
+        .withColor(new JBColor(isDarkBackground ? Gray._230 : Gray._80, Gray._160))
+        .withFont(JBUI.Fonts.label(isDarkBackground ? 24f : 20f))
+        .withShadow(true, new JBColor(Gray._200.withAlpha(100), Gray._0.withAlpha(255)));
 
       painter.appendLine("No files are open");//.underlined(new JBColor(Gray._150, Gray._180));
       painter.draw(g, (width, height) -> {
-        Dimension s = EmptyStatePanel.this.getSize();
+        Dimension s = this.getSize();
         return Couple.of((s.width - width) / 2, (s.height - height) / 2);
       });
     }

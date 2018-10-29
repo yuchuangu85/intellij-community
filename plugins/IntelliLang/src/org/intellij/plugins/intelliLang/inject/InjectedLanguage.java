@@ -27,8 +27,11 @@ public final class InjectedLanguage {
   private static Map<String, Language> ourLanguageCache;
   private static int ourLanguageCount;
 
+  @NotNull
   private final String myID;
+  @NotNull
   private final String myPrefix;
+  @NotNull
   private final String mySuffix;
   private final boolean myDynamic;
 
@@ -68,7 +71,7 @@ public final class InjectedLanguage {
 
   @Nullable
   public static Language findLanguageById(@Nullable String langID) {
-    if (langID == null || langID.length() == 0) {
+    if (langID == null || langID.isEmpty()) {
       return null;
     }
     synchronized (InjectedLanguage.class) {
@@ -97,16 +100,16 @@ public final class InjectedLanguage {
         initLanguageCache();
       }
       final Collection<Language> keys = ourLanguageCache.values();
-      return keys.toArray(new Language[keys.size()]);
+      return keys.toArray(new Language[0]);
     }
   }
 
   private static void initLanguageCache() {
-    ourLanguageCache = new HashMap<String, Language>();
+    ourLanguageCache = new HashMap<>();
 
     Collection<Language> registeredLanguages;
     do {
-      registeredLanguages = new ArrayList<Language>(Language.getRegisteredLanguages());
+      registeredLanguages = new ArrayList<>(Language.getRegisteredLanguages());
       for (Language language : registeredLanguages) {
         if (LanguageUtil.isInjectableLanguage(language)) {
           ourLanguageCache.put(language.getID(), language);
@@ -123,11 +126,11 @@ public final class InjectedLanguage {
 
     final InjectedLanguage that = (InjectedLanguage)o;
 
-    return !(myID != null ? !myID.equals(that.myID) : that.myID != null);
+    return myID.equals(that.myID);
   }
 
   public int hashCode() {
-    return (myID != null ? myID.hashCode() : 0);
+    return myID.hashCode();
   }
 
   @Nullable

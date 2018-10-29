@@ -1,39 +1,39 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.service.settings;
 
+import com.intellij.ide.util.projectWizard.WizardContext;
+import com.intellij.openapi.actionSystem.CustomShortcutSet;
+import com.intellij.openapi.application.ApplicationBundle;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.externalSystem.model.settings.LocationSettingType;
+import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkUtil;
 import com.intellij.openapi.externalSystem.service.settings.ExternalSystemSettingsControlCustomizer;
 import com.intellij.openapi.externalSystem.service.ui.ExternalSystemJdkComboBox;
 import com.intellij.openapi.externalSystem.util.ExternalSystemUiUtil;
 import com.intellij.openapi.externalSystem.util.PaintAwarePanel;
 import com.intellij.openapi.options.ConfigurationException;
+import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.projectRoots.JavaSdkType;
+import com.intellij.openapi.projectRoots.Sdk;
+import com.intellij.openapi.roots.ui.configuration.projectRoot.ProjectSdksModel;
+import com.intellij.openapi.ui.FixedSizeButton;
 import com.intellij.openapi.ui.MessageType;
 import com.intellij.openapi.ui.TextComponentAccessor;
 import com.intellij.openapi.ui.TextFieldWithBrowseButton;
+import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.ui.UIBundle;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBRadioButton;
 import com.intellij.util.Alarm;
 import com.intellij.util.ObjectUtils;
+import com.intellij.util.ThreeState;
 import com.intellij.util.ui.UIUtil;
+import com.intellij.util.ui.accessibility.ScreenReader;
 import org.gradle.util.GradleVersion;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -47,8 +47,11 @@ import org.jetbrains.plugins.gradle.util.GradleUtil;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
@@ -58,7 +61,6 @@ import static com.intellij.openapi.externalSystem.service.execution.ExternalSyst
 
 /**
  * @author Vladislav.Soroka
- * @since 2/24/2015
  */
 public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSettingsControlBuilder {
 
@@ -72,11 +74,11 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
   @NotNull
   private LocationSettingType myGradleHomeSettingType = LocationSettingType.UNKNOWN;
   private boolean myShowBalloonIfNecessary;
-  private ActionListener myActionListener;
-
+  private final ActionListener myActionListener;
 
   private boolean dropUseAutoImportBox;
   private boolean dropCreateEmptyContentRootDirectoriesBox;
+  private boolean dropModulesGroupingOptionPanel;
 
   @SuppressWarnings("FieldCanBeLocal") // Used implicitly by reflection at disposeUIResources() and showUi()
   @Nullable
@@ -89,7 +91,8 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
   @Nullable
   private JLabel myGradleJdkLabel;
   @Nullable
-  private ExternalSystemJdkComboBox myGradleJdkComboBox;
+  protected ExternalSystemJdkComboBox myGradleJdkComboBox;
+  @Nullable protected FixedSizeButton myGradleJdkSetUpButton;
   private boolean dropGradleJdkComponents;
 
   @Nullable
@@ -98,7 +101,7 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
 
   @Nullable
   private JBRadioButton myUseWrapperWithVerificationButton;
-  @SuppressWarnings("FieldCanBeLocal") // Used implicitly by reflection at disposeUIResources() and showUi()
+  // Used implicitly by reflection at disposeUIResources() and showUi()
   @Nullable
   private JBLabel myUseWrapperVerificationLabel;
   private boolean dropCustomizableWrapperButton;
@@ -110,9 +113,22 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
   @Nullable
   private JBRadioButton myUseBundledDistributionButton;
   private boolean dropUseBundledDistributionButton;
+
   @Nullable
   private JBCheckBox myResolveModulePerSourceSetCheckBox;
   private boolean dropResolveModulePerSourceSetCheckBox;
+
+  @Nullable
+  private JBCheckBox myResolveExternalAnnotationsCheckBox;
+  private boolean dropResolveExternalAnnotationsCheckBox;
+
+  @Nullable
+  private JBCheckBox myStoreExternallyCheckBox;
+  private boolean dropStoreExternallyCheckBox;
+
+  @SuppressWarnings("FieldCanBeLocal") // do not shift UI on the hide/show action, see IdeaGradleProjectSettingsControlBuilder.showUi
+  @Nullable
+  private JPanel myGradleJdkPanel;
 
   public IdeaGradleProjectSettingsControlBuilder(@NotNull GradleProjectSettings initialSettings) {
     myInstallationManager = ServiceManager.getService(GradleInstallationManager.class);
@@ -192,11 +208,27 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
     return this;
   }
 
+  public IdeaGradleProjectSettingsControlBuilder dropResolveExternalAnnotationsCheckBox() {
+    dropResolveExternalAnnotationsCheckBox = true;
+    return this;
+  }
+
+  public IdeaGradleProjectSettingsControlBuilder dropStoreExternallyCheckBox() {
+    dropStoreExternallyCheckBox = true;
+    return this;
+  }
+
+  public IdeaGradleProjectSettingsControlBuilder dropModulesGroupingOptionPanel() {
+    dropModulesGroupingOptionPanel = true;
+    return this;
+  }
+
   @Override
   public void showUi(boolean show) {
     ExternalSystemUiUtil.showUi(this, show);
   }
 
+  @Override
   @NotNull
   public GradleProjectSettings getInitialSettings() {
     return myInitialSettings;
@@ -204,7 +236,8 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
 
   @Override
   public ExternalSystemSettingsControlCustomizer getExternalSystemSettingsControlCustomizer() {
-    return new ExternalSystemSettingsControlCustomizer(dropUseAutoImportBox, dropCreateEmptyContentRootDirectoriesBox);
+    return new ExternalSystemSettingsControlCustomizer(
+      dropUseAutoImportBox, dropCreateEmptyContentRootDirectoriesBox, dropModulesGroupingOptionPanel);
   }
 
   @Override
@@ -231,6 +264,16 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
     if (!dropResolveModulePerSourceSetCheckBox) {
       myResolveModulePerSourceSetCheckBox = new JBCheckBox(GradleBundle.message("gradle.settings.text.create.module.per.sourceset"));
       content.add(myResolveModulePerSourceSetCheckBox, ExternalSystemUiUtil.getFillLineConstraints(indentLevel));
+    }
+
+    if (!dropResolveExternalAnnotationsCheckBox) {
+      myResolveExternalAnnotationsCheckBox = new JBCheckBox(GradleBundle.message("gradle.settings.text.resolve.external.annotations"));
+      content.add(myResolveExternalAnnotationsCheckBox, ExternalSystemUiUtil.getFillLineConstraints(indentLevel));
+    }
+
+    if (!dropStoreExternallyCheckBox && myInitialSettings.getStoreProjectFilesExternally() != ThreeState.UNSURE) {
+      myStoreExternallyCheckBox = new JBCheckBox("Store generated project files externally");
+      content.add(myStoreExternallyCheckBox, ExternalSystemUiUtil.getFillLineConstraints(indentLevel));
     }
 
     addGradleChooserComponents(content, indentLevel);
@@ -264,10 +307,32 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
   public IdeaGradleProjectSettingsControlBuilder addGradleJdkComponents(PaintAwarePanel content, int indentLevel) {
     if(!dropGradleJdkComponents) {
       myGradleJdkLabel = new JBLabel(GradleBundle.message("gradle.settings.text.jvm.path"));
-      myGradleJdkComboBox = new ExternalSystemJdkComboBox().withoutJre();
+      myGradleJdkComboBox = new ExternalSystemJdkComboBox();
+      Sdk internalJdk = ExternalSystemJdkUtil.getJdk(null, ExternalSystemJdkUtil.USE_INTERNAL_JAVA);
+      if (internalJdk == null || !ExternalSystemJdkUtil.isValidJdk(internalJdk.getHomePath())) {
+        myGradleJdkComboBox.withoutJre();
+      }
 
       content.add(myGradleJdkLabel, ExternalSystemUiUtil.getLabelConstraints(indentLevel));
-      content.add(myGradleJdkComboBox, ExternalSystemUiUtil.getFillLineConstraints(0));
+      myGradleJdkPanel = new JPanel(new BorderLayout(SystemInfo.isMac ? 0 : 2, 0));
+      myGradleJdkPanel.setFocusable(false);
+      myGradleJdkPanel.add(myGradleJdkComboBox, BorderLayout.CENTER);
+      myGradleJdkSetUpButton = new FixedSizeButton(myGradleJdkComboBox);
+      myGradleJdkSetUpButton.setToolTipText(UIBundle.message("component.with.browse.button.browse.button.tooltip.text"));
+      // FixedSizeButton isn't focusable but it should be selectable via keyboard.
+      DumbAwareAction.create(event -> {
+        for (ActionListener listener : myGradleJdkSetUpButton.getActionListeners()) {
+          listener.actionPerformed(new ActionEvent(myGradleJdkComboBox, ActionEvent.ACTION_PERFORMED, "action"));
+        }
+      }).registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.SHIFT_DOWN_MASK)),
+                                   myGradleJdkComboBox);
+
+      if (ScreenReader.isActive()) {
+        myGradleJdkSetUpButton.setFocusable(true);
+        myGradleJdkSetUpButton.getAccessibleContext().setAccessibleName(ApplicationBundle.message("button.new"));
+      }
+      myGradleJdkPanel.add(myGradleJdkSetUpButton, BorderLayout.EAST);
+      content.add(myGradleJdkPanel, ExternalSystemUiUtil.getFillLineConstraints(0));
     }
     return this;
   }
@@ -315,6 +380,16 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
 
   @Override
   public boolean validate(GradleProjectSettings settings) throws ConfigurationException {
+    if(myGradleJdkComboBox != null && !ApplicationManager.getApplication().isUnitTestMode()) {
+      Sdk selectedJdk = myGradleJdkComboBox.getSelectedJdk();
+      if(selectedJdk == null) {
+        throw new ConfigurationException(GradleBundle.message("gradle.jvm.undefined"));
+      }
+      String homePath = selectedJdk.getHomePath();
+      if(!ExternalSystemJdkUtil.isValidJdk(homePath)) {
+        throw new ConfigurationException(GradleBundle.message("gradle.jvm.incorrect", homePath));
+      }
+    }
     if (myGradleHomePathField == null) return true;
 
     String gradleHomePath = FileUtil.toCanonicalPath(myGradleHomePathField.getText());
@@ -334,6 +409,7 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
 
   @Override
   public void apply(GradleProjectSettings settings) {
+    settings.setCompositeBuild(myInitialSettings.getCompositeBuild());
     if (myGradleHomePathField != null) {
       String gradleHomePath = FileUtil.toCanonicalPath(myGradleHomePathField.getText());
       if (StringUtil.isEmpty(gradleHomePath)) {
@@ -352,6 +428,14 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
 
     if (myResolveModulePerSourceSetCheckBox != null) {
       settings.setResolveModulePerSourceSet(myResolveModulePerSourceSetCheckBox.isSelected());
+    }
+
+    if (myResolveExternalAnnotationsCheckBox != null) {
+      settings.setResolveExternalAnnotations(myResolveExternalAnnotationsCheckBox.isSelected());
+    }
+
+    if (myStoreExternallyCheckBox != null) {
+      settings.setStoreProjectFilesExternally(ThreeState.fromBoolean(myStoreExternallyCheckBox.isSelected()));
     }
 
     if (myUseLocalDistributionButton != null && myUseLocalDistributionButton.isSelected()) {
@@ -394,6 +478,15 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
       return true;
     }
 
+    if (myResolveExternalAnnotationsCheckBox != null &&
+        (myResolveExternalAnnotationsCheckBox.isSelected() != myInitialSettings.isResolveExternalAnnotations())) {
+      return true;
+    }
+
+    if (myStoreExternallyCheckBox != null && ThreeState.fromBoolean(myStoreExternallyCheckBox.isSelected()) != myInitialSettings.getStoreProjectFilesExternally()) {
+      return true;
+    }
+
     if (myGradleJdkComboBox != null && !StringUtil.equals(myGradleJdkComboBox.getSelectedValue(), myInitialSettings.getGradleJvm())) {
       return true;
     }
@@ -409,7 +502,15 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
   }
 
   @Override
-  public void reset(Project project, GradleProjectSettings settings, boolean isDefaultModuleCreation) {
+  public void reset(@Nullable Project project, GradleProjectSettings settings, boolean isDefaultModuleCreation) {
+    reset(project, settings, isDefaultModuleCreation, null);
+  }
+
+  @Override
+  public void reset(@Nullable Project project,
+                    GradleProjectSettings settings,
+                    boolean isDefaultModuleCreation,
+                    @Nullable WizardContext wizardContext) {
     String gradleHome = settings.getGradleHome();
     if (myGradleHomePathField != null) {
       myGradleHomePathField.setText(gradleHome == null ? "" : gradleHome);
@@ -418,8 +519,14 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
     if (myResolveModulePerSourceSetCheckBox != null) {
       myResolveModulePerSourceSetCheckBox.setSelected(settings.isResolveModulePerSourceSet());
     }
+    if (myResolveExternalAnnotationsCheckBox != null) {
+      myResolveExternalAnnotationsCheckBox.setSelected(settings.isResolveExternalAnnotations());
+    }
+    if (myStoreExternallyCheckBox != null) {
+      myStoreExternallyCheckBox.setSelected(settings.getStoreProjectFilesExternally() == ThreeState.YES);
+    }
 
-    resetGradleJdkComboBox(project, settings);
+    resetGradleJdkComboBox(project, settings, wizardContext);
     resetWrapperControls(settings.getExternalProjectPath(), settings, isDefaultModuleCreation);
 
     if (myUseLocalDistributionButton != null && !myUseLocalDistributionButton.isSelected()) {
@@ -449,6 +556,9 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
     if (myResolveModulePerSourceSetCheckBox != null) {
       myResolveModulePerSourceSetCheckBox.setSelected(settings.isResolveModulePerSourceSet());
     }
+    if (myResolveExternalAnnotationsCheckBox != null) {
+      myResolveExternalAnnotationsCheckBox.setSelected(settings.isResolveExternalAnnotations());
+    }
   }
 
   @Override
@@ -458,14 +568,9 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
     myGradleHomeLabel = new JBLabel(GradleBundle.message("gradle.settings.text.home.path"));
     myGradleHomePathField = new TextFieldWithBrowseButton();
 
-    myGradleHomePathField.addBrowseFolderListener(
-      "",
-      GradleBundle.message("gradle.settings.text.home.path"),
-      null,
-      GradleUtil.getGradleHomeFileChooserDescriptor(),
-      TextComponentAccessor.TEXT_FIELD_WHOLE_TEXT,
-      false
-    );
+    myGradleHomePathField.addBrowseFolderListener("", GradleBundle.message("gradle.settings.text.home.path"), null,
+                                                  GradleUtil.getGradleHomeFileChooserDescriptor(),
+                                                  TextComponentAccessor.TEXT_FIELD_WHOLE_TEXT);
     myGradleHomePathField.getTextField().getDocument().addDocumentListener(new DocumentListener() {
       @Override
       public void insertUpdate(DocumentEvent e) {
@@ -488,18 +593,40 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
     return this;
   }
 
-  private void resetGradleJdkComboBox(@Nullable final Project project, GradleProjectSettings settings) {
+  protected void resetGradleJdkComboBox(@Nullable final Project project,
+                                      GradleProjectSettings settings,
+                                      @Nullable WizardContext wizardContext) {
     if (myGradleJdkComboBox == null) return;
 
     final String gradleJvm = settings.getGradleJvm();
     myGradleJdkComboBox.setProject(project);
 
-    final String sdkItem = ObjectUtils.nullizeByCondition(gradleJvm, s -> (project == null && StringUtil.equals(USE_PROJECT_JDK, s)) || StringUtil.isEmpty(s));
+    Sdk projectJdk = wizardContext != null ? wizardContext.getProjectJdk() : null;
+    final String sdkItem = ObjectUtils.nullizeByCondition(gradleJvm, s ->
+      (projectJdk == null && project == null && StringUtil.equals(USE_PROJECT_JDK, s)) || StringUtil.isEmpty(s));
 
-    myGradleJdkComboBox.refreshData(sdkItem);
+    myGradleJdkComboBox.refreshData(sdkItem, projectJdk);
+    if (myGradleJdkSetUpButton != null) {
+      ProjectSdksModel sdksModel = new ProjectSdksModel();
+      myGradleJdkComboBox.setSetupButton(myGradleJdkSetUpButton, sdksModel, null, JavaSdkType.class::isInstance);
+    }
   }
 
   private void resetWrapperControls(String linkedProjectPath, @NotNull GradleProjectSettings settings, boolean isDefaultModuleCreation) {
+    if (isDefaultModuleCreation) {
+      JComponent[] toRemove = new JComponent[]{myUseWrapperWithVerificationButton, myUseWrapperVerificationLabel};
+      for (JComponent component : toRemove) {
+        if (component != null) {
+          Container parent = component.getParent();
+          if (parent != null) {
+            parent.remove(component);
+          }
+        }
+      }
+      myUseWrapperWithVerificationButton = null;
+      myUseWrapperVerificationLabel = null;
+    }
+
     if (StringUtil.isEmpty(linkedProjectPath) && !isDefaultModuleCreation) {
       if (myUseLocalDistributionButton != null) {
         myUseLocalDistributionButton.setSelected(true);

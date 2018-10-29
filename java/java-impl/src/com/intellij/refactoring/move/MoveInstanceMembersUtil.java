@@ -22,9 +22,9 @@ import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.containers.HashSet;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -33,14 +33,14 @@ import java.util.Set;
  * @author ven
  */
 public class MoveInstanceMembersUtil {
-  private static final Logger LOG = Logger.getInstance("#" + MoveInstanceMembersUtil.class.getName());
+  private static final Logger LOG = Logger.getInstance(MoveInstanceMembersUtil.class);
 
   /**
    * @param member  nonstatic class member to search for class references in
    * @return Set<PsiMember> in result map may be null in case no member is needed, but class itself is.
    */
   public static Map<PsiClass, Set<PsiMember>> getThisClassesToMembers(final PsiMember member) {
-    Map<PsiClass, Set<PsiMember>> map = new LinkedHashMap<PsiClass, Set<PsiMember>>();
+    Map<PsiClass, Set<PsiMember>> map = new LinkedHashMap<>();
     getThisClassesToMembers (member, map, member);
     return map;
   }
@@ -88,7 +88,7 @@ public class MoveInstanceMembersUtil {
   private static void addReferencedMember(final Map<PsiClass, Set<PsiMember>> map, final PsiClass classReferenced, final PsiMember member) {
     Set<PsiMember> members = map.get(classReferenced);
     if (members == null) {
-      members = new HashSet<PsiMember>();
+      members = new HashSet<>();
       map.put(classReferenced, members);
     }
     members.add(member);
@@ -114,7 +114,7 @@ public class MoveInstanceMembersUtil {
           final PsiClass resolved = (PsiClass)classReference.resolve();
           if (resolved != null && !resolved.hasModifierProperty(PsiModifier.STATIC)) {
             PsiClass referencedClass = getReferencedClass(resolved, qualifier, expression);
-            return new Pair<PsiMember, PsiClass>(resolved, referencedClass);
+            return new Pair<>(resolved, referencedClass);
           }
         }
       }

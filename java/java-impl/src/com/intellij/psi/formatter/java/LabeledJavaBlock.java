@@ -34,19 +34,20 @@ public class LabeledJavaBlock extends AbstractJavaBlock{
                           Alignment alignment,
                           Indent indent,
                           CommonCodeStyleSettings settings,
-                          JavaCodeStyleSettings javaSettings) {
-    super(node, wrap, alignment, indent, settings, javaSettings);
+                          JavaCodeStyleSettings javaSettings,
+                          @NotNull FormattingMode formattingMode) {
+    super(node, wrap, alignment, indent, settings, javaSettings, formattingMode);
   }
 
   @Override
   protected List<Block> buildChildren() {
-    final ArrayList<Block> result = new ArrayList<Block>();
+    final ArrayList<Block> result = new ArrayList<>();
     ASTNode child = myNode.getFirstChildNode();
     Indent currentIndent = getLabelIndent();
     Wrap currentWrap = null;
     while (child != null) {
       if (!FormatterUtil.containsWhiteSpacesOnly(child) && child.getTextLength() > 0){
-        result.add(createJavaBlock(child, mySettings, myJavaSettings, currentIndent, currentWrap, AlignmentStrategy.getNullStrategy()));
+        result.add(createJavaBlock(child, mySettings, myJavaSettings, currentIndent, currentWrap, AlignmentStrategy.getNullStrategy(), getFormattingMode()));
         if (child.getElementType() == JavaTokenType.COLON) {
           currentIndent = Indent.getNoneIndent();
           currentWrap =Wrap.createWrap(WrapType.ALWAYS, true);

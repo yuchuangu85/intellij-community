@@ -1,30 +1,22 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.updater;
 
 import java.util.List;
 import java.util.Map;
 
 public interface UpdaterUI {
+  void setDescription(String oldBuildDesc, String newBuildDesc);
+  void setDescription(String text);
+
   void startProcess(String title);
-
   void setProgress(int percentage);
-
   void setProgressIndeterminate();
-
-  void setStatus(String status);
-
-  void showError(Throwable e);
-
   void checkCancelled() throws OperationCancelledException;
 
-  void setDescription(String oldBuildDesc, String newBuildDesc);
+  void showError(String message);
 
-  /**
-   * Shows a warning associated with the pretense of a file and asks the user if the validation needs be retried.
-   * This function will return true iff the user wants to retry.
-   * @param message The warning message to display.
-   * @return true if the validation needs to be retried or false if te updater should quit.
-   */
-  boolean showWarning(String message);
+  void askUser(String message) throws OperationCancelledException;
+  Map<String, ValidationResult.Option> askUser(List<? extends ValidationResult> validationResults) throws OperationCancelledException;
 
-  Map<String, ValidationResult.Option> askUser(List<ValidationResult> validationResults) throws OperationCancelledException;
+  default String bold(String text) { return text; }
 }

@@ -43,7 +43,7 @@ public class ChangeSignatureUtil {
 
   public static <Parent extends PsiElement, Child extends PsiElement> void synchronizeList(
     Parent list,
-    List<Child> newElements,
+    List<? extends Child> newElements,
     ChildrenGenerator<Parent, Child> generator,
     boolean[] shouldRemoveChild) throws IncorrectOperationException
   {
@@ -56,7 +56,7 @@ public class ChangeSignatureUtil {
       if (index == newElements.size()) break;
 
       if (elementsToRemove == null) {
-        elementsToRemove = new ArrayList<Child>();
+        elementsToRemove = new ArrayList<>();
         for (int i = 0; i < shouldRemoveChild.length; i++) {
           if (shouldRemoveChild[i] && i < elements.size()) {
             elementsToRemove.add(elements.get(i));

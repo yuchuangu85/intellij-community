@@ -31,13 +31,13 @@ import java.util.Map;
  */
 public class PyCustomMemberTypeInfo<K> {
   @NotNull
-  private final Map<Key<K>, K> myCustomInfo = new HashMap<Key<K>, K>();
+  private final Map<Key<K>, K> myCustomInfo = new HashMap<>();
 
   public PyCustomMemberTypeInfo(@NotNull final Key<K> key, @NotNull final K value) {
     this(Collections.singleton(Pair.create(key, value)));
   }
 
-  public PyCustomMemberTypeInfo(@NotNull final Iterable<Pair<Key<K>, K>> customInfo) {
+  public PyCustomMemberTypeInfo(@NotNull final Iterable<? extends Pair<Key<K>, K>> customInfo) {
     for (final Pair<Key<K>, K> pair : customInfo) {
       myCustomInfo.put(pair.first, pair.second);
     }

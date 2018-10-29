@@ -17,12 +17,11 @@ package com.intellij.ide.impl;
 
 import com.intellij.ide.SelectInContext;
 import com.intellij.ide.SelectInTarget;
-import com.intellij.openapi.editor.Document;
-import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.IndexNotReadyException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
+import com.intellij.psi.util.PsiUtilCore;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -41,7 +40,7 @@ public abstract class SelectInTargetPsiWrapper implements SelectInTarget {
   public final boolean canSelect(@NotNull SelectInContext context) {
     if (!isContextValid(context)) return false;
 
-    return canWorkWithCustomObjects() || canSelectInner(context);
+    return canSelectInner(context);
   }
 
   protected boolean canSelectInner(@NotNull SelectInContext context) {
@@ -59,21 +58,18 @@ public abstract class SelectInTargetPsiWrapper implements SelectInTarget {
   @Nullable
   protected PsiFileSystemItem getContextPsiFile(@NotNull SelectInContext context) {
     VirtualFile virtualFile = context.getVirtualFile();
-    final Document document = FileDocumentManager.getInstance().getDocument(virtualFile);
-    final PsiFileSystemItem psiFile;
-    if (document != null) {
-      psiFile = PsiDocumentManager.getInstance(myProject).getPsiFile(document);
+    PsiFileSystemItem psiFile = PsiManager.getInstance(myProject).findFile(virtualFile);
+    if (psiFile != null) {
+      return psiFile;
     }
-    else if (context.getSelectorInFile() instanceof PsiFile) {
-      psiFile = (PsiFile)context.getSelectorInFile();
+
+    if (context.getSelectorInFile() instanceof PsiFile) {
+      return (PsiFile)context.getSelectorInFile();
     }
-    else if (virtualFile.isDirectory()) {
-      psiFile = PsiManager.getInstance(myProject).findDirectory(virtualFile);
+    if (virtualFile.isDirectory()) {
+      return PsiManager.getInstance(myProject).findDirectory(virtualFile);
     }
-    else {
-      psiFile = PsiManager.getInstance(myProject).findFile(virtualFile);
-    }
-    return psiFile;
+    return null;
   }
 
   @Override
@@ -86,7 +82,12 @@ public abstract class SelectInTargetPsiWrapper implements SelectInTarget {
     }
 
     if (selector instanceof PsiElement) {
-      select(((PsiElement)selector).getOriginalElement(), requestFocus);
+      PsiUtilCore.ensureValid((PsiElement)selector);
+      PsiElement original = ((PsiElement)selector).getOriginalElement();
+      if (original != null && !original.isValid()) {
+        throw new PsiInvalidElementAccessException(original, "Returned by " + selector + " of " + selector.getClass());
+      }
+      select(original, requestFocus);
     }
     else {
       select(selector, file, requestFocus);
@@ -95,7 +96,13 @@ public abstract class SelectInTargetPsiWrapper implements SelectInTarget {
 
   protected abstract void select(Object selector, VirtualFile virtualFile, boolean requestFocus);
 
-  protected abstract boolean canWorkWithCustomObjects();
+  /**
+   * @deprecated unused, implement canSelectInner(context) instead
+   */
+  @Deprecated
+  protected boolean canWorkWithCustomObjects() {
+    return false;
+  }
 
   protected abstract void select(PsiElement element, boolean requestFocus);
 

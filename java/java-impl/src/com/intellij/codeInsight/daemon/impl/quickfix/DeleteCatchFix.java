@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 package com.intellij.codeInsight.daemon.impl.quickfix;
 
-import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.daemon.QuickFixBundle;
 import com.intellij.codeInsight.daemon.impl.analysis.JavaHighlightUtil;
 import com.intellij.codeInsight.intention.IntentionAction;
@@ -48,11 +47,29 @@ public class DeleteCatchFix implements IntentionAction {
     return myCatchParameter.isValid() && PsiManager.getInstance(project).isInProject(myCatchParameter.getContainingFile());
   }
 
+  @NotNull
+  @Override
+  public PsiElement getElementToMakeWritable(@NotNull PsiFile file) {
+    return myCatchParameter;
+  }
+
   @Override
   public void invoke(@NotNull Project project, Editor editor, PsiFile file) {
-    if (!FileModificationService.getInstance().prepareFileForWrite(myCatchParameter.getContainingFile())) return;
+    PsiElement previousElement = deleteCatch(myCatchParameter);
+    if (previousElement != null) {
+      //move caret to previous catch section
+      editor.getCaretModel().moveToOffset(previousElement.getTextRange().getEndOffset());
+    }
+  }
 
-    final PsiTryStatement tryStatement = ((PsiCatchSection)myCatchParameter.getDeclarationScope()).getTryStatement();
+  /**
+   * Deletes catch section
+   *
+   * @param catchParameter the catchParameter in the section to delete (must be a catch parameter)
+   * @return the physical element before the deleted catch section, if available. Can be used to position the editor cursor after deletion.
+   */
+  public static PsiElement deleteCatch(PsiParameter catchParameter) {
+    final PsiTryStatement tryStatement = ((PsiCatchSection)catchParameter.getDeclarationScope()).getTryStatement();
     if (tryStatement.getCatchBlocks().length == 1 && tryStatement.getFinallyBlock() == null && tryStatement.getResourceList() == null) {
       // unwrap entire try statement
       final PsiCodeBlock tryBlock = tryStatement.getTryBlock();
@@ -71,21 +88,18 @@ public class DeleteCatchFix implements IntentionAction {
             }
           }
           else {
-            tryParent.addBefore(tryBlock, tryStatement);
-            lastAddedStatement = tryBlock;
+            tryStatement.replace(tryBlock);
+            return tryBlock;
           }
         }
       }
       tryStatement.delete();
-      if (lastAddedStatement != null) {
-        editor.getCaretModel().moveToOffset(lastAddedStatement.getTextRange().getEndOffset());
-      }
 
-      return;
+      return lastAddedStatement;
     }
 
     // delete catch section
-    final PsiElement catchSection = myCatchParameter.getParent();
+    final PsiElement catchSection = catchParameter.getParent();
     assert catchSection instanceof PsiCatchSection : catchSection;
     //save previous element to move caret to
     PsiElement previousElement = catchSection.getPrevSibling();
@@ -93,10 +107,7 @@ public class DeleteCatchFix implements IntentionAction {
       previousElement = previousElement.getPrevSibling();
     }
     catchSection.delete();
-    if (previousElement != null) {
-      //move caret to previous catch section
-      editor.getCaretModel().moveToOffset(previousElement.getTextRange().getEndOffset());
-    }
+    return previousElement;
   }
 
   @Override

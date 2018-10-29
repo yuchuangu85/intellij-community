@@ -59,12 +59,6 @@ public class EclipseCodeStyleSchemeImporter implements SchemeImporter<CodeStyleS
     return null;
   }
 
-  @Nullable
-  @Override
-  public String getAdditionalImportInfo(@NotNull CodeStyleScheme scheme) {
-    return null;
-  }
-
   /**
    * Attempts to read scheme names from the given stream. The stream may contain several schemes in which case all the available
    * names are returned.
@@ -74,7 +68,7 @@ public class EclipseCodeStyleSchemeImporter implements SchemeImporter<CodeStyleS
    */
   @NotNull
   private static String[] readSchemeNames(@NotNull VirtualFile selectedFile) throws SchemeImportException {
-    final Set<String> names = new HashSet<String>();
+    final Set<String> names = new HashSet<>();
     final EclipseXmlProfileReader reader = new EclipseXmlProfileReader(new EclipseXmlProfileReader.OptionHandler() {
       @Override
       public void handleOption(@NotNull String eclipseKey, @NotNull String value) throws SchemeImportException {

@@ -27,8 +27,8 @@ import java.util.Collections;
 import java.util.List;
 
 public class DownloadSelectedSourcesAndDocsAction extends MavenProjectsAction {
-  private boolean mySources;
-  private boolean myDocs;
+  private final boolean mySources;
+  private final boolean myDocs;
 
   @SuppressWarnings({"UnusedDeclaration"})
   public DownloadSelectedSourcesAndDocsAction() {
@@ -41,15 +41,16 @@ public class DownloadSelectedSourcesAndDocsAction extends MavenProjectsAction {
   }
 
   @Override
-  protected boolean isAvailable(AnActionEvent e) {
+  protected boolean isAvailable(@NotNull AnActionEvent e) {
     return super.isAvailable(e) && !getDependencies(e).isEmpty();
   }
 
   private static Collection<MavenArtifact> getDependencies(AnActionEvent e) {
     Collection<MavenArtifact> result = e.getData(MavenDataKeys.MAVEN_DEPENDENCIES);
-    return result == null ? Collections.<MavenArtifact>emptyList() : result;
+    return result == null ? Collections.emptyList() : result;
   }
 
+  @Override
   protected void perform(@NotNull MavenProjectsManager manager, List<MavenProject> mavenProjects, AnActionEvent e) {
     manager.scheduleArtifactsDownloading(mavenProjects, getDependencies(e), mySources, myDocs, null);
   }

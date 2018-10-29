@@ -17,7 +17,7 @@ package com.jetbrains.python.refactoring.classes;
 
 import com.intellij.refactoring.classMembers.AbstractMemberInfoStorage;
 import com.intellij.refactoring.classMembers.MemberInfoBase;
-import com.intellij.util.containers.HashSet;
+import java.util.HashSet;
 import com.jetbrains.python.psi.PyClass;
 import com.jetbrains.python.psi.PyElement;
 import com.jetbrains.python.psi.PyFunction;
@@ -33,7 +33,7 @@ import java.util.ArrayList;
 public class PyMemberInfoStorage extends AbstractMemberInfoStorage<PyElement, PyClass, PyMemberInfo<PyElement>> {
 
   public PyMemberInfoStorage(PyClass aClass) {
-    this(aClass, new MemberInfoBase.EmptyFilter<PyElement>());
+    this(aClass, new MemberInfoBase.EmptyFilter<>());
   }
 
   public PyMemberInfoStorage(PyClass aClass, MemberInfoBase.Filter<PyElement> memberInfoFilter) {
@@ -47,7 +47,7 @@ public class PyMemberInfoStorage extends AbstractMemberInfoStorage<PyElement, Py
 
   @Override
   protected void buildSubClassesMap(PyClass aClass) {
-    buildSubClassesMapImpl(aClass, new HashSet<PyClass>());
+    buildSubClassesMapImpl(aClass, new HashSet<>());
   }
 
   private void buildSubClassesMapImpl(PyClass aClass, HashSet<PyClass> visited) {

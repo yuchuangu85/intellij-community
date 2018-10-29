@@ -28,7 +28,7 @@ public class UserDictionary implements EditableDictionary {
   private final String name;
 
   @NotNull
-  private final Set<String> words = new THashSet<String>();
+  private final Set<String> words = new THashSet<>();
 
   public UserDictionary(@NotNull String name) {
     this.name = name;
@@ -60,7 +60,7 @@ public class UserDictionary implements EditableDictionary {
   }
 
   @Override
-  @Nullable
+  @NotNull
   public Set<String> getEditableWords() {
     return words;
   }

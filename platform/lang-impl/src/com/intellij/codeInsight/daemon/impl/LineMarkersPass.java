@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 /*
  * @author max
@@ -29,7 +15,6 @@ import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
-import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.colors.CodeInsightColors;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
@@ -39,42 +24,44 @@ import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
-import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.IndexNotReadyException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
-import com.intellij.psi.*;
-import com.intellij.psi.impl.source.tree.injected.InjectedLanguageManagerImpl;
-import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
+import com.intellij.psi.FileViewProvider;
+import com.intellij.psi.PsiDocumentManager;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.impl.source.tree.injected.InjectedFileViewProvider;
 import com.intellij.util.FunctionUtil;
+import com.intellij.util.PairConsumer;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.containers.NotNullList;
 import gnu.trove.THashSet;
 import gnu.trove.TIntObjectHashMap;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.util.*;
 
-public class LineMarkersPass extends TextEditorHighlightingPass implements LineMarkersProcessor, DumbAware {
+public class LineMarkersPass extends TextEditorHighlightingPass {
   private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.daemon.impl.LineMarkersPass");
 
-  private volatile Collection<LineMarkerInfo> myMarkers = Collections.emptyList();
+  private volatile List<LineMarkerInfo<PsiElement>> myMarkers = Collections.emptyList();
 
   @NotNull private final PsiFile myFile;
-  @Nullable private final Editor myEditor;
-  @NotNull private final TextRange myBounds;
+  @NotNull private final TextRange myPriorityBounds;
+  @NotNull private final TextRange myRestrictRange;
 
   LineMarkersPass(@NotNull Project project,
                   @NotNull PsiFile file,
-                  @Nullable Editor editor,
                   @NotNull Document document,
-                  @NotNull TextRange bounds) {
+                  @NotNull TextRange priorityBounds,
+                  @NotNull TextRange restrictRange) {
     super(project, document, false);
     myFile = file;
-    myEditor = editor;
-    myBounds = bounds;
+    myPriorityBounds = priorityBounds;
+    myRestrictRange = restrictRange;
   }
 
   @NotNull
@@ -87,7 +74,7 @@ public class LineMarkersPass extends TextEditorHighlightingPass implements LineM
   @Override
   public void doApplyInformationToEditor() {
     try {
-      LineMarkersUtil.setLineMarkersToEditor(myProject, getDocument(), myBounds, myMarkers, Pass.UPDATE_ALL);
+      LineMarkersUtil.setLineMarkersToEditor(myProject, getDocument(), myRestrictRange, myMarkers, getId());
     }
     catch (IndexNotReadyException ignored) {
     }
@@ -95,58 +82,63 @@ public class LineMarkersPass extends TextEditorHighlightingPass implements LineM
 
   @Override
   public void doCollectInformation(@NotNull ProgressIndicator progress) {
-    final List<LineMarkerInfo> lineMarkers = new ArrayList<>();
-    final FileViewProvider viewProvider = myFile.getViewProvider();
-    final Set<Language> relevantLanguages = viewProvider.getLanguages();
-    for (Language language : relevantLanguages) {
-      PsiElement psiRoot = viewProvider.getPsi(language);
-      if (!HighlightingLevelManager.getInstance(myProject).shouldHighlight(psiRoot)) continue;
-      List<PsiElement> elements = CollectHighlightsUtil.getElementsInRange(psiRoot, myBounds.getStartOffset(), myBounds.getEndOffset());
-      if (elements.isEmpty()) {
-        elements = Collections.singletonList(psiRoot);
-      }
-      final List<LineMarkerProvider> providers = getMarkerProviders(language, myProject);
-      addLineMarkers(elements, providers, lineMarkers, progress);
-      collectLineMarkersForInjected(lineMarkers, elements, this, myFile, progress);
+    final List<LineMarkerInfo<PsiElement>> lineMarkers = new ArrayList<>();
+    FileViewProvider viewProvider = myFile.getViewProvider();
+    for (Language language : viewProvider.getLanguages()) {
+      final PsiFile root = viewProvider.getPsi(language);
+      HighlightingLevelManager highlightingLevelManager = HighlightingLevelManager.getInstance(myProject);
+      if (!highlightingLevelManager.shouldHighlight(root)) continue;
+      Divider.divideInsideAndOutsideInOneRoot(root, myRestrictRange, myPriorityBounds,
+           elements -> {
+             Collection<LineMarkerProvider> providers = getMarkerProviders(language, myProject);
+             List<LineMarkerProvider> providersList = new ArrayList<>(providers);
+
+             queryProviders(elements.inside, root, providersList, (element, info) -> {
+               lineMarkers.add(info);
+               ApplicationManager.getApplication().invokeLater(() -> {
+                 if (isValid()) {
+                   LineMarkersUtil.addLineMarkerToEditorIncrementally(myProject, getDocument(), info);
+                 }
+               }, myProject.getDisposed());
+             });
+             queryProviders(elements.outside, root, providersList, (element, info) -> lineMarkers.add(info));
+             return true;
+           });
     }
 
-    myMarkers = mergeLineMarkers(lineMarkers, myEditor);
+    myMarkers = mergeLineMarkers(lineMarkers, getDocument());
     if (LOG.isDebugEnabled()) {
       LOG.debug("LineMarkersPass.doCollectInformation. lineMarkers: " + lineMarkers+"; merged: "+myMarkers);
     }
   }
 
   @NotNull
-  static List<LineMarkerInfo> mergeLineMarkers(@NotNull List<LineMarkerInfo> markers, @Nullable Editor editor) {
-    List<MergeableLineMarkerInfo> forMerge = new ArrayList<>();
-    final Iterator<LineMarkerInfo> iterator = markers.iterator();
-    while (iterator.hasNext()) {
-      final LineMarkerInfo marker = iterator.next();
-          
+  private static List<LineMarkerInfo<PsiElement>> mergeLineMarkers(@NotNull List<LineMarkerInfo<PsiElement>> markers, @NotNull Document document) {
+    List<MergeableLineMarkerInfo<PsiElement>> forMerge = new ArrayList<>();
+    TIntObjectHashMap<List<MergeableLineMarkerInfo<PsiElement>>> sameLineMarkers = new TIntObjectHashMap<>();
+
+    for (int i = markers.size() - 1; i >= 0; i--) {
+      LineMarkerInfo<PsiElement> marker = markers.get(i);
       if (marker instanceof MergeableLineMarkerInfo) {
-        iterator.remove();
-        forMerge.add((MergeableLineMarkerInfo)marker);
+        MergeableLineMarkerInfo<PsiElement> mergeable = (MergeableLineMarkerInfo<PsiElement>)marker;
+        forMerge.add(mergeable);
+        markers.remove(i);
+
+        int line = document.getLineNumber(marker.startOffset);
+        List<MergeableLineMarkerInfo<PsiElement>> infos = sameLineMarkers.get(line);
+        if (infos == null) {
+          infos = new ArrayList<>();
+          sameLineMarkers.put(line, infos);
+        }
+        infos.add(mergeable);
       }
     }
 
-    if (forMerge.isEmpty() || editor == null) return markers;
+    if (forMerge.isEmpty()) return markers;
 
-    List<LineMarkerInfo> result = new ArrayList<>(markers);
-    TIntObjectHashMap<List<MergeableLineMarkerInfo>> sameLineMarkers = new TIntObjectHashMap<>();
-    for (MergeableLineMarkerInfo info : forMerge) {
-      int line = editor.getDocument().getLineNumber(info.startOffset);
-      List<MergeableLineMarkerInfo> infos = sameLineMarkers.get(line);
-      if (infos == null) {
-        infos = new ArrayList<>();
-        sameLineMarkers.put(line, infos);
-      }
-      infos.add(info);
-    }
+    List<LineMarkerInfo<PsiElement>> result = new ArrayList<>(markers);
 
-    for (Object v : sameLineMarkers.getValues()) {
-      List<MergeableLineMarkerInfo> infos = (List<MergeableLineMarkerInfo>)v;
-      result.addAll(MergeableLineMarkerInfo.merge(infos));
-    }
+    sameLineMarkers.forEachValue(infos -> result.addAll(MergeableLineMarkerInfo.merge(infos)));
 
     return result;
   }
@@ -160,12 +152,12 @@ public class LineMarkersPass extends TextEditorHighlightingPass implements LineM
                                                        || settings.isEnabled((LineMarkerProviderDescriptor)provider));
   }
 
-  @Override
-  public void addLineMarkers(@NotNull List<PsiElement> elements,
-                             @NotNull final List<LineMarkerProvider> providers,
-                             @NotNull final List<LineMarkerInfo> result,
-                             @NotNull ProgressIndicator progress) throws ProcessCanceledException {
+  private static void queryProviders(@NotNull List<PsiElement> elements,
+                                     @NotNull PsiFile containingFile,
+                                     @NotNull List<? extends LineMarkerProvider> providers,
+                                     @NotNull PairConsumer<? super PsiElement, ? super LineMarkerInfo<PsiElement>> consumer) {
     ApplicationManager.getApplication().assertReadAccessAllowed();
+    Set<PsiFile> visitedInjectedFiles = new THashSet<>();
     //noinspection ForLoopReplaceableByForEach
     for (int i = 0; i < elements.size(); i++) {
       PsiElement element = elements.get(i);
@@ -174,7 +166,7 @@ public class LineMarkersPass extends TextEditorHighlightingPass implements LineM
       for (int j = 0; j < providers.size(); j++) {
         ProgressManager.checkCanceled();
         LineMarkerProvider provider = providers.get(j);
-        LineMarkerInfo info;
+        LineMarkerInfo<PsiElement> info;
         try {
           info = provider.getLineMarkerInfo(element);
         }
@@ -186,34 +178,57 @@ public class LineMarkersPass extends TextEditorHighlightingPass implements LineM
           continue;
         }
         if (info != null) {
-          result.add(info);
+          consumer.consume(element, info);
         }
+      }
+
+      queryLineMarkersForInjected(element, containingFile, visitedInjectedFiles, consumer);
+    }
+
+    List<LineMarkerInfo<PsiElement>> slowLineMarkers = new NotNullList<>();
+    //noinspection ForLoopReplaceableByForEach
+    for (int j = 0; j < providers.size(); j++) {
+      ProgressManager.checkCanceled();
+      LineMarkerProvider provider = providers.get(j);
+      try {
+        provider.collectSlowLineMarkers(elements, (List)slowLineMarkers);
+      }
+      catch (ProcessCanceledException | IndexNotReadyException e) {
+        throw e;
+      }
+      catch (Exception e) {
+        LOG.error(e);
+        continue;
+      }
+
+      if (!slowLineMarkers.isEmpty()) {
+        //noinspection ForLoopReplaceableByForEach
+        for (int k = 0; k < slowLineMarkers.size(); k++) {
+          LineMarkerInfo<PsiElement> slowInfo = slowLineMarkers.get(k);
+          PsiElement element = slowInfo.getElement();
+          consumer.consume(element, slowInfo);
+        }
+        slowLineMarkers.clear();
       }
     }
   }
 
-  static void collectLineMarkersForInjected(@NotNull final List<LineMarkerInfo> result,
-                                            @NotNull List<PsiElement> elements,
-                                            @NotNull final LineMarkersProcessor processor,
-                                            @NotNull final PsiFile file,
-                                            @NotNull final ProgressIndicator progress) {
-    final InjectedLanguageManager manager = InjectedLanguageManager.getInstance(file.getProject());
+  private static void queryLineMarkersForInjected(@NotNull PsiElement element,
+                                                  @NotNull final PsiFile containingFile,
+                                                  @NotNull Set<? super PsiFile> visitedInjectedFiles,
+                                                  @NotNull final PairConsumer<? super PsiElement, ? super LineMarkerInfo<PsiElement>> consumer) {
+    if (containingFile.getViewProvider() instanceof InjectedFileViewProvider) return;
+    final InjectedLanguageManager manager = InjectedLanguageManager.getInstance(containingFile.getProject());
 
-    final Set<PsiFile> injectedFiles = new THashSet<>();
-    final PsiLanguageInjectionHost.InjectedPsiVisitor collectingVisitor = (injectedPsi, places) -> injectedFiles.add(injectedPsi);
-    InjectedLanguageManagerImpl.getInstanceImpl(file.getProject()).processInjectableElements(elements, element -> {
-      InjectedLanguageUtil.enumerate(element, file, false, collectingVisitor);
-      return true;
-    });
-    final List<LineMarkerInfo> injectedMarkers = new ArrayList<>();
-    for (PsiFile injectedPsi : injectedFiles) {
+    InjectedLanguageManager.getInstance(containingFile.getProject()).enumerateEx(element, containingFile, false, (injectedPsi, places) -> {
+      if (!visitedInjectedFiles.add(injectedPsi)) return; // there may be several concatenated literals making the one injected file
       final Project project = injectedPsi.getProject();
       Document document = PsiDocumentManager.getInstance(project).getCachedDocument(injectedPsi);
       if (!(document instanceof DocumentWindow)) return;
       List<PsiElement> injElements = CollectHighlightsUtil.getElementsInRange(injectedPsi, 0, injectedPsi.getTextLength());
       final List<LineMarkerProvider> providers = getMarkerProviders(injectedPsi.getLanguage(), project);
-      processor.addLineMarkers(injElements, providers, injectedMarkers, progress);
-      for (final LineMarkerInfo injectedMarker : injectedMarkers) {
+
+      queryProviders(injElements, injectedPsi, providers, (injectedElement, injectedMarker) -> {
         GutterIconRenderer gutterRenderer = injectedMarker.createGutterRenderer();
         TextRange injectedRange = new TextRange(injectedMarker.startOffset, injectedMarker.endOffset);
         List<TextRange> editables = manager.intersectWithAllEditableFragments(injectedPsi, injectedRange);
@@ -222,23 +237,22 @@ public class LineMarkersPass extends TextEditorHighlightingPass implements LineM
           Icon icon = gutterRenderer == null ? null : gutterRenderer.getIcon();
           GutterIconNavigationHandler<PsiElement> navigationHandler = injectedMarker.getNavigationHandler();
           LineMarkerInfo<PsiElement> converted =
-            new LineMarkerInfo<>(injectedMarker.getElement(), hostRange, icon, injectedMarker.updatePass,
-                                 element -> injectedMarker.getLineMarkerTooltip(), navigationHandler,
+            new LineMarkerInfo<>(injectedElement, hostRange, icon, injectedMarker.updatePass,
+                                 e -> injectedMarker.getLineMarkerTooltip(), navigationHandler,
                                  GutterIconRenderer.Alignment.RIGHT);
-          result.add(converted);
+          consumer.consume(injectedElement, converted);
         }
-      }
-      injectedMarkers.clear();
-    }
+      });
+    });
   }
 
   @NotNull
-  public static Collection<LineMarkerInfo> queryLineMarkers(@NotNull PsiFile file, @NotNull Document document) {
+  public static Collection<LineMarkerInfo<PsiElement>> queryLineMarkers(@NotNull PsiFile file, @NotNull Document document) {
     if (file.getNode() == null) {
       // binary file? see IDEADEV-2809
       return Collections.emptyList();
     }
-    LineMarkersPass pass = new LineMarkersPass(file.getProject(), file, null, document, file.getTextRange());
+    LineMarkersPass pass = new LineMarkersPass(file.getProject(), file, document, file.getTextRange(), file.getTextRange());
     pass.doCollectInformation(new EmptyProgressIndicator());
     return pass.myMarkers;
   }
@@ -249,7 +263,7 @@ public class LineMarkersPass extends TextEditorHighlightingPass implements LineM
       startFrom,
       startFrom.getTextRange(),
       null,
-      Pass.UPDATE_ALL,
+      Pass.LINE_MARKERS,
       FunctionUtil.<Object, String>nullConstant(),
       null,
       GutterIconRenderer.Alignment.RIGHT
@@ -262,6 +276,6 @@ public class LineMarkersPass extends TextEditorHighlightingPass implements LineM
 
   @Override
   public String toString() {
-    return super.toString() + "; myBounds: "+myBounds;
+    return super.toString() + "; myBounds: " + myPriorityBounds;
   }
 }

@@ -19,7 +19,6 @@ import com.intellij.lang.ASTNode;
 import com.intellij.lang.properties.parsing.PropertiesElementTypes;
 import com.intellij.lang.properties.psi.PropertiesList;
 import com.intellij.lang.properties.psi.PropertiesListStub;
-import com.intellij.psi.PsiElement;
 
 /**
  * @author max
@@ -33,12 +32,9 @@ public class PropertiesListImpl extends PropertiesStubElementImpl<PropertiesList
     super(stub, PropertiesElementTypes.PROPERTIES_LIST);
   }
 
+  @Override
   public String toString() {
     return "PropertiesList";
   }
 
-  @Override
-  public PsiElement getParent() {
-    return getParentByStub();
-  }
 }

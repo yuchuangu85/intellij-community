@@ -23,12 +23,11 @@ import java.util.List;
 
 /**
  * @author Denis Zhdanov
- * @since 19.12.2012
  */
 public class Info {
   public String text;
 
-  @Nullable public List<TextRange> ranges = new ArrayList<TextRange>();
+  @Nullable public List<TextRange> ranges = new ArrayList<>();
 
-  public final List<FoldingInfo> foldings = new ArrayList<FoldingInfo>();
+  public final List<FoldingInfo> foldings = new ArrayList<>();
 }

@@ -88,11 +88,11 @@ public class InstanceofExpressionPostfixTemplate extends PostfixTemplate {
     Template template = templateManager.createTemplate("", "");
     template.setToReformat(true);
 
-    Set<LookupElement> itemSet = new LinkedHashSet<LookupElement>();
+    Set<LookupElement> itemSet = new LinkedHashSet<>();
     for (PsiType type : suggestedTypes) {
       itemSet.add(PsiTypeLookupItem.createLookupItem(type, null));
     }
-    final LookupElement[] lookupItems = itemSet.toArray(new LookupElement[itemSet.size()]);
+    final LookupElement[] lookupItems = itemSet.toArray(LookupElement.EMPTY_ARRAY);
     final Result result = suggestedTypes.length > 0 ? new PsiTypeResult(suggestedTypes[0], project) : null;
 
     Expression expr = new Expression() {

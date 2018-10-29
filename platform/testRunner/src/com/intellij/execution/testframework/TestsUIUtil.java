@@ -28,7 +28,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.MessageType;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.wm.AppIconScheme;
-import com.intellij.openapi.wm.ToolWindowId;
 import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.pom.Navigatable;
 import com.intellij.psi.PsiElement;
@@ -38,6 +37,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
 import java.awt.*;
 import java.util.List;
@@ -52,7 +52,7 @@ public class TestsUIUtil {
   }
 
   @Nullable
-  public static Object getData(final AbstractTestProxy testProxy, final String dataId, final TestFrameworkRunningModel model) {
+  public static Object getData(final AbstractTestProxy testProxy, @NotNull String dataId, final TestFrameworkRunningModel model) {
     final TestConsoleProperties properties = model.getProperties();
     final Project project = properties.getProject();
     if (testProxy == null) return null;
@@ -82,8 +82,14 @@ public class TestsUIUtil {
     final Component component = PlatformDataKeys.CONTEXT_COMPONENT.getData(dataContext);
     if (component instanceof JTree) {
       final TreePath[] selectionPaths = ((JTree)component).getSelectionPaths();
-      if (selectionPaths == null || selectionPaths.length <= 1) {
+      if (selectionPaths == null || selectionPaths.length == 0) {
         return true;
+      }
+      if (selectionPaths.length == 1) {
+        Object lastPathComponent = selectionPaths[0].getLastPathComponent();
+        if (lastPathComponent instanceof TreeNode && ((TreeNode)lastPathComponent).isLeaf()) {
+          return true;
+        }
       }
     }
     return false;
@@ -130,7 +136,7 @@ public class TestsUIUtil {
 
     TestStatusListener.notifySuiteFinished(root, properties.getProject());
 
-    final String testRunDebugId = properties.isDebug() ? ToolWindowId.DEBUG : ToolWindowId.RUN;
+    final String windowId = properties.getWindowId();
     final ToolWindowManager toolWindowManager = ToolWindowManager.getInstance(project);
 
     final String title = testResultPresentation.getTitle();
@@ -138,8 +144,8 @@ public class TestsUIUtil {
     final String balloonText = testResultPresentation.getBalloonText();
     final MessageType type = testResultPresentation.getType();
 
-    if (!Comparing.strEqual(toolWindowManager.getActiveToolWindowId(), testRunDebugId)) {
-      toolWindowManager.notifyByBalloon(testRunDebugId, type, balloonText, null, null);
+    if (!Comparing.strEqual(toolWindowManager.getActiveToolWindowId(), windowId)) {
+      toolWindowManager.notifyByBalloon(windowId, type, balloonText, null, null);
     }
 
     NOTIFICATION_GROUP.createNotification(balloonText, type).notify(project);
@@ -181,13 +187,19 @@ public class TestsUIUtil {
   }
 
   public static class TestResultPresentation {
-    private AbstractTestProxy myRoot;
-    private boolean myStarted;
-    private String myComment;
+    private final AbstractTestProxy myRoot;
+    private final boolean myStarted;
+    private final String myComment;
+
     private String myTitle;
     private String myText;
     private String myBalloonText;
     private MessageType myType;
+
+    private int myFailedCount;
+    private int myPassedCount;
+    private int myNotStartedCount;
+    private int myIgnoredCount;
 
     public TestResultPresentation(AbstractTestProxy root, boolean started, String comment) {
       myRoot = root;
@@ -215,6 +227,38 @@ public class TestsUIUtil {
       return myType;
     }
 
+    /**
+     * @deprecated Use {@link #getText()} to get short test result summary.
+     */
+    @Deprecated
+    public int getFailedCount() {
+      return myFailedCount;
+    }
+
+    /**
+     * @deprecated Use {@link #getText()} to get short test result summary.
+     */
+    @Deprecated
+    public int getPassedCount() {
+      return myPassedCount;
+    }
+
+    /**
+     * @deprecated Use {@link #getText()} to get short test result summary.
+     */
+    @Deprecated
+    public int getNotStartedCount() {
+      return myNotStartedCount;
+    }
+
+    /**
+     * @deprecated Use {@link #getText()} to get short test result summary.
+     */
+    @Deprecated
+    public int getIgnoredCount() {
+      return myIgnoredCount;
+    }
+
     public TestResultPresentation getPresentation() {
       List allTests = Filter.LEAF.select(myRoot.getAllTests());
       final List<AbstractTestProxy> failed = Filter.DEFECTIVE_LEAF.select(allTests);
@@ -234,26 +278,43 @@ public class TestsUIUtil {
         myBalloonText = myTitle = myStarted ? "Tests were interrupted" : ExecutionBundle.message("test.not.started.progress.text");
         myText = "";
         myType = MessageType.WARNING;
-      } else{
+      }
+      else {
+        myFailedCount = failedCount;
+        myPassedCount = passedCount;
+        myNotStartedCount = notStartedCount;
+        myIgnoredCount = ignoredCount;
+
         if (failedCount > 0) {
           myTitle = ExecutionBundle.message("junit.runing.info.tests.failed.label");
-          myText = passedCount + " passed, " + failedCount + " failed" + (notStartedCount > 0 ? ", " + notStartedCount + " not started" : "");
+          myBalloonText = "Tests failed: " + failedCount + ", passed: " + passedCount +
+                          (ignoredCount > 0 ? ", ignored: " + ignoredCount : notStartedCount > 0 ? ", not started: " + notStartedCount : "");
+          String notStartedMessage = ignoredCount > 0 ? ", " + ignoredCount + " ignored"
+                                                      : notStartedCount > 0 ? ", " + notStartedCount + " not started" : "";
+          myText = failedCount + " failed, " + passedCount + " passed" + notStartedMessage;
           myType = MessageType.ERROR;
         }
+        else if (ignoredCount > 0) {
+          myTitle = "Tests Ignored";
+          myBalloonText = "Tests ignored: " + ignoredCount + ", passed: " + passedCount;
+          myText = ignoredCount + " ignored, " + passedCount + " passed";
+          myType = MessageType.WARNING;
+        }
         else if (notStartedCount > 0) {
-          myTitle = ignoredCount > 0 ? "Tests Ignored" : ExecutionBundle.message("junit.running.info.failed.to.start.error.message");
-          myText = passedCount + " passed, " + notStartedCount + (ignoredCount > 0 ? " ignored" : " not started");
-          myType = ignoredCount == 0 ? MessageType.WARNING : MessageType.ERROR;
+          myTitle = ExecutionBundle.message("junit.running.info.failed.to.start.error.message");
+          myBalloonText = "Failed to start: " + notStartedCount + ", passed: " + passedCount;
+          myText = notStartedCount + " not started, " + passedCount + " passed";
+          myType = MessageType.ERROR;
         }
         else {
           myTitle = ExecutionBundle.message("junit.runing.info.tests.passed.label");
+          myBalloonText = "Tests passed: " + passedCount;
           myText = passedCount + " passed";
           myType = MessageType.INFO;
         }
         if (myComment != null) {
           myText += " " + myComment;
         }
-        myBalloonText = myTitle + ": " + myText;
       }
       return this;
     }

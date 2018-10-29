@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,14 +40,14 @@ public class RunnerLayout  {
   public static final Key<Integer> DROP_INDEX = Key.create("RunnerLayoutDropIndex");
   private final String myID;
 
-  protected Map<String, ViewImpl> myViews = new LinkedHashMap<String, ViewImpl>();
-  private final Map<String, ViewImpl.Default> myDefaultViews = new HashMap<String, ViewImpl.Default>();
+  protected Map<String, ViewImpl> myViews = new LinkedHashMap<>();
+  private final Map<String, ViewImpl.Default> myDefaultViews = new HashMap<>();
 
-  protected Set<TabImpl> myTabs = new TreeSet<TabImpl>((o1, o2) -> o1.getIndex() - o2.getIndex());
-  private final Map<Integer, TabImpl.Default> myDefaultTabs = new HashMap<Integer, TabImpl.Default>();
+  protected Set<TabImpl> myTabs = new TreeSet<>(Comparator.comparingInt(TabImpl::getIndex));
+  private final Map<Integer, TabImpl.Default> myDefaultTabs = new HashMap<>();
 
   protected General myGeneral = new General();
-  private final Map<String, Pair<String, LayoutAttractionPolicy>> myDefaultFocus = new HashMap<String, Pair<String, LayoutAttractionPolicy>>();
+  private final Map<String, Pair<String, LayoutAttractionPolicy>> myDefaultFocus = new HashMap<>();
   private Set<String> myLightWeightIds = null;
 
 
@@ -63,6 +63,10 @@ public class RunnerLayout  {
 
   @NotNull
   public TabImpl getOrCreateTab(final int index) {
+    if (index < 0) {
+      return createNewTab();
+    }
+
     TabImpl tab = findTab(index);
     if (tab != null) return tab;
 
@@ -93,7 +97,8 @@ public class RunnerLayout  {
 
   @NotNull
   public TabImpl createNewTab() {
-    return createNewTab(myTabs.size());
+    final int index = myTabs.stream().mapToInt(x -> x.getIndex()).max().orElse(-1) + 1;
+    return createNewTab(index);
   }
 
   private boolean isUsed(@NotNull TabImpl tab) {
@@ -127,7 +132,6 @@ public class RunnerLayout  {
     List<Element> tabs = parentNode.getChildren(StringUtil.getShortName(TabImpl.class.getName()));
     for (Element eachTabElement : tabs) {
       TabImpl eachTab = XmlSerializer.deserialize(eachTabElement, TabImpl.class);
-      assert eachTab != null;
       XmlSerializer.deserializeInto(getOrCreateTab(eachTab.getIndex()), eachTabElement);
     }
 
@@ -254,6 +258,10 @@ public class RunnerLayout  {
     myDefaultFocus.put(condition, Pair.create(id, policy));
   }
 
+  void cancelDefaultFocusBy(@NotNull String condition) {
+    myDefaultFocus.remove(condition);
+  }
+
   @Nullable
   public String getToFocus(@NotNull String condition) {
     return myGeneral.focusOnCondition.containsKey(condition) ? myGeneral.focusOnCondition.get(condition) :
@@ -267,17 +275,17 @@ public class RunnerLayout  {
   }
 
   /**
-   *   States of contents marked as "lightweight" won't be persisted
+   * States of contents marked as "lightweight" won't be persisted
    */
   public void setLightWeight(Content content) {
     if (myLightWeightIds == null) {
-      myLightWeightIds = new HashSet<String>();
+      myLightWeightIds = new HashSet<>();
     }
     myLightWeightIds.add(getOrCreateContentId(content));
   }
 
   public static class General {
     public volatile boolean horizontalToolbar = false;
-    public volatile Map<String, String> focusOnCondition = new HashMap<String, String>();
+    public volatile Map<String, String> focusOnCondition = new HashMap<>();
   }
 }

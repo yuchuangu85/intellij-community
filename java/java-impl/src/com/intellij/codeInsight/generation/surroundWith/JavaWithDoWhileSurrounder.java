@@ -25,7 +25,7 @@ import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NonNls;
 
-class JavaWithDoWhileSurrounder extends JavaStatementsSurrounder{
+public class JavaWithDoWhileSurrounder extends JavaStatementsSurrounder{
   @Override
   public String getTemplateDescription() {
     return CodeInsightBundle.message("surround.with.dowhile.template");
@@ -34,7 +34,7 @@ class JavaWithDoWhileSurrounder extends JavaStatementsSurrounder{
   @Override
   public TextRange surroundStatements(Project project, Editor editor, PsiElement container, PsiElement[] statements) throws IncorrectOperationException{
     PsiManager manager = PsiManager.getInstance(project);
-    PsiElementFactory factory = JavaPsiFacade.getInstance(manager.getProject()).getElementFactory();
+    PsiElementFactory factory = JavaPsiFacade.getElementFactory(manager.getProject());
     CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
 
     statements = SurroundWithUtil.moveDeclarationsOut(container, statements, false);

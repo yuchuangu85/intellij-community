@@ -30,9 +30,12 @@ import com.intellij.openapi.util.registry.Registry;
 import com.intellij.ui.tabs.impl.TabLabel;
 import com.intellij.util.Alarm;
 import com.intellij.util.Function;
-import com.intellij.util.concurrency.AppExecutorUtil;
-import com.intellij.util.containers.TransferToEDTQueue;
+import com.intellij.util.IconUtil;
+import com.intellij.util.concurrency.EdtExecutorService;
+import com.intellij.util.concurrency.SequentialTaskExecutor;
+import com.intellij.util.ui.EmptyIcon;
 import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.JBUI.CachingScalableJBIcon;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -45,33 +48,55 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Executor;
 
-public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon, ScalableIcon {
+public class DeferredIconImpl<T> extends CachingScalableJBIcon<DeferredIconImpl<T>> implements DeferredIcon, RetrievableIcon {
   private static final Logger LOG = Logger.getInstance("#com.intellij.ui.DeferredIconImpl");
   private static final int MIN_AUTO_UPDATE_MILLIS = 950;
   private static final RepaintScheduler ourRepaintScheduler = new RepaintScheduler();
   @NotNull
-  private volatile Icon myDelegateIcon;
-  private Function<T, Icon> myEvaluator;
+  private final Icon myDelegateIcon;
+  private volatile Icon myScaledDelegateIcon;
+  private Function<? super T, ? extends Icon> myEvaluator;
   private volatile boolean myIsScheduled;
   private T myParam;
-  private static final Icon EMPTY_ICON = JBUI.emptyIcon(16);
+  private static final Icon EMPTY_ICON = JBUI.scale(EmptyIcon.create(16));
   private final boolean myNeedReadAction;
   private boolean myDone;
   private final boolean myAutoUpdatable;
   private long myLastCalcTime;
   private long myLastTimeSpent;
-  private float myScale = 1f;
-  private Icon myOriginalDeferredIcon = null;
 
-  private static final Executor ourIconsCalculatingExecutor = AppExecutorUtil.createBoundedApplicationPoolExecutor(1);
+  private static final Executor ourIconsCalculatingExecutor = SequentialTaskExecutor.createSequentialApplicationPoolExecutor("OurIconsCalculating Pool");
 
   private final IconListener<T> myEvalListener;
-  private static final TransferToEDTQueue<Runnable> ourLaterInvocator = TransferToEDTQueue.createRunnableMerger("Deferred icon later invocator", 200);
 
+  private DeferredIconImpl(@NotNull DeferredIconImpl<T> icon) {
+    super(icon);
+    myDelegateIcon = icon.myDelegateIcon;
+    myScaledDelegateIcon = icon.myDelegateIcon;
+    myEvaluator = icon.myEvaluator;
+    myIsScheduled = icon.myIsScheduled;
+    myParam = icon.myParam;
+    myNeedReadAction = icon.myNeedReadAction;
+    myDone = icon.myDone;
+    myAutoUpdatable = icon.myAutoUpdatable;
+    myLastCalcTime = icon.myLastCalcTime;
+    myLastTimeSpent = icon.myLastTimeSpent;
+    myEvalListener = icon.myEvalListener;
+  }
+
+  @NotNull
   @Override
-  public Icon scale(final float scaleFactor) {
-    if (scaleFactor != myScale) {
-      myDelegateIcon = ((ScalableIcon)myDelegateIcon).scale(myScale = scaleFactor);
+  public DeferredIconImpl<T> copy() {
+    return new DeferredIconImpl<>(this);
+  }
+
+  @NotNull
+  @Override
+  public DeferredIconImpl<T> scale(float scale) {
+    if (getScale() != scale) {
+      DeferredIconImpl<T> icon = super.scale(scale);
+      icon.myScaledDelegateIcon = IconUtil.scale(icon.myDelegateIcon, null, scale);
+      return icon;
     }
     return this;
   }
@@ -80,17 +105,18 @@ public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon, Scala
     private static final boolean CHECK_CONSISTENCY = ApplicationManager.getApplication().isUnitTestMode();
   }
 
-  public DeferredIconImpl(Icon baseIcon, T param, @NotNull Function<T, Icon> evaluator, @NotNull IconListener<T> listener, boolean autoUpdatable) {
+  DeferredIconImpl(Icon baseIcon, T param, @NotNull Function<? super T, ? extends Icon> evaluator, @NotNull IconListener<T> listener, boolean autoUpdatable) {
     this(baseIcon, param, true, evaluator, listener, autoUpdatable);
   }
 
-  public DeferredIconImpl(Icon baseIcon, T param, final boolean needReadAction, @NotNull Function<T, Icon> evaluator) {
+  public DeferredIconImpl(Icon baseIcon, T param, final boolean needReadAction, @NotNull Function<? super T, ? extends Icon> evaluator) {
     this(baseIcon, param, needReadAction, evaluator, null, false);
   }
 
-  private DeferredIconImpl(Icon baseIcon, T param, boolean needReadAction, @NotNull Function<T, Icon> evaluator, @Nullable IconListener<T> listener, boolean autoUpdatable) {
+  private DeferredIconImpl(Icon baseIcon, T param, boolean needReadAction, @NotNull Function<? super T, ? extends Icon> evaluator, @Nullable IconListener<T> listener, boolean autoUpdatable) {
     myParam = param;
     myDelegateIcon = nonNull(baseIcon);
+    myScaledDelegateIcon = myDelegateIcon;
     myEvaluator = evaluator;
     myNeedReadAction = needReadAction;
     myEvalListener = listener;
@@ -101,9 +127,9 @@ public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon, Scala
   private void checkDelegationDepth() {
     int depth = 0;
     DeferredIconImpl each = this;
-    while (each.myDelegateIcon instanceof DeferredIconImpl && depth < 50) {
+    while (each.myScaledDelegateIcon instanceof DeferredIconImpl && depth < 50) {
       depth++;
-      each = (DeferredIconImpl)each.myDelegateIcon;
+      each = (DeferredIconImpl)each.myScaledDelegateIcon;
     }
     if (depth >= 50) {
       LOG.error("Too deep deferred icon nesting");
@@ -117,8 +143,8 @@ public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon, Scala
 
   @Override
   public void paintIcon(final Component c, @NotNull final Graphics g, final int x, final int y) {
-    if (!(myDelegateIcon instanceof DeferredIconImpl && ((DeferredIconImpl)myDelegateIcon).myDelegateIcon instanceof DeferredIconImpl)) {
-      myDelegateIcon.paintIcon(c, g, x, y); //SOE protection
+    if (!(myScaledDelegateIcon instanceof DeferredIconImpl && ((DeferredIconImpl)myScaledDelegateIcon).myScaledDelegateIcon instanceof DeferredIconImpl)) {
+      myScaledDelegateIcon.paintIcon(c, g, x, y); //SOE protection
     }
 
     if (isDone() || myIsScheduled || PowerSaveMode.isEnabled()) {
@@ -130,7 +156,7 @@ public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon, Scala
     final Component paintingParent = SwingUtilities.getAncestorOfClass(PaintingParent.class, c);
     final Rectangle paintingParentRec = paintingParent == null ? null : ((PaintingParent)paintingParent).getChildRec(c);
     ourIconsCalculatingExecutor.execute(() -> {
-      int oldWidth = myDelegateIcon.getIconWidth();
+      int oldWidth = myScaledDelegateIcon.getIconWidth();
       final Icon[] evaluated = new Icon[1];
 
       final long startTime = System.currentTimeMillis();
@@ -155,14 +181,15 @@ public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon, Scala
         }
       }
       final Icon result = evaluated[0];
-      myDelegateIcon = result;
+      myScaledDelegateIcon = result;
       checkDelegationDepth();
 
       final boolean shouldRevalidate =
-        Registry.is("ide.tree.deferred.icon.invalidates.cache") && myDelegateIcon.getIconWidth() != oldWidth;
+        Registry.is("ide.tree.deferred.icon.invalidates.cache") && myScaledDelegateIcon.getIconWidth() != oldWidth;
 
-      ourLaterInvocator.offer(() -> {
+      EdtExecutorService.getInstance().execute(() -> {
         setDone(result);
+        if (equalIcons(result, myDelegateIcon)) return;
 
         Component actualTarget = target;
         if (actualTarget != null && SwingUtilities.getWindowAncestor(actualTarget) == null) {
@@ -242,7 +269,7 @@ public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon, Scala
   @Nullable
   @Override
   public Icon retrieveIcon() {
-    return isDone() ? myDelegateIcon : evaluate();
+    return isDone() ? myScaledDelegateIcon : evaluate();
   }
 
   @NotNull
@@ -260,8 +287,8 @@ public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon, Scala
       checkDoesntReferenceThis(result);
     }
 
-    if (myScale != 1f && result instanceof ScalableIcon) {
-      result = ((ScalableIcon)result).scale(myScale);
+    if (getScale() != 1f && result instanceof ScalableIcon) {
+      result = ((ScalableIcon)result).scale(getScale());
     }
     return result;
   }
@@ -272,7 +299,7 @@ public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon, Scala
     }
 
     if (icon instanceof DeferredIconImpl) {
-      checkDoesntReferenceThis(((DeferredIconImpl)icon).myDelegateIcon);
+      checkDoesntReferenceThis(((DeferredIconImpl)icon).myScaledDelegateIcon);
     }
     else if (icon instanceof LayeredIcon) {
       for (Icon layer : ((LayeredIcon)icon).getAllLayers()) {
@@ -290,12 +317,12 @@ public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon, Scala
 
   @Override
   public int getIconWidth() {
-    return myDelegateIcon.getIconWidth();
+    return myScaledDelegateIcon.getIconWidth();
   }
 
   @Override
   public int getIconHeight() {
-    return myDelegateIcon.getIconHeight();
+    return myScaledDelegateIcon.getIconHeight();
   }
 
   public boolean isDone() {
@@ -308,19 +335,19 @@ public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon, Scala
 
   private static class RepaintScheduler {
     private final Alarm myAlarm = new Alarm();
-    private final Set<RepaintRequest> myQueue = new LinkedHashSet<RepaintRequest>();
+    private final Set<RepaintRequest> myQueue = new LinkedHashSet<>();
 
     private void pushDirtyComponent(@NotNull Component c, final Rectangle rec) {
       ApplicationManager.getApplication().assertIsDispatchThread(); // assert myQueue accessed from EDT only
       myAlarm.cancelAllRequests();
       myAlarm.addRequest(() -> {
         for (RepaintRequest each : myQueue) {
-          Rectangle r = each.getRectangle();
+          Rectangle r = each.rectangle;
           if (r == null) {
-            each.getComponent().repaint();
+            each.component.repaint();
           }
           else {
-            each.getComponent().repaint(r.x, r.y, r.width, r.height);
+            each.component.repaint(r.x, r.y, r.width, r.height);
           }
         }
         myQueue.clear();
@@ -331,26 +358,38 @@ public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon, Scala
   }
 
   private static class RepaintRequest {
-    private final Component myComponent;
-    private final Rectangle myRectangle;
+    final Component component;
+    final Rectangle rectangle;
 
-    private RepaintRequest(@NotNull Component component, Rectangle rectangle) {
-      myComponent = component;
-      myRectangle = rectangle;
+    private RepaintRequest(@NotNull Component component, @Nullable Rectangle rectangle) {
+      this.component = component;
+      this.rectangle = rectangle;
     }
 
-    @NotNull
-    public Component getComponent() {
-      return myComponent;
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      RepaintRequest request = (RepaintRequest)o;
+
+      if (!component.equals(request.component)) return false;
+      if (rectangle != null ? !rectangle.equals(request.rectangle) : request.rectangle != null) return false;
+
+      return true;
     }
 
-    public Rectangle getRectangle() {
-      return myRectangle;
+    @Override
+    public int hashCode() {
+      int result = component.hashCode();
+      result = 31 * result + (rectangle != null ? rectangle.hashCode() : 0);
+      return result;
     }
   }
 
+  @FunctionalInterface
   interface IconListener<T> {
-    void evalDone(DeferredIconImpl<T> source, T key, @NotNull Icon result);
+    void evalDone(@NotNull DeferredIconImpl<T> source, T key, @NotNull Icon result);
   }
 
   static boolean equalIcons(Icon icon1, Icon icon2) {
@@ -366,11 +405,11 @@ public class DeferredIconImpl<T> implements DeferredIcon, RetrievableIcon, Scala
   private boolean isDeferredAndEqual(Icon icon) {
     return icon instanceof DeferredIconImpl &&
            Comparing.equal(myParam, ((DeferredIconImpl)icon).myParam) &&
-           equalIcons(myDelegateIcon, ((DeferredIconImpl)icon).myDelegateIcon);
+           equalIcons(myScaledDelegateIcon, ((DeferredIconImpl)icon).myScaledDelegateIcon);
   }
 
   @Override
   public String toString() {
-    return "Deferred. Base=" + myDelegateIcon;
+    return "Deferred. Base=" + myScaledDelegateIcon;
   }
 }

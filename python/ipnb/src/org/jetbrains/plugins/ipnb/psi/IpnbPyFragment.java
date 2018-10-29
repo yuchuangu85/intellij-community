@@ -1,3 +1,4 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.ipnb.psi;
 
 import com.intellij.openapi.project.Project;
@@ -6,6 +7,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.impl.PsiManagerEx;
 import com.intellij.psi.impl.file.impl.FileManager;
 import com.intellij.psi.impl.source.tree.FileElement;
+import com.intellij.psi.stubs.StubElement;
 import com.intellij.testFramework.LightVirtualFile;
 import com.intellij.util.indexing.IndexingDataKeys;
 import com.jetbrains.python.psi.LanguageLevel;
@@ -24,7 +26,7 @@ public class IpnbPyFragment extends PyFileImpl {
 
   public IpnbPyFragment(Project project, CharSequence text, boolean isPhysical, IpnbCodeSourcePanel codeSourcePanel) {
     super(PsiManagerEx.getInstanceEx(project).getFileManager().createFileViewProvider(
-            new LightVirtualFile("code.py", IpnbPyLanguageDialect.getInstance(), text), isPhysical)
+      new LightVirtualFile("code.py", IpnbPyLanguageDialect.getInstance(), text), isPhysical)
     );
     myPhysical = isPhysical;
     myCodeSourcePanel = codeSourcePanel;
@@ -36,23 +38,27 @@ public class IpnbPyFragment extends PyFileImpl {
     return myCodeSourcePanel;
   }
 
+  @Override
   protected IpnbPyFragment clone() {
     final IpnbPyFragment clone = (IpnbPyFragment)cloneImpl((FileElement)calcTreeElement().clone());
     clone.myPhysical = false;
     clone.myOriginalFile = this;
     FileManager fileManager = ((PsiManagerEx)getManager()).getFileManager();
-    SingleRootFileViewProvider cloneViewProvider = (SingleRootFileViewProvider)fileManager.createFileViewProvider(new LightVirtualFile(getName(), getLanguage(), getText()), false);
+    SingleRootFileViewProvider cloneViewProvider =
+      (SingleRootFileViewProvider)fileManager.createFileViewProvider(new LightVirtualFile(getName(), getLanguage(), getText()), false);
     cloneViewProvider.forceCachedPsi(clone);
     clone.myViewProvider = cloneViewProvider;
     return clone;
   }
 
+  @Override
   @NotNull
   public FileViewProvider getViewProvider() {
-    if(myViewProvider != null) return myViewProvider;
+    if (myViewProvider != null) return myViewProvider;
     return super.getViewProvider();
   }
 
+  @Override
   public boolean isPhysical() {
     return myPhysical;
   }
@@ -103,5 +109,11 @@ public class IpnbPyFragment extends PyFileImpl {
       virtualFile = getViewProvider().getVirtualFile();
     }
     return PyUtil.getLanguageLevelForVirtualFile(getProject(), virtualFile);
+  }
+
+  @Nullable
+  @Override
+  public StubElement getStub() {
+    return null;
   }
 }

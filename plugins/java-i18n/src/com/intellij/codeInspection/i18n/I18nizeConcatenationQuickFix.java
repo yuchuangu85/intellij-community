@@ -56,7 +56,7 @@ public class I18nizeConcatenationQuickFix extends I18nizeQuickFix{
 
   @Override
   @NotNull
-  public String getName() {
+  public String getFamilyName() {
     return CodeInsightBundle.message("quickfix.i18n.concatentation");
   }
 
@@ -86,7 +86,7 @@ public class I18nizeConcatenationQuickFix extends I18nizeQuickFix{
   protected JavaI18nizeQuickFixDialog createDialog(final Project project, final PsiFile context, final PsiLiteralExpression literalExpression) {
     PsiPolyadicExpression concatenation = getEnclosingLiteralConcatenation(literalExpression);
     StringBuilder formatString = new StringBuilder();
-    final List<PsiExpression> args = new ArrayList<PsiExpression>();
+    final List<PsiExpression> args = new ArrayList<>();
     try {
       PsiConcatenationUtil.buildFormatString(concatenation, formatString, args, false);
     }
@@ -109,7 +109,7 @@ public class I18nizeConcatenationQuickFix extends I18nizeQuickFix{
 
       @Override
       public PsiExpression[] getParameters() {
-        return args.toArray(new PsiExpression[args.size()]);
+        return args.toArray(PsiExpression.EMPTY_ARRAY);
       }
 
       @Override

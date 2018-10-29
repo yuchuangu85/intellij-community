@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2013 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ import com.intellij.usageView.UsageInfo;
 import com.intellij.util.VisibilityUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.FilteringIterator;
-import com.intellij.util.containers.HashSet;
+import java.util.HashSet;
 import com.intellij.util.containers.MultiMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -54,25 +54,22 @@ import java.util.List;
 import java.util.Set;
 
 
-/**
- * Created by Max Medvedev on 9/28/13
- */
 public class GrRefactoringConflictsUtil {
   private GrRefactoringConflictsUtil() { }
 
-  public static void analyzeAccessibilityConflicts(@NotNull Set<GrMember> membersToMove,
+  public static void analyzeAccessibilityConflicts(@NotNull Set<? extends GrMember> membersToMove,
                                                    @NotNull PsiClass targetClass,
                                                    @NotNull MultiMap<PsiElement, String> conflicts,
                                                    @Nullable String newVisibility) {
     analyzeAccessibilityConflicts(membersToMove, targetClass, conflicts, newVisibility, targetClass, null);
   }
 
-  public static void analyzeAccessibilityConflicts(@NotNull Set<GrMember> membersToMove,
+  public static void analyzeAccessibilityConflicts(@NotNull Set<? extends GrMember> membersToMove,
                                                    @Nullable PsiClass targetClass,
                                                    @NotNull MultiMap<PsiElement, String> conflicts,
                                                    @Nullable String newVisibility,
                                                    @NotNull PsiElement context,
-                                                   @Nullable Set<PsiMethod> abstractMethods) {
+                                                   @Nullable Set<? extends PsiMethod> abstractMethods) {
     if (VisibilityUtil.ESCALATE_VISIBILITY.equals(newVisibility)) { //Still need to check for access object
       newVisibility = PsiModifier.PUBLIC;
     }
@@ -85,12 +82,12 @@ public class GrRefactoringConflictsUtil {
 
   public static void checkUsedElements(PsiMember member,
                                        PsiElement scope,
-                                       @NotNull Set<GrMember> membersToMove,
-                                       @Nullable Set<PsiMethod> abstractMethods,
+                                       @NotNull Set<? extends GrMember> membersToMove,
+                                       @Nullable Set<? extends PsiMethod> abstractMethods,
                                        @Nullable PsiClass targetClass,
                                        @NotNull PsiElement context,
                                        MultiMap<PsiElement, String> conflicts) {
-    final Set<PsiMember> moving = new HashSet<PsiMember>(membersToMove);
+    final Set<PsiMember> moving = new HashSet<>(membersToMove);
     if (abstractMethods != null) {
       moving.addAll(abstractMethods);
     }
@@ -152,7 +149,7 @@ public class GrRefactoringConflictsUtil {
 
 
     List<GroovyPsiElement> groovyScopes =
-      ContainerUtil.collect(scopes.iterator(), new FilteringIterator.InstanceOf<GroovyPsiElement>(GroovyPsiElement.class));
+      ContainerUtil.collect(scopes.iterator(), new FilteringIterator.InstanceOf<>(GroovyPsiElement.class));
     analyzeModuleConflicts(project, groovyScopes, usages, vFile, conflicts);
     scopes.removeAll(groovyScopes);
     RefactoringConflictsUtil.analyzeModuleConflicts(project, scopes, usages, vFile, conflicts);
@@ -171,17 +168,17 @@ public class GrRefactoringConflictsUtil {
     final Module targetModule = ModuleUtilCore.findModuleForFile(vFile, project);
     if (targetModule == null) return;
     final GlobalSearchScope resolveScope = GlobalSearchScope.moduleWithDependenciesAndLibrariesScope(targetModule);
-    final HashSet<PsiElement> reported = new HashSet<PsiElement>();
+    final HashSet<PsiElement> reported = new HashSet<>();
     for (final GroovyPsiElement scope : scopes) {
       scope.accept(new GroovyRecursiveElementVisitor() {
         @Override
-        public void visitCodeReferenceElement(GrCodeReferenceElement refElement) {
+        public void visitCodeReferenceElement(@NotNull GrCodeReferenceElement refElement) {
           super.visitCodeReferenceElement(refElement);
           visit(refElement);
         }
 
         @Override
-        public void visitReferenceExpression(GrReferenceExpression reference) {
+        public void visitReferenceExpression(@NotNull GrReferenceExpression reference) {
           super.visitReferenceExpression(reference);
           visit(reference);
         }

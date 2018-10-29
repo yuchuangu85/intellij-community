@@ -26,11 +26,8 @@ import org.jetbrains.annotations.NonNls;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
-* User: cdr
-*/
 public class PackageEntryTable implements JDOMExternalizable, Cloneable {
-  private final List<PackageEntry> myEntries = new ArrayList<PackageEntry>();
+  private final List<PackageEntry> myEntries = new ArrayList<>();
 
   public boolean equals(Object obj) {
     if (!(obj instanceof PackageEntryTable)) {
@@ -70,7 +67,7 @@ public class PackageEntryTable implements JDOMExternalizable, Cloneable {
   }
 
   public PackageEntry[] getEntries() {
-    return myEntries.toArray(new PackageEntry[myEntries.size()]);
+    return myEntries.toArray(new PackageEntry[0]);
   }
 
   public void insertEntryAt(PackageEntry entry, int i) {

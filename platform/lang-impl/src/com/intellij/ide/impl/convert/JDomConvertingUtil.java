@@ -36,7 +36,6 @@ import java.util.*;
 /**
  * @author nik
  */
-@SuppressWarnings({"unchecked"})
 public class JDomConvertingUtil extends JDomSerializationUtil {
 
   private JDomConvertingUtil() {
@@ -46,10 +45,7 @@ public class JDomConvertingUtil extends JDomSerializationUtil {
     try {
       return JDOMUtil.loadDocument(file);
     }
-    catch (JDOMException e) {
-      throw new CannotConvertException(file.getAbsolutePath() + ": " + e.getMessage(), e);
-    }
-    catch (IOException e) {
+    catch (JDOMException | IOException e) {
       throw new CannotConvertException(file.getAbsolutePath() + ": " + e.getMessage(), e);
     }
   }
@@ -101,7 +97,7 @@ public class JDomConvertingUtil extends JDomSerializationUtil {
     copyChildren(from, to, Conditions.alwaysTrue());
   }
 
-  public static void copyChildren(Element from, Element to, Condition<Element> filter) {
+  public static void copyChildren(Element from, Element to, Condition<? super Element> filter) {
     final List<Element> list = from.getChildren();
     for (Element element : list) {
       if (filter.value(element)) {
@@ -114,8 +110,8 @@ public class JDomConvertingUtil extends JDomSerializationUtil {
     return element -> elementName.equals(element.getName());
   }
 
-  public static List<Element> removeChildren(final Element element, final Condition<Element> filter) {
-    List<Element> toRemove = new ArrayList<Element>();
+  public static List<Element> removeChildren(final Element element, final Condition<? super Element> filter) {
+    List<Element> toRemove = new ArrayList<>();
     final List<Element> list = element.getChildren();
     for (Element e : list) {
       if (filter.value(e)) {
@@ -136,7 +132,7 @@ public class JDomConvertingUtil extends JDomSerializationUtil {
   }
 
   @Nullable
-  public static Element findChild(Element parent, final Condition<Element> filter) {
+  public static Element findChild(Element parent, final Condition<? super Element> filter) {
     final List<Element> list = parent.getChildren();
     for (Element e : list) {
       if (filter.value(e)) {
@@ -147,8 +143,8 @@ public class JDomConvertingUtil extends JDomSerializationUtil {
   }
 
   public static void removeDuplicatedOptions(final Element element) {
-    List<Element> children = new ArrayList<Element>(element.getChildren(OPTION_ELEMENT));
-    Set<String> names = new HashSet<String>();
+    List<Element> children = new ArrayList<>(element.getChildren(OPTION_ELEMENT));
+    Set<String> names = new HashSet<>();
     for (Element child : children) {
       if (!names.add(child.getAttributeValue(NAME_ATTRIBUTE))) {
         element.removeContent(child);

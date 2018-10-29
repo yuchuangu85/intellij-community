@@ -1,44 +1,40 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.typeEnhancers;
 
-import com.intellij.psi.PsiSubstitutor;
-import com.intellij.psi.PsiType;
-import com.intellij.psi.PsiWildcardType;
+import com.intellij.openapi.util.Pair;
+import com.intellij.psi.*;
+import com.intellij.psi.util.MethodSignature;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.config.GroovyConfigUtils;
-import org.jetbrains.plugins.groovy.gpp.GppClosureParameterTypeProvider;
+import org.jetbrains.plugins.groovy.lang.psi.api.GroovyMethodResult;
+import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.blocks.GrClosableBlock;
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrMethodCall;
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrReferenceExpression;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrSafeCastExpression;
 import org.jetbrains.plugins.groovy.lang.psi.api.types.GrTypeElement;
 import org.jetbrains.plugins.groovy.lang.psi.expectedTypes.GroovyExpectedTypesProvider;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil;
+import org.jetbrains.plugins.groovy.lang.resolve.processors.inference.Argument;
+import org.jetbrains.plugins.groovy.lang.resolve.processors.inference.GroovyInferenceSessionBuilder;
+import org.jetbrains.plugins.groovy.lang.resolve.processors.inference.MethodCandidate;
+import org.jetbrains.plugins.groovy.lang.sam.SamConversionKt;
 
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+
+import static org.jetbrains.plugins.groovy.lang.psi.impl.signatures.GrClosureSignatureUtil.findCall;
 
 /**
  * @author Max Medvedev
  */
 public class ClosureAsAnonymousParameterEnhancer extends AbstractClosureParameterEnhancer {
+
   @Nullable
   @Override
   protected PsiType getClosureParameterType(GrClosableBlock closure, int index) {
-
     List<PsiType> expectedTypes;
 
     if (closure.getParent() instanceof GrSafeCastExpression) {
@@ -56,26 +52,63 @@ public class ClosureAsAnonymousParameterEnhancer extends AbstractClosureParamete
         if (expectedTypes.isEmpty()) expectedTypes.add(castType);
       }
       else {
-        expectedTypes = GroovyExpectedTypesProvider.getDefaultExpectedTypes(closure);
+        expectedTypes = fromMethodCall(closure);
       }
     }
     else {
-      expectedTypes = GroovyExpectedTypesProvider.getDefaultExpectedTypes(closure);
+      expectedTypes = fromMethodCall(closure);
     }
 
     for (PsiType constraint : expectedTypes) {
-      final PsiType suggestion = GppClosureParameterTypeProvider.getSingleMethodParameterType(constraint, index, closure);
-      if (suggestion != null) {
-        if (GroovyConfigUtils.getInstance().isVersionAtLeast(closure, GroovyConfigUtils.GROOVY2_3)) {
-          if (suggestion instanceof PsiWildcardType && ((PsiWildcardType)suggestion).isSuper()) {
-            return ((PsiWildcardType)suggestion).getBound();
-          }
-        }
+      if (!(constraint instanceof PsiClassType)) continue;
 
-        return TypesUtil.substituteAndNormalizeType(suggestion, PsiSubstitutor.EMPTY, null, closure);
+      PsiClassType.ClassResolveResult result = ((PsiClassType)constraint).resolveGenerics();
+      PsiClass resolved = result.getElement();
+      if (resolved == null) continue;
+
+      MethodSignature sam = SamConversionKt.findSingleAbstractSignature(resolved);
+      if (sam == null) continue;
+
+      PsiType[] parameterTypes = sam.getParameterTypes();
+      if (index >= parameterTypes.length) continue;
+
+      final PsiType suggestion = result.getSubstitutor().substitute(parameterTypes[index]);
+      if (suggestion == null) continue;
+
+      if (GroovyConfigUtils.getInstance().isVersionAtLeast(closure, GroovyConfigUtils.GROOVY2_3)) {
+        if (suggestion instanceof PsiWildcardType && ((PsiWildcardType)suggestion).isSuper()) {
+          return ((PsiWildcardType)suggestion).getBound();
+        }
       }
+
+      return TypesUtil.substituteAndNormalizeType(suggestion, result.getSubstitutor(), null, closure);
     }
 
     return null;
+  }
+
+  List<PsiType> fromMethodCall(GrClosableBlock closure) {
+    GrMethodCall call = findCall(closure);
+    if (call == null) return Collections.emptyList();
+    GroovyResolveResult variant = call.advancedResolve();
+    if (variant instanceof GroovyMethodResult) {
+      MethodCandidate candidate = ((GroovyMethodResult)variant).getCandidate();
+      if (candidate != null) {
+        Pair<PsiParameter, PsiType> pair = candidate.getArgumentMapping().get(new Argument(null, closure));
+        if (pair != null) {
+          GrReferenceExpression invokedExpression = (GrReferenceExpression)call.getInvokedExpression();
+          PsiSubstitutor substitutor =
+            new GroovyInferenceSessionBuilder(invokedExpression, candidate)
+              .skipClosureIn(call)
+              .resolveMode(false)
+              .build()
+              .inferSubst();
+
+          return Collections.singletonList(substitutor.substitute(pair.getSecond()));
+        }
+      }
+    }
+    return Collections.emptyList();
+
   }
 }

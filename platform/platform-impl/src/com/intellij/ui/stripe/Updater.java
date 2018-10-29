@@ -1,25 +1,9 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.stripe;
 
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzerSettings;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.actionSystem.CustomShortcutSet;
 import com.intellij.openapi.actionSystem.ShortcutSet;
-import com.intellij.openapi.keymap.KeymapManager;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.ui.components.JBScrollBar;
 import com.intellij.util.ui.JBUI;
@@ -29,12 +13,12 @@ import com.intellij.util.ui.update.MergingUpdateQueue;
 import com.intellij.util.ui.update.Update;
 import org.jetbrains.annotations.NotNull;
 
-import javax.swing.JScrollBar;
-import javax.swing.JScrollPane;
-import java.awt.Cursor;
-import java.awt.Graphics2D;
+import javax.swing.*;
+import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+
+import static com.intellij.openapi.keymap.KeymapUtil.getActiveKeymapShortcuts;
 
 /**
  * @author Sergey.Malenkov
@@ -69,7 +53,7 @@ public abstract class Updater<Painter extends ErrorStripePainter> implements Dis
       @Override
       public void paint(Graphics2D g, int x, int y, int width, int height, Object object) {
         DaemonCodeAnalyzerSettings settings = DaemonCodeAnalyzerSettings.getInstance();
-        myPainter.setMinimalThickness(settings == null ? 2 : Math.min(settings.ERROR_STRIPE_MARK_MIN_HEIGHT, JBUI.scale(4)));
+        myPainter.setMinimalThickness(settings == null ? 2 : Math.min(settings.getErrorStripeMarkMinHeight(), JBUI.scale(4)));
         myPainter.setErrorStripeGap(Registry.intValue("error.stripe.gap", 0));
         if (myPainter instanceof ExtraErrorStripePainter) {
           ExtraErrorStripePainter extra = (ExtraErrorStripePainter)myPainter;
@@ -119,7 +103,7 @@ public abstract class Updater<Painter extends ErrorStripePainter> implements Dis
   }
 
   protected ShortcutSet getNextErrorShortcut() {
-    return new CustomShortcutSet(KeymapManager.getInstance().getActiveKeymap().getShortcuts("GotoNextError"));
+    return getActiveKeymapShortcuts("GotoNextError");
   }
 
   public void selectNext(int index) {
@@ -127,7 +111,7 @@ public abstract class Updater<Painter extends ErrorStripePainter> implements Dis
   }
 
   protected ShortcutSet getPreviousErrorShortcut() {
-    return new CustomShortcutSet(KeymapManager.getInstance().getActiveKeymap().getShortcuts("GotoPreviousError"));
+    return getActiveKeymapShortcuts("GotoPreviousError");
   }
 
   public void selectPrevious(int index) {
@@ -141,7 +125,7 @@ public abstract class Updater<Painter extends ErrorStripePainter> implements Dis
   }
 
   protected ErrorStripe getErrorStripe(Object object) {
-    return null;
+    return object instanceof ErrorStripe ? (ErrorStripe)object : null;
   }
 
   public final void update() {

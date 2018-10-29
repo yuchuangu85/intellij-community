@@ -35,7 +35,7 @@ public abstract class PyInjectorBase implements MultiHostInjector {
 
   @NotNull
   @Override
-  public List<? extends Class<? extends PsiElement>> elementsToInjectIn() {
+  public List<Class<? extends PsiElement>> elementsToInjectIn() {
     return PyInjectionUtil.ELEMENTS_TO_INJECT_IN;
   }
 
@@ -47,12 +47,7 @@ public abstract class PyInjectorBase implements MultiHostInjector {
     if (language != null) {
       final PsiElement element = PyInjectionUtil.getLargestStringLiteral(context);
       if (element != null) {
-        registrar.startInjecting(language);
-        final PyInjectionUtil.InjectionResult result = PyInjectionUtil.registerStringLiteralInjection(element, registrar);
-        if (result.isInjected()) {
-          registrar.doneInjecting();
-        }
-        return result;
+        return PyInjectionUtil.registerStringLiteralInjection(element, registrar, language);
       }
     }
     return PyInjectionUtil.InjectionResult.EMPTY;

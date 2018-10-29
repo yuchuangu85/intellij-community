@@ -26,13 +26,6 @@ import org.jetbrains.annotations.NotNull;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Created by IntelliJ IDEA.
- * User: ik
- * Date: 06.05.2003
- * Time: 23:32:45
- * To change this template use Options | File Templates.
- */
 public class PsiLabelReference implements PsiReference{
   private final PsiStatement myStatement;
   private PsiIdentifier myIdentifier;
@@ -42,11 +35,13 @@ public class PsiLabelReference implements PsiReference{
     myIdentifier = identifier;
   }
 
+  @NotNull
   @Override
   public PsiElement getElement(){
     return myStatement;
   }
 
+  @NotNull
   @Override
   public TextRange getRangeInElement(){
     final int parent = myIdentifier.getStartOffsetInParent();
@@ -76,7 +71,7 @@ public class PsiLabelReference implements PsiReference{
     }
 
     @Override
-    public PsiElement handleElementRename(String newElementName) throws IncorrectOperationException{
+    public PsiElement handleElementRename(@NotNull String newElementName) throws IncorrectOperationException{
       myIdentifier = (PsiIdentifier) PsiImplUtil.setName(myIdentifier, newElementName);
       return myIdentifier;
     }
@@ -91,14 +86,14 @@ public class PsiLabelReference implements PsiReference{
     }
 
     @Override
-    public boolean isReferenceTo(PsiElement element){
+    public boolean isReferenceTo(@NotNull PsiElement element){
       return resolve() == element;
     }
 
   @Override
   @NotNull
   public String[] getVariants() {
-    final List<String> result = new ArrayList<String>();
+    final List<String> result = new ArrayList<>();
     PsiElement context = myStatement;
     while(context != null){
       if(context instanceof PsiLabeledStatement){

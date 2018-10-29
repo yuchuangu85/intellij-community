@@ -24,8 +24,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import static com.jetbrains.python.psi.PyUtil.as;
-
 /**
  * @author yole
  */
@@ -54,7 +52,7 @@ public class PyTypeParserTest extends PyTestCase {
     final PyCollectionType type = (PyCollectionType) PyTypeParser.getTypeByName(myFixture.getFile(), "list of MyObject");
     assertNotNull(type);
     assertClassType(type, "list");
-    assertClassType(type.getElementTypes(getTypeEvalContext()).get(0), "MyObject");
+    assertClassType(type.getIteratedItemType(), "MyObject");
   }
 
   public void testDictType() {
@@ -62,7 +60,7 @@ public class PyTypeParserTest extends PyTestCase {
     final PyCollectionType type = (PyCollectionType) PyTypeParser.getTypeByName(myFixture.getFile(), "dict from str to MyObject");
     assertNotNull(type);
     assertClassType(type, "dict");
-    final List<PyType> elementTypes = type.getElementTypes(getTypeEvalContext());
+    final List<PyType> elementTypes = type.getElementTypes();
     assertClassType(elementTypes.get(0), "str");
     assertClassType(elementTypes.get(1), "MyObject");
   }
@@ -77,7 +75,7 @@ public class PyTypeParserTest extends PyTestCase {
     assertNotNull(type);
     final Collection<PyType> members = type.getMembers();
     assertEquals(2, members.size());
-    final List<PyType> list = new ArrayList<PyType>(members);
+    final List<PyType> list = new ArrayList<>(members);
     assertClassType(list.get(0), "MyObject");
     assertClassType(list.get(1), "str");
   }
@@ -102,7 +100,7 @@ public class PyTypeParserTest extends PyTestCase {
     assertNotNull(type);
     assertInstanceOf(type, PyUnionType.class);
     final PyUnionType unionType = (PyUnionType)type;
-    final ArrayList<PyType> types = new ArrayList<PyType>(unionType.getMembers());
+    final ArrayList<PyType> types = new ArrayList<>(unionType.getMembers());
     assertClassType(types.get(0), "str");
     assertClassType(types.get(1), "unicode");
   }
@@ -139,7 +137,7 @@ public class PyTypeParserTest extends PyTestCase {
     final PyType type = PyTypeParser.getTypeByName(myFixture.getFile(), "T");
     assertNotNull(type);
     assertInstanceOf(type, PyGenericType.class);
-    assertEquals("TypeVar('T')", type.getName());
+    assertEquals("T", type.getName());
   }
 
   // PY-4223
@@ -161,7 +159,7 @@ public class PyTypeParserTest extends PyTestCase {
     final PyType type = PyTypeParser.getTypeByName(myFixture.getFile(), "Unresolved or int");
     assertNotNull(type);
     assertInstanceOf(type, PyUnionType.class);
-    final List<PyType> members = new ArrayList<PyType>(((PyUnionType)type).getMembers());
+    final List<PyType> members = new ArrayList<>(((PyUnionType)type).getMembers());
     assertEquals(2, members.size());
     assertNull(members.get(0));
     assertClassType(members.get(1), "int");
@@ -182,8 +180,7 @@ public class PyTypeParserTest extends PyTestCase {
     final PyCollectionType collectionType = (PyCollectionType)type;
     assertNotNull(collectionType);
     assertEquals("list", collectionType.getName());
-    final List<PyType> elementTypes = collectionType.getElementTypes(TypeEvalContext.codeInsightFallback(null));
-    assertInstanceOf(elementTypes.get(0), PyUnionType.class);
+    assertInstanceOf(collectionType.getIteratedItemType(), PyUnionType.class);
   }
 
   public void testBoundedGeneric() {
@@ -203,8 +200,7 @@ public class PyTypeParserTest extends PyTestCase {
     final PyCollectionType collectionType = (PyCollectionType)type;
     assertNotNull(collectionType);
     assertEquals("list", collectionType.getName());
-    final List<PyType> elementTypes = collectionType.getElementTypes(TypeEvalContext.codeInsightFallback(null));
-    assertEquals("int", elementTypes.get(0).getName());
+    assertEquals("int", collectionType.getIteratedItemType().getName());
   }
 
   public void testBracketMultipleParams() {
@@ -214,7 +210,7 @@ public class PyTypeParserTest extends PyTestCase {
     final PyCollectionType collectionType = (PyCollectionType)type;
     assertNotNull(collectionType);
     assertEquals("dict", collectionType.getName());
-    final List<PyType> elementTypes = collectionType.getElementTypes(TypeEvalContext.codeInsightFallback(null));
+    final List<PyType> elementTypes = collectionType.getElementTypes();
     assertEquals(2, elementTypes.size());
     final PyType first = elementTypes.get(0);
     assertNotNull(first);
@@ -230,7 +226,7 @@ public class PyTypeParserTest extends PyTestCase {
     assertNotNull(type);
     final Collection<PyType> members = type.getMembers();
     assertEquals(3, members.size());
-    final List<PyType> list = new ArrayList<PyType>(members);
+    final List<PyType> list = new ArrayList<>(members);
     assertClassType(list.get(0), "MyObject");
     assertClassType(list.get(1), "str");
     assertClassType(list.get(2), "unicode");
@@ -253,7 +249,7 @@ public class PyTypeParserTest extends PyTestCase {
     assertEquals("int", type0.getName());
     final PyType type1 = parameterTypes.get(1).getType(context);
     assertNotNull(type1);
-    assertEquals("TypeVar('T')", type1.getName());
+    assertEquals("T", type1.getName());
   }
 
   public void testCallableWithoutArgs() {
@@ -268,39 +264,6 @@ public class PyTypeParserTest extends PyTestCase {
     final List<PyCallableParameter> parameterTypes = callableType.getParameters(getTypeEvalContext());
     assertNotNull(parameterTypes);
     assertEquals(0, parameterTypes.size());
-  }
-
-  public void testPep484FunctionTypeInSingleLineComment() {
-    myFixture.configureByFile("typeParser/typeParser.py");
-    final PyType type = PyTypeParser.parsePep484FunctionTypeComment(myFixture.getFile(), "(bool, MyObject, *str, **int) -> int").getType();
-    assertInstanceOf(type, PyCallableType.class);
-    final PyCallableType callableType = (PyCallableType)type;
-    assertNotNull(callableType);
-    final TypeEvalContext context = getTypeEvalContext();
-    final PyType returnType = callableType.getReturnType(context);
-    assertNotNull(returnType);
-    assertEquals("int", returnType.getName());
-    final List<PyCallableParameter> parameterTypes = callableType.getParameters(context);
-    assertNotNull(parameterTypes);
-    assertSize(4, parameterTypes);
-    final PyType type1 = parameterTypes.get(0).getType(context);
-    assertNotNull(type1);
-    assertEquals("bool", type1.getName());
-    
-    final PyType type2 = parameterTypes.get(1).getType(context);
-    assertNotNull(type2);
-    assertEquals("MyObject", type2.getName());
-    
-    final PyClassType type3 = as(parameterTypes.get(2).getType(context), PyClassType.class);
-    assertNotNull(type3);
-    assertEquals("(str, ...)", type3.getName());
-    
-    final PyCollectionType type4 = as(parameterTypes.get(3).getType(context), PyCollectionType.class);
-    assertNotNull(type4);
-    assertEquals("dict", type4.getName());
-    assertSize(2,  type4.getElementTypes(context));
-    assertEquals("str", type4.getElementTypes(context).get(0).getName());
-    assertEquals("int", type4.getElementTypes(context).get(1).getName());
   }
 
   public void testQualifiedUserSkeletonsClass() {

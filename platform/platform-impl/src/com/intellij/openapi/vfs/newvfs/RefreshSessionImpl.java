@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,9 @@
  */
 package com.intellij.openapi.vfs.newvfs;
 
+import com.intellij.codeInsight.daemon.impl.FileStatusMap;
 import com.intellij.openapi.application.*;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.project.DumbModePermission;
-import com.intellij.openapi.project.DumbService;
-import com.intellij.openapi.project.DumbServiceImpl;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
@@ -47,38 +45,35 @@ public class RefreshSessionImpl extends RefreshSession {
   private final boolean myIsAsync;
   private final boolean myIsRecursive;
   private final Runnable myFinishRunnable;
-  private final ModalityState myModalityState;
-  private final DumbModePermission myDumbModePermission;
   private final Throwable myStartTrace;
   private final Semaphore mySemaphore = new Semaphore();
 
   private List<VirtualFile> myWorkQueue = new ArrayList<>();
   private List<VFileEvent> myEvents = new ArrayList<>();
-  private volatile boolean iHaveEventsToFire;
+  private volatile boolean myHaveEventsToFire;
   private volatile RefreshWorker myWorker;
   private volatile boolean myCancelled;
   private final TransactionId myTransaction;
 
-  public RefreshSessionImpl(boolean async, boolean recursive, @Nullable Runnable finishRunnable, @NotNull ModalityState modalityState) {
+  RefreshSessionImpl(boolean async, boolean recursive, @Nullable Runnable finishRunnable, @NotNull ModalityState context) {
     myIsAsync = async;
     myIsRecursive = recursive;
     myFinishRunnable = finishRunnable;
-    myModalityState = modalityState;
-    myTransaction = ((TransactionGuardImpl)TransactionGuard.getInstance()).getModalityTransaction(modalityState);
-    LOG.assertTrue(modalityState == ModalityState.NON_MODAL || modalityState != ModalityState.any(), "Refresh session should have a specific modality");
-
-    if (modalityState == ModalityState.NON_MODAL) {
-      myDumbModePermission = null;
-      myStartTrace = null;
-    }
-    else {
-      myDumbModePermission = DumbServiceImpl.getExplicitPermission();
-      myStartTrace = new Throwable(); // please report exceptions here to peter
-    }
+    myTransaction = ((TransactionGuardImpl)TransactionGuard.getInstance()).getModalityTransaction(context);
+    LOG.assertTrue(context == ModalityState.NON_MODAL || context != ModalityState.any(), "Refresh session should have a specific modality");
+    myStartTrace = rememberStartTrace();
   }
 
-  public RefreshSessionImpl(@NotNull List<VFileEvent> events) {
-    this(false, false, null, ModalityState.NON_MODAL);
+  private Throwable rememberStartTrace() {
+    if (ApplicationManager.getApplication().isUnitTestMode() &&
+        (myIsAsync || !ApplicationManager.getApplication().isDispatchThread())) {
+      return new Throwable();
+    }
+    return null;
+  }
+
+  RefreshSessionImpl(@NotNull List<? extends VFileEvent> events) {
+    this(false, false, null, ModalityState.defaultModalityState());
     myEvents.addAll(events);
   }
 
@@ -94,14 +89,19 @@ public class RefreshSessionImpl extends RefreshSession {
         LOG.error("null passed among " + files);
       }
       else {
-        myWorkQueue.add(file);
+        addFile(file);
       }
     }
   }
 
   @Override
   public void addFile(@NotNull VirtualFile file) {
-    myWorkQueue.add(file);
+    if (file instanceof NewVirtualFile) {
+      myWorkQueue.add(file);
+    }
+    else {
+      LOG.debug("skipped: " + file + " / " + file.getClass());
+    }
   }
 
   @Override
@@ -153,7 +153,7 @@ public class RefreshSessionImpl extends RefreshSession {
         count++;
         if (LOG.isTraceEnabled()) LOG.trace("events=" + myEvents.size());
       }
-      while (myIsRecursive && count < 3 && workQueue.stream().anyMatch(f -> ((NewVirtualFile)f).isDirty()));
+      while (!myCancelled && myIsRecursive && count < 3 && workQueue.stream().anyMatch(f -> ((NewVirtualFile)f).isDirty()));
 
       if (t != 0) {
         t = System.currentTimeMillis() - t;
@@ -162,7 +162,7 @@ public class RefreshSessionImpl extends RefreshSession {
     }
 
     myWorker = null;
-    iHaveEventsToFire = haveEventsToFire;
+    myHaveEventsToFire = haveEventsToFire;
   }
 
   void cancel() {
@@ -175,19 +175,14 @@ public class RefreshSessionImpl extends RefreshSession {
   }
 
   void fireEvents() {
-    if (!iHaveEventsToFire || ApplicationManager.getApplication().isDisposed()) {
+    if (!myHaveEventsToFire || ApplicationManager.getApplication().isDisposed()) {
       mySemaphore.up();
       return;
     }
 
-    //noinspection unused
-    try (AccessToken dumb  = myStartTrace == null ? null : DumbServiceImpl.forceDumbModeStartTrace(myStartTrace);
-         AccessToken write = WriteAction.start()) {
-      if (myDumbModePermission != null) {
-        DumbService.allowStartingDumbModeInside(myDumbModePermission, this::fireEventsInWriteAction);
-      } else {
-        fireEventsInWriteAction();
-      }
+    try {
+      if (LOG.isDebugEnabled()) LOG.debug("events are about to fire: " + myEvents);
+      WriteAction.run(this::fireEventsInWriteAction);
     }
     finally {
       mySemaphore.up();
@@ -203,6 +198,12 @@ public class RefreshSessionImpl extends RefreshSession {
         PersistentFS.getInstance().processEvents(mergeEventsAndReset());
         scan();
       }
+    }
+    catch (AssertionError e) {
+      if (FileStatusMap.CHANGES_NOT_ALLOWED_DURING_HIGHLIGHTING.equals(e.getMessage())) {
+        throw new AssertionError("VFS changes are not allowed during highlighting", myStartTrace);
+      }
+      throw e;
     }
     finally {
       try {
@@ -225,11 +226,6 @@ public class RefreshSessionImpl extends RefreshSession {
     List<VFileEvent> events = new ArrayList<>(mergedEvents);
     myEvents = new ArrayList<>();
     return events;
-  }
-
-  @NotNull
-  ModalityState getModalityState() {
-    return myModalityState;
   }
 
   @Nullable

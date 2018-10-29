@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInspection;
 
@@ -20,16 +6,13 @@ import com.intellij.codeInspection.lang.InspectionExtensionsFactory;
 import com.intellij.lang.Commenter;
 import com.intellij.lang.Language;
 import com.intellij.lang.LanguageCommenters;
-import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.extensions.Extensions;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Couple;
-import com.intellij.openapi.util.NullableComputable;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiComment;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiParserFacade;
-import com.intellij.psi.PsiWhiteSpace;
 import com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -84,7 +67,7 @@ public class SuppressionUtil extends SuppressionUtilCore {
                                                         @NotNull Pattern suppressInLineCommentPattern) {
     PsiElement statement = PsiTreeUtil.getNonStrictParentOfType(place, statementClass);
     if (statement != null) {
-      PsiElement prev = PsiTreeUtil.skipSiblingsBackward(statement, PsiWhiteSpace.class);
+      PsiElement prev = PsiTreeUtil.skipWhitespacesBackward(statement);
       if (prev instanceof PsiComment) {
         String text = prev.getText();
         Matcher matcher = suppressInLineCommentPattern.matcher(text);
@@ -99,12 +82,7 @@ public class SuppressionUtil extends SuppressionUtilCore {
   public static boolean isSuppressedInStatement(@NotNull final PsiElement place,
                                                 @NotNull final String toolId,
                                                 @NotNull final Class<? extends PsiElement> statementClass) {
-    return ApplicationManager.getApplication().runReadAction(new NullableComputable<PsiElement>() {
-      @Override
-      public PsiElement compute() {
-        return getStatementToolSuppressedIn(place, toolId, statementClass);
-      }
-    }) != null;
+    return ReadAction.compute(() -> getStatementToolSuppressedIn(place, toolId, statementClass)) != null;
   }
 
   @NotNull
@@ -116,7 +94,7 @@ public class SuppressionUtil extends SuppressionUtilCore {
   }
 
   @Nullable
-  public static Couple<String> getBlockPrefixSuffixPair(@NotNull PsiElement comment) {
+  private static Couple<String> getBlockPrefixSuffixPair(@NotNull PsiElement comment) {
     final Commenter commenter = LanguageCommenters.INSTANCE.forLanguage(comment.getLanguage());
     if (commenter != null) {
       final String prefix = commenter.getBlockCommentPrefix();
@@ -185,7 +163,7 @@ public class SuppressionUtil extends SuppressionUtilCore {
   }
 
   public static boolean isSuppressed(@NotNull PsiElement psiElement, @NotNull String id) {
-    for (InspectionExtensionsFactory factory : Extensions.getExtensions(InspectionExtensionsFactory.EP_NAME)) {
+    for (InspectionExtensionsFactory factory : InspectionExtensionsFactory.EP_NAME.getExtensionList()) {
       if (!factory.isToCheckMember(psiElement, id)) {
         return true;
       }
@@ -194,6 +172,10 @@ public class SuppressionUtil extends SuppressionUtilCore {
   }
 
   public static boolean inspectionResultSuppressed(@NotNull PsiElement place, @NotNull LocalInspectionTool tool) {
+    return inspectionResultSuppressed(place, (InspectionProfileEntry)tool);
+  }
+
+  public static boolean inspectionResultSuppressed(@NotNull PsiElement place, @NotNull InspectionProfileEntry tool) {
     return tool.isSuppressedFor(place);
   }
 }

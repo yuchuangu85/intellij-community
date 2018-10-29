@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ class InspectionTreeCellRenderer extends ColoredTreeCellRenderer {
   private final InspectionResultsView myView;
   private final InspectionTreeTailRenderer myTailRenderer;
 
-  public InspectionTreeCellRenderer(InspectionResultsView view) {
+  InspectionTreeCellRenderer(InspectionResultsView view) {
     myTailRenderer = new InspectionTreeTailRenderer(view.getGlobalInspectionContext()) {
       @Override
       protected void appendText(String text, SimpleTextAttributes attributes) {
@@ -66,10 +66,10 @@ class InspectionTreeCellRenderer extends ColoredTreeCellRenderer {
   }
 
   private SimpleTextAttributes patchMainTextAttrs(InspectionTreeNode node, SimpleTextAttributes attributes) {
-    if (node.isExcluded(myView.getExcludedManager())) {
+    if (node.isExcluded()) {
       return attributes.derive(attributes.getStyle() | SimpleTextAttributes.STYLE_STRIKEOUT, null, null, null);
     }
-    if (node instanceof ProblemDescriptionNode && ((ProblemDescriptionNode)node).isQuickFixAppliedFromView()) {
+    if (node instanceof SuppressableInspectionTreeNode && ((SuppressableInspectionTreeNode)node).isQuickFixAppliedFromView()) {
       return attributes.derive(-1, SimpleTextAttributes.GRAYED_ATTRIBUTES.getFgColor(), null, null);
     }
     if (!node.isValid()) {
@@ -90,11 +90,6 @@ class InspectionTreeCellRenderer extends ColoredTreeCellRenderer {
           foreground = new SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, JBColor.blue);
         }
       }
-    }
-    final FileStatus nodeStatus = node.getNodeStatus();
-    if (nodeStatus != FileStatus.NOT_CHANGED) {
-      foreground =
-        new SimpleTextAttributes(foreground.getBgColor(), nodeStatus.getColor(), foreground.getWaveColor(), foreground.getStyle());
     }
     return foreground;
   }

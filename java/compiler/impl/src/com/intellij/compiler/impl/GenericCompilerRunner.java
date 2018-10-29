@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@ package com.intellij.compiler.impl;
 import com.intellij.compiler.impl.generic.GenericCompilerCache;
 import com.intellij.compiler.impl.generic.GenericCompilerPersistentData;
 import com.intellij.openapi.application.ReadAction;
-import com.intellij.openapi.application.Result;
-import com.intellij.openapi.application.RunResult;
 import com.intellij.openapi.compiler.CompileContext;
 import com.intellij.openapi.compiler.CompilerBundle;
 import com.intellij.openapi.compiler.CompilerMessageCategory;
@@ -31,8 +29,6 @@ import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Ref;
 import com.intellij.util.CommonProcessors;
-import com.intellij.util.Processor;
-import com.intellij.util.ThrowableRunnable;
 import com.intellij.util.io.KeyDescriptor;
 import gnu.trove.THashSet;
 import gnu.trove.TObjectHashingStrategy;
@@ -48,7 +44,7 @@ import java.util.*;
 public class GenericCompilerRunner {
   private static final Logger LOG = Logger.getInstance("#com.intellij.compiler.impl.GenericCompilerRunner");
   private static final Logger FULL_LOG = Logger.getInstance("#com.intellij.full-generic-compiler-log");
-  private CompileContext myContext;
+  private final CompileContext myContext;
   private final boolean myForceCompile;
   private final boolean myOnlyCheckStatus;
   private final GenericCompiler<?,?,?>[] myCompilers;
@@ -78,10 +74,7 @@ public class GenericCompilerRunner {
       myContext.requestRebuildNextTime(e.getMessage());
       throw new ExitException(ExitStatus.ERRORS);
     }
-    catch (ExitException e) {
-      throw e;
-    }
-    catch (ProcessCanceledException e) {
+    catch (ExitException | ProcessCanceledException e) {
       throw e;
     }
     catch (Exception e) {
@@ -99,7 +92,8 @@ public class GenericCompilerRunner {
   private <T extends BuildTarget, Item extends CompileItem<Key, SourceState, OutputState>, Key, SourceState, OutputState>
   boolean invokeCompiler(GenericCompiler<Key, SourceState, OutputState> compiler, final GenericCompilerInstance<T, Item, Key, SourceState, OutputState> instance) throws IOException,
                                                                                                                                                                          ExitException {
-    final GenericCompilerCache<Key, SourceState, OutputState> cache = CompilerCacheManager.getInstance(myProject).getGenericCompilerCache(compiler);
+    final GenericCompilerCache<Key, SourceState, OutputState> cache =
+      CompilerCacheManager.getInstance(myProject).getGenericCompilerCache(compiler);
     GenericCompilerPersistentData
       data = new GenericCompilerPersistentData(getGenericCompilerCacheDir(myProject, compiler), compiler.getVersion());
     if (data.isVersionChanged()) {
@@ -108,14 +102,12 @@ public class GenericCompilerRunner {
       data.save();
     }
 
-    final Set<String> targetsToRemove = new HashSet<String>(data.getAllTargets());
-    new ReadAction() {
-      protected void run(@NotNull final Result result) {
-        for (T target : instance.getAllTargets()) {
-          targetsToRemove.remove(target.getId());
-        }
+    final Set<String> targetsToRemove = new HashSet<>(data.getAllTargets());
+    ReadAction.run(() -> {
+      for (T target : instance.getAllTargets()) {
+        targetsToRemove.remove(target.getId());
       }
-    }.execute();
+    });
 
     if (!myOnlyCheckStatus) {
       for (final String target : targetsToRemove) {
@@ -124,13 +116,13 @@ public class GenericCompilerRunner {
           LOG.debug("Removing obsolete target '" + target + "' (id=" + id + ")");
         }
 
-        final List<Key> keys = new ArrayList<Key>();
+        final List<Key> keys = new ArrayList<>();
         CompilerUtil.runInContext(myContext, "Processing obsolete targets...", () -> {
-          cache.processSources(id, new CommonProcessors.CollectProcessor<Key>(keys));
-          List<GenericCompilerCacheState<Key, SourceState, OutputState>> obsoleteSources = new ArrayList<GenericCompilerCacheState<Key,SourceState,OutputState>>();
+          cache.processSources(id, new CommonProcessors.CollectProcessor<>(keys));
+          List<GenericCompilerCacheState<Key, SourceState, OutputState>> obsoleteSources = new ArrayList<>();
           for (Key key : keys) {
             final GenericCompilerCache.PersistentStateData<SourceState, OutputState> state = cache.getState(id, key);
-            obsoleteSources.add(new GenericCompilerCacheState<Key,SourceState,OutputState>(key, state.mySourceState, state.myOutputState));
+            obsoleteSources.add(new GenericCompilerCacheState<>(key, state.mySourceState, state.myOutputState));
           }
           instance.processObsoleteTarget(target, obsoleteSources);
         });
@@ -141,11 +133,7 @@ public class GenericCompilerRunner {
       }
     }
 
-    final List<T> selectedTargets = new ReadAction<List<T>>() {
-      protected void run(final Result<List<T>> result) {
-        result.setResult(instance.getSelectedTargets());
-      }
-    }.execute().getResultObject();
+    final List<T> selectedTargets = ReadAction.compute(() -> instance.getSelectedTargets());
 
     boolean didSomething = false;
     for (T target : selectedTargets) {
@@ -179,10 +167,10 @@ public class GenericCompilerRunner {
     final List<Item> items = instance.getItems(target);
     checkForErrorsOrCanceled();
 
-    final List<GenericCompilerProcessingItem<Item, SourceState, OutputState>> toProcess = new ArrayList<GenericCompilerProcessingItem<Item,SourceState,OutputState>>();
-    final THashSet<Key> keySet = new THashSet<Key>(new SourceItemHashingStrategy<Key>(compiler));
+    final List<GenericCompilerProcessingItem<Item, SourceState, OutputState>> toProcess = new ArrayList<>();
+    final THashSet<Key> keySet = new THashSet<>(new SourceItemHashingStrategy<>(compiler));
     final Ref<IOException> exception = Ref.create(null);
-    final Map<Item, SourceState> sourceStates = new HashMap<Item,SourceState>();
+    final Map<Item, SourceState> sourceStates = new HashMap<>();
     DumbService.getInstance(myProject).runReadActionInSmartMode(() -> {
       try {
         for (Item item : items) {
@@ -196,7 +184,7 @@ public class GenericCompilerRunner {
           if (myForceCompile || sourceState == null || !item.isSourceUpToDate(sourceState)
                              || outputState == null || !item.isOutputUpToDate(outputState)) {
             sourceStates.put(item, item.computeSourceState());
-            toProcess.add(new GenericCompilerProcessingItem<Item,SourceState,OutputState>(item, sourceState, outputState));
+            toProcess.add(new GenericCompilerProcessingItem<>(item, sourceState, outputState));
           }
         }
       }
@@ -208,7 +196,7 @@ public class GenericCompilerRunner {
       throw exception.get();
     }
 
-    final List<Key> toRemove = new ArrayList<Key>();
+    final List<Key> toRemove = new ArrayList<>();
     cache.processSources(targetId, key -> {
       if (!keySet.contains(key)) {
         toRemove.add(key);
@@ -234,15 +222,15 @@ public class GenericCompilerRunner {
       throw new ExitException(ExitStatus.CANCELLED);
     }
 
-    List<GenericCompilerCacheState<Key, SourceState, OutputState>> obsoleteItems = new ArrayList<GenericCompilerCacheState<Key,SourceState,OutputState>>();
+    List<GenericCompilerCacheState<Key, SourceState, OutputState>> obsoleteItems = new ArrayList<>();
     for (Key key : toRemove) {
       final GenericCompilerCache.PersistentStateData<SourceState, OutputState> data = cache.getState(targetId, key);
-      obsoleteItems.add(new GenericCompilerCacheState<Key,SourceState,OutputState>(key, data.mySourceState, data.myOutputState));
+      obsoleteItems.add(new GenericCompilerCacheState<>(key, data.mySourceState, data.myOutputState));
     }
 
-    final List<Item> processedItems = new ArrayList<Item>();
-    final List<File> filesToRefresh = new ArrayList<File>();
-    final List<File> dirsToRefresh = new ArrayList<File>();
+    final List<Item> processedItems = new ArrayList<>();
+    final List<File> filesToRefresh = new ArrayList<>();
+    final List<File> dirsToRefresh = new ArrayList<>();
     instance.processItems(target, toProcess, obsoleteItems, new GenericCompilerInstance.OutputConsumer<Item>() {
       @Override
       public void addFileToRefresh(@NotNull File file) {
@@ -277,20 +265,15 @@ public class GenericCompilerRunner {
         }
       }
 
-      final RunResult runResult = new ReadAction() {
-        protected void run(@NotNull final Result result) throws Throwable {
-          for (Item item : processedItems) {
-            SourceState sourceState = sourceStates.get(item);
-            if (sourceState == null) {
-              sourceState = item.computeSourceState();
-            }
-            cache.putState(targetId, item.getKey(), sourceState, item.computeOutputState());
+      ReadAction.run(()->{
+        for (Item item : processedItems) {
+          SourceState sourceState = sourceStates.get(item);
+          if (sourceState == null) {
+            sourceState = item.computeSourceState();
           }
+          cache.putState(targetId, item.getKey(), sourceState, item.computeOutputState());
         }
-      }.executeSilently();
-      Throwable throwable = runResult.getThrowable();
-      if (throwable instanceof IOException) throw (IOException) throwable;
-      else if (throwable != null) throw new RuntimeException(throwable);
+      });
     });
 
     return true;
@@ -305,9 +288,9 @@ public class GenericCompilerRunner {
   }
 
   private class SourceItemHashingStrategy<S> implements TObjectHashingStrategy<S> {
-    private KeyDescriptor<S> myKeyDescriptor;
+    private final KeyDescriptor<S> myKeyDescriptor;
 
-    public SourceItemHashingStrategy(GenericCompiler<S, ?, ?> compiler) {
+    SourceItemHashingStrategy(GenericCompiler<S, ?, ?> compiler) {
       myKeyDescriptor = compiler.getItemKeyDescriptor();
     }
 

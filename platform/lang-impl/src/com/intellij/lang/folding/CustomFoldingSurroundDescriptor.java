@@ -15,6 +15,7 @@
  */
 package com.intellij.lang.folding;
 
+import com.intellij.application.options.CodeStyle;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.Commenter;
 import com.intellij.lang.Language;
@@ -30,7 +31,6 @@ import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
-import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.IncorrectOperationException;
@@ -53,11 +53,11 @@ public class CustomFoldingSurroundDescriptor implements SurroundDescriptor {
   private final static String DEFAULT_DESC_TEXT = "Description";
 
   static {
-    List<CustomFoldingRegionSurrounder> surrounderList = new ArrayList<CustomFoldingRegionSurrounder>();
+    List<CustomFoldingRegionSurrounder> surrounderList = new ArrayList<>();
     for (CustomFoldingProvider provider : CustomFoldingProvider.getAllProviders()) {
       surrounderList.add(new CustomFoldingRegionSurrounder(provider));
     }
-    SURROUNDERS = surrounderList.toArray(new CustomFoldingRegionSurrounder[surrounderList.size()]);
+    SURROUNDERS = surrounderList.toArray(new CustomFoldingRegionSurrounder[0]);
   }
 
   @NotNull
@@ -251,7 +251,7 @@ public class CustomFoldingSurroundDescriptor implements SurroundDescriptor {
 
     private final CustomFoldingProvider myProvider;
 
-    public CustomFoldingRegionSurrounder(@NotNull CustomFoldingProvider provider) {
+    CustomFoldingRegionSurrounder(@NotNull CustomFoldingProvider provider) {
       myProvider = provider;
     }
 
@@ -306,7 +306,7 @@ public class CustomFoldingSurroundDescriptor implements SurroundDescriptor {
       }
 
       String startString = linePrefix + startText + lineSuffix + "\n" + startIndent;
-      String endString = "\n" + linePrefix + myProvider.getEndString() + lineSuffix;
+      String endString = "\n" + startIndent + linePrefix + myProvider.getEndString() + lineSuffix;
       document.insertString(endOffset, endString);
       delta += endString.length();
       document.insertString(startOffset, startString);
@@ -322,7 +322,7 @@ public class CustomFoldingSurroundDescriptor implements SurroundDescriptor {
     }
 
     private static void adjustLineIndent(@NotNull Project project, PsiFile file, Language language, TextRange range) {
-      CommonCodeStyleSettings formatSettings = CodeStyleSettingsManager.getSettings(project).getCommonSettings(language);
+      CommonCodeStyleSettings formatSettings = CodeStyle.getLanguageSettings(file, language);
       boolean keepAtFirstCol = formatSettings.KEEP_FIRST_COLUMN_COMMENT;
       formatSettings.KEEP_FIRST_COLUMN_COMMENT = false;
       CodeStyleManager.getInstance(project).adjustLineIndent(file, range);

@@ -34,7 +34,7 @@ public class StdArrangementRuleAliasToken extends StdArrangementSettingsToken im
   private List<StdArrangementMatchRule> myDefinitionRules;
 
   public StdArrangementRuleAliasToken(@NotNull String name) {
-    this(name, ContainerUtil.<StdArrangementMatchRule>emptyList());
+    this(name, ContainerUtil.emptyList());
   }
 
   public StdArrangementRuleAliasToken(@NotNull String name,
@@ -81,7 +81,7 @@ public class StdArrangementRuleAliasToken extends StdArrangementSettingsToken im
 
   @Override
   protected StdArrangementRuleAliasToken clone() {
-    final List<StdArrangementMatchRule> newValue = new ArrayList<StdArrangementMatchRule>(myDefinitionRules.size());
+    final List<StdArrangementMatchRule> newValue = new ArrayList<>(myDefinitionRules.size());
     for (StdArrangementMatchRule rule : myDefinitionRules) {
       newValue.add(rule.clone());
     }

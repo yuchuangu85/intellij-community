@@ -15,10 +15,18 @@
  */
 package com.jetbrains.python.codeInsight;
 
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiFile;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.containers.ContainerUtil;
+import com.jetbrains.python.PyNames;
 import com.jetbrains.python.fixtures.PyTestCase;
+import com.jetbrains.python.psi.LanguageLevel;
 import com.jetbrains.python.psi.PyClass;
+import com.jetbrains.python.psi.PyFile;
 import com.jetbrains.python.psi.types.PyClassLikeType;
+import com.jetbrains.python.psi.types.PyClassType;
+import com.jetbrains.python.psi.types.PyType;
 import com.jetbrains.python.psi.types.TypeEvalContext;
 import org.jetbrains.annotations.NotNull;
 
@@ -64,7 +72,16 @@ public class PyClassMROTest extends PyTestCase {
   }
 
   public void testSixWithMetaclass() {
-    assertMRO(getClass("C"), "B", "object");
+    assertMRO(getClass("C"), "B", "D", "object");
+  }
+
+  public void testSixWithMetaclassWithAs() {
+    assertMRO(getClass("C"), "B", "D", "object");
+  }
+
+  // PY-22806
+  public void testSixWithMetaclassOnly() {
+    assertMRO(getClass("C"), "object");
   }
 
   // PY-4183
@@ -75,7 +92,7 @@ public class PyClassMROTest extends PyTestCase {
   public void testTangledInheritance() {
     final int numClasses = 100;
 
-    final List<String> expectedMRO = new ArrayList<String>();
+    final List<String> expectedMRO = new ArrayList<>();
     for (int i = numClasses - 1; i >= 1; i--) {
       expectedMRO.add(String.format("Class%03d", i));
     }
@@ -96,7 +113,7 @@ public class PyClassMROTest extends PyTestCase {
 
   public void assertMRO(@NotNull PyClass cls, @NotNull String... mro) {
     final List<PyClassLikeType> types = cls.getAncestorTypes(TypeEvalContext.deepCodeInsight(cls.getProject()));
-    final List<String> classNames = new ArrayList<String>();
+    final List<String> classNames = new ArrayList<>();
     for (PyClassLikeType type : types) {
       if (type != null) {
         final String name = type.getName();
@@ -110,13 +127,68 @@ public class PyClassMROTest extends PyTestCase {
     assertOrderedEquals(classNames, Arrays.asList(mro));
   }
 
+  public void assertMetaClass(@NotNull PyClass cls, @NotNull String name) {
+    final TypeEvalContext context = TypeEvalContext.deepCodeInsight(cls.getProject());
+    final PyType metaClassType = cls.getType(context).getMetaClassType(context, true);
+    assertInstanceOf(metaClassType, PyClassType.class);
+    assertTrue(((PyClassType)metaClassType).isDefinition());
+    assertEquals(name, metaClassType.getName());
+  }
+
   // PY-20026
   public void testDuplicatedBaseClasses() {
     assertMRO(getClass("MyClass"), "Base", "object");
   }
 
+  // PY-27656
+  public void testDirectlyInstantiatedMetaclassAncestor() {
+    runWithLanguageLevel(LanguageLevel.PYTHON30, () -> {
+      final PyClass pyClass = getClass("MyClass");
+      assertMRO(pyClass, "object");
+      assertMetaClass(pyClass, "Meta");
+    });
+  }
+
+  // PY-27656
+  public void testMetaClassDeclaredThroughAncestor() {
+    runWithLanguageLevel(LanguageLevel.PYTHON30, () -> {
+      final PyClass pyClass = getClass("MyClass");
+      assertMRO(pyClass, "Base", "object");
+      assertMetaClass(pyClass, "Meta");
+    });
+  }
+
+  // PY-20026
+  public void testUnresolvedMetaClassAncestors() {
+    runWithLanguageLevel(LanguageLevel.PYTHON34, () -> {
+      final PyClass pyClass = getClass("CompositeFieldMeta");
+      assertMRO(pyClass, "object");
+      assertMetaClass(pyClass, "type");
+    });
+  }
+
+  // PY-21837
+  public void testClassImportedFromUnstubbedFileAndSuperImportedWithAs() {
+    myFixture.copyDirectoryToProject("codeInsight/classMRO/" + getTestName(false), "");
+
+    final VirtualFile d = myFixture.findFileInTempDir("D.py");
+    final VirtualFile bc = myFixture.findFileInTempDir("BC.py");
+
+    final PyFile dPsi = (PyFile)myFixture.getPsiManager().findFile(d);
+    final PsiFile bPsi = myFixture.getPsiManager().findFile(bc);
+
+    //noinspection ResultOfMethodCallIgnored
+    bPsi.getNode(); // unstubbing is necessary
+
+    final PyClass dClass = dPsi.findTopLevelClass("D");
+    final TypeEvalContext context = TypeEvalContext.codeAnalysis(myFixture.getProject(), dPsi); // such context is necessary
+    final List<PyClass> ancestors = dClass.getAncestorClasses(context);
+
+    assertOrderedEquals(ContainerUtil.map(ancestors, PyClass::getName), Arrays.asList("C", "A", "B", PyNames.OBJECT));
+  }
+
   @NotNull
-  public PyClass getClass(@NotNull String name) {
+  private PyClass getClass(@NotNull String name) {
     myFixture.configureByFile(getPath(getTestName(false)));
     final PyClass cls = myFixture.findElementByText(name, PyClass.class);
     assertNotNull(cls);

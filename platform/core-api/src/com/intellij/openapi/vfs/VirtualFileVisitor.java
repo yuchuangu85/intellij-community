@@ -26,7 +26,6 @@ import java.util.Map;
 
 /**
  * @author Dmitry Avdeev
- * @since 31.10.2011
  */
 public abstract class VirtualFileVisitor<T> {
   public static class Option {
@@ -82,13 +81,13 @@ public abstract class VirtualFileVisitor<T> {
 
 
   private boolean myFollowSymLinks = true;
-  private boolean mySkipRoot = false;
+  private boolean mySkipRoot;
   private int myDepthLimit = -1;
 
   private Map<VirtualFile, List<VirtualFile>> myVisitedTargets;
-  private int myLevel = 0;
-  private Stack<T> myValueStack = null;
-  private T myValue = null;
+  private int myLevel;
+  private Stack<T> myValueStack;
+  private T myValue;
 
   protected VirtualFileVisitor(@NotNull Option... options) {
     for (Option option : options) {
@@ -162,7 +161,7 @@ public abstract class VirtualFileVisitor<T> {
   public final void setValueForChildren(@Nullable T value) {
     myValue = value;
     if (myValueStack == null) {
-      myValueStack = new Stack<T>();
+      myValueStack = new Stack<>();
     }
   }
 

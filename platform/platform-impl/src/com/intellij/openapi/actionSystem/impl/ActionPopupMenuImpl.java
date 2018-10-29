@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.actionSystem.impl;
 
 import com.intellij.ide.DataManager;
@@ -23,9 +9,11 @@ import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationActivationListener;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.impl.LaterInvocator;
 import com.intellij.openapi.ui.JBPopupMenu;
 import com.intellij.openapi.util.Getter;
 import com.intellij.openapi.wm.IdeFrame;
+import com.intellij.openapi.wm.impl.InternalDecorator;
 import com.intellij.util.ReflectionUtil;
 import com.intellij.util.messages.MessageBusConnection;
 import com.intellij.util.ui.UIUtil;
@@ -41,28 +29,54 @@ import java.awt.*;
  * @author Anton Katilin
  * @author Vladimir Kondratyev
  */
-public final class ActionPopupMenuImpl extends ApplicationActivationListener.Adapter implements ActionPopupMenu {
-
-  private final MyMenu myMenu;
-  private final ActionManagerImpl myManager;
-  private MessageBusConnection myConnection;
+public final class ActionPopupMenuImpl implements ActionPopupMenu, ApplicationActivationListener {
 
   private final Application myApp;
-  private IdeFrame myFrame;
-  @Nullable private Getter<DataContext> myDataContextProvider;
+  private final MyMenu myMenu;
+  private final ActionManagerImpl myManager;
 
-  public ActionPopupMenuImpl(String place, @NotNull ActionGroup group, ActionManagerImpl actionManager, @Nullable PresentationFactory factory) {
+  private Getter<? extends DataContext> myDataContextProvider;
+  private MessageBusConnection myConnection;
+
+  private IdeFrame myFrame;
+  private boolean myIsToolWindowContextMenu = false;
+
+  public ActionPopupMenuImpl(String place, @NotNull ActionGroup group,
+                             ActionManagerImpl actionManager,
+                             @Nullable PresentationFactory factory) {
     myManager = actionManager;
     myMenu = new MyMenu(place, group, factory);
     myApp = ApplicationManager.getApplication();
   }
 
+  @Override
   public JPopupMenu getComponent() {
     return myMenu;
   }
 
-  public void setDataContextProvider(@Nullable Getter<DataContext> dataContextProvider) {
+  @Override
+  public String getPlace() {
+    return myMenu.myPlace;
+  }
+
+  @Override
+  public ActionGroup getActionGroup() {
+    return myMenu.myGroup;
+  }
+
+  public void setDataContextProvider(@Nullable Getter<? extends DataContext> dataContextProvider) {
     myDataContextProvider = dataContextProvider;
+  }
+
+  @Override
+  public void setTargetComponent(@Nullable JComponent component) {
+    myDataContextProvider = component == null ? null :
+                            () -> DataManager.getInstance().getDataContext(component);
+    myIsToolWindowContextMenu = component != null && UIUtil.getParentOfType(InternalDecorator.class, component) != null;
+  }
+
+  public boolean isToolWindowContextMenu() {
+    return myIsToolWindowContextMenu;
   }
 
   private class MyMenu extends JBPopupMenu {
@@ -71,16 +85,16 @@ public final class ActionPopupMenuImpl extends ApplicationActivationListener.Ada
     private DataContext myContext;
     private final PresentationFactory myPresentationFactory;
 
-    public MyMenu(String place, @NotNull ActionGroup group, @Nullable PresentationFactory factory) {
+    MyMenu(String place, @NotNull ActionGroup group, @Nullable PresentationFactory factory) {
       myPlace = place;
       myGroup = group;
       myPresentationFactory = factory != null ? factory : new MenuItemPresentationFactory();
       addPopupMenuListener(new MyPopupMenuListener());
     }
 
+    @Override
     public void show(final Component component, int x, int y) {
       if (!component.isShowing()) {
-        //noinspection HardCodedStringLiteral
         throw new IllegalArgumentException("component must be shown on the screen");
       }
 
@@ -92,7 +106,7 @@ public final class ActionPopupMenuImpl extends ApplicationActivationListener.Ada
       int y2 = Math.max(0, Math.min(y, component.getHeight() - 1)); // fit y into [0, height-1]
 
       myContext = myDataContextProvider != null ? myDataContextProvider.get() : DataManager.getInstance().getDataContext(component, x2, y2);
-      Utils.fillMenu(myGroup, this, true, myPresentationFactory, myContext, myPlace, false, false);
+      Utils.fillMenu(myGroup, this, true, myPresentationFactory, myContext, myPlace, false, false, LaterInvocator.isInModalContext(), false);
       if (getComponentCount() == 0) {
         return;
       }
@@ -117,10 +131,12 @@ public final class ActionPopupMenuImpl extends ApplicationActivationListener.Ada
     }
 
     private class MyPopupMenuListener implements PopupMenuListener {
+      @Override
       public void popupMenuCanceled(PopupMenuEvent e) {
         disposeMenu();
       }
 
+      @Override
       public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {
         disposeMenu();
       }
@@ -133,24 +149,20 @@ public final class ActionPopupMenuImpl extends ApplicationActivationListener.Ada
         }
       }
 
+      @Override
       public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
         MyMenu.this.removeAll();
-        Utils.fillMenu(myGroup, MyMenu.this, !UISettings.getInstance().DISABLE_MNEMONICS, myPresentationFactory, myContext, myPlace, false,
-                       false);
+        Utils.fillMenu(myGroup, MyMenu.this, !UISettings.getInstance().getDisableMnemonics(), myPresentationFactory, myContext, myPlace, false,
+                       false, LaterInvocator.isInModalContext(), false);
         myManager.addActionPopup(ActionPopupMenuImpl.this);
       }
     }
   }
 
   @Override
-  public void applicationActivated(IdeFrame ideFrame) {
-  }
-
-  @Override
-  public void applicationDeactivated(IdeFrame ideFrame) {
+  public void applicationDeactivated(@NotNull IdeFrame ideFrame) {
     if (myFrame == ideFrame) {
       myMenu.setVisible(false);
     }
   }
-
 }

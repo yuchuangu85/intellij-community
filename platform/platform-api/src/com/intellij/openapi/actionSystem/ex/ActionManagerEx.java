@@ -1,22 +1,10 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
  */
 package com.intellij.openapi.actionSystem.ex;
 
-
 import com.intellij.ide.DataManager;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.extensions.PluginId;
 import org.jetbrains.annotations.NotNull;
@@ -26,20 +14,20 @@ import javax.swing.*;
 import java.awt.event.InputEvent;
 import java.util.Comparator;
 
-
 public abstract class ActionManagerEx extends ActionManager {
   public static ActionManagerEx getInstanceEx() {
     return (ActionManagerEx)getInstance();
   }
 
+  @NotNull
   public abstract ActionToolbar createActionToolbar(String place, @NotNull ActionGroup group, boolean horizontal, boolean decorateButtons);
 
-  public abstract void fireBeforeActionPerformed(AnAction action, DataContext dataContext, AnActionEvent event);
+  public abstract void fireBeforeActionPerformed(@NotNull AnAction action, @NotNull DataContext dataContext, @NotNull AnActionEvent event);
 
-  public abstract void fireAfterActionPerformed(AnAction action, DataContext dataContext, AnActionEvent event);
+  public abstract void fireAfterActionPerformed(@NotNull AnAction action, @NotNull DataContext dataContext, AnActionEvent event);
 
 
-  public abstract void fireBeforeEditorTyping(char c, DataContext dataContext);
+  public abstract void fireBeforeEditorTyping(char c, @NotNull DataContext dataContext);
 
   /**
    * For logging purposes
@@ -49,17 +37,14 @@ public abstract class ActionManagerEx extends ActionManager {
 
   public abstract String getPrevPreformedActionId();
 
-
   /**
    * Comparator compares action ids (String) on order of action registration.
    *
-   * @return a negative integer if action that corresponds to the first id was registered earler than the action that corresponds
-   *         <p/>
-   *         to the second id; zero if both ids are equal; a positive number otherwise.
+   * @return a negative integer if action that corresponds to the first id was registered earlier than the action that corresponds
+   *  to the second id; zero if both ids are equal; a positive number otherwise.
    */
-
+  @NotNull
   public abstract Comparator<String> getRegistrationOrderComparator();
-
 
   /**
    * Similar to {@link KeyStroke#getKeyStroke(String)} but allows keys in lower case.
@@ -90,9 +75,9 @@ public abstract class ActionManagerEx extends ActionManager {
 
 
   @NotNull
-  public abstract String[] getPluginActions(PluginId pluginId);
+  public abstract String[] getPluginActions(@NotNull PluginId pluginId);
 
-  public abstract void queueActionPerformedEvent(final AnAction action, DataContext context, AnActionEvent event);
+  public abstract void queueActionPerformedEvent(@NotNull AnAction action, @NotNull DataContext context, @NotNull AnActionEvent event);
 
   public abstract boolean isActionPopupStackEmpty();
 
@@ -105,5 +90,10 @@ public abstract class ActionManagerEx extends ActionManager {
       fireBeforeActionPerformed(action, DataManager.getInstance().getDataContext(), e);
     }
   }
+
+  /**
+   * Allows to receive notifications when popup menus created from action groups are shown and hidden.
+   */
+  public abstract void addActionPopupMenuListener(ActionPopupMenuListener listener, Disposable parentDisposable);
 }
 

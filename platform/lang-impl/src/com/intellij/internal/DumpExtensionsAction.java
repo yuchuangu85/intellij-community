@@ -26,6 +26,7 @@ import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,8 +37,8 @@ import java.util.List;
  */
 public class DumpExtensionsAction extends DumbAwareAction {
   @Override
-  public void actionPerformed(AnActionEvent e) {
-    List<ExtensionsArea> areas = new ArrayList<ExtensionsArea>();
+  public void actionPerformed(@NotNull AnActionEvent e) {
+    List<ExtensionsArea> areas = new ArrayList<>();
     areas.add(Extensions.getRootArea());
     final Project project = e.getData(CommonDataKeys.PROJECT);
     if (project != null) {
@@ -53,7 +54,7 @@ public class DumpExtensionsAction extends DumbAwareAction {
     }
     System.out.println("\n");
 
-    List<ExtensionPoint> points = new ArrayList<ExtensionPoint>();
+    List<ExtensionPoint> points = new ArrayList<>();
     for (ExtensionsArea area : areas) {
       points.addAll(Arrays.asList(area.getExtensionPoints()));
     }
@@ -62,7 +63,7 @@ public class DumpExtensionsAction extends DumbAwareAction {
       System.out.println(" " + point.getName());
     }
 
-    List<Object> extensions = new ArrayList<Object>();
+    List<Object> extensions = new ArrayList<>();
     for (ExtensionPoint point : points) {
       extensions.addAll(Arrays.asList(point.getExtensions()));
     }

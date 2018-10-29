@@ -19,7 +19,6 @@ import com.intellij.notification.impl.NotificationsConfigurationImpl;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Trinity;
 import com.intellij.openapi.wm.StatusBar;
@@ -32,7 +31,10 @@ import gnu.trove.TObjectHashingStrategy;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 /**
  * @author peter
@@ -40,11 +42,11 @@ import java.util.*;
 public class LogModel implements Disposable {
   public static final Topic<Runnable> LOG_MODEL_CHANGED = Topic.create("LOG_MODEL_CHANGED", Runnable.class, Topic.BroadcastDirection.NONE);
 
-  private final List<Notification> myNotifications = new ArrayList<Notification>();
+  private final List<Notification> myNotifications = new ArrayList<>();
   @SuppressWarnings("unchecked") private final Map<Notification, String> myStatuses = ContainerUtil.createConcurrentWeakMap(TObjectHashingStrategy.IDENTITY);
   private Trinity<Notification, String, Long> myStatusMessage;
   private final Project myProject;
-  final Map<Notification, Runnable> removeHandlers = new THashMap<Notification, Runnable>();
+  final Map<Notification, Runnable> removeHandlers = new THashMap<>();
 
   LogModel(@Nullable Project project, @NotNull Disposable parentDisposable) {
     myProject = project;
@@ -107,7 +109,7 @@ public class LogModel implements Disposable {
 
   public ArrayList<Notification> getNotifications() {
     synchronized (myNotifications) {
-      return new ArrayList<Notification>(myNotifications);
+      return new ArrayList<>(myNotifications);
     }
   }
   public void removeNotification(Notification notification) {
@@ -140,7 +142,6 @@ public class LogModel implements Disposable {
   }
 
   public Project getProject() {
-    //noinspection ConstantConditions
     return myProject;
   }
 

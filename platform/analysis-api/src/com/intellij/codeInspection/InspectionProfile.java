@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ import com.intellij.codeInspection.ex.InspectionToolWrapper;
 import com.intellij.codeInspection.ex.Tools;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
-import com.intellij.profile.Profile;
 import com.intellij.psi.PsiElement;
 import com.intellij.util.Consumer;
 import org.jetbrains.annotations.NotNull;
@@ -30,18 +29,19 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-/**
- * User: anna
- * Date: Dec 7, 2004
- */
-public interface InspectionProfile extends Profile {
+public interface InspectionProfile extends Comparable {
+  @NotNull
+  String getName();
 
   HighlightDisplayLevel getErrorLevel(@NotNull HighlightDisplayKey inspectionToolKey, PsiElement element);
 
   /**
    * If you need to modify tool's settings, please use {@link #modifyToolSettings}
+   *
+   * @return {@link com.intellij.codeInspection.ex.InspectionToolWrapper}
+   * @see #getUnwrappedTool(String, com.intellij.psi.PsiElement)
    */
-  InspectionToolWrapper getInspectionTool(@NotNull String shortName, @NotNull PsiElement element);
+  InspectionToolWrapper getInspectionTool(@NotNull String shortName, @Nullable PsiElement element);
 
   @Nullable
   InspectionToolWrapper getInspectionTool(@NotNull String shortName, Project project);
@@ -50,10 +50,7 @@ public interface InspectionProfile extends Profile {
   InspectionProfileEntry getUnwrappedTool(@NotNull String shortName, @NotNull PsiElement element);
 
   /** Returns (unwrapped) inspection */
-  <T extends InspectionProfileEntry>
-  T getUnwrappedTool(@NotNull Key<T> shortNameKey, @NotNull PsiElement element);
-
-  void modifyProfile(@NotNull Consumer<ModifiableModel> modelConsumer);
+  <T extends InspectionProfileEntry> T getUnwrappedTool(@NotNull Key<T> shortNameKey, @NotNull PsiElement element);
 
   /**
    * Allows a plugin to modify the settings of the inspection tool with the specified ID programmatically, without going through
@@ -74,22 +71,16 @@ public interface InspectionProfile extends Profile {
   @NotNull
   InspectionToolWrapper[] getInspectionTools(@Nullable PsiElement element);
 
-  void cleanup(@NotNull Project project);
+  boolean isToolEnabled(@Nullable HighlightDisplayKey key, @Nullable PsiElement element);
+
+  default boolean isToolEnabled(@Nullable HighlightDisplayKey key) {
+    return isToolEnabled(key, null);
+  }
+
+  boolean isExecutable(@Nullable Project project);
 
   /**
-   * @see #modifyProfile(com.intellij.util.Consumer)
-   */
-  @NotNull
-  ModifiableModel getModifiableModel();
-
-  boolean isToolEnabled(@Nullable HighlightDisplayKey key, PsiElement element);
-
-  boolean isToolEnabled(@Nullable HighlightDisplayKey key);
-
-  boolean isExecutable(Project project);
-
-  /**
-   * @see {@link ModifiableModel#setSingleTool(String)}
+   * @see com.intellij.codeInspection.ex.InspectionProfileImpl#setSingleTool(String)
    *
    * @return tool short name when inspection profile corresponds to synthetic profile for single inspection run
    */
@@ -98,8 +89,6 @@ public interface InspectionProfile extends Profile {
 
   @NotNull
   String getDisplayName();
-
-  void scopesChanged();
 
   @NotNull
   List<Tools> getAllEnabledInspectionTools(Project project);

@@ -34,11 +34,12 @@ public class PairedBraceMatcherAdapter implements NontrivialBraceMatcher, Paired
   private final PairedBraceMatcher myMatcher;
   private final Language myLanguage;
 
-  public PairedBraceMatcherAdapter(final PairedBraceMatcher matcher, Language language) {
+  public PairedBraceMatcherAdapter(@NotNull PairedBraceMatcher matcher, @NotNull Language language) {
     myMatcher = matcher;
     myLanguage = language;
   }
 
+  @NotNull
   @Override
   public BracePair[] getPairs() {
     return myMatcher.getPairs();
@@ -128,12 +129,12 @@ public class PairedBraceMatcherAdapter implements NontrivialBraceMatcher, Paired
       if (type == pair.getLeftBraceType()) match = pair.getRightBraceType();
 
       if (match != null) {
-        if (result == null) result = new ArrayList<IElementType>(2);
+        if (result == null) result = new ArrayList<>(2);
         result.add(match);
       }
     }
 
-    return result != null ? result : Collections.<IElementType>emptyList();
+    return result != null ? result : Collections.emptyList();
   }
 
   @Override

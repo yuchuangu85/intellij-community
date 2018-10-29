@@ -35,7 +35,6 @@ import java.util.Map;
 
 /**
  * @author Dmitry Avdeev
- *         Date: 8/7/12
  */
 class DomStubBuilderVisitor {
   private final DomManagerImpl myManager;
@@ -69,7 +68,7 @@ class DomStubBuilderVisitor {
       for (XmlAttribute attribute : tag.getAttributes()) {
         visitXmlElement(attribute, stub, 0);
       }
-      Map<String, Integer> indices = new HashMap<String, Integer>();
+      Map<String, Integer> indices = new HashMap<>();
       for (final XmlTag subTag : tag.getSubTags()) {
         String name = subTag.getName();
         Integer i = indices.get(name);

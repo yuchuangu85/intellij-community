@@ -35,7 +35,6 @@ import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.history.VcsDiffUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.components.JBList;
-import com.intellij.util.Function;
 import com.intellij.util.ObjectUtils;
 import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
@@ -45,6 +44,8 @@ import javax.swing.*;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+
+import static com.intellij.util.containers.UtilKt.getIfSingle;
 
 /**
  * Compares selected file/folder with itself in another branch.
@@ -73,12 +74,7 @@ public abstract class DvcsCompareWithBranchAction<T extends Repository> extends 
       .setTitle("Select branch to compare")
       .setItemChoosenCallback(new OnBranchChooseRunnable(project, file, presentableRevisionName, list))
       .setAutoselectOnMouseMove(true)
-      .setFilteringEnabled(new Function<Object, String>() {
-        @Override
-        public String fun(Object o) {
-          return o.toString();
-        }
-      })
+      .setNamerForFiltering(o -> o.toString())
       .createPopup()
       .showCenteredInCurrentWindow(project);
   }
@@ -96,10 +92,10 @@ public abstract class DvcsCompareWithBranchAction<T extends Repository> extends 
   public void update(@NotNull AnActionEvent e) {
     Presentation presentation = e.getPresentation();
     Project project = e.getProject();
-    VirtualFile file = VcsUtil.getIfSingle(e.getData(VcsDataKeys.VIRTUAL_FILE_STREAM));
+    VirtualFile file = getIfSingle(e.getData(VcsDataKeys.VIRTUAL_FILE_STREAM));
 
     presentation.setVisible(project != null);
-    presentation.setEnabled(project != null && file != null && isEnabled(getRepositoryManager(project).getRepositoryForFile(file)));
+    presentation.setEnabled(project != null && file != null && isEnabled(getRepositoryManager(project).getRepositoryForFileQuick(file)));
   }
 
   private boolean isEnabled(@Nullable T repository) {

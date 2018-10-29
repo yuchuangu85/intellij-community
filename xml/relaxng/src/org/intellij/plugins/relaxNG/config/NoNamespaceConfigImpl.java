@@ -38,7 +38,7 @@ import java.util.Map;
 @State(name = "NoNamespaceConfig.Mappings", storages = @Storage(StoragePathMacros.WORKSPACE_FILE))
 class NoNamespaceConfigImpl extends NoNamespaceConfig implements PersistentStateComponent<NoNamespaceConfigImpl.Mappings> {
 
-  private final Map<VirtualFilePointer, VirtualFilePointer> myMappings = new HashMap<VirtualFilePointer, VirtualFilePointer>();
+  private final Map<VirtualFilePointer, VirtualFilePointer> myMappings = new HashMap<>();
   private final Project myProject;
 
   NoNamespaceConfigImpl(Project project) {
@@ -97,21 +97,9 @@ class NoNamespaceConfigImpl extends NoNamespaceConfig implements PersistentState
   }
 
   @Override
-  public void initComponent() {
-  }
-
-  @Override
-  public void disposeComponent() {
-  }
-
-  @Override
   @NotNull
   public String getComponentName() {
     return "RELAX-NG.NoNamespaceConfig";
-  }
-
-  @Override
-  public void projectOpened() {
   }
 
   @Override
@@ -121,7 +109,7 @@ class NoNamespaceConfigImpl extends NoNamespaceConfig implements PersistentState
 
   @Override
   public Mappings getState() {
-    final HashMap<String, String> map = new HashMap<String, String>();
+    final HashMap<String, String> map = new HashMap<>();
     for (Map.Entry<VirtualFilePointer, VirtualFilePointer> entry : myMappings.entrySet()) {
       map.put(entry.getKey().getUrl(), entry.getValue().getUrl());
     }
@@ -129,7 +117,7 @@ class NoNamespaceConfigImpl extends NoNamespaceConfig implements PersistentState
   }
 
   @Override
-  public void loadState(Mappings state) {
+  public void loadState(@NotNull Mappings state) {
     reset();
 
     final VirtualFilePointerManager manager = VirtualFilePointerManager.getInstance();
@@ -149,7 +137,7 @@ class NoNamespaceConfigImpl extends NoNamespaceConfig implements PersistentState
     public Map<String, String> myMappings;
 
     public Mappings() {
-      myMappings = new HashMap<String, String>();
+      myMappings = new HashMap<>();
     }
 
     Mappings(Map<String, String> map) {

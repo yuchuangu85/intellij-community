@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection;
 
 import com.intellij.analysis.AnalysisScope;
@@ -36,7 +22,6 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
-import com.intellij.profile.Profile;
 import com.intellij.profile.codeInspection.InspectionProjectProfileManager;
 import com.intellij.psi.PsiDirectory;
 import com.intellij.psi.PsiManager;
@@ -46,6 +31,7 @@ import com.intellij.psi.search.scope.packageSet.NamedScopesHolder;
 import com.thoughtworks.xstream.io.xml.PrettyPrintWriter;
 import org.jdom.JDOMException;
 import org.jetbrains.annotations.NonNls;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
@@ -56,22 +42,22 @@ import java.util.*;
 /**
  * @author max
  */
-@SuppressWarnings({"UseOfSystemOutOrSystemErr"})
+@SuppressWarnings("UseOfSystemOutOrSystemErr")
 public class InspectionApplication {
   private static final Logger LOG = Logger.getInstance("#com.intellij.codeInspection.InspectionApplication");
 
-  public InspectionToolCmdlineOptionHelpProvider myHelpProvider = null;
-  public String myProjectPath = null;
-  public String myOutPath = null;
-  public String mySourceDirectory = null;
-  public String myStubProfile = null;
-  public String myProfileName = null;
-  public String myProfilePath = null;
-  public boolean myRunWithEditorSettings = false;
-  public boolean myRunGlobalToolsOnly = false;
+  public InspectionToolCmdlineOptionHelpProvider myHelpProvider;
+  public String myProjectPath;
+  public String myOutPath;
+  public String mySourceDirectory;
+  public String myStubProfile;
+  public String myProfileName;
+  public String myProfilePath;
+  public boolean myRunWithEditorSettings;
+  public boolean myRunGlobalToolsOnly;
   private Project myProject;
-  private int myVerboseLevel = 0;
-  public String myOutputFormat = null;
+  private int myVerboseLevel;
+  public String myOutputFormat;
 
   public boolean myErrorCodeRequired = true;
 
@@ -97,10 +83,10 @@ public class InspectionApplication {
         final ApplicationInfoEx appInfo = (ApplicationInfoEx)ApplicationInfo.getInstance();
         logMessage(1, InspectionsBundle.message("inspection.application.starting.up",
                                                 appInfo.getFullApplicationName() + " (build " + appInfo.getBuild().asString() + ")"));
-        application.doNotSave();
+        application.setSaveAllowed(false);
         logMessageLn(1, InspectionsBundle.message("inspection.done"));
 
-        this.run();
+        run();
       }
       catch (Exception e) {
         LOG.error(e);
@@ -149,13 +135,12 @@ public class InspectionApplication {
       logMessageLn(1, InspectionsBundle.message("inspection.done"));
       logMessage(1, InspectionsBundle.message("inspection.application.initializing.project"));
 
-      Profile inspectionProfile = loadInspectionProfile();
+      InspectionProfileImpl inspectionProfile = loadInspectionProfile();
       if (inspectionProfile == null) return;
 
       final InspectionManagerEx im = (InspectionManagerEx)InspectionManager.getInstance(myProject);
 
-      final GlobalInspectionContextImpl inspectionContext = im.createNewGlobalContext(true);
-      inspectionContext.setExternalProfile((InspectionProfile)inspectionProfile);
+      im.createNewGlobalContext(true).setExternalProfile(inspectionProfile);
       im.setProfile(inspectionProfile.getName());
 
       final AnalysisScope scope;
@@ -208,13 +193,13 @@ public class InspectionApplication {
         }
       }
 
-      final List<File> inspectionsResults = new ArrayList<File>();
+      final List<File> inspectionsResults = new ArrayList<>();
       ProgressManager.getInstance().runProcess(() -> {
         if (!GlobalInspectionContextUtil.canRunInspections(myProject, false)) {
           gracefulExit();
           return;
         }
-        inspectionContext.launchInspectionsOffline(scope, resultsDataPath, myRunGlobalToolsOnly, inspectionsResults);
+        im.createNewGlobalContext(true).launchInspectionsOffline(scope, resultsDataPath, myRunGlobalToolsOnly, inspectionsResults);
         logMessageLn(1, "\n" + InspectionsBundle.message("inspection.capitalized.done") + "\n");
         if (!myErrorCodeRequired) {
           closeProject();
@@ -244,8 +229,9 @@ public class InspectionApplication {
             if (!isIndeterminate() && getFraction() > 0) {
               final int percent = (int)(getFraction() * 100);
               if (myLastPercent == percent) return;
+              String prefix = getPrefix(text);
               myLastPercent = percent;
-              String msg = InspectionsBundle.message("inspection.display.name") + " " + percent + "%";
+              String msg = (prefix != null ? prefix : InspectionsBundle.message("inspection.display.name")) + " " + percent + "%";
               logMessageLn(2, msg);
             }
             return;
@@ -254,15 +240,20 @@ public class InspectionApplication {
           logMessageLn(2, text);
         }
       });
+      File resultsDataFile = new File(resultsDataPath);
+      if (!resultsDataFile.exists() && !resultsDataFile.mkdirs()) {
+        logError("Unable to create output directory " + resultsDataPath);
+        gracefulExit();
+      }
       final String descriptionsFile = resultsDataPath + File.separatorChar + DESCRIPTIONS + XML_EXTENSION;
       describeInspections(descriptionsFile,
                           myRunWithEditorSettings ? null : inspectionProfile.getName(),
-                          (InspectionProfile)inspectionProfile);
+                          inspectionProfile);
       inspectionsResults.add(new File(descriptionsFile));
       // convert report
       if (reportConverter != null) {
         try {
-          reportConverter.convert(resultsDataPath, myOutPath, inspectionContext.getTools(), inspectionsResults);
+          reportConverter.convert(resultsDataPath, myOutPath, im.createNewGlobalContext(true).getTools(), inspectionsResults);
         }
         catch (InspectionsReportConverter.ConversionException e) {
           logError("\n" + e.getMessage());
@@ -306,8 +297,8 @@ public class InspectionApplication {
   }
 
   @Nullable
-  private Profile loadInspectionProfile() throws IOException, JDOMException {
-    Profile inspectionProfile = null;
+  private InspectionProfileImpl loadInspectionProfile() throws IOException, JDOMException {
+    InspectionProfileImpl inspectionProfile = null;
 
     //fetch profile by name from project file (project profiles can be disabled)
     if (myProfileName != null) {
@@ -346,8 +337,8 @@ public class InspectionApplication {
   }
 
   @Nullable
-  private Profile loadProfileByPath(final String profilePath) throws IOException, JDOMException {
-    Profile inspectionProfile = ApplicationInspectionProfileManager.getInstanceImpl().loadProfile(profilePath);
+  private InspectionProfileImpl loadProfileByPath(final String profilePath) throws IOException, JDOMException {
+    InspectionProfileImpl inspectionProfile = ApplicationInspectionProfileManager.getInstanceImpl().loadProfile(profilePath);
     if (inspectionProfile != null) {
       logMessageLn(1, "Loaded profile \'" + inspectionProfile.getName() + "\' from file \'" + profilePath + "\'");
     }
@@ -355,15 +346,14 @@ public class InspectionApplication {
   }
 
   @Nullable
-  private Profile loadProfileByName(final String profileName) {
-    Profile inspectionProfile = InspectionProjectProfileManager.getInstance(myProject).getProfile(profileName, false);
+  private InspectionProfileImpl loadProfileByName(final String profileName) {
+    InspectionProfileImpl inspectionProfile = InspectionProjectProfileManager.getInstance(myProject).getProfile(profileName, false);
     if (inspectionProfile != null) {
       logMessageLn(1, "Loaded shared project profile \'" + profileName + "\'");
     }
     else {
       //check if ide profile is used for project
-      final Collection<Profile> profiles = InspectionProjectProfileManager.getInstance(myProject).getProfiles();
-      for (Profile profile : profiles) {
+      for (InspectionProfileImpl profile : InspectionProjectProfileManager.getInstance(myProject).getProfiles()) {
         if (Comparing.strEqual(profile.getName(), profileName)) {
           inspectionProfile = profile;
           logMessageLn(1, "Loaded local profile \'" + profileName + "\'");
@@ -394,19 +384,19 @@ public class InspectionApplication {
       }
 
       @Override
-      public void successfullyConverted(final File backupDir) {
+      public void successfullyConverted(@NotNull final File backupDir) {
         logMessageLn(1, InspectionsBundle.message(
           "inspection.application.project.was.succesfully.converted.old.project.files.were.saved.to.0",
                                                   backupDir.getAbsolutePath()));
       }
 
       @Override
-      public void error(final String message) {
+      public void error(@NotNull final String message) {
         logError(InspectionsBundle.message("inspection.application.cannot.convert.project.0", message));
       }
 
       @Override
-      public void cannotWriteToFiles(final List<File> readonlyFiles) {
+      public void cannotWriteToFiles(@NotNull final List<? extends File> readonlyFiles) {
         StringBuilder files = new StringBuilder();
         for (File file : readonlyFiles) {
           files.append(file.getAbsolutePath()).append("; ");
@@ -450,28 +440,24 @@ public class InspectionApplication {
 
   private static void describeInspections(@NonNls String myOutputPath, final String name, final InspectionProfile profile) throws IOException {
     final InspectionToolWrapper[] toolWrappers = profile.getInspectionTools(null);
-    final Map<String, Set<InspectionToolWrapper>> map = new HashMap<String, Set<InspectionToolWrapper>>();
+    final Map<String, Set<InspectionToolWrapper>> map = new HashMap<>();
     for (InspectionToolWrapper toolWrapper : toolWrappers) {
       final String groupName = toolWrapper.getGroupDisplayName();
-      Set<InspectionToolWrapper> groupInspections = map.get(groupName);
-      if (groupInspections == null) {
-        groupInspections = new HashSet<InspectionToolWrapper>();
-        map.put(groupName, groupInspections);
-      }
+      Set<InspectionToolWrapper> groupInspections = map.computeIfAbsent(groupName, __ -> new HashSet<>());
       groupInspections.add(toolWrapper);
     }
 
-    FileWriter fw = new FileWriter(myOutputPath);
-    try {
+    try (FileWriter fw = new FileWriter(myOutputPath)) {
       @NonNls final PrettyPrintWriter xmlWriter = new PrettyPrintWriter(fw);
       xmlWriter.startNode(INSPECTIONS_NODE);
       if (name != null) {
         xmlWriter.addAttribute(PROFILE, name);
       }
-      for (String groupName : map.keySet()) {
+      for (Map.Entry<String, Set<InspectionToolWrapper>> entry : map.entrySet()) {
         xmlWriter.startNode("group");
+        String groupName = entry.getKey();
         xmlWriter.addAttribute("name", groupName);
-        final Set<InspectionToolWrapper> entries = map.get(groupName);
+        final Set<InspectionToolWrapper> entries = entry.getValue();
         for (InspectionToolWrapper toolWrapper : entries) {
           xmlWriter.startNode("inspection");
           final String shortName = toolWrapper.getShortName();
@@ -491,9 +477,6 @@ public class InspectionApplication {
         xmlWriter.endNode();
       }
       xmlWriter.endNode();
-    }
-    finally {
-      fw.close();
     }
   }
 }

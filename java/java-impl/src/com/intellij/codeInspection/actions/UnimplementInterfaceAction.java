@@ -15,7 +15,6 @@
  */
 package com.intellij.codeInspection.actions;
 
-import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.TargetElementUtil;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.openapi.editor.Editor;
@@ -24,7 +23,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.util.MethodSignatureUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.containers.HashMap;
+import java.util.HashMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -66,7 +65,7 @@ public class UnimplementInterfaceAction implements IntentionAction {
     if (referenceElement == null) return false;
 
     final PsiElement target = referenceElement.resolve();
-    if (target == null || !(target instanceof PsiClass)) return false;
+    if (!(target instanceof PsiClass)) return false;
 
     PsiClass targetClass = (PsiClass)target;
     if (targetClass.isInterface()) {
@@ -93,8 +92,6 @@ public class UnimplementInterfaceAction implements IntentionAction {
 
   @Override
   public void invoke(@NotNull final Project project, final Editor editor, final PsiFile file) throws IncorrectOperationException {
-    if (!FileModificationService.getInstance().preparePsiElementForWrite(file)) return;
-
     final PsiReference psiReference = TargetElementUtil.findReference(editor);
     if (psiReference == null) return;
 
@@ -110,11 +107,11 @@ public class UnimplementInterfaceAction implements IntentionAction {
     if (element == null) return;
 
     final PsiElement target = element.resolve();
-    if (target == null || !(target instanceof PsiClass)) return;
+    if (!(target instanceof PsiClass)) return;
 
     PsiClass targetClass = (PsiClass)target;
 
-    final Map<PsiMethod, PsiMethod> implementations = new HashMap<PsiMethod, PsiMethod>();
+    final Map<PsiMethod, PsiMethod> implementations = new HashMap<>();
     for (PsiMethod psiMethod : targetClass.getAllMethods()) {
       final PsiMethod implementingMethod = MethodSignatureUtil.findMethodBySuperMethod(psiClass, psiMethod, false);
       if (implementingMethod != null) {
@@ -125,7 +122,7 @@ public class UnimplementInterfaceAction implements IntentionAction {
 
     if (target == psiClass) return;
 
-    final Set<PsiMethod> superMethods = new HashSet<PsiMethod>();
+    final Set<PsiMethod> superMethods = new HashSet<>();
     for (PsiClass aClass : psiClass.getSupers()) {
       Collections.addAll(superMethods, aClass.getAllMethods());
     }

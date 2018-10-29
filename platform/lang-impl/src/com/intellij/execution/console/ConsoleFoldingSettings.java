@@ -1,21 +1,6 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.console;
 
-import com.google.common.base.Predicate;
 import com.google.common.collect.Collections2;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.ServiceManager;
@@ -23,7 +8,7 @@ import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.containers.ContainerUtil;
-import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
@@ -32,8 +17,8 @@ import java.util.*;
  */
 @State(name="ConsoleFoldingSettings", storages=@Storage("consoleFolding.xml"))
 public class ConsoleFoldingSettings implements PersistentStateComponent<ConsoleFoldingSettings.MyBean> {
-  private final List<String> myPositivePatterns = new ArrayList<String>();
-  private final List<String> myNegativePatterns = new ArrayList<String>();
+  private final List<String> myPositivePatterns = new ArrayList<>();
+  private final List<String> myNegativePatterns = new ArrayList<>();
 
   public ConsoleFoldingSettings() {
     for (CustomizableConsoleFoldingBean regexp : CustomizableConsoleFoldingBean.EP_NAME.getExtensions()) {
@@ -95,21 +80,16 @@ public class ConsoleFoldingSettings implements PersistentStateComponent<ConsoleF
   }
 
   private Collection<String> filterEmptyStringsFromCollection(Collection<String> collection) {
-    return Collections2.filter(collection, new Predicate<String>() {
-      @Override
-      public boolean apply(@Nullable String input) {
-        return !StringUtil.isEmpty(input);
-      }
-    });
+    return Collections2.filter(collection, input -> !StringUtil.isEmpty(input));
   }
 
   @Override
-  public void loadState(MyBean state) {
+  public void loadState(@NotNull MyBean state) {
     myPositivePatterns.clear();
     myNegativePatterns.clear();
 
-    Set<String> removedPositive = new HashSet<String>(state.removedPositive);
-    Set<String> removedNegative = new HashSet<String>(state.removedNegative);
+    Set<String> removedPositive = new HashSet<>(state.removedPositive);
+    Set<String> removedNegative = new HashSet<>(state.removedNegative);
 
     for (CustomizableConsoleFoldingBean regexp : CustomizableConsoleFoldingBean.EP_NAME.getExtensions()) {
       if (!(regexp.negate ? removedNegative : removedPositive).contains(regexp.substring)) {
@@ -123,10 +103,10 @@ public class ConsoleFoldingSettings implements PersistentStateComponent<ConsoleF
   }
 
   public static class MyBean {
-    public List<String> addedPositive = new ArrayList<String>();
-    public List<String> addedNegative = new ArrayList<String>();
-    public List<String> removedPositive = new ArrayList<String>();
-    public List<String> removedNegative = new ArrayList<String>();
+    public List<String> addedPositive = new ArrayList<>();
+    public List<String> addedNegative = new ArrayList<>();
+    public List<String> removedPositive = new ArrayList<>();
+    public List<String> removedNegative = new ArrayList<>();
   }
 
 }

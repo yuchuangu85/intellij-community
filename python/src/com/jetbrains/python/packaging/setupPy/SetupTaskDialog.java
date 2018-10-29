@@ -39,11 +39,11 @@ public class SetupTaskDialog extends DialogWrapper {
   private static final String CURRENT_CARD_PROPERTY = "SetupTaskDialog.currentCard";
   private String myCurrentCard;
 
-  private JPanel myMainPanel;
-  private JButton myExpandCollapseButton;
-  private JPanel myOptionsPanel;
-  private Map<SetupTask.Option, JComponent> myOptionComponents = new LinkedHashMap<SetupTask.Option, JComponent>();
-  private JTextField myCommandLineField;
+  private final JPanel myMainPanel;
+  private final JButton myExpandCollapseButton;
+  private final JPanel myOptionsPanel;
+  private final Map<SetupTask.Option, JComponent> myOptionComponents = new LinkedHashMap<>();
+  private final JTextField myCommandLineField;
   private final LabeledComponent<JTextField> myCommandLinePanel;
 
   protected SetupTaskDialog(Project project, String taskName, List<SetupTask.Option> options) {
@@ -145,7 +145,7 @@ public class SetupTaskDialog extends DialogWrapper {
     if (myCurrentCard.equals(CARD_COMMAND_LINE)) {
       return StringUtil.split(myCommandLineField.getText(), " ");
     }
-    List<String> result = new ArrayList<String>();
+    List<String> result = new ArrayList<>();
     for (Map.Entry<SetupTask.Option, JComponent> entry : myOptionComponents.entrySet()) {
       final SetupTask.Option option = entry.getKey();
       if (option.checkbox) {

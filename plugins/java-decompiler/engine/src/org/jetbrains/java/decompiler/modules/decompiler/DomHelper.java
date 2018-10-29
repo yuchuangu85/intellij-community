@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.java.decompiler.modules.decompiler;
 
 import org.jetbrains.java.decompiler.code.cfg.BasicBlock;
@@ -35,7 +21,7 @@ public class DomHelper {
 
   private static RootStatement graphToStatement(ControlFlowGraph graph) {
 
-    VBStyleCollection<Statement, Integer> stats = new VBStyleCollection<Statement, Integer>();
+    VBStyleCollection<Statement, Integer> stats = new VBStyleCollection<>();
     VBStyleCollection<BasicBlock, Integer> blocks = graph.getBlocks();
 
     for (BasicBlock block : blocks) {
@@ -103,14 +89,14 @@ public class DomHelper {
 
   public static VBStyleCollection<List<Integer>, Integer> calcPostDominators(Statement container) {
 
-    HashMap<Statement, FastFixedSet<Statement>> lists = new HashMap<Statement, FastFixedSet<Statement>>();
+    HashMap<Statement, FastFixedSet<Statement>> lists = new HashMap<>();
 
     StrongConnectivityHelper schelper = new StrongConnectivityHelper(container);
     List<List<Statement>> components = schelper.getComponents();
 
     List<Statement> lstStats = container.getPostReversePostOrderList(StrongConnectivityHelper.getExitReps(components));
 
-    FastFixedSetFactory<Statement> factory = new FastFixedSetFactory<Statement>(lstStats);
+    FastFixedSetFactory<Statement> factory = new FastFixedSetFactory<>(lstStats);
 
     FastFixedSet<Statement> setFlagNodes = factory.spawnEmptySet();
     setFlagNodes.setAllElements();
@@ -176,22 +162,22 @@ public class DomHelper {
     }
     while (!setFlagNodes.isEmpty());
 
-    VBStyleCollection<List<Integer>, Integer> ret = new VBStyleCollection<List<Integer>, Integer>();
+    VBStyleCollection<List<Integer>, Integer> ret = new VBStyleCollection<>();
     List<Statement> lstRevPost = container.getReversePostOrderList(); // sort order crucial!
 
-    final HashMap<Integer, Integer> mapSortOrder = new HashMap<Integer, Integer>();
+    final HashMap<Integer, Integer> mapSortOrder = new HashMap<>();
     for (int i = 0; i < lstRevPost.size(); i++) {
       mapSortOrder.put(lstRevPost.get(i).id, i);
     }
 
     for (Statement st : lstStats) {
 
-      List<Integer> lstPosts = new ArrayList<Integer>();
+      List<Integer> lstPosts = new ArrayList<>();
       for (Statement stt : lists.get(st)) {
         lstPosts.add(stt.id);
       }
 
-      Collections.sort(lstPosts, (o1, o2) -> mapSortOrder.get(o1).compareTo(mapSortOrder.get(o2)));
+      lstPosts.sort(Comparator.comparing(mapSortOrder::get));
 
       if (lstPosts.size() > 1 && lstPosts.get(0).intValue() == st.id) {
         lstPosts.add(lstPosts.remove(0));
@@ -207,7 +193,7 @@ public class DomHelper {
 
     RootStatement root = graphToStatement(graph);
 
-    if (!processStatement(root, new HashMap<Integer, Set<Integer>>())) {
+    if (!processStatement(root, new HashMap<>())) {
 
       //			try {
       //				DotExporter.toDotFile(root.getFirst().getStats().get(13), new File("c:\\Temp\\stat1.dot"));
@@ -217,7 +203,7 @@ public class DomHelper {
       throw new RuntimeException("parsing failure!");
     }
 
-    LabelHelper.lowContinueLabels(root, new HashSet<StatEdge>());
+    LabelHelper.lowContinueLabels(root, new HashSet<>());
 
     SequenceHelper.condenseSequences(root);
     root.buildMonitorFlags();
@@ -287,7 +273,7 @@ public class DomHelper {
                 SynchronizedStatement sync = new SynchronizedStatement(current, ca.getFirst(), ca.getHandler());
                 sync.setAllParent();
 
-                for (StatEdge edge : new HashSet<StatEdge>(ca.getLabelEdges())) {
+                for (StatEdge edge : new HashSet<>(ca.getLabelEdges())) {
                   sync.addLabeledEdge(edge);
                 }
 
@@ -357,7 +343,7 @@ public class DomHelper {
           //						DotExporter.toDotFile(general, new File("c:\\Temp\\stat1.dot"));
           //					} catch(Exception ex) {ex.printStackTrace();}
 
-          mapExtPost = new HashMap<Integer, Set<Integer>>();
+          mapExtPost = new HashMap<>();
           mapRefreshed = true;
         }
 
@@ -378,7 +364,7 @@ public class DomHelper {
             Statement stat = findGeneralStatement(general, forceall, mapExtPost);
 
             if (stat != null) {
-              boolean complete = processStatement(stat, general.getFirst() == stat ? mapExtPost : new HashMap<Integer, Set<Integer>>());
+              boolean complete = processStatement(stat, general.getFirst() == stat ? mapExtPost : new HashMap<>());
 
               if (complete) {
                 // replace general purpose statement with simple one
@@ -388,7 +374,7 @@ public class DomHelper {
                 return false;
               }
 
-              mapExtPost = new HashMap<Integer, Set<Integer>>();
+              mapExtPost = new HashMap<>();
               mapRefreshed = true;
               reducibility = 0;
             }
@@ -409,7 +395,7 @@ public class DomHelper {
         break;
       }
       else {
-        mapExtPost = new HashMap<Integer, Set<Integer>>();
+        mapExtPost = new HashMap<>();
       }
     }
 
@@ -427,13 +413,13 @@ public class DomHelper {
     }
 
     if (forceall) {
-      vbPost = new VBStyleCollection<List<Integer>, Integer>();
+      vbPost = new VBStyleCollection<>();
       List<Statement> lstAll = stat.getPostReversePostOrderList();
 
       for (Statement st : lstAll) {
         Set<Integer> set = mapExtPost.get(st.id);
         if (set != null) {
-          vbPost.addWithKey(new ArrayList<Integer>(set), st.id); // FIXME: sort order!!
+          vbPost.addWithKey(new ArrayList<>(set), st.id); // FIXME: sort order!!
         }
       }
 
@@ -443,7 +429,7 @@ public class DomHelper {
         for (Integer id : setFirst) {
           List<Integer> lst = vbPost.getWithKey(id);
           if (lst == null) {
-            vbPost.addWithKey(lst = new ArrayList<Integer>(), id);
+            vbPost.addWithKey(lst = new ArrayList<>(), id);
           }
           lst.add(id);
         }
@@ -467,14 +453,12 @@ public class DomHelper {
 
       Set<Integer> setExtPosts = mapExtPost.get(headid);
 
-      for (int i = 0; i < posts.size(); i++) {
-
-        Integer postid = posts.get(i);
-        if (!postid.equals(headid) && !setExtPosts.contains(postid)) {
+      for (Integer postId : posts) {
+        if (!postId.equals(headid) && !setExtPosts.contains(postId)) {
           continue;
         }
 
-        Statement post = stats.getWithKey(postid);
+        Statement post = stats.getWithKey(postId);
 
         if (post == null) { // possible in case of an inherited postdominance set
           continue;
@@ -482,11 +466,11 @@ public class DomHelper {
 
         boolean same = (post == head);
 
-        HashSet<Statement> setNodes = new HashSet<Statement>();
-        HashSet<Statement> setPreds = new HashSet<Statement>();
+        HashSet<Statement> setNodes = new HashSet<>();
+        HashSet<Statement> setPreds = new HashSet<>();
 
         // collect statement nodes
-        HashSet<Statement> setHandlers = new HashSet<Statement>();
+        HashSet<Statement> setHandlers = new HashSet<>();
         setHandlers.add(head);
         while (true) {
 
@@ -504,7 +488,7 @@ public class DomHelper {
             }
 
             if (addhd) {
-              LinkedList<Statement> lstStack = new LinkedList<Statement>();
+              LinkedList<Statement> lstStack = new LinkedList<>();
               lstStack.add(handler);
 
               while (!lstStack.isEmpty()) {
@@ -553,14 +537,14 @@ public class DomHelper {
 
         // build statement and return
         if (excok) {
-          Statement res = null;
+          Statement res;
 
           setPreds.removeAll(setNodes);
           if (setPreds.size() == 0) {
             if ((setNodes.size() > 1 ||
                  head.getNeighbours(StatEdge.TYPE_REGULAR, Statement.DIRECTION_BACKWARD).contains(head))
                 && setNodes.size() < stats.size()) {
-              if (checkSynchronizedCompleteness(head, setNodes)) {
+              if (checkSynchronizedCompleteness(setNodes)) {
                 res = new GeneralStatement(head, setNodes, same ? null : post);
                 stat.collapseNodesToStatement(res);
 
@@ -575,8 +559,7 @@ public class DomHelper {
     return null;
   }
 
-  private static boolean checkSynchronizedCompleteness(Statement head, HashSet<Statement> setNodes) {
-
+  private static boolean checkSynchronizedCompleteness(Set<Statement> setNodes) {
     // check exit nodes
     for (Statement stat : setNodes) {
       if (stat.isMonitorEnter()) {
@@ -618,26 +601,21 @@ public class DomHelper {
 
           // update the postdominator map
           if (!mapExtPost.isEmpty()) {
-            HashSet<Integer> setOldNodes = new HashSet<Integer>();
+            HashSet<Integer> setOldNodes = new HashSet<>();
             for (Statement old : result.getStats()) {
               setOldNodes.add(old.id);
             }
 
             Integer newid = result.id;
 
-            for (Integer key : new ArrayList<Integer>(mapExtPost.keySet())) {
+            for (Integer key : new ArrayList<>(mapExtPost.keySet())) {
               Set<Integer> set = mapExtPost.get(key);
 
               int oldsize = set.size();
               set.removeAll(setOldNodes);
 
               if (setOldNodes.contains(key)) {
-                Set<Integer> setNew = mapExtPost.get(newid);
-                if (setNew == null) {
-                  mapExtPost.put(newid, setNew = new HashSet<Integer>());
-                }
-                setNew.addAll(set);
-
+                mapExtPost.computeIfAbsent(newid, k -> new HashSet<>()).addAll(set);
                 mapExtPost.remove(key);
               }
               else {

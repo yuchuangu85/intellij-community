@@ -1,24 +1,11 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.fileEditor;
 
 import com.intellij.codeHighlighting.BackgroundEditorHighlighter;
 import com.intellij.ide.structureView.StructureViewBuilder;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.util.UserDataHolder;
+import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -44,7 +31,7 @@ public interface FileEditor extends UserDataHolder, Disposable {
 
   /**
    * @return component which represents editor in the UI.
-   * The method should never return <code>null</code>.
+   * The method should never return {@code null}.
    */
   @NotNull
   JComponent getComponent();
@@ -59,13 +46,13 @@ public interface FileEditor extends UserDataHolder, Disposable {
    * @return editor's name, a string that identifies editor among
    * other editors. For example, UI form might have two editor: "GUI Designer"
    * and "Text". So "GUI Designer" can be a name of one editor and "Text"
-   * can be a name of other editor. The method should never return <code>null</code>.
+   * can be a name of other editor. The method should never return {@code null}.
    */
   @NonNls @NotNull
   String getName();
 
   /**
-   * @return editor's internal state. Method should never return <code>null</code>.
+   * @return editor's internal state. Method should never return {@code null}.
    */
   @NotNull
   default FileEditorState getState(@NotNull FileEditorStateLevel level) {
@@ -78,6 +65,14 @@ public interface FileEditor extends UserDataHolder, Disposable {
    */
   void setState(@NotNull FileEditorState state);
 
+  /**
+   * In some cases, it's desirable to set state exactly as requested (e.g. on tab splitting), in other cases a different behaviour is
+   * preferred, e.g. bringing caret into view on text editor opening. This method passes additional flag to FileEditor to indicate
+   * the desired way to set state.
+   */
+  default void setState(@NotNull FileEditorState state, boolean exactState) {
+    setState(state);
+  }
   /**
    * @return whether the editor's content is modified in comparison with its file.
    */
@@ -117,7 +112,7 @@ public interface FileEditor extends UserDataHolder, Disposable {
 
   /**
    * @return highlighter object to perform background analysis and highlighting activities.
-   * Return <code>null</code> if no background highlighting activity necessary for this file editor.
+   * Return {@code null} if no background highlighting activity necessary for this file editor.
    */
   @Nullable
   BackgroundEditorHighlighter getBackgroundHighlighter();
@@ -133,4 +128,7 @@ public interface FileEditor extends UserDataHolder, Disposable {
   default StructureViewBuilder getStructureViewBuilder() {
     return null;
   }
+
+  @Nullable 
+  default VirtualFile getFile() { return null; }
 }

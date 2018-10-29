@@ -21,7 +21,6 @@ import com.intellij.psi.*;
 import com.intellij.psi.impl.FakePsiElement;
 import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.FList;
 import groovy.lang.Closure;
@@ -143,7 +142,7 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
     Object docUrl = args.get("docUrl");
     Boolean isStatic = (Boolean)args.get("isStatic");
 
-    Map<Object, Object> getter = new HashMap<Object, Object>();
+    Map<Object, Object> getter = new HashMap<>();
     getter.put("name", GroovyPropertyUtils.getGetterNameNonBoolean(name));
     getter.put("type", type);
     getter.put("isStatic", isStatic);
@@ -151,13 +150,13 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
     getter.put("docUrl", docUrl);
     method(getter);
 
-    Map<Object, Object> setter = new HashMap<Object, Object>();
+    Map<Object, Object> setter = new HashMap<>();
     setter.put("name", GroovyPropertyUtils.getSetterName(name));
     setter.put("type", "void");
     setter.put("isStatic", isStatic);
     setter.put("doc", doc);
     setter.put("docUrl", docUrl);
-    final HashMap<Object, Object> param = new HashMap<Object, Object>();
+    final HashMap<Object, Object> param = new HashMap<>();
     param.put(name, type);
     setter.put("params", param);
     method(setter);
@@ -170,7 +169,6 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
     method(args);
   }
 
-  @SuppressWarnings("MethodMayBeStatic")
   public ParameterDescriptor parameter(Map args) {
     return new ParameterDescriptor(args, myDescriptor.justGetPlaceFile());
   }
@@ -196,12 +194,12 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
       PsiType[] argTypes = PsiUtil.getArgumentTypes(ref, false);
       if (argTypes == null) return;
 
-      String[] types = new String[argTypes.length];
-      ContainerUtil.map(argTypes, (Function<PsiType, Object>)type -> type.getCanonicalText(), types);
+      String[] types =
+      ContainerUtil.map(argTypes, PsiType::getCanonicalText, new String[argTypes.length]);
 
       generator.setDelegate(this);
 
-      HashMap<String, Object> args = new HashMap<String, Object>();
+      HashMap<String, Object> args = new HashMap<>();
       args.put("name", ref.getReferenceName());
       args.put("argumentTypes", types);
       generator.call(args);
@@ -230,7 +228,6 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
       args.put("params", newParams);
     }
 
-    //noinspection unchecked
     Object params = args.get("params");
     if (params instanceof Map) {
       boolean first = true;
@@ -244,7 +241,7 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
     }
     final Object toThrow = args.get(THROWS);
     if (toThrow instanceof List) {
-      final ArrayList<String> list = new ArrayList<String>();
+      final ArrayList<String> list = new ArrayList<>();
       for (Object o : (List)toThrow) {
         list.add(stringifyType(o));
       }

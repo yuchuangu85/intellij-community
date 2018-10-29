@@ -18,8 +18,8 @@ package com.intellij.psi.controlFlow;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.psi.PsiElement;
+import com.intellij.util.containers.ObjectIntHashMap;
 import com.intellij.util.containers.Stack;
-import gnu.trove.TObjectIntHashMap;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -28,13 +28,13 @@ import java.util.List;
 class ControlFlowImpl implements ControlFlow {
   private static final Logger LOG = Logger.getInstance("#com.intellij.psi.controlFlow.ControlFlowImpl");
 
-  private final List<Instruction> myInstructions = new ArrayList<Instruction>();
-  private final TObjectIntHashMap<PsiElement> myElementToStartOffsetMap = new TObjectIntHashMap<PsiElement>();
-  private final TObjectIntHashMap<PsiElement> myElementToEndOffsetMap = new TObjectIntHashMap<PsiElement>();
-  private final List<PsiElement> myElementsForInstructions = new ArrayList<PsiElement>();
+  private final List<Instruction> myInstructions = new ArrayList<>();
+  private final ObjectIntHashMap<PsiElement> myElementToStartOffsetMap = new ObjectIntHashMap<>();
+  private final ObjectIntHashMap<PsiElement> myElementToEndOffsetMap = new ObjectIntHashMap<>();
+  private final List<PsiElement> myElementsForInstructions = new ArrayList<>();
   private boolean myConstantConditionOccurred;
 
-  private final Stack<PsiElement> myElementStack = new Stack<PsiElement>();
+  private final Stack<PsiElement> myElementStack = new Stack<>();
 
   void addInstruction(Instruction instruction) {
     myInstructions.add(instruction);
@@ -64,20 +64,12 @@ class ControlFlowImpl implements ControlFlow {
 
   @Override
   public int getStartOffset(@NotNull PsiElement element) {
-    int value = myElementToStartOffsetMap.get(element);
-    if (value == 0){
-      if (!myElementToStartOffsetMap.containsKey(element)) return -1;
-    }
-    return value;
+    return myElementToStartOffsetMap.get(element, -1);
   }
 
   @Override
   public int getEndOffset(@NotNull PsiElement element) {
-    int value = myElementToEndOffsetMap.get(element);
-    if (value == 0){
-      if (!myElementToEndOffsetMap.containsKey(element)) return -1;
-    }
-    return value;
+    return myElementToEndOffsetMap.get(element, -1);
   }
 
   @Override
@@ -97,10 +89,7 @@ class ControlFlowImpl implements ControlFlow {
     StringBuilder buffer = new StringBuilder();
     for(int i = 0; i < myInstructions.size(); i++){
       Instruction instruction = myInstructions.get(i);
-      buffer.append(Integer.toString(i));
-      buffer.append(": ");
-      buffer.append(instruction);
-      buffer.append("\n");
+      buffer.append(i).append(": ").append(instruction).append("\n");
     }
     return buffer.toString();
   }

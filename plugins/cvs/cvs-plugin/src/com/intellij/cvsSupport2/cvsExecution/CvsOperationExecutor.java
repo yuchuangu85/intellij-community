@@ -115,8 +115,7 @@ public class CvsOperationExecutor {
         setText(CvsBundle.message("progress.text.preparing.for.action", handler.getTitle()));
 
         handler.run(myProject, myExecutor);
-        if (myResult.finishedUnsuccessfully(handler)) return;
-
+        myResult.finishedUnsuccessfully(handler);
       }
       catch (ProcessCanceledException ex) {
         myResult.setIsCanceled();
@@ -182,7 +181,7 @@ public class CvsOperationExecutor {
     if (!myShowErrors || myIsQuietOperation) return;
     if (tabbedWindow == null) {
       if (errors.isEmpty()) return;
-      final List<String> messages = new ArrayList<String>();
+      final List<String> messages = new ArrayList<>();
       for (VcsException error : errors) {
         if (! StringUtil.isEmptyOrSpaces(error.getMessage())) {
           messages.add(error.getMessage());
@@ -222,7 +221,7 @@ public class CvsOperationExecutor {
     if (myProject != null && myProject.isDefault()) return null;
     if (myProject != null) {
       if (myConfiguration != null && myConfiguration.SHOW_OUTPUT && !myIsQuietOperation) {
-        ApplicationManager.getApplication().invokeAndWait(() -> connectToOutput(output), ModalityState.defaultModalityState());
+        ApplicationManager.getApplication().invokeAndWait(() -> connectToOutput(output));
       }
       if (!myProject.isDisposed()) {
         return CvsTabbedWindow.getInstance(myProject);

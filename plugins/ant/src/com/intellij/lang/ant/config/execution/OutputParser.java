@@ -29,7 +29,6 @@ import com.intellij.problems.Problem;
 import com.intellij.problems.WolfTheProblemSolver;
 import com.intellij.rt.ant.execution.IdeaAntLogger2;
 import com.intellij.util.text.StringTokenizer;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.ref.WeakReference;
@@ -39,8 +38,7 @@ import java.util.List;
 
 public class OutputParser{
 
-  @NonNls private static final String JAVAC = "javac";
-  @NonNls private static final String ECHO = "echo";
+  private static final String JAVAC = "javac";
 
   private static final Logger LOG = Logger.getInstance("#com.intellij.ant.execution.OutputParser");
   private final Project myProject;
@@ -52,7 +50,6 @@ public class OutputParser{
   private List<String> myJavacMessages;
   private boolean myFirstLineProcessed;
   private boolean myStartedSuccessfully;
-  private boolean myIsEcho;
 
   public OutputParser(Project project,
                       OSProcessHandler processHandler,
@@ -62,7 +59,7 @@ public class OutputParser{
     myProject = project;
     myProcessHandler = processHandler;
     myMessageView = errorsView;
-    myProgress = new WeakReference<ProgressIndicator>(progress);
+    myProgress = new WeakReference<>(progress);
     myBuildName = buildName;
     myMessageView.setParsingThread(this);
   }
@@ -132,10 +129,7 @@ public class OutputParser{
     else if (IdeaAntLogger2.TASK == tagName) {
       setProgressText(AntBundle.message("executing.task.tag.value.status.text", tagValue));
       if (JAVAC.equals(tagValue)) {
-        myJavacMessages = new ArrayList<String>();
-      }
-      else if (ECHO.equals(tagValue)) {
-        myIsEcho = true;
+        myJavacMessages = new ArrayList<>();
       }
     }
 
@@ -145,12 +139,7 @@ public class OutputParser{
     }
 
     if (IdeaAntLogger2.MESSAGE == tagName) {
-      if (myIsEcho) {
-        myMessageView.outputMessage(tagValue, AntBuildMessageView.PRIORITY_VERBOSE);
-      }
-      else {
-        myMessageView.outputMessage(tagValue, priority);
-      }
+      myMessageView.outputMessage(tagValue, fixPriority(priority));
     }
     else if (IdeaAntLogger2.TARGET == tagName) {
       myMessageView.startTarget(tagValue);
@@ -172,7 +161,6 @@ public class OutputParser{
       final List<String> javacMessages = myJavacMessages;
       myJavacMessages = null;
       processJavacMessages(javacMessages, myMessageView, myProject);
-      myIsEcho = false;
       if (IdeaAntLogger2.TARGET_END == tagName) {
         myMessageView.finishTarget();
       }
@@ -182,18 +170,15 @@ public class OutputParser{
     }
   }
 
-  private static int getNextTwoPoints(int offset, String message) {
-    for (int i = offset + 1; i < message.length(); i++) {
-      char c = message.charAt(i);
-      if (c == ':') {
-        return i;
-      }
-      if (Character.isDigit(c)) {
-        continue;
-      }
-      return -1;
+  private static int fixPriority(int priority) {
+    if (priority == AntBuildMessageView.PRIORITY_ERR ||
+        priority == AntBuildMessageView.PRIORITY_WARN ||
+        priority == AntBuildMessageView.PRIORITY_INFO ||
+        priority == AntBuildMessageView.PRIORITY_VERBOSE ||
+        priority == AntBuildMessageView.PRIORITY_DEBUG) {
+      return priority;
     }
-    return -1;
+    return AntBuildMessageView.PRIORITY_VERBOSE; // fallback value for unknown priority value
   }
 
   private static void processJavacMessages(final List<String> javacMessages, final AntBuildMessageView messageView, final Project project) {
@@ -206,6 +191,7 @@ public class OutputParser{
     com.intellij.compiler.OutputParser.Callback callback = new com.intellij.compiler.OutputParser.Callback() {
       private int myIndex = -1;
 
+      @Override
       @Nullable
       public String getCurrentLine() {
         if (myIndex >= javacMessages.size()) {
@@ -214,6 +200,7 @@ public class OutputParser{
         return javacMessages.get(myIndex);
       }
 
+      @Override
       public String getNextLine() {
         final int size = javacMessages.size();
         final int next = Math.min(myIndex + 1, javacMessages.size());
@@ -229,6 +216,7 @@ public class OutputParser{
         myIndex--;
       }
 
+      @Override
       public void message(final CompilerMessageCategory category,
                           final String message,
                           final String url,
@@ -236,7 +224,6 @@ public class OutputParser{
                           final int columnNum) {
         StringTokenizer tokenizer = new StringTokenizer(message, "\n", false);
         final String[] strings = new String[tokenizer.countTokens()];
-        //noinspection ForLoopThatDoesntUseLoopVariable
         for (int idx = 0; tokenizer.hasMoreTokens(); idx++) {
           strings[idx] = tokenizer.nextToken();
         }
@@ -252,12 +239,15 @@ public class OutputParser{
         });
       }
 
+      @Override
       public void setProgressText(String text) {
       }
 
+      @Override
       public void fileProcessed(String path) {
       }
 
+      @Override
       public void fileGenerated(String path) {
       }
     };

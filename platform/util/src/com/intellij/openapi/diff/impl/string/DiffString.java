@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package com.intellij.openapi.diff.impl.string;
 
 import com.intellij.openapi.diff.LineTokenizerBase;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.text.CharArrayCharSequence;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -91,22 +90,6 @@ public class DiffString extends CharArrayCharSequence {
   public void copyData(@NotNull char[] dst, int start) {
     checkBounds(start, length(), dst.length);
     System.arraycopy(myChars, myStart, dst, start, length());
-  }
-
-  @Override
-  public boolean equals(@Nullable Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
-
-    DiffString that = (DiffString)o;
-
-    if (length() != that.length()) return false;
-    if (hashCode() != that.hashCode()) return false;
-    for (int i = 0; i < length(); i++) {
-      if (data(i) != that.data(i)) return false;
-    }
-
-    return true;
   }
 
   @Nullable
@@ -353,11 +336,11 @@ public class DiffString extends CharArrayCharSequence {
     public DiffString[] execute() {
       ArrayList<DiffString> lines = new ArrayList<DiffString>();
       doExecute(lines);
-      return ContainerUtil.toArray(lines, new DiffString[lines.size()]);
+      return lines.toArray(new DiffString[0]);
     }
 
     @Override
-    protected void addLine(List<DiffString> lines, int start, int end, boolean appendNewLine) {
+    protected void addLine(List<? super DiffString> lines, int start, int end, boolean appendNewLine) {
       if (appendNewLine) {
         lines.add(myText.substring(start, end).append('\n'));
       }

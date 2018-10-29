@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.template.emmet;
 
 import com.intellij.codeInsight.hint.HintManager;
@@ -20,10 +6,10 @@ import com.intellij.codeInsight.hint.HintManagerImpl;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.*;
-import com.intellij.openapi.editor.event.DocumentAdapter;
 import com.intellij.openapi.editor.event.DocumentEvent;
-import com.intellij.openapi.editor.event.EditorFactoryAdapter;
+import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.editor.event.EditorFactoryEvent;
+import com.intellij.openapi.editor.event.EditorFactoryListener;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.ex.EditorMarkupModel;
 import com.intellij.openapi.editor.ex.MarkupModelEx;
@@ -35,12 +21,10 @@ import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
 import com.intellij.ui.HintHint;
-import com.intellij.ui.IdeBorderFactory;
 import com.intellij.ui.LightweightHint;
 import com.intellij.ui.components.JBPanel;
 import com.intellij.util.Alarm;
 import com.intellij.util.DocumentUtil;
-import com.intellij.util.Producer;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -48,9 +32,10 @@ import org.jetbrains.annotations.TestOnly;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.function.Supplier;
 
 public class EmmetPreviewHint extends LightweightHint implements Disposable {
-  private static final Key<EmmetPreviewHint> KEY = new Key<EmmetPreviewHint>("emmet.preview");
+  private static final Key<EmmetPreviewHint> KEY = new Key<>("emmet.preview");
   @NotNull private final Editor myParentEditor;
   @NotNull private final Editor myEditor;
   @NotNull private final Alarm myAlarm = new Alarm(this);
@@ -62,7 +47,7 @@ public class EmmetPreviewHint extends LightweightHint implements Disposable {
     myEditor = editor;
 
     final Editor topLevelEditor = InjectedLanguageUtil.getTopLevelEditor(myParentEditor);
-    EditorFactory.getInstance().addEditorFactoryListener(new EditorFactoryAdapter() {
+    EditorFactory.getInstance().addEditorFactoryListener(new EditorFactoryListener() {
       @Override
       public void editorReleased(@NotNull EditorFactoryEvent event) {
         if (event.getEditor() == myParentEditor || event.getEditor() == myEditor || event.getEditor() == topLevelEditor) {
@@ -71,9 +56,9 @@ public class EmmetPreviewHint extends LightweightHint implements Disposable {
       }
     }, this);
 
-    myEditor.getDocument().addDocumentListener(new DocumentAdapter() {
+    myEditor.getDocument().addDocumentListener(new DocumentListener() {
       @Override
-      public void documentChanged(DocumentEvent event) {
+      public void documentChanged(@NotNull DocumentEvent event) {
         if (!isDisposed && event.isWholeTextReplaced()) {
           Pair<Point, Short> position = guessPosition();
           HintManagerImpl.adjustEditorHintPosition(EmmetPreviewHint.this, myParentEditor, position.first, position.second);
@@ -102,11 +87,11 @@ public class EmmetPreviewHint extends LightweightHint implements Disposable {
     HintManagerImpl.getInstanceImpl().showEditorHint(this, myParentEditor, position.first, hintFlags, 0, false, hintHint);
   }
 
-  public void updateText(@NotNull final Producer<String> contentProducer) {
+  public void updateText(@NotNull final Supplier<String> contentProducer) {
     myAlarm.cancelAllRequests();
     myAlarm.addRequest(() -> {
       if (!isDisposed) {
-        final String newText = contentProducer.produce();
+        final String newText = contentProducer.get();
         if (StringUtil.isEmpty(newText)) {
           hide();
         }
@@ -159,7 +144,7 @@ public class EmmetPreviewHint extends LightweightHint implements Disposable {
     settings.setAdditionalPageAtBottom(false);
     settings.setCaretRowShown(false);
     previewEditor.setCaretEnabled(false);
-    previewEditor.setBorder(IdeBorderFactory.createEmptyBorder());
+    previewEditor.setBorder(JBUI.Borders.empty());
 
     JBPanel panel = new JBPanel(new BorderLayout()) {
       @NotNull
@@ -177,7 +162,7 @@ public class EmmetPreviewHint extends LightweightHint implements Disposable {
       @NotNull
       @Override
       public Insets getInsets() {
-        return new Insets(1, 2, 0, 0);
+        return JBUI.insets(1, 2, 0, 0);
       }
     };
     panel.setBackground(previewEditor.getBackgroundColor());
@@ -193,7 +178,7 @@ public class EmmetPreviewHint extends LightweightHint implements Disposable {
   @Override
   public void hide(boolean ok) {
     super.hide(ok);
-    ApplicationManager.getApplication().invokeLater(() -> Disposer.dispose(EmmetPreviewHint.this));
+    ApplicationManager.getApplication().invokeLater(() -> Disposer.dispose(this));
   }
 
   @Override
@@ -222,13 +207,13 @@ public class EmmetPreviewHint extends LightweightHint implements Disposable {
     boolean p1Ok = p1.y + getComponent().getPreferredSize().height < layeredPane.getHeight();
     boolean p2Ok = p2.y >= 0;
 
-    if (p1Ok) return new Pair<Point, Short>(p1, HintManager.UNDER);
-    if (p2Ok) return new Pair<Point, Short>(p2, HintManager.ABOVE);
+    if (p1Ok) return new Pair<>(p1, HintManager.UNDER);
+    if (p2Ok) return new Pair<>(p2, HintManager.ABOVE);
 
     int underSpace = layeredPane.getHeight() - p1.y;
     int aboveSpace = p2.y;
     return aboveSpace > underSpace
-           ? new Pair<Point, Short>(new Point(p2.x, 0), HintManager.UNDER)
-           : new Pair<Point, Short>(p1, HintManager.ABOVE);
+           ? new Pair<>(new Point(p2.x, 0), HintManager.UNDER)
+           : new Pair<>(p1, HintManager.ABOVE);
   }
 }

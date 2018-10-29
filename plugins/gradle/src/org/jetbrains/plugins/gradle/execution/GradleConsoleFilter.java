@@ -33,7 +33,6 @@ import java.io.File;
 
 /**
  * @author Vladislav.Soroka
- * @since 9/29/2015
  */
 public class GradleConsoleFilter implements Filter {
   private final Project myProject;
@@ -77,7 +76,7 @@ public class GradleConsoleFilter implements Filter {
 
     final String fileName = fileAndLineNumber.substring(0, linePrefixIndex);
     myFilteredFileName = fileName;
-    String lineNumberStr = fileAndLineNumber.substring(linePrefixIndex + linePrefix.length(), fileAndLineNumber.length()).trim();
+    String lineNumberStr = fileAndLineNumber.substring(linePrefixIndex + linePrefix.length()).trim();
     int lineNumberEndIndex = 0;
     for (int i = 0; i < lineNumberStr.length(); i++) {
       if (Character.isDigit(lineNumberStr.charAt(i))) {
@@ -102,7 +101,7 @@ public class GradleConsoleFilter implements Filter {
       return null;
     }
 
-    int textStartOffset = entireLength - line.trim().length() + filePrefix.length() - 1;
+    int textStartOffset = entireLength - line.length() + filePrefix.length() + filePrefixIndex;
     int highlightEndOffset = textStartOffset + fileName.length();
     OpenFileHyperlinkInfo info = new OpenFileHyperlinkInfo(myProject, file, Math.max(lineNumber - 1, 0));
     TextAttributes attributes = HYPERLINK_ATTRIBUTES.clone();

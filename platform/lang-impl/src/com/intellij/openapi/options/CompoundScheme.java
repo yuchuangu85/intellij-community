@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,16 +19,18 @@ import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.THashMap;
 import gnu.trove.TObjectObjectProcedure;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.function.BiConsumer;
 
 public class CompoundScheme<E extends SchemeElement> implements ExternalizableScheme {
   protected String myName;
-  protected final ArrayList<E> myElements = new ArrayList<E>();
+  protected final ArrayList<E> myElements = new ArrayList<>();
 
   public CompoundScheme(final String name) {
     setName(name);
@@ -42,7 +44,10 @@ public class CompoundScheme<E extends SchemeElement> implements ExternalizableSc
 
   @NotNull
   public final List<E> getElements() {
-    return Collections.unmodifiableList(new ArrayList<E>(myElements));
+    if (myElements.isEmpty()) {
+      return Collections.emptyList();
+    }
+    return Collections.unmodifiableList(new ArrayList<>(myElements));
   }
 
   @NotNull
@@ -96,7 +101,7 @@ public class CompoundScheme<E extends SchemeElement> implements ExternalizableSc
     return result;
   }
 
-   void resetFrom(@NotNull CompoundScheme<E> template) {
+   void resetFrom(@NotNull CompoundScheme<? extends E> template) {
     myElements.clear();
     myElements.ensureCapacity(template.myElements.size());
     for (E element : template.myElements) {
@@ -116,7 +121,7 @@ public class CompoundScheme<E extends SchemeElement> implements ExternalizableSc
   }
 
   public static final class MutatorHelper<T extends CompoundScheme<E>, E extends SchemeElement> {
-    private final THashMap<T, T> copiedToOriginal = new THashMap<T, T>(ContainerUtil.identityStrategy());
+    private final THashMap<T, T> copiedToOriginal = ContainerUtil.newIdentityTroveMap();
 
     @NotNull
     public T copy(@NotNull T scheme) {
@@ -128,6 +133,11 @@ public class CompoundScheme<E extends SchemeElement> implements ExternalizableSc
 
     @NotNull
     public List<T> apply(@NotNull final List<T> copiedSchemes) {
+      return apply(copiedSchemes, null);
+    }
+
+    @NotNull
+    public List<T> apply(@NotNull final List<T> copiedSchemes, @Nullable BiConsumer<? super T, ? super T> changedConsumer) {
       copiedToOriginal.retainEntries(new TObjectObjectProcedure<T, T>() {
         @Override
         public boolean execute(T copied, T original) {
@@ -135,7 +145,7 @@ public class CompoundScheme<E extends SchemeElement> implements ExternalizableSc
         }
       });
 
-      List<T> originals = new ArrayList<T>(copiedSchemes.size());
+      List<T> originals = new ArrayList<>(copiedSchemes.size());
       for (T copied : copiedSchemes) {
         T original = copiedToOriginal.remove(copied);
         if (original == null) {
@@ -144,6 +154,9 @@ public class CompoundScheme<E extends SchemeElement> implements ExternalizableSc
           copiedToOriginal.put(copied, original);
         }
         else {
+          if (changedConsumer != null) {
+            changedConsumer.accept(original, copied);
+          }
           original.resetFrom(copied);
         }
 

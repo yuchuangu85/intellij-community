@@ -63,7 +63,7 @@ public class GrIntroduceValidatorEngine implements GrIntroduceHandlerBase.Valida
   private MultiMap<PsiElement, String> isOKImpl(String varName, boolean replaceAllOccurrences) {
     PsiElement firstOccurrence = getFirstOccurrence(replaceAllOccurrences);
 
-    final MultiMap<PsiElement, String> conflicts = new MultiMap<PsiElement, String>();
+    final MultiMap<PsiElement, String> conflicts = new MultiMap<>();
     assert varName != null;
 
     final int offset = firstOccurrence.getTextRange().getStartOffset();
@@ -143,11 +143,8 @@ public class GrIntroduceValidatorEngine implements GrIntroduceHandlerBase.Valida
       }
       if (child instanceof GrVariable) {
         myReporter.check(child, conflicts, varName);
-        validateOccurrencesDown(child, conflicts, varName, startOffset);
       }
-      else {
-        validateOccurrencesDown(child, conflicts, varName, startOffset);
-      }
+      validateOccurrencesDown(child, conflicts, varName, startOffset);
       child = child.getNextSibling();
     }
   }

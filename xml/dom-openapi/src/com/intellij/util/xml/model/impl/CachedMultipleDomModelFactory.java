@@ -34,9 +34,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-/**
- * User: Sergey.Vasiliev
- */
 public abstract class CachedMultipleDomModelFactory<Scope extends UserDataHolder, T extends DomElement, M extends DomModel<T>, C extends PsiElement>
     extends DomModelFactoryHelper<T>
     implements CachedDomModelFactory<T,M,Scope>, MultipleDomModelFactory<Scope,T,M> {
@@ -56,7 +53,7 @@ public abstract class CachedMultipleDomModelFactory<Scope extends UserDataHolder
         @NotNull
         protected CachedValueProvider.Result<M> computeValue(@NotNull final Scope scope) {
           final M combinedModel = computeCombinedModel(scope);
-          return new CachedValueProvider.Result<M>(combinedModel, computeDependencies(combinedModel, scope));
+          return new CachedValueProvider.Result<>(combinedModel, computeDependencies(combinedModel, scope));
         }
       };
 
@@ -65,7 +62,7 @@ public abstract class CachedMultipleDomModelFactory<Scope extends UserDataHolder
         @NotNull
         protected CachedValueProvider.Result<List<M>> computeValue(@NotNull final Scope scope) {
           final List<M> models = computeAllModels(scope);
-          return new CachedValueProvider.Result<List<M>>(models, computeDependencies(null, scope));
+          return new CachedValueProvider.Result<>(models, computeDependencies(null, scope));
         }
       };
     }
@@ -107,12 +104,12 @@ public abstract class CachedMultipleDomModelFactory<Scope extends UserDataHolder
         case 1:
           return models.get(0);
       }
-      final Set<XmlFile> configFiles = new LinkedHashSet<XmlFile>();
-      final LinkedHashSet<DomFileElement<T>> list = new LinkedHashSet<DomFileElement<T>>(models.size());
+      final Set<XmlFile> configFiles = new LinkedHashSet<>();
+      final LinkedHashSet<DomFileElement<T>> list = new LinkedHashSet<>(models.size());
       for (M model: models) {
         final Set<XmlFile> files = model.getConfigFiles();
         for (XmlFile file: files) {
-          ContainerUtil.addIfNotNull(getDomRoot(file), list);
+          ContainerUtil.addIfNotNull(list, getDomRoot(file));
         }
         configFiles.addAll(files);
       }
@@ -150,7 +147,7 @@ public abstract class CachedMultipleDomModelFactory<Scope extends UserDataHolder
     @Override
     @NotNull
     public Set<XmlFile> getAllConfigFiles(@NotNull Scope scope) {
-      final HashSet<XmlFile> xmlFiles = new HashSet<XmlFile>();
+      final HashSet<XmlFile> xmlFiles = new HashSet<>();
       for (M model: getAllModels(scope)) {
         xmlFiles.addAll(model.getConfigFiles());
       }
@@ -158,7 +155,7 @@ public abstract class CachedMultipleDomModelFactory<Scope extends UserDataHolder
     }
 
     public List<DomFileElement<T>> getFileElements(M model) {
-      final ArrayList<DomFileElement<T>> list = new ArrayList<DomFileElement<T>>(model.getConfigFiles().size());
+      final ArrayList<DomFileElement<T>> list = new ArrayList<>(model.getConfigFiles().size());
       for (XmlFile configFile: model.getConfigFiles()) {
         final DomFileElement<T> element = DomManager.getDomManager(configFile.getProject()).getFileElement(configFile, myClass);
         if (element != null) {

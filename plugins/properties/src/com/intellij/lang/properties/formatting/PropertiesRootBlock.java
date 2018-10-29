@@ -15,11 +15,13 @@
  */
 package com.intellij.lang.properties.formatting;
 
-import com.intellij.formatting.*;
+import com.intellij.formatting.Alignment;
+import com.intellij.formatting.Block;
+import com.intellij.formatting.Spacing;
 import com.intellij.lang.ASTNode;
+import com.intellij.lang.properties.PropertiesLanguage;
+import com.intellij.lang.properties.parsing.PropertiesElementTypes;
 import com.intellij.lang.properties.parsing.PropertiesTokenTypes;
-import com.intellij.lang.properties.parsing.PropertyListStubElementType;
-import com.intellij.lang.properties.parsing.PropertyStubElementType;
 import com.intellij.lang.properties.psi.codeStyle.PropertiesCodeStyleSettings;
 import com.intellij.lang.properties.psi.impl.PropertyKeyImpl;
 import com.intellij.lang.properties.psi.impl.PropertyValueImpl;
@@ -33,33 +35,30 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
-import static java.io.File.separator;
-
 /**
  * @author Dmitry Batkovich
  */
-public class PropertiesRootBlock extends AbstractBlock {
-
+class PropertiesRootBlock extends AbstractBlock {
   private final CodeStyleSettings mySettings;
-  private Alignment mySeparatorAlignment;
+  private final Alignment mySeparatorAlignment;
 
-  protected PropertiesRootBlock(@NotNull ASTNode node,
-                                @Nullable Wrap wrap, CodeStyleSettings settings) {
-    super(node, wrap, Alignment.createAlignment());
+  PropertiesRootBlock(@NotNull ASTNode node,
+                      CodeStyleSettings settings) {
+    super(node, null, Alignment.createAlignment());
     mySettings = settings;
     mySeparatorAlignment = Alignment.createAlignment(true, Alignment.Anchor.LEFT);
   }
 
   @Override
   protected List<Block> buildChildren() {
-    final List<Block> result = new ArrayList<Block>();
+    final List<Block> result = new ArrayList<>();
     ASTNode child = myNode.getFirstChildNode();
     while (child != null) {
       if (!(child instanceof PsiWhiteSpace)) {
-        if (child.getElementType() instanceof PropertyListStubElementType) {
+        if (child.getElementType() == PropertiesElementTypes.PROPERTIES_LIST) {
           ASTNode propertyNode = child.getFirstChildNode();
           while (propertyNode != null) {
-            if (propertyNode.getElementType() instanceof PropertyStubElementType) {
+            if (propertyNode.getElementType() == PropertiesElementTypes.PROPERTY) {
               collectPropertyBlock(propertyNode, result);
             }
             else if (PropertiesTokenTypes.END_OF_LINE_COMMENT.equals(propertyNode.getElementType()) ||
@@ -81,7 +80,7 @@ public class PropertiesRootBlock extends AbstractBlock {
     return result;
   }
 
-  private void collectPropertyBlock(ASTNode propertyNode, List<Block> collector) {
+  private void collectPropertyBlock(ASTNode propertyNode, List<? super Block> collector) {
     final ASTNode[] nonWhiteSpaces = propertyNode.getChildren(TokenSet.create(PropertiesTokenTypes.KEY_CHARACTERS,
                                                                               PropertiesTokenTypes.KEY_VALUE_SEPARATOR,
                                                                               PropertiesTokenTypes.VALUE_CHARACTERS));
@@ -90,7 +89,9 @@ public class PropertiesRootBlock extends AbstractBlock {
         collector.add(new PropertyBlock(node, null));
       }
       if (PropertiesTokenTypes.KEY_VALUE_SEPARATOR.equals(node.getElementType())) {
-        collector.add(new PropertyBlock(node, mySettings.ALIGN_GROUP_FIELD_DECLARATIONS ? mySeparatorAlignment : null));
+        collector.add(new PropertyBlock(node, mySettings.getCommonSettings(PropertiesLanguage.INSTANCE).ALIGN_GROUP_FIELD_DECLARATIONS
+                                              ? mySeparatorAlignment
+                                              : null));
       }
       if (node instanceof PropertyValueImpl) {
         collector.add(new PropertyBlock(node, null));
@@ -104,10 +105,11 @@ public class PropertiesRootBlock extends AbstractBlock {
     if (child1 == null) {
       return null;
     }
-    return (mySettings.getCustomSettings(PropertiesCodeStyleSettings.class).SPACES_AROUND_KEY_VALUE_DELIMITER &&
-            (isSeparator(child1) || isSeparator(child2))) || isKeyValue(child1, child2)
+    return mySettings.getCustomSettings(PropertiesCodeStyleSettings.class).SPACES_AROUND_KEY_VALUE_DELIMITER &&
+            (isSeparator(child1) || isSeparator(child2)) || isKeyValue(child1, child2)
            ? Spacing.createSpacing(1, 1, 0, true, 0)
-           : Spacing.createSpacing(0, 0, 0, true, 0);
+           : Spacing.createSpacing(0, 0, 0, true,
+                                   mySettings.getCustomSettings(PropertiesCodeStyleSettings.class).KEEP_BLANK_LINES ? 999 : 0);
   }
 
   private static boolean isKeyValue(Block maybeKey, Block maybeValue) {
@@ -115,11 +117,8 @@ public class PropertiesRootBlock extends AbstractBlock {
         !PropertiesTokenTypes.KEY_CHARACTERS.equals(((PropertyBlock)maybeKey).getNode().getElementType())) {
       return false;
     }
-    if (!(maybeValue instanceof PropertyBlock) ||
-        !PropertiesTokenTypes.VALUE_CHARACTERS.equals(((PropertyBlock)maybeValue).getNode().getElementType())) {
-      return false;
-    }
-    return true;
+    return maybeValue instanceof PropertyBlock &&
+           PropertiesTokenTypes.VALUE_CHARACTERS.equals(((PropertyBlock)maybeValue).getNode().getElementType());
   }
 
   private static boolean isSeparator(Block block) {

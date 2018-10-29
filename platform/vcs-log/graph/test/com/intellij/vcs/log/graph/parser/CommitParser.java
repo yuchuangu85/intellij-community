@@ -33,7 +33,7 @@ public class CommitParser {
     int separatorIndex = nextSeparatorIndex(line, 0);
     String commitHashStr = line.substring(0, separatorIndex);
 
-    String parentHashStr = line.substring(separatorIndex + 2, line.length());
+    String parentHashStr = line.substring(separatorIndex + 2);
     String[] parentsHashes = parentHashStr.split("\\s");
     return Pair.create(commitHashStr, parentsHashes);
   }
@@ -56,7 +56,7 @@ public class CommitParser {
 
   public static List<String> toLines(@NotNull String in) {
     String[] split = in.split("\n");
-    List<String> result = new ArrayList<String>();
+    List<String> result = new ArrayList<>();
     for (String line : split) {
       if (!line.isEmpty()) {
         result.add(line);
@@ -67,7 +67,7 @@ public class CommitParser {
 
   @NotNull
   public static List<GraphCommit<String>> parseStringCommitList(@NotNull String input) {
-    List<GraphCommit<String>> vcsCommitParents = new ArrayList<GraphCommit<String>>();
+    List<GraphCommit<String>> vcsCommitParents = new ArrayList<>();
     for (String line : toLines(input)) {
       vcsCommitParents.add(CommitParser.parseCommitParentsAsString(line));
     }
@@ -76,7 +76,7 @@ public class CommitParser {
 
   @NotNull
   public static List<GraphCommit<Integer>> parseIntegerCommitList(@NotNull String input) {
-    List<GraphCommit<Integer>> vcsCommitParents = new ArrayList<GraphCommit<Integer>>();
+    List<GraphCommit<Integer>> vcsCommitParents = new ArrayList<>();
     for (String line : toLines(input)) {
       vcsCommitParents.add(CommitParser.parseCommitParentsAsInteger(line));
     }

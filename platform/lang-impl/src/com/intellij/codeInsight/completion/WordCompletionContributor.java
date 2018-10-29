@@ -23,7 +23,6 @@ import com.intellij.lang.LanguageWordCompletion;
 import com.intellij.lang.ParserDefinition;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.DumbService;
-import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.patterns.ElementPattern;
 import com.intellij.psi.*;
@@ -48,12 +47,12 @@ public class WordCompletionContributor extends CompletionContributor implements 
   @Override
   public void fillCompletionVariants(@NotNull final CompletionParameters parameters, @NotNull final CompletionResultSet result) {
     if (parameters.getCompletionType() == CompletionType.BASIC && shouldPerformWordCompletion(parameters)) {
-      addWordCompletionVariants(result, parameters, Collections.<String>emptySet());
+      addWordCompletionVariants(result, parameters, Collections.emptySet());
     }
   }
 
   public static void addWordCompletionVariants(CompletionResultSet result, final CompletionParameters parameters, Set<String> excludes) {
-    final Set<String> realExcludes = new HashSet<String>(excludes);
+    final Set<String> realExcludes = new HashSet<>(excludes);
     for (String exclude : excludes) {
       String[] words = exclude.split("[ \\.-]");
       if (words.length > 0 && StringUtil.isNotEmpty(words[0])) {
@@ -94,7 +93,8 @@ public class WordCompletionContributor extends CompletionContributor implements 
     }
     int offset = manipulator.getRangeInElement(localString).getStartOffset();
     PsiFile file = position.getContainingFile();
-    final CompletionResultSet fullStringResult = result.withPrefixMatcher( file.getText().substring(offset + localString.getTextRange().getStartOffset(), parameters.getOffset()));
+    String prefix = file.getText().substring(offset + localString.getTextRange().getStartOffset(), parameters.getOffset());
+    CompletionResultSet fullStringResult = result.withPrefixMatcher(new PlainPrefixMatcher(prefix));
     file.accept(new PsiRecursiveElementWalkingVisitor() {
       @Override
       public void visitElement(PsiElement element) {
@@ -135,7 +135,7 @@ public class WordCompletionContributor extends CompletionContributor implements 
     final PsiFile file = insertedElement.getContainingFile();
     final CompletionData data = CompletionUtil.getCompletionDataByElement(insertedElement, file);
     if (data != null) {
-      Set<CompletionVariant> toAdd = new HashSet<CompletionVariant>();
+      Set<CompletionVariant> toAdd = new HashSet<>();
       data.addKeywordVariants(toAdd, insertedElement, file);
       for (CompletionVariant completionVariant : toAdd) {
         if (completionVariant.hasKeywordCompletions()) {
@@ -165,7 +165,7 @@ public class WordCompletionContributor extends CompletionContributor implements 
   }
 
   public static Set<String> getAllWords(final PsiElement context, final int offset) {
-    final Set<String> words = new LinkedHashSet<String>();
+    final Set<String> words = new LinkedHashSet<>();
     if (StringUtil.isEmpty(CompletionUtil.findJavaIdentifierPrefix(context, offset))) {
       return words;
     }

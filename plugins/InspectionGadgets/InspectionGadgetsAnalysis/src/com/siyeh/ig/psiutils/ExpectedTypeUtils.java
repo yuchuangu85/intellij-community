@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2015 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2017 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,9 @@ package com.siyeh.ig.psiutils;
 import com.intellij.codeInsight.ExceptionUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
+import com.intellij.psi.infos.MethodCandidateInfo;
 import com.intellij.psi.tree.IElementType;
-import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.util.PsiTypesUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
@@ -58,15 +59,14 @@ public class ExpectedTypeUtils {
   private static class ExpectedTypeVisitor extends JavaElementVisitor {
 
     /**
-     * @noinspection StaticCollection
      */
-    private static final Set<IElementType> arithmeticOps = new THashSet<IElementType>(5);
+    private static final Set<IElementType> arithmeticOps = new THashSet<>(5);
 
-    private static final Set<IElementType> booleanOps = new THashSet<IElementType>(5);
+    private static final Set<IElementType> booleanOps = new THashSet<>(5);
 
-    private static final Set<IElementType> shiftOps = new THashSet<IElementType>(3);
+    private static final Set<IElementType> shiftOps = new THashSet<>(3);
 
-    private static final Set<IElementType> operatorAssignmentOps = new THashSet<IElementType>(11);
+    private static final Set<IElementType> operatorAssignmentOps = new THashSet<>(11);
 
     static {
       arithmeticOps.add(JavaTokenType.PLUS);
@@ -123,7 +123,10 @@ public class ExpectedTypeUtils {
 
     @Override
     public void visitVariable(@NotNull PsiVariable variable) {
-      expectedType = variable.getType();
+      final PsiTypeElement typeElement = variable.getTypeElement();
+      if (typeElement != null && !typeElement.isInferredType()) {
+        expectedType = variable.getType();
+      }
     }
 
     @Override
@@ -233,18 +236,7 @@ public class ExpectedTypeUtils {
     }
 
     @Override
-    public void visitPrefixExpression(@NotNull PsiPrefixExpression expression) {
-      final PsiType type = expression.getType();
-      if (type instanceof PsiPrimitiveType) {
-        expectedType = type;
-      }
-      else {
-        expectedType = PsiPrimitiveType.getUnboxedType(type);
-      }
-    }
-
-    @Override
-    public void visitPostfixExpression(@NotNull PsiPostfixExpression expression) {
+    public void visitUnaryExpression(@NotNull PsiUnaryExpression expression) {
       final PsiType type = expression.getType();
       if (type instanceof PsiPrimitiveType) {
         expectedType = type;
@@ -379,13 +371,7 @@ public class ExpectedTypeUtils {
 
     @Override
     public void visitReturnStatement(@NotNull PsiReturnStatement returnStatement) {
-      final PsiElement method = PsiTreeUtil.getParentOfType(returnStatement, PsiMethod.class, PsiLambdaExpression.class);
-      if (method instanceof PsiMethod) {
-        expectedType = ((PsiMethod)method).getReturnType();
-      }
-      else if (method instanceof PsiLambdaExpression) {
-        expectedType = LambdaUtil.getFunctionalInterfaceReturnType((PsiLambdaExpression)method);
-      }
+      expectedType = PsiTypesUtil.getMethodReturnType(returnStatement);
     }
 
     @Override
@@ -439,8 +425,8 @@ public class ExpectedTypeUtils {
     @NotNull
     private static JavaResolveResult findCalledMethod(PsiExpressionList expressionList) {
       final PsiElement parent = expressionList.getParent();
-      if (parent instanceof PsiCallExpression) {
-        final PsiCallExpression call = (PsiCallExpression)parent;
+      if (parent instanceof PsiCall) {
+        final PsiCall call = (PsiCall)parent;
         return call.resolveMethodGenerics();
       }
       else if (parent instanceof PsiAnonymousClass) {
@@ -614,37 +600,22 @@ public class ExpectedTypeUtils {
 
     @Nullable
     private static PsiType getTypeOfParameter(@NotNull JavaResolveResult result, int parameterPosition) {
+      if (parameterPosition < 0 ) {
+        return null;
+      }
       final PsiMethod method = (PsiMethod)result.getElement();
       if (method == null) {
         return null;
       }
-      final PsiSubstitutor substitutor = result.getSubstitutor();
       final PsiParameterList parameterList = method.getParameterList();
-      if (parameterPosition < 0) {
+      final PsiParameter[] parameters = parameterList.getParameters();
+      if (parameters.length == 0) {
         return null;
       }
-      final int parametersCount = parameterList.getParametersCount();
-      final PsiParameter[] parameters;
-      if (parameterPosition >= parametersCount) {
-        final int lastParameterPosition = parametersCount - 1;
-        if (lastParameterPosition < 0) {
-          return null;
-        }
-        parameters = parameterList.getParameters();
-        final PsiParameter lastParameter = parameters[lastParameterPosition];
-        if (lastParameter.isVarArgs()) {
-          final PsiArrayType arrayType = (PsiArrayType)lastParameter.getType();
-          return substitutor.substitute(arrayType.getComponentType());
-        }
-        return null;
-      }
-      parameters = parameterList.getParameters();
-      final PsiParameter parameter = parameters[parameterPosition];
-      final PsiType parameterType = parameter.getType();
-      if (parameter.isVarArgs()) {
-        final PsiArrayType arrayType = (PsiArrayType)parameterType;
-        return substitutor.substitute(arrayType.getComponentType());
-      }
+      final boolean isVarargs = result instanceof MethodCandidateInfo && 
+                                ((MethodCandidateInfo)result).getApplicabilityLevel() == MethodCandidateInfo.ApplicabilityLevel.VARARGS;
+      final PsiType parameterType = PsiTypesUtil.getParameterType(parameters, parameterPosition, isVarargs);
+      final PsiSubstitutor substitutor = result.getSubstitutor();
       final PsiType type = GenericsUtil.getVariableTypeByExpressionType(substitutor.substitute(parameterType));
       if (type == null) {
         return null;

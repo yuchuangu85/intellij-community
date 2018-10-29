@@ -58,8 +58,8 @@ public class XmlTagBlock extends AbstractXmlBlock{
     final Wrap tagBeginWrap = createTagBeginWrapping(getTag());
     final Alignment attrAlignment = Alignment.createAlignment();
     final Alignment textAlignment = Alignment.createAlignment();
-    final ArrayList<Block> result = new ArrayList<Block>(3);
-    ArrayList<Block> localResult = new ArrayList<Block>(1);
+    final ArrayList<Block> result = new ArrayList<>(3);
+    ArrayList<Block> localResult = new ArrayList<>(1);
 
     boolean insideTag = true;
 
@@ -72,7 +72,7 @@ public class XmlTagBlock extends AbstractXmlBlock{
         if (child.getElementType() == XmlTokenType.XML_TAG_END) {
           child = processChild(localResult,child, wrap, alignment, myXmlFormattingPolicy.getTagEndIndent());
           result.add(createTagDescriptionNode(localResult));
-          localResult = new ArrayList<Block>(1);
+          localResult = new ArrayList<>(1);
           insideTag = true;
         }
         else if (child.getElementType() == XmlTokenType.XML_START_TAG_START) {
@@ -80,20 +80,36 @@ public class XmlTagBlock extends AbstractXmlBlock{
           if (!localResult.isEmpty()) {
             result.add(createTagContentNode(localResult));
           }
-          localResult = new ArrayList<Block>(1);
+          localResult = new ArrayList<>(1);
           child = processChild(localResult,child, wrap, alignment, null);
         }
         else if (child.getElementType() == XmlTokenType.XML_END_TAG_START) {
           insideTag = false;
           if (!localResult.isEmpty()) {
             result.add(createTagContentNode(localResult));
-            localResult = new ArrayList<Block>(1);
+            localResult = new ArrayList<>(1);
           }
           child = processChild(localResult,child, wrap, alignment, null);
         } else if (child.getElementType() == XmlTokenType.XML_EMPTY_ELEMENT_END) {
           child = processChild(localResult,child, wrap, alignment, myXmlFormattingPolicy.getTagEndIndent());
           result.add(createTagDescriptionNode(localResult));
-          localResult = new ArrayList<Block>(1);
+          localResult = new ArrayList<>(1);
+        }
+        else if (isTagListStart(child.getElementType())) {
+          child = processChild(localResult, child, wrap, alignment, null);
+          result.add(createTagDescriptionNode(localResult));
+          localResult = new ArrayList<>(1);
+          insideTag = true;
+        }
+        else if (isTagListEnd(child.getElementType())){
+          insideTag = false;
+          if (!localResult.isEmpty()) {
+            result.add(createTagContentNode(localResult));
+            localResult = new ArrayList<>(1);
+          }
+          child = processChild(localResult,child, wrap, alignment, myXmlFormattingPolicy.getTagEndIndent());
+          result.add(createTagDescriptionNode(localResult));
+          localResult = new ArrayList<>(1);
         }
         else if (isJspxJavaContainingNode(child)) {
           createJspTextNode(localResult, child, getChildIndent());
@@ -130,6 +146,14 @@ public class XmlTagBlock extends AbstractXmlBlock{
 
     return result;
 
+  }
+
+  protected boolean isTagListEnd(IElementType elementType) {
+    return false;
+  }
+
+  protected boolean isTagListStart(IElementType elementType) {
+    return false;
   }
 
   protected boolean isJspResult(final ArrayList<Block> localResult) {

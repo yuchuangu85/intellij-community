@@ -21,7 +21,6 @@ import com.intellij.openapi.util.Disposer;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.WeakHashMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
@@ -31,13 +30,15 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public final class ObjectTree<T> {
   private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.util.objectTree.ObjectTree");
+  
+  private static final ThreadLocal<Throwable> ourTopmostDisposeTrace = new ThreadLocal<Throwable>();
 
   private final List<ObjectTreeListener> myListeners = ContainerUtil.createLockFreeCopyOnWriteList();
 
   // identity used here to prevent problems with hashCode/equals overridden by not very bright minds
   private final Set<T> myRootObjects = ContainerUtil.newIdentityTroveSet(); // guarded by treeLock
   private final Map<T, ObjectNode<T>> myObject2NodeMap = ContainerUtil.newIdentityTroveMap(); // guarded by treeLock
-  private final Map<Object, Object> myDisposedObjects = new WeakHashMap<Object, Object>(100, 0.5f, ContainerUtil.identityStrategy()); // guarded by treeLock
+  private final Map<Object, Object> myDisposedObjects = ContainerUtil.createWeakMap(100, 0.5f, ContainerUtil.identityStrategy()); // guarded by treeLock
 
   private final List<ObjectNode<T>> myExecutedNodes = new ArrayList<ObjectNode<T>>(); // guarded by myExecutedNodes
   private final List<T> myExecutedUnregisteredNodes = new ArrayList<T>(); // guarded by myExecutedUnregisteredNodes
@@ -50,8 +51,13 @@ public final class ObjectTree<T> {
     return myObject2NodeMap.get(object);
   }
 
-  ObjectNode<T> putNode(@NotNull T object, @Nullable("null means remove") ObjectNode<T> node) {
-    return node == null ? myObject2NodeMap.remove(object) : myObject2NodeMap.put(object, node);
+  void putNode(@NotNull T object, @Nullable("null means remove") ObjectNode<T> node) {
+    if (node == null) {
+      myObject2NodeMap.remove(object);
+    }
+    else {
+      myObject2NodeMap.put(object, node);
+    }
   }
 
   @NotNull
@@ -60,14 +66,19 @@ public final class ObjectTree<T> {
   }
 
   public final void register(@NotNull T parent, @NotNull T child) {
-    Object wasDisposed = getDisposalInfo(parent);
-    if (wasDisposed != null) {
-      throw new IncorrectOperationException("Sorry but parent: " + parent + " has already been disposed " +
-                                            "(see the cause for stacktrace) so the child: "+child+" will never be disposed",
-                                            wasDisposed instanceof Throwable ? (Throwable)wasDisposed : null);
-    }
-
+    if (parent == child) throw new IllegalArgumentException("Cannot register to itself: "+parent);
     synchronized (treeLock) {
+      Object wasDisposed = getDisposalInfo(parent);
+      if (wasDisposed != null) {
+        throw new IncorrectOperationException("Sorry but parent: " + parent + " has already been disposed " +
+                                              "(see the cause for stacktrace) so the child: "+child+" will never be disposed",
+                                              wasDisposed instanceof Throwable ? (Throwable)wasDisposed : null);
+      }
+
+      if (isDisposing(parent)) {
+        throw new IncorrectOperationException("Sorry but parent: " + parent + " is being disposed so the child: "+child+" will never be disposed");
+      }
+
       myDisposedObjects.remove(child); // if we dispose thing and then register it back it means it's not disposed anymore
       ObjectNode<T> parentNode = getNode(parent);
       if (parentNode == null) parentNode = createNodeFor(parent, null);
@@ -120,27 +131,48 @@ public final class ObjectTree<T> {
     return myModification.incrementAndGet();
   }
 
-  public final boolean executeAll(@NotNull T object, boolean disposeTree, @NotNull ObjectTreeAction<T> action, boolean processUnregistered) {
+  public final void executeAll(@NotNull T object, @NotNull ObjectTreeAction<T> action, boolean processUnregistered) {
     ObjectNode<T> node;
     synchronized (treeLock) {
       node = getNode(object);
     }
-    if (node == null) {
-      if (processUnregistered) {
-        rememberDisposedTrace(object);
-        executeUnregistered(object, action);
-        return true;
-      }
-      return false;
+    boolean needTrace = (node != null || processUnregistered) && Disposer.isDebugMode() && ourTopmostDisposeTrace.get() == null;
+    if (needTrace) {
+      ourTopmostDisposeTrace.set(ThrowableInterner.intern(new Throwable()));
     }
-    node.execute(disposeTree, action);
-    return true;
+    try {
+      if (node == null) {
+        if (processUnregistered) {
+          rememberDisposedTrace(object);
+          executeUnregistered(object, action);
+        }
+      }
+      else {
+        node.execute(action);
+      }
+    }
+    finally {
+      if (needTrace) {
+        ourTopmostDisposeTrace.remove();
+      }
+    }
+  }
+
+  public boolean isDisposing(@NotNull T disposable) {
+    List<ObjectNode<T>> guard = getNodesInExecution();
+    //noinspection SynchronizationOnLocalVariableOrMethodParameter
+    synchronized (guard) {
+      for (ObjectNode<T> node : guard) {
+        if (node.getObject() == disposable) return true;
+      }
+    }
+    return false;
   }
 
   @SuppressWarnings("SynchronizationOnLocalVariableOrMethodParameter")
   static <T> void executeActionWithRecursiveGuard(@NotNull T object,
                                                   @NotNull List<T> recursiveGuard,
-                                                  @NotNull final ObjectTreeAction<T> action) {
+                                                  @NotNull final ObjectTreeAction<? super T> action) {
     synchronized (recursiveGuard) {
       if (ArrayUtil.indexOf(recursiveGuard, object, ContainerUtil.<T>identityStrategy()) != -1) return;
       recursiveGuard.add(object);
@@ -158,23 +190,25 @@ public final class ObjectTree<T> {
     }
   }
 
-  private void executeUnregistered(@NotNull final T object, @NotNull final ObjectTreeAction<T> action) {
+  private void executeUnregistered(@NotNull final T object, @NotNull final ObjectTreeAction<? super T> action) {
     executeActionWithRecursiveGuard(object, myExecutedUnregisteredNodes, action);
   }
 
-  public final void executeChildAndReplace(@NotNull T toExecute, @NotNull T toReplace, boolean disposeTree, @NotNull ObjectTreeAction<T> action) {
+  public final void executeChildAndReplace(@NotNull T toExecute,
+                                           @NotNull T toReplace,
+                                           @NotNull ObjectTreeAction<T> action) {
     final ObjectNode<T> toExecuteNode;
     T parentObject;
     synchronized (treeLock) {
       toExecuteNode = getNode(toExecute);
-      assert toExecuteNode != null : "Object " + toExecute + " wasn't registered or already disposed";
+      if (toExecuteNode == null) throw new IllegalArgumentException("Object " + toExecute + " wasn't registered or already disposed");
 
       final ObjectNode<T> parent = toExecuteNode.getParent();
-      assert parent != null : "Object " + toExecute + " is not connected to the tree - doesn't have parent";
+      if (parent == null) throw new IllegalArgumentException("Object " + toExecute + " is not connected to the tree - doesn't have parent");
       parentObject = parent.getObject();
     }
 
-    toExecuteNode.execute(disposeTree, action);
+    toExecuteNode.execute(action);
     register(parentObject, toReplace);
   }
 
@@ -199,7 +233,7 @@ public final class ObjectTree<T> {
     myRootObjects.remove(object);
   }
 
-  @SuppressWarnings({"UseOfSystemOutOrSystemErr", "HardCodedStringLiteral"})
+  @SuppressWarnings({"HardCodedStringLiteral"})
   public void assertIsEmpty(boolean throwError) {
     synchronized (treeLock) {
       for (T object : myRootObjects) {
@@ -258,7 +292,8 @@ public final class ObjectTree<T> {
 
   private void rememberDisposedTrace(@NotNull Object object) {
     synchronized (treeLock) {
-      myDisposedObjects.put(object, Disposer.isDebugMode() ? ThrowableInterner.intern(new Throwable()) : Boolean.TRUE);
+      Throwable trace = ourTopmostDisposeTrace.get();
+      myDisposedObjects.put(object, trace != null ? trace : Boolean.TRUE);
     }
   }
 

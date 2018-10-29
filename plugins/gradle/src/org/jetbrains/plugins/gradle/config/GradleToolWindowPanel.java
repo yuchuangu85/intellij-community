@@ -23,7 +23,7 @@ import java.util.List;
 
 /**
  * Base class for high-level Gradle GUI controls used at the Gradle tool window. The basic idea is to encapsulate the same features in
- * this class and allow to extend it via <code>Template Method</code> pattern. The shared features are listed below:
+ * this class and allow to extend it via {@code Template Method} pattern. The shared features are listed below:
  * <pre>
  * <ul>
  *   <li>provide common actions at the toolbar;</li>
@@ -34,7 +34,6 @@ import java.util.List;
  * Not thread-safe.
  * 
  * @author Denis Zhdanov
- * @since 12/26/11 5:19 PM
  */
 public abstract class GradleToolWindowPanel extends SimpleToolWindowPanel {
 
@@ -91,7 +90,6 @@ public abstract class GradleToolWindowPanel extends SimpleToolWindowPanel {
     final JComponent payloadControl = buildContent();
     JScrollPane scrollPane = ScrollPaneFactory.createScrollPane(payloadControl);
     JScrollBar scrollBar = scrollPane.getVerticalScrollBar();
-    scrollBar.setUnitIncrement(scrollBar.getUnitIncrement() * 7);
     myContent.add(scrollPane, CONTENT_CARD_NAME);
     RichTextControlBuilder builder = new RichTextControlBuilder();
     builder.setBackgroundColor(payloadControl.getBackground());

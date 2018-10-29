@@ -19,6 +19,7 @@ package com.intellij.ui;
 import com.intellij.util.ui.UIUtil;
 import org.intellij.lang.annotations.JdkConstants;
 
+import javax.swing.event.MouseInputListener;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -28,11 +29,12 @@ import static java.awt.Cursor.*;
 /**
  * @author Sergey Malenkov
  */
-abstract class WindowMouseListener extends MouseAdapter {
+abstract class WindowMouseListener extends MouseAdapter implements MouseInputListener {
   private final Component myContent;
   @JdkConstants.CursorType int myType;
   private Point myLocation;
   private Rectangle myViewBounds;
+  private boolean wasDragged;
 
   /**
    * @param content the window content to find a window, or {@code null} to use a component from a mouse event
@@ -83,15 +85,29 @@ abstract class WindowMouseListener extends MouseAdapter {
   }
 
   /**
+   * @param view the component to move/resize
+   * @return {@code true} if the specified component cannot be moved/resized, or {@code false} otherwise
+   */
+  protected boolean isDisabled(Component view) {
+    if (view instanceof Frame) {
+      int state = ((Frame)view).getExtendedState();
+      if (isStateSet(Frame.ICONIFIED, state)) return true;
+      if (isStateSet(Frame.MAXIMIZED_BOTH, state)) return true;
+    }
+    return false;
+  }
+
+  /**
    * Updates a cursor and starts moving/resizing if the {@code start} is specified.
    */
   private void update(MouseEvent event, boolean start) {
     if (event.isConsumed()) return;
+    if (start) wasDragged = false; // reset dragged state when mouse pressed
     if (myLocation == null) {
       Component content = getContent(event);
       Component view = getView(content);
       if (view != null) {
-        myType = getCursorType(view, event.getLocationOnScreen());
+        myType = isDisabled(view) ? CUSTOM_CURSOR : getCursorType(view, event.getLocationOnScreen());
         setCursor(content, getPredefinedCursor(myType == CUSTOM_CURSOR ? DEFAULT_CURSOR : myType));
         if (start && myType != CUSTOM_CURSOR) {
           myLocation = event.getLocationOnScreen();
@@ -107,27 +123,41 @@ abstract class WindowMouseListener extends MouseAdapter {
    */
   private void process(MouseEvent event, boolean stop) {
     if (event.isConsumed()) return;
+    if (!stop) wasDragged = true; // set dragged state when mouse dragged
     if (myLocation != null && myViewBounds != null) {
       Component content = getContent(event);
       Component view = getView(content);
       if (view != null) {
         Rectangle bounds = new Rectangle(myViewBounds);
-        updateBounds(bounds, view, event.getXOnScreen() - myLocation.x, event.getYOnScreen() - myLocation.y);
-        if (!bounds.equals(view.getBounds())) {
+        int dx = event.getXOnScreen() - myLocation.x;
+        int dy = event.getYOnScreen() - myLocation.y;
+        if (myType == DEFAULT_CURSOR && view instanceof Frame) {
+          int state = ((Frame)view).getExtendedState();
+          if (isStateSet(Frame.MAXIMIZED_HORIZ, state)) dx = 0;
+          if (isStateSet(Frame.MAXIMIZED_VERT, state)) dy = 0;
+        }
+        updateBounds(bounds, view, dx, dy);
+        Rectangle viewBounds = view.getBounds();
+        if (!bounds.equals(viewBounds)) {
+          boolean moved = bounds.x != viewBounds.x || bounds.y != viewBounds.y;
+          boolean resized = bounds.width != viewBounds.width || bounds.height != viewBounds.height;
           view.setBounds(bounds);
           view.invalidate();
           view.validate();
           view.repaint();
+          if (moved) notifyMoved();
+          if (resized) notifyResized();
         }
       }
       if (stop) {
         setCursor(content, getPredefinedCursor(DEFAULT_CURSOR));
         myLocation = null;
+        if (wasDragged) myViewBounds = null; // no mouse clicked when mouse released after mouse dragged
       }
       event.consume();
     }
     else if (stop && myViewBounds != null) {
-      myViewBounds = null; // consume second call
+      myViewBounds = null; // consume mouse clicked for consumed mouse released if no mouse dragged
       event.consume();
     }
   }
@@ -156,7 +186,7 @@ abstract class WindowMouseListener extends MouseAdapter {
    * It can be overridden if another approach is used.
    */
   protected void setCursor(Component content, Cursor cursor) {
-    content.setCursor(cursor);
+    UIUtil.setCursor(content, cursor);
   }
 
   /**
@@ -165,4 +195,12 @@ abstract class WindowMouseListener extends MouseAdapter {
   public boolean isBusy() {
     return myLocation != null;
   }
+
+  static boolean isStateSet(int mask, int state) {
+    return mask == (mask & state);
+  }
+
+  protected void notifyMoved() {}
+
+  protected void notifyResized() {}
 }

@@ -17,7 +17,6 @@ package org.jetbrains.plugins.groovy.testIntegration;
 
 import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInsight.CodeInsightUtil;
-import com.intellij.openapi.application.AccessToken;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.editor.Editor;
@@ -58,8 +57,7 @@ public class GroovyTestGenerator implements TestGenerator {
   @Nullable
   @Override
   public PsiElement generateTest(final Project project, final CreateTestDialog d) {
-    AccessToken accessToken = WriteAction.start();
-    try {
+    return WriteAction.compute(() -> {
       final PsiClass test = (PsiClass)PostprocessReformattingAspect.getInstance(project).postponeFormattingInside(
         (Computable<PsiElement>)() -> {
           try {
@@ -93,10 +91,7 @@ public class GroovyTestGenerator implements TestGenerator {
       JavaCodeStyleManager.getInstance(test.getProject()).shortenClassReferences(test);
       CodeStyleManager.getInstance(project).reformat(test);
       return test;
-    }
-    finally {
-      accessToken.finish();
-    }
+    });
   }
 
   @Override
@@ -135,10 +130,10 @@ public class GroovyTestGenerator implements TestGenerator {
   private static void addTestMethods(Editor editor,
                                      PsiClass targetClass,
                                      TestFramework descriptor,
-                                     Collection<MemberInfo> methods,
+                                     Collection<? extends MemberInfo> methods,
                                      boolean generateBefore,
                                      boolean generateAfter) throws IncorrectOperationException {
-    final HashSet<String> existingNames = new HashSet<String>();
+    final HashSet<String> existingNames = new HashSet<>();
     if (generateBefore) {
       generateMethod(TestIntegrationUtils.MethodKind.SET_UP, descriptor, targetClass, editor, null, existingNames);
     }
@@ -160,7 +155,7 @@ public class GroovyTestGenerator implements TestGenerator {
                                      TestFramework descriptor,
                                      PsiClass targetClass,
                                      Editor editor,
-                                     @Nullable String name, Set<String> existingNames) {
+                                     @Nullable String name, Set<? super String> existingNames) {
     GroovyPsiElementFactory f = GroovyPsiElementFactory.getInstance(targetClass.getProject());
     PsiMethod method = (PsiMethod)targetClass.add(f.createMethod("dummy", PsiType.VOID));
     PsiDocumentManager.getInstance(targetClass.getProject()).doPostponedOperationsAndUnblockDocument(editor.getDocument());

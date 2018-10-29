@@ -14,12 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * Created by IntelliJ IDEA.
- * User: Anna.Kozlova
- * Date: 16-Aug-2006
- * Time: 16:56:21
- */
 package com.intellij.openapi.roots.ui.configuration;
 
 import com.intellij.openapi.actionSystem.AnAction;
@@ -27,6 +21,8 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectBundle;
+import com.intellij.openapi.projectRoots.JavaSdk;
+import com.intellij.openapi.projectRoots.JavaSdkVersion;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.projectRoots.impl.ProjectJdkImpl;
 import com.intellij.openapi.roots.ui.configuration.projectRoot.JdkConfigurable;
@@ -38,16 +34,15 @@ import com.intellij.openapi.util.Conditions;
 import com.intellij.openapi.util.Ref;
 import com.intellij.ui.JBSplitter;
 import com.intellij.ui.TreeSpeedSearch;
-import com.intellij.util.Consumer;
 import com.intellij.util.IconUtil;
-import com.intellij.util.containers.Convertor;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.tree.DefaultMutableTreeNode;
-import javax.swing.tree.TreePath;
 import java.awt.*;
 import java.util.*;
+
+import static com.intellij.openapi.projectRoots.SimpleJavaSdkType.notSimpleJavaSdkType;
 
 public class ProjectJdksConfigurable extends MasterDetailsComponent {
   private final ProjectSdksModel myProjectJdksModel;
@@ -78,12 +73,7 @@ public class ProjectJdksConfigurable extends MasterDetailsComponent {
   @Override
   protected void initTree() {
     super.initTree();
-    new TreeSpeedSearch(myTree, new Convertor<TreePath, String>() {
-      @Override
-      public String convert(final TreePath treePath) {
-        return ((MyNode)treePath.getLastPathComponent()).getDisplayName();
-      }
-    }, true);
+    new TreeSpeedSearch(myTree, treePath -> ((MyNode)treePath.getLastPathComponent()).getDisplayName(), true);
 
     myTree.setRootVisible(false);
   }
@@ -118,7 +108,7 @@ public class ProjectJdksConfigurable extends MasterDetailsComponent {
   public void apply() throws ConfigurationException {
     final Ref<ConfigurationException> exceptionRef = Ref.create();
     try {
-      ProjectJdksConfigurable.super.apply();
+      super.apply();
       boolean modifiedJdks = false;
       for (int i = 0; i < myRoot.getChildCount(); i++) {
         final NamedConfigurable configurable = ((MyNode)myRoot.getChildAt(i)).getConfigurable();
@@ -129,7 +119,7 @@ public class ProjectJdksConfigurable extends MasterDetailsComponent {
       }
 
       if (myProjectJdksModel.isModified() || modifiedJdks) {
-        myProjectJdksModel.apply(ProjectJdksConfigurable.this);
+        myProjectJdksModel.apply(this);
       }
       myProjectJdksModel.setProjectSdk(getSelectedJdk());
     }
@@ -160,27 +150,27 @@ public class ProjectJdksConfigurable extends MasterDetailsComponent {
     if (myProjectJdksModel == null) {
       return null;
     }
-    final ArrayList<AnAction> actions = new ArrayList<AnAction>();
+    final ArrayList<AnAction> actions = new ArrayList<>();
     DefaultActionGroup group = new DefaultActionGroup(ProjectBundle.message("add.new.jdk.text"), true);
     group.getTemplatePresentation().setIcon(IconUtil.getAddIcon());
     myProjectJdksModel.createAddActions(group, myTree, projectJdk -> {
       addNode(new MyNode(new JdkConfigurable(((ProjectJdkImpl)projectJdk), myProjectJdksModel, TREE_UPDATER, myHistory, myProject), false), myRoot);
       selectNodeInTree(findNodeByObject(myRoot, projectJdk));
-    });
+    }, notSimpleJavaSdkType());
     actions.add(new MyActionGroupWrapper(group));
-    actions.add(new MyDeleteAction(Conditions.<Object[]>alwaysTrue()));
+    actions.add(new MyDeleteAction(Conditions.alwaysTrue()));
     return actions;
   }
 
   @Override
   protected void processRemovedItems() {
-    final Set<Sdk> jdks = new HashSet<Sdk>();
+    final Set<Sdk> jdks = new HashSet<>();
     for(int i = 0; i < myRoot.getChildCount(); i++){
       final DefaultMutableTreeNode node = (DefaultMutableTreeNode)myRoot.getChildAt(i);
       final NamedConfigurable namedConfigurable = (NamedConfigurable)node.getUserObject();
       jdks.add(((JdkConfigurable)namedConfigurable).getEditableObject());
     }
-    final HashMap<Sdk, Sdk> sdks = new HashMap<Sdk, Sdk>(myProjectJdksModel.getProjectSdks());
+    final HashMap<Sdk, Sdk> sdks = new HashMap<>(myProjectJdksModel.getProjectSdks());
     for (Sdk sdk : sdks.values()) {
       if (!jdks.contains(sdk)) {
         myProjectJdksModel.removeSdk(sdk);
@@ -190,7 +180,6 @@ public class ProjectJdksConfigurable extends MasterDetailsComponent {
 
   @Override
   protected boolean wasObjectStored(Object editableObject) {
-    //noinspection RedundantCast
     return myProjectJdksModel.getProjectSdks().containsKey((Sdk)editableObject);
   }
 
@@ -221,5 +210,14 @@ public class ProjectJdksConfigurable extends MasterDetailsComponent {
   @Nullable
   String getEmptySelectionString() {
     return "Select an SDK to view or edit its details here";
+  }
+
+  public void selectJdkVersion(JavaSdkVersion requiredJdkVersion) {
+    for (Sdk sdk : myProjectJdksModel.getSdks()) {
+      if (JavaSdk.getInstance().isOfVersionOrHigher(sdk, requiredJdkVersion)) {
+        selectJdk(sdk);
+        break;
+      }
+    }
   }
 }

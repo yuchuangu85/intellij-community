@@ -14,10 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * User: anna
- * Date: 23-May-2007
- */
 package com.theoryinpractice.testng.configuration;
 
 import com.intellij.execution.RunnerAndConfigurationSettings;
@@ -47,7 +43,7 @@ public abstract class AbstractTestNGSuiteConfigurationProducer extends TestNGCon
     if (containingFile == null) return false;
     final VirtualFile virtualFile = containingFile.getVirtualFile();
     if (virtualFile == null || !virtualFile.isValid()) return false;
-    if (!TestNGUtil.isTestngXML(virtualFile)) return false;
+    if (!TestNGUtil.isTestngSuiteFile(virtualFile)) return false;
     RunnerAndConfigurationSettings settings = cloneTemplateConfiguration(context);
     setupConfigurationModule(context, configuration);
     final Module originalModule = configuration.getConfigurationModule().getModule();
@@ -58,5 +54,10 @@ public abstract class AbstractTestNGSuiteConfigurationProducer extends TestNGCon
     settings.setName(configuration.getName());
     sourceElement.set(containingFile);
     return true;
+  }
+
+  @Override
+  protected boolean isApplicableTestType(String type, ConfigurationContext context) {
+    return TestType.SUITE.getType().equals(type);
   }
 }

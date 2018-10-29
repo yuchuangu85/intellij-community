@@ -35,8 +35,8 @@ public class GraphLayoutBuilder {
   private static final Logger LOG = Logger.getInstance(GraphLayoutBuilder.class);
 
   @NotNull
-  public static GraphLayoutImpl build(@NotNull LinearGraph graph, @NotNull Comparator<Integer> headNodeIndexComparator) {
-    List<Integer> heads = new ArrayList<Integer>();
+  public static GraphLayoutImpl build(@NotNull LinearGraph graph, @NotNull Comparator<? super Integer> headNodeIndexComparator) {
+    List<Integer> heads = new ArrayList<>();
     for (int i = 0; i < graph.nodesCount(); i++) {
       if (getUpNodes(graph, i).size() == 0) {
         heads.add(i);
@@ -62,8 +62,6 @@ public class GraphLayoutBuilder {
   @NotNull private final List<Integer> myHeadNodeIndex;
   @NotNull private final int[] myStartLayoutIndexForHead;
 
-  @NotNull private final DfsUtil myDfsUtil = new DfsUtil();
-
   private int currentLayoutIndex = 1;
 
   private GraphLayoutBuilder(@NotNull LinearGraph graph, @NotNull List<Integer> headNodeIndex) {
@@ -75,7 +73,7 @@ public class GraphLayoutBuilder {
   }
 
   private void dfs(int nodeIndex) {
-    myDfsUtil.nodeDfsIterator(nodeIndex, new DfsUtil.NextNode() {
+    DfsUtil.walk(nodeIndex, new DfsUtil.NextNode() {
       @Override
       public int fun(int currentNode) {
         boolean firstVisit = myLayoutIndex[currentNode] == 0;

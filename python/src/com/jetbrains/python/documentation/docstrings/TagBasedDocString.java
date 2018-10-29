@@ -24,7 +24,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -116,7 +115,7 @@ public abstract class TagBasedDocString extends DocStringLineParser implements S
       }
       if (tagMatcher != null) {
         final Substring tagName = line.getMatcherGroup(tagMatcher, 1);
-        final Substring argName = line.getMatcherGroup(tagMatcher, 2).trim();
+        Substring argName = line.getMatcherGroup(tagMatcher, 2).trim();
         final TextRange firstArgLineRange = line.getMatcherGroup(tagMatcher, 3).trim().getTextRange();
         final int linesCount = getLineCount();
         final int argStart = firstArgLineRange.getStartOffset();
@@ -137,19 +136,16 @@ public abstract class TagBasedDocString extends DocStringLineParser implements S
         else {
           if ("param".equals(tagNameString) || "parameter".equals(tagNameString) ||
               "arg".equals(tagNameString) || "argument".equals(tagNameString)) {
+            // Process declarations that combine type and description, e.g. ":param int foo: bar"
+            // as if there were both ":param foo: bar" and ":type foo: int"
             final Matcher argTypeMatcher = RE_ARG_TYPE.matcher(argName);
             if (argTypeMatcher.matches()) {
-              final Substring type = argName.getMatcherGroup(argTypeMatcher, 1).trim();
-              final Substring arg = argName.getMatcherGroup(argTypeMatcher, 2);
-              getTagValuesMap(TYPE).put(arg, type);
-            }
-            else {
-              getTagValuesMap(tagNameString).put(argName, argValue);
+              final Substring argType = argName.getMatcherGroup(argTypeMatcher, 1).trim();
+              argName = argName.getMatcherGroup(argTypeMatcher, 2);
+              getTagValuesMap(TYPE).put(argName, argType);
             }
           }
-          else {
-            getTagValuesMap(tagNameString).put(argName, argValue);
-          }
+          getTagValuesMap(tagNameString).put(argName, argValue);
         }
       }
     }
@@ -157,7 +153,7 @@ public abstract class TagBasedDocString extends DocStringLineParser implements S
   }
 
   protected static List<String> toUniqueStrings(List<?> objects) {
-    final List<String> result = new ArrayList<String>(objects.size());
+    final List<String> result = new ArrayList<>(objects.size());
     for (Object o : objects) {
       final String s = o.toString();
       if (!result.contains(s)) {
@@ -187,28 +183,30 @@ public abstract class TagBasedDocString extends DocStringLineParser implements S
   @Nullable
   public Substring getTagValue(String[] tagNames, @NotNull String argName) {
     for (String tagName : tagNames) {
-      Map<Substring, Substring> argValues = myArgTagValues.get(tagName);
-      if (argValues != null) {
-        return argValues.get(new Substring(argName));
+      final Map<Substring, Substring> argValues = myArgTagValues.get(tagName);
+      final Substring key = new Substring(argName);
+      if (argValues != null && argValues.containsKey(key)) {
+        return argValues.get(key);
       }
     }
     return null;
   }
 
   public List<Substring> getTagArguments(String... tagNames) {
+    final List<Substring> result = new ArrayList<>();
     for (String tagName : tagNames) {
       final Map<Substring, Substring> map = myArgTagValues.get(tagName);
       if (map != null) {
-        return new ArrayList<Substring>(map.keySet());
+        result.addAll(map.keySet());
       }
     }
-    return Collections.emptyList();
+    return result;
   }
 
   @NotNull
   @Override
   public List<Substring> getParameterSubstrings() {
-    final List<Substring> results = new ArrayList<Substring>();
+    final List<Substring> results = new ArrayList<>();
     results.addAll(getTagArguments(PARAM_TAGS));
     results.addAll(getTagArguments(PARAM_TYPE_TAGS));
     return results;

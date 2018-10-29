@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.lookup;
 
@@ -22,17 +8,16 @@ import com.intellij.codeInsight.completion.InsertHandler;
 import com.intellij.codeInsight.completion.InsertionContext;
 import com.intellij.codeInsight.lookup.impl.ElementLookupRenderer;
 import com.intellij.openapi.editor.Editor;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.util.ClassConditionKey;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Key;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.HashMap;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -61,13 +46,14 @@ public class LookupItem<T> extends MutableLookupElement<T> implements Comparable
   private double myPriority;
   private Map<Object,Object> myAttributes = null;
   public static final LookupItem[] EMPTY_ARRAY = new LookupItem[0];
-  private final Set<String> myAllLookupStrings = new HashSet<String>();
+  private final Set<String> myAllLookupStrings = new HashSet<>();
   private String myPresentable;
   private AutoCompletionPolicy myAutoCompletionPolicy = AutoCompletionPolicy.SETTINGS_DEPENDENT;
 
   /**
    * @deprecated use {@link LookupElementBuilder}
    */
+  @Deprecated
   public LookupItem(T o, @NotNull @NonNls String lookupString) {
     setObject(o);
     setLookupString(lookupString);
@@ -76,8 +62,9 @@ public class LookupItem<T> extends MutableLookupElement<T> implements Comparable
   /**
    * @deprecated use {@link LookupElementBuilder}
    */
+  @Deprecated
   public static LookupItem fromString(String s) {
-    return new LookupItem<String>(s, s);
+    return new LookupItem<>(s, s);
   }
 
   public void setObject(@NotNull T o) {
@@ -155,8 +142,13 @@ public class LookupItem<T> extends MutableLookupElement<T> implements Comparable
   }
 
   public void setAttribute(Object key, Object value){
+    if (value == null && myAttributes != null) {
+      myAttributes.remove(key);
+      return;
+    }
+
     if (myAttributes == null){
-      myAttributes = new HashMap<Object, Object>(5);
+      myAttributes = new HashMap<>(5);
     }
     myAttributes.put(key, value);
   }
@@ -168,7 +160,7 @@ public class LookupItem<T> extends MutableLookupElement<T> implements Comparable
     }
 
     if (myAttributes == null){
-      myAttributes = new HashMap<Object, Object>(5);
+      myAttributes = new HashMap<>(5);
     }
     myAttributes.put(key, value);
   }
@@ -184,7 +176,7 @@ public class LookupItem<T> extends MutableLookupElement<T> implements Comparable
   }
 
   @Override
-  public void handleInsert(final InsertionContext context) {
+  public void handleInsert(@NotNull final InsertionContext context) {
     final InsertHandler<? extends LookupElement> handler = getInsertHandler();
     if (handler != null) {
       //noinspection unchecked
@@ -260,7 +252,7 @@ public class LookupItem<T> extends MutableLookupElement<T> implements Comparable
 
   @Override
   public void renderElement(LookupElementPresentation presentation) {
-    for (final ElementLookupRenderer renderer : Extensions.getExtensions(ElementLookupRenderer.EP_NAME)) {
+    for (final ElementLookupRenderer renderer : ElementLookupRenderer.EP_NAME.getExtensionList()) {
       if (renderer.handlesItem(getObject())) {
         renderer.renderElement(this, getObject(), presentation);
         return;

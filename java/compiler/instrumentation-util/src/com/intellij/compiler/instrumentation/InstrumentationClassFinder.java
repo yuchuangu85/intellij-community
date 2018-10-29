@@ -1,3 +1,18 @@
+/*
+ * Copyright 2000-2016 JetBrains s.r.o.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.intellij.compiler.instrumentation;
 
 import org.jetbrains.org.objectweb.asm.ClassReader;
@@ -17,7 +32,6 @@ import java.util.zip.ZipFile;
 
 /**
  * @author Eugene Zhuravlev
- *         Date: 2/16/12
  */
 public class InstrumentationClassFinder {
   private static final PseudoClass[] EMPTY_PSEUDOCLASS_ARRAY = new PseudoClass[0];
@@ -45,7 +59,7 @@ public class InstrumentationClassFinder {
   public static URL createJDKPlatformUrl(String jdkHomePath) throws MalformedURLException {
     return new URL(ClassFinderClasspath.Loader.JRT_PROTOCOL, null, jdkHomePath.replace(File.separatorChar, '/'));
   }
-  
+
   // compatibility with legacy code requiring ClassLoader
   public ClassLoader getLoader() {
     ClassLoader loader = myLoader;
@@ -56,6 +70,7 @@ public class InstrumentationClassFinder {
     final ClassLoader cpLoader = new URLClassLoader(myClasspathUrls, platformLoader);
     loader = new ClassLoader(cpLoader) {
 
+      @Override
       public InputStream getResourceAsStream(String name) {
         InputStream is = null;
         is = super.getResourceAsStream(name);
@@ -69,6 +84,7 @@ public class InstrumentationClassFinder {
         return is;
       }
 
+      @Override
       protected Class findClass(String name) throws ClassNotFoundException {
         final InputStream is = lookupClassBeforeClasspath(name.replace('.', '/'));
         if (is == null) {
@@ -213,7 +229,7 @@ public class InstrumentationClassFinder {
 
     return new PseudoClass(this, visitor.myName, visitor.mySuperclassName, visitor.myInterfaces, visitor.myModifiers, visitor.myMethods);
   }
-  
+
   public static class PseudoClass {
     static final PseudoClass NULL_OBJ = new PseudoClass(null, null, null, null, 0, null);
     private final String myName;
@@ -420,9 +436,10 @@ public class InstrumentationClassFinder {
     private final List<PseudoMethod> myMethods = new ArrayList<PseudoMethod>();
 
     private V() {
-      super(Opcodes.ASM5);
+      super(Opcodes.API_VERSION);
     }
 
+    @Override
     public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
       if ((access & Opcodes.ACC_PUBLIC) > 0) {
         myMethods.add(new PseudoMethod(access, name, desc));
@@ -430,6 +447,7 @@ public class InstrumentationClassFinder {
       return super.visitMethod(access, name, desc, signature, exceptions);
     }
 
+    @Override
     public void visit(int version, int access, String pName, String signature, String pSuperName, String[] pInterfaces) {
       mySuperclassName = pSuperName;
       myInterfaces = pInterfaces;
@@ -448,7 +466,7 @@ public class InstrumentationClassFinder {
     private final List<Loader> myLoaders = new ArrayList<Loader>();
     private final Map<URL,Loader> myLoadersMap = new HashMap<URL, Loader>();
 
-    public ClassFinderClasspath(URL[] urls) {
+    ClassFinderClasspath(URL[] urls) {
       if (urls.length > 0) {
         for (int i = urls.length - 1; i >= 0; i--) {
           myUrls.push(urls[i]);
@@ -566,7 +584,6 @@ public class InstrumentationClassFinder {
     private static class FileLoader extends Loader {
       private final File myRootDir;
 
-      @SuppressWarnings({"HardCodedStringLiteral"})
       FileLoader(URL url, int index) throws IOException {
         super(url, index);
         if (!FILE_PROTOCOL.equals(url.getProtocol())) {
@@ -578,9 +595,11 @@ public class InstrumentationClassFinder {
         }
       }
 
+      @Override
       public void releaseResources() {
       }
 
+      @Override
       public Resource getResource(final String name) {
         try {
           final URL url = new URL(getBaseURL(), name);
@@ -621,6 +640,7 @@ public class InstrumentationClassFinder {
         myURL = url;
       }
 
+      @Override
       public void releaseResources() {
         final ZipFile zipFile = myZipFile;
         if (zipFile != null) {
@@ -655,6 +675,7 @@ public class InstrumentationClassFinder {
         return null;
       }
 
+      @Override
       public Resource getResource(String name) {
         try {
           final ZipFile file = acquireZipFile();

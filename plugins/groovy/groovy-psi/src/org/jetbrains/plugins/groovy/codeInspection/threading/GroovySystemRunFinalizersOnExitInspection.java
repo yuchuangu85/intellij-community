@@ -27,12 +27,6 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrRefere
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.path.GrMethodCallExpression;
 
 public class GroovySystemRunFinalizersOnExitInspection extends BaseInspection {
-  @Override
-  @Nls
-  @NotNull
-  public String getGroupDisplayName() {
-    return THREADING_ISSUES;
-  }
 
   @Override
   @Nls
@@ -56,7 +50,7 @@ public class GroovySystemRunFinalizersOnExitInspection extends BaseInspection {
 
   private static class Visitor extends BaseInspectionVisitor {
     @Override
-    public void visitMethodCallExpression(GrMethodCallExpression grMethodCallExpression) {
+    public void visitMethodCallExpression(@NotNull GrMethodCallExpression grMethodCallExpression) {
       super.visitMethodCallExpression(grMethodCallExpression);
       final GrExpression methodExpression = grMethodCallExpression.getInvokedExpression();
       if (!(methodExpression instanceof GrReferenceExpression)) {

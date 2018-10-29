@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui;
 
 import com.intellij.openapi.components.*;
@@ -33,7 +19,7 @@ public class RecentsManager implements PersistentStateComponent<Element> {
   @NonNls private static final String RECENT_ELEMENT_NAME = "recent";
   @NonNls protected static final String NAME_ATTR = "name";
 
-  private final Map<String, LinkedList<String>> myMap = new THashMap<String, LinkedList<String>>();
+  private final Map<String, LinkedList<String>> myMap = new THashMap<>();
   private int myRecentsNumberToKeep = 5;
 
   @NotNull
@@ -49,7 +35,7 @@ public class RecentsManager implements PersistentStateComponent<Element> {
   public void registerRecentEntry(@NotNull String key, String recentEntry) {
     LinkedList<String> recents = myMap.get(key);
     if (recents == null) {
-      recents = new LinkedList<String>();
+      recents = new LinkedList<>();
       myMap.put(key, recents);
     }
 
@@ -69,10 +55,10 @@ public class RecentsManager implements PersistentStateComponent<Element> {
   }
 
   @Override
-  public void loadState(Element element) {
+  public void loadState(@NotNull Element element) {
     myMap.clear();
     for (Element keyElement : element.getChildren(KEY_ELEMENT_NAME)) {
-      LinkedList<String> recents = new LinkedList<String>();
+      LinkedList<String> recents = new LinkedList<>();
       for (Element aChildren : keyElement.getChildren(RECENT_ELEMENT_NAME)) {
         recents.addLast(aChildren.getAttributeValue(NAME_ATTR));
       }

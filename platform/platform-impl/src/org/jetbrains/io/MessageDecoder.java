@@ -15,12 +15,12 @@
  */
 package org.jetbrains.io;
 
+import com.intellij.util.io.CharSequenceBackedByChars;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 
@@ -36,7 +36,7 @@ public abstract class MessageDecoder extends Decoder {
   }
 
   @Nullable
-  protected final CharSequence readChars(@NotNull ByteBuf input) throws IOException {
+  protected final CharSequence readChars(@NotNull ByteBuf input) {
     int readableBytes = input.readableBytes();
     if (readableBytes == 0) {
       input.release();
@@ -84,7 +84,6 @@ public abstract class MessageDecoder extends Decoder {
 
   public static boolean readUntil(char what, @NotNull ByteBuf buffer, @NotNull StringBuilder builder) {
     int i = buffer.readerIndex();
-    //noinspection ForLoopThatDoesntUseLoopVariable
     for (int n = buffer.writerIndex(); i < n; i++) {
       char c = (char)buffer.getByte(i);
       if (c == what) {

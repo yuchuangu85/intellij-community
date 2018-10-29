@@ -31,20 +31,23 @@ import java.util.*;
 
 /**
  * @author Dmitry Avdeev
- *         Date: 9/17/12
  */
 public class ConfigurableWrapper implements SearchableConfigurable, Weighted {
   private static final Logger LOG = Logger.getInstance(ConfigurableWrapper.class);
 
   @Nullable
   public static <T extends UnnamedConfigurable> T wrapConfigurable(@NotNull ConfigurableEP<T> ep) {
+    return wrapConfigurable(ep, false);
+  }
+
+  @Nullable
+  public static <T extends UnnamedConfigurable> T wrapConfigurable(@NotNull ConfigurableEP<T> ep, boolean settings) {
     if (!ep.canCreateConfigurable()) {
       return null;
     }
-    if (ep.displayName != null || ep.key != null || ep.parentId != null || ep.groupId != null) {
-      return !ep.dynamic && ep.children == null && ep.childrenEPName == null
-             ? (T)new ConfigurableWrapper(ep)
-             : (T)new CompositeWrapper(ep);
+    if (settings || ep.displayName != null || ep.key != null || ep.parentId != null || ep.groupId != null) {
+      //noinspection unchecked
+      return (T)(!ep.dynamic && ep.children == null && ep.childrenEPName == null ? new ConfigurableWrapper(ep) : new CompositeWrapper(ep));
     }
     return createConfigurable(ep, LOG.isDebugEnabled());
   }
@@ -62,16 +65,7 @@ public class ConfigurableWrapper implements SearchableConfigurable, Weighted {
   }
 
   public static <T extends UnnamedConfigurable> List<T> createConfigurables(ExtensionPointName<? extends ConfigurableEP<T>> name) {
-    return ContainerUtil.mapNotNull(name.getExtensions(), new NullableFunction<ConfigurableEP<T>, T>() {
-      @Override
-      public T fun(ConfigurableEP<T> ep) {
-        return wrapConfigurable(ep);
-      }
-    });
-  }
-
-  public static boolean isNoScroll(Configurable configurable) {
-    return cast(NoScroll.class, configurable) != null;
+    return ContainerUtil.mapNotNull(name.getExtensions(), (NullableFunction<ConfigurableEP<T>, T>)ep -> wrapConfigurable(ep));
   }
 
   public static boolean hasOwnContent(UnnamedConfigurable configurable) {
@@ -80,6 +74,7 @@ public class ConfigurableWrapper implements SearchableConfigurable, Weighted {
   }
 
   public static boolean isNonDefaultProject(Configurable configurable) {
+    //noinspection deprecation
     return configurable instanceof NonDefaultProjectConfigurable ||
            (configurable instanceof ConfigurableWrapper && ((ConfigurableWrapper)configurable).myEp.nonDefaultProject);
   }
@@ -151,10 +146,6 @@ public class ConfigurableWrapper implements SearchableConfigurable, Weighted {
     return myEp.getDisplayName();
   }
 
-  public String getInstanceClass() {
-    return myEp.instanceClass;
-  }
-
   public String getProviderClass() {
     return myEp.providerClass;
   }
@@ -207,9 +198,12 @@ public class ConfigurableWrapper implements SearchableConfigurable, Weighted {
       }
       return id;
     }
-    return myEp.instanceClass != null
-           ? myEp.instanceClass
-           : myEp.providerClass;
+    // order from #ConfigurableEP(PicoContainer, Project)
+    return myEp.providerClass != null
+           ? myEp.providerClass
+           : myEp.instanceClass != null
+             ? myEp.instanceClass
+             : myEp.implementationClass;
   }
 
   @NotNull
@@ -248,10 +242,12 @@ public class ConfigurableWrapper implements SearchableConfigurable, Weighted {
       myKids = kids;
     }
 
+    @NotNull
     @Override
     public Configurable[] getConfigurables() {
       if (!isInitialized) {
-        ArrayList<Configurable> list = new ArrayList<Configurable>();
+        long time = System.currentTimeMillis();
+        ArrayList<Configurable> list = new ArrayList<>();
         if (super.myEp.dynamic) {
           Composite composite = cast(Composite.class, this);
           if (composite != null) {
@@ -294,6 +290,7 @@ public class ConfigurableWrapper implements SearchableConfigurable, Weighted {
         }
         myKids = ArrayUtil.toObjectArray(list, Configurable.class);
         isInitialized = true;
+        ConfigurableCardPanel.warn(this, "children", time);
       }
       return myKids;
     }

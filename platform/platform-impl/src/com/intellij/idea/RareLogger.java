@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2010 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,7 +68,7 @@ public class RareLogger extends Logger {
         return super.remove(key);
       }
     };
-    myConvertors = new LinkedList<LogFilter>();
+    myConvertors = new LinkedList<>();
 
     // just passes to parent logger
     myProxy = new LogFilter() {
@@ -140,6 +140,11 @@ public class RareLogger extends Logger {
   @Override
   public void trace(String message) {
     process(Level.TRACE, message, null);
+  }
+
+  @Override
+  public void trace(@Nullable Throwable t) {
+    process(Level.TRACE, null, t);
   }
 
   @Override

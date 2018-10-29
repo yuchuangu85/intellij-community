@@ -1,6 +1,6 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.edu.debugger;
 
-import com.google.common.base.Predicate;
 import com.google.common.collect.Collections2;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.ui.ExecutionConsole;
@@ -29,7 +29,7 @@ class PyEduDebugProcess extends PyDebugProcess {
   private final String myScriptName;
   private final int myLine;
 
-  public PyEduDebugProcess(@NotNull XDebugSession session,
+  PyEduDebugProcess(@NotNull XDebugSession session,
                            @NotNull ServerSocket serverSocket,
                            @NotNull ExecutionConsole executionConsole,
                            @Nullable ProcessHandler processHandler, boolean multiProcess,
@@ -43,7 +43,7 @@ class PyEduDebugProcess extends PyDebugProcess {
   @Override
   public PyStackFrame createStackFrame(PyStackFrameInfo frameInfo) {
     return new PyEduStackFrame(getSession().getProject(), this, frameInfo,
-                               getPositionConverter().convertFromPython(frameInfo.getPosition()));
+                               getPositionConverter().convertFromPython(frameInfo.getPosition(), frameInfo.getName()));
   }
 
   @Override
@@ -55,7 +55,7 @@ class PyEduDebugProcess extends PyDebugProcess {
   @NotNull
   @Override
   protected PySuspendContext createSuspendContext(PyThreadInfo threadInfo) {
-    threadInfo.updateState(threadInfo.getState(), new ArrayList<PyStackFrameInfo>(filterFrames(threadInfo.getFrames())));
+    threadInfo.updateState(threadInfo.getState(), new ArrayList<>(filterFrames(threadInfo.getFrames())));
     return new PySuspendContext(this, threadInfo);
   }
 
@@ -64,12 +64,9 @@ class PyEduDebugProcess extends PyDebugProcess {
       return Collections.emptyList();
     }
     final String helpersPath = PythonHelpersLocator.getHelpersRoot().getPath();
-    Collection<PyStackFrameInfo> filteredFrames = Collections2.filter(frames, new Predicate<PyStackFrameInfo>() {
-      @Override
-      public boolean apply(PyStackFrameInfo frame) {
-        String file = frame.getPosition().getFile();
-        return !FileUtil.isAncestor(helpersPath, file, false);
-      }
+    Collection<PyStackFrameInfo> filteredFrames = Collections2.filter(frames, frame -> {
+      String file = frame.getPosition().getFile();
+      return !FileUtil.isAncestor(helpersPath, file, false);
     });
     return !filteredFrames.isEmpty() ? filteredFrames : frames;
   }
@@ -82,12 +79,13 @@ class PyEduDebugProcess extends PyDebugProcess {
       @Override
       public Content registerConsoleContent(@NotNull RunnerLayoutUi ui, @NotNull ExecutionConsole console) {
         final PythonDebugLanguageConsoleView view = ((PythonDebugLanguageConsoleView)console);
+        view.initialized();
         view.enableConsole(false);
 
         Content eduConsole =
           ui.createContent("EduConsole", view.getComponent(),
                            XDebuggerBundle.message("debugger.session.tab.console.content.name"),
-                           AllIcons.Debugger.ToolConsole, view.getPreferredFocusableComponent());
+                           AllIcons.Debugger.Console, view.getPreferredFocusableComponent());
         eduConsole.setCloseable(false);
         ui.addContent(eduConsole, 0, PlaceInGrid.right, false);
         return eduConsole;

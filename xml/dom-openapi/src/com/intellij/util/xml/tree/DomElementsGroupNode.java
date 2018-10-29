@@ -49,17 +49,18 @@ public class DomElementsGroupNode extends AbstractDomElementNode {
     myRootDomElement = rootDomElement;
   }
 
+  @NotNull
   @Override
   public SimpleNode[] getChildren() {
     if (!myParentElement.isValid()) return NO_CHILDREN;
 
-    final List<SimpleNode> simpleNodes = new ArrayList<SimpleNode>();
+    final List<SimpleNode> simpleNodes = new ArrayList<>();
     for (DomElement domChild : myChildDescription.getStableValues(myParentElement)) {
       if (shouldBeShown(domChild.getDomElementType())) {
         simpleNodes.add(new BaseDomElementNode(domChild, myRootDomElement, this));
       }
     }
-    return simpleNodes.toArray(new SimpleNode[simpleNodes.size()]);
+    return simpleNodes.toArray(new SimpleNode[0]);
   }
 
   @Override

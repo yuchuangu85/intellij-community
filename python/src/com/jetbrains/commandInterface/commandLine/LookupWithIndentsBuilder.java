@@ -24,7 +24,10 @@ import com.intellij.psi.PsiReference;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 
 // TODO: TEST
@@ -54,7 +57,7 @@ import java.util.Map.Entry;
  */
 final class LookupWithIndentsBuilder {
   @NotNull
-  private final Map<LookupElementBuilder, Pair<String, Integer>> myMap = new LinkedHashMap<LookupElementBuilder, Pair<String, Integer>>();
+  private final Map<LookupElementBuilder, Pair<String, Integer>> myMap = new LinkedHashMap<>();
   private int myMaxLength;
   private boolean myHasPriority;
 
@@ -105,7 +108,7 @@ final class LookupWithIndentsBuilder {
    */
   @NotNull
   LookupElement[] getResult() {
-    final List<LookupElement> result = new ArrayList<LookupElement>(myMap.size());
+    final List<LookupElement> result = new ArrayList<>(myMap.size());
     for (final Entry<LookupElementBuilder, Pair<String, Integer>> entry : myMap.entrySet()) {
       LookupElementBuilder elementBuilder = entry.getKey();
       final Pair<String, Integer> helpAndPriority = entry.getValue();
@@ -124,6 +127,6 @@ final class LookupWithIndentsBuilder {
         result.add(elementBuilder);
       }
     }
-    return result.toArray(new LookupElement[result.size()]);
+    return result.toArray(LookupElement.EMPTY_ARRAY);
   }
 }

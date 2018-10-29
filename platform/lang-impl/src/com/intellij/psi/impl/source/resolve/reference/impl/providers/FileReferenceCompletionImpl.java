@@ -65,6 +65,7 @@ public class FileReferenceCompletionImpl extends FileReferenceCompletion {
     }
   };
 
+  @NotNull
   @Override
   public Object[] getFileReferenceCompletionVariants(final FileReference reference) {
     final String s = reference.getText();
@@ -73,11 +74,11 @@ public class FileReferenceCompletionImpl extends FileReferenceCompletion {
     }
 
     final CommonProcessors.CollectUniquesProcessor<PsiFileSystemItem> collector =
-      new CommonProcessors.CollectUniquesProcessor<PsiFileSystemItem>();
+      new CommonProcessors.CollectUniquesProcessor<>();
     final PsiElementProcessor<PsiFileSystemItem> processor = new PsiElementProcessor<PsiFileSystemItem>() {
       @Override
       public boolean execute(@NotNull PsiFileSystemItem fileSystemItem) {
-        return new FilteringProcessor<PsiFileSystemItem>(reference.getFileReferenceSet().getReferenceCompletionFilter(), collector).process(
+        return new FilteringProcessor<>(reference.getFileReferenceSet().getReferenceCompletionFilter(), collector).process(
           FileReference.getOriginalFile(fileSystemItem));
       }
     };
@@ -95,7 +96,7 @@ public class FileReferenceCompletionImpl extends FileReferenceCompletion {
     }
 
     final FileType[] types = reference.getFileReferenceSet().getSuitableFileTypes();
-    final THashSet<PsiElement> set = new THashSet<PsiElement>(collector.getResults(), VARIANTS_HASHING_STRATEGY);
+    final THashSet<PsiElement> set = new THashSet<>(collector.getResults(), VARIANTS_HASHING_STRATEGY);
     final PsiElement[] candidates = PsiUtilCore.toPsiElementArray(set);
 
     final Object[] variants = new Object[candidates.length + additionalItems.size()];
@@ -118,7 +119,7 @@ public class FileReferenceCompletionImpl extends FileReferenceCompletion {
     if (!reference.getFileReferenceSet().isUrlEncoded()) {
       return variants;
     }
-    List<Object> encodedVariants = new ArrayList<Object>(variants.length + additionalItems.size());
+    List<Object> encodedVariants = new ArrayList<>(variants.length + additionalItems.size());
     for (int i = 0; i < candidates.length; i++) {
       final PsiElement element = candidates[i];
       if (element instanceof PsiNamedElement) {

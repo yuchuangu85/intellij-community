@@ -21,8 +21,6 @@ import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.htmlInspections.RequiredAttributesInspection;
 import com.intellij.javaee.ExternalResourceManagerEx;
-import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.Result;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Document;
@@ -48,12 +46,8 @@ import org.intellij.plugins.testUtil.ResourceUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collection;
+import java.util.Collections;
 
-/**
- * Created by IntelliJ IDEA.
- * User: sweinreuter
- * Date: 25.07.2007
- */
 public abstract class HighlightingTestBase extends UsefulTestCase implements IdeaCodeInsightTestCase {
   protected CodeInsightTestFixture myTestFixture;
 
@@ -75,13 +69,10 @@ public abstract class HighlightingTestBase extends UsefulTestCase implements Ide
 
     myTestFixture.enableInspections(inspectionClasses);
 
-    new WriteAction() {
-      @Override
-      protected void run(@NotNull Result result) throws Throwable {
-        ResourceUtil.copyFiles(HighlightingTestBase.this);
-        init();
-      }
-    }.execute().throwException();
+    WriteAction.runAndWait(() -> {
+      ResourceUtil.copyFiles(HighlightingTestBase.this);
+      init();
+    });
   }
 
   protected static String toAbsolutePath(String relativeTestDataPath) {
@@ -122,7 +113,7 @@ public abstract class HighlightingTestBase extends UsefulTestCase implements Ide
   public abstract String getTestDataPath();
 
   protected void init() {
-    ApplicationManager.getApplication().runWriteAction(() -> ExternalResourceManagerEx.getInstanceEx().addIgnoredResource("urn:test:undefined"));
+    ExternalResourceManagerEx.getInstanceEx().addIgnoredResources(Collections.singletonList("urn:test:undefined"), getTestRootDisposable());
   }
 
   @Override
@@ -137,12 +128,12 @@ public abstract class HighlightingTestBase extends UsefulTestCase implements Ide
     }
   }
 
-  protected void doHighlightingTest(String s) throws Throwable {
+  protected void doHighlightingTest(String s) {
     doCustomHighlighting(s, true, false);
 //    myTestFixture.testHighlighting(true, false, true, s);
   }
 
-  protected void doExternalToolHighlighting(String name) throws Throwable {
+  protected void doExternalToolHighlighting(String name) {
     doCustomHighlighting(name, true, true);
   }
 
@@ -176,8 +167,6 @@ public abstract class HighlightingTestBase extends UsefulTestCase implements Ide
       Pass.POPUP_HINTS,
       Pass.UPDATE_ALL,
       Pass.UPDATE_FOLDING,
-      Pass.UPDATE_OVERRIDDEN_MARKERS,
-      Pass.VISIBLE_LINE_MARKERS,
     } : new int[]{Pass.EXTERNAL_TOOLS};
     return CodeInsightTestFixtureImpl.instantiateAndRun(myTestFixture.getFile(), editor, ignore, false);
   }
@@ -190,7 +179,7 @@ public abstract class HighlightingTestBase extends UsefulTestCase implements Ide
     myTestFixture.testCompletionVariants(before, variants);
   }
 
-  protected void doTestCompletion(String before) throws Throwable {
+  protected void doTestCompletion(String before) {
     doTestCompletion(before, "xml");
   }
 
@@ -198,7 +187,7 @@ public abstract class HighlightingTestBase extends UsefulTestCase implements Ide
     myTestFixture.testRename(name + "." + ext, name + "_after." + ext, newName);
   }
 
-  @SuppressWarnings({ "deprecation", "unchecked" })
+  @SuppressWarnings({ "deprecation"})
   protected void doTestQuickFix(String file, String ext) {
     final PsiReference psiReference = myTestFixture.getReferenceAtCaretPositionWithAssertion(file + "." + ext);
     assertNull("Reference", psiReference.resolve());
@@ -214,16 +203,14 @@ public abstract class HighlightingTestBase extends UsefulTestCase implements Ide
                                                                                                                fixes,
                                                                                                                ProblemHighlightType.GENERIC_ERROR_OR_WARNING,
                                                                                                                true);
-    new WriteCommandAction.Simple(project, myTestFixture.getFile()) {
-      @Override
-      protected void run() throws Throwable {
-        fixes[0].applyFix(project, problemDescriptor);
-      }
-    }.execute();
+    WriteCommandAction.writeCommandAction(project, myTestFixture.getFile()).run(() -> {
+      fixes[0].applyFix(project, problemDescriptor);
+    });
     myTestFixture.checkResultByFile(file + "_after." + ext);
   }
 
   private static class DefaultInspectionProvider implements InspectionToolProvider {
+    @NotNull
     @Override
     public Class[] getInspectionClasses() {
       return new Class[]{

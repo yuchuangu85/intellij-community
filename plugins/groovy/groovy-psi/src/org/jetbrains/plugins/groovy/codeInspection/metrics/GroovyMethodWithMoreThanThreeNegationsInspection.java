@@ -30,12 +30,6 @@ public class GroovyMethodWithMoreThanThreeNegationsInspection extends BaseInspec
   }
 
   @Override
-  @NotNull
-  public String getGroupDisplayName() {
-    return METHOD_METRICS;
-  }
-
-  @Override
   public String buildErrorString(Object... args) {
     return "Method '#ref' has too many negations (" + args[0] + " > 3)";
   }
@@ -48,7 +42,7 @@ public class GroovyMethodWithMoreThanThreeNegationsInspection extends BaseInspec
 
   private static class Visitor extends BaseInspectionVisitor {
     @Override
-    public void visitMethod(GrMethod grMethod) {
+    public void visitMethod(@NotNull GrMethod grMethod) {
       super.visitMethod(grMethod);
       final NegationCountVisitor visitor = new NegationCountVisitor();
       final GrOpenBlock body = grMethod.getBlock();

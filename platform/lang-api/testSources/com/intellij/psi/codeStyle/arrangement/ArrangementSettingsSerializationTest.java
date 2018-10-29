@@ -49,7 +49,6 @@ import static org.junit.Assert.*;
 
 /**
  * @author Denis Zhdanov
- * @since 9/18/12 9:24 AM
  */
 public class ArrangementSettingsSerializationTest {
   private static final String VISIBILITY = "visibility";
@@ -65,7 +64,7 @@ public class ArrangementSettingsSerializationTest {
   }
 
   private static StdArrangementMatchRule rule(boolean byName, @NotNull ArrangementSettingsToken... tokens) {
-    final List<ArrangementAtomMatchCondition> conditions = new ArrayList<ArrangementAtomMatchCondition>();
+    final List<ArrangementAtomMatchCondition> conditions = new ArrayList<>();
     for (ArrangementSettingsToken token : tokens) {
       conditions.add(new ArrangementAtomMatchCondition(token));
     }
@@ -97,11 +96,11 @@ public class ArrangementSettingsSerializationTest {
   }
 
   private static StdArrangementSettings emptySettings() {
-    return new StdArrangementSettings(ContainerUtil.<ArrangementGroupingRule>emptyList(), ContainerUtil.<ArrangementSectionRule>emptyList());
+    return new StdArrangementSettings(ContainerUtil.emptyList(), ContainerUtil.emptyList());
   }
 
   private static StdArrangementRuleAliasToken visibilityToken() {
-    final ArrayList<StdArrangementMatchRule> rules = new ArrayList<StdArrangementMatchRule>();
+    final ArrayList<StdArrangementMatchRule> rules = new ArrayList<>();
     rules.add(rule(false, PUBLIC));
     rules.add(rule(false, PROTECTED));
     rules.add(rule(false, PRIVATE));
@@ -109,7 +108,7 @@ public class ArrangementSettingsSerializationTest {
   }
 
   private static StdArrangementRuleAliasToken modifiersToken() {
-    final ArrayList<StdArrangementMatchRule> rules = new ArrayList<StdArrangementMatchRule>();
+    final ArrayList<StdArrangementMatchRule> rules = new ArrayList<>();
     rules.add(rule(false, PUBLIC, STATIC));
     rules.add(rule(false, PROTECTED, STATIC));
     rules.add(rule(false, PRIVATE, STATIC));
@@ -176,7 +175,7 @@ public class ArrangementSettingsSerializationTest {
   }
 
   @Test
-  public void testEmptyGroupings() throws Exception {
+  public void testEmptyGroupings() {
     final StdArrangementSettings settings = new StdArrangementSettings();
     final ArrangementAtomMatchCondition condition = new ArrangementAtomMatchCondition(FIELD);
     settings.addRule(new StdArrangementMatchRule(new StdArrangementEntryMatcher(condition), BY_NAME));
@@ -192,7 +191,7 @@ public class ArrangementSettingsSerializationTest {
   }
 
   @Test
-  public void testEmptyRules() throws Exception {
+  public void testEmptyRules() {
     final StdArrangementSettings settings = new StdArrangementSettings();
     settings.addGrouping(new ArrangementGroupingRule(OVERRIDDEN_METHODS, BY_NAME));
 
@@ -439,7 +438,7 @@ public class ArrangementSettingsSerializationTest {
 
   private static class TestArrangementSettingsSerializer extends DefaultArrangementSettingsSerializer {
 
-    public TestArrangementSettingsSerializer(@NotNull StdArrangementSettings defaultSettings) {
+    TestArrangementSettingsSerializer(@NotNull StdArrangementSettings defaultSettings) {
       super(defaultSettings);
     }
   }

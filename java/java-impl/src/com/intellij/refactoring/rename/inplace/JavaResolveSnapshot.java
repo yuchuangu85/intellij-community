@@ -21,8 +21,8 @@ import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.refactoring.rename.RenameJavaMemberProcessor;
 import com.intellij.refactoring.rename.ResolveSnapshotProvider;
-import com.intellij.util.containers.HashMap;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -31,7 +31,7 @@ import java.util.Map;
 class JavaResolveSnapshot extends ResolveSnapshotProvider.ResolveSnapshot {
   private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.rename.inplace.JavaResolveSnapshot");
 
-  private final Map<SmartPsiElementPointer, SmartPsiElementPointer> myReferencesMap = new HashMap<SmartPsiElementPointer, SmartPsiElementPointer>();
+  private final Map<SmartPsiElementPointer, SmartPsiElementPointer> myReferencesMap = new HashMap<>();
   private final Project myProject;
   private final Document myDocument;
 
@@ -39,7 +39,7 @@ class JavaResolveSnapshot extends ResolveSnapshotProvider.ResolveSnapshot {
     myProject = scope.getProject();
     myDocument = PsiDocumentManager.getInstance(myProject).getDocument(scope.getContainingFile());
     final SmartPointerManager pointerManager = SmartPointerManager.getInstance(myProject);
-    final Map<PsiElement, SmartPsiElementPointer> pointers = new HashMap<PsiElement, SmartPsiElementPointer>();
+    final Map<PsiElement, SmartPsiElementPointer> pointers = new HashMap<>();
     scope.accept(new JavaRecursiveElementWalkingVisitor() {
       @Override public void visitReferenceExpression(PsiReferenceExpression refExpr) {
         if (!refExpr.isQualified()) {
@@ -60,6 +60,7 @@ class JavaResolveSnapshot extends ResolveSnapshotProvider.ResolveSnapshot {
     });
   }
 
+  @Override
   public void apply(String hidingLocalName) {
     PsiDocumentManager.getInstance(myProject).commitDocument(myDocument);
     for (Map.Entry<SmartPsiElementPointer,SmartPsiElementPointer> entry : myReferencesMap.entrySet()) {

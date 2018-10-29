@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2013 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 package com.intellij.openapi.actionSystem.impl;
 
-import com.intellij.ide.DataManager;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.actionSystem.ex.ActionUtil;
 import com.intellij.openapi.application.ApplicationManager;
@@ -27,7 +26,6 @@ import com.intellij.openapi.util.ActionCallback;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -51,11 +49,11 @@ public class Utils{
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
     }
 
     @Override
-    public void update(AnActionEvent e) {
+    public void update(@NotNull AnActionEvent e) {
       e.getPresentation().setEnabled(false);
       super.update(e);
     }
@@ -66,7 +64,7 @@ public class Utils{
   private static void handleUpdateException(AnAction action, Presentation presentation, Throwable exc) {
     String id = ActionManager.getInstance().getId(action);
     if (id != null) {
-      LOG.error("update failed for AnAction with ID=" + id, exc);
+      LOG.error("update failed for AnAction(" + action.getClass().getName() + ") with ID=" + id, exc);
     }
     else {
       LOG.error("update failed for ActionGroup: " + action + "[" + presentation.getText() + "]", exc);
@@ -77,37 +75,49 @@ public class Utils{
    * @param list this list contains expanded actions.
    * @param actionManager manager
    */
-  public static void expandActionGroup(@NotNull ActionGroup group,
-                                       List<AnAction> list,
+  public static void expandActionGroup(boolean isInModalContext,
+                                       @NotNull ActionGroup group,
+                                       List<? super AnAction> list,
                                        PresentationFactory presentationFactory,
                                        @NotNull DataContext context,
                                        String place,
                                        ActionManager actionManager){
-    expandActionGroup(group, list, presentationFactory, context, place, actionManager, false, group instanceof CompactActionGroup);
+    expandActionGroup(isInModalContext, group, list, presentationFactory, context, place, actionManager, false, group instanceof CompactActionGroup);
   }
 
-  public static void expandActionGroup(@NotNull ActionGroup group,
-                                       List<AnAction> list,
-                                       PresentationFactory presentationFactory,
-                                       DataContext context,
-                                       @NotNull String place,
-                                       ActionManager actionManager,
-                                       boolean transparentOnly) {
-    expandActionGroup(group, list, presentationFactory, context, place, actionManager, transparentOnly, false);
+
+  /**
+   * @param list this list contains expanded actions.
+   * @param actionManager manager
+   */
+  private static void expandActionGroup(boolean isInModalContext,
+                                        @NotNull ActionGroup group,
+                                        List<? super AnAction> list,
+                                        PresentationFactory presentationFactory,
+                                        DataContext context,
+                                        @NotNull String place,
+                                        ActionManager actionManager,
+                                        boolean transparentOnly,
+                                        boolean hideDisabled) {
+    expandActionGroup(isInModalContext , group, list, presentationFactory, context,
+                      place, actionManager, transparentOnly, hideDisabled, false, false);
   }
 
   /**
    * @param list this list contains expanded actions.
    * @param actionManager manager
    */
-  public static void expandActionGroup(@NotNull ActionGroup group,
-                                       List<AnAction> list,
+  public static void expandActionGroup(boolean isInModalContext,
+                                       @NotNull ActionGroup group,
+                                       List<? super AnAction> list,
                                        PresentationFactory presentationFactory,
                                        DataContext context,
                                        @NotNull String place,
                                        ActionManager actionManager,
                                        boolean transparentOnly,
-                                       boolean hideDisabled) {
+                                       boolean hideDisabled,
+                                       boolean isContextMenuAction,
+                                       boolean isToolbarAction) {
     Presentation presentation = presentationFactory.getPresentation(group);
     AnActionEvent e = new AnActionEvent(
       null,
@@ -115,9 +125,11 @@ public class Utils{
       place,
       presentation,
       actionManager,
-      0
+      0,
+      isContextMenuAction,
+      isToolbarAction
     );
-    if (!doUpdate(group, e, presentation)) return;
+    if (!doUpdate(isInModalContext, group, e, presentation)) return;
 
     if (!presentation.isVisible()) { // don't process invisible groups
       return;
@@ -132,11 +144,11 @@ public class Utils{
       }
 
       presentation = presentationFactory.getPresentation(child);
-      AnActionEvent e1 = new AnActionEvent(null, context, place, presentation, actionManager, 0);
+      AnActionEvent e1 = new AnActionEvent(null, context, place, presentation, actionManager, 0, isContextMenuAction, isToolbarAction);
       e1.setInjectedContext(child.isInInjectedContext());
 
-      if (transparentOnly && child.isTransparentUpdate() || !transparentOnly) {
-        if (!doUpdate(child, e1, presentation)) continue;
+      if (!transparentOnly || child.isTransparentUpdate()) {
+        if (!doUpdate(isInModalContext, child, e1, presentation)) continue;
       }
 
       if (!presentation.isVisible() || (!presentation.isEnabled() && hideDisabled)) { // don't create invisible items in the menu
@@ -161,7 +173,9 @@ public class Utils{
           list.add(child);
         }
         else {
-          expandActionGroup((ActionGroup)child, list, presentationFactory, context, place, actionManager, false, hideDisabled);
+          boolean hideDisabledChildren = hideDisabled || actionGroup instanceof CompactActionGroup;
+          expandActionGroup(isInModalContext, (ActionGroup)child, list, presentationFactory, context, place, actionManager, false,
+                            hideDisabledChildren, isContextMenuAction, isToolbarAction);
         }
       }
       else if (child instanceof Separator) {
@@ -179,13 +193,13 @@ public class Utils{
   }
 
   // returns false if exception was thrown and handled
-  private static boolean doUpdate(final AnAction action, final AnActionEvent e, final Presentation presentation) throws ProcessCanceledException {
+  private static boolean doUpdate(boolean isInModalContext, final AnAction action, final AnActionEvent e, final Presentation presentation) throws ProcessCanceledException {
     if (ApplicationManager.getApplication().isDisposed()) return false;
 
     long startTime = System.currentTimeMillis();
     final boolean result;
     try {
-      result = !ActionUtil.performDumbAwareUpdate(action, e, false);
+      result = !ActionUtil.performDumbAwareUpdate(isInModalContext, action, e, false);
     }
     catch (ProcessCanceledException ex) {
       throw ex;
@@ -215,7 +229,6 @@ public class Utils{
                                               String place,
                                               boolean checkVisible,
                                               boolean checkEnabled) {
-    //noinspection InstanceofIncompatibleInterface
     if (group instanceof AlwaysVisibleActionGroup) {
       return true;
     }
@@ -262,7 +275,7 @@ public class Utils{
   public static void updateGroupChild(DataContext context, String place, AnAction anAction, final Presentation presentation) {
     AnActionEvent event1 = new AnActionEvent(null, context, place, presentation, ActionManager.getInstance(), 0);
     event1.setInjectedContext(anAction.isInInjectedContext());
-    doUpdate(anAction, event1, presentation);
+    doUpdate(false, anAction, event1, presentation);
   }
 
   public static void fillMenu(@NotNull final ActionGroup group,
@@ -272,15 +285,17 @@ public class Utils{
                               @NotNull DataContext context,
                               final String place,
                               final boolean isWindowMenu,
-                              final boolean mayDataContextBeInvalid){
+                              final boolean mayDataContextBeInvalid,
+                              boolean isInModalContext,
+                              final boolean useDarkIcons) {
     final ActionCallback menuBuilt = new ActionCallback();
     final boolean checked = group instanceof CheckedActionGroup;
 
-    final ArrayList<AnAction> list = new ArrayList<AnAction>();
-    expandActionGroup(group, list, presentationFactory, context, place, ActionManager.getInstance());
+    final ArrayList<AnAction> list = new ArrayList<>();
+    expandActionGroup(isInModalContext, group, list, presentationFactory, context, place, ActionManager.getInstance(), false, group instanceof CompactActionGroup, true, false);
 
     final boolean fixMacScreenMenu = SystemInfo.isMacSystemMenu && isWindowMenu && Registry.is("actionSystem.mac.screenMenuNotUpdatedFix");
-    final ArrayList<Component> children = new ArrayList<Component>();
+    final ArrayList<Component> children = new ArrayList<>();
 
     for (int i = 0, size = list.size(); i < size; i++) {
       final AnAction action = list.get(i);
@@ -289,14 +304,6 @@ public class Utils{
         if (!StringUtil.isEmpty(text) || (i > 0 && i < size - 1)) {
           component.add(new JPopupMenu.Separator() {
             private final JMenuItem myMenu = !StringUtil.isEmpty(text) ? new JMenuItem(text) : null;
-            @Override
-            public Insets getInsets() {
-              final Insets insets = super.getInsets();
-              final boolean fix = UIUtil.isUnderGTKLookAndFeel() &&
-                                  getBorder() != null &&
-                                  insets.top + insets.bottom == 0;
-              return fix ? new Insets(2, insets.left, 3, insets.right) : insets;  // workaround for Sun bug #6636964
-            }
 
             @Override
             public void doLayout() {
@@ -308,7 +315,7 @@ public class Utils{
 
             @Override
             protected void paintComponent(Graphics g) {
-              if (UIUtil.isUnderWindowsClassicLookAndFeel() || UIUtil.isUnderDarcula() || UIUtil.isUnderWindowsLookAndFeel()) {
+              if (UIUtil.isUnderDarcula() || UIUtil.isUnderWin10LookAndFeel()) {
                 g.setColor(component.getBackground());
                 g.fillRect(0, 0, getWidth(), getHeight());
               }
@@ -329,13 +336,13 @@ public class Utils{
       else if (action instanceof ActionGroup &&
                !(((ActionGroup)action).canBePerformed(context) &&
                  !hasVisibleChildren((ActionGroup)action, presentationFactory, context, place))) {
-        ActionMenu menu = new ActionMenu(context, place, (ActionGroup)action, presentationFactory, enableMnemonics, false);
+        ActionMenu menu = new ActionMenu(context, place, (ActionGroup)action, presentationFactory, enableMnemonics, useDarkIcons);
         component.add(menu);
         children.add(menu);
       }
       else {
         final ActionMenuItem each =
-          new ActionMenuItem(action, presentationFactory.getPresentation(action), place, context, enableMnemonics, !fixMacScreenMenu, checked);
+          new ActionMenuItem(action, presentationFactory.getPresentation(action), place, context, enableMnemonics, !fixMacScreenMenu, checked, useDarkIcons);
         component.add(each);
         children.add(each);
       }
@@ -344,7 +351,7 @@ public class Utils{
     if (list.isEmpty()) {
       final ActionMenuItem each =
         new ActionMenuItem(EMPTY_MENU_FILLER, presentationFactory.getPresentation(EMPTY_MENU_FILLER), place, context, enableMnemonics,
-                           !fixMacScreenMenu, checked);
+                           !fixMacScreenMenu, checked, useDarkIcons);
       component.add(each);
       children.add(each);
     }
@@ -363,27 +370,5 @@ public class Utils{
     else {
       menuBuilt.setDone();
     }
-
-    menuBuilt.doWhenDone(() -> {
-      if (!mayDataContextBeInvalid) return;
-
-      if (IdeFocusManager.getInstance(null).isFocusBeingTransferred()) {
-        IdeFocusManager.getInstance(null).doWhenFocusSettlesDown(() -> {
-          if (!component.isShowing()) return;
-
-          DataContext context1 = DataManager.getInstance().getDataContext();
-          expandActionGroup(group, new ArrayList<AnAction>(), presentationFactory, context1, place, ActionManager.getInstance());
-
-          for (Component each : children) {
-            if (each instanceof ActionMenuItem) {
-              ((ActionMenuItem)each).updateContext(context1);
-            } else if (each instanceof ActionMenu) {
-              ((ActionMenu)each).updateContext(context1);
-            }
-          }
-        });
-      }
-    });
-
   }
 }

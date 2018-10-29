@@ -36,12 +36,13 @@ public abstract class BaseOccurrenceManager implements OccurrenceManager {
     myFilter = filter;
   }
 
+  @Override
   public PsiExpression[] getOccurrences() {
     if(myOccurrences == null) {
       myOccurrences = findOccurrences();
 
       if(myFilter != null) {
-        ArrayList<PsiExpression> result = new ArrayList<PsiExpression>();
+        ArrayList<PsiExpression> result = new ArrayList<>();
         for (PsiExpression occurrence : myOccurrences) {
           if (myFilter.isOK(occurrence)) result.add(occurrence);
         }
@@ -49,7 +50,7 @@ public abstract class BaseOccurrenceManager implements OccurrenceManager {
           myOccurrences = defaultOccurrences();
         }
         else {
-          myOccurrences = result.toArray(new PsiExpression[result.size()]);
+          myOccurrences = result.toArray(PsiExpression.EMPTY_ARRAY);
         }
       }
 
@@ -64,10 +65,12 @@ public abstract class BaseOccurrenceManager implements OccurrenceManager {
 
   protected abstract PsiExpression[] findOccurrences();
 
+  @Override
   public boolean isInFinalContext() {
     return needToDeclareFinal(myOccurrences);
   }
 
+  @Override
   public PsiElement getAnchorStatementForAll() {
     if(myAnchorStatement == null) {
       myAnchorStatement = getAnchorStatementForAllInScope(null);
@@ -75,6 +78,7 @@ public abstract class BaseOccurrenceManager implements OccurrenceManager {
     return myAnchorStatement;
 
   }
+  @Override
   public PsiElement getAnchorStatementForAllInScope(PsiElement scope) {
     return RefactoringUtil.getAnchorElementForMultipleExpressions(myOccurrences, scope);
   }

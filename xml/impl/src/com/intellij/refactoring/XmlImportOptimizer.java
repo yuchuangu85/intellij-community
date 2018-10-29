@@ -29,7 +29,6 @@ import com.intellij.psi.*;
 import com.intellij.psi.xml.XmlAttribute;
 import com.intellij.psi.xml.XmlFile;
 import com.intellij.psi.xml.XmlTag;
-import com.intellij.util.ArrayUtil;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -40,7 +39,6 @@ import java.util.Map;
 
 /**
  * @author Dmitry Avdeev
- *         Date: 11/7/11
  */
 public class XmlImportOptimizer implements ImportOptimizer {
   
@@ -82,10 +80,9 @@ public class XmlImportOptimizer implements ImportOptimizer {
           }
         }.visitFile(xmlFile);
         ProblemDescriptor[] results = holder.getResultsArray();
-        ArrayUtil.reverseArray(results);
         List<ProblemDescriptor> list = ContainerUtil.filter(results, myCondition);
 
-        Map<XmlUnusedNamespaceInspection.RemoveNamespaceDeclarationFix, ProblemDescriptor> fixes = new LinkedHashMap<XmlUnusedNamespaceInspection.RemoveNamespaceDeclarationFix, ProblemDescriptor>();
+        Map<XmlUnusedNamespaceInspection.RemoveNamespaceDeclarationFix, ProblemDescriptor> fixes = new LinkedHashMap<>();
         for (ProblemDescriptor result : list) {
           for (QuickFix fix : result.getFixes()) {
             if (fix instanceof XmlUnusedNamespaceInspection.RemoveNamespaceDeclarationFix) {

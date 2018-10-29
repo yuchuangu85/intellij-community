@@ -62,6 +62,7 @@ public interface PyElementTypes {
   PyElementType DEL_STATEMENT = new PyElementType("DEL_STATEMENT", PyDelStatementImpl.class);
   PyElementType EXEC_STATEMENT = new PyElementType("EXEC_STATEMENT", PyExecStatementImpl.class);
   PyElementType FOR_STATEMENT = new PyElementType("FOR_STATEMENT", PyForStatementImpl.class);
+  PyElementType TYPE_DECLARATION_STATEMENT = new PyElementType("TYPE_DECLARATION_STATEMENT", PyTypeDeclarationStatementImpl.class); 
 
   PyStubElementType<PyFromImportStatementStub, PyFromImportStatement> FROM_IMPORT_STATEMENT = new PyFromImportStatementElementType();
   PyStubElementType<PyImportStatementStub, PyImportStatement> IMPORT_STATEMENT = new PyImportStatementElementType();
@@ -120,8 +121,6 @@ public interface PyElementTypes {
   PyElementType SET_COMP_EXPRESSION = new PyElementType("SET_COMP_EXPRESSION", PySetCompExpressionImpl.class);
   PyElementType DICT_COMP_EXPRESSION = new PyElementType("DICT_COMP_EXPRESSION", PyDictCompExpressionImpl.class);
 
-  TokenSet LIST_LIKE_EXPRESSIONS = TokenSet.create(LIST_LITERAL_EXPRESSION, LIST_COMP_EXPRESSION, TUPLE_EXPRESSION);
-
   TokenSet STATEMENT_LISTS = TokenSet.create(STATEMENT_LIST);
 
   TokenSet BINARY_OPS = TokenSet.create(PyTokenTypes.OR_KEYWORD, PyTokenTypes.AND_KEYWORD, PyTokenTypes.LT, PyTokenTypes.GT,
@@ -151,4 +150,8 @@ public interface PyElementTypes {
   TokenSet STAR_PARAMETERS = TokenSet.create(NAMED_PARAMETER, STAR_ARGUMENT_EXPRESSION, STAR_EXPRESSION, DOUBLE_STAR_EXPRESSION);
   TokenSet CLASS_OR_FUNCTION = TokenSet.create(CLASS_DECLARATION, FUNCTION_DECLARATION);
   TokenSet IMPORT_STATEMENTS = TokenSet.create(IMPORT_STATEMENT, FROM_IMPORT_STATEMENT);
+
+  PyElementType FSTRING_NODE = new PyElementType("FSTRING_NODE", PyFormattedStringElementImpl.class);
+  PyElementType FSTRING_FRAGMENT = new PyElementType("FSTRING_FRAGMENT", PyFStringFragmentImpl.class);
+  PyElementType FSTRING_FRAGMENT_FORMAT_PART = new PyElementType("FSTRING_FRAGMENT_FORMAT_PART", PyFStringFragmentFormatPartImpl.class);
 }

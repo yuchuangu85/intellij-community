@@ -25,7 +25,6 @@ import com.intellij.util.ArrayUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
@@ -40,7 +39,7 @@ public class TestVirtualFile extends VirtualFile {
 
   private final boolean IsDirectory;
   private VirtualFile myParent;
-  private final List<TestVirtualFile> myChildren = new ArrayList<TestVirtualFile>();
+  private final List<TestVirtualFile> myChildren = new ArrayList<>();
 
   public TestVirtualFile(@NotNull String name, String content, long timestamp) {
     this(name, content,  timestamp, false);
@@ -105,7 +104,7 @@ public class TestVirtualFile extends VirtualFile {
 
   @Override
   @NotNull
-  public byte[] contentsToByteArray() throws IOException {
+  public byte[] contentsToByteArray() {
     return myContent == null ? ArrayUtil.EMPTY_BYTE_ARRAY : myContent.getBytes();
   }
 
@@ -115,7 +114,7 @@ public class TestVirtualFile extends VirtualFile {
     return new MockLocalFileSystem() {
       @Override
       public boolean equals(Object o) {
-        return true;
+        return o != null;
       }
     };
   }
@@ -138,7 +137,7 @@ public class TestVirtualFile extends VirtualFile {
 
   @Override
   @NotNull
-  public OutputStream getOutputStream(Object requestor, long newModificationStamp, long newTimeStamp) throws IOException {
+  public OutputStream getOutputStream(Object requestor, long newModificationStamp, long newTimeStamp) {
     throw new UnsupportedOperationException();
   }
 
@@ -148,7 +147,7 @@ public class TestVirtualFile extends VirtualFile {
   }
 
   @Override
-  public InputStream getInputStream() throws IOException {
+  public InputStream getInputStream() {
     throw new UnsupportedOperationException();
   }
 }

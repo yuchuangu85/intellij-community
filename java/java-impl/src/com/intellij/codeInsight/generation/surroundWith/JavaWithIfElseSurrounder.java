@@ -26,7 +26,7 @@ import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NonNls;
 
-class JavaWithIfElseSurrounder extends JavaStatementsSurrounder{
+public class JavaWithIfElseSurrounder extends JavaStatementsSurrounder{
   @Override
   public String getTemplateDescription() {
     return CodeInsightBundle.message("surround.with.ifelse.template");
@@ -35,7 +35,7 @@ class JavaWithIfElseSurrounder extends JavaStatementsSurrounder{
   @Override
   public TextRange surroundStatements(Project project, Editor editor, PsiElement container, PsiElement[] statements) throws IncorrectOperationException{
     PsiManager manager = PsiManager.getInstance(project);
-    PsiElementFactory factory = JavaPsiFacade.getInstance(manager.getProject()).getElementFactory();
+    PsiElementFactory factory = JavaPsiFacade.getElementFactory(manager.getProject());
     CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
 
     statements = SurroundWithUtil.moveDeclarationsOut(container, statements, false);

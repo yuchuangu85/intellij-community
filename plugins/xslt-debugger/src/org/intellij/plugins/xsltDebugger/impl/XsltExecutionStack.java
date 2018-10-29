@@ -30,7 +30,7 @@ public class XsltExecutionStack extends XExecutionStack {
     try {
       if (myDebuggerSession.getCurrentState() == Debugger.State.SUSPENDED) {
         Debugger.Frame frame = myTopFrame.getFrame();
-        final List<XStackFrame> frames = new ArrayList<XStackFrame>();
+        final List<XStackFrame> frames = new ArrayList<>();
         frames.add(myTopFrame);
         while (frame != null) {
           frame = frame.getPrevious();
@@ -41,7 +41,7 @@ public class XsltExecutionStack extends XExecutionStack {
         if (firstFrameIndex <= frames.size()) {
           container.addStackFrames(frames.subList(firstFrameIndex, frames.size()), true);
         } else {
-          container.addStackFrames(Collections.<XStackFrame>emptyList(), true);
+          container.addStackFrames(Collections.emptyList(), true);
         }
       }
     } catch (VMPausedException e) {

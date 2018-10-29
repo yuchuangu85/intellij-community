@@ -28,13 +28,13 @@ import java.util.ResourceBundle;
  * @author max
  */
 public class InspectionGadgetsBundle {
-
+  @NotNull
   public static String message(@NotNull @PropertyKey(resourceBundle = BUNDLE) String key, @NotNull Object... params) {
     return CommonBundle.message(getBundle(), key, params);
   }
 
   private static Reference<ResourceBundle> ourBundle;
-  @NonNls private static final String BUNDLE = "com.siyeh.InspectionGadgetsBundle";
+  @NonNls public static final String BUNDLE = "com.siyeh.InspectionGadgetsBundle";
 
   private InspectionGadgetsBundle() {
   }
@@ -43,7 +43,7 @@ public class InspectionGadgetsBundle {
     ResourceBundle bundle = com.intellij.reference.SoftReference.dereference(ourBundle);
     if (bundle == null) {
       bundle = ResourceBundle.getBundle(BUNDLE);
-      ourBundle = new SoftReference<ResourceBundle>(bundle);
+      ourBundle = new SoftReference<>(bundle);
     }
     return bundle;
   }

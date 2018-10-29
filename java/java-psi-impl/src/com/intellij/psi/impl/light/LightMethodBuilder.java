@@ -43,7 +43,7 @@ import java.util.List;
  */
 public class LightMethodBuilder extends LightElement implements PsiMethod, OriginInfoAwareElement {
   private final String myName;
-  private Computable<PsiType> myReturnType;
+  private Computable<? extends PsiType> myReturnType;
   private final PsiModifierList myModifierList;
   private final PsiParameterList myParameterList;
   private final PsiTypeParameterList myTypeParameterList;
@@ -179,13 +179,13 @@ public class LightMethodBuilder extends LightElement implements PsiMethod, Origi
     return myReturnType == null ? null : myReturnType.compute();
   }
 
-  public LightMethodBuilder setMethodReturnType(Computable<PsiType> returnType) {
+  public LightMethodBuilder setMethodReturnType(Computable<? extends PsiType> returnType) {
     myReturnType = returnType;
     return this;
   }
 
   public LightMethodBuilder setMethodReturnType(PsiType returnType) {
-    return setMethodReturnType(new Computable.PredefinedValueComputable<PsiType>(returnType));
+    return setMethodReturnType(new Computable.PredefinedValueComputable<>(returnType));
   }
 
   public LightMethodBuilder setMethodReturnType(@NotNull final String returnType) {
@@ -193,7 +193,7 @@ public class LightMethodBuilder extends LightElement implements PsiMethod, Origi
       @NotNull
       @Override
       protected PsiType internalCompute() {
-        return JavaPsiFacade.getInstance(myManager.getProject()).getElementFactory().createTypeByFQClassName(returnType, getResolveScope());
+        return JavaPsiFacade.getElementFactory(myManager.getProject()).createTypeByFQClassName(returnType, getResolveScope());
       }
     });
   }
@@ -334,6 +334,7 @@ public class LightMethodBuilder extends LightElement implements PsiMethod, Origi
     return this;
   }
 
+  @Override
   public String toString() {
     return myMethodKind + ":" + getName();
   }

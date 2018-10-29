@@ -15,16 +15,14 @@
  */
 package com.intellij.codeInsight.actions;
 
+import com.intellij.codeInsight.FileModificationService;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.Presentation;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.CommandProcessor;
-import com.intellij.openapi.editor.Caret;
-import com.intellij.openapi.editor.CaretAction;
-import com.intellij.openapi.editor.Editor;
-import com.intellij.openapi.editor.ScrollType;
+import com.intellij.openapi.editor.*;
 import com.intellij.openapi.editor.actionSystem.DocCommandGroupId;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Ref;
@@ -55,6 +53,9 @@ public abstract class MultiCaretCodeInsightAction extends AnAction {
     if (hostEditor == null) {
       return;
     }
+    if (!EditorModificationUtil.checkModificationAllowed(hostEditor)) return;
+    PsiFile hostFile = PsiDocumentManager.getInstance(project).getPsiFile(hostEditor.getDocument());
+    if (hostFile != null && !FileModificationService.getInstance().prepareFileForWrite(hostFile)) return;
 
     actionPerformedImpl(project, hostEditor);
   }
@@ -74,6 +75,12 @@ public abstract class MultiCaretCodeInsightAction extends AnAction {
   }
 
   @Override
+  public void beforeActionPerformedUpdate(@NotNull AnActionEvent e) {
+    CodeInsightEditorAction.beforeActionPerformedUpdate(e);
+    super.beforeActionPerformedUpdate(e);
+  }
+
+  @Override
   public void update(@NotNull AnActionEvent e) {
     final Presentation presentation = e.getPresentation();
 
@@ -89,7 +96,7 @@ public abstract class MultiCaretCodeInsightAction extends AnAction {
       return;
     }
 
-    final Ref<Boolean> enabled  = new Ref<Boolean>(Boolean.FALSE);
+    final Ref<Boolean> enabled  = new Ref<>(Boolean.FALSE);
     iterateOverCarets(project, hostEditor, new MultiCaretCodeInsightActionHandler() {
       @Override
       public void invoke(@NotNull Project project, @NotNull Editor editor, @NotNull Caret caret, @NotNull PsiFile file) {
@@ -104,32 +111,27 @@ public abstract class MultiCaretCodeInsightAction extends AnAction {
   private static void iterateOverCarets(@NotNull final Project project,
                                  @NotNull final Editor hostEditor,
                                  @NotNull final MultiCaretCodeInsightActionHandler handler) {
-    PsiDocumentManager documentManager = PsiDocumentManager.getInstance(project);
-    final PsiFile psiFile = documentManager.getCachedPsiFile(hostEditor.getDocument());
-    documentManager.commitAllDocuments();
+    PsiFile hostFile = PsiDocumentManager.getInstance(project).getPsiFile(hostEditor.getDocument());
 
-    hostEditor.getCaretModel().runForEachCaret(new CaretAction() {
-      @Override
-      public void perform(Caret caret) {
-        Editor editor = hostEditor;
-        if (psiFile != null) {
-          Caret injectedCaret = InjectedLanguageUtil.getCaretForInjectedLanguageNoCommit(caret, psiFile);
-          if (injectedCaret != null) {
-            caret = injectedCaret;
-            editor = caret.getEditor();
-          }
+    hostEditor.getCaretModel().runForEachCaret(caret -> {
+      Editor editor = hostEditor;
+      if (hostFile != null) {
+        Caret injectedCaret = InjectedLanguageUtil.getCaretForInjectedLanguageNoCommit(caret, hostFile);
+        if (injectedCaret != null) {
+          caret = injectedCaret;
+          editor = caret.getEditor();
         }
-        final PsiFile file = PsiUtilBase.getPsiFileInEditor(caret, project);
-        if (file != null) {
-          handler.invoke(project, editor, caret, file);
-        }
+      }
+      final PsiFile file = PsiUtilBase.getPsiFileInEditor(caret, project);
+      if (file != null) {
+        handler.invoke(project, editor, caret, file);
       }
     });
   }
 
   /**
    * During action status update this method is invoked for each caret in editor. If at least for a single caret it returns
-   * <code>true</code>, action is considered enabled.
+   * {@code true}, action is considered enabled.
    */
   protected boolean isValidFor(@NotNull Project project, @NotNull Editor editor, @NotNull Caret caret, @NotNull PsiFile file) {
     return true;

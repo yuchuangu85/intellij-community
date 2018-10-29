@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,19 +49,19 @@ import java.util.Map;
  * author: lesya
  */
 
-public class CvsEntriesManager extends VirtualFileAdapter {
+public class CvsEntriesManager implements VirtualFileListener {
 
   private static final Logger LOG = Logger.getInstance("#com.intellij.cvsSupport2.application.CvsEntriesManager");
 
-  private final Map<VirtualFile, CvsInfo> myInfoByParentDirectoryPath = new THashMap<VirtualFile, CvsInfo>();
+  private final Map<VirtualFile, CvsInfo> myInfoByParentDirectoryPath = new THashMap<>();
 
   private static final String CVS_ADMIN_DIRECTORY_NAME = CvsUtil.CVS;
 
   private final Collection<CvsEntriesListener> myEntriesListeners = ContainerUtil.createLockFreeCopyOnWriteList();
   private int myIsActive = 0;
-  private final Collection<String> myFilesToRefresh = new THashSet<String>();
+  private final Collection<String> myFilesToRefresh = new THashSet<>();
 
-  private final Map<String, CvsConnectionSettings> myStringToSettingsMap = new THashMap<String, CvsConnectionSettings>();
+  private final Map<String, CvsConnectionSettings> myStringToSettingsMap = new THashMap<>();
   private final UserDirIgnores myUserDirIgnores = new UserDirIgnores();
   private final MyVirtualFileManagerListener myVirtualFileManagerListener = new MyVirtualFileManagerListener();
   private final CvsApplicationLevelConfiguration myApplicationLevelConfiguration;
@@ -75,10 +75,12 @@ public class CvsEntriesManager extends VirtualFileAdapter {
   }
 
   private class MyVirtualFileManagerListener implements VirtualFileManagerListener {
+    @Override
     public void afterRefreshFinish(boolean asynchonous) {
       ensureFilesCached(); //to cache for next refreshes
     }
 
+    @Override
     public void beforeRefreshStart(boolean asynchonous) {
     }
   }
@@ -101,14 +103,17 @@ public class CvsEntriesManager extends VirtualFileAdapter {
     }
   }
 
+  @Override
   public void beforePropertyChange(@NotNull VirtualFilePropertyEvent event) {
     processEvent(event);
   }
 
+  @Override
   public void beforeContentsChange(@NotNull VirtualFileEvent event) {
     processEvent(event);
   }
 
+  @Override
   public void contentsChanged(@NotNull VirtualFileEvent event) {
     fireStatusChanged(event.getFile());
   }
@@ -151,14 +156,17 @@ public class CvsEntriesManager extends VirtualFileAdapter {
     return getInfoFor(parent).getIgnoreFilter();
   }
 
+  @Override
   public void beforeFileDeletion(@NotNull VirtualFileEvent event) {
     processEvent(event);
   }
 
+  @Override
   public void beforeFileMovement(@NotNull VirtualFileMoveEvent event) {
     processEvent(event);
   }
 
+  @Override
   public void fileCreated(@NotNull VirtualFileEvent event) {
     processEvent(event);
   }

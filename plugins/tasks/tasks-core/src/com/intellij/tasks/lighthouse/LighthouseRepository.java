@@ -25,7 +25,7 @@ import com.intellij.tasks.impl.BaseRepositoryImpl;
 import com.intellij.util.NullableFunction;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xmlb.annotations.Tag;
-import icons.TasksIcons;
+import icons.TasksCoreIcons;
 import org.apache.commons.httpclient.HttpClient;
 import org.apache.commons.httpclient.HttpMethod;
 import org.apache.commons.httpclient.methods.GetMethod;
@@ -99,7 +99,7 @@ public class LighthouseRepository extends BaseRepositoryImpl {
     if (!StringUtil.isEmpty(query)) {
       url += encodeUrl(query);
     }
-    final List<Task> tasks = new ArrayList<Task>();
+    final List<Task> tasks = new ArrayList<>();
     int page = 1;
     final HttpClient client = login();
     while (tasks.size() < max) {
@@ -119,7 +119,7 @@ public class LighthouseRepository extends BaseRepositoryImpl {
       tasks.addAll(taskList);
       page++;
     }
-    return tasks.toArray(new Task[tasks.size()]);
+    return tasks.toArray(Task.EMPTY_ARRAY);
   }
 
   @Nullable
@@ -134,8 +134,8 @@ public class LighthouseRepository extends BaseRepositoryImpl {
     }
     final String description = element.getChildText("original-body");
     final boolean isClosed = "true".equals(element.getChildText("closed"));
-    final Ref<Date> updated = new Ref<Date>();
-    final Ref<Date> created = new Ref<Date>();
+    final Ref<Date> updated = new Ref<>();
+    final Ref<Date> created = new Ref<>();
     try {
       updated.set(parseDate(element, "updated-at"));
       created.set(parseDate(element, "created-at"));
@@ -166,6 +166,7 @@ public class LighthouseRepository extends BaseRepositoryImpl {
         return summary;
       }
 
+      @Override
       public String getDescription() {
         return description;
       }
@@ -179,7 +180,7 @@ public class LighthouseRepository extends BaseRepositoryImpl {
       @NotNull
       @Override
       public Icon getIcon() {
-        return TasksIcons.Lighthouse;
+        return TasksCoreIcons.Lighthouse;
       }
 
       @NotNull
@@ -224,6 +225,7 @@ public class LighthouseRepository extends BaseRepositoryImpl {
     return null;
   }
 
+  @Override
   @Nullable
   public String extractId(@NotNull String taskName) {
     Matcher matcher = myPattern.matcher(taskName);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,7 @@
 package com.siyeh.ig.javabeans;
 
 import com.intellij.codeInspection.InspectionProfileEntry;
-import com.intellij.psi.codeStyle.CodeStyleSettings;
-import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
+import com.intellij.psi.codeStyle.JavaCodeStyleSettings;
 import com.siyeh.ig.LightInspectionTestCase;
 import org.jetbrains.annotations.Nullable;
 
@@ -27,21 +26,19 @@ import org.jetbrains.annotations.Nullable;
 public class SuspiciousGetterSetterInspectionTest extends LightInspectionTestCase {
 
   public void testSuspiciousGetterSetter() {
-    final CodeStyleSettings settings = CodeStyleSettingsManager.getInstance(getProject()).getCurrentSettings();
-    final String oldPrefix = settings.FIELD_NAME_PREFIX;
-    try {
-      settings.FIELD_NAME_PREFIX = "my";
-      doTest();
-    } finally {
-      settings.FIELD_NAME_PREFIX = oldPrefix;
-    }
+    final JavaCodeStyleSettings settings =
+      JavaCodeStyleSettings.getInstance(getProject());
+    settings.FIELD_NAME_PREFIX = "my";
+    doTest();
+  }
+
+  public void testNoPrefix() {
+    doTest();
   }
 
   @Nullable
   @Override
   protected InspectionProfileEntry getInspection() {
-    final SuspiciousGetterSetterInspection inspection = new SuspiciousGetterSetterInspection();
-    inspection.onlyWarnWhenFieldPresent = true;
-    return inspection;
+    return new SuspiciousGetterSetterInspection();
   }
 }

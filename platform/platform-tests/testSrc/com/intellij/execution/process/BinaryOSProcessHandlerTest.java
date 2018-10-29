@@ -16,8 +16,8 @@
 package com.intellij.execution.process;
 
 import com.intellij.openapi.util.Key;
-import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.util.io.BaseOutputReader;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Test;
@@ -49,15 +49,13 @@ public class BinaryOSProcessHandlerTest {
   }
 
   private static Process launchTest() throws URISyntaxException, IOException {
-    String java = System.getProperty("java.home") + (SystemInfo.isWindows ? "\\bin\\java.exe" : "/bin/java");
-
     String className = Runner.class.getName();
     URL url = Runner.class.getClassLoader().getResource(className.replace('.', '/') + ".class");
     assertNotNull(url);
     File dir = new File(url.toURI());
     for (int i = 0; i < StringUtil.countChars(className, '.') + 1; i++) dir = dir.getParentFile();
 
-    String[] cmd = {java, "-cp", dir.getPath(), className};
+    String[] cmd = {PlatformTestUtil.getJavaExe(), "-cp", dir.getPath(), className};
     return new ProcessBuilder(cmd).redirectErrorStream(false).start();
   }
 
@@ -66,7 +64,7 @@ public class BinaryOSProcessHandlerTest {
     private final boolean blocking;
     private int exitCode = -1;
 
-    public TestBinaryOSProcessHandler(Process process, boolean blocking) {
+    TestBinaryOSProcessHandler(Process process, boolean blocking) {
       super(process, "test", null);
       this.blocking = blocking;
     }
@@ -78,7 +76,7 @@ public class BinaryOSProcessHandlerTest {
     }
 
     @Override
-    public void notifyTextAvailable(String text, Key outputType) {
+    public void notifyTextAvailable(@NotNull String text, @NotNull Key outputType) {
       if (outputType != ProcessOutputTypes.SYSTEM) {
         stdErr.append(text);
       }
@@ -98,7 +96,7 @@ public class BinaryOSProcessHandlerTest {
     private static final int SEND_TIMEOUT = 500;
 
     @SuppressWarnings("BusyWait")
-    public static void main(String[] args) throws IOException, InterruptedException {
+    public static void main(String[] args) throws InterruptedException {
       System.err.print(TEXT);
 
       for (int offset = 0; offset < BYTES.length; offset += PACKET_SIZE) {

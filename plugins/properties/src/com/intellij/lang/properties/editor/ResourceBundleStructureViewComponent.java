@@ -56,15 +56,15 @@ public class ResourceBundleStructureViewComponent extends PropertiesGroupingStru
 
   private final ResourceBundle myResourceBundle;
 
-  public ResourceBundleStructureViewComponent(final ResourceBundle resourceBundle,
-                                              final ResourceBundleEditor editor,
-                                              final PropertiesAnchorizer anchorizer) {
-    super(resourceBundle.getProject(), editor, new ResourceBundleStructureViewModel(resourceBundle, anchorizer));
+  public ResourceBundleStructureViewComponent(@NotNull final ResourceBundle resourceBundle,
+                                              @NotNull final ResourceBundleEditor editor) {
+    super(resourceBundle.getProject(), editor, new ResourceBundleStructureViewModel(resourceBundle));
     myResourceBundle = resourceBundle;
     tunePopupActionGroup();
     getTree().setCellRenderer(new ResourceBundleEditorRenderer());
   }
 
+  @NotNull
   @Override
   protected ActionGroup createActionGroup() {
     final DefaultActionGroup result = (DefaultActionGroup) super.createActionGroup();
@@ -73,7 +73,7 @@ public class ResourceBundleStructureViewComponent extends PropertiesGroupingStru
   }
 
   @Override
-  protected void addGroupByActions(final DefaultActionGroup result) {
+  protected void addGroupByActions(@NotNull final DefaultActionGroup result) {
     super.addGroupByActions(result);
     result.add(new NewPropertyAction(true), Constraints.FIRST);
   }
@@ -96,7 +96,8 @@ public class ResourceBundleStructureViewComponent extends PropertiesGroupingStru
     return PsiFile.EMPTY_ARRAY;
   }
 
-  public Object getData(final String dataId) {
+  @Override
+  public Object getData(@NotNull final String dataId) {
     if (CommonDataKeys.VIRTUAL_FILE.is(dataId)) {
       return new ResourceBundleAsVirtualFile(myResourceBundle);
     } else if (PlatformDataKeys.FILE_EDITOR.is(dataId)) {
@@ -122,7 +123,7 @@ public class ResourceBundleStructureViewComponent extends PropertiesGroupingStru
       }
     }
     else if (LangDataKeys.PSI_ELEMENT_ARRAY.is(dataId)) {
-      final List<PsiElement> elements = new ArrayList<PsiElement>();
+      final List<PsiElement> elements = new ArrayList<>();
       Collections.addAll(elements, getSelectedPsiFiles());
       final IProperty[] properties = (IProperty[])getData(IProperty.ARRAY_KEY.getName());
       if (properties != null) {
@@ -133,7 +134,7 @@ public class ResourceBundleStructureViewComponent extends PropertiesGroupingStru
           }
         }
       }
-      return elements.toArray(new PsiElement[elements.size()]);
+      return elements.toArray(PsiElement.EMPTY_ARRAY);
     }
     else if (PlatformDataKeys.DELETE_ELEMENT_PROVIDER.is(dataId)) {
       if (getSelectedPsiFiles().length != 0) {
@@ -160,7 +161,7 @@ public class ResourceBundleStructureViewComponent extends PropertiesGroupingStru
         public void performCopy(@NotNull final DataContext dataContext) {
           final PsiElement[] selectedPsiElements = (PsiElement[])getData(LangDataKeys.PSI_ELEMENT_ARRAY.getName());
           if (selectedPsiElements != null) {
-            final List<String> names = new ArrayList<String>(selectedPsiElements.length);
+            final List<String> names = new ArrayList<>(selectedPsiElements.length);
             for (final PsiElement element : selectedPsiElements) {
               if (element instanceof PsiNamedElement) {
                 names.add(((PsiNamedElement)element).getName());
@@ -184,6 +185,7 @@ public class ResourceBundleStructureViewComponent extends PropertiesGroupingStru
     return super.getData(dataId);
   }
 
+  @Override
   protected boolean showScrollToFromSourceActions() {
     return false;
   }
@@ -201,7 +203,7 @@ public class ResourceBundleStructureViewComponent extends PropertiesGroupingStru
     public void deleteElement(@NotNull final DataContext dataContext) {
       final List<PropertiesFile> bundlePropertiesFiles = myResourceBundle.getPropertiesFiles();
 
-      final List<PsiElement> toDelete = new ArrayList<PsiElement>();
+      final List<PsiElement> toDelete = new ArrayList<>();
       for (IProperty property : myProperties) {
         final String key = property.getKey();
         if (key == null) {
@@ -226,6 +228,7 @@ public class ResourceBundleStructureViewComponent extends PropertiesGroupingStru
     }
   }
 
+  @Override
   @NonNls
   public String getHelpID() {
     return "editing.propertyFile.bundleEditor";

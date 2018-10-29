@@ -18,7 +18,7 @@ package com.intellij.util.config;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.util.containers.HashMap;
+import java.util.HashMap;
 
 import java.util.Collections;
 import java.util.Iterator;
@@ -68,7 +68,7 @@ public interface Storage {
   }
 
   class MapStorage implements Storage {
-    private final Map<String, String> myValues = new HashMap<String, String>();
+    private final Map<String, String> myValues = new HashMap<>();
 
     @Override
     public String get(String key) {

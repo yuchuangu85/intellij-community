@@ -52,6 +52,7 @@ public class HgRegularUpdater implements HgUpdater {
     this.updateConfiguration = configuration;
   }
 
+  @Override
   public boolean update(final UpdatedFiles updatedFiles, ProgressIndicator indicator, List<VcsException> warnings)
     throws VcsException {
     indicator.setText(HgVcsMessages.message("hg4idea.progress.updating", repoRoot.getPath()));
@@ -129,7 +130,7 @@ public class HgRegularUpdater implements HgUpdater {
 
   private static List<HgRevisionNumber> determingRemainingOriginalBranchHeads(List<HgRevisionNumber> branchHeadsBeforePull,
                                                                               List<HgRevisionNumber> branchHeadsAfterPull) {
-    List<HgRevisionNumber> originalBranchHeadsRemaining = new ArrayList<HgRevisionNumber>();
+    List<HgRevisionNumber> originalBranchHeadsRemaining = new ArrayList<>();
     for (HgRevisionNumber headAfterPull : branchHeadsAfterPull) {
       if (branchHeadsBeforePull.contains(headAfterPull)) {
         originalBranchHeadsRemaining.add(headAfterPull);
@@ -140,7 +141,7 @@ public class HgRegularUpdater implements HgUpdater {
 
   private static List<HgRevisionNumber> determinePulledBranchHeads(List<HgRevisionNumber> branchHeadsBeforePull,
                                                                    List<HgRevisionNumber> branchHeadsAfterPull) {
-    List<HgRevisionNumber> pulledBranchHeads = new ArrayList<HgRevisionNumber>(branchHeadsAfterPull);
+    List<HgRevisionNumber> pulledBranchHeads = new ArrayList<>(branchHeadsAfterPull);
     pulledBranchHeads.removeAll(branchHeadsBeforePull);
     return pulledBranchHeads;
   }
@@ -289,7 +290,6 @@ public class HgRegularUpdater implements HgUpdater {
   }
 
   private static void reportWarning(List<VcsException> exceptions, String warningMessage) {
-    @SuppressWarnings({"ThrowableInstanceNeverThrown"})
     VcsException warningException = new VcsException(warningMessage);
     warningException.setIsWarning(true);
     exceptions.add(warningException);

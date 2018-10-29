@@ -1,24 +1,9 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.actionSystem;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.ex.AnActionListener;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.components.NamedComponent;
 import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.util.ActionCallback;
 import org.jetbrains.annotations.NonNls;
@@ -35,55 +20,48 @@ import java.awt.event.InputEvent;
  *
  * @see AnAction
  */
-public abstract class ActionManager implements NamedComponent {
-
+public abstract class ActionManager {
   /**
    * Fetches the instance of ActionManager implementation.
    */
-  public static ActionManager getInstance(){
+  public static ActionManager getInstance() {
     return ApplicationManager.getApplication().getComponent(ActionManager.class);
   }
 
   /**
-   * Factory method that creates an <code>ActionPopupMenu</code> from the
+   * Factory method that creates an {@code ActionPopupMenu} from the
    * specified group. The specified place is associated with the created popup.
    *
    * @param place Determines the place that will be set for {@link AnActionEvent} passed
-   *  when an action from the group is either performed or updated
-   *  See {@link com.intellij.openapi.actionSystem.ActionPlaces}
-   *
+   *              when an action from the group is either performed or updated
+   *              See {@link com.intellij.openapi.actionSystem.ActionPlaces}
    * @param group Group from which the actions for the menu are taken.
-   *
-   * @return An instance of <code>ActionPopupMenu</code>
+   * @return An instance of {@code ActionPopupMenu}
    */
+  @NotNull
   public abstract ActionPopupMenu createActionPopupMenu(@NonNls String place, @NotNull ActionGroup group);
 
   /**
-   * Factory method that creates an <code>ActionToolbar</code> from the
+   * Factory method that creates an {@code ActionToolbar} from the
    * specified group. The specified place is associated with the created toolbar.
    *
-   * @param place Determines the place that will be set for {@link AnActionEvent} passed
-   *  when an action from the group is either performed or updated.
-   *  See {@link com.intellij.openapi.actionSystem.ActionPlaces}
-   *
-   * @param group Group from which the actions for the toolbar are taken.
-   *
+   * @param place      Determines the place that will be set for {@link AnActionEvent} passed
+   *                   when an action from the group is either performed or updated.
+   *                   See {@link com.intellij.openapi.actionSystem.ActionPlaces}
+   * @param group      Group from which the actions for the toolbar are taken.
    * @param horizontal The orientation of the toolbar (true - horizontal, false - vertical)
-   *
-   * @return An instance of <code>ActionToolbar</code>
+   * @return An instance of {@code ActionToolbar}
    */
-  public abstract ActionToolbar createActionToolbar(@NonNls String place, @NotNull ActionGroup group, boolean horizontal);
+  @NotNull
+  public abstract ActionToolbar createActionToolbar(@NonNls @NotNull String place, @NotNull ActionGroup group, boolean horizontal);
 
   /**
    * Returns action associated with the specified actionId.
    *
    * @param actionId Id of the registered action
-   *
-   * @return Action associated with the specified actionId, <code>null</code> if
-   *  there is no actions associated with the specified actionId
-   *
-   * @exception java.lang.IllegalArgumentException if <code>actionId</code> is <code>null</code>
-   *
+   * @return Action associated with the specified actionId, {@code null} if
+   * there is no actions associated with the specified actionId
+   * @throws IllegalArgumentException if {@code actionId} is {@code null}
    * @see com.intellij.openapi.actionSystem.IdeActions
    */
   public abstract AnAction getAction(@NonNls @NotNull String actionId);
@@ -91,10 +69,9 @@ public abstract class ActionManager implements NamedComponent {
   /**
    * Returns actionId associated with the specified action.
    *
-   * @return id associated with the specified action, <code>null</code> if action
-   *  is not registered
-   *
-   * @exception java.lang.IllegalArgumentException if <code>action</code> is <code>null</code>
+   * @return id associated with the specified action, {@code null} if action
+   * is not registered
+   * @throws IllegalArgumentException if {@code action} is {@code null}
    */
   public abstract String getId(@NotNull AnAction action);
 
@@ -103,7 +80,7 @@ public abstract class ActionManager implements NamedComponent {
    * processing deals only with registered actions.
    *
    * @param actionId Id to associate with the action
-   * @param action Action to register
+   * @param action   Action to register
    */
   public abstract void registerAction(@NonNls @NotNull String actionId, @NotNull AnAction action);
 
@@ -127,7 +104,7 @@ public abstract class ActionManager implements NamedComponent {
   /**
    * Returns the list of all registered action IDs with the specified prefix.
    *
-   * @return all action <code>id</code>s which have the specified prefix.
+   * @return all action {@code id}s which have the specified prefix.
    * @since 5.1
    */
   public abstract String[] getActionIds(@NotNull String idPrefix);
@@ -151,8 +128,10 @@ public abstract class ActionManager implements NamedComponent {
    * @return the created panel.
    * @since 5.1
    */
+  @NotNull
   public abstract JComponent createButtonToolbar(final String actionPlace, @NotNull ActionGroup messageActionGroup);
 
+  @Nullable
   public abstract AnAction getActionOrStub(@NonNls String id);
 
   public abstract void addTimerListener(int delay, TimerListener listener);
@@ -166,11 +145,32 @@ public abstract class ActionManager implements NamedComponent {
   public abstract ActionCallback tryToExecute(@NotNull AnAction action, @NotNull InputEvent inputEvent, @Nullable Component contextComponent,
                                               @Nullable String place, boolean now);
 
+  /**
+   * Use {@link AnActionListener#TOPIC}
+   */
+  @Deprecated
   public abstract void addAnActionListener(AnActionListener listener);
-  public abstract void addAnActionListener(AnActionListener listener, Disposable parentDisposable);
 
+  /**
+   * @deprecated Use {@link AnActionListener#TOPIC}
+   */
+  @Deprecated
+  public void addAnActionListener(AnActionListener listener, Disposable parentDisposable) {
+    ApplicationManager.getApplication().getMessageBus().connect(parentDisposable).subscribe(AnActionListener.TOPIC, listener);
+  }
+
+  @Deprecated
   public abstract void removeAnActionListener(AnActionListener listener);
 
   @Nullable
   public abstract KeyboardShortcut getKeyboardShortcut(@NonNls @NotNull String actionId);
+
+  /**
+   * @deprecated Don't use
+   */
+  @Deprecated
+  @NotNull
+  public String getComponentName() {
+    return "ActionManager";
+  }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import com.intellij.psi.search.GlobalSearchScope;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.SystemIndependent;
 
 /**
  * Represents a module in an IDEA project.
@@ -31,6 +32,7 @@ import org.jetbrains.annotations.Nullable;
  * @see ModuleManager#getModules()
  * @see ModuleComponent
  */
+@SuppressWarnings("DeprecatedIsStillUsed")
 public interface Module extends ComponentManager, AreaInstance, Disposable {
   /**
    * The empty array of modules which cab be reused to avoid unnecessary allocations.
@@ -40,7 +42,7 @@ public interface Module extends ComponentManager, AreaInstance, Disposable {
   @NonNls String ELEMENT_TYPE = "type";
 
   /**
-   * Returns the <code>VirtualFile</code> for the module .iml file.
+   * Returns the {@code VirtualFile} for the module .iml file.
    *
    * @return the virtual file instance.
    */
@@ -51,6 +53,7 @@ public interface Module extends ComponentManager, AreaInstance, Disposable {
    * System-independent path to the .iml file.
    */
   @NotNull
+  @SystemIndependent
   String getModuleFilePath();
 
   /**
@@ -78,67 +81,97 @@ public interface Module extends ComponentManager, AreaInstance, Disposable {
   boolean isLoaded();
 
   /**
-   * Removes a custom option from this module.
-   *
-   * @param key the name of the custom option.
+   * @deprecated Please store options in your own {@link com.intellij.openapi.components.PersistentStateComponent}
    */
-  void clearOption(@NotNull String key);
+  @Deprecated
+  default void clearOption(@NotNull String key) {
+    setOption(key, null);
+  }
 
   /**
-   * Sets a custom option for this module.
-   *
-   * @param key the name of the custom option.
-   * @param value the value of the custom option.
+   * @deprecated Please store options in your own {@link com.intellij.openapi.components.PersistentStateComponent}
    */
-  void setOption(@NotNull String key, @NotNull String value);
+  @Deprecated
+  void setOption(@NotNull String key, @Nullable String value);
 
   /**
-   * Gets the value of a custom option for this module.
-   *
-   * @param key the name of the custom option.
-   * @return the value of the custom option, or null if no value has been set.
+   * @deprecated Please store options in your own {@link com.intellij.openapi.components.PersistentStateComponent}
    */
+  @Deprecated
   @Nullable
   String getOptionValue(@NotNull String key);
 
   /**
-   * Returns module scope including sources and tests, excluding libraries and dependencies.
-   *
-   * @return scope including sources and tests, excluding libraries and dependencies.
+   * @return module scope including source and tests, excluding libraries and dependencies.
    */
   @NotNull
   GlobalSearchScope getModuleScope();
 
+  /**
+   * @param includeTests whether to include test source
+   * @return module scope including source and, optionally, tests, excluding libraries and dependencies.
+   */
   @NotNull
   GlobalSearchScope getModuleScope(boolean includeTests);
 
   /**
-   * Returns module scope including sources, tests, and libraries, excluding dependencies.
-   *
-   * @return scope including sources, tests, and libraries, excluding dependencies.
+   * @return module scope including source, tests, and libraries, excluding dependencies.
    */
   @NotNull
   GlobalSearchScope getModuleWithLibrariesScope();
 
   /**
-   * Returns module scope including sources, tests, and dependencies, excluding libraries.
-   *
-   * @return scope including sources, tests, and dependencies, excluding libraries.
+   * @return module scope including source, tests, and dependencies, excluding libraries.
    */
   @NotNull
   GlobalSearchScope getModuleWithDependenciesScope();
 
+  /**
+   * @return a scope that includes everything in module content roots, without any dependencies or libraries
+   */
   @NotNull
   GlobalSearchScope getModuleContentScope();
+
+  /**
+   * @return a scope that includes everything under the content roots of this module and its dependencies, with test source
+   */
   @NotNull
   GlobalSearchScope getModuleContentWithDependenciesScope();
 
+  /**
+   * @param includeTests whether test source and test dependencies should be included
+   * @return a scope including module source and dependencies with libraries
+   */
   @NotNull
   GlobalSearchScope getModuleWithDependenciesAndLibrariesScope(boolean includeTests);
+
+  /**
+   * @return a scope including everything under the content roots of this module and all modules that depend on it, directly or indirectly (via exported dependencies), excluding test source and resources
+   */
   @NotNull
   GlobalSearchScope getModuleWithDependentsScope();
+
+  /**
+   * @return same as {@link #getModuleWithDependentsScope()}, but with test source/resources included
+   */
   @NotNull
   GlobalSearchScope getModuleTestsWithDependentsScope();
+
+  /**
+   * @param includeTests whether test source and test dependencies should be included
+   * @return a scope including production (and optionally test) source of this module and all modules and libraries it depends upon, including runtime and transitive dependencies, even if they're not exported.
+   */
   @NotNull
   GlobalSearchScope getModuleRuntimeScope(boolean includeTests);
+
+  @Nullable
+  default String getModuleTypeName() {
+    //noinspection deprecation
+    return getOptionValue(ELEMENT_TYPE);
+  }
+
+  default void setModuleType(@NotNull String name) {
+    //noinspection deprecation
+    setOption(ELEMENT_TYPE, name);
+  }
 }

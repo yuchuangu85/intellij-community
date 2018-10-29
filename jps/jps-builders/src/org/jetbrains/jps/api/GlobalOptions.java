@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package org.jetbrains.jps.api;
 
 /**
  * @author Eugene Zhuravlev
- *         Date: 1/24/12
  */
 public interface GlobalOptions {
   String USE_MEMORY_TEMP_CACHE_OPTION = "use.memory.temp.cache";
@@ -28,6 +27,7 @@ public interface GlobalOptions {
   String LOG_DIR_OPTION = "jps.log.dir";
   String FALLBACK_JDK_HOME = "jps.fallback.jdk.home";
   String FALLBACK_JDK_VERSION = "jps.fallback.jdk.version";
+  String REPORT_BUILD_STATISTICS = "jps.report.build.statistics";
 
   /**
    * Set this property to 'false' to disable default logging. By default the log is written to build.log file in the directory specified by {@link #LOG_DIR_OPTION}.
@@ -38,4 +38,9 @@ public interface GlobalOptions {
   String JPS_SYSTEM_BUILDER_ID = "JPS";
   // notification about the files changed during compilation, but not compiled in current compilation session
   String JPS_UNPROCESSED_FS_CHANGES_MESSAGE_ID = "!unprocessed_fs_changes_detected!";
+
+  /**
+   * The path to external project config directory (used for external system projects).
+   */
+  String EXTERNAL_PROJECT_CONFIG = "external.project.config";
 }

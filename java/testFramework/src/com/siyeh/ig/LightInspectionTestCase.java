@@ -1,22 +1,20 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.siyeh.ig;
 
+import com.intellij.codeHighlighting.HighlightDisplayLevel;
+import com.intellij.codeInsight.daemon.HighlightDisplayKey;
+import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInspection.InspectionProfileEntry;
+import com.intellij.codeInspection.ex.InspectionProfileImpl;
+import com.intellij.openapi.module.ModuleManager;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.projectRoots.Sdk;
+import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.profile.codeInspection.ProjectInspectionProfileManager;
+import com.intellij.psi.JavaPsiFacade;
+import com.intellij.psi.PsiClass;
+import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
 import com.intellij.util.ArrayUtil;
 import org.intellij.lang.annotations.Language;
@@ -28,6 +26,8 @@ import org.jetbrains.annotations.Nullable;
  */
 public abstract class LightInspectionTestCase extends LightCodeInsightFixtureTestCase {
 
+  public static final String INSPECTION_GADGETS_TEST_DATA_PATH = "/plugins/InspectionGadgets/test/";
+
   @Override
   protected void setUp() throws Exception {
     super.setUp();
@@ -38,6 +38,23 @@ public abstract class LightInspectionTestCase extends LightCodeInsightFixtureTes
     final InspectionProfileEntry inspection = getInspection();
     if (inspection != null) {
       myFixture.enableInspections(inspection);
+
+      final Project project = myFixture.getProject();
+      final HighlightDisplayKey displayKey = HighlightDisplayKey.find(inspection.getShortName());
+      final InspectionProfileImpl currentProfile = ProjectInspectionProfileManager.getInstance(project).getCurrentProfile();
+      final HighlightDisplayLevel errorLevel = currentProfile.getErrorLevel(displayKey, null);
+      if (errorLevel == HighlightDisplayLevel.DO_NOT_SHOW) {
+        currentProfile.setErrorLevel(displayKey, HighlightDisplayLevel.WARNING, project);
+      }
+    }
+
+    Sdk sdk = ModuleRootManager.getInstance(ModuleManager.getInstance(getProject()).getModules()[0]).getSdk();
+    if (JAVA_1_7.getSdk().getName().equals(sdk == null ? null : sdk.getName())) {
+      PsiClass object = JavaPsiFacade.getInstance(getProject()).findClass("java.lang.Object", GlobalSearchScope.allScope(getProject()));
+      assertNotNull(object);
+
+      PsiClass component = JavaPsiFacade.getInstance(getProject()).findClass("java.awt.Component", GlobalSearchScope.allScope(getProject()));
+      assertNotNull(component);
     }
   }
 
@@ -54,15 +71,37 @@ public abstract class LightInspectionTestCase extends LightCodeInsightFixtureTes
     myFixture.addClass(classText);
   }
 
-  protected final void doStatementTest(@Language(value="JAVA", prefix="class X { void m() {", suffix="}}") @NotNull String statementText) {
+  protected final void doStatementTest(@Language(value="JAVA", prefix="@SuppressWarnings(\"all\") class X { void m() {", suffix="}}") @NotNull String statementText) {
     doTest("class X { void m() {" + statementText + "}}");
   }
 
-  protected final void doMemberTest(@Language(value="JAVA", prefix="class X {", suffix="}") @NotNull String memberText) {
+  protected final void doMemberTest(@Language(value="JAVA", prefix="@SuppressWarnings(\"all\") class X {", suffix="}") @NotNull String memberText) {
     doTest("class X {" + memberText + "}");
   }
 
   protected final void doTest(@Language("JAVA") @NotNull String classText) {
+    doTest(classText, "X.java");
+  }
+
+  protected final void assertQuickFixNotAvailable(String name) {
+    assertEmpty(myFixture.filterAvailableIntentions(name));
+  }
+
+  protected final void checkQuickFix(String name, @Language("JAVA") String result) {
+    final IntentionAction intention = myFixture.getAvailableIntention(name);
+    assertNotNull(intention);
+    myFixture.launchAction(intention);
+    myFixture.checkResult(result);
+  }
+
+  protected final void checkQuickFix(String intentionName) {
+    final IntentionAction intention = myFixture.getAvailableIntention(intentionName);
+    assertNotNull(intention);
+    myFixture.launchAction(intention);
+    myFixture.checkResultByFile(getTestName(false) + ".after.java");
+  }
+
+  protected final void doTest(@Language("JAVA") @NotNull String classText, String fileName) {
     final StringBuilder newText = new StringBuilder();
     int start = 0;
     int end = classText.indexOf("/*");
@@ -77,8 +116,17 @@ public abstract class LightInspectionTestCase extends LightCodeInsightFixtureTes
       if (text.isEmpty()) {
         newText.append("</warning>");
       }
+      else if ("!".equals(text)) {
+        newText.append("</error>");
+      }
       else if ("_".equals(text)) {
         newText.append("<caret>");
+      }
+      else if (text.startsWith("!")) {
+        newText.append("<error descr=\"").append(text.substring(1)).append("\">");
+      }
+      else if (text.startsWith(" ")) {
+        newText.append("/*").append(text).append("*/");
       }
       else {
         newText.append("<warning descr=\"").append(text).append("\">");
@@ -87,7 +135,7 @@ public abstract class LightInspectionTestCase extends LightCodeInsightFixtureTes
       end = classText.indexOf("/*", end + 1);
     }
     newText.append(classText, start, classText.length());
-    myFixture.configureByText("X.java", newText.toString());
+    myFixture.configureByText(fileName, newText.toString());
     myFixture.testHighlighting(true, false, false);
   }
 
@@ -97,7 +145,7 @@ public abstract class LightInspectionTestCase extends LightCodeInsightFixtureTes
     assertNotNull("File-based tests should either return an inspection or override this method", inspection);
     final String className = inspection.getClass().getName();
     final String[] words = className.split("\\.");
-    final StringBuilder basePath = new StringBuilder("/plugins/InspectionGadgets/test/");
+    final StringBuilder basePath = new StringBuilder(INSPECTION_GADGETS_TEST_DATA_PATH);
     final int lastWordIndex = words.length - 1;
     for (int i = 0; i < lastWordIndex; i++) {
       String word = words[i];

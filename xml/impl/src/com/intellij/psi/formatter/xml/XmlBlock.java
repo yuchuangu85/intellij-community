@@ -28,10 +28,7 @@ import com.intellij.psi.formatter.common.AbstractBlock;
 import com.intellij.psi.impl.source.SourceTreeToPsiMap;
 import com.intellij.psi.templateLanguages.OuterLanguageElement;
 import com.intellij.psi.tree.IElementType;
-import com.intellij.psi.xml.XmlDocument;
-import com.intellij.psi.xml.XmlElementType;
-import com.intellij.psi.xml.XmlTag;
-import com.intellij.psi.xml.XmlTokenType;
+import com.intellij.psi.xml.*;
 import com.intellij.util.SmartList;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -90,7 +87,7 @@ public class XmlBlock extends AbstractXmlBlock {
     }
 
     if (myNode.getElementType() == XmlElementType.XML_COMMENT) {
-      List<Block> result = new SmartList<Block>();
+      List<Block> result = new SmartList<>();
       if (buildInjectedPsiBlocks(result, myNode, myWrap, null, Indent.getNoneIndent())) {
         return result;
       }
@@ -99,7 +96,7 @@ public class XmlBlock extends AbstractXmlBlock {
 
     if (myNode.getFirstChildNode() != null) {
       boolean keepWhitespaces = shouldKeepWhitespaces();
-      final ArrayList<Block> result = new ArrayList<Block>(5);
+      final ArrayList<Block> result = new ArrayList<>(5);
       ASTNode child = myNode.getFirstChildNode();
       while (child != null) {
         if (child.getTextLength() > 0) {
@@ -144,7 +141,7 @@ public class XmlBlock extends AbstractXmlBlock {
 
 
   protected List<Block> splitAttribute(ASTNode node, XmlFormattingPolicy formattingPolicy) {
-    final ArrayList<Block> result = new ArrayList<Block>(3);
+    final ArrayList<Block> result = new ArrayList<>(3);
     ASTNode child = node.getFirstChildNode();
     while (child != null) {
       if (child.getElementType() == XmlTokenType.XML_ATTRIBUTE_VALUE_START_DELIMITER ||
@@ -201,7 +198,7 @@ public class XmlBlock extends AbstractXmlBlock {
 
   protected List<Block> splitComment() {
     if (myNode.getElementType() != XmlElementType.XML_COMMENT) return EMPTY;
-    final ArrayList<Block> result = new ArrayList<Block>(3);
+    final ArrayList<Block> result = new ArrayList<>(3);
     ASTNode child = myNode.getFirstChildNode();
     boolean hasOuterLangElements = false;
     while (child != null) {
@@ -261,7 +258,7 @@ public class XmlBlock extends AbstractXmlBlock {
       return getSpacesInsideText(type1, type2);
 
     }
-    else if (elementType == XmlElementType.XML_ATTRIBUTE) {
+    else if (isAttributeElementType(elementType)) {
       return getSpacesInsideAttribute(type1, type2);
     }
 
@@ -276,7 +273,7 @@ public class XmlBlock extends AbstractXmlBlock {
     return createDefaultSpace(false, false);
   }
 
-  private Spacing getSpacesInsideAttribute(final IElementType type1, final IElementType type2) {
+  protected Spacing getSpacesInsideAttribute(final IElementType type1, final IElementType type2) {
     if (type1 == XmlTokenType.XML_EQ || type2 == XmlTokenType.XML_EQ) {
       int spaces = myXmlFormattingPolicy.getShouldAddSpaceAroundEqualityInAttribute() ? 1 : 0;
       return Spacing
@@ -319,14 +316,14 @@ public class XmlBlock extends AbstractXmlBlock {
   @Override
   public boolean isTextElement() {
     return myNode.getElementType() == XmlElementType.XML_TEXT || myNode.getElementType() == XmlTokenType.XML_DATA_CHARACTERS ||
-           myNode.getElementType() == XmlTokenType.XML_CHAR_ENTITY_REF;
+           myNode.getElementType() == XmlTokenType.XML_CHAR_ENTITY_REF || myNode.getElementType() == XmlElementType.XML_ENTITY_REF;
   }
 
   @Override
   @NotNull
   public ChildAttributes getChildAttributes(final int newChildIndex) {
     PsiElement element = myNode.getPsi();
-    if (element instanceof PsiFile || element instanceof XmlDocument) {
+    if (element instanceof PsiFile || element instanceof XmlDocument || element instanceof XmlProlog) {
       return new ChildAttributes(Indent.getNoneIndent(), null);
     }
     else {

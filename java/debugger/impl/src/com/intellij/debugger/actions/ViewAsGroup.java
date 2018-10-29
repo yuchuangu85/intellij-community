@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package com.intellij.debugger.actions;
 
 import com.intellij.debugger.engine.DebugProcessImpl;
 import com.intellij.debugger.engine.JavaValue;
+import com.intellij.debugger.engine.SuspendContextImpl;
 import com.intellij.debugger.engine.events.DebuggerContextCommandImpl;
 import com.intellij.debugger.impl.DebuggerContextImpl;
 import com.intellij.debugger.settings.NodeRendererSettings;
@@ -28,18 +29,13 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.xdebugger.frame.XValue;
 import com.intellij.xdebugger.impl.ui.tree.actions.XDebuggerTreeActionBase;
 import com.intellij.xdebugger.impl.ui.tree.nodes.XValueNodeImpl;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
-/**
- * User: lex
- * Date: Sep 26, 2003
- * Time: 11:05:57 PM
- */
 public class ViewAsGroup extends ActionGroup implements DumbAware {
   private static final Logger LOG = Logger.getInstance("#com.intellij.debugger.actions.ViewAsGroup");
 
@@ -52,12 +48,13 @@ public class ViewAsGroup extends ActionGroup implements DumbAware {
   private static class RendererAction extends ToggleAction {
     private final NodeRenderer myNodeRenderer;
 
-    public RendererAction(NodeRenderer nodeRenderer) {
+    RendererAction(NodeRenderer nodeRenderer) {
       super(nodeRenderer.getName());
       myNodeRenderer = nodeRenderer;
     }
 
-    public boolean isSelected(AnActionEvent e) {
+    @Override
+    public boolean isSelected(@NotNull AnActionEvent e) {
       List<JavaValue> values = getSelectedValues(e);
       if (values.isEmpty()) {
         return false;
@@ -70,7 +67,8 @@ public class ViewAsGroup extends ActionGroup implements DumbAware {
       return true;
     }
 
-    public void setSelected(final AnActionEvent e, final boolean state) {
+    @Override
+    public void setSelected(@NotNull final AnActionEvent e, final boolean state) {
       if (!state) return;
 
       final DebuggerContextImpl debuggerContext = DebuggerAction.getDebuggerContext(e.getDataContext());
@@ -85,19 +83,20 @@ public class ViewAsGroup extends ActionGroup implements DumbAware {
       }
 
       process.getManagerThread().schedule(new DebuggerContextCommandImpl(debuggerContext) {
-          public void threadAction() {
-            for (final XValueNodeImpl node : selectedNodes) {
-              final XValue container = node.getValueContainer();
-              if (container instanceof JavaValue) {
-                ((JavaValue)container).setRenderer(myNodeRenderer, node);
-              }
+        @Override
+        public void threadAction(@NotNull SuspendContextImpl suspendContext) {
+          for (XValueNodeImpl node : selectedNodes) {
+            XValue container = node.getValueContainer();
+            if (container instanceof JavaValue) {
+              ((JavaValue)container).setRenderer(myNodeRenderer, node);
             }
           }
         }
-      );
+      });
     }
   }
 
+  @Override
   @NotNull
   public AnAction[] getChildren(@Nullable final AnActionEvent e) {
     return myChildren;
@@ -153,10 +152,11 @@ public class ViewAsGroup extends ActionGroup implements DumbAware {
     }
     children.addAll(renderers);
 
-    return children.toArray(new AnAction[children.size()]);
+    return children.toArray(AnAction.EMPTY_ARRAY);
   }
 
-  public void update(final AnActionEvent event) {
+  @Override
+  public void update(@NotNull final AnActionEvent event) {
     if(!DebuggerAction.isFirstStart(event)) {
       return;
     }
@@ -174,26 +174,21 @@ public class ViewAsGroup extends ActionGroup implements DumbAware {
       event.getPresentation().setEnabled(false);
       return;
     }
-    
+
     process.getManagerThread().schedule(new DebuggerContextCommandImpl(debuggerContext) {
-      public void threadAction() {
+      @Override
+      public void threadAction(@NotNull SuspendContextImpl suspendContext) {
         myChildren = calcChildren(values);
         DebuggerAction.enableAction(event, myChildren.length > 0);
       }
     });
   }
 
+  @NotNull
   public static List<JavaValue> getSelectedValues(AnActionEvent event) {
-    List<XValueNodeImpl> selectedNodes = XDebuggerTreeActionBase.getSelectedNodes(event.getDataContext());
-    if (selectedNodes.isEmpty()) return Collections.emptyList();
-
-    List<JavaValue> res = new ArrayList<>(selectedNodes.size());
-    for (XValueNodeImpl node : selectedNodes) {
-      XValue container = node.getValueContainer();
-      if (container instanceof JavaValue) {
-        res.add((JavaValue)container);
-      }
-    }
-    return res;
+    return StreamEx.of(XDebuggerTreeActionBase.getSelectedNodes(event.getDataContext()))
+      .map(XValueNodeImpl::getValueContainer)
+      .select(JavaValue.class)
+      .toList();
   }
 }

@@ -31,8 +31,8 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import javax.swing.border.Border;
 import java.awt.*;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 
 /**
  * @author Konstantin Bulenkov
@@ -51,7 +51,7 @@ public abstract class ToolbarDecorator implements CommonActionsPanel.ListenerFac
   protected boolean myUpActionEnabled;
   protected boolean myDownActionEnabled;
   protected Border myActionsPanelBorder;
-  private final List<AnActionButton> myExtraActions = new SmartList<AnActionButton>();
+  private final List<AnActionButton> myExtraActions = new SmartList<>();
   private ActionToolbarPosition myToolbarPosition;
   protected AnActionButtonRunnable myAddAction;
   protected AnActionButtonRunnable myEditAction;
@@ -69,6 +69,7 @@ public abstract class ToolbarDecorator implements CommonActionsPanel.ListenerFac
   private AnActionButtonUpdater myMoveUpActionUpdater = null;
   private AnActionButtonUpdater myMoveDownActionUpdater = null;
   private Dimension myPreferredSize;
+  private Dimension myMinimumSize;
   private CommonActionsPanel myActionsPanel;
   private Comparator<AnActionButton> myButtonComparator;
   private boolean myAsUsualTopToolbar = false;
@@ -311,6 +312,11 @@ public abstract class ToolbarDecorator implements CommonActionsPanel.ListenerFac
     return this;
   }
 
+  public ToolbarDecorator setMinimumSize(Dimension size) {
+    myMinimumSize = size;
+    return this;
+  }
+
   public ToolbarDecorator setVisibleRowCount(int rowCount) {
     return this;//do nothing by default
   }
@@ -328,13 +334,16 @@ public abstract class ToolbarDecorator implements CommonActionsPanel.ListenerFac
     final JComponent contextComponent = getComponent();
     myActionsPanel = new CommonActionsPanel(this, contextComponent,
                              myToolbarPosition,
-                             myExtraActions.toArray(new AnActionButton[myExtraActions.size()]),
+                             myExtraActions.toArray(new AnActionButton[0]),
                              myButtonComparator,
                              myAddName, myRemoveName, myMoveUpName, myMoveDownName, myEditName,
                              myAddIcon, buttons);
     final JScrollPane scrollPane = ScrollPaneFactory.createScrollPane(contextComponent, true);
     if (myPreferredSize != null) {
       scrollPane.setPreferredSize(myPreferredSize);
+    }
+    if (myMinimumSize != null) {
+      scrollPane.setMinimumSize(myMinimumSize);
     }
     final JPanel panel = new JPanel(new BorderLayout()) {
       @Override
@@ -403,9 +412,9 @@ public abstract class ToolbarDecorator implements CommonActionsPanel.ListenerFac
   }
 
   private CommonActionsPanel.Buttons[] getButtons() {
-    final ArrayList<CommonActionsPanel.Buttons> buttons = new ArrayList<CommonActionsPanel.Buttons>();
+    final ArrayList<CommonActionsPanel.Buttons> buttons = new ArrayList<>();
     final HashMap<CommonActionsPanel.Buttons, Pair<Boolean, AnActionButtonRunnable>> map =
-      new HashMap<CommonActionsPanel.Buttons, Pair<Boolean, AnActionButtonRunnable>>();
+      new HashMap<>();
     map.put(CommonActionsPanel.Buttons.ADD, Pair.create(myAddActionEnabled, myAddAction));
     map.put(CommonActionsPanel.Buttons.REMOVE, Pair.create(myRemoveActionEnabled, myRemoveAction));
     map.put(CommonActionsPanel.Buttons.EDIT, Pair.create(myEditActionEnabled, myEditAction));
@@ -419,7 +428,7 @@ public abstract class ToolbarDecorator implements CommonActionsPanel.ListenerFac
       }
     }
 
-    return buttons.toArray(new CommonActionsPanel.Buttons[buttons.size()]);
+    return buttons.toArray(new CommonActionsPanel.Buttons[0]);
   }
 
   @Override
@@ -487,7 +496,6 @@ public abstract class ToolbarDecorator implements CommonActionsPanel.ListenerFac
     if (panel != null) {
       return panel.getAnActionButton(type);
     }
-    //noinspection ConstantConditions
     return null;
   }
 

@@ -48,7 +48,7 @@ class HttpVirtualFileImpl extends HttpVirtualFile {
   HttpVirtualFileImpl(@NotNull HttpFileSystemBase fileSystem, @Nullable HttpVirtualFileImpl parent, String path, @Nullable RemoteFileInfoImpl fileInfo) {
     if (parent != null) {
       if (parent.myChildren == null) {
-        parent.myChildren = new SmartList<VirtualFile>();
+        parent.myChildren = new SmartList<>();
       }
       parent.myChildren.add(this);
     }
@@ -59,7 +59,7 @@ class HttpVirtualFileImpl extends HttpVirtualFile {
     if (myFileInfo != null) {
       myFileInfo.addDownloadingListener(new FileDownloadingAdapter() {
         @Override
-        public void fileDownloaded(final VirtualFile localFile) {
+        public void fileDownloaded(@NotNull final VirtualFile localFile) {
           ApplicationManager.getApplication().invokeLater(() -> {
             HttpVirtualFileImpl file = HttpVirtualFileImpl.this;
             FileDocumentManager.getInstance().reloadFiles(file);
@@ -152,7 +152,7 @@ class HttpVirtualFileImpl extends HttpVirtualFile {
 
   @Override
   public VirtualFile[] getChildren() {
-    return ContainerUtil.isEmpty(myChildren) ? EMPTY_ARRAY : myChildren.toArray(new VirtualFile[myChildren.size()]);
+    return ContainerUtil.isEmpty(myChildren) ? EMPTY_ARRAY : myChildren.toArray(VirtualFile.EMPTY_ARRAY);
   }
 
   @Nullable

@@ -13,12 +13,12 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiFileFactory;
-import com.intellij.util.NullableConsumer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.maven.project.MavenProject;
 import org.jetbrains.idea.maven.project.MavenProjectsManager;
 import org.jetbrains.idea.maven.server.MavenServerManager;
+import org.jetbrains.idea.maven.statistics.MavenActionsUsagesCollector;
 import org.jetbrains.idea.maven.utils.MavenSettings;
 import org.jetbrains.idea.maven.utils.MavenUtil;
 import org.jetbrains.idea.maven.utils.actions.MavenActionUtil;
@@ -68,7 +68,6 @@ public class MavenShowEffectivePom extends AnAction implements DumbAware {
       String fileName = mavenProject.getMavenId().getArtifactId() + "-effective-pom.xml";
       PsiFile file1 = PsiFileFactory.getInstance(project).createFileFromText(fileName, XMLLanguage.INSTANCE, s);
       try {
-        //noinspection ConstantConditions
         file1.getVirtualFile().setWritable(false);
       }
       catch (IOException e) {
@@ -85,7 +84,7 @@ public class MavenShowEffectivePom extends AnAction implements DumbAware {
     if (file == null) return null;
 
     if (file.isDirectory()) {
-      file = file.findChild("pom.xml");
+      file = MavenUtil.streamPomFiles(MavenActionUtil.getProject(dataContext), file).findFirst().orElse(null);
       if (file == null) return null;
     }
 
@@ -101,6 +100,7 @@ public class MavenShowEffectivePom extends AnAction implements DumbAware {
   public void actionPerformed(@NotNull AnActionEvent event) {
     final Project project = MavenActionUtil.getProject(event.getDataContext());
     if(project == null) return;
+    MavenActionsUsagesCollector.trigger(project, this, event);
     final VirtualFile file = findPomXml(event.getDataContext());
     if (file == null) return;
 

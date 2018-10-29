@@ -1,24 +1,9 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.typeMigration.inspections;
 
 import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.ui.MultipleCheckboxOptionsPanel;
-import com.intellij.openapi.command.undo.UndoUtil;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
@@ -33,9 +18,7 @@ import com.intellij.refactoring.typeMigration.TypeMigrationProcessor;
 import com.intellij.refactoring.typeMigration.TypeMigrationRules;
 import com.intellij.refactoring.typeMigration.rules.TypeConversionRule;
 import com.intellij.refactoring.typeMigration.rules.guava.*;
-import com.intellij.reference.SoftLazyValue;
 import com.intellij.util.Function;
-import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.hash.HashMap;
 import org.jetbrains.annotations.Nls;
@@ -48,27 +31,18 @@ import java.util.*;
 /**
  * @author Dmitry Batkovich
  */
-@SuppressWarnings("DialogTitleCapitalization")
-public class GuavaInspection extends BaseJavaLocalInspectionTool {
-  //public class GuavaInspection extends BaseJavaBatchLocalInspectionTool {
+public class GuavaInspection extends AbstractBaseJavaLocalInspectionTool {
   private final static Logger LOG = Logger.getInstance(GuavaInspection.class);
+  private final static Set<String> FLUENT_ITERABLE_STOP_METHODS = ContainerUtil.newHashSet("append", "cycle", "uniqueIndex", "index", "toMultiset");
 
   public final static String PROBLEM_DESCRIPTION = "Guava's functional primitives can be replaced by Java API";
 
-  private final static SoftLazyValue<Set<String>> FLUENT_ITERABLE_STOP_METHODS = new SoftLazyValue<Set<String>>() {
-    @NotNull
-    @Override
-    protected Set<String> compute() {
-      return ContainerUtil.newHashSet("append", "cycle", "uniqueIndex", "index");
-    }
-  };
 
   public boolean checkVariables = true;
   public boolean checkChains = true;
   public boolean checkReturnTypes = true;
   public boolean ignoreJavaxNullable = true;
 
-  @SuppressWarnings("Duplicates")
   @Override
   public JComponent createOptionsPanel() {
     final MultipleCheckboxOptionsPanel panel = new MultipleCheckboxOptionsPanel(this);
@@ -91,7 +65,7 @@ public class GuavaInspection extends BaseJavaLocalInspectionTool {
           @NotNull
           @Override
           protected Map<String, PsiClass> compute() {
-            Map<String, PsiClass> map = new HashMap<String, PsiClass>();
+            Map<String, PsiClass> map = new HashMap<>();
             for (TypeConversionRule rule : TypeConversionRule.EP_NAME.getExtensions()) {
               if (rule instanceof BaseGuavaTypeConversionRule) {
                 final String fromClass = ((BaseGuavaTypeConversionRule)rule).ruleFromClass();
@@ -203,8 +177,6 @@ public class GuavaInspection extends BaseJavaLocalInspectionTool {
         return null;
       }
 
-      ;
-
       private PsiType wrapAsArray(PsiArrayType initial, PsiType created) {
         PsiArrayType result = new PsiArrayType(created);
         while (initial.getComponentType() instanceof PsiArrayType) {
@@ -233,7 +205,7 @@ public class GuavaInspection extends BaseJavaLocalInspectionTool {
             if (method == null) {
               return chain;
             }
-            if (FLUENT_ITERABLE_STOP_METHODS.getValue().contains(method.getName())) {
+            if (FLUENT_ITERABLE_STOP_METHODS.contains(method.getName())) {
               return null;
             }
             final PsiClass containingClass = method.getContainingClass();
@@ -271,7 +243,7 @@ public class GuavaInspection extends BaseJavaLocalInspectionTool {
           LOG.assertTrue(substitutionMap.size() == 2);
           LOG.assertTrue(GuavaLambda.FUNCTION.getJavaAnalogueClassQName().equals(targetClass.getQualifiedName()));
           final PsiType returnType = LambdaUtil.getFunctionalInterfaceReturnType(currentType);
-          final List<PsiType> types = new ArrayList<PsiType>(substitutionMap.values());
+          final List<PsiType> types = new ArrayList<>(substitutionMap.values());
           types.remove(returnType);
           final PsiType parameterType = types.get(0);
           return elementFactory.createType(targetClass, parameterType, returnType);
@@ -281,6 +253,7 @@ public class GuavaInspection extends BaseJavaLocalInspectionTool {
   }
 
   public class MigrateGuavaTypeFix extends LocalQuickFixAndIntentionActionOnPsiElement implements BatchQuickFix<CommonProblemDescriptor> {
+    public static final String FAMILY_NAME = "Migrate Guava's type to Java";
     private final PsiType myTargetType;
 
     private MigrateGuavaTypeFix(@NotNull PsiElement element, PsiType targetType) {
@@ -323,7 +296,7 @@ public class GuavaInspection extends BaseJavaLocalInspectionTool {
     @NotNull
     @Override
     public String getFamilyName() {
-      return "Migrate Guava's type to Java";
+      return FAMILY_NAME;
     }
 
     @Override
@@ -336,8 +309,8 @@ public class GuavaInspection extends BaseJavaLocalInspectionTool {
                          @NotNull CommonProblemDescriptor[] descriptors,
                          @NotNull List<PsiElement> psiElementsToIgnore,
                          @Nullable Runnable refreshViews) {
-      final List<PsiElement> elementsToFix = new ArrayList<PsiElement>();
-      final List<PsiType> migrationTypes = new ArrayList<PsiType>();
+      final List<PsiElement> elementsToFix = new ArrayList<>();
+      final List<PsiType> migrationTypes = new ArrayList<>();
 
       for (CommonProblemDescriptor descriptor : descriptors) {
         final MigrateGuavaTypeFix fix = getFix(descriptor);
@@ -359,42 +332,26 @@ public class GuavaInspection extends BaseJavaLocalInspectionTool {
       throw new AssertionError();
     }
 
-    private boolean performTypeMigration(List<PsiElement> elements, List<PsiType> types) {
-      PsiFile containingFile = null;
-      for (PsiElement element : elements) {
-        final PsiFile currentContainingFile = element.getContainingFile();
-        if (containingFile == null) {
-          containingFile = currentContainingFile;
-        }
-        else {
-          LOG.assertTrue(containingFile.isEquivalentTo(currentContainingFile));
-        }
-      }
-      LOG.assertTrue(containingFile != null);
-      if (!FileModificationService.getInstance().prepareFileForWrite(containingFile)) return false;
-      try {
-        final TypeMigrationRules rules = new TypeMigrationRules();
-        rules.setBoundScope(GlobalSearchScopesCore.projectProductionScope(containingFile.getProject())
-                              .union(GlobalSearchScopesCore.projectTestScope(containingFile.getProject())));
-        rules.addConversionRuleSettings(new GuavaConversionSettings(ignoreJavaxNullable));
-        TypeMigrationProcessor.runHighlightingTypeMigration(containingFile.getProject(),
-                                                            null,
-                                                            rules,
-                                                            elements.toArray(new PsiElement[elements.size()]),
-                                                            createMigrationTypeFunction(elements, types),
-                                                            true);
-        UndoUtil.markPsiFileForUndo(containingFile);
-      }
-      catch (IncorrectOperationException e) {
-        LOG.error(e);
-      }
-      return true;
+    private void performTypeMigration(List<PsiElement> elements, List<PsiType> types) {
+      if (!FileModificationService.getInstance().preparePsiElementsForWrite(elements)) return;
+      final Project project = elements.get(0).getProject();
+      final TypeMigrationRules rules = new TypeMigrationRules(project);
+      rules.setBoundScope(GlobalSearchScopesCore.projectProductionScope(project)
+                            .union(GlobalSearchScopesCore.projectTestScope(project)));
+      rules.addConversionRuleSettings(new GuavaConversionSettings(ignoreJavaxNullable));
+      TypeMigrationProcessor.runHighlightingTypeMigration(project,
+                                                          null,
+                                                          rules,
+                                                          elements.toArray(PsiElement.EMPTY_ARRAY),
+                                                          createMigrationTypeFunction(elements, types),
+                                                          true,
+                                                          true);
     }
 
     private Function<PsiElement, PsiType> createMigrationTypeFunction(@NotNull final List<PsiElement> elements,
                                                                              @NotNull final List<PsiType> types) {
       LOG.assertTrue(elements.size() == types.size());
-      final Map<PsiElement, PsiType> mappings = new HashMap<PsiElement, PsiType>();
+      final Map<PsiElement, PsiType> mappings = new HashMap<>();
       final Iterator<PsiType> typeIterator = types.iterator();
       for (PsiElement element : elements) {
         PsiType type = typeIterator.next();

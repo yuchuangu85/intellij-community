@@ -84,6 +84,12 @@ public class MockGitRepository implements GitRepository {
     throw new UnsupportedOperationException();
   }
 
+  @Nullable
+  @Override
+  public GitBranchTrackInfo getBranchTrackInfo(@NotNull String localBranchName) {
+    throw new UnsupportedOperationException();
+  }
+
   @Override
   public boolean isRebaseInProgress() {
     throw new UnsupportedOperationException();
@@ -127,6 +133,12 @@ public class MockGitRepository implements GitRepository {
   @NotNull
   @Override
   public GitVcs getVcs() {
+    throw new UnsupportedOperationException();
+  }
+
+  @NotNull
+  @Override
+  public Collection<GitSubmoduleInfo> getSubmodules() {
     throw new UnsupportedOperationException();
   }
 

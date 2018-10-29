@@ -28,15 +28,16 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.xml.XmlChildRole;
 import com.intellij.psi.xml.XmlTag;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 public class XmlUnwrapDescriptor implements UnwrapDescriptor {
+  @NotNull
   @Override
-  public List<Pair<PsiElement, Unwrapper>> collectUnwrappers(Project project, Editor editor, PsiFile file) {
+  public List<Pair<PsiElement, Unwrapper>> collectUnwrappers(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file) {
     int offset = editor.getCaretModel().getOffset();
 
     PsiElement e1 = file.findElementAt(offset);
@@ -50,7 +51,7 @@ public class XmlUnwrapDescriptor implements UnwrapDescriptor {
       }
     }
 
-    List<Pair<PsiElement, Unwrapper>> result = new ArrayList<Pair<PsiElement, Unwrapper>>();
+    List<Pair<PsiElement, Unwrapper>> result = new ArrayList<>();
 
     FileViewProvider viewProvider = file.getViewProvider();
 
@@ -62,7 +63,7 @@ public class XmlUnwrapDescriptor implements UnwrapDescriptor {
         PsiElement tag = PsiTreeUtil.getParentOfType(e, XmlTag.class);
         while (tag != null) {
           if (XmlChildRole.START_TAG_NAME_FINDER.findChild(tag.getNode()) != null) { // Exclude implicit tags suck as 'jsp:root'
-            result.add(new Pair<PsiElement, Unwrapper>(tag, new XmlEnclosingTagUnwrapper()));
+            result.add(new Pair<>(tag, new XmlEnclosingTagUnwrapper()));
           }
           tag = PsiTreeUtil.getParentOfType(tag, XmlTag.class);
         }

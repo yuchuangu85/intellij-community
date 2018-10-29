@@ -66,4 +66,13 @@ public class PyFoldingTest extends PyTestCase {
     doTest();
   }
 
+  // PY-17017
+  public void testCustomFoldingAtBlockEnd() {
+    doTest();
+  }
+
+  // PY-31154
+  public void testEmptyStatementListHasNoFolding() {
+    doTest();
+  }
 }

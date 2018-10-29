@@ -11,26 +11,30 @@ import java.util.List;
  * @author Eugene.Kudelevsky
  */
 public class EquivalenceDescriptorBuilder implements EquivalenceDescriptor {
-  private final List<SingleChildDescriptor> mySingleChildDescriptors = new ArrayList<SingleChildDescriptor>();
-  private final List<MultiChildDescriptor> myMultiChildDescriptors = new ArrayList<MultiChildDescriptor>();
-  private final List<Object> myConstants = new ArrayList<Object>();
-  private final List<PsiElement[]> myCodeBlocks = new ArrayList<PsiElement[]>();
+  private final List<SingleChildDescriptor> mySingleChildDescriptors = new ArrayList<>();
+  private final List<MultiChildDescriptor> myMultiChildDescriptors = new ArrayList<>();
+  private final List<Object> myConstants = new ArrayList<>();
+  private final List<PsiElement[]> myCodeBlocks = new ArrayList<>();
 
   public EquivalenceDescriptorBuilder() {
   }
 
+  @Override
   public List<SingleChildDescriptor> getSingleChildDescriptors() {
     return mySingleChildDescriptors;
   }
 
+  @Override
   public List<MultiChildDescriptor> getMultiChildDescriptors() {
     return myMultiChildDescriptors;
   }
 
+  @Override
   public List<Object> getConstants() {
     return myConstants;
   }
 
+  @Override
   @NotNull
   public List<PsiElement[]> getCodeBlocks() {
     return myCodeBlocks;

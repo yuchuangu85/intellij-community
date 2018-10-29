@@ -29,11 +29,6 @@ import java.util.Map;
 
 import static org.intellij.lang.xpath.xslt.context.XsltFunctionContext.SAXON_7;
 
-/*
-* Created by IntelliJ IDEA.
-* User: sweinreuter
-* Date: 08.01.11
-*/
 public class Xslt2FunctionContext extends DefaultFunctionContext {
 
   protected static final Map<Pair<QName, Integer>, Function> XSLT2_FUNCTIONS;
@@ -45,7 +40,7 @@ public class Xslt2FunctionContext extends DefaultFunctionContext {
   }
 
   static {
-    final Map<Pair<QName, Integer>, Function> decls = new HashMap<Pair<QName, Integer>, Function>();
+    final Map<Pair<QName, Integer>, Function> decls = new HashMap<>();
 
     // xslt 2.0
 

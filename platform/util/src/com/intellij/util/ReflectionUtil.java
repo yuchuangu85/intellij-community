@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,17 +16,22 @@
 package com.intellij.util;
 
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.DifferenceFilter;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.containers.JBIterable;
+import com.intellij.util.containers.JBTreeTraverser;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import sun.reflect.ConstructorAccessor;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Set;
 
 public class ReflectionUtil {
   private static final Logger LOG = Logger.getInstance("#com.intellij.util.ReflectionUtil");
@@ -135,8 +140,10 @@ public class ReflectionUtil {
 
   @NotNull
   public static List<Field> collectFields(@NotNull Class clazz) {
-    List<Field> result = new ArrayList<Field>();
-    collectFields(clazz, result);
+    List<Field> result = ContainerUtil.newArrayList();
+    for (Class c : classTraverser(clazz)) {
+      result.addAll(getClassDeclaredFields(c));
+    }
     return result;
   }
 
@@ -165,35 +172,14 @@ public class ReflectionUtil {
     throw new NoSuchFieldException("Class: " + clazz + " fieldName: " + fieldName + " fieldType: " + fieldType);
   }
 
-  private static void collectFields(@NotNull Class clazz, @NotNull List<Field> result) {
-    final List<Field> fields = getClassDeclaredFields(clazz);
-    result.addAll(fields);
-    final Class superClass = clazz.getSuperclass();
-    if (superClass != null) {
-      collectFields(superClass, result);
-    }
-    final Class[] interfaces = clazz.getInterfaces();
-    for (Class each : interfaces) {
-      collectFields(each, result);
-    }
-  }
-
-  private static Field processFields(@NotNull Class clazz, @NotNull Condition<Field> checker) {
-    for (Field field : clazz.getDeclaredFields()) {
-      if (checker.value(field)) {
+  @Nullable
+  private static Field processFields(@NotNull Class clazz, @NotNull Condition<? super Field> checker) {
+    for (Class c : classTraverser(clazz)) {
+      Field field = JBIterable.of(c.getDeclaredFields()).find(checker);
+      if (field != null) {
         field.setAccessible(true);
         return field;
       }
-    }
-    final Class superClass = clazz.getSuperclass();
-    if (superClass != null) {
-      Field result = processFields(superClass, checker);
-      if (result != null) return result;
-    }
-    final Class[] interfaces = clazz.getInterfaces();
-    for (Class each : interfaces) {
-      Field result = processFields(each, checker);
-      if (result != null) return result;
     }
     return null;
   }
@@ -250,10 +236,6 @@ public class ReflectionUtil {
     catch (IllegalAccessException e) {
       LOG.info(e);
     }
-  }
-
-  public static void resetStaticField(@NotNull Class aClass, @NotNull @NonNls String name) {
-    resetField(aClass, null, name);
   }
 
   @Nullable
@@ -417,50 +399,6 @@ public class ReflectionUtil {
     }
   }
 
-  private static final Method acquireConstructorAccessorMethod = getDeclaredMethod(Constructor.class, "acquireConstructorAccessor");
-  private static final Method getConstructorAccessorMethod = getDeclaredMethod(Constructor.class, "getConstructorAccessor");
-
-  /** @deprecated private API (to be removed in IDEA 17) */
-  @SuppressWarnings("unused")
-  public static ConstructorAccessor getConstructorAccessor(@NotNull Constructor constructor) {
-    if (acquireConstructorAccessorMethod == null || getConstructorAccessorMethod == null) {
-      throw new IllegalStateException();
-    }
-
-    constructor.setAccessible(true);
-    try {
-      acquireConstructorAccessorMethod.invoke(constructor);
-      return (ConstructorAccessor)getConstructorAccessorMethod.invoke(constructor);
-    }
-    catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  /** @deprecated private API, use {@link #createInstance(Constructor, Object...)} instead (to be removed in IDEA 17) */
-  @SuppressWarnings("unused")
-  public static <T> T createInstanceViaConstructorAccessor(@NotNull ConstructorAccessor constructorAccessor, @NotNull Object... arguments) {
-    try {
-      @SuppressWarnings("unchecked") T t = (T)constructorAccessor.newInstance(arguments);
-      return t;
-    }
-    catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  /** @deprecated private API, use {@link #newInstance(Class)} instead (to be removed in IDEA 17) */
-  @SuppressWarnings("unused")
-  public static <T> T createInstanceViaConstructorAccessor(@NotNull ConstructorAccessor constructorAccessor) {
-    try {
-      @SuppressWarnings("unchecked") T t = (T)constructorAccessor.newInstance(ArrayUtil.EMPTY_OBJECT_ARRAY);
-      return t;
-    }
-    catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
   /**
    * Like {@link Class#newInstance()} but also handles private classes
    */
@@ -477,41 +415,76 @@ public class ReflectionUtil {
       return constructor.newInstance();
     }
     catch (Exception e) {
-      // support Kotlin data classes - pass null as default value
-      for (Annotation annotation : aClass.getAnnotations()) {
-        String name = annotation.annotationType().getName();
-        if (name.equals("kotlin.Metadata") || name.equals("kotlin.jvm.internal.KotlinClass")) {
-          Constructor<?>[] constructors = aClass.getDeclaredConstructors();
-          Exception exception = e;
-          ctorLoop:
-          for (Constructor<?> constructor1 : constructors) {
-            try {
-              try {
-                constructor1.setAccessible(true);
-              }
-              catch (Throwable ignored) { }
+      T t = createAsDataClass(aClass);
+      if (t != null) {
+        return t;
+      }
 
-              Class<?>[] parameterTypes = constructor1.getParameterTypes();
-              for (Class<?> type : parameterTypes) {
-                if (type.getName().equals("kotlin.jvm.internal.DefaultConstructorMarker")) {
-                  continue ctorLoop;
-                }
-              }
+      ExceptionUtil.rethrow(e);
+    }
 
-              @SuppressWarnings("unchecked")
-              T t = (T)constructor1.newInstance(new Object[parameterTypes.length]);
-              return t;
-            }
-            catch (Exception e1) {
-              exception = e1;
+    // error will be thrown
+    return null;
+  }
+
+  @Nullable
+  private static <T> T createAsDataClass(@NotNull Class<T> aClass) {
+    // support Kotlin data classes - pass null as default value
+    for (Annotation annotation : aClass.getAnnotations()) {
+      String name = annotation.annotationType().getName();
+      if (!name.equals("kotlin.Metadata") && !name.equals("kotlin.jvm.internal.KotlinClass")) {
+        continue;
+      }
+
+      Constructor<?>[] constructors = aClass.getDeclaredConstructors();
+      Exception exception = null;
+      List<Constructor<?>> defaultCtors = new SmartList<Constructor<?>>();
+      ctorLoop:
+      for (Constructor<?> constructor : constructors) {
+        try {
+          try {
+            constructor.setAccessible(true);
+          }
+          catch (Throwable ignored) {
+          }
+
+          Class<?>[] parameterTypes = constructor.getParameterTypes();
+          for (Class<?> type : parameterTypes) {
+            if (type.getName().equals("kotlin.jvm.internal.DefaultConstructorMarker")) {
+              defaultCtors.add(constructor);
+              continue ctorLoop;
             }
           }
-          throw new RuntimeException(exception);
+
+          //noinspection unchecked
+          return (T)constructor.newInstance(new Object[parameterTypes.length]);
+        }
+        catch (Exception e) {
+          exception = e;
         }
       }
 
-      throw new RuntimeException(e);
+      for (Constructor<?> constructor : defaultCtors) {
+        try {
+          try {
+            constructor.setAccessible(true);
+          }
+          catch (Throwable ignored) {
+          }
+
+          //noinspection unchecked
+          return (T)constructor.newInstance();
+        }
+        catch (Exception e) {
+          exception = e;
+        }
+      }
+
+      if (exception != null) {
+        ExceptionUtil.rethrow(exception);
+      }
     }
+    return null;
   }
 
   @NotNull
@@ -527,12 +500,16 @@ public class ReflectionUtil {
   @Nullable
   public static Class getGrandCallerClass() {
     int stackFrameCount = 3;
+    return getCallerClass(stackFrameCount+1);
+  }
+
+  public static Class getCallerClass(int stackFrameCount) {
     Class callerClass = findCallerClass(stackFrameCount);
-    while (callerClass != null && callerClass.getClassLoader() == null) { // looks like a system class
-      callerClass = findCallerClass(++stackFrameCount);
+    for (int depth=stackFrameCount+1; callerClass != null && callerClass.getClassLoader() == null; depth++) { // looks like a system class
+      callerClass = findCallerClass(depth);
     }
     if (callerClass == null) {
-      callerClass = findCallerClass(2);
+      callerClass = findCallerClass(stackFrameCount-1);
     }
     return callerClass;
   }
@@ -562,6 +539,26 @@ public class ReflectionUtil {
     return valuesChanged;
   }
 
+  public static boolean comparePublicNonFinalFields(@NotNull Object first,
+                                                    @NotNull Object second) {
+    Set<Field> firstFields = ContainerUtil.newHashSet(first.getClass().getFields());
+    for (Field field : second.getClass().getFields()) {
+      if (firstFields.contains(field)) {
+        if (isPublic(field) && !isFinal(field)) {
+          try {
+            if (!Comparing.equal(field.get(first), field.get(second))) {
+              return false;
+            }
+          }
+          catch (IllegalAccessException e) {
+            throw new RuntimeException(e);
+          }
+        }
+      }
+    }
+    return true;
+  }
+
   public static void copyFieldValue(@NotNull Object from, @NotNull Object to, @NotNull Field field)
     throws IllegalAccessException {
     Class<?> fieldType = field.getType();
@@ -582,13 +579,27 @@ public class ReflectionUtil {
   }
 
   @NotNull
-  public static Class forName(@NotNull String fqn) {
+  public static Class<?> forName(@NotNull String fqn) {
     try {
       return Class.forName(fqn);
     }
     catch (Exception e) {
       throw new RuntimeException(e);
     }
+  }
+
+  @NotNull
+  public static Class<?> boxType(@NotNull Class<?> type) {
+    if (!type.isPrimitive()) return type;
+    if (type == boolean.class) return Boolean.class;
+    if (type == byte.class) return Byte.class;
+    if (type == short.class) return Short.class;
+    if (type == int.class) return Integer.class;
+    if (type == long.class) return Long.class;
+    if (type == float.class) return Float.class;
+    if (type == double.class) return Double.class;
+    if (type == char.class) return Character.class;
+    return type;
   }
 
 
@@ -623,4 +634,16 @@ public class ReflectionUtil {
   public static boolean isAssignable(@NotNull Class<?> ancestor, @NotNull Class<?> descendant) {
     return ancestor == descendant || ancestor.isAssignableFrom(descendant);
   }
+
+  @NotNull
+  public static JBTreeTraverser<Class> classTraverser(@Nullable Class root) {
+    return CLASS_TRAVERSER.unique().withRoot(root);
+  }
+
+  private static final JBTreeTraverser<Class> CLASS_TRAVERSER = JBTreeTraverser.from(new Function<Class, Iterable<Class>>() {
+    @Override
+    public Iterable<Class> fun(Class aClass) {
+      return JBIterable.of(aClass.getSuperclass()).append(aClass.getInterfaces());
+    }
+  });
 }

@@ -33,18 +33,18 @@ public class MavenPluginInfoReaderTest extends MavenTestCase {
     p = MavenArtifactUtil.readPluginInfo(getRepositoryFile(), id);
   }
 
-  public void testLoadingPluginInfo() throws Exception {
+  public void testLoadingPluginInfo() {
     assertEquals("org.apache.maven.plugins", p.getGroupId());
     assertEquals("maven-compiler-plugin", p.getArtifactId());
     assertEquals("2.0.2", p.getVersion());
   }
 
-  public void testGoals() throws Exception {
+  public void testGoals() {
     assertEquals("compiler", p.getGoalPrefix());
 
-    List<String> qualifiedGoals = new ArrayList<String>();
-    List<String> displayNames = new ArrayList<String>();
-    List<String> goals = new ArrayList<String>();
+    List<String> qualifiedGoals = new ArrayList<>();
+    List<String> displayNames = new ArrayList<>();
+    List<String> goals = new ArrayList<>();
     for (MavenPluginInfo.Mojo m : p.getMojos()) {
       goals.add(m.getGoal());
       qualifiedGoals.add(m.getQualifiedGoal());

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,12 +35,18 @@ public abstract class ProjectManagerEx extends ProjectManager {
    * @param filePath path to .ipr file or directory where .idea directory is located
    */
   @Nullable
-  public abstract Project newProject(final String projectName, @NotNull String filePath, boolean useDefaultProjectSettings, boolean isDummy);
+  public abstract Project newProject(@Nullable String projectName, @NotNull String filePath, boolean useDefaultProjectSettings, boolean isDummy);
 
   @Nullable
   public abstract Project loadProject(@NotNull String filePath) throws IOException;
 
+  @Nullable
+  public abstract Project loadProject(@NotNull String filePath, @Nullable String projectName) throws IOException;
+
   public abstract boolean openProject(@NotNull Project project);
+
+  @TestOnly
+  public abstract boolean isDefaultProjectInitialized();
 
   public abstract boolean isProjectOpened(Project project);
 
@@ -62,15 +68,30 @@ public abstract class ProjectManagerEx extends ProjectManager {
   @NotNull
   public abstract Collection<Project> closeTestProject(@NotNull Project project);
 
+  @TestOnly
+  public abstract boolean forceCloseProject(@NotNull Project project, boolean dispose);
+
+  // return true if successful
+  public abstract boolean closeAndDisposeAllProjects(boolean checkCanClose);
+
   // returns true on success
   public abstract boolean closeAndDispose(@NotNull Project project);
 
   @Nullable
   @Override
-  public Project createProject(String name, String path) {
+  public Project createProject(@Nullable String name, @NotNull String path) {
     return newProject(name, path, true, false);
   }
 
   @Nullable
+  public abstract Project findOpenProjectByHash(@Nullable String locationHash);
+
+  @Nullable
   public abstract Project convertAndLoadProject(@NotNull String filePath) throws IOException;
+
+  /**
+   * Internal use only. Force reload changed project files. Must be called before save otherwise saving maybe not performed (because storage saving is disabled).
+   */
+  public void flushChangedProjectFileAlarm() {
+  }
 }

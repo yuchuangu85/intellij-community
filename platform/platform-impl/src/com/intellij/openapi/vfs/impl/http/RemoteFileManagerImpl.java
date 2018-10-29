@@ -35,11 +35,11 @@ import java.util.Map;
 public class RemoteFileManagerImpl extends RemoteFileManager implements Disposable {
   private final LocalFileStorage myStorage;
 
-  private final Map<Url, HttpVirtualFileImpl> remoteFiles = new THashMap<Url, HttpVirtualFileImpl>();
-  private final Map<Url, HttpVirtualFileImpl> remoteDirectories = new THashMap<Url, HttpVirtualFileImpl>();
+  private final Map<Url, HttpVirtualFileImpl> remoteFiles = new THashMap<>();
+  private final Map<Url, HttpVirtualFileImpl> remoteDirectories = new THashMap<>();
 
   private final EventDispatcher<HttpVirtualFileListener> myDispatcher = EventDispatcher.create(HttpVirtualFileListener.class);
-  private final List<RemoteContentProvider> myProviders = new ArrayList<RemoteContentProvider>();
+  private final List<RemoteContentProvider> myProviders = new ArrayList<>();
   private final DefaultRemoteContentProvider myDefaultRemoteContentProvider;
 
   public RemoteFileManagerImpl() {
@@ -131,12 +131,12 @@ public class RemoteFileManagerImpl extends RemoteFileManager implements Disposab
   private class MyDownloadingListener extends FileDownloadingAdapter {
     private final HttpVirtualFileImpl myFile;
 
-    public MyDownloadingListener(final HttpVirtualFileImpl file) {
+    MyDownloadingListener(final HttpVirtualFileImpl file) {
       myFile = file;
     }
 
     @Override
-    public void fileDownloaded(final VirtualFile localFile) {
+    public void fileDownloaded(@NotNull final VirtualFile localFile) {
       fireFileDownloaded(myFile);
     }
   }

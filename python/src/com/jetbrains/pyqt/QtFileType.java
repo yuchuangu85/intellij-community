@@ -15,8 +15,9 @@
  */
 package com.jetbrains.pyqt;
 
-import com.intellij.openapi.fileTypes.FileType;
+import com.intellij.lang.xml.XMLLanguage;
 import com.intellij.openapi.fileTypes.INativeFileType;
+import com.intellij.openapi.fileTypes.LanguageFileType;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtil;
 import com.intellij.openapi.project.Project;
@@ -25,9 +26,11 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDirectory;
-import com.jetbrains.python.psi.resolve.QualifiedNameResolver;
-import com.jetbrains.python.psi.resolve.QualifiedNameResolverImpl;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.util.QualifiedName;
+import com.jetbrains.python.psi.resolve.PyResolveImportUtil;
 import com.jetbrains.python.sdk.PythonSdkType;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -38,13 +41,14 @@ import java.util.List;
 /**
  * @author yole
  */
-public abstract class QtFileType implements FileType, INativeFileType {
+public abstract class QtFileType extends LanguageFileType implements INativeFileType {
   private final String myName;
   private final String myDescription;
   private final String myDefaultExtension;
   private final Icon myIcon;
 
   protected QtFileType(String name, String description, String defaultExtension, Icon icon) {
+    super(XMLLanguage.INSTANCE);
     myName = name;
     myDescription = description;
     myDefaultExtension = defaultExtension;
@@ -72,11 +76,6 @@ public abstract class QtFileType implements FileType, INativeFileType {
   @Override
   public Icon getIcon() {
     return myIcon;
-  }
-
-  @Override
-  public boolean isBinary() {
-    return true;
   }
 
   @Override
@@ -113,27 +112,26 @@ public abstract class QtFileType implements FileType, INativeFileType {
       if (sdk == null) {
         return null;
       }
-      String tool = findToolInPackage(toolName, module, sdk, "PyQt4");
+      String tool = findToolInPackage(toolName, module, "PyQt4");
       if (tool != null) {
         return tool;
       }
-      return findToolInPackage(toolName, module, sdk, "PySide");
+      return findToolInPackage(toolName, module, "PySide");
    }
     // TODO
     return null;
   }
 
   @Nullable
-  private static String findToolInPackage(String toolName, Module module, Sdk sdk, String name) {
-    QualifiedNameResolver visitor = new QualifiedNameResolverImpl(name).fromModule(module).withSdk(sdk);
-    List<PsiDirectory> elements = visitor.resultsOfType(PsiDirectory.class);
-    for (PsiDirectory directory : elements) {
-      VirtualFile tool = directory.getVirtualFile().findChild(toolName + ".exe");
-      if (tool != null) {
-        return tool.getPath();
-      }
-    }
-    return null;
+  private static String findToolInPackage(String toolName, Module module, String name) {
+    final List<PsiElement> results = PyResolveImportUtil.resolveQualifiedName(QualifiedName.fromDottedString(name),
+                                                                              PyResolveImportUtil.fromModule(module));
+    return StreamEx.of(results).select(PsiDirectory.class)
+      .map(directory -> directory.getVirtualFile().findChild(toolName + ".exe"))
+      .nonNull()
+      .map(VirtualFile::getPath)
+      .findFirst()
+      .orElse(null);
   }
 
   protected abstract String getToolName();

@@ -45,15 +45,12 @@ public class IndexedRelevantResource<K, V extends Comparable> implements Compara
                                                                                            @Nullable final GlobalSearchScope additionalScope) {
 
     if (project.isDefault()) return Collections.emptyList();
-    final ArrayList<IndexedRelevantResource<K, V>> resources = new ArrayList<IndexedRelevantResource<K, V>>();
+    final ArrayList<IndexedRelevantResource<K, V>> resources = new ArrayList<>();
     final ProjectFileIndex fileIndex = ProjectRootManager.getInstance(project).getFileIndex();
-    FileBasedIndex.getInstance().processValues(indexId, key, null, new FileBasedIndex.ValueProcessor<V>() {
-      @Override
-      public boolean process(VirtualFile file, V value) {
-        ResourceRelevance relevance = ResourceRelevance.getRelevance(file, module, fileIndex, additionalScope);
-        resources.add(new IndexedRelevantResource<K, V>(file, key, value, relevance));
-        return true;
-      }
+    FileBasedIndex.getInstance().processValues(indexId, key, null, (file, value) -> {
+      ResourceRelevance relevance = ResourceRelevance.getRelevance(file, module, fileIndex, additionalScope);
+      resources.add(new IndexedRelevantResource<>(file, key, value, relevance));
+      return true;
     }, new AdditionalIndexedRootsScope(GlobalSearchScope.allScope(project)));
     return resources;
   }
@@ -61,8 +58,8 @@ public class IndexedRelevantResource<K, V extends Comparable> implements Compara
   public static <K, V extends Comparable> List<IndexedRelevantResource<K, V>> getAllResources(ID<K, V> indexId,
                                                                                               @Nullable final Module module,
                                                                                               @NotNull Project project,
-                                                                                              @Nullable NullableFunction<List<IndexedRelevantResource<K, V>>, IndexedRelevantResource<K, V>> chooser) {
-    ArrayList<IndexedRelevantResource<K, V>> all = new ArrayList<IndexedRelevantResource<K, V>>();
+                                                                                              @Nullable NullableFunction<? super List<IndexedRelevantResource<K, V>>, ? extends IndexedRelevantResource<K, V>> chooser) {
+    ArrayList<IndexedRelevantResource<K, V>> all = new ArrayList<>();
     Collection<K> allKeys = FileBasedIndex.getInstance().getAllKeys(indexId, project);
     for (K key : allKeys) {
       List<IndexedRelevantResource<K, V>> resources = getResources(indexId, key, module, project, null);

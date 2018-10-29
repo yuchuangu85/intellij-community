@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,13 +34,13 @@ import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.util.indexing.FileBasedIndex;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
 /**
  * @author Eugene Zhuravlev
- *         Date: Jan 16, 2008
  */
 public class IndexTodoCacheManagerImpl implements TodoCacheManager {
   private final Project myProject;
@@ -58,7 +58,7 @@ public class IndexTodoCacheManagerImpl implements TodoCacheManager {
       return PsiFile.EMPTY_ARRAY;
     }
     final FileBasedIndex fileBasedIndex = FileBasedIndex.getInstance();
-    final Set<PsiFile> allFiles = new HashSet<PsiFile>();
+    final Set<PsiFile> allFiles = new HashSet<>();
     final ProjectFileIndex projectFileIndex = ProjectRootManager.getInstance(myProject).getFileIndex();
     for (IndexPattern indexPattern : IndexPatternUtil.getIndexPatterns()) {
       final Collection<VirtualFile> files = fileBasedIndex.getContainingFiles(
@@ -80,21 +80,17 @@ public class IndexTodoCacheManagerImpl implements TodoCacheManager {
 
   @Override
   public int getTodoCount(@NotNull final VirtualFile file, @NotNull final IndexPatternProvider patternProvider) {
-    if (myProject.isDefault()) {
+    if (myProject.isDefault() || !ProjectFileIndex.getInstance(myProject).isInContent(file)) {
       return 0;
     }
     if (file instanceof VirtualFileWindow) return -1;
     final FileBasedIndex fileBasedIndex = FileBasedIndex.getInstance();
-    int count = 0;
-    for (IndexPattern indexPattern : patternProvider.getIndexPatterns()) {
-      count += fetchCount(fileBasedIndex, file, indexPattern);
-    }
-    return count;
+    return Arrays.stream(patternProvider.getIndexPatterns()).mapToInt(indexPattern -> fetchCount(fileBasedIndex, file, indexPattern)).sum();
   }
 
   @Override
   public int getTodoCount(@NotNull final VirtualFile file, @NotNull final IndexPattern pattern) {
-    if (myProject.isDefault()) {
+    if (myProject.isDefault() || !ProjectFileIndex.getInstance(myProject).isInContent(file)) {
       return 0;
     }
     if (file instanceof VirtualFileWindow) return -1;
@@ -105,12 +101,9 @@ public class IndexTodoCacheManagerImpl implements TodoCacheManager {
     final int[] count = {0};
     fileBasedIndex.processValues(
       TodoIndex.NAME, new TodoIndexEntry(indexPattern.getPatternString(), indexPattern.isCaseSensitive()), file,
-      new FileBasedIndex.ValueProcessor<Integer>() {
-        @Override
-        public boolean process(final VirtualFile file, final Integer value) {
-          count[0] += value.intValue();
-          return true;
-        }
+      (file1, value) -> {
+        count[0] += value.intValue();
+        return true;
       }, GlobalSearchScope.fileScope(myProject, file));
     return count[0];
   }

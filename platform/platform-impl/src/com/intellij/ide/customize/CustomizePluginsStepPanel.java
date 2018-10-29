@@ -82,7 +82,7 @@ public class CustomizePluginsStepPanel extends AbstractCustomizeWizardStep imple
       gbc.fill = GridBagConstraints.BOTH;
       gbc.gridwidth = GridBagConstraints.REMAINDER;
       gbc.weightx = 1;
-      JLabel titleLabel = new JLabel("<html><body><h2 style=\"text-align:left;\">" + group + "</h2></body></html>", SwingConstants.CENTER) {
+      JLabel titleLabel = new JLabel("<html><body><h2 style=\"text-align:center;\">" + group + "</h2></body></html>", SwingConstants.CENTER) {
         @Override
         public boolean isEnabled() {
           return isGroupEnabled(group);
@@ -146,7 +146,6 @@ public class CustomizePluginsStepPanel extends AbstractCustomizeWizardStep imple
   static JBScrollPane createScrollPane(JPanel gridPanel) {
     JBScrollPane scrollPane =
       new JBScrollPane(gridPanel, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-    scrollPane.getVerticalScrollBar().setUnitIncrement(10);
     scrollPane.setBorder(JBUI.Borders.empty()); // to disallow resetting border on LaF change
     return scrollPane;
   }
@@ -240,9 +239,9 @@ public class CustomizePluginsStepPanel extends AbstractCustomizeWizardStep imple
   }
 
   private class IdSetPanel extends JPanel implements LinkListener<String> {
-    private JLabel myTitleLabel = new JLabel();
-    private JPanel myContentPanel = new JPanel(new GridLayout(0, 3, 5, 5));
-    private JButton mySaveButton = new JButton("Save Changes and Go Back");
+    private final JLabel myTitleLabel = new JLabel();
+    private final JPanel myContentPanel = new JPanel(new GridLayout(0, 3, 5, 5));
+    private final JButton mySaveButton = new JButton("Save Changes and Go Back");
     private String myGroup;
 
     private IdSetPanel() {
@@ -254,8 +253,8 @@ public class CustomizePluginsStepPanel extends AbstractCustomizeWizardStep imple
       gbc.insets.right = 25;
       gbc.gridy = 0;
       buttonPanel.add(mySaveButton, gbc);
-      buttonPanel.add(new LinkLabel<String>("Enable All", null, this, "enable"), gbc);
-      buttonPanel.add(new LinkLabel<String>("Disable All", null, this, "disable"), gbc);
+      buttonPanel.add(new LinkLabel<>("Enable All", null, this, "enable"), gbc);
+      buttonPanel.add(new LinkLabel<>("Disable All", null, this, "disable"), gbc);
       gbc.weightx = 1;
       buttonPanel.add(Box.createHorizontalGlue(), gbc);
       add(buttonPanel);

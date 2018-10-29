@@ -38,15 +38,15 @@ import java.util.List;
  * @author yole
  */
 public abstract class HighlightUsagesHandlerBase<T extends PsiElement> {
-  protected final Editor myEditor;
-  protected final PsiFile myFile;
+  @NotNull protected final Editor myEditor;
+  @NotNull protected final PsiFile myFile;
 
-  protected List<TextRange> myReadUsages = new ArrayList<TextRange>();
-  protected List<TextRange> myWriteUsages = new ArrayList<TextRange>();
+  protected List<TextRange> myReadUsages = new ArrayList<>();
+  protected List<TextRange> myWriteUsages = new ArrayList<>();
   protected String myStatusText;
   protected String myHintText;
 
-  protected HighlightUsagesHandlerBase(final Editor editor, final PsiFile file) {
+  protected HighlightUsagesHandlerBase(@NotNull Editor editor, @NotNull PsiFile file) {
     myEditor = editor;
     myFile = file;
   }
@@ -123,7 +123,7 @@ public abstract class HighlightUsagesHandlerBase<T extends PsiElement> {
   }
 
   /**
-   * In case of egoistic handler (highlightReferences = true) IdentifierHighlighterPass applies information only from this particular handler.
+   * In case of egoistic handler (highlightReferences = false) IdentifierHighlighterPass applies information only from this particular handler.
    * Otherwise additional information would be collected from reference search as well. 
    */
   public boolean highlightReferences() {

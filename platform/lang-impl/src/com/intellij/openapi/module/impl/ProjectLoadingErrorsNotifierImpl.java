@@ -27,7 +27,6 @@ import com.intellij.openapi.module.ProjectLoadingErrorsNotifier;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectBundle;
 import com.intellij.openapi.startup.StartupManager;
-import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
@@ -42,7 +41,7 @@ import java.util.List;
  * @author nik
  */
 public class ProjectLoadingErrorsNotifierImpl extends ProjectLoadingErrorsNotifier {
-  private final MultiMap<ConfigurationErrorType, ConfigurationErrorDescription> myErrors = new MultiMap<ConfigurationErrorType, ConfigurationErrorDescription>();
+  private final MultiMap<ConfigurationErrorType, ConfigurationErrorDescription> myErrors = new MultiMap<>();
   private final Object myLock = new Object();
   private final Project myProject;
 
@@ -75,7 +74,7 @@ public class ProjectLoadingErrorsNotifierImpl extends ProjectLoadingErrorsNotifi
   }
 
   private void fireNotifications() {
-    final MultiMap<ConfigurationErrorType, ConfigurationErrorDescription> descriptionsMap = new MultiMap<ConfigurationErrorType, ConfigurationErrorDescription>();
+    final MultiMap<ConfigurationErrorType, ConfigurationErrorDescription> descriptionsMap = new MultiMap<>();
     synchronized (myLock) {
       if (myErrors.isEmpty()) return;
       descriptionsMap.putAllValues(myErrors);
@@ -96,11 +95,10 @@ public class ProjectLoadingErrorsNotifierImpl extends ProjectLoadingErrorsNotifi
                                                                               @NotNull HyperlinkEvent event) {
                                                     final List<ConfigurationErrorDescription> validDescriptions =
                                                       ContainerUtil.findAll(descriptions, errorDescription -> errorDescription.isValid());
-                                                    RemoveInvalidElementsDialog
-                                                      .showDialog(myProject, CommonBundle.getErrorTitle(), type, invalidElements,
-                                                                  validDescriptions);
-
-                                                    notification.expire();
+                                                    if (RemoveInvalidElementsDialog.showDialog(myProject, CommonBundle.getErrorTitle(), type,
+                                                                                               invalidElements, validDescriptions)) {
+                                                      notification.expire();
+                                                    }
                                                   }
                                                 }), myProject);
     }

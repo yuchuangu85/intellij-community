@@ -107,6 +107,9 @@ public interface GitRepository extends Repository {
   @NotNull
   Collection<GitBranchTrackInfo> getBranchTrackInfos();
 
+  @Nullable
+  GitBranchTrackInfo getBranchTrackInfo(@NotNull String localBranchName);
+
   boolean isRebaseInProgress();
 
   boolean isOnBranch();
@@ -114,4 +117,10 @@ public interface GitRepository extends Repository {
   @NotNull
   @Override
   GitVcs getVcs();
+
+  /**
+   * Returns direct submodules of this repository.
+   */
+  @NotNull
+  Collection<GitSubmoduleInfo> getSubmodules();
 }

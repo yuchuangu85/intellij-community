@@ -21,13 +21,13 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.codeStyle.NameUtil;
 import com.intellij.psi.xml.XmlTag;
-import com.intellij.util.containers.HashMap;
 import com.intellij.util.xml.DomElement;
 import com.intellij.util.xml.DomElementNavigationProvider;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 
 
@@ -65,7 +65,7 @@ public abstract class AbstractDomGenerateProvider<T extends DomElement> extends 
 
   @NotNull
   public static Map<String, String> createNamespacePrefixMap(@Nullable DomElement domElement) {
-    Map<String, String> vars = new HashMap<String, String>();
+    Map<String, String> vars = new HashMap<>();
 
     addNamespacePrefix(domElement, vars);
 

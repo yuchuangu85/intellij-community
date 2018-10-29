@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2011 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,10 +21,9 @@ import com.intellij.openapi.module.Module;
 import com.intellij.openapi.roots.*;
 import com.intellij.openapi.roots.ui.CellAppearanceEx;
 import com.intellij.openapi.roots.ui.OrderEntryAppearanceService;
+import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
-import com.intellij.util.PathUtil;
-import com.intellij.util.Processor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -54,11 +53,11 @@ public class ModuleDependenciesAnalyzer {
   /**
    * The order entry explanations
    */
-  private final List<OrderEntryExplanation> myOrderEntries = new ArrayList<OrderEntryExplanation>();
+  private final List<OrderEntryExplanation> myOrderEntries = new ArrayList<>();
   /**
    * The url explanations
    */
-  private final List<UrlExplanation> myUrls = new ArrayList<UrlExplanation>();
+  private final List<UrlExplanation> myUrls = new ArrayList<>();
 
   /**
    * The constructor (it creates explanations immediately
@@ -108,17 +107,17 @@ public class ModuleDependenciesAnalyzer {
     if (myProduction) {
       e.productionOnly();
     }
-    final Map<String, List<OrderPath>> urlExplanations = new LinkedHashMap<String, List<OrderPath>>();
+    final Map<String, List<OrderPath>> urlExplanations = new LinkedHashMap<>();
     final OrderRootsEnumerator classes = e.classes();
     if (myCompile) {
       classes.withoutSelfModuleOutput();
     }
     for (String url : classes.getUrls()) {
       if (!urlExplanations.containsKey(url)) {
-        urlExplanations.put(url, new ArrayList<OrderPath>());
+        urlExplanations.put(url, new ArrayList<>());
       }
     }
-    final Map<OrderEntry, List<OrderPath>> orderExplanations = new LinkedHashMap<OrderEntry, List<OrderPath>>();
+    final Map<OrderEntry, List<OrderPath>> orderExplanations = new LinkedHashMap<>();
     new PathWalker(urlExplanations, orderExplanations).examine(myModule, 0);
     for (Map.Entry<OrderEntry, List<OrderPath>> entry : orderExplanations.entrySet()) {
       myOrderEntries.add(new OrderEntryExplanation(entry.getKey(), entry.getValue()));
@@ -143,11 +142,11 @@ public class ModuleDependenciesAnalyzer {
     /**
      * The current stack
      */
-    private final ArrayList<OrderPathElement> myStack = new ArrayList<OrderPathElement>();
+    private final ArrayList<OrderPathElement> myStack = new ArrayList<>();
     /**
      * Visited modules (in order to detect cyclic dependencies)
      */
-    private final HashSet<Module> myVisited = new HashSet<Module>();
+    private final HashSet<Module> myVisited = new HashSet<>();
 
     /**
      * The constructor
@@ -155,7 +154,7 @@ public class ModuleDependenciesAnalyzer {
      * @param urlExplanations   the url explanations to accumulate
      * @param orderExplanations the explanations for order entries
      */
-    public PathWalker(Map<String, List<OrderPath>> urlExplanations,
+    PathWalker(Map<String, List<OrderPath>> urlExplanations,
                       Map<OrderEntry, List<OrderPath>> orderExplanations) {
       myUrlExplanations = urlExplanations;
       myOrderExplanations = orderExplanations;
@@ -247,7 +246,7 @@ public class ModuleDependenciesAnalyzer {
     private void addEntryPath(OrderEntry orderEntry, OrderPath p) {
       List<OrderPath> paths = myOrderExplanations.get(orderEntry);
       if (paths == null) {
-        paths = new ArrayList<OrderPath>();
+        paths = new ArrayList<>();
         myOrderExplanations.put(orderEntry, paths);
       }
       paths.add(p);
@@ -269,7 +268,7 @@ public class ModuleDependenciesAnalyzer {
      * @param entries the list of entries (will be copied and wrapped)
      */
     public OrderPath(List<OrderPathElement> entries) {
-      this.myEntries = Collections.unmodifiableList(new ArrayList<OrderPathElement>(entries));
+      this.myEntries = Collections.unmodifiableList(new ArrayList<>(entries));
     }
 
     /**
@@ -468,7 +467,7 @@ public class ModuleDependenciesAnalyzer {
     public VirtualFile getLocalFile() {
       VirtualFile file = VirtualFileManager.getInstance().findFileByUrl(myUrl);
       if (file != null) {
-        file = PathUtil.getLocalFile(file);
+        file = VfsUtil.getLocalFile(file);
       }
       return file;
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.options.CompoundScheme;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Comparing;
+import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.*;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.PlatformIcons;
@@ -76,7 +77,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
   private final AnActionButton myRemoveButton;
   private boolean myIsModified = false;
 
-  private final CompoundScheme.MutatorHelper<ToolsGroup<T>, T> mutatorHelper = new CompoundScheme.MutatorHelper<ToolsGroup<T>, T>();
+  private final CompoundScheme.MutatorHelper<ToolsGroup<T>, T> mutatorHelper = new CompoundScheme.MutatorHelper<>();
 
   protected BaseToolsPanel() {
     myTree = new CheckboxTree(
@@ -140,7 +141,9 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
         if (dlg.showAndGet()) {
           insertNewTool(dlg.getData(), true);
         }
-        myTree.requestFocus();
+        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+          IdeFocusManager.getGlobalInstance().requestFocus(myTree, true);
+        });
       }
     }).setRemoveAction(new AnActionButtonRunnable() {
       @Override
@@ -151,7 +154,9 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
       @Override
       public void run(AnActionButton button) {
         editSelected();
-        myTree.requestFocus();
+        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+          IdeFocusManager.getGlobalInstance().requestFocus(myTree, true);
+        });
       }
     }).setMoveUpAction(new AnActionButtonRunnable() {
       @Override
@@ -167,7 +172,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
       }
     }).addExtraAction(myCopyButton = new AnActionButton(ToolsBundle.message("tools.copy.button"), PlatformIcons.COPY_ICON) {
       @Override
-      public void actionPerformed(AnActionEvent e) {
+      public void actionPerformed(@NotNull AnActionEvent e) {
         Tool originalTool = getSelectedTool();
 
         if (originalTool != null) {
@@ -178,7 +183,9 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
           if (dlg.showAndGet()) {
             insertNewTool(dlg.getData(), true);
           }
-          myTree.requestFocus();
+          IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+            IdeFocusManager.getGlobalInstance().requestFocus(myTree, true);
+          });
         }
       }
     }).createPanel(), BorderLayout.CENTER);
@@ -254,7 +261,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
   @NotNull
   private List<ToolsGroup<T>> getGroupList() {
     MutableTreeNode root = (MutableTreeNode)myTree.getModel().getRoot();
-    List<ToolsGroup<T>> result = new ArrayList<ToolsGroup<T>>(root.getChildCount());
+    List<ToolsGroup<T>> result = new ArrayList<>(root.getChildCount());
     for (int i = 0; i < root.getChildCount(); i++) {
       final CheckedTreeNode node = (CheckedTreeNode)root.getChildAt(i);
       for (int j = 0; j < node.getChildCount(); j++) {
@@ -285,7 +292,9 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
         TreePath path = new TreePath(node.getPath());
         myTree.getSelectionModel().setSelectionPath(path);
         myTree.expandPath(path);
-        myTree.requestFocus();
+        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+          IdeFocusManager.getGlobalInstance().requestFocus(myTree, true);
+        });
       }
     }
   }
@@ -422,7 +431,9 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
         removeNodeFromParent(node);
       }
       update();
-      myTree.requestFocus();
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+        IdeFocusManager.getGlobalInstance().requestFocus(myTree, true);
+      });
     }
   }
 
@@ -487,7 +498,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
   }
 
   private String[] getGroups() {
-    List<String> result = new ArrayList<String>();
+    List<String> result = new ArrayList<>();
     for (ToolsGroup group : getGroupList()) {
       result.add(group.getName());
     }
@@ -513,12 +524,11 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
 
   public void selectTool(final String actionId) {
     Object root = myTree.getModel().getRoot();
-    if (root == null || !(root instanceof CheckedTreeNode)) {
+    if (!(root instanceof CheckedTreeNode)) {
       return;
     }
-    final List<CheckedTreeNode> nodes = new ArrayList<CheckedTreeNode>();
+    final List<CheckedTreeNode> nodes = new ArrayList<>();
     new Object() {
-      @SuppressWarnings("unchecked")
       public void collect(CheckedTreeNode node) {
         if (node.isLeaf()) {
           Object userObject = node.getUserObject();

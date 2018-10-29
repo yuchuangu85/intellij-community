@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,11 +21,11 @@ import java.util.Collection;
 
 /**
  * @author max
- * @author Konstantin Bulenkov
  *
  * @see Functions for some common implementations
+ *
+ * Consider to use {@link java.util.function.Function} instead
  */
-@SuppressWarnings({"unchecked"})
 public interface Function<Param, Result> {
   Result fun(Param param);
 
@@ -55,18 +55,21 @@ public interface Function<Param, Result> {
 
     @Nullable
     public R fun(P p) {
+      //noinspection unchecked
       return p.getClass().isAssignableFrom(myResultClass) ? (R)p : null;
     }
   }
 
   final class First<P, R extends P> implements Function<P[], R> {
     public R fun(P[] ps) {
+      //noinspection unchecked
       return (R)ps[0];
     }
   }
 
   final class FirstInCollection<P, R extends P> implements Function<Collection<P>, R> {
     public R fun(Collection<P> ps) {
+      //noinspection unchecked
       return (R)ps.iterator().next();
     }
   }

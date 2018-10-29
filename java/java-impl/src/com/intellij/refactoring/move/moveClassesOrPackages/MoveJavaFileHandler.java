@@ -14,10 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * User: anna
- * Date: 05-Aug-2009
- */
 package com.intellij.refactoring.move.moveClassesOrPackages;
 
 import com.intellij.codeInsight.ChangeContextUtil;
@@ -25,11 +21,11 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.roots.JavaProjectRootsUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
+import com.intellij.psi.util.FileTypeUtils;
 import com.intellij.refactoring.move.moveFilesOrDirectories.MoveFileHandler;
 import com.intellij.refactoring.util.MoveRenameUsageInfo;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.psi.util.FileTypeUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -56,8 +52,9 @@ public class MoveJavaFileHandler extends MoveFileHandler {
     }
   }
 
+  @Override
   public List<UsageInfo> findUsages(PsiFile psiFile, PsiDirectory newParent, boolean searchInComments, boolean searchInNonJavaFiles) {
-    final List<UsageInfo> result = new ArrayList<UsageInfo>();
+    final List<UsageInfo> result = new ArrayList<>();
     final PsiPackage newParentPackage = JavaDirectoryService.getInstance().getPackage(newParent);
     final String qualifiedName = newParentPackage == null ? "" : newParentPackage.getQualifiedName();
     for (PsiClass aClass : ((PsiJavaFile)psiFile).getClasses()) {

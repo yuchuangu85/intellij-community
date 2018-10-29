@@ -1,17 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
  */
 
 package com.intellij.psi.impl.source.resolve.reference.impl.providers;
@@ -41,6 +29,7 @@ import com.intellij.psi.search.PsiFileSystemItemProcessor;
 import com.intellij.refactoring.rename.BindablePsiReference;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
+import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -101,7 +90,7 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
   @NotNull
   protected Collection<PsiFileSystemItem> getContexts() {
     final FileReference contextRef = getContextReference();
-    ArrayList<PsiFileSystemItem> result = new ArrayList<PsiFileSystemItem>();
+    ArrayList<PsiFileSystemItem> result = new ArrayList<>();
 
     if (contextRef == null) {
       Collection<PsiFileSystemItem> defaultContexts = myFileReferenceSet.getDefaultContexts();
@@ -140,7 +129,7 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
       return new ResolveResult[]{new PsiElementResolveResult(containingFile)};
     }
     final Collection<PsiFileSystemItem> contexts = getContexts();
-    final Collection<ResolveResult> result = new THashSet<ResolveResult>();
+    final Collection<ResolveResult> result = new THashSet<>();
     for (final PsiFileSystemItem context : contexts) {
       innerResolveInContext(referenceText, context, result, caseSensitive);
     }
@@ -156,9 +145,18 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
                                        final Collection<ResolveResult> result,
                                        final boolean caseSensitive) {
     if (isAllowedEmptyPath(text) || ".".equals(text) || "/".equals(text)) {
+      if (context instanceof FileReferenceResolver) {
+        ContainerUtil.addIfNotNull(result, resolveFileReferenceResolver((FileReferenceResolver)context, text));
+        return;
+      }
       result.add(new PsiElementResolveResult(context));
     }
     else if ("..".equals(text)) {
+      if (context instanceof FileReferenceResolver) {
+        ContainerUtil.addIfNotNull(result, resolveFileReferenceResolver((FileReferenceResolver)context, text));
+        return;
+      }
+
       final PsiFileSystemItem resolved = context.getParent();
       if (resolved != null) {
         result.add(new PsiElementResolveResult(resolved));
@@ -167,7 +165,7 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
     else {
       final int separatorIndex = text.indexOf('/');
       if (separatorIndex >= 0) {
-        final List<ResolveResult> resolvedContexts = new ArrayList<ResolveResult>();
+        final List<ResolveResult> resolvedContexts = new ArrayList<>();
         if (separatorIndex == 0 /*starts with slash*/ && "/".equals(context.getName())) {
           resolvedContexts.add(new PsiElementResolveResult(context));
         }
@@ -189,9 +187,9 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
           context = ((PackagePrefixFileSystemItem)context).getDirectory();
         }
         else if (context instanceof FileReferenceResolver) {
-          PsiFileSystemItem child = ((FileReferenceResolver)context).resolveFileReference(this, decoded);
+          ResolveResult child = resolveFileReferenceResolver((FileReferenceResolver)context, decoded);
           if (child != null) {
-            result.add(new PsiElementResolveResult(getOriginalFile(child)));
+            result.add(child);
             return;
           }
         }
@@ -233,13 +231,18 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
   }
 
   @Nullable
-  public
-  String getNewFileTemplateName() {
+  public String getNewFileTemplateName() {
     FileType fileType = FileTypeRegistry.getInstance().getFileTypeByFileName(myText);
     if (fileType != UnknownFileType.INSTANCE) {
       return fileType.getName() + " File." + fileType.getDefaultExtension();
     }
     return null;
+  }
+
+  @Nullable
+  private ResolveResult resolveFileReferenceResolver(@NotNull FileReferenceResolver fileReferenceResolver, @NotNull String text) {
+    PsiFileSystemItem resolve = fileReferenceResolver.resolveFileReference(this, text);
+    return resolve != null ? new PsiElementResolveResult(getOriginalFile(resolve)) : null;
   }
 
   private static boolean caseSensitivityApplies(PsiDirectory context, boolean caseSensitive) {
@@ -335,6 +338,7 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
     return myIndex > 0 ? myFileReferenceSet.getReference(myIndex - 1) : null;
   }
 
+  @NotNull
   @Override
   public PsiElement getElement() {
     return myFileReferenceSet.getElement();
@@ -353,13 +357,14 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
   }
 
   @Override
-  public boolean isReferenceTo(PsiElement element) {
+  public boolean isReferenceTo(@NotNull PsiElement element) {
     if (!(element instanceof PsiFileSystemItem)) return false;
 
     final PsiFileSystemItem item = resolve();
     return item != null && FileReferenceHelperRegistrar.areElementsEquivalent(item, (PsiFileSystemItem)element);
   }
 
+  @NotNull
   @Override
   public TextRange getRangeInElement() {
     return myRange;
@@ -381,7 +386,7 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
   }
 
   @Override
-  public PsiElement handleElementRename(String newElementName) throws IncorrectOperationException {
+  public PsiElement handleElementRename(@NotNull String newElementName) throws IncorrectOperationException {
     final ElementManipulator<PsiElement> manipulator = CachingReference.getManipulator(getElement());
     myFileReferenceSet.setElement(manipulator.handleContentChange(getElement(), getRangeInElement(), newElementName));
     //Correct ranges
@@ -446,7 +451,7 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
         }
       }
 
-      final String relativePath = PsiFileSystemItemUtil.getRelativePath(root, dstItem);
+      String relativePath = PsiFileSystemItemUtil.findRelativePath(root, dstItem);
       if (relativePath == null) {
         return getElement();
       }
@@ -484,7 +489,7 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
         }
         return fixRefText(file.getName());
       }
-      newName = PsiFileSystemItemUtil.getRelativePath(curItem, dstItem);
+      newName = PsiFileSystemItemUtil.findRelativePath(curItem, dstItem);
       if (newName == null) {
         return getElement();
       }
@@ -527,6 +532,7 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
     }
   }
 
+  @NotNull
   protected static FileReferenceHelper[] getHelpers() {
     return FileReferenceHelperRegistrar.getHelpers();
   }
@@ -554,11 +560,11 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
 
   @Override
   public LocalQuickFix[] getQuickFixes() {
-    final List<LocalQuickFix> result = new ArrayList<LocalQuickFix>();
+    final List<LocalQuickFix> result = new ArrayList<>();
     for (final FileReferenceHelper helper : getHelpers()) {
       result.addAll(helper.registerFixes(this));
     }
-    return result.toArray(new LocalQuickFix[result.size()]);
+    return result.toArray(LocalQuickFix.EMPTY_ARRAY);
   }
 
   @Override

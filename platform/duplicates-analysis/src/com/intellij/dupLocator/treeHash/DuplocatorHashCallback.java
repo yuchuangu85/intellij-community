@@ -25,13 +25,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.*;
 
-/**
- * Created by IntelliJ IDEA.
- * User: db
- * Date: Mar 26, 2004
- * Time: 7:11:30 PM
- * To change this template use File | Settings | File Templates.
- */
 public class DuplocatorHashCallback implements FragmentsCollector {
   private static final Logger LOG = Logger.getInstance("#com.intellij.dupLocator.treeHash.DuplocatorHashCallback");
 
@@ -41,7 +34,7 @@ public class DuplocatorHashCallback implements FragmentsCollector {
   private final int myDiscardCost;
 
   public DuplocatorHashCallback(int bound, int discardCost) {
-    myDuplicates = new TIntObjectHashMap<List<List<PsiFragment>>>();
+    myDuplicates = new TIntObjectHashMap<>();
     myBound = bound;
     myDiscardCost = discardCost;
   }
@@ -69,7 +62,7 @@ public class DuplocatorHashCallback implements FragmentsCollector {
 
   private void forceAdd(int hash, int cost, PsiFragment frag) {
     if (frag == null) { //fake fragment
-      myDuplicates.put(hash, new ArrayList<List<PsiFragment>>());
+      myDuplicates.put(hash, new ArrayList<>());
       return;
     }
 
@@ -79,8 +72,8 @@ public class DuplocatorHashCallback implements FragmentsCollector {
 
     if (fragments == null) {
       if (!myReadOnly) { //do not add new hashcodes
-        List<List<PsiFragment>> list = new ArrayList<List<PsiFragment>>();
-        List<PsiFragment> listf = new ArrayList<PsiFragment>();
+        List<List<PsiFragment>> list = new ArrayList<>();
+        List<PsiFragment> listf = new ArrayList<>();
 
         listf.add(frag);
         list.add(listf);
@@ -132,7 +125,7 @@ public class DuplocatorHashCallback implements FragmentsCollector {
     }
 
     if (!found) {
-      List<PsiFragment> newFrags = new ArrayList<PsiFragment>();
+      List<PsiFragment> newFrags = new ArrayList<>();
       newFrags.add(frag);
 
       fragments.add(newFrags);
@@ -160,9 +153,10 @@ public class DuplocatorHashCallback implements FragmentsCollector {
   }
 
   public DupInfo getInfo() {
-    final TObjectIntHashMap<PsiFragment[]> duplicateList = new TObjectIntHashMap<PsiFragment[]>();
+    final TObjectIntHashMap<PsiFragment[]> duplicateList = new TObjectIntHashMap<>();
 
     myDuplicates.forEachEntry(new TIntObjectProcedure<List<List<PsiFragment>>>() {
+      @Override
       public boolean execute(final int hash, final List<List<PsiFragment>> listList) {
         for (List<PsiFragment> list : listList) {
           final int len = list.size();
@@ -205,24 +199,29 @@ public class DuplocatorHashCallback implements FragmentsCollector {
     Arrays.sort(duplicates, (x, y) -> ((PsiFragment[])y)[0].getCost() - ((PsiFragment[])x)[0].getCost());
 
     return new DupInfo() {
-      private final TIntObjectHashMap<GroupNodeDescription> myPattern2Description = new TIntObjectHashMap<GroupNodeDescription>();
+      private final TIntObjectHashMap<GroupNodeDescription> myPattern2Description = new TIntObjectHashMap<>();
 
+      @Override
       public int getPatterns() {
         return duplicates.length;
       }
 
+      @Override
       public int getPatternCost(int number) {
         return ((PsiFragment[])duplicates[number])[0].getCost();
       }
 
+      @Override
       public int getPatternDensity(int number) {
         return ((PsiFragment[])duplicates[number]).length;
       }
 
+      @Override
       public PsiFragment[] getFragmentOccurences(int pattern) {
         return (PsiFragment[])duplicates[pattern];
       }
 
+      @Override
       public UsageInfo[] getUsageOccurences(int pattern) {
         PsiFragment[] occs = getFragmentOccurences(pattern);
         UsageInfo[] infos = new UsageInfo[occs.length];
@@ -234,6 +233,7 @@ public class DuplocatorHashCallback implements FragmentsCollector {
         return infos;
       }
 
+      @Override
       public int getFileCount(final int pattern) {
         if (myPattern2Description.containsKey(pattern)) {
           return myPattern2Description.get(pattern).getFilesCount();
@@ -242,7 +242,7 @@ public class DuplocatorHashCallback implements FragmentsCollector {
       }
 
       private GroupNodeDescription cacheGroupNodeDescription(final int pattern) {
-        final Set<PsiFile> files = new HashSet<PsiFile>();
+        final Set<PsiFile> files = new HashSet<>();
         final PsiFragment[] occurencies = getFragmentOccurences(pattern);
         for (PsiFragment occurency : occurencies) {
           final PsiFile file = occurency.getFile();
@@ -259,6 +259,7 @@ public class DuplocatorHashCallback implements FragmentsCollector {
         return description;
       }
 
+      @Override
       @Nullable
       public String getTitle(int pattern) {
         if (getFileCount(pattern) == 1) {
@@ -271,6 +272,7 @@ public class DuplocatorHashCallback implements FragmentsCollector {
       }
 
 
+      @Override
       @Nullable
       public String getComment(int pattern) {
         if (getFileCount(pattern) == 1) {
@@ -282,6 +284,7 @@ public class DuplocatorHashCallback implements FragmentsCollector {
         return null;
       }
 
+      @Override
       public int getHash(final int i) {
         return duplicateList.get((PsiFragment[])duplicates[i]);
       }
@@ -315,13 +318,16 @@ public class DuplocatorHashCallback implements FragmentsCollector {
       }
     }
 
-    fileWriter = null;
-    //duplicates
+    writeDuplicates(path, project, getInfo());
+  }
+
+  //duplicates
+  public static void writeDuplicates(String path, Project project, DupInfo info) throws IOException {
+    FileWriter fileWriter = null;
     try {
       fileWriter = new FileWriter(path + File.separator + "duplicates.xml");
       PrettyPrintWriter writer = new PrettyPrintWriter(fileWriter);
       writer.startNode("root");
-      final DupInfo info = getInfo();
       final int patterns = info.getPatterns();
       for (int i = 0; i < patterns; i++) {
         writer.startNode("duplicate");
@@ -341,7 +347,7 @@ public class DuplocatorHashCallback implements FragmentsCollector {
   }
 
   @SuppressWarnings({"HardCodedStringLiteral"})
-  private static void writeFragments(final List<PsiFragment> psiFragments,
+  private static void writeFragments(final List<? extends PsiFragment> psiFragments,
                                      final PrettyPrintWriter writer,
                                      Project project,
                                      final boolean shouldWriteOffsets) {

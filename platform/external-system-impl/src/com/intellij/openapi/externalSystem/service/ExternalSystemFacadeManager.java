@@ -38,7 +38,6 @@ import java.util.concurrent.locks.ReentrantLock;
  * Thread-safe.
  * 
  * @author Denis Zhdanov
- * @since 8/8/11 1:08 PM
  */
 public class ExternalSystemFacadeManager {
 
@@ -104,14 +103,13 @@ public class ExternalSystemFacadeManager {
   }
 
   /**
-   * @return gradle api facade to use
+   * @return external system api facade to use
    * @throws Exception    in case of inability to return the facade
    */
   @NotNull
   public RemoteExternalSystemFacade getFacade(@Nullable Project project,
                                               @NotNull String externalProjectPath,
-                                              @NotNull ProjectSystemId externalSystemId) throws Exception
-  {
+                                              @NotNull ProjectSystemId externalSystemId) {
     if (project == null) {
       project = ProjectManager.getInstance().getDefaultProject();
     }
@@ -150,7 +148,6 @@ public class ExternalSystemFacadeManager {
     return currentInProcess ? myInProcessCommunicationManager : myRemoteCommunicationManager;
   }
 
-  @SuppressWarnings("ConstantConditions")
   @NotNull
   private RemoteExternalSystemFacade doGetFacade(@NotNull IntegrationKey key, @NotNull Project project) throws Exception {
     final boolean currentInProcess = ExternalSystemApiUtil.isInProcessMode(key.getExternalSystemId());
@@ -253,7 +250,7 @@ public class ExternalSystemFacadeManager {
   
   private class MyHandler implements InvocationHandler {
 
-    @NotNull private final AtomicReference<IntegrationKey> myKey = new AtomicReference<IntegrationKey>();
+    @NotNull private final AtomicReference<IntegrationKey> myKey = new AtomicReference<>();
 
     MyHandler(@NotNull IntegrationKey key) {
       myKey.set(key);

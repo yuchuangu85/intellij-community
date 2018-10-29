@@ -32,6 +32,7 @@ import com.intellij.util.ArrayUtil;
 import com.intellij.xml.XmlBundle;
 import org.apache.xmlbeans.impl.inst2xsd.Inst2Xsd;
 import org.jetbrains.annotations.NonNls;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.IOException;
@@ -44,8 +45,8 @@ import java.util.Map;
  * @author Konstantin Bulenkov
  */
 public class GenerateSchemaFromInstanceDocumentAction extends AnAction {
-  private static final Map<String, String> DESIGN_TYPES = new HashMap<String, String>();
-  private static final Map<String, String> CONTENT_TYPES = new HashMap<String, String>();
+  private static final Map<String, String> DESIGN_TYPES = new HashMap<>();
+  private static final Map<String, String> CONTENT_TYPES = new HashMap<>();
   static {
     DESIGN_TYPES.put(GenerateSchemaFromInstanceDocumentDialog.LOCAL_ELEMENTS_GLOBAL_COMPLEX_TYPES, "vb");
     DESIGN_TYPES.put(GenerateSchemaFromInstanceDocumentDialog.LOCAL_ELEMENTS_TYPES, "ss");
@@ -57,7 +58,7 @@ public class GenerateSchemaFromInstanceDocumentAction extends AnAction {
   //private static final
   
   @Override
-  public void update(AnActionEvent e) {
+  public void update(@NotNull AnActionEvent e) {
     final VirtualFile file = CommonDataKeys.VIRTUAL_FILE.getData(e.getDataContext());
     final boolean enabled = isAcceptableFile(file);
     e.getPresentation().setEnabled(enabled);
@@ -67,7 +68,7 @@ public class GenerateSchemaFromInstanceDocumentAction extends AnAction {
   }
 
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public void actionPerformed(@NotNull AnActionEvent e) {
     final Project project = e.getProject();
     final VirtualFile file = CommonDataKeys.VIRTUAL_FILE.getData(e.getDataContext());
 
@@ -94,7 +95,7 @@ public class GenerateSchemaFromInstanceDocumentAction extends AnAction {
       return;
     }
 
-    @NonNls List<String> parameters = new LinkedList<String>();
+    @NonNls List<String> parameters = new LinkedList<>();
     parameters.add("-design");
     parameters.add(DESIGN_TYPES.get(dialog.getDesignType()));
 

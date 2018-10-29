@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.highlighting
 
 import com.intellij.codeInspection.InspectionProfileEntry
@@ -33,44 +19,44 @@ class GrUnusedDefTest extends GrHighlightingTestBase {
      new UnusedDeclarationInspectionBase(true)]
   }
 
-  public void testUnusedVariable() { doTest() }
+  void testUnusedVariable() { doTest() }
 
-  public void testDefinitionUsedInClosure() { doTest() }
+  void testDefinitionUsedInClosure() { doTest() }
 
-  public void testDefinitionUsedInClosure2() { doTest() }
+  void testDefinitionUsedInClosure2() { doTest() }
 
-  public void testDefinitionUsedInSwitchCase() { doTest() }
+  void testDefinitionUsedInSwitchCase() { doTest() }
 
-  public void testUnusedDefinitionForMethodMissing() { doTest() }
+  void testUnusedDefinitionForMethodMissing() { doTest() }
 
-  public void testPrefixIncrementCfa() { doTest() }
+  void testPrefixIncrementCfa() { doTest() }
 
-  public void testIfIncrementElseReturn() { doTest() }
+  void testIfIncrementElseReturn() { doTest() }
 
-  public void testSwitchControlFlow() { doTest() }
+  void testSwitchControlFlow() { doTest() }
 
-  public void testUsageInInjection() { doTest() }
+  void testUsageInInjection() { doTest() }
 
-  public void testUnusedDefsForArgs() { doTest() }
+  void testUnusedDefsForArgs() { doTest() }
 
-  public void testUsedDefBeforeTry1() { doTest() }
+  void testUsedDefBeforeTry1() { doTest() }
 
-  public void testUsedDefBeforeTry2() { doTest() }
+  void testUsedDefBeforeTry2() { doTest() }
 
-  public void testUnusedInc() { doTest() }
+  void testUnusedInc() { doTest() }
 
-  public void testUsedInCatch() { doTest() }
+  void testUsedInCatch() { doTest() }
 
-  public void testGloballyUnusedSymbols() { doTest() }
+  void testGloballyUnusedSymbols() { doTest() }
 
-  public void testGloballyUnusedInnerMethods() {
+  void testGloballyUnusedInnerMethods() {
     myFixture.addClass 'package junit.framework; public class TestCase {}'
     doTest()
   }
 
-  public void testUnusedParameter() { doTest() }
+  void testUnusedParameter() { doTest() }
 
-  public void testSuppressUnusedMethod() {
+  void testSuppressUnusedMethod() {
     testHighlighting('''\
 class <warning descr="Class Foo is unused">Foo</warning> {
     @SuppressWarnings("GroovyUnusedDeclaration")
@@ -123,5 +109,52 @@ def <warning descr="Method f2 is unused">f2</warning>(String foo, int mode) {
     testHighlighting('''\
 def <warning descr="Variable is not used">abc</warning>
 ''')
+  }
+
+  void 'test method referenced via incapplicable call is used'() {
+    testHighlighting '''\
+static boolean fsdasdfsgsdsfadfgs(a, b) { a == b }
+def bar() { fsdasdfsgsdsfadfgs("s") }
+bar()
+'''
+  }
+
+  void 'test delegate'() {
+    fixture.addClass '''
+package groovy.lang;
+@Target({ElementType.FIELD, ElementType.METHOD})
+public @interface Delegate {}
+'''
+
+    testHighlighting '''\
+class Foo {
+  @Delegate
+  Integer i
+  @Delegate
+  String bar() {}
+}
+
+new Foo()
+'''
+  }
+
+  void 'test "unused" suppresses warning'() {
+    testHighlighting '''\
+@SuppressWarnings("unused")
+class Aaaa {} 
+'''
+  }
+
+  void 'test suppress with "unused"'() {
+    testHighlighting '''\
+class <caret><warning descr="Class Aaaa is unused">Aaaa</warning> {} 
+'''
+    def action = fixture.findSingleIntention 'Suppress'
+    fixture.launchAction(action)
+
+    fixture.checkResult '''\
+@SuppressWarnings("unused")
+class <caret>Aaaa {} 
+'''
   }
 }

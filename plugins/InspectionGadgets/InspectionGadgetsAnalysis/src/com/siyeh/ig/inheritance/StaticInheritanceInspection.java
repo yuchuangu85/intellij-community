@@ -74,13 +74,13 @@ public class StaticInheritanceInspection extends BaseInspection {
           return;
         }
         final PsiClass targetClass = (PsiClass)target;
-        if (targetClass.isInterface() && interfaceContainsOnlyConstants(targetClass, new HashSet<PsiClass>())) {
+        if (targetClass.isInterface() && interfaceContainsOnlyConstants(targetClass, new HashSet<>())) {
           registerError(reference);
         }
       }
     }
 
-    private static boolean interfaceContainsOnlyConstants(PsiClass anInterface, Set<PsiClass> visitedInterfaces) {
+    private static boolean interfaceContainsOnlyConstants(PsiClass anInterface, Set<? super PsiClass> visitedInterfaces) {
       if (!visitedInterfaces.add(anInterface)) {
         return true;
       }

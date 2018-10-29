@@ -50,12 +50,12 @@ public class PyKeywordArgumentReference extends PsiReferenceBase.Poly<PyKeywordA
     final PsiPolyVariantReference calleeReference = (PsiPolyVariantReference) callee.getReference();
     if (calleeReference == null) return ResolveResult.EMPTY_ARRAY;
     final ResolveResult[] calleeCandidates = calleeReference.multiResolve(incompleteCode);
-    List<ResolveResult> resultList = new ArrayList<ResolveResult>();
+    List<ResolveResult> resultList = new ArrayList<>();
     for (ResolveResult calleeCandidate : calleeCandidates) {
       if (!calleeCandidate.isValidResult()) continue;
       final PsiElement element = calleeCandidate.getElement();
       if (element == null) continue;
-      final PyFunction calleeFunction = resolveToFunction(element, new HashSet<PsiElement>());
+      final PyFunction calleeFunction = resolveToFunction(element, new HashSet<>());
       if (calleeFunction != null) {
         final PsiElement result = calleeFunction.getParameterList().findParameterByName(keyword);
         if (result != null) {
@@ -63,7 +63,7 @@ public class PyKeywordArgumentReference extends PsiReferenceBase.Poly<PyKeywordA
         }
       }
     }
-    return resultList.toArray(new ResolveResult[resultList.size()]);
+    return resultList.toArray(ResolveResult.EMPTY_ARRAY);
   }
 
   @Nullable
@@ -84,11 +84,5 @@ public class PyKeywordArgumentReference extends PsiReferenceBase.Poly<PyKeywordA
       return resolveToFunction(resolveResult, visited);
     }
     return null;
-  }
-
-  @NotNull
-  @Override
-  public Object[] getVariants() {
-    return new Object[0];  //To change body of implemented methods use File | Settings | File Templates.
   }
 }

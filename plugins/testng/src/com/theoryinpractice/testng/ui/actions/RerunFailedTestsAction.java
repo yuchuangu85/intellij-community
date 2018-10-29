@@ -10,10 +10,10 @@ import com.intellij.execution.runners.ExecutionEnvironment;
 import com.intellij.execution.testframework.AbstractTestProxy;
 import com.intellij.execution.testframework.TestConsoleProperties;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.ComponentContainer;
-import com.intellij.openapi.util.Computable;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiMethod;
@@ -51,18 +51,13 @@ public class RerunFailedTestsAction extends JavaRerunFailedTestsAction {
         return new TestNGRunnableState(env, configuration) {
           @Override
           public SearchingForTestsTask createSearchingForTestsTask() {
-            return new SearchingForTestsTask(myServerSocket, getConfiguration(), myTempFile, client) {
+            return new SearchingForTestsTask(myServerSocket, getConfiguration(), myTempFile) {
               @Override
               protected void fillTestObjects(final Map<PsiClass, Map<PsiMethod, List<String>>> classes) throws CantRunException {
                 final HashMap<PsiClass, Map<PsiMethod, List<String>>> fullClassList = ContainerUtil.newHashMap();
                 super.fillTestObjects(fullClassList);
                 for (final PsiClass aClass : fullClassList.keySet()) {
-                  if (!ApplicationManager.getApplication().runReadAction(new Computable<Boolean>() {
-                    @Override
-                    public Boolean compute() {
-                      return TestNGUtil.hasTest(aClass);
-                    }
-                  })) {
+                  if (!ReadAction.compute(() -> TestNGUtil.hasTest(aClass))) {
                     classes.put(aClass, fullClassList.get(aClass));
                   }
                 }
@@ -102,12 +97,12 @@ public class RerunFailedTestsAction extends JavaRerunFailedTestsAction {
         TestNGTestObject.collectTestMethods(classes, psiClass, psiMethod.getName(), scope);
         Map<PsiMethod, List<String>> psiMethods = classes.get(psiClass);
         if (psiMethods == null) {
-          psiMethods = new LinkedHashMap<PsiMethod, List<String>>();
+          psiMethods = new LinkedHashMap<>();
           classes.put(psiClass, psiMethods);
         }
         List<String> strings = psiMethods.get(psiMethod);
         if (strings == null || strings.isEmpty()) {
-          strings = new ArrayList<String>();
+          strings = new ArrayList<>();
         }
         setupParameterName(location, strings);
         psiMethods.put(psiMethod, strings);

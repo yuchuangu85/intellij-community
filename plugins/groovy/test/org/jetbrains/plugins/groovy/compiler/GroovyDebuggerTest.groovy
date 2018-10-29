@@ -26,11 +26,14 @@ import com.intellij.psi.PsiFile
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.TestLoggerFactory
+import com.intellij.testFramework.ThreadTracker
 import com.intellij.testFramework.builders.JavaModuleFixtureBuilder
 import com.intellij.testFramework.fixtures.impl.TempDirTestFixtureImpl
 import com.intellij.util.SystemProperties
 import groovy.transform.CompileStatic
 import org.jetbrains.plugins.groovy.GroovyFileType
+
+import java.util.concurrent.TimeUnit
 
 import static com.intellij.testFramework.EdtTestUtil.runInEdtAndWait
 
@@ -39,7 +42,7 @@ import static com.intellij.testFramework.EdtTestUtil.runInEdtAndWait
  */
 @CompileStatic
 class GroovyDebuggerTest extends GroovyCompilerTestCase implements DebuggerMethods {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.plugins.groovy.compiler.GroovyDebuggerTest");
+  private static final Logger LOG = Logger.getInstance("#org.jetbrains.plugins.groovy.compiler.GroovyDebuggerTest")
 
   @Override
   Logger getLogger() { LOG }
@@ -47,8 +50,14 @@ class GroovyDebuggerTest extends GroovyCompilerTestCase implements DebuggerMetho
   @Override
   protected void setUp() {
     super.setUp()
-    addGroovyLibrary(myModule);
+    addGroovyLibrary(myModule)
     enableDebugLogging()
+  }
+
+  @Override
+  protected void tearDown() throws Exception {
+    ThreadTracker.awaitJDIThreadsTermination(100, TimeUnit.SECONDS);
+    super.tearDown()
   }
 
   @Override
@@ -57,15 +66,15 @@ class GroovyDebuggerTest extends GroovyCompilerTestCase implements DebuggerMetho
   }
 
   private void enableDebugLogging() {
-    TestLoggerFactory.enableDebugLogging(testRootDisposable,
+    TestLoggerFactory.enableDebugLogging(myFixture.testRootDisposable,
                                          "#com.intellij.debugger.engine.DebugProcessImpl",
                                          "#com.intellij.debugger.engine.DebugProcessEvents",
-                                         "#org.jetbrains.plugins.groovy.compiler.GroovyDebuggerTest");
-    LOG.info(getTestStartedLogMessage());
+                                         "#org.jetbrains.plugins.groovy.compiler.GroovyDebuggerTest")
+    LOG.info(getTestStartedLogMessage())
   }
 
   private String getTestStartedLogMessage() {
-    return "Starting " + getClass().getName() + "." + getTestName(false);
+    return "Starting " + getClass().getName() + "." + getTestName(false)
   }
 
   @Override
@@ -74,16 +83,9 @@ class GroovyDebuggerTest extends GroovyCompilerTestCase implements DebuggerMetho
       super.runTest()
     }
     catch (Throwable e) {
-      TestLoggerFactory.dumpLogToStdout(getTestStartedLogMessage());
+      TestLoggerFactory.dumpLogToStdout(getTestStartedLogMessage())
       throw e
     }
-  }
-
-  @Override
-  protected void tuneFixture(JavaModuleFixtureBuilder moduleBuilder) {
-    super.tuneFixture(moduleBuilder)
-    def javaHome = FileUtil.toSystemIndependentName(SystemProperties.getJavaHome())
-    moduleBuilder.addJdk(StringUtil.trimEnd(StringUtil.trimEnd(javaHome, '/'), '/jre'))
   }
 
   void runDebugger(PsiFile script, Closure cl) {
@@ -91,9 +93,9 @@ class GroovyDebuggerTest extends GroovyCompilerTestCase implements DebuggerMetho
     runDebugger(configuration, cl)
   }
 
-  public void testVariableInScript() {
+  void testVariableInScript() {
     def file = myFixture.addFileToProject("Foo.groovy", """def a = 2
-a""");
+a""")
     addBreakpoint 'Foo.groovy', 1
     runDebugger file, {
       waitForBreakpoint()
@@ -103,14 +105,14 @@ a""");
     }
   }
 
-  public void testVariableInsideClosure() {
+  void testVariableInsideClosure() {
     def file = myFixture.addFileToProject("Foo.groovy", """def a = 2
 Closure c = {
   a++;
   a    //3
 }
 c()
-a++""");
+a++""")
     addBreakpoint 'Foo.groovy', 3
     runDebugger file, {
       waitForBreakpoint()
@@ -118,7 +120,7 @@ a++""");
     }
   }
 
-  public void testQualifyNames() {
+  void testQualifyNames() {
     myFixture.addFileToProject "com/Goo.groovy", '''
 package com
 interface Goo {
@@ -157,7 +159,7 @@ println 2 //4
     }
   }
 
-  public void testCall() {
+  void testCall() {
     def file = myFixture.addFileToProject 'B.groovy', '''class B {
     def getFoo() {2}
 
@@ -182,7 +184,7 @@ println 2 //4
     }
   }
 
-  public void testStaticContext() {
+  void testStaticContext() {
     def file = myFixture.addFileToProject 'B.groovy', '''
 class B {
     public static void main(String[] args) {
@@ -210,7 +212,7 @@ class B {
     }
   }
 
-  public void "test closures in instance context with delegation"() {
+  void "test closures in instance context with delegation"() {
     def file = myFixture.addFileToProject 'B.groovy', '''
 def cl = { a ->
   hashCode() //2
@@ -232,7 +234,7 @@ def getFoo() { 13 }
     }
   }
 
-  public void testClassOutOfSourceRoots() {
+  void testClassOutOfSourceRoots() {
     def tempDir = new TempDirTestFixtureImpl()
     runInEdtAndWait {
       tempDir.setUp()
@@ -271,7 +273,7 @@ cl.parseClass('''$mcText''', 'MyClass.groovy').foo(2)
     }
   }
 
-  public void "test groovy source named java in lib source"() {
+  void "test groovy source named java in lib source"() {
     def tempDir = new TempDirTestFixtureImpl()
     runInEdtAndWait {
       tempDir.setUp()
@@ -342,7 +344,7 @@ println "hello"
     }
   }
 
-  public void "test navigation outside source"() {
+  void "test navigation outside source"() {
     def module1 = addModule("module1", false)
     def module2 = addModule("module2", true)
     addGroovyLibrary(module1)
@@ -361,7 +363,7 @@ println "hello"
     }
   }
 
-  public void "test in static inner class"() {
+  void "test in static inner class"() {
     def file = myFixture.addFileToProject "Foo.groovy", """
 class Outer {               //1
     static class Inner {
@@ -394,7 +396,7 @@ public static void main(String[] args) {
     }
   }
 
-  public void "test evaluation within trait method"() {
+  void "test evaluation within trait method"() {
     def file = myFixture.addFileToProject 'Foo.groovy', '''
 trait Introspector {  // 1
     def whoAmI() {
@@ -420,7 +422,7 @@ new FooT().whoAmI()
     }
   }
 
-  public void "test evaluation in java context"() {
+  void "test evaluation in java context"() {
     def starterFile = myFixture.addFileToProject 'Gr.groovy', '''
 new Main().foo()
 '''
@@ -444,7 +446,7 @@ public class Main {
     }
   }
 
-  public void "test evaluation in static java context"() {
+  void "test evaluation in static java context"() {
     def starterFile = myFixture.addFileToProject 'Gr.groovy', '''
 Main.test()
 '''
@@ -468,7 +470,7 @@ public class Main {
     }
   }
 
-  public void "test evaluation with java references in java context"() {
+  void "test evaluation with java references in java context"() {
     def starterFile = myFixture.addFileToProject 'Gr.groovy', '''
 new Main().foo()
 '''
@@ -492,7 +494,7 @@ public class Main {
     }
   }
 
-  public void "test evaluation of params in java context"() {
+  void "test evaluation of params in java context"() {
     def starterFile = myFixture.addFileToProject 'Gr.groovy', '''
 new Main().foo((String[])["a", "b", "c"])
 '''

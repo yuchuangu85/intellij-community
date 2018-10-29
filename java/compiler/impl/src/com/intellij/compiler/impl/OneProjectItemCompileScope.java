@@ -46,9 +46,10 @@ public class OneProjectItemCompileScope extends ExportableUserDataHolderBase imp
     myUrl = file.isDirectory()? url + "/" : url;
   }
 
+  @Override
   @NotNull
   public VirtualFile[] getFiles(final FileType fileType, final boolean inSourceOnly) {
-    final List<VirtualFile> files = new ArrayList<VirtualFile>(1);
+    final List<VirtualFile> files = new ArrayList<>(1);
     final ProjectFileIndex projectFileIndex = ProjectRootManager.getInstance(myProject).getFileIndex();
     final ContentIterator iterator = new CompilerContentIterator(fileType, projectFileIndex, inSourceOnly, files);
     if (myFile.isDirectory()){
@@ -60,6 +61,7 @@ public class OneProjectItemCompileScope extends ExportableUserDataHolderBase imp
     return VfsUtil.toVirtualFileArray(files);
   }
 
+  @Override
   public boolean belongs(String url) {
     if (myFile.isDirectory()){
       return FileUtil.startsWith(url, myUrl);
@@ -67,6 +69,7 @@ public class OneProjectItemCompileScope extends ExportableUserDataHolderBase imp
     return FileUtil.pathsEqual(url, myUrl);
   }
 
+  @Override
   @NotNull
   public Module[] getAffectedModules() {
     final Module module = ModuleUtil.findModuleForFile(myFile, myProject);

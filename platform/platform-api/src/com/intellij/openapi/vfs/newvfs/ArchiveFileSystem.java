@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package com.intellij.openapi.vfs.newvfs;
 import com.intellij.openapi.fileTypes.FileTypeRegistry;
 import com.intellij.openapi.fileTypes.FileTypes;
 import com.intellij.openapi.util.Key;
-import com.intellij.openapi.util.io.BufferExposingByteArrayInputStream;
 import com.intellij.openapi.util.io.FileAttributes;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.*;
@@ -41,17 +40,22 @@ public abstract class ArchiveFileSystem extends NewVirtualFileSystem {
   /**
    * Returns a root entry of an archive hosted by a given local file
    * (i.e.: file:///path/to/jar.jar => jar:///path/to/jar.jar!/),
-   * or null if the file does not host this file system.
+   * or {@code null} if the file does not host this file system.
    */
   @Nullable
   public VirtualFile getRootByLocal(@NotNull VirtualFile file) {
-    return findFileByPath(composeRootPath(file.getPath()));
+    return isCorrectFileType(file) ? findFileByPath(getRootPathByLocal(file)) : null;
+  }
+
+  @NotNull
+  public String getRootPathByLocal(@NotNull VirtualFile file) {
+    return composeRootPath(file.getPath());
   }
 
   /**
    * Returns a root entry of an archive which hosts a given entry file
    * (i.e.: jar:///path/to/jar.jar!/resource.xml => jar:///path/to/jar.jar!/),
-   * or null if the file does not belong to this file system.
+   * or {@code null} if the file does not belong to this file system.
    */
   @Nullable
   public VirtualFile getRootByEntry(@NotNull VirtualFile entry) {
@@ -61,7 +65,7 @@ public abstract class ArchiveFileSystem extends NewVirtualFileSystem {
   /**
    * Returns a local file of an archive which hosts a given entry file
    * (i.e.: jar:///path/to/jar.jar!/resource.xml => file:///path/to/jar.jar),
-   * or null if the file does not belong to this file system.
+   * or {@code null} if the file does not belong to this file system.
    */
   @Nullable
   public VirtualFile getLocalByEntry(@NotNull VirtualFile entry) {
@@ -210,7 +214,7 @@ public abstract class ArchiveFileSystem extends NewVirtualFileSystem {
   @NotNull
   @Override
   public InputStream getInputStream(@NotNull VirtualFile file) throws IOException {
-    return new BufferExposingByteArrayInputStream(contentsToByteArray(file));
+    return getHandler(file).getInputStream(getRelativePath(file));
   }
 
   @Override
@@ -234,7 +238,7 @@ public abstract class ArchiveFileSystem extends NewVirtualFileSystem {
   /**
    * Returns a local file of an archive which hosts a root with the given path
    * (i.e.: "jar:///path/to/jar.jar!/" => file:///path/to/jar.jar),
-   * or null if the local file is of incorrect type.
+   * or {@code null} if the local file is of incorrect type.
    */
   @Nullable
   public VirtualFile findLocalByRootPath(@NotNull String rootPath) {

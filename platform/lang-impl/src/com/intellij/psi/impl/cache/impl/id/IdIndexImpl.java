@@ -30,7 +30,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Comparator;
 
 public class IdIndexImpl extends IdIndex implements CustomInputsIndexFileBasedIndexExtension<IdIndexEntry> {
   private static final ThreadLocalCachedIntArray spareBufferLocal = new ThreadLocalCachedIntArray();
@@ -48,7 +47,7 @@ public class IdIndexImpl extends IdIndex implements CustomInputsIndexFileBasedIn
     int version = super.getVersion();
     for(FileType fileType:types) {
       if (!isIndexable(fileType)) continue;
-      FileTypeIdIndexer indexer = IdTableBuilding.getFileTypeIndexer(fileType);
+      IdIndexer indexer = IdTableBuilding.getFileTypeIndexer(fileType);
       if (indexer == null) continue;
       version = version * 31 + (indexer.getVersion() ^ indexer.getClass().getName().hashCode());
     }
@@ -79,7 +78,7 @@ public class IdIndexImpl extends IdIndex implements CustomInputsIndexFileBasedIn
       @Override
       public Collection<IdIndexEntry> read(@NotNull DataInput in) throws IOException {
         int length = DataInputOutputUtil.readINT(in);
-        ArrayList<IdIndexEntry> entries = new ArrayList<IdIndexEntry>(length);
+        ArrayList<IdIndexEntry> entries = new ArrayList<>(length);
         int prev = 0;
         while(length-- > 0) {
           final int l = (int)(DataInputOutputUtil.readLONG(in) + prev);

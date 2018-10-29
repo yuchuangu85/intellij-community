@@ -1,25 +1,9 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.diff.impl.incrementalMerge.ui;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.DataContext;
-import com.intellij.openapi.actionSystem.IdeActions;
 import com.intellij.openapi.actionSystem.PlatformDataKeys;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.diagnostic.Logger;
@@ -59,6 +43,7 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.EditorNotificationPanel;
 import com.intellij.util.containers.Convertor;
 import gnu.trove.TIntHashSet;
@@ -86,12 +71,14 @@ public class MergePanel2 implements DiffViewer {
   private final DividersRepainter myDividersRepainter = new DividersRepainter();
   private StatusUpdater myStatusUpdater;
   private final DialogBuilder myBuilder;
-  private final MyDataProvider myProvider;
 
   public MergePanel2(DialogBuilder builder, @NotNull Disposable parent) {
-    ArrayList<EditorPlace> editorPlaces = new ArrayList<EditorPlace>();
+    DiffUsageTriggerCollector.trigger("deprecated.MergePanel2");
+
+    ArrayList<EditorPlace> editorPlaces = new ArrayList<>();
     EditorPlace.EditorListener placeListener = new EditorPlace.EditorListener() {
-      public void onEditorCreated(EditorPlace place) {
+      @Override
+      public void onEditorCreated(@NotNull EditorPlace place) {
         if (myDuringCreation) return;
         disposeMergeList();
         myDuringCreation = true;
@@ -103,7 +90,8 @@ public class MergePanel2 implements DiffViewer {
         }
       }
 
-      public void onEditorReleased(Editor releasedEditor) {
+      @Override
+      public void onEditorReleased(@NotNull Editor releasedEditor) {
         LOG.assertTrue(!myDuringCreation);
         disposeMergeList();
       }
@@ -120,8 +108,7 @@ public class MergePanel2 implements DiffViewer {
     FontSizeSynchronizer.attachTo(editorPlaces);
     myPanel = new DiffPanelOuterComponent(TextDiffType.MERGE_TYPES, createToolbar());
     myPanel.insertDiffComponent(new ThreePanels(myEditorsPanels, myDividers), new MyScrollingPanel());
-    myProvider = new MyDataProvider();
-    myPanel.setDataProvider(myProvider);
+    myPanel.setDataProvider(new MyDataProvider());
     myBuilder = builder;
   }
 
@@ -142,13 +129,14 @@ public class MergePanel2 implements DiffViewer {
   @NotNull
   private DiffRequest.ToolbarAddons createToolbar() {
     return new DiffRequest.ToolbarAddons() {
+      @Override
       public void customize(DiffToolbar toolbar) {
         toolbar.addAction(PreviousDiffAction.find());
         toolbar.addAction(NextDiffAction.find());
         toolbar.addSeparator();
-        toolbar.addAction(new OpenPartialDiffAction(0, 1, AllIcons.Diff.LeftDiff));
-        toolbar.addAction(new OpenPartialDiffAction(1, 2, AllIcons.Diff.RightDiff));
-        toolbar.addAction(new OpenPartialDiffAction(0, 2, AllIcons.Diff.BranchDiff));
+        toolbar.addAction(new OpenPartialDiffAction(0, 1, AllIcons.Diff.Compare3LeftMiddle));
+        toolbar.addAction(new OpenPartialDiffAction(1, 2, AllIcons.Diff.Compare3MiddleRight));
+        toolbar.addAction(new OpenPartialDiffAction(0, 2, AllIcons.Diff.Compare3LeftRight));
         toolbar.addSeparator();
         toolbar.addAction(new ApplyNonConflicts(myPanel));
         toolbar.addSeparator();
@@ -164,7 +152,7 @@ public class MergePanel2 implements DiffViewer {
 
   @NotNull
   private Collection<Editor> getEditors() {
-    Collection<Editor> editors = new ArrayList<Editor>(3);
+    Collection<Editor> editors = new ArrayList<>(3);
     for (EditorPlace place : getEditorPlaces()) {
       editors.add(place.getEditor());
     }
@@ -173,7 +161,7 @@ public class MergePanel2 implements DiffViewer {
 
   @NotNull
   private Collection<EditorPlace> getEditorPlaces() {
-    Collection<EditorPlace> editorPlaces = new ArrayList<EditorPlace>(3);
+    Collection<EditorPlace> editorPlaces = new ArrayList<>(3);
     for (LabeledComponent editorsPanel : myEditorsPanels) {
       editorPlaces.add((EditorPlace) editorsPanel.getComponent());
     }
@@ -349,6 +337,7 @@ public class MergePanel2 implements DiffViewer {
     return MergeTool.canShowRequest(request);
   }
 
+  @Override
   public void setDiffRequest(DiffRequest data) {
     setTitle(data.getWindowTitle());
     disposeMergeList();
@@ -357,7 +346,6 @@ public class MergePanel2 implements DiffViewer {
     }
     LOG.assertTrue(!myDuringCreation);
     myDuringCreation = true;
-    myProvider.putData(data.getGenericData());
     try {
       myData = data;
       String[] titles = myData.getContentTitles();
@@ -366,21 +354,18 @@ public class MergePanel2 implements DiffViewer {
         editorsPanel.getLabel().setText(titles[i].isEmpty() ? " " : titles[i]);
       }
       createMergeList();
-      data.customizeToolbar(myPanel.resetToolbar());
+      myPanel.resetToolbar();
       myPanel.registerToolbarActions();
       if ( data instanceof MergeRequestImpl && myBuilder != null){
-        Convertor<DialogWrapper, Boolean> preOkHook = new Convertor<DialogWrapper, Boolean>() {
-          @Override
-          public Boolean convert(DialogWrapper dialog) {
-            ChangeCounter counter = ChangeCounter.getOrCreate(myMergeList);
-            int changes = counter.getChangeCounter();
-            int conflicts = counter.getConflictCounter();
-            if (changes == 0 && conflicts == 0) return true;
-            return Messages.showYesNoDialog(dialog.getRootPane(),
-                                            DiffBundle.message("merge.dialog.apply.partially.resolved.changes.confirmation.message", changes, conflicts),
-                                            DiffBundle.message("apply.partially.resolved.merge.dialog.title"),
-                                            Messages.getQuestionIcon()) == Messages.YES;
-          }
+        Convertor<DialogWrapper, Boolean> preOkHook = dialog -> {
+          ChangeCounter counter = ChangeCounter.getOrCreate(myMergeList);
+          int changes = counter.getChangeCounter();
+          int conflicts = counter.getConflictCounter();
+          if (changes == 0 && conflicts == 0) return true;
+          return Messages.showYesNoDialog(dialog.getRootPane(),
+                                          DiffBundle.message("merge.dialog.apply.partially.resolved.changes.confirmation.message", changes, conflicts),
+                                          DiffBundle.message("apply.partially.resolved.merge.dialog.title"),
+                                          Messages.getQuestionIcon()) == Messages.YES;
         };
         ((MergeRequestImpl)data).setActions(myBuilder, this, preOkHook);
       }
@@ -406,17 +391,15 @@ public class MergePanel2 implements DiffViewer {
     return null;
   }
 
+  @Override
   public JComponent getComponent() {
     return myPanel;
   }
 
+  @Override
   @Nullable
   public JComponent getPreferredFocusedComponent() {
     return getEditorPlace(1).getContentComponent();
-  }
-
-  public int getContentsNumber() {
-    return 3;
   }
 
   @Override
@@ -443,22 +426,27 @@ public class MergePanel2 implements DiffViewer {
       mySide = side;
     }
 
+    @Override
     @Nullable
     public Editor getEditor(FragmentSide side) {
       return MergePanel2.this.getEditor(mySide.getIndex() + side.getIndex());
     }
 
+    @Override
     public LineBlocks getLineBlocks() {
       return myMergeList.getChanges(mySide).getLineBlocks();
     }
   }
 
   private class MyScrollingPanel implements DiffPanelOuterComponent.ScrollingPanel {
+    @Override
     public void scrollEditors() {
       Editor centerEditor = getEditor(1);
       JComponent centerComponent = centerEditor.getContentComponent();
       if (centerComponent.isShowing()) {
-        centerComponent.requestFocus();
+        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+          IdeFocusManager.getGlobalInstance().requestFocus(centerComponent, true);
+        });
       }
       int[] toLeft = getPrimaryBeginnings(myDividers[0].getPaint());
       int[] toRight = getPrimaryBeginnings(myDividers[1].getPaint());
@@ -540,7 +528,8 @@ public class MergePanel2 implements DiffViewer {
   }
 
   private class MyDataProvider extends GenericDataProvider {
-    public Object getData(String dataId) {
+    @Override
+    public Object getData(@NotNull String dataId) {
       if (FocusDiffSide.DATA_KEY.is(dataId)) {
         int index = getFocusedEditorIndex();
         if (index < 0) return null;
@@ -574,21 +563,25 @@ public class MergePanel2 implements DiffViewer {
       mySide = side;
     }
 
+    @Override
     @Nullable
     public Editor getEditor() {
       return MergePanel2.this.getEditor(mySide.getMergeIndex());
     }
 
+    @Override
     public int[] getFragmentStartingLines() {
       return myMergeList.getChanges(mySide).getNonAppliedLineBlocks().getBeginnings(MergeList.BRANCH_SIDE);
     }
   }
 
   private class MergeFocusedSide implements FocusDiffSide {
+    @Override
     public Editor getEditor() {
       return MergePanel2.this.getEditor(1);
     }
 
+    @Override
     public int[] getFragmentStartingLines() {
       TIntHashSet beginnings = new TIntHashSet();
       if (myMergeList != null) {
@@ -625,12 +618,13 @@ public class MergePanel2 implements DiffViewer {
   private class DividersRepainter implements ChangeList.Listener {
 
     @Override
-    public void onChangeApplied(ChangeList source) {
+    public void onChangeApplied(@NotNull ChangeList source) {
       FragmentSide side = myMergeList.getSideOf(source);
       myDividers[side.getIndex()].repaint();
     }
 
-    public void onChangeRemoved(ChangeList source) {
+    @Override
+    public void onChangeRemoved(@NotNull ChangeList source) {
       FragmentSide side = myMergeList.getSideOf(source);
       myDividers[side.getIndex()].repaint();
     }
@@ -643,7 +637,8 @@ public class MergePanel2 implements DiffViewer {
       myPanel = panel;
     }
 
-    public void onCountersChanged(ChangeCounter counter) {
+    @Override
+    public void onCountersChanged(@NotNull ChangeCounter counter) {
       int changes = counter.getChangeCounter();
       int conflicts = counter.getConflictCounter();
       String text;

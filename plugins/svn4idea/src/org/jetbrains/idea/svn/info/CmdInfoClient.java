@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,16 +21,14 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.CharsetToolkit;
-import com.intellij.util.Consumer;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.svn.api.BaseSvnClient;
 import org.jetbrains.idea.svn.api.Depth;
+import org.jetbrains.idea.svn.api.Revision;
+import org.jetbrains.idea.svn.api.Target;
 import org.jetbrains.idea.svn.commandLine.*;
-import org.tmatesoft.svn.core.SVNException;
-import org.tmatesoft.svn.core.wc.SVNRevision;
-import org.tmatesoft.svn.core.wc2.SvnTarget;
 import org.xml.sax.SAXException;
 
 import javax.xml.parsers.ParserConfigurationException;
@@ -42,12 +40,6 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 
-/**
- * Created with IntelliJ IDEA.
- * User: Irina.Chernushina
- * Date: 1/27/12
- * Time: 12:59 PM
- */
 public class CmdInfoClient extends BaseSvnClient implements InfoClient {
 
   private static final Logger LOG = Logger.getInstance(CmdInfoClient.class);
@@ -65,7 +57,7 @@ public class CmdInfoClient extends BaseSvnClient implements InfoClient {
     };
 
     try {
-      CommandExecutor command = execute(myVcs, SvnTarget.fromFile(path), SvnCommandName.info, parameters, listener);
+      CommandExecutor command = execute(myVcs, Target.on(path), SvnCommandName.info, parameters, listener);
 
       return command.getOutput();
     }
@@ -104,15 +96,12 @@ public class CmdInfoClient extends BaseSvnClient implements InfoClient {
       return;
     }
 
-    final SvnInfoHandler infoHandler = new SvnInfoHandler(base, new Consumer<Info>() {
-      @Override
-      public void consume(Info info) {
-        try {
-          handler.consume(info);
-        }
-        catch (SVNException e) {
-          throw new SvnExceptionWrapper(e);
-        }
+    final SvnInfoHandler infoHandler = new SvnInfoHandler(base, info -> {
+      try {
+        handler.consume(info);
+      }
+      catch (SvnBindException e) {
+        throw new SvnExceptionWrapper(e);
       }
     });
 
@@ -128,22 +117,14 @@ public class CmdInfoClient extends BaseSvnClient implements InfoClient {
     catch (SvnExceptionWrapper e) {
       LOG.info("info output " + result);
       throw new SvnBindException(e.getCause());
-    } catch (IOException e) {
-      LOG.info("info output " + result);
-      throw new SvnBindException(e);
-    }
-    catch (ParserConfigurationException e) {
-      LOG.info("info output " + result);
-      throw new SvnBindException(e);
-    }
-    catch (SAXException e) {
+    } catch (IOException | SAXException | ParserConfigurationException e) {
       LOG.info("info output " + result);
       throw new SvnBindException(e);
     }
   }
 
   @NotNull
-  private static List<String> buildParameters(@NotNull SvnTarget target, @Nullable SVNRevision revision, @Nullable Depth depth) {
+  private static List<String> buildParameters(@NotNull Target target, @Nullable Revision revision, @Nullable Depth depth) {
     List<String> parameters = ContainerUtil.newArrayList();
 
     CommandUtil.put(parameters, depth);
@@ -155,14 +136,14 @@ public class CmdInfoClient extends BaseSvnClient implements InfoClient {
   }
 
   @Override
-  public Info doInfo(@NotNull File path, @Nullable SVNRevision revision) throws SvnBindException {
+  public Info doInfo(@NotNull File path, @Nullable Revision revision) throws SvnBindException {
     File base = CommandUtil.requireExistingParent(path);
 
-    return parseResult(base, execute(buildParameters(SvnTarget.fromFile(path), revision, Depth.EMPTY), path));
+    return parseResult(base, execute(buildParameters(Target.on(path), revision, Depth.EMPTY), path));
   }
 
   @Override
-  public Info doInfo(@NotNull SvnTarget target, @Nullable SVNRevision revision) throws SvnBindException {
+  public Info doInfo(@NotNull Target target, @Nullable Revision revision) throws SvnBindException {
     assertUrl(target);
 
     CommandExecutor command = execute(myVcs, target, SvnCommandName.info, buildParameters(target, revision, Depth.EMPTY), null);
@@ -197,7 +178,7 @@ public class CmdInfoClient extends BaseSvnClient implements InfoClient {
     @Nullable private Info myInfo;
 
     @Override
-    public void consume(Info info) throws SVNException {
+    public void consume(Info info) {
       myInfo = info;
     }
 

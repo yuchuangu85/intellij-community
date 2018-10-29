@@ -16,7 +16,10 @@
 
 package com.intellij.xml.util;
 
-import com.intellij.codeInspection.*;
+import com.intellij.codeInspection.LocalQuickFix;
+import com.intellij.codeInspection.ProblemsHolder;
+import com.intellij.codeInspection.XmlInspectionGroupNames;
+import com.intellij.codeInspection.XmlSuppressableInspectionTool;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.xml.XMLLanguage;
 import com.intellij.openapi.editor.Editor;
@@ -28,6 +31,7 @@ import com.intellij.psi.xml.XmlChildRole;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.psi.xml.XmlTokenType;
 import com.intellij.xml.XmlBundle;
+import com.intellij.xml.XmlExtension;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
@@ -69,7 +73,8 @@ public class CheckTagEmptyBodyInspection extends XmlSuppressableInspectionTool {
   static boolean isCollapsibleTag(final XmlTag tag) {
     final String name = tag.getName().toLowerCase();
     return tag.getLanguage() == XMLLanguage.INSTANCE ||
-           "link".equals(name) || "br".equals(name) || "meta".equals(name) || "img".equals(name) || "input".equals(name) || "hr".equals(name);
+           "link".equals(name) || "br".equals(name) || "meta".equals(name) || "img".equals(name) || "input".equals(name) || "hr".equals(name) ||
+           XmlExtension.isCollapsible(tag);
   }
 
   @Override

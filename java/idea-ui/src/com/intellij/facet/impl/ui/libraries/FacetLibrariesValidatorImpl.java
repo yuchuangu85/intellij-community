@@ -32,7 +32,6 @@ import com.intellij.openapi.roots.ui.configuration.libraries.AddCustomLibraryDia
 import com.intellij.openapi.roots.ui.configuration.libraries.CustomLibraryDescription;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.Processor;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
@@ -48,7 +47,7 @@ public class FacetLibrariesValidatorImpl extends FacetLibrariesValidator {
   private final FacetValidatorsManager myValidatorsManager;
   private RequiredLibrariesInfo myRequiredLibraries;
   private FacetLibrariesValidatorDescription myDescription;
-  private final List<Library> myAddedLibraries = new ArrayList<Library>();
+  private final List<Library> myAddedLibraries = new ArrayList<>();
 
   public FacetLibrariesValidatorImpl(LibraryInfo[] requiredLibraries, FacetLibrariesValidatorDescription description,
                                      final LibrariesValidatorContext context, FacetValidatorsManager validatorsManager) {
@@ -58,20 +57,24 @@ public class FacetLibrariesValidatorImpl extends FacetLibrariesValidator {
     myDescription = description;
   }
 
+  @Override
   public void setRequiredLibraries(final LibraryInfo[] requiredLibraries) {
     myRequiredLibraries = new RequiredLibrariesInfo(requiredLibraries);
     onChange();
   }
 
+  @Override
   public boolean isLibrariesAdded() {
     return false;
   }
 
+  @Override
   public void setDescription(@NotNull final FacetLibrariesValidatorDescription description) {
     myDescription = description;
     onChange();
   }
 
+  @Override
   @NotNull
   public ValidationResult check() {
     if (myRequiredLibraries == null) {
@@ -96,6 +99,7 @@ public class FacetLibrariesValidatorImpl extends FacetLibrariesValidator {
     }
   }
 
+  @Override
   public void onFacetInitialized(Facet facet) {
     for (Library addedLibrary : myAddedLibraries) {
       myDescription.onLibraryAdded(facet, addedLibrary);
@@ -103,7 +107,7 @@ public class FacetLibrariesValidatorImpl extends FacetLibrariesValidator {
   }
 
   private List<VirtualFile> collectRoots(final @NotNull ModuleRootModel rootModel) {
-    final ArrayList<VirtualFile> roots = new ArrayList<VirtualFile>();
+    final ArrayList<VirtualFile> roots = new ArrayList<>();
     rootModel.orderEntries().using(myContext.getModulesProvider()).recursively().librariesOnly().forEachLibrary(library -> {
       ContainerUtil.addAll(roots, myContext.getLibrariesContainer().getLibraryFiles(library, OrderRootType.CLASSES));
       return true;
@@ -112,13 +116,14 @@ public class FacetLibrariesValidatorImpl extends FacetLibrariesValidator {
   }
 
   private class LibrariesQuickFix extends FacetConfigurationQuickFix {
-    private CustomLibraryDescription myDescription;
+    private final CustomLibraryDescription myDescription;
 
-    public LibrariesQuickFix(CustomLibraryDescription description) {
+    LibrariesQuickFix(CustomLibraryDescription description) {
       super(IdeBundle.message("button.fix"));
       myDescription = description;
     }
 
+    @Override
     public void run(final JComponent place) {
       AddCustomLibraryDialog dialog = AddCustomLibraryDialog.createDialog(myDescription, myContext.getLibrariesContainer(),
                                                                      myContext.getModule(), myContext.getModifiableRootModel(), null);

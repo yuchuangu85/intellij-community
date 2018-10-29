@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 /*
  * Class EvaluatorBuilderImpl
@@ -36,12 +22,12 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.JavaConstantExpressionEvaluator;
-import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiTypesUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
+import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.sun.jdi.Value;
 import org.jetbrains.annotations.NotNull;
@@ -68,7 +54,6 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
     if (codeFragment == null) {
       throw EvaluateExceptionUtil.createEvaluateException(DebuggerBundle.message("evaluation.error.invalid.expression", text.getText()));
     }
-    codeFragment.forceResolveScope(GlobalSearchScope.allScope(project));
     DebuggerUtils.checkSyntax(codeFragment);
 
     return factory.getEvaluatorBuilder().build(codeFragment, position);
@@ -85,11 +70,12 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
     private PsiClass myContextPsiClass;
     private CodeFragmentEvaluator myCurrentFragmentEvaluator;
     private final Set<JavaCodeFragment> myVisitedFragments = new HashSet<>();
-    @Nullable
-    private final SourcePosition myPosition;
+    @Nullable private final SourcePosition myPosition;
+    @Nullable private final PsiClass myPositionPsiClass;
 
     private Builder(@Nullable SourcePosition position) {
       myPosition = position;
+      myPositionPsiClass = JVMNameUtil.getClassAt(myPosition);
     }
 
     @Override
@@ -108,7 +94,7 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
           myResult = null;
         }
 
-        myCurrentFragmentEvaluator.setStatements(evaluators.toArray(new Evaluator[evaluators.size()]));
+        myCurrentFragmentEvaluator.setStatements(evaluators.toArray(new Evaluator[0]));
         myResult = myCurrentFragmentEvaluator;
       }
       finally {
@@ -247,14 +233,15 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
     }
 
     private Evaluator[] visitStatements(PsiStatement[] statements) {
-      Evaluator[] evaluators = new Evaluator[statements.length];
-      for (int i = 0; i < statements.length; i++) {
-        PsiStatement psiStatement = statements[i];
+      List<Evaluator> evaluators = new ArrayList<>();
+      for (PsiStatement psiStatement : statements) {
         psiStatement.accept(this);
-        evaluators[i] = new DisableGC(myResult);
+        if (myResult != null) { // for example declaration w/o initializer produces empty evaluator now
+          evaluators.add(DisableGC.create(myResult));
+        }
         myResult = null;
       }
-      return evaluators;
+      return evaluators.toArray(new Evaluator[0]);
     }
 
     @Override
@@ -432,7 +419,7 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
     }
 
     // constructs binary evaluator handling unboxing and numeric promotion issues
-    private static BinaryExpressionEvaluator createBinaryEvaluator(Evaluator lResult,
+    private static Evaluator createBinaryEvaluator(Evaluator lResult,
                                                                    PsiType lType,
                                                                    Evaluator rResult,
                                                                    @NotNull PsiType rType,
@@ -506,7 +493,7 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
         rResult = handleUnaryNumericPromotion(rType, rResult);
       }
 
-      return new BinaryExpressionEvaluator(lResult, rResult, operation, expressionExpectedType.getCanonicalText());
+      return DisableGC.create(new BinaryExpressionEvaluator(lResult, rResult, operation, expressionExpectedType.getCanonicalText()));
     }
 
     private static boolean isBinaryNumericPromotionApplicable(PsiType lType, PsiType rType, IElementType opType) {
@@ -591,7 +578,7 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
 
             final PsiType lType = localVariable.getType();
 
-            PsiElementFactory elementFactory = JavaPsiFacade.getInstance(localVariable.getProject()).getElementFactory();
+            PsiElementFactory elementFactory = JavaPsiFacade.getElementFactory(localVariable.getProject());
             try {
               PsiExpression initialValue = elementFactory.createExpressionFromText(PsiTypesUtil.getDefaultValueOfType(lType), null);
               Object value = JavaConstantExpressionEvaluator.computeConstantExpression(initialValue, true);
@@ -639,7 +626,7 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
 
       if(!evaluators.isEmpty()) {
         CodeFragmentEvaluator codeFragmentEvaluator = new CodeFragmentEvaluator(myCurrentFragmentEvaluator);
-        codeFragmentEvaluator.setStatements(evaluators.toArray(new Evaluator[evaluators.size()]));
+        codeFragmentEvaluator.setStatements(evaluators.toArray(new Evaluator[0]));
         myResult = codeFragmentEvaluator;
       } else {
         myResult = null;
@@ -703,20 +690,17 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
         final PsiVariable psiVar = (PsiVariable)element;
         final String localName = psiVar.getName();
         PsiClass variableClass = getContainingClass(psiVar);
-        if (getContextPsiClass() == null || getContextPsiClass().equals(variableClass)) {
+        final PsiClass positionClass = getPositionClass();
+        if (Objects.equals(positionClass, variableClass)) {
           PsiElement method = DebuggerUtilsEx.getContainingMethod(expression);
           boolean canScanFrames = method instanceof PsiLambdaExpression || ContextUtil.isJspImplicit(element);
           myResult = new LocalVariableEvaluator(localName, canScanFrames);
           return;
         }
         // the expression references final var outside the context's class (in some of the outer classes)
-        int iterationCount = 0;
-        PsiClass aClass = getOuterClass(getContextPsiClass());
-        while (aClass != null && !aClass.equals(variableClass)) {
-          iterationCount++;
-          aClass = getOuterClass(aClass);
-        }
-        if (aClass != null) {
+        // -1 because val$ are located in the same class
+        int iterationCount = calcIterationCount(variableClass, "Base class not found for " + psiVar.getName(), false) - 1;
+        if (iterationCount > -1) {
           PsiExpression initializer = psiVar.getInitializer();
           if(initializer != null) {
             Object value = JavaPsiFacade.getInstance(psiVar.getProject()).getConstantEvaluationHelper().computeConstantExpression(initializer);
@@ -727,11 +711,9 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
             }
           }
           Evaluator objectEvaluator = new ThisEvaluator(iterationCount);
-          //noinspection HardCodedStringLiteral
-          final PsiClass classAt = myPosition != null? JVMNameUtil.getClassAt(myPosition) : null;
-          FieldEvaluator.TargetClassFilter filter = FieldEvaluator.createClassFilter(classAt != null? classAt : getContextPsiClass());
-          myResult = createFallbackEvaluator(new FieldEvaluator(objectEvaluator, filter, "val$" + localName),
-                                             new LocalVariableEvaluator(localName, true));
+          myResult = createFallbackEvaluator(
+            new FieldEvaluator(objectEvaluator, FieldEvaluator.createClassFilter(positionClass), "val$" + localName),
+            new LocalVariableEvaluator(localName, true));
           return;
         }
         throwEvaluateException(DebuggerBundle.message("evaluation.error.local.variable.missing.from.class.closure", localName));
@@ -754,21 +736,12 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
           qualifier.accept(this);
           objectEvaluator = myResult;
         }
-        else if (fieldClass.equals(getContextPsiClass()) ||
-                 (getContextPsiClass() != null && getContextPsiClass().isInheritor(fieldClass, true))) {
-            objectEvaluator = new ThisEvaluator();
-        }
-        else {  // myContextPsiClass != fieldClass && myContextPsiClass is not a subclass of fieldClass
-          int iterationCount = 0;
-          PsiClass aClass = getContextPsiClass();
-          while (aClass != null && !(aClass.equals(fieldClass) || aClass.isInheritor(fieldClass, true))) {
-            iterationCount++;
-            aClass = getOuterClass(aClass);
-          }
-          if (aClass == null) {
+        else {
+          int iterations = calcIterationCount(fieldClass, fieldClass.getName(), true);
+          if (iterations < 0) {
             throwEvaluateException(DebuggerBundle.message("evaluation.error.cannot.sources.for.field.class", psiField.getName()));
           }
-          objectEvaluator = new ThisEvaluator(iterationCount);
+          objectEvaluator = new ThisEvaluator(iterations);
         }
         myResult = new FieldEvaluator(objectEvaluator, FieldEvaluator.createClassFilter(fieldClass), psiField.getName());
       }
@@ -851,8 +824,7 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
       if (LOG.isDebugEnabled()) {
         LOG.debug("visitSuperExpression " + expression);
       }
-      final int iterationCount = calcIterationCount(expression.getQualifier());
-      myResult = new SuperEvaluator(iterationCount);
+      myResult = new SuperEvaluator(calcIterationCount(expression.getQualifier()));
     }
 
     @Override
@@ -860,34 +832,42 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
       if (LOG.isDebugEnabled()) {
         LOG.debug("visitThisExpression " + expression);
       }
-      final int iterationCount = calcIterationCount(expression.getQualifier());
-      myResult = new ThisEvaluator(iterationCount);
+      myResult = new ThisEvaluator(calcIterationCount(expression.getQualifier()));
     }
 
     private int calcIterationCount(final PsiJavaCodeReferenceElement qualifier) {
       if (qualifier != null) {
-        return calcIterationCount(qualifier.resolve(), qualifier.getText());
+        return calcIterationCount(qualifier.resolve(), qualifier.getText(), false);
       }
       return 0;
     }
 
-    private int calcIterationCount(PsiElement targetClass, String name) {
-      int iterationCount = 0;
-      if (targetClass == null || getContextPsiClass() == null) {
+    private int calcIterationCount(PsiElement targetClass, String name, boolean checkInheritance) {
+      PsiClass fromClass = getPositionClass();
+      if (targetClass == null || fromClass == null) {
         throwEvaluateException(DebuggerBundle.message("evaluation.error.invalid.expression", name));
       }
       try {
-        PsiClass aClass = getContextPsiClass();
-        while (aClass != null && !aClass.equals(targetClass)) {
-          iterationCount++;
-          aClass = getOuterClass(aClass);
+        int iterationCount = calcDepth(targetClass, fromClass, checkInheritance);
+        if (iterationCount < -1 && !fromClass.equals(myContextPsiClass)) { // do not check twice
+          iterationCount = calcDepth(targetClass, myContextPsiClass, checkInheritance);
         }
+        return Math.max(0, iterationCount);
       }
       catch (Exception e) {
-        //noinspection ThrowableResultOfMethodCallIgnored
         throw new EvaluateRuntimeException(EvaluateExceptionUtil.createEvaluateException(e));
       }
-      return iterationCount;
+    }
+
+    private static int calcDepth(PsiElement targetClass, PsiClass fromClass, boolean checkInheritance) {
+      int iterationCount = 0;
+      while (fromClass != null &&
+             !fromClass.equals(targetClass) &&
+             (!checkInheritance || !fromClass.isInheritor((PsiClass)targetClass, true))) {
+        iterationCount++;
+        fromClass = getOuterClass(fromClass);
+      }
+      return fromClass != null ? iterationCount : -1;
     }
 
     @Override
@@ -934,7 +914,7 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
 
       Evaluator incrementImpl = createBinaryEvaluator(
         operandEvaluator, operandType,
-        new LiteralEvaluator(Integer.valueOf(1), "int"), PsiType.INT,
+        new LiteralEvaluator(1, "int"), PsiType.INT,
         operation == JavaTokenType.PLUSPLUS ? JavaTokenType.PLUS : JavaTokenType.MINUS,
         unboxedOperandType!= null? unboxedOperandType : operandType
       );
@@ -968,7 +948,7 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
 
       if(operation == JavaTokenType.PLUSPLUS || operation == JavaTokenType.MINUSMINUS) {
         try {
-          final BinaryExpressionEvaluator rightEval = createBinaryEvaluator(
+          final Evaluator rightEval = createBinaryEvaluator(
             operandEvaluator, operandType,
             new LiteralEvaluator(Integer.valueOf(1), "int"), PsiType.INT,
             operation == JavaTokenType.PLUSPLUS ? JavaTokenType.PLUS : JavaTokenType.MINUS,
@@ -1009,7 +989,7 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
           // cannot build evaluator
           throwExpressionInvalid(psiExpression);
         }
-        argumentEvaluators[idx] = new DisableGC(myResult);
+        argumentEvaluators[idx] = DisableGC.create(myResult);
       }
       PsiReferenceExpression methodExpr = expression.getMethodExpression();
 
@@ -1032,13 +1012,9 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
         }
         else {
           int iterationCount = 0;
-          final PsiElement currentFileResolveScope = resolveResult.getCurrentFileResolveScope();
+          PsiElement currentFileResolveScope = resolveResult.getCurrentFileResolveScope();
           if (currentFileResolveScope instanceof PsiClass) {
-            PsiClass aClass = getContextPsiClass();
-            while(aClass != null && !aClass.equals(currentFileResolveScope)) {
-              aClass = getOuterClass(aClass);
-              iterationCount++;
-            }
+            iterationCount = calcIterationCount(currentFileResolveScope, ((PsiClass)currentFileResolveScope).getName(), false);
           }
           objectEvaluator = new ThisEvaluator(iterationCount);
         }
@@ -1066,9 +1042,9 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
         }
         else {
           objectEvaluator = new ThisEvaluator();
-          contextClass = JVMNameUtil.getContextClassJVMQualifiedName(myPosition);
-          if(contextClass == null && myContextPsiClass != null) {
-            contextClass = JVMNameUtil.getJVMQualifiedName(myContextPsiClass);
+          PsiClass positionClass = getPositionClass();
+          if (positionClass != null) {
+            contextClass = JVMNameUtil.getJVMQualifiedName(positionClass);
           }
           //else {
           //  throw new EvaluateRuntimeException(EvaluateExceptionUtil.createEvaluateException(
@@ -1104,7 +1080,7 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
 
     @Override
     public void visitLiteralExpression(PsiLiteralExpression expression) {
-      final HighlightInfo parsingError = HighlightUtil.checkLiteralExpressionParsingError(expression, null, null);
+      final HighlightInfo parsingError = HighlightUtil.checkLiteralExpressionParsingError(expression, PsiUtil.getLanguageLevel(expression), null);
       if (parsingError != null) {
         throwEvaluateException(parsingError.getDescription());
         return;
@@ -1313,7 +1289,7 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
           PsiExpression argExpression = argExpressions[idx];
           argExpression.accept(this);
           if (myResult != null) {
-            argumentEvaluators[idx] = new DisableGC(myResult);
+            argumentEvaluators[idx] = DisableGC.create(myResult);
           }
           else {
             throwExpressionInvalid(argExpression);
@@ -1324,8 +1300,22 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
           processBoxingConversions(constructor.getParameterList().getParameters(), argExpressions, constructorResolveResult.getSubstitutor(), argumentEvaluators);
         }
 
-        if (aClass != null && aClass.getContainingClass() != null && !aClass.hasModifierProperty(PsiModifier.STATIC)) {
-          argumentEvaluators = addThisEvaluator(argumentEvaluators, aClass.getContainingClass());
+        if (aClass != null) {
+          PsiClass containingClass = aClass.getContainingClass();
+          if (containingClass != null && !aClass.hasModifierProperty(PsiModifier.STATIC)) {
+            PsiExpression qualifier = expression.getQualifier();
+            if (qualifier != null) {
+              qualifier.accept(this);
+              if (myResult != null) {
+                argumentEvaluators = ArrayUtil.prepend(myResult, argumentEvaluators);
+              }
+            }
+            else {
+              argumentEvaluators = ArrayUtil.prepend(
+                new ThisEvaluator(calcIterationCount(containingClass, "this", false)),
+                argumentEvaluators);
+            }
+          }
         }
 
         JVMName signature = JVMNameUtil.getJVMConstructorSignature(constructor, aClass);
@@ -1345,14 +1335,6 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
       }
     }
 
-    private Evaluator[] addThisEvaluator(Evaluator[] argumentEvaluators, PsiClass cls) {
-      Evaluator[] res = new Evaluator[argumentEvaluators.length+1];
-      int depth = calcIterationCount(cls, "this");
-      res[0] = new ThisEvaluator(depth);
-      System.arraycopy(argumentEvaluators, 0, res, 1, argumentEvaluators.length);
-      return res;
-    }
-
     @Override
     public void visitArrayInitializerExpression(PsiArrayInitializerExpression expression) {
       PsiExpression[] initializers = expression.getInitializers();
@@ -1365,7 +1347,7 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
         if (myResult != null) {
           final Evaluator coerced =
             primitive ? handleUnaryNumericPromotion(initializer.getType(), myResult) : new BoxingEvaluator(myResult);
-          evaluators[idx] = new DisableGC(coerced);
+          evaluators[idx] = DisableGC.create(coerced);
         }
         else {
           throwExpressionInvalid(initializer);
@@ -1384,14 +1366,15 @@ public class EvaluatorBuilderImpl implements EvaluatorBuilder {
       return aClass == null ? null : PsiTreeUtil.getContextOfType(aClass, PsiClass.class, true);
     }
 
-    private PsiClass getContainingClass(PsiVariable variable) {
-      PsiElement element = PsiTreeUtil.getParentOfType(variable.getParent(), PsiClass.class, false);
-      return element == null ? getContextPsiClass() : (PsiClass)element;
+    @Nullable
+    private PsiClass getContainingClass(@NotNull PsiVariable variable) {
+      PsiClass element = PsiTreeUtil.getParentOfType(variable.getParent(), PsiClass.class, false);
+      return element == null ? myContextPsiClass : element;
     }
 
     @Nullable
-    public PsiClass getContextPsiClass() {
-      return myContextPsiClass;
+    private PsiClass getPositionClass() {
+      return myPositionPsiClass != null ? myPositionPsiClass : myContextPsiClass;
     }
 
     protected ExpressionEvaluator buildElement(final PsiElement element) throws EvaluateException {

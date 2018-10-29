@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package org.jetbrains.plugins.groovy.intentions.conversions;
 
 import com.intellij.codeInsight.intention.impl.CreateClassDialog;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.module.ModuleUtilCore;
@@ -74,7 +75,12 @@ public class ConvertMapToClassIntention extends Intention {
   private static final Logger LOG = Logger.getInstance("#org.jetbrains.plugins.groovy.intentions.conversions.ConvertMapToClassIntention");
 
   @Override
-  protected void processIntention(@NotNull PsiElement element, final Project project, Editor editor) throws IncorrectOperationException {
+  public boolean startInWriteAction() {
+    return false;
+  }
+
+  @Override
+  protected void processIntention(@NotNull PsiElement element, @NotNull final Project project, Editor editor) throws IncorrectOperationException {
     final GrListOrMap map = (GrListOrMap)element;
     final GrNamedArgument[] namedArguments = map.getNamedArguments();
     LOG.assertTrue(map.getInitializers().length == 0);
@@ -96,10 +102,12 @@ public class ConvertMapToClassIntention extends Intention {
     final String shortName = StringUtil.getShortName(qualifiedClassName);
 
     final GrTypeDefinition typeDefinition = createClass(project, namedArguments, selectedPackageName, shortName);
-    final PsiClass generatedClass = CreateClassActionBase.createClassByType(
-      dialog.getTargetDirectory(), typeDefinition.getName(), PsiManager.getInstance(project), map, GroovyTemplates.GROOVY_CLASS, true);
-    final PsiClass replaced = (PsiClass)generatedClass.replace(typeDefinition);
-    replaceMapWithClass(project, map, replaced, replaceReturnType, variableDeclaration, methodParameter);
+    WriteAction.run(() -> {
+      PsiClass generatedClass = CreateClassActionBase.createClassByType(
+        dialog.getTargetDirectory(), typeDefinition.getName(), PsiManager.getInstance(project), map, GroovyTemplates.GROOVY_CLASS, true);
+      PsiClass replaced = (PsiClass)generatedClass.replace(typeDefinition);
+      replaceMapWithClass(project, map, replaced, replaceReturnType, variableDeclaration, methodParameter);
+    });
   }
 
   public static void replaceMapWithClass(Project project,
@@ -202,7 +210,7 @@ public class ConvertMapToClassIntention extends Intention {
     if (mapToParams == null) return null;
 
     final Pair<PsiParameter, PsiType> parameterPair = mapToParams.get(arg);
-    final PsiParameter parameter = parameterPair == null ? null : parameterPair.getFirst();
+    final PsiParameter parameter = Pair.getFirst(parameterPair);
 
     return parameter instanceof GrParameter? ((GrParameter)parameter):null;
   }
@@ -257,7 +265,7 @@ public class ConvertMapToClassIntention extends Intention {
 
 class MyPredicate implements PsiElementPredicate {
   @Override
-  public boolean satisfiedBy(PsiElement element) {
+  public boolean satisfiedBy(@NotNull PsiElement element) {
     if (!(element instanceof GrListOrMap)) return false;
     final GrListOrMap map = (GrListOrMap)element;
     final GrNamedArgument[] namedArguments = map.getNamedArguments();

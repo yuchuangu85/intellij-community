@@ -48,11 +48,11 @@ public class ScriptGenerator {
   /**
    * The class paths for the script
    */
-  private final ArrayList<String> myPaths = new ArrayList<String>();
+  private final ArrayList<String> myPaths = new ArrayList<>();
   /**
    * The internal parameters for the script
    */
-  private final ArrayList<String> myInternalParameters = new ArrayList<String>();
+  private final ArrayList<String> myInternalParameters = new ArrayList<>();
 
   /**
    * A constructor
@@ -121,17 +121,22 @@ public class ScriptGenerator {
    * @throws IOException if there is a problem with creating script
    */
   @NotNull
-  public File generate() throws IOException {
+  public static File generate(@NotNull String fileName, @NotNull String commandLine) throws IOException {
     String title = SystemInfo.isWindows ? "@echo off" : "#!/bin/sh";
     String parametersPassthrough = SystemInfo.isWindows ? " %*" : " \"$@\"";
-    String content = title + "\n" + commandLine() + parametersPassthrough + "\n";
-    File file = new File(PathManager.getTempPath(), myPrefix + SCRIPT_EXT);
+    String content = title + "\n" + commandLine + parametersPassthrough + "\n";
+    File file = new File(PathManager.getTempPath(), fileName + SCRIPT_EXT);
     if (SystemInfo.isWindows && file.getPath().contains(" ")) {
-      file = new File(FileUtil.getTempDirectory(), myPrefix + SCRIPT_EXT);
+      file = new File(FileUtil.getTempDirectory(), fileName + SCRIPT_EXT);
     }
     FileUtil.writeToFile(file, content);
     FileUtil.setExecutableAttribute(file.getPath(), true);
     return file;
+  }
+
+  @NotNull
+  public File generate() throws IOException {
+    return generate(myPrefix, commandLine());
   }
 
   /**

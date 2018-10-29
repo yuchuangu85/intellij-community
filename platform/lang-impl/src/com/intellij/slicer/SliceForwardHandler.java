@@ -19,9 +19,11 @@ import com.intellij.analysis.AnalysisScope;
 import com.intellij.analysis.AnalysisUIOptions;
 import com.intellij.analysis.BaseAnalysisActionDialog;
 import com.intellij.openapi.module.Module;
+import com.intellij.openapi.module.ModuleUtil;
 import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiElement;
+import org.jetbrains.jps.model.java.JavaSourceRootType;
 
 import javax.swing.*;
 
@@ -37,7 +39,6 @@ public class SliceForwardHandler extends SliceHandler {
   public SliceAnalysisParams askForParams(PsiElement element, boolean dataFlowToThis, SliceManager.StoredSettingsBean storedSettingsBean, String dialogTitle) {
     AnalysisScope analysisScope = new AnalysisScope(element.getContainingFile());
     Module module = ModuleUtilCore.findModuleForPsiElement(element);
-    String name = module == null ? null : module.getName();
 
     Project myProject = element.getProject();
     final SliceForwardForm form = new SliceForwardForm();
@@ -46,9 +47,10 @@ public class SliceForwardHandler extends SliceHandler {
     AnalysisUIOptions analysisUIOptions = new AnalysisUIOptions();
     analysisUIOptions.save(storedSettingsBean.analysisUIOptions);
 
-    BaseAnalysisActionDialog dialog = new BaseAnalysisActionDialog(dialogTitle, "Analyze scope", myProject, analysisScope, name, true,
-                                                                   analysisUIOptions,
-                                                                   element) {
+    BaseAnalysisActionDialog dialog = new BaseAnalysisActionDialog(dialogTitle, "Analyze scope", myProject, BaseAnalysisActionDialog.standardItems(
+      myProject, analysisScope, module, element),
+                                                                   analysisUIOptions, true, ModuleUtil
+                                                                     .isSupportedRootType(myProject, JavaSourceRootType.TEST_SOURCE)) {
       @Override
       protected JComponent getAdditionalActionSettings(Project project) {
         return form.getComponent();

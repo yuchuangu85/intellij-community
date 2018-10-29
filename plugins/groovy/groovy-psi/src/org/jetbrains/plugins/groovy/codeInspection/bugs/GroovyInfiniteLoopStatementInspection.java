@@ -28,13 +28,6 @@ public class GroovyInfiniteLoopStatementInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return PROBABLE_BUGS;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Infinite loop statement";
   }
@@ -60,7 +53,7 @@ public class GroovyInfiniteLoopStatementInspection extends BaseInspection {
   private static class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitWhileStatement(GrWhileStatement whileStatement) {
+    public void visitWhileStatement(@NotNull GrWhileStatement whileStatement) {
       super.visitWhileStatement(whileStatement);
       if (ControlFlowUtils.statementMayCompleteNormally(whileStatement)) {
         return;

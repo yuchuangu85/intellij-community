@@ -14,10 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * User: anna
- * Date: 27-Jul-2007
- */
 package com.intellij.ide.todo;
 
 import com.intellij.ide.util.PropertiesComponent;
@@ -28,7 +24,6 @@ import com.intellij.util.Alarm;
 import com.intellij.util.ui.JBUI;
 
 import javax.swing.*;
-import javax.swing.tree.DefaultTreeModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -40,7 +35,7 @@ public class ScopeBasedTodosPanel extends TodoPanel {
 
   public ScopeBasedTodosPanel(final Project project, TodoPanelSettings settings, Content content){
     super(project,settings,false,content);
-    myAlarm = new Alarm(Alarm.ThreadToUse.POOLED_THREAD, project);
+    myAlarm = new Alarm(Alarm.ThreadToUse.POOLED_THREAD, this);
     myScopes.getChildComponent().addActionListener(new ActionListener() {
       @Override
       public void actionPerformed(ActionEvent e) {
@@ -79,8 +74,8 @@ public class ScopeBasedTodosPanel extends TodoPanel {
   }
 
   @Override
-  protected TodoTreeBuilder createTreeBuilder(JTree tree, DefaultTreeModel treeModel, Project project) {
-    ScopeBasedTodosTreeBuilder builder = new ScopeBasedTodosTreeBuilder(tree, treeModel, project, myScopes);
+  protected TodoTreeBuilder createTreeBuilder(JTree tree, Project project) {
+    ScopeBasedTodosTreeBuilder builder = new ScopeBasedTodosTreeBuilder(tree, project, myScopes);
     builder.init();
     return builder;
   }

@@ -21,7 +21,6 @@ import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.PanelWithAnchor;
 import com.intellij.ui.components.JBLabel;
-import com.intellij.util.Function;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.idea.maven.execution.MavenExecutionOptions;
 import org.jetbrains.idea.maven.utils.ComboBoxUtil;
@@ -32,7 +31,7 @@ import java.util.Arrays;
 /**
  * @author Ralf Quebbemann (ralfq@codehaus.org)
  */
-public class MavenGeneralPanel implements  PanelWithAnchor {
+public class MavenGeneralPanel implements PanelWithAnchor {
   private JCheckBox checkboxWorkOffline;
   private JPanel panel;
   private JComboBox outputLevelCombo;
@@ -43,7 +42,7 @@ public class MavenGeneralPanel implements  PanelWithAnchor {
   private JCheckBox checkboxUsePluginRegistry;
   private JCheckBox checkboxRecursive;
   private MavenEnvironmentForm mavenPathsForm;
-  private JBLabel myMultiprojectBuildFailPolicyLabel;
+  private JBLabel myMultiProjectBuildFailPolicyLabel;
   private JCheckBox alwaysUpdateSnapshotsCheckBox;
   private JTextField threadsEditor;
   private final DefaultComboBoxModel outputLevelComboModel = new DefaultComboBoxModel();
@@ -58,55 +57,36 @@ public class MavenGeneralPanel implements  PanelWithAnchor {
     fillFailureBehaviorCombobox();
     fillPluginUpdatePolicyCombobox();
 
-    setAnchor(myMultiprojectBuildFailPolicyLabel);
+    setAnchor(myMultiProjectBuildFailPolicyLabel);
   }
 
   private void fillOutputLevelCombobox() {
     ComboBoxUtil.setModel(outputLevelCombo, outputLevelComboModel,
                           Arrays.asList(MavenExecutionOptions.LoggingLevel.values()),
-                          new Function<MavenExecutionOptions.LoggingLevel, Pair<String, ?>>() {
-                            public Pair<String, MavenExecutionOptions.LoggingLevel> fun(MavenExecutionOptions.LoggingLevel each) {
-                              return Pair.create(each.getDisplayString(), each);
-                            }
-                          });
+                          each -> Pair.create(each.getDisplayString(), each));
   }
 
   private void fillFailureBehaviorCombobox() {
     ComboBoxUtil.setModel(failPolicyCombo, failPolicyComboModel,
                           Arrays.asList(MavenExecutionOptions.FailureMode.values()),
-                          new Function<MavenExecutionOptions.FailureMode, Pair<String, ?>>() {
-                            public Pair<String, MavenExecutionOptions.FailureMode> fun(MavenExecutionOptions.FailureMode each) {
-                              return Pair.create(each.getDisplayString(), each);
-                            }
-                          });
+                          each -> Pair.create(each.getDisplayString(), each));
   }
 
   private void fillChecksumPolicyCombobox() {
     ComboBoxUtil.setModel(checksumPolicyCombo, checksumPolicyComboModel,
                           Arrays.asList(MavenExecutionOptions.ChecksumPolicy.values()),
-                          new Function<MavenExecutionOptions.ChecksumPolicy, Pair<String, ?>>() {
-                            public Pair<String, MavenExecutionOptions.ChecksumPolicy> fun(MavenExecutionOptions.ChecksumPolicy each) {
-                              return Pair.create(each.getDisplayString(), each);
-                            }
-                          });
+                          each -> Pair.create(each.getDisplayString(), each));
   }
 
   private void fillPluginUpdatePolicyCombobox() {
     ComboBoxUtil.setModel(pluginUpdatePolicyCombo, pluginUpdatePolicyComboModel,
                           Arrays.asList(MavenExecutionOptions.PluginUpdatePolicy.values()),
-                          new Function<MavenExecutionOptions.PluginUpdatePolicy, Pair<String, ?>>() {
-                            public Pair<String, MavenExecutionOptions.PluginUpdatePolicy> fun(MavenExecutionOptions.PluginUpdatePolicy each) {
-                              return Pair.create(each.getDisplayString(), each);
-                            }
-                          });
+                          each -> Pair.create(each.getDisplayString(), each));
   }
 
   public JComponent createComponent() {
     mavenPathsForm.createComponent(); // have to initialize all listeners
     return panel;
-  }
-
-  public void disposeUIResources() {
   }
 
   protected void setData(MavenGeneralSettings data) {
@@ -159,7 +139,7 @@ public class MavenGeneralPanel implements  PanelWithAnchor {
   @Override
   public void setAnchor(JComponent anchor) {
     this.anchor = anchor;
-    myMultiprojectBuildFailPolicyLabel.setAnchor(anchor);
+    myMultiProjectBuildFailPolicyLabel.setAnchor(anchor);
     mavenPathsForm.setAnchor(anchor);
   }
 }

@@ -37,12 +37,12 @@ import java.util.List;
  */
 public class FormEditorErrorCollector extends FormErrorCollector {
   private final GuiEditor myEditor;
-  private final RadComponent myComponent;
-  private List<ErrorInfo> myResults = null;
+  @NotNull private final RadComponent myComponent;
+  private List<ErrorInfo> myResults;
   private final InspectionProfile myProfile;
   private final PsiFile myFormPsiFile;
 
-  public FormEditorErrorCollector(final GuiEditor editor, final RadComponent component) {
+  FormEditorErrorCollector(final GuiEditor editor, @NotNull RadComponent component) {
     myEditor = editor;
     myComponent = component;
 
@@ -52,16 +52,17 @@ public class FormEditorErrorCollector extends FormErrorCollector {
   }
 
   public ErrorInfo[] result() {
-    return myResults == null ? null : myResults.toArray(new ErrorInfo[myResults.size()]);
+    return myResults == null ? null : myResults.toArray(ErrorInfo.EMPTY_ARRAY);
   }
 
-  public void addError(@NotNull final String inspectionId, final IComponent component, @Nullable IProperty prop,
+  @Override
+  public void addError(@NotNull final String inspectionId, @NotNull final IComponent component, @Nullable IProperty prop,
                        @NotNull String errorMessage,
-                       EditorQuickFixProvider... editorQuickFixProviders) {
+                       @NotNull EditorQuickFixProvider... editorQuickFixProviders) {
     if (myResults == null) {
-      myResults = new ArrayList<ErrorInfo>();
+      myResults = new ArrayList<>();
     }
-    List<QuickFix> quickFixes = new ArrayList<QuickFix>();
+    List<QuickFix> quickFixes = new ArrayList<>();
     for (EditorQuickFixProvider provider : editorQuickFixProviders) {
       if (provider != null) {
         quickFixes.add(provider.createQuickFix(myEditor, myComponent));
@@ -70,7 +71,7 @@ public class FormEditorErrorCollector extends FormErrorCollector {
 
     final ErrorInfo errorInfo = new ErrorInfo(myComponent, prop == null ? null : prop.getName(), errorMessage,
                                               myProfile.getErrorLevel(HighlightDisplayKey.find(inspectionId), myFormPsiFile),
-                                              quickFixes.toArray(new QuickFix[quickFixes.size()]));
+                                              quickFixes.toArray(QuickFix.EMPTY_ARRAY));
     errorInfo.setInspectionId(inspectionId);
     myResults.add(errorInfo);
   }

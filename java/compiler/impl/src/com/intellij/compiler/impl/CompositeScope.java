@@ -16,8 +16,6 @@
 
 /*
  * @author: Eugene Zhuravlev
- * Date: Feb 5, 2003
- * Time: 4:17:58 PM
  */
 package com.intellij.compiler.impl;
 
@@ -35,7 +33,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.*;
 
 public class CompositeScope extends ExportableUserDataHolderBase implements CompileScope{
-  private final List<CompileScope> myScopes = new ArrayList<CompileScope>();
+  private final List<CompileScope> myScopes = new ArrayList<>();
 
   public CompositeScope(CompileScope scope1, CompileScope scope2) {
     addScope(scope1);
@@ -60,9 +58,10 @@ public class CompositeScope extends ExportableUserDataHolderBase implements Comp
     }
   }
 
+  @Override
   @NotNull
   public VirtualFile[] getFiles(FileType fileType, boolean inSourceOnly) {
-    Set<VirtualFile> allFiles = new THashSet<VirtualFile>();
+    Set<VirtualFile> allFiles = new THashSet<>();
     for (CompileScope scope : myScopes) {
       final VirtualFile[] files = scope.getFiles(fileType, inSourceOnly);
       if (files.length > 0) {
@@ -72,6 +71,7 @@ public class CompositeScope extends ExportableUserDataHolderBase implements Comp
     return VfsUtil.toVirtualFileArray(allFiles);
   }
 
+  @Override
   public boolean belongs(String url) {
     for (CompileScope scope : myScopes) {
       if (scope.belongs(url)) {
@@ -81,15 +81,27 @@ public class CompositeScope extends ExportableUserDataHolderBase implements Comp
     return false;
   }
 
+  @Override
   @NotNull
   public Module[] getAffectedModules() {
-    Set<Module> modules = new HashSet<Module>();
+    Set<Module> modules = new HashSet<>();
     for (final CompileScope compileScope : myScopes) {
       ContainerUtil.addAll(modules, compileScope.getAffectedModules());
     }
-    return modules.toArray(new Module[modules.size()]);
+    return modules.toArray(Module.EMPTY_ARRAY);
   }
 
+  @NotNull
+  @Override
+  public Collection<String> getAffectedUnloadedModules() {
+    Set<String> unloadedModules = new LinkedHashSet<>();
+    for (final CompileScope compileScope : myScopes) {
+      ContainerUtil.addAll(unloadedModules, compileScope.getAffectedUnloadedModules());
+    }
+    return unloadedModules;
+  }
+
+  @Override
   public <T> T getUserData(@NotNull Key<T> key) {
     for (CompileScope compileScope : myScopes) {
       T userData = compileScope.getUserData(key);
@@ -99,7 +111,7 @@ public class CompositeScope extends ExportableUserDataHolderBase implements Comp
     }
     return super.getUserData(key);
   }
-  
+
   public Collection<CompileScope> getScopes() {
     return Collections.unmodifiableList(myScopes);
   }

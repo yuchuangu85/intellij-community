@@ -20,7 +20,7 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
-import com.intellij.openapi.vcs.ConstantZipperUpdater;
+import com.intellij.openapi.util.ZipperUpdater;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.ProjectLevelVcsManager;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -45,10 +45,10 @@ public class VcsDirtyScopeVfsListener implements BulkFileListener, Disposable {
 
   private boolean myForbid; // for tests only
 
-  private final ConstantZipperUpdater myZipperUpdater;
+  @NotNull private final ZipperUpdater myZipperUpdater;
   private final List<FilesAndDirs> myQueue;
   private final Object myLock;
-  private final Runnable myDirtReporter;
+  @NotNull private final Runnable myDirtReporter;
 
   public VcsDirtyScopeVfsListener(@NotNull Project project,
                                   @NotNull ProjectLevelVcsManager vcsManager,
@@ -57,27 +57,24 @@ public class VcsDirtyScopeVfsListener implements BulkFileListener, Disposable {
 
     myLock = new Object();
     myQueue = new ArrayList<>();
-    myDirtReporter = new Runnable() {
-      @Override
-      public void run() {
-        ArrayList<FilesAndDirs> list;
-        synchronized (myLock) {
-          list = new ArrayList<>(myQueue);
-          myQueue.clear();
-        }
+    myDirtReporter = () -> {
+      ArrayList<FilesAndDirs> list;
+      synchronized (myLock) {
+        list = new ArrayList<>(myQueue);
+        myQueue.clear();
+      }
 
-        HashSet<FilePath> dirtyFiles = ContainerUtil.newHashSet();
-        HashSet<FilePath> dirtyDirs = ContainerUtil.newHashSet();
-        for (FilesAndDirs filesAndDirs : list) {
-          dirtyFiles.addAll(filesAndDirs.dirtyFiles);
-          dirtyDirs.addAll(filesAndDirs.dirtyDirs);
-        }
-        if (!dirtyFiles.isEmpty() || !dirtyDirs.isEmpty()) {
-          dirtyScopeManager.filePathsDirty(dirtyFiles, dirtyDirs);
-        }
+      HashSet<FilePath> dirtyFiles = ContainerUtil.newHashSet();
+      HashSet<FilePath> dirtyDirs = ContainerUtil.newHashSet();
+      for (FilesAndDirs filesAndDirs : list) {
+        dirtyFiles.addAll(filesAndDirs.dirtyFiles);
+        dirtyDirs.addAll(filesAndDirs.dirtyDirs);
+      }
+      if (!dirtyFiles.isEmpty() || !dirtyDirs.isEmpty()) {
+        dirtyScopeManager.filePathsDirty(dirtyFiles, dirtyDirs);
       }
     };
-    myZipperUpdater = new ConstantZipperUpdater(300, Alarm.ThreadToUse.POOLED_THREAD, this, myDirtReporter);
+    myZipperUpdater = new ZipperUpdater(300, Alarm.ThreadToUse.POOLED_THREAD, this);
     Disposer.register(project, this);
     project.getMessageBus().connect().subscribe(VirtualFileManager.VFS_CHANGES, this);
   }
@@ -169,7 +166,7 @@ public class VcsDirtyScopeVfsListener implements BulkFileListener, Disposable {
       synchronized (myLock) {
         myQueue.add(dirtyFilesAndDirs);
       }
-      myZipperUpdater.request();
+      myZipperUpdater.queue(myDirtReporter);
     }
   }
 

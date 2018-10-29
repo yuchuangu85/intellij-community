@@ -17,21 +17,21 @@
 package com.intellij.facet.impl;
 
 import com.intellij.facet.*;
-import com.intellij.openapi.util.SimpleModificationTracker;
-import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.openapi.util.ModificationTracker;
-import com.intellij.openapi.util.Disposer;
-import com.intellij.openapi.project.Project;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.module.Module;
+import com.intellij.openapi.module.ModuleManager;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.Disposer;
+import com.intellij.openapi.util.ModificationTracker;
+import com.intellij.openapi.util.SimpleModificationTracker;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.util.CachedValue;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
-import com.intellij.psi.util.CachedValue;
 import com.intellij.util.SmartList;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
@@ -40,9 +40,9 @@ import java.util.*;
  */
 public class FacetFinderImpl extends FacetFinder {
   private static final Logger LOG = Logger.getInstance("#com.intellij.facet.impl.FacetFinderImpl");
-  private final Map<FacetTypeId, AllFacetsOfTypeModificationTracker> myAllFacetTrackers = new HashMap<FacetTypeId, AllFacetsOfTypeModificationTracker>();
+  private final Map<FacetTypeId, AllFacetsOfTypeModificationTracker> myAllFacetTrackers = new HashMap<>();
   private final Map<FacetTypeId, CachedValue<Map<VirtualFile, List<Facet>>>> myCachedMaps =
-    new HashMap<FacetTypeId, CachedValue<Map<VirtualFile, List<Facet>>>>();
+    new HashMap<>();
   private final Project myProject;
   private final CachedValuesManager myCachedValuesManager;
   private final ModuleManager myModuleManager;
@@ -57,7 +57,7 @@ public class FacetFinderImpl extends FacetFinder {
   public <F extends Facet> ModificationTracker getAllFacetsOfTypeModificationTracker(FacetTypeId<F> type) {
     AllFacetsOfTypeModificationTracker tracker = myAllFacetTrackers.get(type);
     if (tracker == null) {
-      tracker = new AllFacetsOfTypeModificationTracker<F>(myProject, type);
+      tracker = new AllFacetsOfTypeModificationTracker<>(myProject, type);
       Disposer.register(myProject, tracker);
       myAllFacetTrackers.put(type, tracker);
     }
@@ -81,14 +81,14 @@ public class FacetFinderImpl extends FacetFinder {
   @NotNull
   private <F extends Facet&FacetRootsProvider> Map<VirtualFile, List<Facet>> computeRootToFacetsMap(final FacetTypeId<F> type) {
     final Module[] modules = myModuleManager.getModules();
-    final HashMap<VirtualFile, List<Facet>> map = new HashMap<VirtualFile, List<Facet>>();
+    final HashMap<VirtualFile, List<Facet>> map = new HashMap<>();
     for (Module module : modules) {
       final Collection<F> facets = FacetManager.getInstance(module).getFacetsByType(type);
       for (F facet : facets) {
         for (VirtualFile root : facet.getFacetRoots()) {
           List<Facet> list = map.get(root);
           if (list == null) {
-            list = new SmartList<Facet>();
+            list = new SmartList<>();
             map.put(root, list);
           }
           list.add(facet);
@@ -118,26 +118,26 @@ public class FacetFinderImpl extends FacetFinder {
         file = file.getParent();
       }
     }
-    return Collections.<F>emptyList();
+    return Collections.emptyList();
   }
 
   private static class AllFacetsOfTypeModificationTracker<F extends Facet> extends SimpleModificationTracker implements Disposable, ProjectWideFacetListener<F> {
-    public AllFacetsOfTypeModificationTracker(final Project project, final FacetTypeId<F> type) {
+    AllFacetsOfTypeModificationTracker(final Project project, final FacetTypeId<F> type) {
       ProjectWideFacetListenersRegistry.getInstance(project).registerListener(type, this, this);
     }
 
     @Override
-    public void facetAdded(final F facet) {
+    public void facetAdded(@NotNull final F facet) {
       incModificationCount();
     }
 
     @Override
-    public void facetRemoved(final F facet) {
+    public void facetRemoved(@NotNull final F facet) {
       incModificationCount();
     }
 
     @Override
-    public void facetConfigurationChanged(final F facet) {
+    public void facetConfigurationChanged(@NotNull final F facet) {
       incModificationCount();
     }
 
@@ -147,7 +147,7 @@ public class FacetFinderImpl extends FacetFinder {
     }
 
     @Override
-    public void beforeFacetRemoved(F facet) {
+    public void beforeFacetRemoved(@NotNull F facet) {
 
     }
 

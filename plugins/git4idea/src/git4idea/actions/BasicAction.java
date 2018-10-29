@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.actions;
 
 import com.intellij.openapi.actionSystem.ActionPlaces;
@@ -54,11 +40,7 @@ public abstract class BasicAction extends DumbAwareAction {
   @Override
   public void actionPerformed(@NotNull AnActionEvent event) {
     final Project project = event.getData(CommonDataKeys.PROJECT);
-    ApplicationManager.getApplication().runWriteAction(new Runnable() {
-      public void run() {
-        FileDocumentManager.getInstance().saveAllDocuments();
-      }
-    });
+    ApplicationManager.getApplication().runWriteAction(() -> FileDocumentManager.getInstance().saveAllDocuments());
     final VirtualFile[] vFiles = event.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY);
     assert vFiles != null : "The action is only available when files are selected";
 
@@ -70,18 +52,15 @@ public abstract class BasicAction extends DumbAwareAction {
     final String actionName = getActionName();
 
     final VirtualFile[] affectedFiles = collectAffectedFiles(project, vFiles);
-    final List<VcsException> exceptions = new ArrayList<VcsException>();
+    final List<VcsException> exceptions = new ArrayList<>();
     final boolean background = perform(project, vcs, exceptions, affectedFiles);
     if (!background) {
       GitVcs.runInBackground(new Task.Backgroundable(project, getActionName()) {
+        @Override
         public void run(@NotNull ProgressIndicator indicator) {
           VfsUtil.markDirtyAndRefresh(false, true, false, affectedFiles);
           VcsFileUtil.markFilesDirty(project, Arrays.asList(affectedFiles));
-          UIUtil.invokeLaterIfNeeded(new Runnable() {
-            public void run() {
-              GitUIUtil.showOperationErrors(project, exceptions, actionName);
-            }
-          });
+          UIUtil.invokeLaterIfNeeded(() -> GitUIUtil.showOperationErrors(project, exceptions, actionName));
         }
       });
     }
@@ -113,7 +92,7 @@ public abstract class BasicAction extends DumbAwareAction {
    */
   @NotNull
   protected VirtualFile[] collectAffectedFiles(@NotNull Project project, @NotNull VirtualFile[] files) {
-    List<VirtualFile> affectedFiles = new ArrayList<VirtualFile>(files.length);
+    List<VirtualFile> affectedFiles = new ArrayList<>(files.length);
     ProjectLevelVcsManager projectLevelVcsManager = ProjectLevelVcsManager.getInstance(project);
     for (VirtualFile file : files) {
       if (!file.isDirectory() && projectLevelVcsManager.getVcsFor(file) instanceof GitVcs) {
@@ -159,7 +138,6 @@ public abstract class BasicAction extends DumbAwareAction {
   /**
    * @return true if the action could be applied recursively
    */
-  @SuppressWarnings({"MethodMayBeStatic"})
   protected boolean isRecursive() {
     return true;
   }
@@ -171,7 +149,7 @@ public abstract class BasicAction extends DumbAwareAction {
    * @param file    the file to check
    * @return true if the action is applicable to the virtual file
    */
-  @SuppressWarnings({"MethodMayBeStatic", "UnusedDeclaration"})
+  @SuppressWarnings({"UnusedDeclaration"})
   protected boolean appliesTo(@NotNull Project project, @NotNull VirtualFile file) {
     return !file.isDirectory();
   }
@@ -225,10 +203,6 @@ public abstract class BasicAction extends DumbAwareAction {
    * Save all files in the application (the operation creates write action)
    */
   public static void saveAll() {
-    ApplicationManager.getApplication().runWriteAction(new Runnable() {
-      public void run() {
-        FileDocumentManager.getInstance().saveAllDocuments();
-      }
-    });
+    ApplicationManager.getApplication().runWriteAction(() -> FileDocumentManager.getInstance().saveAllDocuments());
   }
 }

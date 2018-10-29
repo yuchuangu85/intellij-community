@@ -43,23 +43,24 @@ import java.util.Set;
  */
 public abstract class DependenciesHandlerBase {
   protected final Project myProject;
-  private final List<AnalysisScope> myScopes;
+  private final List<? extends AnalysisScope> myScopes;
   private final Set<PsiFile> myExcluded;
 
-  public DependenciesHandlerBase(final Project project, final List<AnalysisScope> scopes, Set<PsiFile> excluded) {
+  public DependenciesHandlerBase(final Project project, final List<? extends AnalysisScope> scopes, Set<PsiFile> excluded) {
     myScopes = scopes;
     myExcluded = excluded;
     myProject = project;
   }
 
   public void analyze() {
-    final List<DependenciesBuilder> builders = new ArrayList<DependenciesBuilder>();
+    final List<DependenciesBuilder> builders = new ArrayList<>();
 
     final Task task;
     if (canStartInBackground()) {
       task = new Task.Backgroundable(myProject, getProgressTitle(), true, new PerformAnalysisInBackgroundOption(myProject)) {
         @Override
         public void run(@NotNull final ProgressIndicator indicator) {
+          indicator.setIndeterminate(false);
           perform(builders);
         }
 
@@ -72,6 +73,7 @@ public abstract class DependenciesHandlerBase {
       task = new Task.Modal(myProject, getProgressTitle(), true) {
         @Override
         public void run(@NotNull ProgressIndicator indicator) {
+          indicator.setIndeterminate(false);
           perform(builders);
         }
 
@@ -88,7 +90,7 @@ public abstract class DependenciesHandlerBase {
     return true;
   }
 
-  protected boolean shouldShowDependenciesPanel(List<DependenciesBuilder> builders) {
+  protected boolean shouldShowDependenciesPanel(List<? extends DependenciesBuilder> builders) {
     return true;
   }
 
@@ -129,7 +131,7 @@ public abstract class DependenciesHandlerBase {
     });
   }
 
-  protected String getPanelDisplayName(List<DependenciesBuilder> builders) {
+  protected String getPanelDisplayName(List<? extends DependenciesBuilder> builders) {
     return getPanelDisplayName(builders.get(0).getScope());
   }
 }

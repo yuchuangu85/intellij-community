@@ -1,27 +1,13 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-package com.intellij.ide.actions
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+package com.intellij.configurationStore
 
 import com.intellij.AbstractBundle
 import com.intellij.CommonBundle
-import com.intellij.configurationStore.ROOT_CONFIG
-import com.intellij.configurationStore.SchemeManagerFactoryBase
-import com.intellij.configurationStore.path
-import com.intellij.configurationStore.sortByDeprecated
+import com.intellij.configurationStore.schemeManager.ROOT_CONFIG
+import com.intellij.configurationStore.schemeManager.SchemeManagerFactoryBase
 import com.intellij.ide.IdeBundle
+import com.intellij.ide.actions.ImportSettingsFilenameFilter
+import com.intellij.ide.actions.ShowFilePathAction
 import com.intellij.ide.plugins.IdeaPluginDescriptor
 import com.intellij.ide.plugins.PluginManager
 import com.intellij.ide.plugins.PluginManagerCore
@@ -31,11 +17,8 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.application.impl.ApplicationImpl
 import com.intellij.openapi.components.*
-import com.intellij.openapi.components.ex.ComponentManagerEx
 import com.intellij.openapi.components.impl.ServiceManagerImpl
-import com.intellij.openapi.components.impl.stores.StateStorageManager
 import com.intellij.openapi.components.impl.stores.StoreUtil
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.extensions.PluginDescriptor
 import com.intellij.openapi.options.OptionsBundle
 import com.intellij.openapi.options.SchemeManagerFactory
@@ -43,9 +26,10 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.io.FileUtilRt
 import com.intellij.openapi.vfs.CharsetToolkit
-import com.intellij.util.*
+import com.intellij.util.PlatformUtils
+import com.intellij.util.ReflectionUtil
 import com.intellij.util.containers.putValue
-import com.intellij.util.io.ZipUtil
+import com.intellij.util.io.*
 import gnu.trove.THashMap
 import gnu.trove.THashSet
 import java.io.IOException
@@ -57,14 +41,31 @@ import java.util.*
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-private class ExportSettingsAction : AnAction(), DumbAware {
-  override fun actionPerformed(e: AnActionEvent?) {
+internal fun isImportExportActionApplicable(): Boolean {
+  val app = ApplicationManager.getApplication()
+  val storageManager = app.stateStore.storageManager as? StateStorageManagerImpl ?: return true
+  return !storageManager.isStreamProviderPreventExportAction
+}
+
+// for Rider purpose
+open class ExportSettingsAction : AnAction(), DumbAware {
+  protected open fun getExportableComponents(): Map<Path, List<ExportableItem>> = getExportableComponentsMap(true, true)
+
+  protected open fun exportSettings(saveFile: Path, markedComponents: Set<ExportableItem>) {
+    val exportFiles = markedComponents.mapTo(THashSet()) { it.file }
+    exportSettings(exportFiles, saveFile.outputStream(), FileUtilRt.toSystemIndependentName(PathManager.getConfigPath()))
+  }
+
+  override fun update(e: AnActionEvent) {
+    e.presentation.isEnabledAndVisible = isImportExportActionApplicable()
+  }
+
+  override fun actionPerformed(e: AnActionEvent) {
     ApplicationManager.getApplication().saveSettings()
 
-    val dialog = ChooseComponentsToExportDialog(getExportableComponentsMap(true, true), true,
-      IdeBundle.message("title.select.components.to.export"),
-      IdeBundle.message(
-        "prompt.please.check.all.components.to.export"))
+    val dialog = ChooseComponentsToExportDialog(getExportableComponents(), true,
+                                                IdeBundle.message("title.select.components.to.export"),
+                                                IdeBundle.message("prompt.please.check.all.components.to.export"))
     if (!dialog.showAndGet()) {
       return
     }
@@ -74,22 +75,17 @@ private class ExportSettingsAction : AnAction(), DumbAware {
       return
     }
 
-    val exportFiles = THashSet<Path>()
-    for ((files) in markedComponents) {
-      exportFiles.addAll(files)
-    }
-
     val saveFile = dialog.exportFile
     try {
       if (saveFile.exists() && Messages.showOkCancelDialog(
-        IdeBundle.message("prompt.overwrite.settings.file", saveFile.toString()),
-        IdeBundle.message("title.file.already.exists"), Messages.getWarningIcon()) != Messages.OK) {
+          IdeBundle.message("prompt.overwrite.settings.file", saveFile.toString()),
+          IdeBundle.message("title.file.already.exists"), Messages.getWarningIcon()) != Messages.OK) {
         return
       }
 
-      exportSettings(exportFiles, saveFile.outputStream(), FileUtilRt.toSystemIndependentName(PathManager.getConfigPath()))
-      ShowFilePathAction.showDialog(AnAction.getEventProject(e), IdeBundle.message("message.settings.exported.successfully"),
-        IdeBundle.message("title.export.successful"), saveFile.toFile(), null)
+      exportSettings(saveFile, markedComponents)
+      ShowFilePathAction.showDialog(getEventProject(e), IdeBundle.message("message.settings.exported.successfully"),
+                                    IdeBundle.message("title.export.successful"), saveFile.toFile(), null)
     }
     catch (e1: IOException) {
       Messages.showErrorDialog(IdeBundle.message("error.writing.settings", e1.toString()), IdeBundle.message("title.error.writing.file"))
@@ -97,77 +93,55 @@ private class ExportSettingsAction : AnAction(), DumbAware {
   }
 }
 
-// not internal only to test
 fun exportSettings(exportFiles: Set<Path>, out: OutputStream, configPath: String) {
-  val zipOut = MyZipOutputStream(out)
-  try {
+  ZipOutputStream(out).use {
     val writtenItemRelativePaths = THashSet<String>()
     for (file in exportFiles) {
       if (file.exists()) {
         val relativePath = FileUtilRt.getRelativePath(configPath, file.toAbsolutePath().systemIndependentPath, '/')!!
-        ZipUtil.addFileOrDirRecursively(zipOut, null, file.toFile(), relativePath, null, writtenItemRelativePaths)
+        ZipUtil.addFileOrDirRecursively(it, null, file.toFile(), relativePath, null, writtenItemRelativePaths)
       }
     }
 
-    exportInstalledPlugins(zipOut)
+    exportInstalledPlugins(it)
 
-    val zipEntry = ZipEntry(ImportSettingsFilenameFilter.SETTINGS_JAR_MARKER)
-    zipOut.putNextEntry(zipEntry)
-    zipOut.closeEntry()
-  }
-  finally {
-    zipOut.doClose()
+    it.putNextEntry(ZipEntry(ImportSettingsFilenameFilter.SETTINGS_JAR_MARKER))
+    it.closeEntry()
   }
 }
 
-private class MyZipOutputStream(out: OutputStream) : ZipOutputStream(out) {
-  override fun close() {
-  }
+data class ExportableItem(val file: Path, val presentableName: String, val roamingType: RoamingType = RoamingType.DEFAULT)
 
-  fun doClose() {
-    super.close()
-  }
-}
-
-data class ExportableItem(val files: List<Path>, val presentableName: String, val roamingType: RoamingType = RoamingType.DEFAULT)
-
-private val LOG = Logger.getInstance(ExportSettingsAction::class.java)
-
-private fun exportInstalledPlugins(zipOut: MyZipOutputStream) {
-  val plugins = ArrayList<String>()
-  for (descriptor in PluginManagerCore.getPlugins()) {
-    if (!descriptor.isBundled && descriptor.isEnabled) {
-      plugins.add(descriptor.pluginId.idString)
+fun exportInstalledPlugins(zipOut: ZipOutputStream) {
+  val plugins = PluginManagerCore.getPlugins().filter { !it.isBundled && it.isEnabled }.map { it.pluginId.idString }
+  if (!plugins.isEmpty()) {
+    zipOut.putNextEntry(ZipEntry(PluginManager.INSTALLED_TXT))
+    try {
+      PluginManagerCore.writePluginsList(plugins, OutputStreamWriter(zipOut, CharsetToolkit.UTF8_CHARSET))
     }
-  }
-  if (plugins.isEmpty()) {
-    return
-  }
-
-  val e = ZipEntry(PluginManager.INSTALLED_TXT)
-  zipOut.putNextEntry(e)
-  try {
-    PluginManagerCore.writePluginsList(plugins, OutputStreamWriter(zipOut, CharsetToolkit.UTF8_CHARSET))
-  }
-  finally {
-    zipOut.closeEntry()
+    finally {
+      zipOut.closeEntry()
+    }
   }
 }
 
 // onlyPaths - include only specified paths (relative to config dir, ends with "/" if directory)
 fun getExportableComponentsMap(onlyExisting: Boolean,
                                computePresentableNames: Boolean,
-                               storageManager: StateStorageManager = ApplicationManager.getApplication().stateStore.stateStorageManager,
+                               storageManager: StateStorageManager = ApplicationManager.getApplication().stateStore.storageManager,
                                onlyPaths: Set<String>? = null): Map<Path, List<ExportableItem>> {
   val result = LinkedHashMap<Path, MutableList<ExportableItem>>()
+  @Suppress("DEPRECATION")
   val processor = { component: ExportableComponent ->
-    val item = ExportableItem(component.exportFiles.map { it.toPath() }, component.presentableName, RoamingType.DEFAULT)
-    for (exportFile in item.files) {
-      result.putValue(exportFile, item)
+    for (file in component.exportFiles) {
+      val item = ExportableItem(file.toPath(), component.presentableName, RoamingType.DEFAULT)
+      result.putValue(item.file, item)
     }
   }
 
-  (ApplicationManager.getApplication() as ComponentManagerEx).getComponentInstancesOfType(ExportableApplicationComponent::class.java).forEach(processor)
+  @Suppress("DEPRECATION")
+  ApplicationManager.getApplication().getComponents(ExportableApplicationComponent::class.java).forEach(processor)
+  @Suppress("DEPRECATION")
   ServiceBean.loadServicesFromBeans(ExportableComponent.EXTENSION_POINT, ExportableComponent::class.java).forEach(processor)
 
   val configPath = storageManager.expandMacros(ROOT_CONFIG)
@@ -192,15 +166,16 @@ fun getExportableComponentsMap(onlyExisting: Boolean,
 
   val fileToContent = THashMap<Path, String>()
 
-  ServiceManagerImpl.processAllImplementationClasses(ApplicationManager.getApplication() as ApplicationImpl, PairProcessor<Class<*>, PluginDescriptor> { aClass, pluginDescriptor ->
+  ServiceManagerImpl.processAllImplementationClasses(ApplicationManager.getApplication() as ApplicationImpl) { aClass, pluginDescriptor ->
     val stateAnnotation = StoreUtil.getStateSpec(aClass)
-    if (stateAnnotation == null || stateAnnotation.name.isNullOrEmpty() || ExportableComponent::class.java.isAssignableFrom(aClass)) {
-      return@PairProcessor true
+    @Suppress("DEPRECATION")
+    if (stateAnnotation == null || stateAnnotation.name.isEmpty() || ExportableComponent::class.java.isAssignableFrom(aClass)) {
+      return@processAllImplementationClasses true
     }
 
-    val storage = stateAnnotation.storages.sortByDeprecated().firstOrNull() ?: return@PairProcessor true
-    if (!(storage.roamingType != RoamingType.DISABLED && storage.storageClass == StateStorage::class && !storage.path.isNullOrEmpty())) {
-      return@PairProcessor true
+    val storage = stateAnnotation.storages.sortByDeprecated().firstOrNull() ?: return@processAllImplementationClasses true
+    if (!isStorageExportable(storage)) {
+      return@processAllImplementationClasses true
     }
 
     var additionalExportFile: Path? = null
@@ -223,31 +198,39 @@ fun getExportableComponentsMap(onlyExisting: Boolean,
     if (isFileIncluded || additionalExportFile != null) {
       if (computePresentableNames && onlyExisting && additionalExportFile == null && file.fileName.toString().endsWith(".xml")) {
         val content = fileToContent.getOrPut(file) { file.readText() }
-        if (!content.contains("""<component name="${stateAnnotation.name}">""")) {
-          return@PairProcessor true
+        if (!content.contains("""<component name="${stateAnnotation.name}"""")) {
+          return@processAllImplementationClasses true
         }
       }
 
-      val files = if (additionalExportFile == null) listOf(file) else if (isFileIncluded) listOf(file, additionalExportFile) else listOf(additionalExportFile)
-      val item = ExportableItem(files, if (computePresentableNames) getComponentPresentableName(stateAnnotation, aClass, pluginDescriptor) else "", storage.roamingType)
-      result.putValue(file, item)
+      val presentableName = if (computePresentableNames) getComponentPresentableName(stateAnnotation, aClass, pluginDescriptor) else ""
+      if (isFileIncluded) {
+        result.putValue(file, ExportableItem(file, presentableName, storage.roamingType))
+      }
       if (additionalExportFile != null) {
-        result.putValue(additionalExportFile, item)
+        result.putValue(additionalExportFile, ExportableItem(additionalExportFile, "$presentableName (schemes)", RoamingType.DEFAULT))
       }
     }
     true
-  })
+  }
 
   // must be in the end - because most of SchemeManager clients specify additionalExportFile in the State spec
   (SchemeManagerFactory.getInstance() as SchemeManagerFactoryBase).process {
-    if (it.roamingType != RoamingType.DISABLED && it.presentableName != null && it.fileSpec.getOrNull(0) != '$') {
+    if (it.roamingType != RoamingType.DISABLED && it.fileSpec.getOrNull(0) != '$') {
       val file = Paths.get(storageManager.expandMacros(ROOT_CONFIG), it.fileSpec)
       if (!result.containsKey(file) && !isSkipFile(file)) {
-        result.putValue(file, ExportableItem(listOf(file), it.presentableName, it.roamingType))
+        result.putValue(file, ExportableItem(file, it.presentableName ?: "", it.roamingType))
       }
     }
   }
   return result
+}
+
+private fun isStorageExportable(storage: Storage): Boolean {
+  if (storage.exportable) {
+    return true
+  }
+  return storage.roamingType != RoamingType.DISABLED && storage.storageClass == StateStorage::class && !storage.path.isEmpty()
 }
 
 private fun getComponentPresentableName(state: State, aClass: Class<*>, pluginDescriptor: PluginDescriptor?): String {
@@ -263,7 +246,12 @@ private fun getComponentPresentableName(state: State, aClass: Class<*>, pluginDe
 
   val defaultName = state.name
 
-  fun trimDefaultName() = defaultName.removeSuffix("Settings")
+  fun trimDefaultName(): String {
+    // Vcs.Log.App.Settings
+    return defaultName
+      .removeSuffix(".Settings")
+      .removeSuffix(".Settings")
+  }
 
   var resourceBundleName: String?
   if (pluginDescriptor is IdeaPluginDescriptor && "com.intellij" != pluginDescriptor.pluginId.idString) {
@@ -272,7 +260,7 @@ private fun getComponentPresentableName(state: State, aClass: Class<*>, pluginDe
       if (pluginDescriptor.vendor == "JetBrains") {
         resourceBundleName = OptionsBundle.PATH_TO_BUNDLE
       }
-       else {
+      else {
         return trimDefaultName()
       }
     }

@@ -29,13 +29,6 @@ public class GroovyNegatedConditionalInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return CONFUSING_CODE_CONSTRUCTS;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Negated conditional expression";
   }
@@ -56,7 +49,7 @@ public class GroovyNegatedConditionalInspection extends BaseInspection {
   private static class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitConditionalExpression(GrConditionalExpression grConditionalExpression) {
+    public void visitConditionalExpression(@NotNull GrConditionalExpression grConditionalExpression) {
       super.visitConditionalExpression(grConditionalExpression);
       final GrExpression condition = grConditionalExpression.getCondition();
       if (!BoolUtils.isNegation(condition)) {

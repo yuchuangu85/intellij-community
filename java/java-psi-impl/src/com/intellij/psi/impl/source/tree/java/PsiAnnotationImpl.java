@@ -17,6 +17,7 @@ package com.intellij.psi.impl.source.tree.java;
 
 import com.intellij.lang.ASTNode;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.PsiImplUtil;
 import com.intellij.psi.impl.java.stubs.JavaStubElementTypes;
@@ -36,12 +37,8 @@ import org.jetbrains.annotations.Nullable;
  * @author ven
  */
 public class PsiAnnotationImpl extends JavaStubPsiElement<PsiAnnotationStub> implements PsiAnnotation {
-  private static final PairFunction<Project, String, PsiAnnotation> ANNOTATION_CREATOR = new PairFunction<Project, String, PsiAnnotation>() {
-    @Override
-    public PsiAnnotation fun(Project project, String text) {
-      return JavaPsiFacade.getInstance(project).getElementFactory().createAnnotationFromText(text, null);
-    }
-  };
+  private static final PairFunction<Project, String, PsiAnnotation> ANNOTATION_CREATOR =
+    (project, text) -> JavaPsiFacade.getElementFactory(project).createAnnotationFromText(text, null);
 
   public PsiAnnotationImpl(final PsiAnnotationStub stub) {
     super(stub, JavaStubElementTypes.ANNOTATION);
@@ -54,11 +51,7 @@ public class PsiAnnotationImpl extends JavaStubPsiElement<PsiAnnotationStub> imp
   @Override
   public PsiJavaCodeReferenceElement getNameReferenceElement() {
     PsiAnnotationStub stub = getStub();
-    if (stub != null) {
-      return PsiTreeUtil.getRequiredChildOfType(stub.getPsiElement(), PsiJavaCodeReferenceElement.class);
-    }
-
-    return PsiTreeUtil.getChildOfType(this, PsiJavaCodeReferenceElement.class);
+    return PsiTreeUtil.getChildOfType(stub != null ? stub.getPsiElement() : this, PsiJavaCodeReferenceElement.class);
   }
 
   @Override
@@ -78,6 +71,7 @@ public class PsiAnnotationImpl extends JavaStubPsiElement<PsiAnnotationStub> imp
     return t;
   }
 
+  @Override
   public String toString() {
     return "PsiAnnotation";
   }
@@ -94,6 +88,23 @@ public class PsiAnnotationImpl extends JavaStubPsiElement<PsiAnnotationStub> imp
     final PsiJavaCodeReferenceElement nameRef = getNameReferenceElement();
     if (nameRef == null) return null;
     return nameRef.getCanonicalText();
+  }
+
+  @Nullable
+  private String getShortName() {
+    PsiAnnotationStub stub = getStub();
+    if (stub != null) {
+      return getAnnotationShortName(stub.getText());
+    }
+
+    PsiJavaCodeReferenceElement nameRef = getNameReferenceElement();
+    return nameRef == null ? null : nameRef.getReferenceName();
+  }
+
+
+  @Override
+  public boolean hasQualifiedName(@NotNull String qualifiedName) {
+    return StringUtil.getShortName(qualifiedName).equals(getShortName()) && PsiAnnotation.super.hasQualifiedName(qualifiedName);
   }
 
   @Override
@@ -155,5 +166,13 @@ public class PsiAnnotationImpl extends JavaStubPsiElement<PsiAnnotationStub> imp
     }
 
     return null;
+  }
+
+  @NotNull
+  public static String getAnnotationShortName(@NotNull String annoText) {
+    int at = annoText.indexOf('@');
+    int paren = annoText.indexOf('(');
+    String qualified = PsiNameHelper.getQualifiedClassName(annoText.substring(at + 1, paren > 0 ? paren : annoText.length()), true);
+    return StringUtil.getShortName(qualified);
   }
 }

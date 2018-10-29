@@ -126,7 +126,7 @@ public class HtmlUnknownTagInspectionBase extends HtmlUnknownElementInspection {
         assert startTagName != null;
         final PsiElement endTagName = XmlTagUtil.getEndTagNameElement(tag);
 
-        List<LocalQuickFix> quickfixes = new ArrayList<LocalQuickFix>();
+        List<LocalQuickFix> quickfixes = new ArrayList<>();
         quickfixes.add(action);
         if (isOnTheFly) {
           PsiFile file = startTagName.getContainingFile();
@@ -146,11 +146,11 @@ public class HtmlUnknownTagInspectionBase extends HtmlUnknownElementInspection {
                                              ProblemHighlightType.GENERIC_ERROR_OR_WARNING :
                                              ProblemHighlightType.INFORMATION;
         if (startTagName.getTextLength() > 0) {
-          holder.registerProblem(startTagName, message, highlightType, quickfixes.toArray(new LocalQuickFix[quickfixes.size()]));
+          holder.registerProblem(startTagName, message, highlightType, quickfixes.toArray(LocalQuickFix.EMPTY_ARRAY));
         }
 
         if (endTagName != null) {
-          holder.registerProblem(endTagName, message, highlightType, quickfixes.toArray(new LocalQuickFix[quickfixes.size()]));
+          holder.registerProblem(endTagName, message, highlightType, quickfixes.toArray(LocalQuickFix.EMPTY_ARRAY));
         }
       }
     }

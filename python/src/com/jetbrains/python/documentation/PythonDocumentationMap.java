@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.documentation;
 
 import com.google.common.collect.ImmutableList;
@@ -21,6 +7,7 @@ import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiNamedElement;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.QualifiedName;
@@ -39,6 +26,14 @@ import java.util.Map;
  */
 @State(name = "PythonDocumentationMap", storages = @Storage("other.xml"))
 public class PythonDocumentationMap implements PersistentStateComponent<PythonDocumentationMap.State> {
+
+  public static final String PYQT4_DOC_URL =
+    "http://pyqt.sourceforge.net/Docs/PyQt4/{class.name.lower}.html#{function.name}";
+
+  public static final String PYQT4_DOC_URL_OLD =
+    "http://www.riverbankcomputing.co.uk/static/Docs/PyQt4/html/{class.name.lower}.html#{function.name}";
+  public static final String PyQt4 = "PyQt4";
+
   public static PythonDocumentationMap getInstance() {
     return ServiceManager.getService(PythonDocumentationMap.class);
   }
@@ -93,10 +88,11 @@ public class PythonDocumentationMap implements PersistentStateComponent<PythonDo
   }
 
   public static class State {
-    private List<Entry> myEntries = new ArrayList<Entry>();
+    private List<Entry> myEntries = new ArrayList<>();
 
     public State() {
-      addEntry("PyQt4", "http://www.riverbankcomputing.co.uk/static/Docs/PyQt4/html/{class.name.lower}.html#{function.name}");
+      addEntry(PyQt4, PYQT4_DOC_URL);
+      addEntry("PyQt5", "http://doc.qt.io/qt-5/{class.name.lower}.html#{functionOrProp.name}");
       addEntry("PySide", "http://pyside.github.io/docs/pyside/{module.name.slashes}/{class.name}.html#{module.name}.{element.qname}");
       addEntry("gtk", "http://library.gnome.org/devel/pygtk/stable/class-gtk{class.name.lower}.html#method-gtk{class.name.lower}--{function.name.dashes}");
       addEntry("wx", "http://www.wxpython.org/docs/api/{module.name}.{class.name}-class.html#{function.name}");
@@ -140,8 +136,14 @@ public class PythonDocumentationMap implements PersistentStateComponent<PythonDo
   }
 
   @Override
-  public void loadState(State state) {
+  public void loadState(@NotNull State state) {
     myState = state;
+    for (Entry e: myState.getEntries()) {
+      if (PyQt4.equals(e.myPrefix) && PYQT4_DOC_URL_OLD.equals(e.myUrlPattern)) {
+        // old URL is broken, switch to new one
+        e.setUrlPattern(PYQT4_DOC_URL);
+      }
+    }
   }
 
   public List<Entry> getEntries() {
@@ -162,16 +164,6 @@ public class PythonDocumentationMap implements PersistentStateComponent<PythonDo
     return null;
   }
 
-  @Nullable
-  public String rootUrlFor(QualifiedName moduleQName) {
-    for (Entry entry : myState.myEntries) {
-      if (moduleQName.matchesPrefix(QualifiedName.fromDottedString(entry.myPrefix))) {
-        return rootForPattern(entry.myUrlPattern);
-      }
-    }
-    return null;
-  }
-
   private static String rootForPattern(String urlPattern) {
     int pos = urlPattern.indexOf('{');
     return pos >= 0 ? urlPattern.substring(0, pos) : urlPattern;
@@ -180,7 +172,7 @@ public class PythonDocumentationMap implements PersistentStateComponent<PythonDo
   @Nullable
   private static String transformPattern(@NotNull String urlPattern, QualifiedName moduleQName, @Nullable PsiNamedElement element,
                                          String pyVersion) {
-    Map<String, String> macros = new HashMap<String, String>();
+    Map<String, String> macros = new HashMap<>();
     macros.put("element.name", element == null ? null : element.getName());
     PyClass pyClass = element == null ? null : PsiTreeUtil.getParentOfType(element, PyClass.class, false);
     macros.put("class.name", pyClass == null ? null : pyClass.getName());
@@ -196,6 +188,7 @@ public class PythonDocumentationMap implements PersistentStateComponent<PythonDo
       macros.put("element.qname", "");
     }
     macros.put("function.name", element instanceof PyFunction ? element.getName() : "");
+    macros.put("functionOrProp.name", element instanceof PyFunction && element.getName() != null ? functionOrProp(element.getName()) : "");
     macros.put("module.name", moduleQName.toString());
     macros.put("python.version", pyVersion);
     final String pattern = transformPattern(urlPattern, macros);
@@ -203,6 +196,14 @@ public class PythonDocumentationMap implements PersistentStateComponent<PythonDo
       return rootForPattern(urlPattern);
     }
     return pattern;
+  }
+
+  private static String functionOrProp(@NotNull String name) {
+    String functionOrProp = StringUtil.getPropertyName(name);
+    if (!name.equals(functionOrProp)) {
+      functionOrProp += functionOrProp + "-prop";
+    }
+    return functionOrProp;
   }
 
   @Nullable

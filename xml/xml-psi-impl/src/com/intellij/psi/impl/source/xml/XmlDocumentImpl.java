@@ -43,6 +43,7 @@ import com.intellij.psi.util.CachedValue;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.xml.*;
+import com.intellij.util.AstLoadingFilter;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.concurrency.AtomicFieldUpdater;
 import com.intellij.util.containers.ContainerUtil;
@@ -101,7 +102,7 @@ public class XmlDocumentImpl extends XmlElementImpl implements XmlDocument {
   }
 
   @Override
-  public int getChildRole(ASTNode child) {
+  public int getChildRole(@NotNull ASTNode child) {
     LOG.assertTrue(child.getTreeParent() == this);
     IElementType i = child.getElementType();
     if (i == XmlElementType.XML_PROLOG) {
@@ -146,7 +147,6 @@ public class XmlDocumentImpl extends XmlElementImpl implements XmlDocument {
   }
 
   @Override
-  @SuppressWarnings("ConstantConditions")
   public XmlNSDescriptor getRootTagNSDescriptor() {
     XmlTag rootTag = getRootTag();
     return rootTag != null ? rootTag.getNSDescriptor(rootTag.getNamespace(), false) : null;
@@ -166,6 +166,7 @@ public class XmlDocumentImpl extends XmlElementImpl implements XmlDocument {
     super.clearCaches();
   }
 
+  @Nullable
   @Override
   public XmlNSDescriptor getDefaultNSDescriptor(final String namespace, final boolean strict) {
     long curExtResourcesModCount = ExternalResourceManagerEx.getInstanceEx().getModificationCount(getProject());
@@ -185,16 +186,16 @@ public class XmlDocumentImpl extends XmlElementImpl implements XmlDocument {
 
     CachedValue<XmlNSDescriptor> cachedValue = defaultDescriptorsCache.get(namespace);
     if (cachedValue == null) {
-      defaultDescriptorsCache.put(namespace, cachedValue = new PsiCachedValueImpl<XmlNSDescriptor>(getManager(), () -> {
+      defaultDescriptorsCache.put(namespace, cachedValue = new PsiCachedValueImpl<>(getManager(), () -> {
         final XmlNSDescriptor defaultNSDescriptorInner = getDefaultNSDescriptorInner(namespace, strict);
 
         if (isGeneratedFromDtd(defaultNSDescriptorInner)) {
-          return new CachedValueProvider.Result<XmlNSDescriptor>(defaultNSDescriptorInner, XmlDocumentImpl.this, ExternalResourceManager.getInstance());
+          return new CachedValueProvider.Result<>(defaultNSDescriptorInner, this, ExternalResourceManager.getInstance());
         }
 
-        return new CachedValueProvider.Result<XmlNSDescriptor>(defaultNSDescriptorInner, defaultNSDescriptorInner != null
-                                                                     ? defaultNSDescriptorInner.getDependences()
-                                                                     : ExternalResourceManager.getInstance());
+        return new CachedValueProvider.Result<>(defaultNSDescriptorInner, defaultNSDescriptorInner != null
+                                                                          ? defaultNSDescriptorInner.getDependencies()
+                                                                          : ExternalResourceManager.getInstance());
       }));
     }
     return cachedValue.getValue();
@@ -233,9 +234,11 @@ public class XmlDocumentImpl extends XmlElementImpl implements XmlDocument {
         }
         nsDescriptor = getDefaultNSDescriptor(htmlns, false);
       }
-      final XmlFile descriptorFile = nsDescriptor.getDescriptorFile();
-      if (descriptorFile != null) {
-        return getCachedHtmlNsDescriptor(descriptorFile);
+      if (nsDescriptor != null) {
+        final XmlFile descriptorFile = nsDescriptor.getDescriptorFile();
+        if (descriptorFile != null) {
+          return getCachedHtmlNsDescriptor(descriptorFile);
+        }
       }
       return new HtmlNSDescriptorImpl(nsDescriptor);
     }
@@ -254,7 +257,7 @@ public class XmlDocumentImpl extends XmlElementImpl implements XmlDocument {
                                 ? containingFile
                                 : XmlUtil.findNamespace(containingFile, namespace);
         if (xmlFile != null) {
-          final XmlDocument document = xmlFile.getDocument();
+          final XmlDocument document = AstLoadingFilter.forceAllowTreeLoading(xmlFile, () -> xmlFile.getDocument());
           if (document != null) {
             return (XmlNSDescriptor)document.getMetaData();
           }
@@ -365,10 +368,10 @@ public class XmlDocumentImpl extends XmlElementImpl implements XmlDocument {
   @NotNull
   @Override
   public CompositePsiElement clone() {
-    HashMap<String, CachedValue<XmlNSDescriptor>> cacheStrict = new HashMap<String, CachedValue<XmlNSDescriptor>>(
+    HashMap<String, CachedValue<XmlNSDescriptor>> cacheStrict = new HashMap<>(
       myDefaultDescriptorsCacheStrict
     );
-    HashMap<String, CachedValue<XmlNSDescriptor>> cacheNotStrict = new HashMap<String, CachedValue<XmlNSDescriptor>>(
+    HashMap<String, CachedValue<XmlNSDescriptor>> cacheNotStrict = new HashMap<>(
       myDefaultDescriptorsCacheNotStrict
     );
     final XmlDocumentImpl copy = (XmlDocumentImpl) super.clone();
@@ -378,10 +381,10 @@ public class XmlDocumentImpl extends XmlElementImpl implements XmlDocument {
 
   @Override
   public PsiElement copy() {
-    HashMap<String, CachedValue<XmlNSDescriptor>> cacheStrict = new HashMap<String, CachedValue<XmlNSDescriptor>>(
+    HashMap<String, CachedValue<XmlNSDescriptor>> cacheStrict = new HashMap<>(
       myDefaultDescriptorsCacheStrict
     );
-    HashMap<String, CachedValue<XmlNSDescriptor>> cacheNotStrict = new HashMap<String, CachedValue<XmlNSDescriptor>>(
+    HashMap<String, CachedValue<XmlNSDescriptor>> cacheNotStrict = new HashMap<>(
       myDefaultDescriptorsCacheNotStrict
     );
     final XmlDocumentImpl copy = (XmlDocumentImpl)super.copy();
@@ -417,7 +420,7 @@ public class XmlDocumentImpl extends XmlElementImpl implements XmlDocument {
   @SuppressWarnings({"HardCodedStringLiteral"})
   public void dumpStatistics(){
     System.out.println("Statistics:");
-    final TObjectIntHashMap<Object> map = new TObjectIntHashMap<Object>();
+    final TObjectIntHashMap<Object> map = new TObjectIntHashMap<>();
 
     final PsiElementVisitor psiRecursiveElementVisitor = new XmlRecursiveElementVisitor(){
       @NonNls private static final String TOKENS_KEY = "Tokens";

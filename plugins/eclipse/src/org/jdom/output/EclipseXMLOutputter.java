@@ -59,12 +59,12 @@ package org.jdom.output;
 import com.intellij.openapi.vfs.CharsetToolkit;
 import org.jdom.*;
 
+import javax.annotation.Generated;
 import javax.xml.transform.Result;
 import java.io.*;
-import java.util.List;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.List;
 
 /**
  * Outputs a JDOM document as a stream of bytes. The outputter can manage many
@@ -114,7 +114,7 @@ import java.util.Comparator;
  * @author  Alex Chaffee
  * @author  Bradley S. Huffman
  */
-
+@Generated("fork from JDOM")
 public class EclipseXMLOutputter implements Cloneable {
 
     private static final String CVS_ID =
@@ -1113,7 +1113,7 @@ public class EclipseXMLOutputter implements Cloneable {
         // this is illegal; but as yet we don't throw an exception
         // if someone tries to do this
         // Set prefixes = new HashSet();
-        List<Attribute> atts = new ArrayList<Attribute>();
+        List<Attribute> atts = new ArrayList<>();
         for (Object attribute : attributes) {
           atts.add((Attribute)((Attribute)attribute).clone());
         }
@@ -1381,7 +1381,7 @@ public class EclipseXMLOutputter implements Cloneable {
                     buffer = new StringBuffer(str.length() + 20);
                     // Copy previous skipped characters and fall through
                     // to pickup current character
-                    buffer.append(str.substring(0, i));
+                    buffer.append(str, 0, i);
                     buffer.append(entity);
                 }
             }
@@ -1454,7 +1454,7 @@ public class EclipseXMLOutputter implements Cloneable {
                     buffer = new StringBuffer(str.length() + 20);
                     // Copy previous skipped characters and fall through
                     // to pickup current character
-                    buffer.append(str.substring(0, i));
+                    buffer.append(str, 0, i);
                     buffer.append(entity);
                 }
             }
@@ -1477,6 +1477,7 @@ public class EclipseXMLOutputter implements Cloneable {
     /**
      * Returns a copy of this XMLOutputter.
      */
+    @Override
     public Object clone() {
         // Implementation notes: Since all state of an XMLOutputter is
         // embodied in simple private instance variables, Object.clone
@@ -1502,7 +1503,7 @@ public class EclipseXMLOutputter implements Cloneable {
      * @return a string listing the settings for this XMLOutputter instance
      */
     public String toString() {
-        StringBuffer buffer = new StringBuffer();
+        StringBuilder buffer = new StringBuilder();
         for (int i = 0; i < userFormat.lineSeparator.length(); i++) {
             char ch = userFormat.lineSeparator.charAt(i);
             switch (ch) {

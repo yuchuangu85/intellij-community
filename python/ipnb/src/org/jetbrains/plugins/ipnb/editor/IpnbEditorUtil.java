@@ -45,14 +45,14 @@ import java.util.List;
  * @author traff
  */
 public class IpnbEditorUtil {
-  public enum PromptType { In, Out, None }
+  public enum PromptType {In, Out, None}
 
-  public static Dimension PROMPT_SIZE = new Dimension(80, 30);
+  public static final Dimension PROMPT_SIZE = new Dimension(80, 30);
 
   public static Editor createPythonCodeEditor(@NotNull final Project project, @NotNull final IpnbCodeSourcePanel codeSourcePanel) {
     final EditorFactory editorFactory = EditorFactory.getInstance();
     assert editorFactory != null;
-    final String text = codeSourcePanel.getCell().getSourceAsString().trim();
+    final String text = codeSourcePanel.getCell().getSourceAsString();
     final Module module = ProjectRootManagerEx.getInstanceEx(project).getFileIndex()
       .getModuleForFile(codeSourcePanel.getIpnbCodePanel().getFileEditor().getVirtualFile());
     final IpnbPyFragment fragment = new IpnbPyFragment(project, text, true, codeSourcePanel);
@@ -60,7 +60,7 @@ public class IpnbEditorUtil {
     final Document document = PsiDocumentManager.getInstance(project).getDocument(fragment);
     assert document != null;
     EditorEx editor = (EditorEx)editorFactory.createEditor(document, project, fragment.getVirtualFile(), false);
-
+    editor.setFile(fragment.getVirtualFile());
     setupEditor(editor);
     return editor;
   }
@@ -69,6 +69,7 @@ public class IpnbEditorUtil {
     editor.setBackgroundColor(getEditablePanelBackground());
     noScrolling(editor);
     editor.getScrollPane().setBorder(null);
+    editor.setContextMenuGroupId(null);
     final EditorSettings editorSettings = editor.getSettings();
     editorSettings.setLineMarkerAreaShown(false);
     editorSettings.setIndentGuidesShown(false);
@@ -105,7 +106,7 @@ public class IpnbEditorUtil {
     }
   }
 
-  public static JComponent createPromptComponent(@Nullable Integer promptNumber, @NotNull final PromptType type) {
+  public static JLabel createPromptComponent(@Nullable Integer promptNumber, @NotNull final PromptType type) {
     final String promptText = prompt(promptNumber, type);
     JLabel promptLabel = new JLabel(promptText);
     promptLabel.setHorizontalAlignment(SwingConstants.RIGHT);
@@ -120,11 +121,13 @@ public class IpnbEditorUtil {
     return promptLabel;
   }
 
-  protected static String prompt(@Nullable Integer promptNumber, @NotNull final PromptType type) {
-    if (type == PromptType.In)
+  public static String prompt(@Nullable Integer promptNumber, @NotNull final PromptType type) {
+    if (type == PromptType.In) {
       return promptNumber == null ? type + " [ ]:" : promptNumber > 0 ? String.format(type + " [%d]:", promptNumber) : type + " [*]:";
-    else if (type == PromptType.Out)
+    }
+    else if (type == PromptType.Out) {
       return promptNumber == null ? type + "[ ]:" : promptNumber > 0 ? String.format(type + "[%d]:", promptNumber) : type + "[*]:";
+    }
     return "";
   }
 

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.tabs.impl;
 
 import com.intellij.icons.AllIcons;
@@ -66,6 +52,7 @@ public class JBTabsDemo {
     pos.setSelectedIndex(0);
     south.add(pos);
     pos.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(final ActionEvent e) {
         final JBTabsPosition p = (JBTabsPosition)pos.getSelectedItem();
         if (p != null) {
@@ -76,6 +63,7 @@ public class JBTabsDemo {
 
     final JCheckBox bb = new JCheckBox("Buffered", true);
     bb.addItemListener(new ItemListener() {
+      @Override
       public void itemStateChanged(final ItemEvent e) {
         tabs.setUseBufferedPaint(bb.isSelected());
       }
@@ -84,6 +72,7 @@ public class JBTabsDemo {
 
     final JCheckBox f = new JCheckBox("Focused");
     f.addItemListener(new ItemListener() {
+      @Override
       public void itemStateChanged(final ItemEvent e) {
         tabs.setFocused(f.isSelected());
       }
@@ -93,14 +82,25 @@ public class JBTabsDemo {
 
     final JCheckBox v = new JCheckBox("Vertical");
     v.addItemListener(new ItemListener() {
+      @Override
       public void itemStateChanged(final ItemEvent e) {
         tabs.setSideComponentVertical(v.isSelected());
       }
     });
     south.add(v);
 
+    final JCheckBox before = new JCheckBox("Before", true);
+    before.addItemListener(new ItemListener() {
+      @Override
+      public void itemStateChanged(final ItemEvent e) {
+        tabs.setSideComponentBefore(before.isSelected());
+      }
+    });
+    south.add(before);
+
     final JCheckBox row = new JCheckBox("Single row", true);
     row.addItemListener(new ItemListener() {
+      @Override
       public void itemStateChanged(final ItemEvent e) {
         tabs.setSingleRow(row.isSelected());
       }
@@ -109,6 +109,7 @@ public class JBTabsDemo {
 
     final JCheckBox ghosts = new JCheckBox("Ghosts always visible", false);
     ghosts.addItemListener(new ItemListener() {
+      @Override
       public void itemStateChanged(final ItemEvent e) {
         tabs.setGhostsAlwaysVisible(ghosts.isSelected());
       }
@@ -117,6 +118,7 @@ public class JBTabsDemo {
 
     final JCheckBox stealth = new JCheckBox("Stealth tab", tabs.isStealthTabMode());
     stealth.addItemListener(new ItemListener() {
+      @Override
       public void itemStateChanged(final ItemEvent e) {
         tabs.setStealthTabMode(stealth.isSelected());
       }
@@ -125,6 +127,7 @@ public class JBTabsDemo {
 
     final JCheckBox hide = new JCheckBox("Hide tabs", tabs.isHideTabs());
     hide.addItemListener(new ItemListener() {
+      @Override
       public void itemStateChanged(final ItemEvent e) {
         tabs.setHideTabs(hide.isSelected());
       }
@@ -133,21 +136,24 @@ public class JBTabsDemo {
 
     frame.getContentPane().add(south, BorderLayout.SOUTH);
 
-    tabs.addListener(new TabsListener.Adapter() {
+    tabs.addListener(new TabsListener() {
+      @Override
       public void selectionChanged(final TabInfo oldSelection, final TabInfo newSelection) {
         System.out.println("TabsWithActions.selectionChanged old=" + oldSelection + " new=" + newSelection);
       }
     });
 
     final JTree someTree = new Tree() {
+      @Override
       public void addNotify() {
-        super.addNotify();    //To change body of overridden methods use File | Settings | File Templates.
+        super.addNotify();
         System.out.println("JBTabs.addNotify");
       }
 
+      @Override
       public void removeNotify() {
         System.out.println("JBTabs.removeNotify");
-        super.removeNotify();    //To change body of overridden methods use File | Settings | File Templates.
+        super.removeNotify();
       }
     };
     //someTree.setBorder(new LineBorder(Color.cyan));
@@ -159,6 +165,7 @@ public class JBTabsDemo {
     //toAnimate1.setIcon(IconLoader.getIcon("/debugger/console.png"));
     final JCheckBox attract1 = new JCheckBox("Attract 1");
     attract1.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(final ActionEvent e) {
         //toAnimate1.setText("Should be animated");
 
@@ -174,6 +181,7 @@ public class JBTabsDemo {
 
     final JCheckBox hide1 = new JCheckBox("Hide 1", toAnimate1.isHidden());
     hide1.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(final ActionEvent e) {
         toAnimate1.setHidden(!toAnimate1.isHidden());
       }
@@ -183,6 +191,7 @@ public class JBTabsDemo {
 
     final JCheckBox block = new JCheckBox("Block", false);
     block.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(final ActionEvent e) {
         tabs.setPaintBlocked(!block.isSelected(), true);
       }
@@ -191,6 +200,7 @@ public class JBTabsDemo {
 
     final JCheckBox fill = new JCheckBox("Tab fill in", true);
     fill.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(final ActionEvent e) {
         tabs.getPresentation().setActiveTabFillIn(fill.isSelected() ? Color.white : null);
       }
@@ -200,6 +210,7 @@ public class JBTabsDemo {
 
     final JButton refire = new JButton("Re-fire attraction");
     refire.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(final ActionEvent e) {
         toAnimate1.fireAlert();
       }
@@ -212,7 +223,7 @@ public class JBTabsDemo {
 
     final JEditorPane text = new JEditorPane();
     text.setEditorKit(new HTMLEditorKit());
-    StringBuffer buffer = new StringBuffer();
+    StringBuilder buffer = new StringBuilder();
     for (int i = 0; i < 50; i ++) {
       buffer.append("1234567890abcdefghijklmnopqrstv1234567890abcdefghijklmnopqrstv1234567890abcdefghijklmnopqrstv<br>");
     }
@@ -243,6 +254,7 @@ public class JBTabsDemo {
     tabs.setBorder(new EmptyBorder(30, 30, 30, 30));
 
     tabs.setUiDecorator(new UiDecorator() {
+      @Override
       public UiDecoration getDecoration() {
         return new UiDecoration(null, new Insets(0, -1, 0, -1));
       }

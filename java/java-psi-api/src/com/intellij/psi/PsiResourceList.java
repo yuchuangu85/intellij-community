@@ -27,6 +27,6 @@ public interface PsiResourceList extends PsiElement, Iterable<PsiResourceListEle
   int getResourceVariablesCount();
 
   /** @deprecated use {@link #iterator()} (to be removed in IDEA 17) */
-  @SuppressWarnings("unused")
+  @Deprecated
   List<PsiResourceVariable> getResourceVariables();
 }

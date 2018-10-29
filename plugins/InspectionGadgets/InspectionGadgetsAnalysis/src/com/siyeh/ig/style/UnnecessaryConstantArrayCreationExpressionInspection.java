@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2015 Bas Leijdekkers
+ * Copyright 2008-2018 Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,11 +19,12 @@ import com.intellij.codeInspection.CleanupLocalInspectionTool;
 import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
-import com.intellij.util.IncorrectOperationException;
+import com.intellij.psi.util.PsiUtil;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.InspectionGadgetsFix;
+import com.siyeh.ig.psiutils.CommentTracker;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -46,38 +47,49 @@ public class UnnecessaryConstantArrayCreationExpressionInspection extends BaseIn
   @Override
   @Nullable
   protected InspectionGadgetsFix buildFix(Object... infos) {
-    return new UnnecessaryConstantArrayCreationExpressionFix();
+    if (infos.length != 0 && infos[0] instanceof String) {
+      return new UnnecessaryConstantArrayCreationExpressionFix((String)infos[0]);
+    }
+    return null;
   }
 
-  private static class UnnecessaryConstantArrayCreationExpressionFix
-    extends InspectionGadgetsFix {
+  private static class UnnecessaryConstantArrayCreationExpressionFix extends InspectionGadgetsFix {
+    private final String myType;
+
+    private UnnecessaryConstantArrayCreationExpressionFix(String type) {
+      myType = type;
+    }
+
     @Override
     @NotNull
     public String getFamilyName() {
-      return getName();
+      return InspectionGadgetsBundle.message(
+        "unnecessary.constant.array.creation.expression.family.quickfix");
     }
 
     @Override
     @NotNull
     public String getName() {
       return InspectionGadgetsBundle.message(
-        "unnecessary.constant.array.creation.expression.quickfix");
+        "unnecessary.constant.array.creation.expression.quickfix", myType);
     }
 
     @Override
-    protected void doFix(Project project, ProblemDescriptor descriptor)
-      throws IncorrectOperationException {
+    protected void doFix(Project project, ProblemDescriptor descriptor) {
       final PsiElement element = descriptor.getPsiElement();
       if (!(element instanceof PsiNewExpression)) {
         return;
       }
       final PsiNewExpression newExpression = (PsiNewExpression)element;
-      final PsiArrayInitializerExpression arrayInitializer =
-        newExpression.getArrayInitializer();
+      final PsiArrayInitializerExpression arrayInitializer = newExpression.getArrayInitializer();
       if (arrayInitializer == null) {
         return;
       }
-      newExpression.replace(arrayInitializer);
+      PsiExpression target = newExpression;
+      while(target.getParent() instanceof PsiParenthesizedExpression) {
+        target = (PsiExpression)target.getParent();
+      }
+      new CommentTracker().replaceAndRestoreComments(target, arrayInitializer);
     }
   }
 
@@ -86,8 +98,7 @@ public class UnnecessaryConstantArrayCreationExpressionInspection extends BaseIn
     return new UnnecessaryConstantArrayCreationExpressionVisitor();
   }
 
-  private static class UnnecessaryConstantArrayCreationExpressionVisitor
-    extends BaseInspectionVisitor {
+  private static class UnnecessaryConstantArrayCreationExpressionVisitor extends BaseInspectionVisitor {
 
     @Override
     public void visitArrayInitializerExpression(PsiArrayInitializerExpression expression) {
@@ -96,18 +107,23 @@ public class UnnecessaryConstantArrayCreationExpressionInspection extends BaseIn
       if (!(parent instanceof PsiNewExpression)) {
         return;
       }
-      final PsiElement grandParent = parent.getParent();
+      final PsiElement grandParent = PsiUtil.skipParenthesizedExprUp(parent.getParent());
       if (!(grandParent instanceof PsiVariable)) {
         return;
       }
       final PsiVariable variable = (PsiVariable)grandParent;
-      if (!variable.getType().equals(expression.getType())) {
+      final PsiType expressionType = expression.getType();
+      if (!variable.getType().equals(expressionType)) {
+        return;
+      }
+      PsiTypeElement typeElement = variable.getTypeElement();
+      if (typeElement != null && typeElement.isInferredType()) {
         return;
       }
       if (hasGenericTypeParameters(variable)) {
         return;
       }
-      registerError(parent);
+      registerError(parent, expressionType.getPresentableText());
     }
 
     private static boolean hasGenericTypeParameters(PsiVariable variable) {

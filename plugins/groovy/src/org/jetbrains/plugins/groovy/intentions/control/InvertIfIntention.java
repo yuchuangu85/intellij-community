@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2013 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ import org.jetbrains.plugins.groovy.lang.psi.controlFlow.impl.IfEndInstruction;
 public class InvertIfIntention extends Intention {
 
   @Override
-  protected void processIntention(@NotNull PsiElement element, Project project, Editor editor) throws IncorrectOperationException {
+  protected void processIntention(@NotNull PsiElement element, @NotNull Project project, Editor editor) throws IncorrectOperationException {
     PsiElement parent = element.getParent();
 
     if (!"if".equals(element.getText()) || !(parent instanceof GrIfStatement)) {
@@ -176,7 +176,7 @@ public class InvertIfIntention extends Intention {
   protected PsiElementPredicate getElementPredicate() {
     return new PsiElementPredicate() {
       @Override
-      public boolean satisfiedBy(PsiElement element) {
+      public boolean satisfiedBy(@NotNull PsiElement element) {
         PsiElement parent = element.getParent();
         if (!(parent instanceof GrIfStatement)) return false;
         if (((GrIfStatement)parent).getCondition() == null) return false;

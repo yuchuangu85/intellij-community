@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.java.decompiler.modules.decompiler.deobfuscator;
 
 import org.jetbrains.java.decompiler.modules.decompiler.StatEdge;
@@ -31,15 +17,15 @@ public class IrreducibleCFGDeobfuscator {
 
     class Node {
       public Integer id;
-      public final Set<Node> preds = new HashSet<Node>();
-      public final Set<Node> succs = new HashSet<Node>();
+      public final Set<Node> preds = new HashSet<>();
+      public final Set<Node> succs = new HashSet<>();
 
-      public Node(Integer id) {
+      Node(Integer id) {
         this.id = id;
       }
     }
 
-    HashMap<Integer, Node> mapNodes = new HashMap<Integer, Node>();
+    HashMap<Integer, Node> mapNodes = new HashMap<>();
 
     // checking exceptions and creating nodes
     for (Statement stat : statement.getStats()) {
@@ -145,7 +131,7 @@ public class IrreducibleCFGDeobfuscator {
     StatEdge enteredge = splitnode.getPredecessorEdges(StatEdge.TYPE_REGULAR).iterator().next();
 
     // copy the smallest statement
-    Statement splitcopy = copyStatement(splitnode, null, new HashMap<Statement, Statement>());
+    Statement splitcopy = copyStatement(splitnode, null, new HashMap<>());
     initCopiedStatement(splitcopy);
 
     // insert the copy
@@ -172,15 +158,13 @@ public class IrreducibleCFGDeobfuscator {
 
   private static int getStatementSize(Statement statement) {
 
-    int res = 0;
+    int res;
 
     if (statement.type == Statement.TYPE_BASICBLOCK) {
       res = ((BasicBlockStatement)statement).getBlock().getSeq().length();
     }
     else {
-      for (Statement stat : statement.getStats()) {
-        res += getStatementSize(stat);
-      }
+      res = statement.getStats().stream().mapToInt(IrreducibleCFGDeobfuscator::getStatementSize).sum();
     }
 
     return res;

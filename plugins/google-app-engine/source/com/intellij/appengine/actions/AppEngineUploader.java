@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.appengine.actions;
 
 import com.intellij.CommonBundle;
@@ -24,7 +10,6 @@ import com.intellij.appengine.facet.AppEngineFacet;
 import com.intellij.appengine.sdk.AppEngineSdk;
 import com.intellij.appengine.util.AppEngineUtil;
 import com.intellij.execution.ExecutionException;
-import com.intellij.execution.configurations.CommandLineBuilder;
 import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.execution.configurations.JavaParameters;
 import com.intellij.execution.configurations.ParametersList;
@@ -32,7 +17,6 @@ import com.intellij.execution.process.*;
 import com.intellij.execution.ui.ConsoleView;
 import com.intellij.execution.ui.ConsoleViewContentType;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.Result;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.compiler.CompileContext;
 import com.intellij.openapi.compiler.CompileScope;
@@ -47,7 +31,6 @@ import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Key;
-import com.intellij.openapi.util.KeyValue;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -69,7 +52,6 @@ import org.jetbrains.annotations.Nullable;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.Collections;
-import java.util.List;
 
 /**
  * @author nik
@@ -125,15 +107,14 @@ public class AppEngineUploader {
       final GenericDomValue<String> application = root.getApplication();
       if (StringUtil.isEmptyOrSpaces(application.getValue())) {
         final String name = Messages.showInputDialog(project, "<html>Application name is not specified in appengine-web.xml.<br>" +
-              "Enter application name (see your <a href=\"http://appengine.google.com\">AppEngine account</a>):</html>", CommonBundle.getErrorTitle(), null, "", null);
+                                                              "Enter application name (see your <a href=\"https://appengine.google.com\">AppEngine account</a>):</html>",
+                                                     CommonBundle.getErrorTitle(), null, "", null);
         if (name == null) return null;
 
         final PsiFile file = application.getXmlTag().getContainingFile();
-        new WriteCommandAction(project, file) {
-          protected void run(@NotNull final Result result) {
-            application.setStringValue(name);
-          }
-        }.execute();
+        WriteCommandAction.writeCommandAction(project, file).run(() -> {
+          application.setStringValue(name);
+        });
         final Document document = PsiDocumentManager.getInstance(project).getDocument(file);
         if (document != null) {
           FileDocumentManager.getInstance().saveDocument(document);
@@ -150,6 +131,7 @@ public class AppEngineUploader {
   public void startUploading() {
     FileDocumentManager.getInstance().saveAllDocuments();
     ProgressManager.getInstance().run(new Task.Backgroundable(myProject, "Uploading application", true, null) {
+      @Override
       public void run(@NotNull ProgressIndicator indicator) {
         compileAndUpload();
       }
@@ -163,7 +145,8 @@ public class AppEngineUploader {
     final CompileScope moduleScope = compilerManager.createModuleCompileScope(myAppEngineFacet.getModule(), true);
     final CompileScope compileScope = ArtifactCompileScope.createScopeWithArtifacts(moduleScope, Collections.singletonList(myArtifact));
     ApplicationManager.getApplication().invokeLater(() -> compilerManager.make(compileScope, new CompileStatusNotification() {
-      public void finished(boolean aborted, int errors, int warnings, CompileContext compileContext) {
+      @Override
+      public void finished(boolean aborted, int errors, int warnings, @NotNull CompileContext compileContext) {
         if (!aborted && errors == 0) {
           startUploading.run();
         }
@@ -180,13 +163,7 @@ public class AppEngineUploader {
       parameters.setMainClass("com.google.appengine.tools.admin.AppCfg");
       parameters.getClassPath().add(mySdk.getToolsApiJarFile().getAbsolutePath());
 
-      final List<KeyValue<String,String>> list = HttpConfigurable.getJvmPropertiesList(false, null);
-      if (! list.isEmpty()) {
-        final ParametersList parametersList = parameters.getVMParametersList();
-        for (KeyValue<String, String> value : list) {
-          parametersList.defineProperty(value.getKey(), value.getValue());
-        }
-      }
+      HttpConfigurable.getInstance().getJvmProperties(false, null).forEach(p -> parameters.getVMParametersList().addProperty(p.first, p.second));
 
       final ParametersList programParameters = parameters.getProgramParametersList();
       if (myAuthData.isOAuth2()) {
@@ -200,7 +177,7 @@ public class AppEngineUploader {
       programParameters.add("update");
       programParameters.add(FileUtil.toSystemDependentName(myArtifact.getOutputPath()));
 
-      final GeneralCommandLine commandLine = CommandLineBuilder.createFromJavaParameters(parameters);
+      final GeneralCommandLine commandLine = parameters.toCommandLine();
       processHandler = new OSProcessHandler(commandLine);
     }
     catch (ExecutionException e) {
@@ -219,14 +196,14 @@ public class AppEngineUploader {
     @Nullable private final ConsoleView myConsole;
     @Nullable private final LoggingHandler myLoggingHandler;
 
-    public MyProcessListener(ProcessHandler processHandler, @Nullable ConsoleView console, @Nullable LoggingHandler loggingHandler) {
+    MyProcessListener(ProcessHandler processHandler, @Nullable ConsoleView console, @Nullable LoggingHandler loggingHandler) {
       myProcessHandler = processHandler;
       myConsole = console;
       myLoggingHandler = loggingHandler;
     }
 
     @Override
-    public void onTextAvailable(ProcessEvent event, Key outputType) {
+    public void onTextAvailable(@NotNull ProcessEvent event, @NotNull Key outputType) {
       if (!myAuthData.isOAuth2() && !myPasswordEntered && !outputType.equals(ProcessOutputTypes.SYSTEM) && event.getText().contains(myAuthData.getEmail())) {
         myPasswordEntered = true;
         final OutputStream processInput = myProcessHandler.getProcessInput();
@@ -247,7 +224,7 @@ public class AppEngineUploader {
     }
 
     @Override
-    public void processTerminated(ProcessEvent event) {
+    public void processTerminated(@NotNull ProcessEvent event) {
       int exitCode = event.getExitCode();
       if (exitCode == 0) {
         myCallback.succeeded(new DeploymentRuntime() {

@@ -28,13 +28,6 @@ public class GroovyNestedConditionalInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return CONFUSING_CODE_CONSTRUCTS;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Nested conditional expression";
   }
@@ -55,7 +48,7 @@ public class GroovyNestedConditionalInspection extends BaseInspection {
   private static class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitConditionalExpression(GrConditionalExpression grConditionalExpression) {
+    public void visitConditionalExpression(@NotNull GrConditionalExpression grConditionalExpression) {
       super.visitConditionalExpression(grConditionalExpression);
       final GrConditionalExpression containingConditional =
           PsiTreeUtil.getParentOfType(grConditionalExpression, GrConditionalExpression.class);

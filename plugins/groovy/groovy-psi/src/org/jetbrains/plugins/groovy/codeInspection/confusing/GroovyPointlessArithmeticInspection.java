@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,12 +38,6 @@ public class GroovyPointlessArithmeticInspection extends BaseInspection {
   @NotNull
   public String getDisplayName() {
     return "Pointless arithmetic expression";
-  }
-
-  @Override
-  @NotNull
-  public String getGroupDisplayName() {
-    return CONFUSING_CODE_CONSTRUCTS;
   }
 
   @Override
@@ -108,12 +102,12 @@ public class GroovyPointlessArithmeticInspection extends BaseInspection {
   private static class PointlessArithmeticFix extends GroovyFix {
     @Override
     @NotNull
-    public String getName() {
+    public String getFamilyName() {
       return "Simplify";
     }
 
     @Override
-    public void doFix(Project project, ProblemDescriptor descriptor) throws IncorrectOperationException {
+    public void doFix(@NotNull Project project, @NotNull ProblemDescriptor descriptor) throws IncorrectOperationException {
       final GrExpression expression = (GrExpression) descriptor.getPsiElement();
       final String newExpression = calculateReplacementExpression(expression);
       replaceExpression(expression, newExpression);
@@ -179,7 +173,6 @@ public class GroovyPointlessArithmeticInspection extends BaseInspection {
   }
 
   /**
-   * @noinspection FloatingPointEquality
    */
   private static boolean isZero(GrExpression expression) {
     final PsiElement inner = PsiUtil.skipParentheses(expression, false);
@@ -197,7 +190,6 @@ public class GroovyPointlessArithmeticInspection extends BaseInspection {
   }
 
   /**
-   * @noinspection FloatingPointEquality
    */
   private static boolean isOne(GrExpression expression) {
     final PsiElement inner = PsiUtil.skipParentheses(expression, false);

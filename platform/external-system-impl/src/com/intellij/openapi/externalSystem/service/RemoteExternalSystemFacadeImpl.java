@@ -20,31 +20,32 @@ import com.intellij.openapi.externalSystem.service.project.ExternalSystemProject
 import com.intellij.openapi.externalSystem.task.ExternalSystemTaskManager;
 import com.intellij.openapi.externalSystem.util.ExternalSystemConstants;
 import com.intellij.openapi.util.registry.Registry;
-import com.intellij.util.Alarm;
+import com.intellij.util.concurrency.AppExecutorUtil;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * @author Denis Zhdanov
- * @since 8/9/13 4:28 PM
  */
 public class RemoteExternalSystemFacadeImpl<S extends ExternalSystemExecutionSettings> extends AbstractExternalSystemFacadeImpl<S> {
 
   private static final long DEFAULT_REMOTE_PROCESS_TTL_IN_MS = TimeUnit.MILLISECONDS.convert(3, TimeUnit.MINUTES);
 
   private final AtomicInteger myCallsInProgressNumber = new AtomicInteger();
-  private final Alarm         myShutdownAlarm         = new Alarm(Alarm.ThreadToUse.SHARED_THREAD);
+  private Future<?> myShutdownFuture = CompletableFuture.completedFuture(null);
   private final AtomicLong    myTtlMs                 = new AtomicLong(DEFAULT_REMOTE_PROCESS_TTL_IN_MS);
 
   private volatile boolean myStdOutputConfigured;
@@ -94,10 +95,10 @@ public class RemoteExternalSystemFacadeImpl<S extends ExternalSystemExecutionSet
     start(facade);
   }
 
-  @SuppressWarnings({"IOResourceOpenedButNotSafelyClosed", "unchecked", "UseOfSystemOutOrSystemErr"})
+  @SuppressWarnings({"unchecked", "UseOfSystemOutOrSystemErr"})
   @Override
   protected <I extends RemoteExternalSystemService<S>, C extends I> I createService(@NotNull Class<I> interfaceClass, @NotNull final C impl)
-    throws ClassNotFoundException, IllegalAccessException, InstantiationException, RemoteException
+    throws RemoteException
   {
     if (!myStdOutputConfigured) {
       myStdOutputConfigured = true;
@@ -111,6 +112,9 @@ public class RemoteExternalSystemFacadeImpl<S extends ExternalSystemExecutionSet
         myCallsInProgressNumber.incrementAndGet();
         try {
           return method.invoke(impl, args);
+        }
+        catch (InvocationTargetException e) {
+          throw e.getCause();
         }
         finally {
           myCallsInProgressNumber.decrementAndGet();
@@ -137,17 +141,16 @@ public class RemoteExternalSystemFacadeImpl<S extends ExternalSystemExecutionSet
    * at IJ. We don't want to keep remote process that communicates with the gradle api then.
    */
   private void updateAutoShutdownTime() {
-    myShutdownAlarm.cancelAllRequests();
-    myShutdownAlarm.addRequest(() -> {
+    myShutdownFuture.cancel(false);
+    myShutdownFuture = AppExecutorUtil.getAppScheduledExecutorService().schedule(() -> {
       if (myCallsInProgressNumber.get() > 0) {
         updateAutoShutdownTime();
         return;
       }
       System.exit(0);
-    }, (int)myTtlMs.get());
+    }, (int)myTtlMs.get(), TimeUnit.MILLISECONDS);
   }
 
-  @SuppressWarnings("IOResourceOpenedButNotSafelyClosed")
   private static class LineAwarePrintStream extends PrintStream {
     private LineAwarePrintStream(@NotNull final PrintStream delegate) {
       super(new OutputStream() {
@@ -155,16 +158,16 @@ public class RemoteExternalSystemFacadeImpl<S extends ExternalSystemExecutionSet
         @NotNull private final StringBuilder myBuffer = new StringBuilder();
 
         @Override
-        public void write(int b) throws IOException {
+        public void write(int b) {
           char c = (char)b;
-          myBuffer.append(Character.toString(c));
+          myBuffer.append(c);
           if (c == '\n') {
             doFlush();
           }
         }
 
         @Override
-        public void write(byte[] b, int off, int len) throws IOException {
+        public void write(byte[] b, int off, int len) {
           int start = off;
           int maxOffset = off + len;
           for (int i = off; i < maxOffset; i++) {

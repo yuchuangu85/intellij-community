@@ -15,6 +15,7 @@
  */
 package com.intellij.openapi.diff.impl.patch;
 
+import com.intellij.openapi.vcs.FileStatus;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.charset.Charset;
@@ -26,12 +27,19 @@ import java.util.List;
  * @author yole
  */
 public class TextFilePatch extends FilePatch {
-  private Charset myCharset;
+  private final Charset myCharset;
+  @Nullable private final String myLineSeparator;
   private final List<PatchHunk> myHunks;
+  @Nullable private FileStatus myFileStatus;
 
   public TextFilePatch(@Nullable Charset charset) {
+    this(charset, null);
+  }
+
+  public TextFilePatch(@Nullable Charset charset, @Nullable String lineSeparator) {
     myCharset = charset;
-    myHunks = new ArrayList<PatchHunk>();
+    myLineSeparator = lineSeparator;
+    myHunks = new ArrayList<>();
   }
 
   public TextFilePatch pathsOnlyCopy() {
@@ -45,6 +53,9 @@ public class TextFilePatch extends FilePatch {
     setBeforeName(patch.getBeforeName());
     setAfterName(patch.getAfterName());
     myHunks = patch.myHunks;
+    myLineSeparator = patch.getLineSeparator();
+    setNewFileMode(patch.getNewFileMode());
+    setFileStatus(patch.myFileStatus);
   }
 
   public void addHunk(final PatchHunk hunk) {
@@ -57,20 +68,31 @@ public class TextFilePatch extends FilePatch {
 
   @Override
   public boolean isNewFile() {
-    return myHunks.size() == 1 && myHunks.get(0).isNewContent();
+    return myFileStatus == FileStatus.ADDED || (myHunks.size() == 1 && myHunks.get(0).isNewContent());
   }
 
-  public String getNewFileText() {
+  public String getSingleHunkPatchText() {
+    if (myHunks.isEmpty()) return "";     // file can be empty, only status changed
+    assert myHunks.size() == 1;
     return myHunks.get(0).getText();
   }
 
   @Override
   public boolean isDeletedFile() {
-    return myHunks.size() == 1 && myHunks.get(0).isDeletedContent();
+    return myFileStatus == FileStatus.DELETED || (myHunks.size() == 1 && myHunks.get(0).isDeletedContent());
   }
 
   @Nullable
   public Charset getCharset() {
     return myCharset;
+  }
+
+  @Nullable
+  public String getLineSeparator() {
+    return myLineSeparator;
+  }
+
+  public void setFileStatus(@Nullable FileStatus fileStatus) {
+    myFileStatus = fileStatus;
   }
 }

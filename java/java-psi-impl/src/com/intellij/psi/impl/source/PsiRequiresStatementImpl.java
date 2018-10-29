@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,16 +15,50 @@
  */
 package com.intellij.psi.impl.source;
 
-import com.intellij.psi.JavaElementVisitor;
-import com.intellij.psi.PsiElementVisitor;
-import com.intellij.psi.PsiRequiresStatement;
-import com.intellij.psi.impl.source.tree.CompositePsiElement;
-import com.intellij.psi.impl.source.tree.JavaElementType;
+import com.intellij.lang.ASTNode;
+import com.intellij.psi.*;
+import com.intellij.psi.impl.java.stubs.JavaStubElementTypes;
+import com.intellij.psi.impl.java.stubs.PsiRequiresStatementStub;
+import com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.annotations.NotNull;
 
-public class PsiRequiresStatementImpl extends CompositePsiElement implements PsiRequiresStatement {
-  public PsiRequiresStatementImpl() {
-    super(JavaElementType.REQUIRES_STATEMENT);
+import static com.intellij.openapi.util.text.StringUtil.nullize;
+
+public class PsiRequiresStatementImpl extends JavaStubPsiElement<PsiRequiresStatementStub> implements PsiRequiresStatement {
+  public PsiRequiresStatementImpl(@NotNull PsiRequiresStatementStub stub) {
+    super(stub, JavaStubElementTypes.REQUIRES_STATEMENT);
+  }
+
+  public PsiRequiresStatementImpl(@NotNull ASTNode node) {
+    super(node);
+  }
+
+  @Override
+  public PsiJavaModuleReferenceElement getReferenceElement() {
+    return PsiTreeUtil.getChildOfType(this, PsiJavaModuleReferenceElement.class);
+  }
+
+  @Override
+  public String getModuleName() {
+    PsiRequiresStatementStub stub = getGreenStub();
+    if (stub != null) {
+      return nullize(stub.getModuleName());
+    }
+    else {
+      PsiJavaModuleReferenceElement refElement = getReferenceElement();
+      return refElement != null ? refElement.getReferenceText() : null;
+    }
+  }
+
+  @Override
+  public PsiModifierList getModifierList() {
+    return getStubOrPsiChild(JavaStubElementTypes.MODIFIER_LIST);
+  }
+
+  @Override
+  public boolean hasModifierProperty(@NotNull String name) {
+    PsiModifierList modifierList = getModifierList();
+    return modifierList != null && modifierList.hasModifierProperty(name);
   }
 
   @Override

@@ -51,7 +51,7 @@ public class RootDetectionUtil {
   }
 
   @NotNull
-  public static List<OrderRoot> detectRoots(@NotNull final Collection<VirtualFile> rootCandidates,
+  public static List<OrderRoot> detectRoots(@NotNull final Collection<? extends VirtualFile> rootCandidates,
                                             @Nullable Component parentComponent,
                                             @Nullable Project project,
                                             @NotNull final LibraryRootsComponentDescriptor rootsComponentDescriptor) {
@@ -60,11 +60,11 @@ public class RootDetectionUtil {
   }
 
   @NotNull
-  public static List<OrderRoot> detectRoots(@NotNull final Collection<VirtualFile> rootCandidates, @Nullable Component parentComponent,
+  public static List<OrderRoot> detectRoots(@NotNull final Collection<? extends VirtualFile> rootCandidates, @Nullable Component parentComponent,
                                             @Nullable Project project, @NotNull final LibraryRootsDetector detector,
                                             @NotNull OrderRootType[] rootTypesAllowedToBeSelectedByUserIfNothingIsDetected) {
-    final List<OrderRoot> result = new ArrayList<OrderRoot>();
-    final List<SuggestedChildRootInfo> suggestedRoots = new ArrayList<SuggestedChildRootInfo>();
+    final List<OrderRoot> result = new ArrayList<>();
+    final List<SuggestedChildRootInfo> suggestedRoots = new ArrayList<>();
     new Task.Modal(project, "Scanning for Roots", true) {
       @Override
       public void run(@NotNull ProgressIndicator indicator) {
@@ -79,7 +79,7 @@ public class RootDetectionUtil {
             }
             else {
               for (DetectedLibraryRoot root : roots) {
-                final HashMap<LibraryRootType, String> names = new HashMap<LibraryRootType, String>();
+                final HashMap<LibraryRootType, String> names = new HashMap<>();
                 for (LibraryRootType type : root.getTypes()) {
                   final String typeName = detector.getRootTypeName(type);
                   LOG.assertTrue(typeName != null, "Unexpected root type " + type.getType().name() + (type.isJarDirectory() ? " (JAR directory)" : "") + ", detectors: " + detector);
@@ -109,7 +109,7 @@ public class RootDetectionUtil {
     }
 
     if (result.isEmpty() && rootTypesAllowedToBeSelectedByUserIfNothingIsDetected.length > 0) {
-      Map<String, Pair<OrderRootType, Boolean>> types = new HashMap<String, Pair<OrderRootType, Boolean>>();
+      Map<String, Pair<OrderRootType, Boolean>> types = new HashMap<>();
       for (OrderRootType type : rootTypesAllowedToBeSelectedByUserIfNothingIsDetected) {
         for (boolean isJarDirectory : new boolean[]{false, true}) {
           final String typeName = detector.getRootTypeName(new LibraryRootType(type, isJarDirectory));
@@ -119,7 +119,7 @@ public class RootDetectionUtil {
         }
       }
       LOG.assertTrue(!types.isEmpty(), "No allowed root types found for " + detector);
-      List<String> names = new ArrayList<String>(types.keySet());
+      List<String> names = new ArrayList<>(types.keySet());
       if (names.size() == 1) {
         String title = "Attach Roots";
         String typeName = names.get(0);
@@ -158,7 +158,7 @@ public class RootDetectionUtil {
     return result;
   }
 
-  private static boolean allRootsHaveOneTypeAndEqualToOrAreDirectParentOf(Collection<DetectedLibraryRoot> roots, VirtualFile candidate) {
+  private static boolean allRootsHaveOneTypeAndEqualToOrAreDirectParentOf(Collection<? extends DetectedLibraryRoot> roots, VirtualFile candidate) {
     for (DetectedLibraryRoot root : roots) {
       if (root.getTypes().size() > 1 || !root.getFile().equals(candidate) && !root.getFile().equals(candidate.getParent())) {
         return false;
@@ -168,7 +168,7 @@ public class RootDetectionUtil {
   }
 
   private static class ChooseRootTypeElementsDialog extends ChooseElementsDialog<String> {
-    public ChooseRootTypeElementsDialog(Project project, List<String> names, String title, String description) {
+    ChooseRootTypeElementsDialog(Project project, List<String> names, String title, String description) {
       super(project, names, title, description, true);
     }
 

@@ -15,7 +15,6 @@
  */
 package com.intellij.xml.util.documentation;
 
-import com.intellij.codeInsight.completion.XmlCompletionData;
 import com.intellij.lang.Language;
 import com.intellij.lang.documentation.DocumentationProvider;
 import com.intellij.lang.documentation.DocumentationUtil;
@@ -93,7 +92,7 @@ public class XmlDocumentationProvider implements DocumentationProvider {
   @Override
   public String generateDoc(PsiElement element, final PsiElement originalElement) {
     if (element instanceof XmlElementDecl) {
-      PsiElement curElement = findPreviousComment(element);
+      PsiElement curElement = XmlUtil.findPreviousComment(element);
 
       if (curElement!=null) {
         return formatDocFromComment(curElement, ((XmlElementDecl)element).getNameElement().getText());
@@ -139,7 +138,7 @@ public class XmlDocumentationProvider implements DocumentationProvider {
         }
       }
       if (processor.result == null) {
-        final PsiElement comment = findPreviousComment(element);
+        final PsiElement comment = XmlUtil.findPreviousComment(element);
         if (comment != null) {
           return formatDocFromComment(comment, ((XmlTag)element).getName());
         }
@@ -154,7 +153,7 @@ public class XmlDocumentationProvider implements DocumentationProvider {
     } else if (element instanceof XmlAttributeDecl) {
       // Check for comment before attlist, it should not be right after previous declaration
       final PsiElement parent = element.getParent();
-      final PsiElement previousComment = findPreviousComment(parent);
+      final PsiElement previousComment = XmlUtil.findPreviousComment(parent);
       final String referenceName = ((XmlAttributeDecl)element).getNameElement().getText();
 
       if (previousComment instanceof PsiComment) {
@@ -180,7 +179,7 @@ public class XmlDocumentationProvider implements DocumentationProvider {
   }
 
   private static XmlTag findEnumerationValue(final String text, XmlTag tag) {
-    final Ref<XmlTag> enumerationTag = new Ref<XmlTag>();
+    final Ref<XmlTag> enumerationTag = new Ref<>();
 
     Processor<XmlTag> processor = xmlTag -> {
       if (text.equals(xmlTag.getAttributeValue(XmlUtil.VALUE_ATTR_NAME))) {
@@ -248,26 +247,6 @@ public class XmlDocumentationProvider implements DocumentationProvider {
       return formatDocFromComment(uncleElement, referenceName);
     }
     return null;
-  }
-
-  @Nullable
-  public static PsiElement findPreviousComment(final PsiElement element) {
-    PsiElement curElement = element;
-
-    while(curElement!=null && !(curElement instanceof XmlComment)) {
-      curElement = curElement.getPrevSibling();
-      if (curElement instanceof XmlText && StringUtil.isEmptyOrSpaces(curElement.getText())) {
-        continue;
-      }
-      if (!(curElement instanceof PsiWhiteSpace) &&
-          !(curElement instanceof XmlProlog) &&
-          !(curElement instanceof XmlComment)
-         ) {
-        curElement = null; // finding comment fails, we found another similar declaration
-        break;
-      }
-    }
-    return curElement;
   }
 
   private String formatDocFromComment(final PsiElement curElement, final String name) {
@@ -448,7 +427,7 @@ public class XmlDocumentationProvider implements DocumentationProvider {
   public static PsiElement findDeclWithName(final String name, final @NotNull PsiElement element) {
     final XmlFile containingXmlFile = XmlUtil.getContainingFile(element);
     final XmlTag nearestTag = PsiTreeUtil.getParentOfType(element, XmlTag.class, false);
-    final XmlFile xmlFile = nearestTag != null && containingXmlFile != null ? XmlCompletionData.findDescriptorFile(nearestTag, containingXmlFile):containingXmlFile;
+    final XmlFile xmlFile = nearestTag != null && containingXmlFile != null ? XmlUtil.findDescriptorFile(nearestTag, containingXmlFile) : containingXmlFile;
 
     if (xmlFile != null) {
       final PsiElement[] result = new PsiElement[1];

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.deadCode;
 
 import com.intellij.ToolExtensionPoints;
@@ -27,46 +13,38 @@ import com.intellij.codeInspection.ex.JobDescriptor;
 import com.intellij.codeInspection.reference.*;
 import com.intellij.codeInspection.unusedSymbol.UnusedSymbolLocalInspectionBase;
 import com.intellij.codeInspection.util.RefFilter;
-import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.ExtensionPoint;
-import com.intellij.openapi.extensions.ExtensionPointListener;
 import com.intellij.openapi.extensions.Extensions;
-import com.intellij.openapi.extensions.PluginDescriptor;
-import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.InvalidDataException;
 import com.intellij.openapi.util.WriteExternalException;
-import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.profile.codeInspection.InspectionProjectProfileManager;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.PsiClassImplUtil;
-import com.intellij.psi.search.DelegatingGlobalSearchScope;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.psi.search.PsiNonJavaFileReferenceProcessor;
-import com.intellij.psi.search.PsiSearchHelper;
-import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.PsiMethodUtil;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.HashMap;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.uast.*;
 
 import java.util.*;
 
 /**
  * @author max
- * @since Oct 12, 2001
  */
 public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
-  private static final Logger LOG = Logger.getInstance("#" + UnusedDeclarationInspectionBase.class.getName());
+  private static final Logger LOG = Logger.getInstance(UnusedDeclarationInspectionBase.class);
 
   public boolean ADD_MAINS_TO_ENTRIES = true;
   public boolean ADD_APPLET_TO_ENTRIES = true;
   public boolean ADD_SERVLET_TO_ENTRIES = true;
   public boolean ADD_NONJAVA_TO_ENTRIES = true;
+  private boolean TEST_ENTRY_POINTS = true;
 
   public static final String DISPLAY_NAME = InspectionsBundle.message("inspection.dead.code.display.name");
   public static final String SHORT_NAME = HighlightInfoType.UNUSED_SYMBOL_SHORT_NAME;
@@ -77,7 +55,6 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
 
   private Set<RefElement> myProcessedSuspicious;
   private int myPhase;
-  private GlobalInspectionContext myContext;
   private final boolean myEnabledInEditor;
 
   @SuppressWarnings("TestOnlyProblems")
@@ -89,7 +66,7 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
   public UnusedDeclarationInspectionBase(boolean enabledInEditor) {
     ExtensionPoint<EntryPoint> point = Extensions.getRootArea().getExtensionPoint(ToolExtensionPoints.DEAD_CODE_TOOL);
     EntryPoint[] extensions = point.getExtensions();
-    List<EntryPoint> deadCodeAddIns = new ArrayList<EntryPoint>(extensions.length);
+    List<EntryPoint> deadCodeAddIns = new ArrayList<>(extensions.length);
     for (EntryPoint entryPoint : extensions) {
       try {
         deadCodeAddIns.add(entryPoint.clone());
@@ -107,14 +84,10 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
     return new UnusedSymbolLocalInspectionBase();
   }
 
-  @Nullable
+  @NotNull
   @Override
   public UnusedSymbolLocalInspectionBase getSharedLocalInspectionTool() {
     return myLocalInspectionBase;
-  }
-
-  protected GlobalInspectionContext getContext() {
-    return myContext;
   }
 
   private boolean isAddMainsEnabled() {
@@ -131,6 +104,14 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
 
   private boolean isAddNonJavaUsedEnabled() {
     return ADD_NONJAVA_TO_ENTRIES;
+  }
+
+  public boolean isTestEntryPoints() {
+    return TEST_ENTRY_POINTS;
+  }
+
+  public void setTestEntryPoints(boolean testEntryPoints) {
+    TEST_ENTRY_POINTS = testEntryPoints;
   }
 
   @Override
@@ -158,12 +139,19 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
     for (EntryPoint extension : myExtensions) {
       extension.readExternal(node);
     }
+
+    final String testEntriesAttr = node.getAttributeValue("test_entries");
+    TEST_ENTRY_POINTS = testEntriesAttr == null || Boolean.parseBoolean(testEntriesAttr);
   }
 
   @Override
   public void writeSettings(@NotNull Element node) throws WriteExternalException {
     myLocalInspectionBase.writeSettings(node);
     writeUnusedDeclarationSettings(node);
+
+    if (!TEST_ENTRY_POINTS) {
+      node.setAttribute("test_entries", Boolean.toString(false));
+    }
   }
 
   protected void writeUnusedDeclarationSettings(Element node) throws WriteExternalException {
@@ -173,64 +161,64 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
     }
   }
 
-  private static boolean isExternalizableNoParameterConstructor(@NotNull PsiMethod method, RefClass refClass) {
+  private static boolean isExternalizableNoParameterConstructor(@NotNull UMethod method, RefClass refClass) {
     if (!method.isConstructor()) return false;
-    if (!method.hasModifierProperty(PsiModifier.PUBLIC)) return false;
-    final PsiParameterList parameterList = method.getParameterList();
-    if (parameterList.getParametersCount() != 0) return false;
-    final PsiClass aClass = method.getContainingClass();
+    if (method.getVisibility() != UastVisibility.PUBLIC) return false;
+    final List<UParameter> parameterList = method.getUastParameters();
+    if (!parameterList.isEmpty()) return false;
+    final UClass aClass = UDeclarationKt.getContainingDeclaration(method, UClass.class);
     return aClass == null || isExternalizable(aClass, refClass);
   }
 
-  private static boolean isSerializationImplicitlyUsedField(@NotNull PsiField field) {
+  private static boolean isSerializationImplicitlyUsedField(@NotNull UField field) {
     final String name = field.getName();
     if (!HighlightUtilBase.SERIAL_VERSION_UID_FIELD_NAME.equals(name) && !"serialPersistentFields".equals(name)) return false;
-    if (!field.hasModifierProperty(PsiModifier.STATIC)) return false;
-    PsiClass aClass = field.getContainingClass();
+    if (!field.isStatic()) return false;
+    UClass aClass = UDeclarationKt.getContainingDeclaration(field, UClass.class);
     return aClass == null || isSerializable(aClass, null);
   }
 
-  private static boolean isWriteObjectMethod(@NotNull PsiMethod method, RefClass refClass) {
+  private static boolean isWriteObjectMethod(@NotNull UMethod method, RefClass refClass) {
     final String name = method.getName();
     if (!"writeObject".equals(name)) return false;
-    PsiParameter[] parameters = method.getParameterList().getParameters();
-    if (parameters.length != 1) return false;
-    if (!equalsToText(parameters[0].getType(), "java.io.ObjectOutputStream")) return false;
-    if (method.hasModifierProperty(PsiModifier.STATIC)) return false;
-    PsiClass aClass = method.getContainingClass();
+    List<UParameter> parameters = method.getUastParameters();
+    if (parameters.size() != 1) return false;
+    if (!equalsToText(parameters.get(0).getType(), "java.io.ObjectOutputStream")) return false;
+    if (method.isStatic()) return false;
+    UClass aClass = UDeclarationKt.getContainingDeclaration(method, UClass.class);
     return !(aClass != null && !isSerializable(aClass, refClass));
   }
 
-  private static boolean isReadObjectMethod(@NotNull PsiMethod method, RefClass refClass) {
+  private static boolean isReadObjectMethod(@NotNull UMethod method, RefClass refClass) {
     final String name = method.getName();
     if (!"readObject".equals(name)) return false;
-    PsiParameter[] parameters = method.getParameterList().getParameters();
-    if (parameters.length != 1) return false;
-    if (!equalsToText(parameters[0].getType(), "java.io.ObjectInputStream")) return false;
-    if (method.hasModifierProperty(PsiModifier.STATIC)) return false;
-    PsiClass aClass = method.getContainingClass();
+    List<UParameter> parameters = method.getUastParameters();
+    if (parameters.size() != 1) return false;
+    if (!equalsToText(parameters.get(0).getType(), "java.io.ObjectInputStream")) return false;
+    if (method.isStatic()) return false;
+    UClass aClass = UDeclarationKt.getContainingDeclaration(method, UClass.class);
     return !(aClass != null && !isSerializable(aClass, refClass));
   }
 
-  private static boolean isWriteReplaceMethod(@NotNull PsiMethod method, RefClass refClass) {
+  private static boolean isWriteReplaceMethod(@NotNull UMethod method, RefClass refClass) {
     final String name = method.getName();
     if (!"writeReplace".equals(name)) return false;
-    PsiParameter[] parameters = method.getParameterList().getParameters();
-    if (parameters.length != 0) return false;
+    List<UParameter> parameters = method.getUastParameters();
+    if (parameters.size() != 0) return false;
     if (!equalsToText(method.getReturnType(), CommonClassNames.JAVA_LANG_OBJECT)) return false;
-    if (method.hasModifierProperty(PsiModifier.STATIC)) return false;
-    PsiClass aClass = method.getContainingClass();
+    if (method.isStatic()) return false;
+    UClass aClass = UDeclarationKt.getContainingDeclaration(method, UClass.class);
     return !(aClass != null && !isSerializable(aClass, refClass));
   }
 
-  private static boolean isReadResolveMethod(@NotNull PsiMethod method, RefClass refClass) {
+  private static boolean isReadResolveMethod(@NotNull UMethod method, RefClass refClass) {
     final String name = method.getName();
     if (!"readResolve".equals(name)) return false;
-    PsiParameter[] parameters = method.getParameterList().getParameters();
-    if (parameters.length != 0) return false;
+    List<UParameter> parameters = method.getUastParameters();
+    if (parameters.size() != 0) return false;
     if (!equalsToText(method.getReturnType(), CommonClassNames.JAVA_LANG_OBJECT)) return false;
-    if (method.hasModifierProperty(PsiModifier.STATIC)) return false;
-    final PsiClass aClass = method.getContainingClass();
+    if (method.isStatic()) return false;
+    final UClass aClass = UDeclarationKt.getContainingDeclaration(method, UClass.class);
     return !(aClass != null && !isSerializable(aClass, refClass));
   }
 
@@ -238,24 +226,26 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
     return type != null && type.equalsToText(text);
   }
 
-  private static boolean isSerializable(PsiClass aClass, @Nullable RefClass refClass) {
-    final PsiClass serializableClass = JavaPsiFacade.getInstance(aClass.getProject()).findClass("java.io.Serializable", aClass.getResolveScope());
+  private static boolean isSerializable(UClass aClass, @Nullable RefClass refClass) {
+    PsiClass psi = aClass.getPsi();
+    final PsiClass serializableClass = JavaPsiFacade.getInstance(psi.getProject()).findClass("java.io.Serializable", psi.getResolveScope());
     return serializableClass != null && isSerializable(aClass, refClass, serializableClass);
   }
 
-  private static boolean isExternalizable(@NotNull PsiClass aClass, RefClass refClass) {
-    final GlobalSearchScope scope = aClass.getResolveScope();
-    final PsiClass externalizableClass = JavaPsiFacade.getInstance(aClass.getProject()).findClass("java.io.Externalizable", scope);
+  private static boolean isExternalizable(@NotNull UClass aClass, RefClass refClass) {
+    PsiClass psi = aClass.getPsi();
+    final PsiClass externalizableClass = JavaPsiFacade.getInstance(psi.getProject()).findClass("java.io.Externalizable", psi.getResolveScope());
     return externalizableClass != null && isSerializable(aClass, refClass, externalizableClass);
   }
 
-  private static boolean isSerializable(PsiClass aClass, RefClass refClass, PsiClass serializableClass) {
+  private static boolean isSerializable(UClass aClass, RefClass refClass, PsiClass serializableClass) {
     if (aClass == null) return false;
-    if (aClass.isInheritor(serializableClass, true)) return true;
+    if (aClass.getJavaPsi().isInheritor(serializableClass, true)) return true;
     if (refClass != null) {
       final Set<RefClass> subClasses = refClass.getSubClasses();
       for (RefClass subClass : subClasses) {
-        if (isSerializable(subClass.getElement(), subClass, serializableClass)) return true;
+        //TODO reimplement
+        if (isSerializable(subClass.getUastElement(), subClass, serializableClass)) return true;
       }
     }
     return false;
@@ -279,98 +269,26 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
           final boolean isSuppressed = refElement.isSuppressed(getShortName(), ALTERNATIVE_ID);
           if (isSuppressed || !((GlobalInspectionContextBase)globalContext).isToCheckFile(file, UnusedDeclarationInspectionBase.this)) {
             if (isSuppressed || !scope.contains(file)) {
-              getEntryPointsManager().addEntryPoint(refElement, false);
+              getEntryPointsManager(globalContext).addEntryPoint(refElement, false);
             }
-            return;
           }
-
-          refElement.accept(new RefJavaVisitor() {
-            @Override
-            public void visitMethod(@NotNull RefMethod method) {
-              if (isAddMainsEnabled() && method.isAppMain()) {
-                getEntryPointsManager().addEntryPoint(method, false);
-              }
-            }
-
-            @Override
-            public void visitClass(@NotNull RefClass aClass) {
-              if (isAddAppletEnabled() && aClass.isApplet() ||
-                  isAddServletEnabled() && aClass.isServlet()) {
-                getEntryPointsManager().addEntryPoint(aClass, false);
-              }
-            }
-          });
         }
       }
     });
 
-    if (isAddNonJavaUsedEnabled()) {
-      checkForReachableRefs(globalContext);
-      final StrictUnreferencedFilter strictUnreferencedFilter = new StrictUnreferencedFilter(this, globalContext);
-      ProgressManager.getInstance().runProcess(new Runnable() {
-        @Override
-        public void run() {
-          final RefManager refManager = globalContext.getRefManager();
-          final PsiSearchHelper helper = PsiSearchHelper.SERVICE.getInstance(refManager.getProject());
-          refManager.iterate(new RefJavaVisitor() {
-            @Override
-            public void visitElement(@NotNull final RefEntity refEntity) {
-              if (refEntity instanceof RefClass && strictUnreferencedFilter.accepts((RefClass)refEntity)) {
-                findExternalClassReferences((RefClass)refEntity);
-              }
-              else if (refEntity instanceof RefMethod) {
-                RefMethod refMethod = (RefMethod)refEntity;
-                if (refMethod.isConstructor() && strictUnreferencedFilter.accepts(refMethod)) {
-                  findExternalClassReferences(refMethod.getOwnerClass());
-                }
-              }
-            }
-
-            private void findExternalClassReferences(final RefClass refElement) {
-              final PsiClass psiClass = refElement.getElement();
-              String qualifiedName = psiClass != null ? psiClass.getQualifiedName() : null;
-              if (qualifiedName != null) {
-                final GlobalSearchScope projectScope = GlobalSearchScope.projectScope(globalContext.getProject());
-                final PsiNonJavaFileReferenceProcessor processor = new PsiNonJavaFileReferenceProcessor() {
-                  @Override
-                  public boolean process(PsiFile file, int startOffset, int endOffset) {
-                    getEntryPointsManager().addEntryPoint(refElement, false);
-                    return false;
-                  }
-                };
-                final DelegatingGlobalSearchScope globalSearchScope = new DelegatingGlobalSearchScope(projectScope) {
-                  @Override
-                  public boolean contains(@NotNull VirtualFile file) {
-                    return file.getFileType() != JavaFileType.INSTANCE && super.contains(file);
-                  }
-                };
-
-                if (helper.processUsagesInNonJavaFiles(qualifiedName, processor, globalSearchScope)) {
-                  final PsiReference reference = ReferencesSearch.search(psiClass, globalSearchScope).findFirst();
-                  if (reference != null) {
-                    getEntryPointsManager().addEntryPoint(refElement, false);
-                    for (PsiMethod method : psiClass.getMethods()) {
-                      final RefElement refMethod = refManager.getReference(method);
-                      if (refMethod != null) {
-                        getEntryPointsManager().addEntryPoint(refMethod, false);
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          });
-        }
-      }, null);
-    }
-
-    myProcessedSuspicious = new HashSet<RefElement>();
+    myProcessedSuspicious = new HashSet<>();
     myPhase = 1;
   }
 
   public boolean isEntryPoint(@NotNull RefElement owner) {
-    final PsiElement element = owner.getElement();
-    if (isImplicitUsage(element)) return true;
+    PsiElement element = owner.getPsiElement();
+    if (owner instanceof RefJavaElement) {
+      UElement uElement = ((RefJavaElement)owner).getUastElement();
+      if (uElement != null) {
+        element = uElement.getJavaPsi();
+      }
+    }
+    if (RefUtil.isImplicitUsage(element)) return true;
     if (element instanceof PsiModifierListOwner) {
       final EntryPointsManager entryPointsManager = EntryPointsManager.getInstance(element.getProject());
       if (entryPointsManager.isEntryPoint(element)) {
@@ -383,13 +301,19 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
           return true;
         }
       }
-    }
-    return false;
-  }
 
-  private static boolean isImplicitUsage(PsiElement element) {
-    return element instanceof PsiField ? RefUtil.isImplicitRead(element)
-                                       : RefUtil.isImplicitUsage(element);
+      if (isAddMainsEnabled() && owner instanceof RefMethod && ((RefMethod)owner).isAppMain()) {
+        return true;
+      }
+
+      if (owner instanceof RefClass) {
+        if (isAddAppletEnabled() && ((RefClass)owner).isApplet() || isAddServletEnabled() && ((RefClass)owner).isServlet()) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   public boolean isEntryPoint(@NotNull PsiElement element) {
@@ -409,7 +333,9 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
       if (isAddServletEnabled() && servlet != null && aClass.isInheritor(servlet, true)) {
         return true;
       }
-      if (isAddMainsEnabled() && PsiMethodUtil.hasMainMethod(aClass)) return true;
+      if (isAddMainsEnabled()) {
+        if (hasMainMethodDeep(aClass)) return true;
+      }
     }
     if (element instanceof PsiModifierListOwner) {
       final EntryPointsManager entryPointsManager = EntryPointsManager.getInstance(project);
@@ -420,11 +346,32 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
         return true;
       }
     }
-    return isImplicitUsage(element);
+    return RefUtil.isImplicitUsage(element);
+  }
+
+  private static boolean hasMainMethodDeep(PsiClass aClass) {
+    if (PsiMethodUtil.hasMainMethod(aClass)) return true;
+    for (PsiClass innerClass : aClass.getInnerClasses()) {
+      if (innerClass.hasModifierProperty(PsiModifier.STATIC) && PsiMethodUtil.hasMainMethod(innerClass)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public boolean isGlobalEnabledInEditor() {
     return myEnabledInEditor;
+  }
+
+  @NotNull
+  public static UnusedDeclarationInspectionBase findUnusedDeclarationInspection(@NotNull PsiElement element) {
+    InspectionProfile profile = InspectionProjectProfileManager.getInstance(element.getProject()).getCurrentProfile();
+    UnusedDeclarationInspectionBase tool = (UnusedDeclarationInspectionBase)profile.getUnwrappedTool(SHORT_NAME, element);
+    return tool == null ? new UnusedDeclarationInspectionBase() : tool;
+  }
+
+  public static boolean isDeclaredAsEntryPoint(@NotNull PsiElement method) {
+    return findUnusedDeclarationInspection(method).isEntryPoint(method);
   }
 
   private static class StrictUnreferencedFilter extends UnreferencedFilter {
@@ -445,10 +392,12 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
                                              @NotNull GlobalInspectionContext globalContext,
                                              @NotNull ProblemDescriptionsProcessor problemDescriptionsProcessor) {
     checkForReachableRefs(globalContext);
-    final RefFilter filter = myPhase == 1 ? new StrictUnreferencedFilter(this, globalContext) :
+    final boolean firstPhase = myPhase == 1;
+    final RefFilter filter = firstPhase ? new StrictUnreferencedFilter(this, globalContext) :
                              new RefUnreachableFilter(this, globalContext);
-    final boolean[] requestAdded = {false};
+    LOG.assertTrue(myProcessedSuspicious != null, "phase: " + myPhase);
 
+    final boolean[] requestAdded = {false};
     globalContext.getRefManager().iterate(new RefJavaVisitor() {
       @Override
       public void visitElement(@NotNull RefEntity refEntity) {
@@ -460,17 +409,14 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
             @Override
             public void visitField(@NotNull final RefField refField) {
               myProcessedSuspicious.add(refField);
-              PsiField psiField = refField.getElement();
-              if (psiField != null && isSerializationImplicitlyUsedField(psiField)) {
-                getEntryPointsManager().addEntryPoint(refField, false);
+              UField uField = refField.getUastElement();
+              if (uField != null && isSerializationImplicitlyUsedField(uField)) {
+                getEntryPointsManager(globalContext).addEntryPoint(refField, false);
               }
               else {
-                getJavaContext().enqueueFieldUsagesProcessor(refField, new GlobalJavaInspectionContext.UsagesProcessor() {
-                  @Override
-                  public boolean process(PsiReference psiReference) {
-                    getEntryPointsManager().addEntryPoint(refField, false);
-                    return false;
-                  }
+                globalContext.getExtension(GlobalJavaInspectionContext.CONTEXT).enqueueFieldUsagesProcessor(refField, psiReference -> {
+                  getEntryPointsManager(globalContext).addEntryPoint(refField, false);
+                  return false;
                 });
                 requestAdded[0] = true;
               }
@@ -480,19 +426,24 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
             public void visitMethod(@NotNull final RefMethod refMethod) {
               myProcessedSuspicious.add(refMethod);
               if (refMethod instanceof RefImplicitConstructor) {
-                visitClass(refMethod.getOwnerClass());
+                RefClass ownerClass = refMethod.getOwnerClass();
+                LOG.assertTrue(ownerClass != null);
+                visitClass(ownerClass);
+              }
+              else if (refMethod.isConstructor()) {
+                RefClass ownerClass = refMethod.getOwnerClass();
+                LOG.assertTrue(ownerClass != null);
+                queryQualifiedNameUsages(ownerClass);
               }
               else {
-                PsiMethod psiMethod = (PsiMethod)refMethod.getElement();
-                if (psiMethod != null && isSerializablePatternMethod(psiMethod, refMethod.getOwnerClass())) {
-                  getEntryPointsManager().addEntryPoint(refMethod, false);
+                UMethod uMethod = (UMethod)refMethod.getUastElement();
+                if (uMethod != null && isSerializablePatternMethod(uMethod, refMethod.getOwnerClass())) {
+                  getEntryPointsManager(globalContext).addEntryPoint(refMethod, false);
                 }
                 else if (!refMethod.isExternalOverride() && !PsiModifier.PRIVATE.equals(refMethod.getAccessModifier())) {
-                  for (final RefMethod derivedMethod : refMethod.getDerivedMethods()) {
-                    myProcessedSuspicious.add(derivedMethod);
-                  }
+                  myProcessedSuspicious.addAll(refMethod.getDerivedMethods());
 
-                  enqueueMethodUsages(refMethod);
+                  enqueueMethodUsages(globalContext, refMethod);
                   requestAdded[0] = true;
                 }
               }
@@ -502,22 +453,38 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
             public void visitClass(@NotNull final RefClass refClass) {
               myProcessedSuspicious.add(refClass);
               if (!refClass.isAnonymous()) {
-                getJavaContext().enqueueDerivedClassesProcessor(refClass, new GlobalJavaInspectionContext.DerivedClassesProcessor() {
-                  @Override
-                  public boolean process(PsiClass inheritor) {
-                    getEntryPointsManager().addEntryPoint(refClass, false);
-                    return false;
+                globalContext.getExtension(GlobalJavaInspectionContext.CONTEXT).enqueueDerivedClassesProcessor(refClass, inheritor -> {
+                  getEntryPointsManager(globalContext).addEntryPoint(refClass, false);
+                  return false;
+                });
+
+                globalContext.getExtension(GlobalJavaInspectionContext.CONTEXT).enqueueClassUsagesProcessor(refClass, psiReference -> {
+                  getEntryPointsManager(globalContext).addEntryPoint(refClass, false);
+                  return false;
+                });
+
+                queryQualifiedNameUsages(refClass);
+                requestAdded[0] = true;
+              }
+            }
+
+            public void queryQualifiedNameUsages(@NotNull RefClass refClass) {
+              if (firstPhase && isAddNonJavaUsedEnabled()) {
+                globalContext.getExtension(GlobalJavaInspectionContext.CONTEXT).enqueueQualifiedNameOccurrencesProcessor(refClass, () -> {
+                  EntryPointsManager entryPointsManager = getEntryPointsManager(globalContext);
+                  entryPointsManager.addEntryPoint(refClass, false);
+                  for (RefMethod constructor : refClass.getConstructors()) {
+                    entryPointsManager.addEntryPoint(constructor, false);
                   }
                 });
 
-                getJavaContext().enqueueClassUsagesProcessor(refClass, new GlobalJavaInspectionContext.UsagesProcessor() {
-                  @Override
-                  public boolean process(PsiReference psiReference) {
-                    getEntryPointsManager().addEntryPoint(refClass, false);
-                    return false;
+                //references from java-like are already in graph or
+                //they would be checked during GlobalJavaInspectionContextImpl.performPostRunActivities
+                for (RefElement element : refClass.getInReferences()) {
+                  if (!(element instanceof RefJavaElement)) {
+                    getEntryPointsManager(globalContext).addEntryPoint(refElement, false);
                   }
-                });
-                requestAdded[0] = true;
+                }
               }
             }
           });
@@ -538,36 +505,29 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
     return true;
   }
 
-  private static boolean isSerializablePatternMethod(@NotNull PsiMethod psiMethod, RefClass refClass) {
+  private static boolean isSerializablePatternMethod(@NotNull UMethod psiMethod, RefClass refClass) {
     return isReadObjectMethod(psiMethod, refClass) || isWriteObjectMethod(psiMethod, refClass) || isReadResolveMethod(psiMethod, refClass) ||
            isWriteReplaceMethod(psiMethod, refClass) || isExternalizableNoParameterConstructor(psiMethod, refClass);
   }
 
-  private void enqueueMethodUsages(final RefMethod refMethod) {
+  private static void enqueueMethodUsages(GlobalInspectionContext globalContext, final RefMethod refMethod) {
     if (refMethod.getSuperMethods().isEmpty()) {
-      getJavaContext().enqueueMethodUsagesProcessor(refMethod, new GlobalJavaInspectionContext.UsagesProcessor() {
-        @Override
-        public boolean process(PsiReference psiReference) {
-          getEntryPointsManager().addEntryPoint(refMethod, false);
-          return false;
-        }
+      globalContext.getExtension(GlobalJavaInspectionContext.CONTEXT).enqueueMethodUsagesProcessor(refMethod, psiReference -> {
+        getEntryPointsManager(globalContext).addEntryPoint(refMethod, false);
+        return false;
       });
     }
     else {
       for (RefMethod refSuper : refMethod.getSuperMethods()) {
-        enqueueMethodUsages(refSuper);
+        enqueueMethodUsages(globalContext, refSuper);
       }
     }
   }
 
-  private GlobalJavaInspectionContext getJavaContext() {
-    return getContext().getExtension(GlobalJavaInspectionContext.CONTEXT);
-  }
-
   @Nullable
   @Override
-  public JobDescriptor[] getAdditionalJobs() {
-    return new JobDescriptor[]{getContext().getStdJobDescriptors().BUILD_GRAPH, getContext().getStdJobDescriptors().FIND_EXTERNAL_USAGES};
+  public JobDescriptor[] getAdditionalJobs(GlobalInspectionContext context) {
+    return new JobDescriptor[]{context.getStdJobDescriptors().BUILD_GRAPH, context.getStdJobDescriptors().FIND_EXTERNAL_USAGES};
   }
 
 
@@ -575,7 +535,8 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
     CodeScanner codeScanner = new CodeScanner();
 
     // Cleanup previous reachability information.
-    context.getRefManager().iterate(new RefJavaVisitor() {
+    RefManager refManager = context.getRefManager();
+    refManager.iterate(new RefJavaVisitor() {
       @Override
       public void visitElement(@NotNull RefEntity refEntity) {
         if (refEntity instanceof RefJavaElementImpl) {
@@ -587,7 +548,7 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
     });
 
 
-    for (RefElement entry : getEntryPointsManager().getEntryPoints()) {
+    for (RefElement entry : getEntryPointsManager(context).getEntryPoints(refManager)) {
       entry.accept(codeScanner);
     }
 
@@ -597,15 +558,15 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
     }
   }
 
-  private EntryPointsManager getEntryPointsManager() {
-    return getJavaContext().getEntryPointsManager(getContext().getRefManager());
+  private static EntryPointsManager getEntryPointsManager(final GlobalInspectionContext context) {
+    return context.getExtension(GlobalJavaInspectionContext.CONTEXT).getEntryPointsManager(context.getRefManager());
   }
 
   private static class CodeScanner extends RefJavaVisitor {
-    private final Map<RefClass, Set<RefMethod>> myClassIDtoMethods = new HashMap<RefClass, Set<RefMethod>>();
-    private final Set<RefClass> myInstantiatedClasses = new HashSet<RefClass>();
+    private final Map<RefClass, Set<RefMethod>> myClassIDtoMethods = new HashMap<>();
+    private final Set<RefClass> myInstantiatedClasses = new HashSet<>();
     private int myInstantiatedClassesCount;
-    private final Set<RefMethod> myProcessedMethods = new HashSet<RefMethod>();
+    private final Set<RefMethod> myProcessedMethods = new HashSet<>();
 
     @Override public void visitMethod(@NotNull RefMethod method) {
       if (!myProcessedMethods.contains(method)) {
@@ -615,7 +576,7 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
             addInstantiatedClass(method.getOwnerClass());
           }
           else {
-            ((RefClassImpl)method.getOwnerClass()).setReachable(true);
+            ((RefElementImpl)method.getOwner()).setReachable(true);
           }
           myProcessedMethods.add(method);
           makeContentReachable((RefJavaElementImpl)method);
@@ -679,23 +640,25 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
       }
     }
 
-    private void makeClassInitializersReachable(RefClass refClass) {
-      for (RefElement refCallee : refClass.getOutReferences()) {
-        refCallee.accept(this);
+    private void makeClassInitializersReachable(@Nullable RefClass refClass) {
+      if (refClass != null) {
+        for (RefElement refCallee : refClass.getOutReferences()) {
+          refCallee.accept(this);
+        }
       }
     }
 
     private void addDelayedMethod(RefMethod refMethod) {
       Set<RefMethod> methods = myClassIDtoMethods.get(refMethod.getOwnerClass());
       if (methods == null) {
-        methods = new HashSet<RefMethod>();
+        methods = new HashSet<>();
         myClassIDtoMethods.put(refMethod.getOwnerClass(), methods);
       }
       methods.add(refMethod);
     }
 
     private boolean isClassInstantiated(RefClass refClass) {
-      return myInstantiatedClasses.contains(refClass);
+      return refClass == null || refClass.isUtilityClass() || myInstantiatedClasses.contains(refClass);
     }
 
     private int newlyInstantiatedClassesCount() {
@@ -707,12 +670,12 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
     }
 
     private void processDelayedMethods() {
-      RefClass[] instClasses = myInstantiatedClasses.toArray(new RefClass[myInstantiatedClasses.size()]);
+      RefClass[] instClasses = myInstantiatedClasses.toArray(new RefClass[0]);
       for (RefClass refClass : instClasses) {
         if (isClassInstantiated(refClass)) {
           Set<RefMethod> methods = myClassIDtoMethods.get(refClass);
           if (methods != null) {
-            RefMethod[] arMethods = methods.toArray(new RefMethod[methods.size()]);
+            RefMethod[] arMethods = methods.toArray(new RefMethod[0]);
             for (RefMethod arMethod : arMethods) {
               arMethod.accept(this);
             }
@@ -722,44 +685,6 @@ public class UnusedDeclarationInspectionBase extends GlobalInspectionTool {
     }
   }
 
-  @Override
-  public void initialize(@NotNull GlobalInspectionContext context) {
-    super.initialize(context);
-    myContext = context;
-    ExtensionPoint<EntryPoint> point = Extensions.getRootArea().getExtensionPoint(ToolExtensionPoints.DEAD_CODE_TOOL);
-    point.addExtensionPointListener(new ExtensionPointListener<EntryPoint>() {
-      @Override
-      public void extensionAdded(@NotNull final EntryPoint extension, @Nullable PluginDescriptor pluginDescriptor) {
-        boolean alreadyAdded = ContainerUtil.find(myExtensions, point1 -> point1.getClass().equals(extension.getClass())) != null;
-        if (!alreadyAdded) {
-          try {
-            myExtensions.add(extension.clone());
-          }
-          catch (CloneNotSupportedException e) {
-            LOG.error(e);
-          }
-        }
-      }
-
-      @Override
-      public void extensionRemoved(@NotNull final EntryPoint extension, @Nullable PluginDescriptor pluginDescriptor) {
-        ContainerUtil.retainAll(myExtensions, point12 -> !point12.getClass().equals(extension.getClass()));
-      }
-    }, getEntryPointsManager());
-  }
-
-  @Override
-  public void cleanup(@NotNull Project project) {
-    super.cleanup(project);
-    myContext = null;
-  }
-
-  @Override
-  public boolean isGraphNeeded() {
-    return true;
-  }
-
-  @TestOnly
   public List<EntryPoint> getExtensions() {
     return myExtensions;
   }

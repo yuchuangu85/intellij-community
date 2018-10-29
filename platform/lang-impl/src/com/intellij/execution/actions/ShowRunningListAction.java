@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.actions;
 
 import com.intellij.execution.ExecutionBundle;
@@ -33,6 +19,7 @@ import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.Trinity;
+import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.openapi.wm.IdeFrame;
 import com.intellij.openapi.wm.WindowManager;
 import com.intellij.openapi.wm.ex.WindowManagerEx;
@@ -44,26 +31,27 @@ import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
-import javax.swing.Timer;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 public class ShowRunningListAction extends AnAction {
   public ShowRunningListAction() {
     super(ExecutionBundle.message("show.running.list.action.name"), ExecutionBundle.message("show.running.list.action.description"),
-          LayeredIcon.create(AllIcons.RunConfigurations.Variables, AllIcons.Nodes.RunnableMark));
+          LayeredIcon.create(AllIcons.Actions.ListFiles, AllIcons.Nodes.RunnableMark));
   }
 
   @Override
-  public void actionPerformed(final AnActionEvent e) {
+  public void actionPerformed(@NotNull final AnActionEvent e) {
     final Project project = e.getProject();
     if (project == null || project.isDisposed()) return;
-    final Ref<Pair<? extends JComponent, String>> stateRef = new Ref<Pair<? extends JComponent, String>>();
-    final Ref<Balloon> balloonRef = new Ref<Balloon>();
+    final Ref<Pair<? extends JComponent, String>> stateRef = new Ref<>();
+    final Ref<Balloon> balloonRef = new Ref<>();
 
     final Timer timer = UIUtil.createNamedTimer("runningLists", 250);
     ActionListener actionListener = new ActionListener() {
@@ -109,7 +97,9 @@ public class ShowRunningListAction extends AnAction {
                 Project aProject = (Project)((Trinity)value).first;
                 JFrame aFrame = WindowManager.getInstance().getFrame(aProject);
                 if (aFrame != null && !aFrame.isActive()) {
-                  aFrame.requestFocus();
+                  IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+                    IdeFocusManager.getGlobalInstance().requestFocus(aFrame, true);
+                  });
                 }
                 ExecutionManagerImpl.getInstance(aProject).getContentManager().
                   toFrontRunContent((Executor)((Trinity)value).second, (RunContentDescriptor)((Trinity)value).third);
@@ -178,7 +168,7 @@ public class ShowRunningListAction extends AnAction {
   }
 
   @Override
-  public void update(AnActionEvent e) {
+  public void update(@NotNull AnActionEvent e) {
     Project[] projects = ProjectManager.getInstance().getOpenProjects();
     for (Project project : projects) {
       boolean enabled = project != null && !project.isDisposed()

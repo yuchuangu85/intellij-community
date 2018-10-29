@@ -21,7 +21,7 @@ import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.SystemProperties;
-import com.intellij.util.io.CompressedBytesReadAwareGZIPInputStream;
+import com.intellij.util.io.CountingGZIPInputStream;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -54,20 +54,10 @@ public class NetUtils {
   }
 
   private static boolean canBindToLocalSocket(String host, int port) {
-    try {
-      ServerSocket socket = new ServerSocket();
-      try {
-        //it looks like this flag should be set but it leads to incorrect results for NodeJS under Windows
-        //socket.setReuseAddress(true);
-        socket.bind(new InetSocketAddress(host, port));
-      }
-      finally {
-        try {
-          socket.close();
-        }
-        catch (IOException ignored) {
-        }
-      }
+    try (ServerSocket socket = new ServerSocket()) {
+      //it looks like this flag should be set but it leads to incorrect results for NodeJS under Windows
+      //socket.setReuseAddress(true);
+      socket.bind(new InetSocketAddress(host, port));
       return true;
     }
     catch (IOException e) {
@@ -88,8 +78,7 @@ public class NetUtils {
   }
 
   public static int findAvailableSocketPort() throws IOException {
-    final ServerSocket serverSocket = new ServerSocket(0);
-    try {
+    try (ServerSocket serverSocket = new ServerSocket(0)) {
       int port = serverSocket.getLocalPort();
       // workaround for linux : calling close() immediately after opening socket
       // may result that socket is not closed
@@ -104,9 +93,6 @@ public class NetUtils {
         }
       }
       return port;
-    }
-    finally {
-      serverSocket.close();
     }
   }
 
@@ -184,11 +170,9 @@ public class NetUtils {
                                       int expectedContentLength) throws IOException, ProcessCanceledException {
     if (indicator != null) {
       indicator.checkCanceled();
-      if (expectedContentLength < 0) {
-        indicator.setIndeterminate(true);
-      }
+      indicator.setIndeterminate(expectedContentLength <= 0);
     }
-    CompressedBytesReadAwareGZIPInputStream gzipStream = ObjectUtils.tryCast(inputStream, CompressedBytesReadAwareGZIPInputStream.class);
+    CountingGZIPInputStream gzipStream = ObjectUtils.tryCast(inputStream, CountingGZIPInputStream.class);
     final byte[] buffer = new byte[8 * 1024];
     int count;
     int bytesWritten = 0;
@@ -203,6 +187,14 @@ public class NetUtils {
         if (expectedContentLength > 0) {
           indicator.setFraction((double)bytesRead / expectedContentLength);
         }
+      }
+    }
+    if (gzipStream != null) {
+      // Amount of read bytes may have changed when 'inputStream.read(buffer)' returns -1
+      // E.g. reading GZIP trailer doesn't produce inflated stream data.
+      bytesRead = gzipStream.getCompressedBytesRead();
+      if (indicator != null && expectedContentLength > 0) {
+        indicator.setFraction((double)bytesRead / expectedContentLength);
       }
     }
 

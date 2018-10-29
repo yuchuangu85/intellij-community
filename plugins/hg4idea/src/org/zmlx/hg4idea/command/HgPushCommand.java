@@ -12,6 +12,7 @@
 // limitations under the License.
 package org.zmlx.hg4idea.command;
 
+import com.intellij.openapi.progress.util.BackgroundTaskUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -62,7 +63,7 @@ public class HgPushCommand {
   }
 
   public HgCommandResult executeInCurrentThread() {
-    final List<String> arguments = new LinkedList<String>();
+    final List<String> arguments = new LinkedList<>();
     if (!StringUtil.isEmptyOrSpaces(myRevision)) {
       arguments.add("-r");
       arguments.add(myRevision);
@@ -86,7 +87,7 @@ public class HgPushCommand {
     final HgRemoteCommandExecutor executor = new HgRemoteCommandExecutor(myProject, myDestination);
     executor.setShowOutput(true);
     HgCommandResult result = executor.executeInCurrentThread(myRepo, "push", arguments);
-    myProject.getMessageBus().syncPublisher(HgVcs.REMOTE_TOPIC).update(myProject, null);
+    BackgroundTaskUtil.syncPublisher(myProject, HgVcs.REMOTE_TOPIC).update(myProject, null);
     return result;
   }
 

@@ -26,8 +26,8 @@ public final class JsonReaders {
   private JsonReaders() {
   }
 
-  public static <T> ObjectFactory<Map<String, T>> mapFactory(@NotNull ObjectFactory<T> valueFactory) {
-    return new MapFactory<T>(valueFactory);
+  public static <T> ObjectFactory<Map<String, T>> mapFactory(@NotNull ObjectFactory<? extends T> valueFactory) {
+    return new MapFactory<>(valueFactory);
   }
 
   private static void checkIsNull(JsonReaderEx reader, String fieldName) {
@@ -91,7 +91,7 @@ public final class JsonReaders {
     }
   }
 
-  public static <T> List<T> readObjectArray(@NotNull JsonReaderEx reader, @NotNull ObjectFactory<T> factory) {
+  public static <T> List<T> readObjectArray(@NotNull JsonReaderEx reader, @NotNull ObjectFactory<? extends T> factory) {
     if (reader.peek() == JsonToken.NULL) {
       reader.skipValue();
       return null;
@@ -103,7 +103,7 @@ public final class JsonReaders {
       return Collections.emptyList();
     }
 
-    List<T> result = new ArrayList<T>();
+    List<T> result = new ArrayList<>();
     do {
       result.add(factory.read(reader));
     }
@@ -112,7 +112,7 @@ public final class JsonReaders {
     return result;
   }
 
-  public static <T> Map<String, T> readMap(@NotNull JsonReaderEx reader, @Nullable ObjectFactory<T> factory) {
+  public static <T> Map<String, T> readMap(@NotNull JsonReaderEx reader, @Nullable ObjectFactory<? extends T> factory) {
     if (reader.peek() == JsonToken.NULL) {
       reader.skipValue();
       return null;
@@ -124,7 +124,7 @@ public final class JsonReaders {
       return Collections.emptyMap();
     }
 
-    Map<String, T> map = new THashMap<String, T>();
+    Map<String, T> map = new THashMap<>();
     while (reader.hasNext()) {
       if (factory == null) {
         //noinspection unchecked
@@ -165,7 +165,7 @@ public final class JsonReaders {
   }
 
   public static Map<String, Object> nextObject(JsonReaderEx reader) {
-    Map<String, Object> map = new THashMap<String, Object>();
+    Map<String, Object> map = new THashMap<>();
     while (reader.hasNext()) {
       map.put(reader.nextName(), read(reader));
     }
@@ -180,7 +180,7 @@ public final class JsonReaders {
       return Collections.emptyList();
     }
 
-    List<T> list = new ArrayList<T>();
+    List<T> list = new ArrayList<>();
     do {
       //noinspection unchecked
       list.add((T)read(reader));
@@ -197,9 +197,8 @@ public final class JsonReaders {
       return Collections.emptyList();
     }
 
-    List<String> list = new ArrayList<String>();
+    List<String> list = new ArrayList<>();
     do {
-      //noinspection unchecked
       list.add(reader.nextString(true));
     }
     while (reader.hasNext());
@@ -266,7 +265,7 @@ public final class JsonReaders {
       return Collections.emptyList();
     }
 
-    List<StringIntPair> result = new ArrayList<StringIntPair>();
+    List<StringIntPair> result = new ArrayList<>();
     do {
       reader.beginArray();
       result.add(new StringIntPair(reader.nextInt(), reader.nextString()));

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,8 @@ package com.intellij.util.ui.tree;
 
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Conditions;
-import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.util.registry.Registry;
+import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.MouseEventAdapter;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NonNls;
@@ -48,44 +49,39 @@ public class WideSelectionTreeUI extends BasicTreeUI {
   private static final Border LIST_SELECTION_BACKGROUND_PAINTER = UIManager.getBorder("List.sourceListSelectionBackgroundPainter");
   private static final Border LIST_FOCUSED_SELECTION_BACKGROUND_PAINTER = UIManager.getBorder("List.sourceListFocusedSelectionBackgroundPainter");
   
-  @NotNull private final Condition<Integer> myWideSelectionCondition;
-  private boolean myWideSelection;
+  @NotNull private final Condition<? super Integer> myWideSelectionCondition;
+  private final boolean myWideSelection;
   private boolean myOldRepaintAllRowValue;
   private boolean myForceDontPaintLines = false;
-  private boolean mySkinny = false;
+  private final boolean mySkinny = false;
 
-  @SuppressWarnings("unchecked")
   public WideSelectionTreeUI() {
     this(true, Conditions.<Integer>alwaysTrue());
   }
 
   /**
-   * Creates new <code>WideSelectionTreeUI</code> object.
+   * Creates new {@code WideSelectionTreeUI} object.
    * 
    * @param wideSelection           flag that determines if wide selection should be used
    * @param wideSelectionCondition  strategy that determine if wide selection should be used for a target row (it's zero-based index
    *                                is given to the condition as an argument)
    */
-  public WideSelectionTreeUI(final boolean wideSelection, @NotNull Condition<Integer> wideSelectionCondition) {
+  public WideSelectionTreeUI(final boolean wideSelection, @NotNull Condition<? super Integer> wideSelectionCondition) {
     myWideSelection = wideSelection;
     myWideSelectionCondition = wideSelectionCondition;
   }
 
   @Override
   public int getRightChildIndent() {
-    return isSkinny() ? 8 : super.getRightChildIndent();
+    return isCustomIndent() ? getCustomIndent() : super.getRightChildIndent();
   }
 
-  public boolean isSkinny() {
-    return mySkinny;
+  public boolean isCustomIndent() {
+    return getCustomIndent() > 0;
   }
 
-  /**
-   * Setting to <code>true</code> make tree to reduce row offset
-   * @param skinny <code>true</code> to reduce row offset
-   */
-  public void setSkinny(boolean skinny) {
-    mySkinny = skinny;
+  protected int getCustomIndent() {
+    return JBUI.scale(Registry.intValue("ide.ui.tree.indent"));
   }
 
   @Override
@@ -100,8 +96,9 @@ public class WideSelectionTreeUI extends BasicTreeUI {
         }
       }
 
+      @NotNull
       @Override
-      protected MouseEvent convert(MouseEvent event) {
+      protected MouseEvent convert(@NotNull MouseEvent event) {
         if (!event.isConsumed() && SwingUtilities.isLeftMouseButton(event)) {
           int x = event.getX();
           int y = event.getY();
@@ -170,14 +167,13 @@ public class WideSelectionTreeUI extends BasicTreeUI {
                 boolean leaf = tree.getModel().isLeaf(selectionPath.getLastPathComponent());
                 int toSelect = -1;
                 int toScroll = -1;
-                if (!leaf && tree.isExpanded(selectionRow)) {
+                if ((!leaf && tree.isExpanded(selectionRow)) || leaf) {
                   if (selectionRow + 1 < tree.getRowCount()) {
                     toSelect = selectionRow + 1;
                     toScroll = toSelect;
                   }
-                } else if (leaf) {
-                  toScroll = selectionRow;
                 }
+                //todo[kb]: make cycle scrolling
 
                 if (toSelect != -1) {
                   tree.setSelectionInterval(toSelect, toSelect);
@@ -237,7 +233,7 @@ public class WideSelectionTreeUI extends BasicTreeUI {
 
   @Override
   protected int getRowX(int row, int depth) {
-    if (isSkinny()) {
+    if (isCustomIndent()) {
       int off = tree.isRootVisible() ? 8 : 0;
       return 8 * depth + 8 + off;
     } else {
@@ -269,7 +265,7 @@ public class WideSelectionTreeUI extends BasicTreeUI {
 
   @Override
   protected boolean isToggleSelectionEvent(MouseEvent e) {
-    return SwingUtilities.isLeftMouseButton(e) && (SystemInfo.isMac ? e.isMetaDown() : e.isControlDown()) && !e.isPopupTrigger();
+    return UIUtil.isToggleListSelectionEvent(e);
   }
 
   @Override
@@ -284,17 +280,6 @@ public class WideSelectionTreeUI extends BasicTreeUI {
     if (shouldPaintLines()) {
       super.paintVerticalLine(g, c, x, top, bottom);
     }
-  }
-
-  @Override
-  protected Color getHashColor() {
-    //if (invertLineColor && !ComparatorUtil.equalsNullable(UIUtil.getTreeSelectionForeground(), UIUtil.getTreeForeground())) {
-    //  final Color c = UIUtil.getTreeSelectionForeground();
-    //  if (c != null) {
-    //    return c.darker();
-    //  }
-    //}
-    return super.getHashColor();
   }
 
   public boolean isWideSelection() {
@@ -454,5 +439,9 @@ public class WideSelectionTreeUI extends BasicTreeUI {
       selection = Boolean.TRUE.equals(property);
     }
     return UIUtil.getTreeSelectionBackground(selection);
+  }
+
+  public void invalidateNodeSizes() {
+    treeState.invalidateSizes();
   }
 }

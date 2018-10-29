@@ -27,6 +27,7 @@ public class UserExpressionData extends DescriptorData<UserExpressionDescriptor>
   private final String myTypeName;
   private final String myName;
   protected TextWithImports myText;
+  private int myEnumerationIndex = -1;
 
   public UserExpressionData(ValueDescriptorImpl parentDescriptor, String typeName, String name, TextWithImports text) {
     super();
@@ -36,8 +37,9 @@ public class UserExpressionData extends DescriptorData<UserExpressionDescriptor>
     myText = text;
   }
 
+  @Override
   protected UserExpressionDescriptorImpl createDescriptorImpl(@NotNull Project project) {
-    return new UserExpressionDescriptorImpl(project, myParentDescriptor, myTypeName, myName, myText);
+    return new UserExpressionDescriptorImpl(project, myParentDescriptor, myTypeName, myName, myText, myEnumerationIndex);
   }
 
   public boolean equals(Object object) {
@@ -50,7 +52,12 @@ public class UserExpressionData extends DescriptorData<UserExpressionDescriptor>
     return myName.hashCode();
   }
 
+  @Override
   public DisplayKey<UserExpressionDescriptor> getDisplayKey() {
     return new SimpleDisplayKey<>(myTypeName + myName);
+  }
+
+  public void setEnumerationIndex(int enumerationIndex) {
+    myEnumerationIndex = enumerationIndex;
   }
 }

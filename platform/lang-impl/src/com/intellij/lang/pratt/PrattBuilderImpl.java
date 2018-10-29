@@ -35,7 +35,7 @@ public class PrattBuilderImpl extends PrattBuilder {
   private final PsiBuilder myBuilder;
   private final PrattBuilder myParentBuilder;
   private final PrattRegistry myRegistry;
-  private final LinkedList<IElementType> myLeftSiblings = new LinkedList<IElementType>();
+  private final LinkedList<IElementType> myLeftSiblings = new LinkedList<>();
   private boolean myParsingStarted;
   private String myExpectedMessage;
   private int myPriority = Integer.MIN_VALUE;
@@ -141,7 +141,7 @@ public class PrattBuilderImpl extends PrattBuilder {
   }
 
   @Override
-  public void error(final String errorText) {
+  public void error(@NotNull final String errorText) {
     final PsiBuilder.Marker marker = myBuilder.mark();
     myBuilder.error(errorText);
     marker.drop();

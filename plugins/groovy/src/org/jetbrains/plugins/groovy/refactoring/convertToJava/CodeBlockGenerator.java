@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.refactoring.convertToJava;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -27,6 +13,7 @@ import org.jetbrains.plugins.groovy.codeInspection.noReturnMethod.MissingReturnI
 import org.jetbrains.plugins.groovy.codeInspection.utils.ControlFlowUtils;
 import org.jetbrains.plugins.groovy.lang.lexer.TokenSets;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElement;
+import org.jetbrains.plugins.groovy.lang.psi.api.GrExpressionList;
 import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.GrCondition;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.GrListOrMap;
@@ -55,6 +42,7 @@ import org.jetbrains.plugins.groovy.lang.psi.impl.PsiImplUtil;
 import org.jetbrains.plugins.groovy.lang.psi.impl.signatures.GrClosureSignatureUtil;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil;
 import org.jetbrains.plugins.groovy.lang.psi.util.GroovyCommonClassNames;
+import org.jetbrains.plugins.groovy.transformations.impl.GroovyObjectTransformationSupport;
 
 import java.util.Collection;
 import java.util.Set;
@@ -79,7 +67,7 @@ public class CodeBlockGenerator extends Generator {
   public CodeBlockGenerator(StringBuilder builder, ExpressionContext context, @Nullable Collection<GrStatement> exitPoints) {
     this.builder = builder;
     this.context = context;
-    myExitPoints = new HashSet<GrStatement>();
+    myExitPoints = new HashSet<>();
     if (exitPoints != null) {
       myExitPoints.addAll(exitPoints);
     }
@@ -101,7 +89,10 @@ public class CodeBlockGenerator extends Generator {
     boolean shouldInsertReturnNull;
     myExitPoints.clear();
     PsiType returnType = context.typeProvider.getReturnType(method);
-    if (!method.isConstructor() && !PsiType.VOID.equals(returnType)) {
+    if (GroovyObjectTransformationSupport.isGroovyObjectSupportMethod(method)) {
+      shouldInsertReturnNull = !(returnType instanceof PsiPrimitiveType);
+    }
+    else if (!method.isConstructor() && !PsiType.VOID.equals(returnType)) {
       myExitPoints.addAll(ControlFlowUtils.collectReturns(block));
       shouldInsertReturnNull = block != null &&
                                !(returnType instanceof PsiPrimitiveType) &&
@@ -112,34 +103,29 @@ public class CodeBlockGenerator extends Generator {
       shouldInsertReturnNull = false;
     }
 
-    if (block != null) {
-      generateCodeBlock(block, shouldInsertReturnNull);
-    }
+    generateCodeBlock(method.getParameters(), block, shouldInsertReturnNull);
   }
 
   @Override
-  public void visitMethod(GrMethod method) {
+  public void visitMethod(@NotNull GrMethod method) {
     LOG.error("don't invoke it!!!");
   }
 
   @Override
-  public void visitOpenBlock(GrOpenBlock block) {
-    generateCodeBlock(block, false);
-  }
-
-  public void generateCodeBlock(GrCodeBlock block, boolean shouldInsertReturnNull) {
-    builder.append("{");
+  public void visitOpenBlock(@NotNull GrOpenBlock block) {
     GrParameter[] parameters;
     if (block.getParent() instanceof GrMethod) {
       GrMethod method = (GrMethod)block.getParent();
       parameters = method.getParameters();
     }
-    else if (block instanceof GrClosableBlock) {
-      parameters = ((GrClosableBlock)block).getAllParameters();
-    }
     else {
       parameters = GrParameter.EMPTY_ARRAY;
     }
+    generateCodeBlock(parameters, block, false);
+  }
+
+  public void generateCodeBlock(@NotNull GrParameter[] parameters, @Nullable GrCodeBlock block, boolean shouldInsertReturnNull) {
+    builder.append("{");
 
     for (GrParameter parameter : parameters) {
       if (context.analyzedVars.toWrap(parameter)) {
@@ -154,9 +140,9 @@ public class CodeBlockGenerator extends Generator {
     builder.append("}\n");
   }
 
-  public void visitStatementOwner(GrStatementOwner owner, boolean shouldInsertReturnNull) {
+  public void visitStatementOwner(@Nullable GrStatementOwner owner, boolean shouldInsertReturnNull) {
     boolean hasLineFeed = false;
-    for (PsiElement e = owner.getFirstChild(); e != null; e = e.getNextSibling()) {
+    for (PsiElement e = owner == null ? null : owner.getFirstChild(); e != null; e = e.getNextSibling()) {
       if (e instanceof GrStatement) {
         ((GrStatement)e).accept(this);
         hasLineFeed = false;
@@ -197,7 +183,7 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitConstructorInvocation(final GrConstructorInvocation invocation) {
+  public void visitConstructorInvocation(@NotNull final GrConstructorInvocation invocation) {
     writeStatement(invocation, new StatementWriter() {
       @Override
       public void writeStatement(StringBuilder builder, ExpressionContext context) {
@@ -225,12 +211,12 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitStatement(GrStatement statement) {
+  public void visitStatement(@NotNull GrStatement statement) {
     LOG.error("all statements must be overloaded");
   }
 
   @Override
-  public void visitFlowInterruptStatement(GrFlowInterruptingStatement statement) {
+  public void visitFlowInterruptStatement(@NotNull GrFlowInterruptingStatement statement) {
     builder.append(statement.getStatementText());
     final String name = statement.getLabelName();
     if (name != null) {
@@ -240,7 +226,7 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitReturnStatement(final GrReturnStatement returnStatement) {
+  public void visitReturnStatement(@NotNull final GrReturnStatement returnStatement) {
     final GrExpression returnValue = returnStatement.getReturnValue();
     if (returnValue == null) {
       builder.append("return;\n");
@@ -256,7 +242,7 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitAssertStatement(final GrAssertStatement assertStatement) {
+  public void visitAssertStatement(@NotNull final GrAssertStatement assertStatement) {
     final GrExpression assertion = assertStatement.getAssertion();
     final GrExpression message = assertStatement.getErrorMessage();
     if (assertion != null) {
@@ -289,7 +275,7 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitThrowStatement(GrThrowStatement throwStatement) {
+  public void visitThrowStatement(@NotNull GrThrowStatement throwStatement) {
     final GrExpression exception = throwStatement.getException();
     if (exception == null) {
       builder.append("throw ;");
@@ -306,7 +292,7 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitLabeledStatement(final GrLabeledStatement labeledStatement) {
+  public void visitLabeledStatement(@NotNull final GrLabeledStatement labeledStatement) {
     writeStatement(labeledStatement, new StatementWriter() {
       @Override
       public void writeStatement(StringBuilder builder, ExpressionContext context) {
@@ -322,7 +308,7 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitExpression(final GrExpression expression) {
+  public void visitExpression(@NotNull final GrExpression expression) {
     writeStatement(expression, new StatementWriter() {
       @Override
       public void writeStatement(StringBuilder builder, ExpressionContext context) {
@@ -363,17 +349,17 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitApplicationStatement(GrApplicationStatement applicationStatement) {
+  public void visitApplicationStatement(@NotNull GrApplicationStatement applicationStatement) {
     visitExpression(applicationStatement);
   }
 
   @Override
-  public void visitTypeDefinition(GrTypeDefinition typeDefinition) {
+  public void visitTypeDefinition(@NotNull GrTypeDefinition typeDefinition) {
     //todo ???????
   }
 
   @Override
-  public void visitIfStatement(final GrIfStatement ifStatement) {
+  public void visitIfStatement(@NotNull final GrIfStatement ifStatement) {
     writeStatement(ifStatement, new StatementWriter() {
       @Override
       public void writeStatement(StringBuilder builder, ExpressionContext context) {
@@ -403,7 +389,7 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitForStatement(GrForStatement forStatement) {
+  public void visitForStatement(@NotNull GrForStatement forStatement) {
     //final StringBuilder builder = new StringBuilder();
     builder.append("for(");
 
@@ -411,7 +397,7 @@ public class CodeBlockGenerator extends Generator {
     ExpressionContext forContext = context.extend();
     if (clause instanceof GrForInClause) {
       final GrExpression expression = ((GrForInClause)clause).getIteratedExpression();
-      final GrVariable declaredVariable = clause.getDeclaredVariable();
+      final GrVariable declaredVariable = ((GrForInClause)clause).getDeclaredVariable();
       LOG.assertTrue(declaredVariable != null);
 
       writeVariableWithoutSemicolonAndInitializer(builder, declaredVariable, context);
@@ -425,7 +411,7 @@ public class CodeBlockGenerator extends Generator {
       final GrTraditionalForClause cl = (GrTraditionalForClause)clause;
       final GrCondition initialization = cl.getInitialization();
       final GrExpression condition = cl.getCondition();
-      final GrExpression update = cl.getUpdate();
+      final GrExpressionList update = cl.getUpdate();
 
       if (initialization instanceof GrParameter) {
         StringBuilder partBuilder = new StringBuilder();
@@ -465,7 +451,7 @@ public class CodeBlockGenerator extends Generator {
     }
   }
 
-  private static void genForPart(StringBuilder builder, GrExpression part, final ExpressionContext context) {
+  private static void genForPart(StringBuilder builder, GroovyPsiElement part, final ExpressionContext context) {
     genForPart(builder, part, new ExpressionGenerator(new StringBuilder(), context));
   }
 
@@ -484,7 +470,7 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitWhileStatement(final GrWhileStatement whileStatement) {
+  public void visitWhileStatement(@NotNull final GrWhileStatement whileStatement) {
     writeStatement(whileStatement, new StatementWriter() {
       @Override
       public void writeStatement(StringBuilder builder, ExpressionContext context) {
@@ -504,7 +490,7 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitSwitchStatement(final GrSwitchStatement switchStatement) {
+  public void visitSwitchStatement(@NotNull final GrSwitchStatement switchStatement) {
     writeStatement(switchStatement, new StatementWriter() {
       @Override
       public void writeStatement(StringBuilder builder, ExpressionContext context) {
@@ -514,12 +500,17 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitTryStatement(GrTryCatchStatement tryCatchStatement) {
+  public void visitTryStatement(@NotNull GrTryCatchStatement tryCatchStatement) {
+    builder.append("try");
     final GrOpenBlock tryBlock = tryCatchStatement.getTryBlock();
+    if (tryBlock == null) {
+      builder.append("{}");
+    }
+    else {
+      tryBlock.accept(this);
+    }
     final GrCatchClause[] catchClauses = tryCatchStatement.getCatchClauses();
     final GrFinallyClause finallyClause = tryCatchStatement.getFinallyClause();
-    builder.append("try");
-    tryBlock.accept(this);
     for (GrCatchClause catchClause : catchClauses) {
       catchClause.accept(this);
     }
@@ -529,7 +520,7 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitCatchClause(GrCatchClause catchClause) {
+  public void visitCatchClause(@NotNull GrCatchClause catchClause) {
     final GrParameter parameter = catchClause.getParameter();
     builder.append("catch (");
     writeVariableWithoutSemicolonAndInitializer(builder, parameter, context);
@@ -541,7 +532,7 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitFinallyClause(GrFinallyClause finallyClause) {
+  public void visitFinallyClause(@NotNull GrFinallyClause finallyClause) {
     builder.append("finally ");
     final GrOpenBlock body = finallyClause.getBody();
     if (body != null) {
@@ -550,12 +541,12 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitBlockStatement(GrBlockStatement blockStatement) {
+  public void visitBlockStatement(@NotNull GrBlockStatement blockStatement) {
     blockStatement.getBlock().accept(this);
   }
 
   @Override
-  public void visitSynchronizedStatement(final GrSynchronizedStatement statement) {
+  public void visitSynchronizedStatement(@NotNull final GrSynchronizedStatement statement) {
     writeStatement(statement, new StatementWriter() {
       @Override
       public void writeStatement(StringBuilder builder, ExpressionContext context) {
@@ -575,7 +566,7 @@ public class CodeBlockGenerator extends Generator {
   }
 
   @Override
-  public void visitVariableDeclaration(final GrVariableDeclaration variableDeclaration) {
+  public void visitVariableDeclaration(@NotNull final GrVariableDeclaration variableDeclaration) {
     writeStatement(variableDeclaration, new StatementWriter() {
       @Override
       public void writeStatement(StringBuilder builder, ExpressionContext context) {
@@ -674,10 +665,5 @@ public class CodeBlockGenerator extends Generator {
         return facade.getElementFactory().createTypeFromText(CommonClassNames.JAVA_UTIL_ITERATOR, tupleInitializer);
       }
     }
-  }
-
-  @Override
-  public void visitVariable(GrVariable variable) {
-    super.visitVariable(variable);    //To change body of overridden methods use File | Settings | File Templates.
   }
 }

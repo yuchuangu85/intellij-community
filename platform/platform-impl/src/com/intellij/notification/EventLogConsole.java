@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.notification;
 
 import com.intellij.execution.filters.HyperlinkInfo;
@@ -25,7 +11,9 @@ import com.intellij.notification.impl.NotificationsConfigurationImpl;
 import com.intellij.notification.impl.NotificationsManagerImpl;
 import com.intellij.notification.impl.ui.NotificationsUtil;
 import com.intellij.openapi.actionSystem.*;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.*;
+import com.intellij.openapi.editor.actions.ScrollToTheEndToolbarAction;
 import com.intellij.openapi.editor.colors.EditorColorsListener;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
@@ -34,11 +22,12 @@ import com.intellij.openapi.editor.colors.impl.DelegateColorScheme;
 import com.intellij.openapi.editor.event.EditorMouseEvent;
 import com.intellij.openapi.editor.ex.*;
 import com.intellij.openapi.editor.ex.util.EditorUtil;
+import com.intellij.openapi.editor.impl.EditorImpl;
 import com.intellij.openapi.editor.markup.*;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
-import com.intellij.openapi.project.ProjectManagerAdapter;
+import com.intellij.openapi.project.ProjectManagerListener;
 import com.intellij.openapi.util.*;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.ColorUtil;
@@ -94,9 +83,9 @@ class EventLogConsole {
     final EditorEx editor = ConsoleViewUtil.setupConsoleEditor(project, false, false);
     editor.getSettings().setWhitespacesShown(false);
     installNotificationsFont(editor);
-    myProjectModel.getProject().getMessageBus().connect().subscribe(ProjectManager.TOPIC, new ProjectManagerAdapter() {
+    myProjectModel.getProject().getMessageBus().connect().subscribe(ProjectManager.TOPIC, new ProjectManagerListener() {
       @Override
-      public void projectClosed(Project project) {
+      public void projectClosed(@NotNull Project project) {
         if (project == myProjectModel.getProject()) {
           EditorFactory.getInstance().releaseEditor(editor);
         }
@@ -111,6 +100,7 @@ class EventLogConsole {
 
     editor.setContextMenuGroupId(null); // disabling default context menu
     editor.addEditorMouseListener(new EditorPopupHandler() {
+      @Override
       public void invokePopup(final EditorMouseEvent event) {
         final ActionManager actionManager = ActionManager.getInstance();
         DefaultActionGroup actions = createPopupActions(actionManager, clearLog, editor, event);
@@ -161,14 +151,18 @@ class EventLogConsole {
       public void setConsoleFontSize(int fontSize) {
       }
     };
-    EditorColorsManager.getInstance().addEditorColorsListener(new EditorColorsListener() {
+
+    ApplicationManager.getApplication().getMessageBus().connect(myProjectModel).subscribe(EditorColorsManager.TOPIC, new EditorColorsListener() {
       @Override
       public void globalSchemeChange(EditorColorsScheme scheme) {
         globalScheme.setDelegate(EditorColorsManager.getInstance().getGlobalScheme());
         editor.reinitSettings();
       }
-    }, myProjectModel);
+    });
     editor.setColorsScheme(ConsoleViewUtil.updateConsoleColorScheme(editor.createBoundColorSchemeDelegate(globalScheme)));
+    if (editor instanceof EditorImpl) {
+      ((EditorImpl)editor).setUseEditorAntialiasing(false);
+    }
   }
 
   private static DefaultActionGroup createPopupActions(ActionManager actionManager,
@@ -177,6 +171,9 @@ class EventLogConsole {
                                                        EditorMouseEvent event) {
     AnAction[] children = ((ActionGroup)actionManager.getAction(IdeActions.GROUP_CONSOLE_EDITOR_POPUP)).getChildren(null);
     DefaultActionGroup group = new DefaultActionGroup();
+    group.add(new EventLogToolWindowFactory.ToggleSoftWraps(editor));
+    group.add(new ScrollToTheEndToolbarAction(editor));
+    group.addSeparator();
     addConfigureNotificationAction(editor, event, group);
     group.addAll(children);
     group.addSeparator();
@@ -223,7 +220,7 @@ class EventLogConsole {
     private final NotificationDisplayType myType;
     private final NotificationDisplayType myCurrent;
 
-    public DisplayTypeAction(@NotNull NotificationSettings settings,
+    DisplayTypeAction(@NotNull NotificationSettings settings,
                              @NotNull NotificationDisplayType type,
                              @NotNull NotificationDisplayType current) {
       super(type.getTitle());
@@ -233,12 +230,12 @@ class EventLogConsole {
     }
 
     @Override
-    public boolean isSelected(AnActionEvent e) {
+    public boolean isSelected(@NotNull AnActionEvent e) {
       return myType == myCurrent;
     }
 
     @Override
-    public void setSelected(AnActionEvent e, boolean state) {
+    public void setSelected(@NotNull AnActionEvent e, boolean state) {
       if (state) {
         NotificationsConfigurationImpl.getInstanceImpl().changeSettings(mySettings.withDisplayType(myType));
       }
@@ -288,8 +285,8 @@ class EventLogConsole {
 
     TextAttributes attributes = EditorColorsManager.getInstance().getGlobalScheme().getAttributes(key);
     int layer = HighlighterLayer.CARET_ROW + 1;
-    RangeHighlighter highlighter =
-      editor.getMarkupModel().addRangeHighlighter(msgStart, document.getTextLength(), layer, attributes, HighlighterTargetArea.EXACT_RANGE);
+    RangeHighlighter highlighter = editor.getMarkupModel()
+      .addRangeHighlighter(msgStart, document.getTextLength(), layer, attributes, HighlighterTargetArea.LINES_IN_RANGE);
     GROUP_ID.set(highlighter, notification.getGroupId());
     NOTIFICATION_ID.set(highlighter, notification.id);
 
@@ -465,7 +462,7 @@ class EventLogConsole {
   }
 
   public static class ClearLogAction extends DumbAwareAction {
-    private EventLogConsole myConsole;
+    private final EventLogConsole myConsole;
 
     public ClearLogAction(EventLogConsole console) {
       super("Clear All", "Clear the contents of the Event Log", AllIcons.Actions.GC);
@@ -473,12 +470,13 @@ class EventLogConsole {
     }
 
     @Override
-    public void update(AnActionEvent e) {
+    public void update(@NotNull AnActionEvent e) {
       Editor editor = e.getData(CommonDataKeys.EDITOR);
       e.getPresentation().setEnabled(editor != null && editor.getDocument().getTextLength() > 0);
     }
 
-    public void actionPerformed(final AnActionEvent e) {
+    @Override
+    public void actionPerformed(@NotNull final AnActionEvent e) {
       LogModel model = myConsole.myProjectModel;
       for (Notification notification : model.getNotifications()) {
         notification.expire();

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.hint;
 
 import com.intellij.codeInsight.CodeInsightBundle;
@@ -70,7 +56,7 @@ import java.util.Set;
 public class ImplementationViewComponent extends JPanel {
   @NonNls private static final String TEXT_PAGE_KEY = "Text";
   @NonNls private static final String BINARY_PAGE_KEY = "Binary";
-  private static final Logger LOG = Logger.getInstance("#" + ImplementationViewComponent.class.getName());
+  private static final Logger LOG = Logger.getInstance(ImplementationViewComponent.class);
 
   private PsiElement[] myElements;
   private int myIndex;
@@ -104,7 +90,7 @@ public class ImplementationViewComponent extends JPanel {
     public final String myElementPresentation;
     private final String myLocationString;
 
-    public FileDescriptor(PsiFile file, PsiElement element) {
+    FileDescriptor(PsiFile file, PsiElement element) {
       myFile = file;
       final ItemPresentation presentation = element instanceof NavigationItem ? ((NavigationItem)element).getPresentation() : null;
       if (presentation != null) {
@@ -165,8 +151,7 @@ public class ImplementationViewComponent extends JPanel {
     myCountLabel = new JLabel();
 
     final JPanel header = new JPanel(new BorderLayout(2, 0));
-    header.setBorder(BorderFactory.createCompoundBorder(IdeBorderFactory.createBorder(SideBorder.BOTTOM),
-                                                        IdeBorderFactory.createEmptyBorder(0, 0, 0, 5)));
+    header.setBorder(BorderFactory.createCompoundBorder(IdeBorderFactory.createBorder(SideBorder.BOTTOM), JBUI.Borders.emptyRight(5)));
     final JPanel toolbarPanel = new JPanel(new GridBagLayout());
     final GridBagConstraints gc = new GridBagConstraints(GridBagConstraints.RELATIVE, 0, 1, 1, 0, 0, GridBagConstraints.WEST, GridBagConstraints.NONE, new Insets(0,2,0,0), 0,0);
     toolbarPanel.add(myToolbar.getComponent(), gc);
@@ -194,7 +179,7 @@ public class ImplementationViewComponent extends JPanel {
       gc.fill = GridBagConstraints.HORIZONTAL;
       gc.weightx = 1;
       myLabel = new JLabel();
-      myFileChooser = new ComboBox(fileDescriptors.toArray(new FileDescriptor[fileDescriptors.size()]), 250);
+      myFileChooser = new ComboBox(fileDescriptors.toArray(new FileDescriptor[0]), 250);
       myFileChooser.addActionListener(new ActionListener() {
         @Override
         public void actionPerformed(ActionEvent e) {
@@ -220,7 +205,7 @@ public class ImplementationViewComponent extends JPanel {
           myLabel.setIcon(getIconForFile(psiFile));
           myLabel.setForeground(FileStatusManager.getInstance(project).getStatus(file).getColor());
           myLabel.setText(file.getPresentableName());
-          myLabel.setBorder(new CompoundBorder(IdeBorderFactory.createRoundedBorder(), IdeBorderFactory.createEmptyBorder(0, 0, 0, 5)));
+          myLabel.setBorder(new CompoundBorder(IdeBorderFactory.createRoundedBorder(), JBUI.Borders.emptyRight(5)));
         }
         toolbarPanel.add(myLabel, gc);
       }
@@ -247,7 +232,6 @@ public class ImplementationViewComponent extends JPanel {
         setIcon(getIconForFile(file));
         final VirtualFile vFile = file.getVirtualFile();
         setForeground(FileStatusManager.getInstance(project).getStatus(vFile).getColor());
-        //noinspection ConstantConditions
         setText(value.getPresentableName(vFile));
       }
     });
@@ -291,7 +275,7 @@ public class ImplementationViewComponent extends JPanel {
         myCountLabel.setVisible(true);
         myLabel.setVisible(false);
 
-        myFileChooser.setModel(new DefaultComboBoxModel(fileDescriptors.toArray(new FileDescriptor[fileDescriptors.size()])));
+        myFileChooser.setModel(new DefaultComboBoxModel(fileDescriptors.toArray(new FileDescriptor[0])));
         updateRenderer(project);
       }
       else {
@@ -303,7 +287,7 @@ public class ImplementationViewComponent extends JPanel {
           myLabel.setIcon(getIconForFile(psiFile));
           myLabel.setForeground(FileStatusManager.getInstance(project).getStatus(file).getColor());
           myLabel.setText(file.getPresentableName());
-          myLabel.setBorder(new CompoundBorder(IdeBorderFactory.createRoundedBorder(), IdeBorderFactory.createEmptyBorder(0, 0, 0, 5)));
+          myLabel.setBorder(new CompoundBorder(IdeBorderFactory.createRoundedBorder(), JBUI.Borders.emptyRight(5)));
           myLabel.setVisible(true);
         }
       }
@@ -318,10 +302,10 @@ public class ImplementationViewComponent extends JPanel {
 
   }
 
-  private static void update(@NotNull PsiElement[] elements, @NotNull PairFunction<PsiElement[], List<FileDescriptor>, Boolean> fun) {
-    List<PsiElement> candidates = new ArrayList<PsiElement>(elements.length);
-    List<FileDescriptor> files = new ArrayList<FileDescriptor>(elements.length);
-    final Set<String> names = new HashSet<String>();
+  private static void update(@NotNull PsiElement[] elements, @NotNull PairFunction<PsiElement[], ? super List<FileDescriptor>, Boolean> fun) {
+    List<PsiElement> candidates = new ArrayList<>(elements.length);
+    List<FileDescriptor> files = new ArrayList<>(elements.length);
+    final Set<String> names = new HashSet<>();
     for (PsiElement element : elements) {
       if (element instanceof PsiNamedElement) {
         names.add(((PsiNamedElement)element).getName());
@@ -446,7 +430,9 @@ public class ImplementationViewComponent extends JPanel {
 
     final int lineStart = doc.getLineStartOffset(doc.getLineNumber(start));
     final int lineEnd = end < doc.getTextLength() ? doc.getLineEndOffset(doc.getLineNumber(end)) : doc.getTextLength();
-    return doc.getCharsSequence().subSequence(lineStart, lineEnd).toString();
+    final String text = doc.getCharsSequence().subSequence(lineStart, lineEnd).toString();
+    final ImplementationTextProcessor processor = LanguageImplementationTextProcessor.INSTANCE.forLanguage(elt.getLanguage());
+    return processor!=null ? processor.process(text, elt) : text;
   }
 
   private static PsiFile getContainingFile(final PsiElement elt) {
@@ -491,7 +477,7 @@ public class ImplementationViewComponent extends JPanel {
     edit.registerCustomShortcutSet(new CompositeShortcutSet(CommonShortcuts.getViewSource(), CommonShortcuts.CTRL_ENTER), this);
     group.add(edit);
 
-    return ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN, group, true);
+    return ActionManager.getInstance().createActionToolbar("ImplementationView", group, true);
   }
 
   private void goBack() {
@@ -517,46 +503,46 @@ public class ImplementationViewComponent extends JPanel {
   }
 
   private class BackAction extends AnAction implements HintManagerImpl.ActionToIgnore {
-    public BackAction() {
+    BackAction() {
       super(CodeInsightBundle.message("quick.definition.back"), null, AllIcons.Actions.Back);
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       goBack();
     }
 
 
     @Override
-    public void update(AnActionEvent e) {
+    public void update(@NotNull AnActionEvent e) {
       Presentation presentation = e.getPresentation();
       presentation.setEnabled(myIndex > 0);
     }
   }
 
   private class ForwardAction extends AnAction implements HintManagerImpl.ActionToIgnore {
-    public ForwardAction() {
+    ForwardAction() {
       super(CodeInsightBundle.message("quick.definition.forward"), null, AllIcons.Actions.Forward);
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       goForward();
     }
 
     @Override
-    public void update(AnActionEvent e) {
+    public void update(@NotNull AnActionEvent e) {
       Presentation presentation = e.getPresentation();
       presentation.setEnabled(myElements != null && myIndex < myElements.length - 1);
     }
   }
 
   private class EditSourceAction extends EditSourceActionBase {
-    public EditSourceAction() {
+    EditSourceAction() {
       super(true, AllIcons.Actions.EditSource, CodeInsightBundle.message("quick.definition.edit.source"));
     }
 
-    @Override public void actionPerformed(AnActionEvent e) {
+    @Override public void actionPerformed(@NotNull AnActionEvent e) {
       super.actionPerformed(e);
       if (myHint.isVisible()) {
         myHint.cancel();
@@ -565,7 +551,7 @@ public class ImplementationViewComponent extends JPanel {
   }
 
   private class ShowSourceAction extends EditSourceActionBase implements HintManagerImpl.ActionToIgnore {
-    public ShowSourceAction() {
+    ShowSourceAction() {
       super(false, AllIcons.Actions.Preview, CodeInsightBundle.message("quick.definition.show.source"));
     }
   }
@@ -573,18 +559,18 @@ public class ImplementationViewComponent extends JPanel {
   private class EditSourceActionBase extends AnAction {
     private final boolean myFocusEditor;
 
-    public EditSourceActionBase(boolean focusEditor, Icon icon, String text) {
+    EditSourceActionBase(boolean focusEditor, Icon icon, String text) {
       super(text, null, icon);
       myFocusEditor = focusEditor;
     }
 
     @Override
-    public void update(AnActionEvent e) {
+    public void update(@NotNull AnActionEvent e) {
       e.getPresentation().setEnabled(myFileChooser == null || !myFileChooser.isPopupVisible());
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       PsiElement element = myElements[myIndex];
       PsiElement navigationElement = element.getNavigationElement();
       PsiFile file = getContainingFile(navigationElement);
@@ -599,7 +585,7 @@ public class ImplementationViewComponent extends JPanel {
   }
 
   private PsiElement[] collectNonBinaryElements() {
-    List<PsiElement> result = new ArrayList<PsiElement>();
+    List<PsiElement> result = new ArrayList<>();
     for (PsiElement element : myElements) {
       if (!(element instanceof PsiBinaryFile)) {
         result.add(element);

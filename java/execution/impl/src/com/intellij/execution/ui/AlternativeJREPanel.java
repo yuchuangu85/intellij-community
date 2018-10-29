@@ -41,10 +41,10 @@ import java.util.ArrayList;
 
 /**
  * User: anna
- * Date: Jun 21, 2005
  *
  * @deprecated use {@link JrePathEditor} instead
  */
+@Deprecated
 public class AlternativeJREPanel extends JPanel implements PanelWithAnchor {
   private final ComponentWithBrowseButton<TextFieldWithHistory> myPathField;
   private final JBCheckBox myCbEnabled;
@@ -56,7 +56,7 @@ public class AlternativeJREPanel extends JPanel implements PanelWithAnchor {
 
     myFieldWithHistory = new TextFieldWithHistory();
     myFieldWithHistory.setHistorySize(-1);
-    final ArrayList<String> foundJDKs = new ArrayList<String>();
+    final ArrayList<String> foundJDKs = new ArrayList<>();
     final Sdk[] allJDKs = ProjectJdkTable.getInstance().getAllJdks();
 
     for (Sdk sdk : allJDKs) {
@@ -85,7 +85,7 @@ public class AlternativeJREPanel extends JPanel implements PanelWithAnchor {
       }
     }
     myFieldWithHistory.setHistory(foundJDKs);
-    myPathField = new ComponentWithBrowseButton<TextFieldWithHistory>(myFieldWithHistory, null);
+    myPathField = new ComponentWithBrowseButton<>(myFieldWithHistory, null);
     myPathField.addBrowseFolderListener(ExecutionBundle.message("run.configuration.select.alternate.jre.label"),
                                         ExecutionBundle.message("run.configuration.select.jre.dir.label"),
                                         null, BrowseFilesListener.SINGLE_DIRECTORY_DESCRIPTOR,
@@ -98,6 +98,7 @@ public class AlternativeJREPanel extends JPanel implements PanelWithAnchor {
     InsertPathAction.addTo(myFieldWithHistory.getTextEditor());
 
     myCbEnabled.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent e) {
         enabledChanged();
       }

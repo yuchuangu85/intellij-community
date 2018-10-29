@@ -1,5 +1,7 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.javaFX.fxml.codeInsight.inspections;
 
+import com.intellij.codeInspection.LocalInspectionToolSession;
 import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.codeInspection.XmlSuppressableInspectionTool;
 import com.intellij.psi.*;
@@ -19,14 +21,10 @@ import org.jetbrains.plugins.javaFX.fxml.descriptors.JavaFxPropertyTagDescriptor
 public class JavaFxColorRgbInspection extends XmlSuppressableInspectionTool {
   @NotNull
   @Override
-  public PsiElementVisitor buildVisitor(@NotNull ProblemsHolder holder, boolean isOnTheFly) {
-    return new XmlElementVisitor() {
-      @Override
-      public void visitXmlFile(XmlFile file) {
-        if (!JavaFxFileTypeFactory.isFxml(file)) return;
-        super.visitXmlFile(file);
-      }
+  public PsiElementVisitor buildVisitor(@NotNull ProblemsHolder holder, boolean isOnTheFly, @NotNull LocalInspectionToolSession session) {
+    if (!JavaFxFileTypeFactory.isFxml(session.getFile())) return PsiElementVisitor.EMPTY_VISITOR;
 
+    return new XmlElementVisitor() {
       @Override
       public void visitXmlAttribute(XmlAttribute attribute) {
         super.visitXmlAttribute(attribute);
@@ -65,7 +63,7 @@ public class JavaFxColorRgbInspection extends XmlSuppressableInspectionTool {
                                           @NotNull String propertyName,
                                           @NotNull String propertyValue,
                                           @NotNull PsiElement location) {
-        final PsiMember declaration = JavaFxPsiUtil.collectWritableProperties(psiClass).get(propertyName);
+        final PsiMember declaration = JavaFxPsiUtil.getWritableProperties(psiClass).get(propertyName);
         final String boxedQName = JavaFxPsiUtil.getBoxedPropertyType(psiClass, declaration);
         if (CommonClassNames.JAVA_LANG_FLOAT.equals(boxedQName) || CommonClassNames.JAVA_LANG_DOUBLE.equals(boxedQName)) {
           try {

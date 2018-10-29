@@ -15,8 +15,9 @@
  */
 package com.intellij.openapi.util;
 
-import com.intellij.util.containers.ConcurrentIntObjectMap;
+import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.containers.IntObjectMap;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -30,12 +31,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author max
  * @author Konstantin Bulenkov
  */
-@SuppressWarnings({"EqualsWhichDoesntCheckParameterClass"})
 public class Key<T> {
   private static final AtomicInteger ourKeysCounter = new AtomicInteger();
   private final int myIndex = ourKeysCounter.getAndIncrement();
   private final String myName; // for debug purposes only
-  private static final ConcurrentIntObjectMap<Key> allKeys = ContainerUtil.createConcurrentIntObjectWeakValueMap();
+  private static final IntObjectMap<Key<?>> allKeys = ContainerUtil.createConcurrentIntObjectWeakValueMap();
 
   public Key(@NotNull @NonNls String name) {
     myName = name;
@@ -58,6 +58,7 @@ public class Key<T> {
     return myName;
   }
 
+  @NotNull
   public static <T> Key<T> create(@NotNull @NonNls String name) {
     return new Key<T>(name);
   }
@@ -76,13 +77,18 @@ public class Key<T> {
     return t == null ? defaultValue : t;
   }
 
+  @NotNull
+  public T getRequired(@NotNull UserDataHolder holder) {
+    return ObjectUtils.notNull(holder.getUserData(this));
+  }
+
   /**
-   * Returns <code>true</code> if and only if the <code>holder</code> has
+   * Returns {@code true} if and only if the {@code holder} has
    * not null value by the key.
    *
    * @param holder user data holder object
-   * @return <code>true</code> if holder.getUserData(this) != null
-   * <code>false</code> otherwise.
+   * @return {@code true} if holder.getUserData(this) != null
+   * {@code false} otherwise.
    */
   public boolean isIn(@Nullable UserDataHolder holder) {
     return get(holder) != null;
@@ -109,11 +115,11 @@ public class Key<T> {
   /**
    * @deprecated access to Key via its name is a kind of hack, use Key instance directly instead
    */
+  @Deprecated
   @Nullable
   public static Key<?> findKeyByName(String name) {
-    for (ConcurrentIntObjectMap.IntEntry<Key> key : allKeys.entries()) {
+    for (IntObjectMap.Entry<Key<?>> key : allKeys.entrySet()) {
       if (name.equals(key.getValue().myName)) {
-        //noinspection unchecked
         return key.getValue();
       }
     }

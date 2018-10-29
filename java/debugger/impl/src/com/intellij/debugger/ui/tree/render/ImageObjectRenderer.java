@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.ui.tree.render;
 
 import com.intellij.debugger.DebuggerBundle;
@@ -38,13 +24,10 @@ import java.awt.image.BufferedImage;
 import java.util.Collections;
 import java.util.List;
 
-/**
-* Created by Egor on 04.10.2014.
-*/
-class ImageObjectRenderer extends ToStringBasedRenderer implements FullValueEvaluatorProvider {
+class ImageObjectRenderer extends CompoundReferenceRenderer implements FullValueEvaluatorProvider {
   private static final Logger LOG = Logger.getInstance(ImageObjectRenderer.class);
 
-  public ImageObjectRenderer(final NodeRendererSettings rendererSettings) {
+  ImageObjectRenderer(final NodeRendererSettings rendererSettings) {
     super(rendererSettings, "Image", null, null);
     setClassName("java.awt.Image");
     setEnabled(true);
@@ -93,7 +76,7 @@ class ImageObjectRenderer extends ToStringBasedRenderer implements FullValueEval
     throws EvaluateException {
     DebugProcess process = evaluationContext.getDebugProcess();
     EvaluationContext copyContext = evaluationContext.createEvaluationContext(obj);
-    ClassType helperClass = ClassLoadingUtils.getHelperClass(ImageSerializer.class.getName(), copyContext, process);
+    ClassType helperClass = ClassLoadingUtils.getHelperClass(ImageSerializer.class, copyContext);
 
     if (helperClass != null) {
       List<Method> methods = helperClass.methodsByName(methodName);
@@ -123,7 +106,7 @@ class ImageObjectRenderer extends ToStringBasedRenderer implements FullValueEval
   }
 
   static abstract class IconPopupEvaluator extends CustomPopupFullValueEvaluator<Icon> {
-    public IconPopupEvaluator(@NotNull String linkText, @NotNull EvaluationContextImpl evaluationContext) {
+    IconPopupEvaluator(@NotNull String linkText, @NotNull EvaluationContextImpl evaluationContext) {
       super(linkText, evaluationContext);
     }
 

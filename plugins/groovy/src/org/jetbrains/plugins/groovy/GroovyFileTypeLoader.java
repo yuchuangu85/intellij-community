@@ -30,7 +30,7 @@ import java.util.*;
 public class GroovyFileTypeLoader extends FileTypeFactory{
 
   public static Set<String> getCustomGroovyScriptExtensions() {
-    final LinkedHashSet<String> strings = new LinkedHashSet<String>();
+    final LinkedHashSet<String> strings = new LinkedHashSet<>();
     strings.add("gdsl");
     strings.add("gy");
     for (GroovyScriptTypeDetector ep : GroovyScriptTypeDetector.EP_NAME.getExtensions()) {
@@ -39,8 +39,8 @@ public class GroovyFileTypeLoader extends FileTypeFactory{
     return strings;
   }
 
-  public static List<String> getAllGroovyExtensions() {
-    final ArrayList<String> strings = new ArrayList<String>();
+  private static List<String> getAllGroovyExtensions() {
+    final ArrayList<String> strings = new ArrayList<>();
     strings.add(GroovyFileType.DEFAULT_EXTENSION);
     strings.addAll(getCustomGroovyScriptExtensions());
     return strings;

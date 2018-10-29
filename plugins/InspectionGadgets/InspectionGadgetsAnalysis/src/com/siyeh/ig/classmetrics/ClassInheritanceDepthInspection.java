@@ -78,14 +78,14 @@ public class ClassInheritanceDepthInspection
         return;
       }
       final int inheritanceDepth =
-        getInheritanceDepth(aClass, new HashSet<PsiClass>());
+        getInheritanceDepth(aClass, new HashSet<>());
       if (inheritanceDepth <= getLimit()) {
         return;
       }
       registerClassError(aClass, Integer.valueOf(inheritanceDepth));
     }
 
-    private int getInheritanceDepth(PsiClass aClass, Set<PsiClass> visited) {
+    private int getInheritanceDepth(PsiClass aClass, Set<? super PsiClass> visited) {
       if (visited.contains(aClass)) {
         return 0;
       }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.xml.ui;
 
 import com.intellij.codeHighlighting.BackgroundEditorHighlighter;
@@ -21,10 +7,9 @@ import com.intellij.codeInsight.daemon.impl.DefaultHighlightInfoProcessor;
 import com.intellij.codeInsight.daemon.impl.GeneralHighlightingPass;
 import com.intellij.codeInsight.daemon.impl.LocalInspectionsPass;
 import com.intellij.openapi.editor.Document;
-import com.intellij.openapi.editor.event.DocumentAdapter;
 import com.intellij.openapi.editor.event.DocumentEvent;
+import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.editor.impl.EditorComponentImpl;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.ProperTextRange;
 import com.intellij.psi.PsiDocumentManager;
@@ -54,16 +39,15 @@ import java.lang.reflect.Type;
  */
 public class DomUIFactoryImpl extends DomUIFactory {
 
-  private final ClassMap<Function<DomWrapper<String>, BaseControl>> myCustomControlCreators = new ClassMap<Function<DomWrapper<String>, BaseControl>>();
-  private final ClassMap<Function<DomElement, TableCellEditor>> myCustomCellEditorCreators = new ClassMap<Function<DomElement, TableCellEditor>>();
+  private final ClassMap<Function<DomWrapper<String>, BaseControl>> myCustomControlCreators = new ClassMap<>();
+  private final ClassMap<Function<DomElement, TableCellEditor>> myCustomCellEditorCreators = new ClassMap<>();
 
   public DomUIFactoryImpl() {
     final Function<DomElement, TableCellEditor> booleanCreator = domElement -> new BooleanTableCellEditor();
     registerCustomCellEditor(Boolean.class, booleanCreator);
     registerCustomCellEditor(boolean.class, booleanCreator);
     registerCustomCellEditor(String.class, domElement -> new DefaultCellEditor(removeBorder(new JTextField())));
-    Consumer<DomUIFactory>[] extensions = Extensions.getExtensions(EXTENSION_POINT_NAME);
-    for (Consumer<DomUIFactory> extension : extensions) {
+    for (Consumer<DomUIFactory> extension : EXTENSION_POINT_NAME.getExtensionList()) {
       extension.consume(this);
     }
   }
@@ -71,6 +55,7 @@ public class DomUIFactoryImpl extends DomUIFactory {
   @Override
   protected TableCellEditor createCellEditor(DomElement element, Class type) {
     if (Enum.class.isAssignableFrom(type)) {
+      //noinspection unchecked
       return new ComboTableCellEditor((Class<? extends Enum>)type, false);
     }
 
@@ -82,9 +67,9 @@ public class DomUIFactoryImpl extends DomUIFactory {
   @Override
   public final UserActivityWatcher createEditorAwareUserActivityWatcher() {
     return new UserActivityWatcher() {
-      private final DocumentAdapter myListener = new DocumentAdapter() {
+      private final DocumentListener myListener = new DocumentListener() {
         @Override
-        public void documentChanged(DocumentEvent e) {
+        public void documentChanged(@NotNull DocumentEvent e) {
           fireUIChanged();
         }
       };
@@ -151,7 +136,7 @@ public class DomUIFactoryImpl extends DomUIFactory {
       @NotNull
       public HighlightingPass[] createPassesForEditor() {
         if (!element.isValid()) return HighlightingPass.EMPTY_ARRAY;
-        
+
         final XmlFile psiFile = DomUtil.getFile(element);
 
         final PsiDocumentManager psiDocumentManager = PsiDocumentManager.getInstance(project);
@@ -159,8 +144,6 @@ public class DomUIFactoryImpl extends DomUIFactory {
         if (document == null) return HighlightingPass.EMPTY_ARRAY;
 
         editor.commit();
-
-        psiDocumentManager.commitAllDocuments();
 
         GeneralHighlightingPass ghp = new GeneralHighlightingPass(project, psiFile, document, 0, document.getTextLength(),
                                                                   true, new ProperTextRange(0, document.getTextLength()), null, new DefaultHighlightInfoProcessor());

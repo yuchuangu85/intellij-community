@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,9 +37,6 @@ import org.jetbrains.plugins.groovy.refactoring.introduce.field.GroovyInplaceFie
 import javax.swing.*;
 import java.util.ArrayList;
 
-/**
- * Created by Max Medvedev on 8/29/13
- */
 public class GrInplaceConstantIntroducer extends GrAbstractInplaceIntroducer<GrIntroduceConstantSettings> {
   private final GrInplaceIntroduceConstantPanel myPanel;
   private final GrIntroduceContext myContext;
@@ -74,6 +71,7 @@ public class GrInplaceConstantIntroducer extends GrAbstractInplaceIntroducer<GrI
     return GrIntroduceConstantHandler.REFACTORING_NAME;
   }
 
+  @NotNull
   @Override
   protected String[] suggestNames(boolean replaceAll, @Nullable GrVariable variable) {
     return mySuggestedNames;
@@ -212,9 +210,7 @@ public class GrInplaceConstantIntroducer extends GrAbstractInplaceIntroducer<GrI
     return super.performRefactoring();
   }
 
-  /**
-   * Created by Max Medvedev on 8/29/13
-   */
+ 
   public class GrInplaceIntroduceConstantPanel {
     private JBCheckBox myMoveToAnotherClassJBCheckBox;
     private JPanel myRootPane;

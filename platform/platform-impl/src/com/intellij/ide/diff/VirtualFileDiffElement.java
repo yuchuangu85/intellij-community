@@ -18,13 +18,13 @@ package com.intellij.ide.diff;
 import com.intellij.ide.presentation.VirtualFilePresentation;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
-import com.intellij.openapi.application.Result;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
+import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.FileTypeManager;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
@@ -40,6 +40,7 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -98,13 +99,13 @@ public class VirtualFileDiffElement extends DiffElement<VirtualFile> {
       return new VirtualFileDiffElement[0];
     }
     final VirtualFile[] files = myFile.getChildren();
-    final ArrayList<VirtualFileDiffElement> elements = new ArrayList<VirtualFileDiffElement>();
+    final ArrayList<VirtualFileDiffElement> elements = new ArrayList<>();
     for (VirtualFile file : files) {
       if (!FileTypeManager.getInstance().isFileIgnored(file) && file.isValid()) {
         elements.add(new VirtualFileDiffElement(file));
       }
     }
-    return elements.toArray(new VirtualFileDiffElement[elements.size()]);
+    return elements.toArray(new VirtualFileDiffElement[0]);
   }
 
   @Nullable
@@ -151,6 +152,17 @@ public class VirtualFileDiffElement extends DiffElement<VirtualFile> {
     return myFile.getFileSystem() instanceof LocalFileSystem;
   }
 
+  @NotNull
+  @Override
+  public Charset getCharset() {
+    return myFile.getCharset();
+  }
+
+  @Override
+  public FileType getFileType() {
+    return myFile.getFileType();
+  }
+
   @Override
   public VirtualFileDiffElement copyTo(DiffElement<VirtualFile> container, String relativePath) {
     try {
@@ -185,7 +197,7 @@ public class VirtualFileDiffElement extends DiffElement<VirtualFile> {
 
   public static void refreshFile(boolean userInitiated, VirtualFile virtualFile) {
     if (userInitiated) {
-      final List<Document> docsToSave = new ArrayList<Document>();
+      final List<Document> docsToSave = new ArrayList<>();
       final FileDocumentManager manager = FileDocumentManager.getInstance();
       for (Document document : manager.getUnsavedDocuments()) {
         VirtualFile file = manager.getFile(document);
@@ -195,14 +207,11 @@ public class VirtualFileDiffElement extends DiffElement<VirtualFile> {
       }
 
       if (!docsToSave.isEmpty()) {
-        new WriteAction() {
-          @Override
-          protected void run(@NotNull Result result) throws Throwable {
-            for (Document document : docsToSave) {
-              manager.saveDocument(document);
-            }
+        WriteAction.runAndWait(() -> {
+          for (Document document : docsToSave) {
+            manager.saveDocument(document);
           }
-        }.execute();
+        });
       }
 
       ModalityState modalityState = ProgressManager.getInstance().getProgressIndicator().getModalityState();

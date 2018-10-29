@@ -36,7 +36,7 @@ public class DumpScreenConfigurationAction extends DumbAwareAction {
   private static final Logger LOG = Logger.getInstance(DumpScreenConfigurationAction.class);
 
   @Override
-  public void actionPerformed(AnActionEvent event) {
+  public void actionPerformed(@NotNull AnActionEvent event) {
     new ScreenDialog(event).show();
   }
 
@@ -155,7 +155,7 @@ public class DumpScreenConfigurationAction extends DumbAwareAction {
   }
 
   private static final class ScreenView extends JComponent {
-    private final ArrayList<ScreenInfo> myScreenList = new ArrayList<ScreenInfo>();
+    private final ArrayList<ScreenInfo> myScreenList = new ArrayList<>();
     private final Rectangle myBounds = new Rectangle();
 
     private boolean update() {

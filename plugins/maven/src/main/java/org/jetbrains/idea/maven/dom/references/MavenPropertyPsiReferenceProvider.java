@@ -15,6 +15,7 @@
  */
 package org.jetbrains.idea.maven.dom.references;
 
+import com.intellij.codeInspection.XmlSuppressionProvider;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -41,6 +42,7 @@ import java.util.regex.Matcher;
 
 public class MavenPropertyPsiReferenceProvider extends PsiReferenceProvider {
   public static final boolean SOFT_DEFAULT = false;
+  public static final String UNRESOLVED_MAVEN_PROPERTY_QUICKFIX_ID = "UnresolvedMavenProperty";
 
   @NotNull
   @Override
@@ -79,6 +81,8 @@ public class MavenPropertyPsiReferenceProvider extends PsiReferenceProvider {
 
     if (!isElementCanContainReference(element)) return PsiReference.EMPTY_ARRAY;
 
+    if (XmlSuppressionProvider.isSuppressed(element, UNRESOLVED_MAVEN_PROPERTY_QUICKFIX_ID)) return PsiReference.EMPTY_ARRAY;
+
     MavenProject mavenProject = null;
     XmlTag propertiesTag = null;
     List<PsiReference> result = null;
@@ -98,7 +102,7 @@ public class MavenPropertyPsiReferenceProvider extends PsiReferenceProvider {
       TextRange range = TextRange.from(textRange.getStartOffset() + from, propertyName.length());
 
       if (result == null) {
-        result = new ArrayList<PsiReference>();
+        result = new ArrayList<>();
 
         mavenProject = findMavenProject(element);
         if (mavenProject == null) {
@@ -120,7 +124,7 @@ public class MavenPropertyPsiReferenceProvider extends PsiReferenceProvider {
       result.add(ref);
     }
 
-    return result == null ? PsiReference.EMPTY_ARRAY : result.toArray(new PsiReference[result.size()]);
+    return result == null ? PsiReference.EMPTY_ARRAY : result.toArray(PsiReference.EMPTY_ARRAY);
   }
 
   private static XmlTag findPropertiesParentTag(@NotNull PsiElement element) {

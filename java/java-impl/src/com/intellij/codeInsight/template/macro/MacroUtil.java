@@ -53,7 +53,7 @@ public class MacroUtil {
     if (decl != null) {
       place = file.findElementAt(decl.getTextOffset() -1);
     }
-    PsiElementFactory factory = JavaPsiFacade.getInstance(manager.getProject()).getElementFactory();
+    PsiElementFactory factory = JavaPsiFacade.getElementFactory(manager.getProject());
     try{
       return factory.createTypeFromText(text, place);
     }
@@ -85,7 +85,7 @@ public class MacroUtil {
         }
       }
     }
-    PsiElementFactory factory = JavaPsiFacade.getInstance(manager.getProject()).getElementFactory();
+    PsiElementFactory factory = JavaPsiFacade.getElementFactory(manager.getProject());
     try{
       return factory.createExpressionFromText(text, place);
     }
@@ -95,8 +95,8 @@ public class MacroUtil {
   }
 
   @NotNull private static PsiExpression[] getStandardExpressions(PsiElement place) {
-    ArrayList<PsiExpression> array = new ArrayList<PsiExpression>();
-    PsiElementFactory factory = JavaPsiFacade.getInstance(place.getProject()).getElementFactory();
+    ArrayList<PsiExpression> array = new ArrayList<>();
+    PsiElementFactory factory = JavaPsiFacade.getElementFactory(place.getProject());
     try {
       array.add(factory.createExpressionFromText("true", null));
       array.add(factory.createExpressionFromText("false", null));
@@ -126,11 +126,11 @@ public class MacroUtil {
     catch (IncorrectOperationException e) {
       LOG.error(e);
     }
-    return array.toArray(new PsiExpression[array.size()]);
+    return array.toArray(PsiExpression.EMPTY_ARRAY);
   }
 
   @NotNull public static PsiExpression[] getStandardExpressionsOfType(PsiElement place, PsiType type) {
-    List<PsiExpression> array = new ArrayList<PsiExpression>();
+    List<PsiExpression> array = new ArrayList<>();
     PsiExpression[] expressions = getStandardExpressions(place);
     for (PsiExpression expr : expressions) {
       PsiType type1 = expr.getType();
@@ -138,7 +138,7 @@ public class MacroUtil {
         array.add(expr);
       }
     }
-    return array.toArray(new PsiExpression[array.size()]);
+    return array.toArray(PsiExpression.EMPTY_ARRAY);
   }
 
   @NotNull public static PsiVariable[] getVariablesVisibleAt(@Nullable final PsiElement place, String prefix) {
@@ -147,7 +147,7 @@ public class MacroUtil {
     }
 
     final Set<String> usedNames = ContainerUtil.newHashSet();
-    final List<PsiVariable> list = new ArrayList<PsiVariable>();
+    final List<PsiVariable> list = new ArrayList<>();
     VariablesProcessor varproc = new VariablesProcessor(prefix, true, list) {
       @Override
       public boolean execute(@NotNull PsiElement pe, @NotNull ResolveState state) {

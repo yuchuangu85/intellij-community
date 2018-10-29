@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.content.impl;
 
 import com.intellij.ide.DataManager;
@@ -25,13 +11,10 @@ import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.*;
-import com.intellij.openapi.wm.FocusCommand;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.openapi.wm.ex.IdeFocusTraversalPolicy;
 import com.intellij.ui.components.panels.NonOpaquePanel;
 import com.intellij.ui.content.*;
-import com.intellij.ui.switcher.SwitchProvider;
-import com.intellij.ui.switcher.SwitchTarget;
 import com.intellij.util.EventDispatcher;
 import com.intellij.util.SmartList;
 import com.intellij.util.ui.UIUtil;
@@ -43,31 +26,35 @@ import javax.swing.*;
 import java.awt.*;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+
+import static com.intellij.openapi.wm.IdeFocusManager.getGlobalInstance;
 
 /**
  * @author Anton Katilin
  * @author Vladimir Kondratyev
  */
 public class ContentManagerImpl implements ContentManager, PropertyChangeListener, Disposable.Parent {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.ui.content.impl.ContentManagerImpl");
+  private static final Logger LOG = Logger.getInstance(ContentManagerImpl.class);
 
   private ContentUI myUI;
-  private final List<Content> myContents = new ArrayList<Content>();
+  private final List<Content> myContents = new ArrayList<>();
   private final EventDispatcher<ContentManagerListener> myDispatcher = EventDispatcher.create(ContentManagerListener.class);
-  private final List<Content> mySelection = new ArrayList<Content>();
+  private final List<Content> mySelection = new ArrayList<>();
   private final boolean myCanCloseContents;
 
   private MyNonOpaquePanel myComponent;
 
-  private final Set<Content> myContentWithChangedComponent = new HashSet<Content>();
+  private final Set<Content> myContentWithChangedComponent = new HashSet<>();
 
   private boolean myDisposed;
   private final Project myProject;
 
-  private final List<DataProvider> dataProviders = new SmartList<DataProvider>();
-  private ArrayList<Content> mySelectionHistory = new ArrayList<Content>();
+  private final List<DataProvider> dataProviders = new SmartList<>();
+  private final ArrayList<Content> mySelectionHistory = new ArrayList<>();
 
   /**
    * WARNING: as this class adds listener to the ProjectManager which is removed on projectClosed event, all instances of this class
@@ -94,9 +81,8 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
     if (myComponent == null) {
       myComponent = new MyNonOpaquePanel();
 
-      MyContentComponent contentComponent = new MyContentComponent();
+      NonOpaquePanel contentComponent = new NonOpaquePanel();
       contentComponent.setContent(myUI.getComponent());
-      contentComponent.setFocusCycleRoot(true);
 
       myComponent.add(contentComponent, BorderLayout.CENTER);
     }
@@ -113,13 +99,13 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
   }
 
   private class MyNonOpaquePanel extends NonOpaquePanel implements DataProvider {
-    public MyNonOpaquePanel() {
+    MyNonOpaquePanel() {
       super(new BorderLayout());
     }
 
     @Override
     @Nullable
-    public Object getData(@NonNls String dataId) {
+    public Object getData(@NotNull @NonNls String dataId) {
       if (PlatformDataKeys.CONTENT_MANAGER.is(dataId) || PlatformDataKeys.NONEMPTY_CONTENT_MANAGER.is(dataId) && getContentCount() > 1) {
         return ContentManagerImpl.this;
       }
@@ -140,31 +126,6 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
     }
   }
 
-  private class MyContentComponent extends NonOpaquePanel implements SwitchProvider {
-    @Override
-    public List<SwitchTarget> getTargets(boolean onlyVisible, boolean originalProvider) {
-      if (myUI instanceof SwitchProvider) {
-        return ((SwitchProvider)myUI).getTargets(onlyVisible, false);
-      }
-      return Collections.emptyList();
-    }
-
-    @Override
-    public SwitchTarget getCurrentTarget() {
-      return myUI instanceof SwitchProvider ? ((SwitchProvider)myUI).getCurrentTarget() : null;
-    }
-
-    @Override
-    public JComponent getComponent() {
-      return myUI instanceof SwitchProvider ? myUI.getComponent() : this;
-    }
-
-    @Override
-    public boolean isCycleRoot() {
-      return myUI instanceof SwitchProvider && ((SwitchProvider)myUI).isCycleRoot();
-    }
-  }
-
   @Override
   public void addContent(@NotNull Content content, final int order) {
     doAddContent(content, order);
@@ -172,11 +133,6 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
 
   @Override
   public void addContent(@NotNull Content content) {
-    doAddContent(content, -1);
-  }
-
-  @Override
-  public void addContent(@NotNull final Content content, final Object constraints) {
     doAddContent(content, -1);
   }
 
@@ -218,7 +174,7 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
       if (trackFocus) {
         Content current = getSelectedContent();
         if (current != null) {
-          setSelectedContent(current, true, true, !forcedFocus);
+          setSelectedContent(current, true, true, !forcedFocus).notify(result);
         }
         else {
           result.setDone();
@@ -282,25 +238,24 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
 
       int newSize = myContents.size();
       if (newSize > 0 && trackSelection) {
-        ActionCallback result = new ActionCallback();
         if (indexToSelect > -1) {
           final Content toSelect = mySelectionHistory.size() > 0 ? mySelectionHistory.get(0) : myContents.get(indexToSelect);
           if (!isSelected(toSelect)) {
             if (myUI.isSingleSelection()) {
+              ActionCallback result = new ActionCallback();
               setSelectedContentCB(toSelect).notify(result);
+              return result;
             }
             else {
               addSelectedContent(toSelect);
-              result.setDone();
             }
           }
         }
-        return result;
       }
       else {
         mySelection.clear();
-        return ActionCallback.DONE;
       }
+      return ActionCallback.DONE;
     }
     finally {
       if (ApplicationManager.getApplication().isDispatchThread()) {
@@ -327,7 +282,7 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
   @Override
   @NotNull
   public Content[] getContents() {
-    return myContents.toArray(new Content[myContents.size()]);
+    return myContents.toArray(new Content[0]);
   }
 
   //TODO[anton,vova] is this method needed?
@@ -443,7 +398,7 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
   @Override
   @NotNull
   public Content[] getSelectedContents() {
-    return mySelection.toArray(new Content[mySelection.size()]);
+    return mySelection.toArray(new Content[0]);
   }
 
   @Override
@@ -507,7 +462,7 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
         addSelectedContent(content);
 
         if (requestFocus) {
-          return requestFocus(content, forcedFocus);
+          requestFocus(content, forcedFocus);
         }
         return ActionCallback.DONE;
       }
@@ -517,13 +472,10 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
     boolean enabledFocus = getFocusManager().isFocusTransferEnabled();
     if (focused || requestFocus) {
       if (enabledFocus) {
-        return getFocusManager().requestFocus(myComponent, true).doWhenProcessed(() -> selection.run().notify(result));
+        return getFocusManager().requestFocus(getComponent(), true).doWhenProcessed(() -> selection.run().notify(result));
       }
-      return selection.run().notify(result);
     }
-    else {
-      return selection.run().notify(result);
-    }
+    return selection.run().notify(result);
   }
 
   private boolean isSelectionHoldsFocus() {
@@ -588,22 +540,22 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
   }
 
 
-  private void fireContentAdded(Content content, int newIndex) {
+  private void fireContentAdded(@NotNull Content content, int newIndex) {
     ContentManagerEvent e = new ContentManagerEvent(this, content, newIndex, ContentManagerEvent.ContentOperation.add);
     myDispatcher.getMulticaster().contentAdded(e);
   }
 
-  private void fireContentRemoved(Content content, int oldIndex) {
+  private void fireContentRemoved(@NotNull Content content, int oldIndex) {
     ContentManagerEvent e = new ContentManagerEvent(this, content, oldIndex, ContentManagerEvent.ContentOperation.remove);
     myDispatcher.getMulticaster().contentRemoved(e);
   }
 
-  private void fireSelectionChanged(Content content, ContentManagerEvent.ContentOperation operation) {
+  private void fireSelectionChanged(@NotNull Content content, ContentManagerEvent.ContentOperation operation) {
     ContentManagerEvent e = new ContentManagerEvent(this, content, getIndexOfContent(content), operation);
     myDispatcher.getMulticaster().selectionChanged(e);
   }
 
-  private boolean fireContentRemoveQuery(Content content, int oldIndex, ContentManagerEvent.ContentOperation operation) {
+  private boolean fireContentRemoveQuery(@NotNull Content content, int oldIndex, ContentManagerEvent.ContentOperation operation) {
     ContentManagerEvent event = new ContentManagerEvent(this, content, oldIndex, operation);
     for (ContentManagerListener listener : myDispatcher.getListeners()) {
       listener.contentRemoveQuery(event);
@@ -620,15 +572,8 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
     final Content toSelect = content == null ? getSelectedContent() : content;
     if (toSelect == null) return ActionCallback.REJECTED;
     assert myContents.contains(toSelect);
-
-
-    return getFocusManager().requestFocus(new FocusCommand(content, toSelect.getPreferredFocusableComponent()) {
-      @NotNull
-      @Override
-      public ActionCallback run() {
-        return doRequestFocus(toSelect);
-      }
-    }, forced);
+    JComponent preferredFocusableComponent = toSelect.getPreferredFocusableComponent();
+    return preferredFocusableComponent != null ? getFocusManager().requestFocusInProject(preferredFocusableComponent, myProject) : ActionCallback.REJECTED;
   }
 
   private IdeFocusManager getFocusManager() {
@@ -639,7 +584,9 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
     JComponent toFocus = computeWillFocusComponent(toSelect);
 
     if (toFocus != null) {
-      toFocus.requestFocus();
+      getGlobalInstance().doWhenFocusSettlesDown(() -> {
+        getGlobalInstance().requestFocus(toFocus, true);
+      });
     }
 
     return ActionCallback.DONE;
@@ -688,6 +635,7 @@ public class ContentManagerImpl implements ContentManager, PropertyChangeListene
     myUI = null;
     myDispatcher.getListeners().clear();
     dataProviders.clear();
+    myComponent = null;
   }
 
   @Override

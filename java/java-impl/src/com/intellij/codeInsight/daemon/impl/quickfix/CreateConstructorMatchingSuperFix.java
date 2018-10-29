@@ -61,8 +61,23 @@ public class CreateConstructorMatchingSuperFix extends BaseIntentionAction {
   @Override
   public boolean isAvailable(@NotNull Project project, Editor editor, PsiFile file) {
     if (!myClass.isValid() || !myClass.getManager().isInProject(myClass)) return false;
-    setText(QuickFixBundle.message("create.constructor.matching.super"));
-    return true;
+    PsiClass base = myClass.getSuperClass();
+    if (base == null) return false;
+    PsiSubstitutor substitutor = TypeConversionUtil.getSuperClassSubstitutor(base, myClass, PsiSubstitutor.EMPTY);
+    for (PsiMethod baseConstructor: base.getConstructors()) {
+      if (PsiUtil.isAccessible(baseConstructor, myClass, null)) {
+        PsiMethod derived = GenerateMembersUtil.substituteGenericMethod(baseConstructor, substitutor, myClass);
+        String className = myClass.getName();
+        LOG.assertTrue(className != null);
+        derived.setName(className);
+        if (myClass.findMethodBySignature(derived, false) == null) {
+          setText(QuickFixBundle.message("create.constructor.matching.super"));
+          return true;
+        }
+      }
+    }
+    return false;
+    
   }
 
   @Override
@@ -71,7 +86,7 @@ public class CreateConstructorMatchingSuperFix extends BaseIntentionAction {
     PsiClass baseClass = myClass.getSuperClass();
     LOG.assertTrue(baseClass != null);
     PsiSubstitutor substitutor = TypeConversionUtil.getSuperClassSubstitutor(baseClass, myClass, PsiSubstitutor.EMPTY);
-    List<PsiMethodMember> baseConstructors = new ArrayList<PsiMethodMember>();
+    List<PsiMethodMember> baseConstructors = new ArrayList<>();
     PsiMethod[] baseConstrs = baseClass.getConstructors();
     for (PsiMethod baseConstr : baseConstrs) {
       if (PsiUtil.isAccessible(baseConstr, myClass, myClass)) baseConstructors.add(new PsiMethodMember(baseConstr, substitutor));
@@ -86,7 +101,7 @@ public class CreateConstructorMatchingSuperFix extends BaseIntentionAction {
                                                 List<PsiMethodMember> baseConstructors,
                                                 PsiMethod[] baseConstrs,
                                                 final PsiClass targetClass) {
-    PsiMethodMember[] constructors = baseConstructors.toArray(new PsiMethodMember[baseConstructors.size()]);
+    PsiMethodMember[] constructors = baseConstructors.toArray(new PsiMethodMember[0]);
     if (constructors.length == 0) {
       constructors = new PsiMethodMember[baseConstrs.length];
       for (int i = 0; i < baseConstrs.length; i++) {
@@ -97,7 +112,7 @@ public class CreateConstructorMatchingSuperFix extends BaseIntentionAction {
     LOG.assertTrue(constructors.length >=1); // Otherwise we won't have been messing with all this stuff
     boolean isCopyJavadoc = true;
     if (constructors.length > 1 && !ApplicationManager.getApplication().isUnitTestMode()) {
-      MemberChooser<PsiMethodMember> chooser = new MemberChooser<PsiMethodMember>(constructors, false, true, project);
+      MemberChooser<PsiMethodMember> chooser = new MemberChooser<>(constructors, false, true, project);
       chooser.setTitle(QuickFixBundle.message("super.class.constructors.chooser.title"));
       chooser.show();
       if (chooser.getExitCode() != DialogWrapper.OK_EXIT_CODE) return;
@@ -111,7 +126,7 @@ public class CreateConstructorMatchingSuperFix extends BaseIntentionAction {
       () -> {
         try {
           if (targetClass.getLBrace() == null) {
-            PsiClass psiClass = JavaPsiFacade.getInstance(targetClass.getProject()).getElementFactory().createClass("X");
+            PsiClass psiClass = JavaPsiFacade.getElementFactory(targetClass.getProject()).createClass("X");
             targetClass.addRangeAfter(psiClass.getLBrace(), psiClass.getRBrace(), targetClass.getLastChild());
           }
           JVMElementFactory factory = JVMElementFactories.getFactory(targetClass.getLanguage(), project);

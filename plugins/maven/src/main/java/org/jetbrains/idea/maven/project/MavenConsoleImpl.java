@@ -36,6 +36,7 @@ import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
 import com.intellij.ui.content.MessageView;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.maven.execution.MavenRunnerParameters;
 import org.jetbrains.idea.maven.execution.MavenRunnerSettings;
@@ -47,7 +48,7 @@ public class MavenConsoleImpl extends MavenConsole {
   private static final Key<MavenConsoleImpl> CONSOLE_KEY = Key.create("MAVEN_CONSOLE_KEY");
 
   private static final String CONSOLE_FILTER_REGEXP =
-    "(?:^|(?:\\[\\w+\\]\\s*))" + RegexpFilter.FILE_PATH_MACROS + ":\\[" + RegexpFilter.LINE_MACROS + "," + RegexpFilter.COLUMN_MACROS + "]";
+    "(?:^|(?:\\[\\w+\\]\\s*)( /)?)" + RegexpFilter.FILE_PATH_MACROS + ":\\[" + RegexpFilter.LINE_MACROS + "," + RegexpFilter.COLUMN_MACROS + "]";
 
   private final String myTitle;
   private final Project myProject;
@@ -106,14 +107,17 @@ public class MavenConsoleImpl extends MavenConsole {
     return builder;
   }
 
+  @Override
   public boolean canPause() {
     return myConsoleView.canPause();
   }
 
+  @Override
   public boolean isOutputPaused() {
     return myConsoleView.isOutputPaused();
   }
 
+  @Override
   public void setOutputPaused(boolean outputPaused) {
     myConsoleView.setOutputPaused(outputPaused);
   }
@@ -122,16 +126,18 @@ public class MavenConsoleImpl extends MavenConsole {
     return myParametersAndSettings;
   }
 
+  @Override
   public void attachToProcess(ProcessHandler processHandler) {
     myConsoleView.attachToProcess(processHandler);
     processHandler.addProcessListener(new ProcessAdapter() {
       @Override
-      public void onTextAvailable(ProcessEvent event, Key outputType) {
+      public void onTextAvailable(@NotNull ProcessEvent event, @NotNull Key outputType) {
         ensureAttachedToToolWindow();
       }
     });
   }
 
+  @Override
   protected void doPrint(String text, OutputType type) {
     ensureAttachedToToolWindow();
 
@@ -158,7 +164,7 @@ public class MavenConsoleImpl extends MavenConsole {
 
       Content content = ContentFactory.SERVICE.getInstance().createContent(
         myConsoleView.getComponent(), myTitle, true);
-      content.putUserData(CONSOLE_KEY, MavenConsoleImpl.this);
+      content.putUserData(CONSOLE_KEY, this);
       messageView.getContentManager().addContent(content);
       messageView.getContentManager().setSelectedContent(content);
 

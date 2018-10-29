@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.javadoc;
 
 import com.intellij.codeInsight.documentation.AbstractExternalFilter;
@@ -22,12 +8,14 @@ import com.intellij.ide.BrowserUtil;
 import com.intellij.lang.java.JavaDocumentationProvider;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.Couple;
 import com.intellij.openapi.util.NullableComputable;
-import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiMethod;
+import com.intellij.util.Url;
+import com.intellij.util.Urls;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -35,16 +23,9 @@ import org.jetbrains.builtInWebServer.BuiltInServerOptions;
 import org.jetbrains.builtInWebServer.WebServerPathToFileManager;
 
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-/**
- * Created by IntelliJ IDEA.
- * User: db
- * Date: May 2, 2003
- * Time: 8:35:34 PM
- * To change this template use Options | File Templates.
- */
 
 public class JavaDocExternalFilter extends AbstractExternalFilter {
   private final Project myProject;  
@@ -111,20 +92,15 @@ public class JavaDocExternalFilter extends AbstractExternalFilter {
    public String getExternalDocInfoForElement(@NotNull String docURL, final PsiElement element) throws Exception {
     String externalDoc = null;
     myElement = element;
-    String builtInServer = "http://localhost:" + BuiltInServerOptions.getInstance().getEffectiveBuiltInServerPort() + "/" + myProject.getName() + "/";
+    String projectPath = "/" + myProject.getName() + "/";
+    String builtInServer = "http://localhost:" + BuiltInServerOptions.getInstance().getEffectiveBuiltInServerPort() + projectPath;
     if (docURL.startsWith(builtInServer)) {
-      int refPosition = docURL.lastIndexOf('#');
-      VirtualFile file = WebServerPathToFileManager.getInstance(myProject).findVirtualFile(
-        docURL.substring(builtInServer.length(), refPosition < builtInServer.length() ? docURL.length() : refPosition)
-      );
+      Url url = Urls.parseFromIdea(docURL);
+      VirtualFile file = url == null ? null : WebServerPathToFileManager.getInstance(myProject).findVirtualFile(url.getPath().substring(projectPath.length()));
       if (file != null) {
-        InputStreamReader reader = new InputStreamReader(file.getInputStream(), CharsetToolkit.UTF8_CHARSET);
         StringBuilder result = new StringBuilder();
-        try {
+        try (InputStreamReader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8)) {
           doBuildFromStream(docURL, reader, result);
-        }
-        finally {
-          reader.close();
         }
 
         externalDoc = correctDocText(docURL, result);
@@ -140,19 +116,17 @@ public class JavaDocExternalFilter extends AbstractExternalFilter {
     }
 
     if (element instanceof PsiMethod) {
-      final String className = ApplicationManager.getApplication().runReadAction(
-        new NullableComputable<String>() {
-          @Override
-          @Nullable
-          public String compute() {
-            PsiClass aClass = ((PsiMethod)element).getContainingClass();
-            return aClass == null ? null : aClass.getQualifiedName();
-          }
+      final Couple<String> classNameAndPresentation = ApplicationManager.getApplication().runReadAction(
+        (NullableComputable<Couple<String>>)() -> {
+          PsiClass aClass = ((PsiMethod)element).getContainingClass();
+          return aClass == null ? null : Couple.of(aClass.getQualifiedName(), 
+                                                   aClass.getQualifiedName() + JavaDocInfoGenerator.generateTypeParameters(aClass, true));
         }
       );
+      if (classNameAndPresentation == null) return externalDoc;
       Matcher matcher = ourMethodHeading.matcher(externalDoc);
       StringBuilder buffer = new StringBuilder("<h3>");
-      DocumentationManager.createHyperlink(buffer, className, className, false);
+      DocumentationManager.createHyperlink(buffer, classNameAndPresentation.first, classNameAndPresentation.second, false);
       return matcher.replaceFirst(buffer.append("</h3>").toString());
     }
     return externalDoc;

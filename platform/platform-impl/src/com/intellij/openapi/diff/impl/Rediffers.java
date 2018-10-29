@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.diff.impl;
 
 import com.intellij.openapi.Disposable;
@@ -20,15 +6,17 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.Alarm;
-import com.intellij.util.containers.HashMap;
+import org.jetbrains.annotations.NotNull;
+
+import java.util.HashMap;
 
 public class Rediffers {
-  private final HashMap<EditorSource, Rediff> myRediffers = new HashMap<EditorSource, Rediff>();
+  private final HashMap<EditorSource, Rediff> myRediffers = new HashMap<>();
   private final DiffPanelImpl myPanel;
   private final Alarm myAlarm = new Alarm();
   private final Runnable myUpdateRequest = new Runnable() {
+        @Override
         public void run() {
           if (myDisposed) return;
           updateNow();
@@ -60,6 +48,7 @@ public class Rediffers {
     myRediffers.put(source, rediff);
     rediff.startListen();
     source.addDisposable(new Disposable() {
+      @Override
       public void dispose() {
         contentRemoved(source);
       }
@@ -80,13 +69,12 @@ public class Rediffers {
     private final Document myDocument;
     private boolean myLinstening = false;
 
-    public Rediff(Document document) {
+    Rediff(Document document) {
       myDocument = document;
     }
 
-    public void beforeDocumentChange(DocumentEvent event) {}
-
-    public void documentChanged(DocumentEvent event) {
+    @Override
+    public void documentChanged(@NotNull DocumentEvent event) {
       if (event.getOldLength() != event.getNewLength()) myPanel.invalidateDiff();
       requestRediff();
     }
@@ -101,6 +89,7 @@ public class Rediffers {
       myLinstening = true;
     }
 
+    @Override
     public void dispose() {
       stopListen();
     }

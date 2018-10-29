@@ -28,13 +28,6 @@ public class GroovySynchronizedMethodInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return THREADING_ISSUES;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Synchronized method";
   }
@@ -54,7 +47,7 @@ public class GroovySynchronizedMethodInspection extends BaseInspection {
 
   private static class Visitor extends BaseInspectionVisitor {
     @Override
-    public void visitMethod(GrMethod grMethod) {
+    public void visitMethod(@NotNull GrMethod grMethod) {
       super.visitMethod(grMethod);
       if (!grMethod.hasModifierProperty(PsiModifier.SYNCHRONIZED)) {
         return;

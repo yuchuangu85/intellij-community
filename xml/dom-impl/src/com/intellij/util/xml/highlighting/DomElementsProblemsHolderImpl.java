@@ -19,7 +19,6 @@ package com.intellij.util.xml.highlighting;
 import com.intellij.codeInsight.daemon.impl.SeverityRegistrar;
 import com.intellij.lang.annotation.Annotation;
 import com.intellij.lang.annotation.HighlightSeverity;
-import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Factory;
 import com.intellij.util.Function;
 import com.intellij.util.SmartList;
@@ -40,20 +39,20 @@ public class DomElementsProblemsHolderImpl implements DomElementsProblemsHolder 
     ContainerUtil.newConcurrentMap();
   private final Map<DomElement, Map<Class<? extends DomElementsInspection>, List<DomElementProblemDescriptor>>> myCachedChildrenErrors =
     ContainerUtil.newConcurrentMap();
-  private final List<Annotation> myAnnotations = new ArrayList<Annotation>();
+  private final List<Annotation> myAnnotations = new ArrayList<>();
 
   private final Function<DomElement, List<DomElementProblemDescriptor>> myDomProblemsGetter =
     s -> {
       final Map<Class<? extends DomElementsInspection>, List<DomElementProblemDescriptor>> map = myCachedErrors.get(s);
-      return map != null ? ContainerUtil.concat(map.values()) : Collections.<DomElementProblemDescriptor>emptyList();
+      return map != null ? ContainerUtil.concat(map.values()) : Collections.emptyList();
     };
 
   private final DomFileElement myElement;
 
   private static final Factory<Map<Class<? extends DomElementsInspection>,List<DomElementProblemDescriptor>>> CONCURRENT_HASH_MAP_FACTORY =
     () -> ContainerUtil.newConcurrentMap();
-  private static final Factory<List<DomElementProblemDescriptor>> SMART_LIST_FACTORY = () -> new SmartList<DomElementProblemDescriptor>();
-  private final Set<Class<? extends DomElementsInspection>> myPassedInspections = new THashSet<Class<? extends DomElementsInspection>>();
+  private static final Factory<List<DomElementProblemDescriptor>> SMART_LIST_FACTORY = () -> new SmartList<>();
+  private final Set<Class<? extends DomElementsInspection>> myPassedInspections = new THashSet<>();
 
   public DomElementsProblemsHolderImpl(final DomFileElement element) {
     myElement = element;
@@ -98,11 +97,6 @@ public class DomElementsProblemsHolderImpl implements DomElementsProblemsHolder 
   }
 
   @Override
-  public List<DomElementProblemDescriptor> getProblems(final DomElement domElement, boolean includeXmlProblems) {
-    return getProblems(domElement);
-  }
-
-  @Override
   public List<DomElementProblemDescriptor> getProblems(final DomElement domElement,
                                                        final boolean includeXmlProblems,
                                                        final boolean withChildren) {
@@ -113,7 +107,6 @@ public class DomElementsProblemsHolderImpl implements DomElementsProblemsHolder 
     return ContainerUtil.concat(getProblemsMap(domElement).values());
   }
 
-  @Override
   public List<DomElementProblemDescriptor> getProblems(DomElement domElement,
                                                        final boolean includeXmlProblems,
                                                        final boolean withChildren,
@@ -135,7 +128,7 @@ public class DomElementsProblemsHolderImpl implements DomElementsProblemsHolder 
       return map;
     }
 
-    final Map<Class<? extends DomElementsInspection>, List<DomElementProblemDescriptor>> problems = new THashMap<Class<? extends DomElementsInspection>, List<DomElementProblemDescriptor>>();
+    final Map<Class<? extends DomElementsInspection>, List<DomElementProblemDescriptor>> problems = new THashMap<>();
     if (domElement == myElement) {
       for (Map<Class<? extends DomElementsInspection>, List<DomElementProblemDescriptor>> listMap : myCachedErrors.values()) {
         mergeMaps(problems, listMap);
@@ -174,6 +167,6 @@ public class DomElementsProblemsHolderImpl implements DomElementsProblemsHolder 
       return Collections.emptyList();
     }
     final List<DomElementProblemDescriptor> list = getProblemsMap(myElement).get(inspection.getClass());
-    return list != null ? new ArrayList<DomElementProblemDescriptor>(list) : Collections.<DomElementProblemDescriptor>emptyList();
+    return list != null ? new ArrayList<>(list) : Collections.emptyList();
   }
 }

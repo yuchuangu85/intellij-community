@@ -21,7 +21,6 @@ import com.intellij.openapi.editor.impl.AbstractEditorTest;
 import com.intellij.testFramework.EditorTestUtil;
 import com.intellij.testFramework.TestFileType;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -29,30 +28,30 @@ import java.util.regex.Pattern;
 
 public class SoftWrapTest extends AbstractEditorTest {
 
-  public void testCollapsedRegionWithLongPlaceholderAtLineStart1() throws IOException {
+  public void testCollapsedRegionWithLongPlaceholderAtLineStart1() {
     doTestSoftWraps(10, "<fold text='veryVeryVeryLongPlaceholder'>foo</fold>");
   }
 
-  public void testCollapsedRegionWithLongPlaceholderAtLineStart2() throws IOException {
+  public void testCollapsedRegionWithLongPlaceholderAtLineStart2() {
     doTestSoftWraps(10, "<fold text='veryVeryVeryLongPlaceholder'>foo</fold><wrap>bar");
   }
 
-  public void testCollapsedRegionWithLongPlaceholderAtLineStart3() throws IOException {
+  public void testCollapsedRegionWithLongPlaceholderAtLineStart3() {
     doTestSoftWraps(10, "<fold text='veryVeryVeryLongPlaceholder'>foo</fold>\nvery long <wrap>text");
   }
 
   private static final String TAGS_PATTERN = "(<fold(\\stext=\'([^\']*)\')?>)|(</fold>)|<wrap>";
 
-  private void doTestSoftWraps(int wrapWidth, String text) throws IOException {
-    List<MyFoldRegion> foldRegions = new ArrayList<MyFoldRegion>();
-    List<Integer> wrapPositions = new ArrayList<Integer>();
+  private void doTestSoftWraps(int wrapWidth, String text) {
+    List<MyFoldRegion> foldRegions = new ArrayList<>();
+    List<Integer> wrapPositions = new ArrayList<>();
     int foldInsertPosition = 0;
     int pos = 0;
     int docPos = 0;
     Matcher matcher = Pattern.compile(TAGS_PATTERN).matcher(text);
     StringBuilder cleanedText = new StringBuilder();
     while(matcher.find()) {
-      cleanedText.append(text.substring(pos, matcher.start()));
+      cleanedText.append(text, pos, matcher.start());
       docPos += matcher.start() - pos;
       pos = matcher.end();
       if (matcher.group(1) != null) {       // <fold>
@@ -80,7 +79,7 @@ public class SoftWrapTest extends AbstractEditorTest {
 
     EditorTestUtil.configureSoftWraps(myEditor, wrapWidth);
 
-    List<Integer> actualWrapPositions = new ArrayList<Integer>();
+    List<Integer> actualWrapPositions = new ArrayList<>();
     for (SoftWrap wrap : myEditor.getSoftWrapModel().getSoftWrapsForRange(0, myEditor.getDocument().getTextLength())) {
       actualWrapPositions.add(wrap.getStart());
     }

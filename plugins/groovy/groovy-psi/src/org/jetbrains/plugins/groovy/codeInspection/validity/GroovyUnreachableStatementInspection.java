@@ -30,13 +30,6 @@ public class GroovyUnreachableStatementInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return VALIDITY_ISSUES;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Unreachable Statement";
   }
@@ -61,7 +54,7 @@ public class GroovyUnreachableStatementInspection extends BaseInspection {
 
   private static class Visitor extends BaseInspectionVisitor {
     @Override
-    public void visitClosure(GrClosableBlock closure) {
+    public void visitClosure(@NotNull GrClosableBlock closure) {
       super.visitClosure(closure);
       GrStatement[] statements = closure.getStatements();
       for (int i = 0; i < statements.length - 1; i++) {
@@ -70,7 +63,7 @@ public class GroovyUnreachableStatementInspection extends BaseInspection {
     }
 
     @Override
-    public void visitOpenBlock(GrOpenBlock block) {
+    public void visitOpenBlock(@NotNull GrOpenBlock block) {
       super.visitOpenBlock(block);
       GrStatement[] statements = block.getStatements();
       for (int i = 0; i < statements.length - 1; i++) {

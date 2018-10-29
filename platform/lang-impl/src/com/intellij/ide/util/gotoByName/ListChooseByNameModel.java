@@ -43,13 +43,13 @@ public class ListChooseByNameModel<T extends ChooseByNameItem> extends SimpleCho
 
   private Pattern myCompiledPattern;
   private String myPattern;
-  private final List<T> myItems;
+  private final List<? extends T> myItems;
   private final String myNotInMessage;
 
   public ListChooseByNameModel(@NotNull final Project project,
                                final String prompt,
                                final String notInMessage,
-                               List<T> items) {
+                               List<? extends T> items) {
     super(project, prompt, null);
 
     myItems = items;
@@ -58,7 +58,7 @@ public class ListChooseByNameModel<T extends ChooseByNameItem> extends SimpleCho
 
   @Override
   public String[] getNames() {
-    final ArrayList<String> taskFullCmds = new ArrayList<String>();
+    final ArrayList<String> taskFullCmds = new ArrayList<>();
     for (T item : myItems) {
       taskFullCmds.add(item.getName());
     }

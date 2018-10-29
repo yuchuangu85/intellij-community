@@ -90,7 +90,7 @@ public class PsiBreakStatementImpl extends CompositePsiElement implements PsiBre
   }
 
   @Override
-  public int getChildRole(ASTNode child) {
+  public int getChildRole(@NotNull ASTNode child) {
     LOG.assertTrue(child.getTreeParent() == this);
     IElementType i = child.getElementType();
     if (i == BREAK_KEYWORD) {
@@ -120,8 +120,9 @@ public class PsiBreakStatementImpl extends CompositePsiElement implements PsiBre
   @Override
   public PsiReference getReference() {
     final PsiReference[] references = getReferences();
-    if (references != null && references.length > 0)
+    if (references.length > 0) {
       return references[0];
+    }
     return null;
   }
 
@@ -133,6 +134,7 @@ public class PsiBreakStatementImpl extends CompositePsiElement implements PsiBre
     return new PsiReference[]{new PsiLabelReference(this, getLabelIdentifier())};
   }
 
+  @Override
   public String toString() {
     return "PsiBreakStatement";
   }

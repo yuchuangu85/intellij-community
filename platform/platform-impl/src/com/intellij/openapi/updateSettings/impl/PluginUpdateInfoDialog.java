@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.updateSettings.impl;
 
 import com.intellij.ide.IdeBundle;
@@ -21,7 +7,6 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.progress.PerformInBackgroundOption;
 import com.intellij.openapi.progress.ProgressIndicator;
-import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.Task;
 import com.intellij.ui.TableUtil;
 import org.jetbrains.annotations.NotNull;
@@ -35,10 +20,10 @@ import java.util.Set;
  * @author pti
  */
 class PluginUpdateInfoDialog extends AbstractUpdateDialog {
-  private final Collection<PluginDownloader> myUploadedPlugins;
+  private final Collection<? extends PluginDownloader> myUploadedPlugins;
   private final boolean myPlatformUpdate;
 
-  PluginUpdateInfoDialog(Collection<PluginDownloader> uploadedPlugins, boolean enableLink) {
+  PluginUpdateInfoDialog(Collection<? extends PluginDownloader> uploadedPlugins, boolean enableLink) {
     super(enableLink);
     myUploadedPlugins = uploadedPlugins;
     myPlatformUpdate = false;
@@ -48,11 +33,16 @@ class PluginUpdateInfoDialog extends AbstractUpdateDialog {
   /**
    * Used from {@link UpdateInfoDialog} when both platform and plugin updates are available.
    */
-  PluginUpdateInfoDialog(Component parent, @NotNull Collection<PluginDownloader> updatePlugins) {
-    super(parent, false);
+  PluginUpdateInfoDialog(@NotNull Collection<? extends PluginDownloader> updatePlugins) {
+    super(false);
     myUploadedPlugins = updatePlugins;
     myPlatformUpdate = true;
     init();
+  }
+
+  @Override
+  protected String getDimensionServiceKey() {
+    return "#com.intellij.openapi.updateSettings.impl.PluginUpdateInfoDialog";
   }
 
   @Override
@@ -75,26 +65,16 @@ class PluginUpdateInfoDialog extends AbstractUpdateDialog {
   protected void doOKAction() {
     super.doOKAction();
 
-    if (myPlatformUpdate) {
-      ProgressManager.getInstance().run(new Task.Modal(null, IdeBundle.message("progress.downloading.plugins"), true) {
+    if (!myPlatformUpdate) {
+      new Task.Backgroundable(null, IdeBundle.message("update.notifications.title"), true, PerformInBackgroundOption.DEAF) {
         @Override
         public void run(@NotNull ProgressIndicator indicator) {
-          UpdateChecker.saveDisabledToUpdatePlugins();
-          UpdateChecker.installPluginUpdates(myUploadedPlugins, indicator);
-        }
-      });
-    }
-    else {
-      ProgressManager.getInstance().run(new Task.Backgroundable(null, IdeBundle.message("progress.downloading.plugins"), true, PerformInBackgroundOption.DEAF) {
-        @Override
-        public void run(@NotNull ProgressIndicator indicator) {
-          UpdateChecker.saveDisabledToUpdatePlugins();
-          boolean updated = UpdateChecker.installPluginUpdates(myUploadedPlugins, indicator);
+          boolean updated = UpdateInstaller.installPluginUpdates(myUploadedPlugins, indicator);
           if (updated) {
             ApplicationManager.getApplication().invokeLater(() -> PluginManagerMain.notifyPluginsUpdated(null), ModalityState.NON_MODAL);
           }
         }
-      });
+      }.queue();
     }
   }
 
@@ -104,7 +84,7 @@ class PluginUpdateInfoDialog extends AbstractUpdateDialog {
     private JPanel myPluginsPanel;
     private JEditorPane myMessageArea;
 
-    public PluginUpdateInfoPanel() {
+    PluginUpdateInfoPanel() {
       myPluginsToUpdateLabel.setVisible(true);
       myPluginsPanel.setVisible(true);
 
@@ -120,9 +100,11 @@ class PluginUpdateInfoDialog extends AbstractUpdateDialog {
     }
 
     private void updateState(DetectedPluginsPanel panel) {
-      Set<String> skipped = panel.getSkippedPlugins();
-      boolean nothingSelected = myUploadedPlugins.stream().allMatch(plugin -> skipped.contains(plugin.getPluginId()));
-      getOKAction().setEnabled(!nothingSelected);
+      if (!myPlatformUpdate) {
+        Set<String> skipped = panel.getSkippedPlugins();
+        boolean nothingSelected = myUploadedPlugins.stream().allMatch(plugin -> skipped.contains(plugin.getPluginId()));
+        getOKAction().setEnabled(!nothingSelected);
+      }
     }
   }
 }

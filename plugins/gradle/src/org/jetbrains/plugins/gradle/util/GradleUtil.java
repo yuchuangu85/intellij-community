@@ -39,14 +39,18 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Properties;
 
 /**
  * Holds miscellaneous utility methods.
  *
  * @author Denis Zhdanov
- * @since 8/25/11 1:19 PM
  */
 public class GradleUtil {
   private static final String LAST_USED_GRADLE_HOME_KEY = "last.used.gradle.home";
@@ -71,7 +75,6 @@ public class GradleUtil {
     return FileChooserDescriptorFactory.createSingleFolderDescriptor();
   }
 
-  @SuppressWarnings("IOResourceOpenedButNotSafelyClosed")
   public static boolean isGradleDefaultWrapperFilesExist(@Nullable String gradleProjectPath) {
     return getWrapperConfiguration(gradleProjectPath) != null;
   }
@@ -81,7 +84,7 @@ public class GradleUtil {
    *
    * @param gradleProjectPath  target gradle project config (*.gradle) path or config file's directory path.
    * @return                   gradle wrapper settings should be used with gradle wrapper for the gradle project located at the given path
-   *                           if any; <code>null</code> otherwise
+   *                           if any; {@code null} otherwise
    */
   @Nullable
   public static WrapperConfiguration getWrapperConfiguration(@Nullable String gradleProjectPath) {
@@ -98,7 +101,7 @@ public class GradleUtil {
       if(StringUtil.isEmpty(distributionUrl)) {
         throw new ExternalSystemException("Wrapper 'distributionUrl' property does not exist!");
       } else {
-        wrapperConfiguration.setDistribution(new URI(distributionUrl));
+        wrapperConfiguration.setDistribution(prepareDistributionUri(distributionUrl, wrapperPropertiesFile));
       }
       String distributionPath = props.getProperty(WrapperExecutor.DISTRIBUTION_PATH_PROPERTY);
       if(!StringUtil.isEmpty(distributionPath)) {
@@ -125,6 +128,11 @@ public class GradleUtil {
       }
     }
     return null;
+  }
+
+  private static URI prepareDistributionUri(String distributionUrl, File propertiesFile) throws URISyntaxException {
+    URI source = new URI(distributionUrl);
+    return source.getScheme() != null ? source : new File(propertiesFile.getParentFile(), source.getSchemeSpecificPart()).toURI();
   }
 
   /**
@@ -220,5 +228,30 @@ public class GradleUtil {
     }
 
     return candidates[0];
+  }
+
+  @NotNull
+  public static String determineRootProject(@NotNull String subProjectPath) {
+    final Path subProject = Paths.get(subProjectPath);
+    Path candidate = subProject;
+    try {
+      while (candidate != null && candidate != candidate.getParent()) {
+        if (containsGradleSettingsFile(candidate)) {
+          return candidate.toString();
+        }
+        candidate = candidate.getParent();
+      }
+    } catch (IOException e) {
+      GradleLog.LOG.warn("Failed to determine root Gradle project directory for [" + subProjectPath + "]", e);
+    }
+    return Files.isDirectory(subProject) ? subProjectPath : subProject.getParent().toString();
+  }
+
+  private static boolean containsGradleSettingsFile(Path directory) throws IOException {
+    return Files.isDirectory(directory) && Files.walk(directory, 1)
+      .map(Path::getFileName)
+      .filter(Objects::nonNull)
+      .map(Path::toString)
+      .anyMatch(name -> name.startsWith("settings.gradle"));
   }
 }

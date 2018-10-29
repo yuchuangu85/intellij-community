@@ -14,16 +14,9 @@
  * limitations under the License.
  */
 
-/*
- * Created by IntelliJ IDEA.
- * User: max
- * Date: Dec 17, 2001
- * Time: 2:40:54 PM
- * To change template for new class use
- * Code Style | Class Templates options (Tools | IDE Options).
- */
 package com.intellij.codeInspection.reference;
 
+import com.intellij.openapi.diagnostic.Logger;
 import org.jdom.Element;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -32,6 +25,7 @@ public class SmartRefElementPointerImpl implements SmartRefElementPointer {
   @NonNls public static final String FQNAME_ATTR = "FQNAME";
   @NonNls public static final String TYPE_ATTR = "TYPE";
   @NonNls public static final String ENTRY_POINT = "entry_point";
+  private static final Logger LOG = Logger.getInstance(SmartRefElementPointerImpl.class);
 
   private final boolean myIsPersistent;
   private RefEntity myRefElement;
@@ -43,6 +37,7 @@ public class SmartRefElementPointerImpl implements SmartRefElementPointer {
       myRefElement = ref;
       myFQName = ref.getExternalName();
       myType = ref.getRefManager().getType(ref);
+      LOG.assertTrue(myFQName != null, "Name: " + ref.getName() + ", qName: " + ref.getQualifiedName() + "; type: " + myType);
     }
 
   public SmartRefElementPointerImpl(Element jDomElement) {
@@ -57,13 +52,6 @@ public class SmartRefElementPointerImpl implements SmartRefElementPointer {
      myFQName = fqName;
      myType = type;
    }
-
-  public SmartRefElementPointerImpl(final String type, final String fqName, final RefManager manager) {
-    myIsPersistent = false;
-    myFQName = fqName;
-    myType = type;
-    resolve(manager);
-  }
 
   @Override
   public boolean isPersistent() {
@@ -91,8 +79,7 @@ public class SmartRefElementPointerImpl implements SmartRefElementPointer {
   @Override
   public boolean resolve(@NotNull RefManager manager) {
     if (myRefElement != null) {
-      if (myRefElement instanceof RefElement && myRefElement.isValid()) return true;
-      return false;
+      return myRefElement instanceof RefElement && myRefElement.isValid();
     }
     myRefElement = manager.getReference(myType, getFQName());
     return myRefElement != null;

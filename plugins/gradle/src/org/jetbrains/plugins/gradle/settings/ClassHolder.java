@@ -24,7 +24,6 @@ import java.io.Serializable;
  * Holds information about target class.
  * 
  * @author Denis Zhdanov
- * @since 8/15/13 2:52 PM
  */
 public class ClassHolder<T> implements Serializable {
 
@@ -37,7 +36,6 @@ public class ClassHolder<T> implements Serializable {
   /**
    * @param targetClass  class to use
    */
-  @SuppressWarnings("NullableProblems")
   public ClassHolder(@NotNull Class<T> targetClass) {
     myTargetClass = targetClass;
     myClassName = myTargetClass.getName();
@@ -45,7 +43,7 @@ public class ClassHolder<T> implements Serializable {
 
   @NotNull
   public static <T> ClassHolder<T> from(@NotNull Class<T> clazz) {
-    return new ClassHolder<T>(clazz);
+    return new ClassHolder<>(clazz);
   }
 
   @SuppressWarnings("unchecked")

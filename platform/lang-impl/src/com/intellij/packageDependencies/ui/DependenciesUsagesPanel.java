@@ -14,10 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * User: anna
- * Date: 26-Mar-2008
- */
 package com.intellij.packageDependencies.ui;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -78,7 +74,7 @@ public class DependenciesUsagesPanel extends UsagesPanel {
               elementsToSearch = searchFor;
               usages = FindDependencyUtil.findDependencies(myBuilders, searchIn, searchFor);
             }
-            assert !new HashSet<PsiFile>(elementsToSearch).contains(null);
+            assert !new HashSet<>(elementsToSearch).contains(null);
           }
           catch (ProcessCanceledException e) {
           }
@@ -90,7 +86,8 @@ public class DependenciesUsagesPanel extends UsagesPanel {
             final UsageInfo[] finalUsages = usages;
             final PsiElement[] _elementsToSearch =
               elementsToSearch != null ? PsiUtilCore.toPsiElementArray(elementsToSearch) : PsiElement.EMPTY_ARRAY;
-            ApplicationManager.getApplication().invokeLater(() -> showUsages(_elementsToSearch, finalUsages), ModalityState.stateForComponent(DependenciesUsagesPanel.this));
+            ApplicationManager.getApplication().invokeLater(() -> showUsages(_elementsToSearch, finalUsages), ModalityState.stateForComponent(
+              this));
           }
         });
         myCurrentProgress = null;

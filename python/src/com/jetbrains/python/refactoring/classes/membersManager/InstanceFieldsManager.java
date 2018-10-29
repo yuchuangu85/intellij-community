@@ -51,7 +51,7 @@ class InstanceFieldsManager extends FieldsManager {
                                                   @NotNull final PyClass... to) {
     //TODO: Copy/paste with ClassFieldsManager. Move to parent?
 
-    final List<PyElement> result = new ArrayList<PyElement>();
+    final List<PyElement> result = new ArrayList<>();
     for (final PyClass destClass : to) {
       result.addAll(copyInstanceFields(statements, destClass));
     }
@@ -95,7 +95,7 @@ class InstanceFieldsManager extends FieldsManager {
   private static PyFunction createInitMethod(@NotNull final PyClass to) {
     final PyFunctionBuilder functionBuilder = new PyFunctionBuilder(PyNames.INIT, to);
     functionBuilder.parameter(PyNames.CANONICAL_SELF); //TODO: Take param from codestyle?
-    final PyFunction function = functionBuilder.buildFunction(to.getProject(), LanguageLevel.forElement(to));
+    final PyFunction function = functionBuilder.buildFunction();
     return PyClassRefactoringUtil.addMethods(to, true, function).get(0);
   }
 

@@ -16,26 +16,20 @@
 package org.jetbrains.plugins.javaFX.fxml.refs;
 
 import com.intellij.codeInsight.AnnotationUtil;
-import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.search.DelegatingGlobalSearchScope;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.SearchScope;
 import com.intellij.psi.search.UseScopeEnlarger;
-import com.intellij.psi.search.searches.ClassInheritorsSearch;
 import com.intellij.psi.util.InheritanceUtil;
-import com.intellij.psi.util.PropertyUtil;
+import com.intellij.psi.util.PropertyUtilBase;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.javaFX.fxml.JavaFxCommonNames;
 import org.jetbrains.plugins.javaFX.fxml.JavaFxFileTypeFactory;
-import org.jetbrains.plugins.javaFX.indexing.JavaFxControllerClassIndex;
+import org.jetbrains.plugins.javaFX.fxml.JavaFxPsiUtil;
 
-/**
- * User: anna
- */
 public class JavaFxScopeEnlarger extends UseScopeEnlarger {
   @Nullable
   @Override
@@ -49,7 +43,7 @@ public class JavaFxScopeEnlarger extends UseScopeEnlarger {
     }
     else if (element instanceof PsiParameter) {
       final PsiElement declarationScope = ((PsiParameter)element).getDeclarationScope();
-      if (declarationScope instanceof PsiMethod && PropertyUtil.isSimplePropertySetter((PsiMethod)declarationScope)) {
+      if (declarationScope instanceof PsiMethod && PropertyUtilBase.isSimplePropertySetter((PsiMethod)declarationScope)) {
         containingClass = ((PsiMethod)declarationScope).getContainingClass();
       }
     }
@@ -59,7 +53,7 @@ public class JavaFxScopeEnlarger extends UseScopeEnlarger {
           element instanceof PsiMethod && needToEnlargeMethodScope((PsiMethod)element) ||
           element instanceof PsiParameter) {
         if (InheritanceUtil.isInheritor(containingClass, JavaFxCommonNames.JAVAFX_SCENE_NODE) ||
-            isControllerClass(containingClass)) {
+            JavaFxPsiUtil.isControllerClass(containingClass)) {
           final GlobalSearchScope projectScope = GlobalSearchScope.projectScope(element.getProject());
           return new GlobalFxmlSearchScope(projectScope);
         }
@@ -69,32 +63,9 @@ public class JavaFxScopeEnlarger extends UseScopeEnlarger {
     return null;
   }
 
-  public boolean isControllerClass(PsiClass psiClass) {
-    final Project project = psiClass.getProject();
-    final GlobalSearchScope resolveScope = psiClass.getResolveScope();
-    if (isControllerClassName(project, psiClass.getQualifiedName(), resolveScope)) {
-      return true;
-    }
-    final Ref<Boolean> refFound = new Ref<>(false);
-    ClassInheritorsSearch.search(psiClass, resolveScope, true, true, false).forEach((aClass) -> {
-      if (isControllerClassName(project, aClass.getQualifiedName(), resolveScope)) {
-        refFound.set(true);
-        return false;
-      }
-      return true;
-    });
-    return refFound.get();
-  }
-
-  private static boolean isControllerClassName(@NotNull Project project,
-                                               @Nullable String qualifiedName,
-                                               @NotNull GlobalSearchScope resolveScope) {
-    return qualifiedName != null && !JavaFxControllerClassIndex.findFxmlWithController(project, qualifiedName, resolveScope).isEmpty();
-  }
-
   private static boolean needToEnlargeFieldScope(PsiField field) {
     return !field.hasModifierProperty(PsiModifier.PUBLIC) &&
-           AnnotationUtil.isAnnotated(field, JavaFxCommonNames.JAVAFX_FXML_ANNOTATION, false);
+           AnnotationUtil.isAnnotated(field, JavaFxCommonNames.JAVAFX_FXML_ANNOTATION, 0);
   }
 
   private static boolean needToEnlargeMethodScope(PsiMethod method) {
@@ -102,7 +73,7 @@ public class JavaFxScopeEnlarger extends UseScopeEnlarger {
     return isStatic && method.getParameterList().getParametersCount() == 2 &&
            InheritanceUtil.isInheritor(method.getParameterList().getParameters()[0].getType(), JavaFxCommonNames.JAVAFX_SCENE_NODE) ||
            !isStatic && !method.hasModifierProperty(PsiModifier.PUBLIC) &&
-           AnnotationUtil.isAnnotated(method, JavaFxCommonNames.JAVAFX_FXML_ANNOTATION, false);
+           AnnotationUtil.isAnnotated(method, JavaFxCommonNames.JAVAFX_FXML_ANNOTATION, 0);
   }
 
   public static class GlobalFxmlSearchScope extends DelegatingGlobalSearchScope {
@@ -112,7 +83,7 @@ public class JavaFxScopeEnlarger extends UseScopeEnlarger {
 
     @Override
     public boolean contains(@NotNull VirtualFile file) {
-      return super.contains(file) && JavaFxFileTypeFactory.isFxml(file);
+      return JavaFxFileTypeFactory.isFxml(file) && super.contains(file);
     }
   }
 }

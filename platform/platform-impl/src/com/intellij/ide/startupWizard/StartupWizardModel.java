@@ -25,7 +25,6 @@ import com.intellij.openapi.extensions.PluginId;
 import com.intellij.ui.wizard.WizardModel;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.MultiMap;
 import org.jetbrains.annotations.Nullable;
 
@@ -36,13 +35,13 @@ import java.util.*;
  * @author yole
  */
 public class StartupWizardModel extends WizardModel {
-  private final Set<String> myDisabledPluginIds = new HashSet<String>();
-  private final Map<String, SelectPluginsStep> myStepMap = new HashMap<String, SelectPluginsStep>();
-  private Map<PluginId, SelectPluginsStep> myPluginToStepMap = new HashMap<PluginId, SelectPluginsStep>();
-  private MultiMap<IdeaPluginDescriptor, IdeaPluginDescriptor> myBackwardDependencies =
-    new MultiMap<IdeaPluginDescriptor, IdeaPluginDescriptor>();
+  private final Set<String> myDisabledPluginIds = new HashSet<>();
+  private final Map<String, SelectPluginsStep> myStepMap = new HashMap<>();
+  private final Map<PluginId, SelectPluginsStep> myPluginToStepMap = new HashMap<>();
+  private final MultiMap<IdeaPluginDescriptor, IdeaPluginDescriptor> myBackwardDependencies =
+    new MultiMap<>();
   private SelectPluginsStep myOtherStep;
-  private IdeaPluginDescriptor[] myAllPlugins;
+  private final IdeaPluginDescriptor[] myAllPlugins;
 
   public StartupWizardModel(final List<ApplicationInfoEx.PluginChooserPage> pluginChooserPages) {
     super(ApplicationNamesInfo.getInstance().getFullProductName() + " Initial Configuration Wizard");
@@ -60,7 +59,7 @@ public class StartupWizardModel extends WizardModel {
       add(myOtherStep);
     }
 
-    myAllPlugins = PluginManager.loadDescriptors(null, ContainerUtil.<String>newArrayList());
+    myAllPlugins = PluginManager.loadDescriptors(null, ContainerUtil.newArrayList());
     for (IdeaPluginDescriptor pluginDescriptor : myAllPlugins) {
       if (pluginDescriptor.getPluginId().getIdString().equals("com.intellij")) {
         // skip 'IDEA CORE' plugin
@@ -103,7 +102,7 @@ public class StartupWizardModel extends WizardModel {
   }
 
   static List<PluginId> getNonOptionalDependencies(final IdeaPluginDescriptor descriptor) {
-    List<PluginId> result = new ArrayList<PluginId>();
+    List<PluginId> result = new ArrayList<>();
     for (PluginId pluginId : descriptor.getDependentPluginIds()) {
       if (pluginId.getIdString().equals("com.intellij")) continue;
       if (!ArrayUtil.contains(pluginId, descriptor.getOptionalDependentPluginIds())) {
@@ -166,7 +165,7 @@ public class StartupWizardModel extends WizardModel {
   }
 
   public List<IdeaPluginDescriptor> getDependentsOnEarlierPages(IdeaPluginDescriptor descriptor, boolean includeSamePage) {
-    List<IdeaPluginDescriptor> dependents = new ArrayList<IdeaPluginDescriptor>();
+    List<IdeaPluginDescriptor> dependents = new ArrayList<>();
     int thisStep = getPluginStepIndex(descriptor);
     for (IdeaPluginDescriptor dependent : myBackwardDependencies.get(descriptor)) {
       if (!myDisabledPluginIds.contains(dependent.getPluginId().toString())) {

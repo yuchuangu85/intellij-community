@@ -14,10 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * User: anna
- * Date: 11-Nov-2008
- */
 package org.jetbrains.idea.eclipse.conversion;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -45,7 +41,7 @@ import java.util.Map;
 public class EclipseClasspathWriter {
   public static final Logger LOG = Logger.getInstance(EclipseClasspathWriter.class);
 
-  private final Map<String, Element> myOldEntries = new THashMap<String, Element>();
+  private final Map<String, Element> myOldEntries = new THashMap<>();
 
   @NotNull
   public Element writeClasspath(@Nullable Element oldRoot, @NotNull ModuleRootModel model) {

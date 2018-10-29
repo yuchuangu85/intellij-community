@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.dsl;
 
 import com.intellij.openapi.application.Application;
@@ -28,11 +14,11 @@ import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.util.*;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.openapi.vfs.VirtualFileAdapter;
 import com.intellij.openapi.vfs.VirtualFileEvent;
+import com.intellij.openapi.vfs.VirtualFileListener;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.psi.*;
-import com.intellij.psi.impl.PsiModificationTrackerImpl;
+import com.intellij.psi.impl.PsiManagerEx;
 import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.CachedValue;
@@ -43,7 +29,6 @@ import com.intellij.util.PathUtil;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.containers.ConcurrentMultiMap;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.util.indexing.*;
 import com.intellij.util.io.EnumeratorStringDescriptor;
@@ -78,14 +63,14 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
   public static final @NonNls ID<String, Void> NAME = ID.create("GroovyDslFileIndex");
 
   private static final MultiMap<String, LinkedBlockingQueue<Pair<VirtualFile, GroovyDslExecutor>>> filesInProcessing =
-    new ConcurrentMultiMap<String, LinkedBlockingQueue<Pair<VirtualFile, GroovyDslExecutor>>>();
+    new ConcurrentMultiMap<>();
 
-  private static final ExecutorService ourPool = AppExecutorUtil.createBoundedApplicationPoolExecutor(4);
+  private static final ExecutorService ourPool = AppExecutorUtil.createBoundedApplicationPoolExecutor("GroovyDSLIndex Pool", 4);
 
   private final MyDataIndexer myDataIndexer = new MyDataIndexer();
 
   public GroovyDslFileIndex() {
-    VirtualFileManager.getInstance().addVirtualFileListener(new VirtualFileAdapter() {
+    VirtualFileManager.getInstance().addVirtualFileListener(new VirtualFileListener() {
       @Override
       public void contentsChanged(@NotNull VirtualFileEvent event) {
         final VirtualFile file = event.getFile();
@@ -154,7 +139,7 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
     app.invokeLater(() -> {
       for (Project project : ProjectManager.getInstance().getOpenProjects()) {
         project.putUserData(SCRIPTS_CACHE, null);
-        ((PsiModificationTrackerImpl)PsiManager.getInstance(project).getModificationTracker()).incCounter();
+        PsiManagerEx.getInstanceEx(project).dropPsiCaches();
       }
     }, app.getDisposed());
   }
@@ -281,12 +266,12 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
 
   private static List<VirtualFile> getGdslFiles(final Project project) {
     final List<VirtualFile> result = ContainerUtil.newArrayList();
-    result.addAll(getBundledGdslFiles());
+    result.addAll(bundledGdslFiles.getValue());
     result.addAll(getProjectGdslFiles(project));
     return result;
   }
 
-  private static List<VirtualFile> getBundledGdslFiles() {
+  private static final NotNullLazyValue<List<VirtualFile>> bundledGdslFiles = NotNullLazyValue.createValue(() -> {
     final List<VirtualFile> result = ContainerUtil.newArrayList();
     for (File file : getBundledScriptFolders()) {
       if (file.exists()) {
@@ -304,7 +289,7 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
       }
     }
     return result;
-  }
+  });
 
   private static List<VirtualFile> getProjectGdslFiles(Project project) {
     final List<VirtualFile> result = ContainerUtil.newArrayList();
@@ -354,7 +339,7 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
   private static List<GroovyDslScript> getDslScripts(final Project project) {
     return CachedValuesManager.getManager(project).getCachedValue(project, SCRIPTS_CACHE, () -> {
       if (GdslUtil.ourGdslStopped) {
-        return CachedValueProvider.Result.create(Collections.<GroovyDslScript>emptyList(), ModificationTracker.NEVER_CHANGED);
+        return CachedValueProvider.Result.create(Collections.emptyList(), ModificationTracker.NEVER_CHANGED);
       }
 
       // eagerly initialize some services used by background gdsl parsing threads
@@ -366,10 +351,10 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
 
       int count = 0;
 
-      List<GroovyDslScript> result = new ArrayList<GroovyDslScript>();
+      List<GroovyDslScript> result = new ArrayList<>();
 
       final LinkedBlockingQueue<Pair<VirtualFile, GroovyDslExecutor>> queue =
-        new LinkedBlockingQueue<Pair<VirtualFile, GroovyDslExecutor>>();
+        new LinkedBlockingQueue<>();
 
       for (VirtualFile vfile : getGdslFiles(project)) {
         final long stamp = vfile.getModificationStamp();
@@ -455,7 +440,6 @@ public class GroovyDslFileIndex extends ScalarIndexExtension<String> {
       }
     };
 
-    //noinspection SynchronizationOnLocalVariableOrMethodParameter
     synchronized (filesInProcessing) { //ensure that only one thread calculates dsl executor
       final boolean isNewRequest = !filesInProcessing.containsKey(fileUrl);
       filesInProcessing.putValue(fileUrl, queue);

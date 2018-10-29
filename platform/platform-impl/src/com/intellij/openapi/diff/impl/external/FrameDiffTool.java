@@ -1,29 +1,13 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.diff.impl.external;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
-import com.intellij.openapi.actionSystem.CustomShortcutSet;
 import com.intellij.openapi.diff.*;
 import com.intellij.openapi.diff.impl.ComparisonPolicy;
 import com.intellij.openapi.diff.impl.DiffPanelImpl;
 import com.intellij.openapi.diff.impl.DiffUtil;
-import com.intellij.openapi.keymap.KeymapManager;
 import com.intellij.openapi.ui.DialogBuilder;
 import com.intellij.openapi.ui.FrameWrapper;
 import com.intellij.openapi.ui.Messages;
@@ -39,7 +23,10 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 
+import static com.intellij.openapi.keymap.KeymapUtil.getActiveKeymapShortcuts;
+
 public class FrameDiffTool implements DiffTool {
+  @Override
   public void show(DiffRequest request) {
     Collection hints = request.getHints();
     boolean shouldOpenDialog = shouldOpenDialog(hints);
@@ -65,11 +52,11 @@ public class FrameDiffTool implements DiffTool {
       builder.setDimensionServiceKey(request.getGroupKey());
 
       new AnAction() {
-        public void actionPerformed(final AnActionEvent e) {
+        @Override
+        public void actionPerformed(@NotNull final AnActionEvent e) {
           builder.getDialogWrapper().close(0);
         }
-      }.registerCustomShortcutSet(new CustomShortcutSet(KeymapManager.getInstance().getActiveKeymap().getShortcuts("CloseContent")),
-                                  diffPanel.getComponent());
+      }.registerCustomShortcutSet(getActiveKeymapShortcuts("CloseContent"), diffPanel.getComponent());
       showDiffDialog(builder, hints);
     }
     else {
@@ -83,11 +70,11 @@ public class FrameDiffTool implements DiffTool {
       DiffUtil.initDiffFrame(diffPanel.getProject(), frameWrapper, diffPanel, diffPanel.getComponent());
 
       new AnAction() {
-        public void actionPerformed(final AnActionEvent e) {
+        @Override
+        public void actionPerformed(@NotNull final AnActionEvent e) {
           frameWrapper.getFrame().dispose();
         }
-      }.registerCustomShortcutSet(new CustomShortcutSet(KeymapManager.getInstance().getActiveKeymap().getShortcuts("CloseContent")),
-                                  diffPanel.getComponent());
+      }.registerCustomShortcutSet(getActiveKeymapShortcuts("CloseContent"), diffPanel.getComponent());
 
       frameWrapper.show();
     }
@@ -115,8 +102,7 @@ public class FrameDiffTool implements DiffTool {
       public void actionPerformed(final AnActionEvent e) {
         frameWrapper.getFrame().dispose();
       }
-    }.registerCustomShortcutSet(new CustomShortcutSet(KeymapManager.getInstance().getActiveKeymap().getShortcuts("CloseContent")),
-                                diffPanel.getComponent());
+    }.registerCustomShortcutSet(getActiveKeymapShortcuts("CloseContent"), diffPanel.getComponent());
 
     frameWrapper.show();
   }*/
@@ -194,6 +180,7 @@ public class FrameDiffTool implements DiffTool {
                                     DiffBundle.message("no.differences.dialog.title"), Messages.getQuestionIcon()) == Messages.YES;
   }
 
+  @Override
   public boolean canShow(DiffRequest data) {
     return canShowDiff(data);
   }

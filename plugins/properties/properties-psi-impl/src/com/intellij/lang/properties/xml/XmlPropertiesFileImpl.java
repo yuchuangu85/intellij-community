@@ -43,7 +43,6 @@ import java.util.*;
 
 /**
  * @author Dmitry Avdeev
- *         Date: 7/26/11
  */
 public class XmlPropertiesFileImpl extends XmlPropertiesFile {
   public static final String ENTRY_TAG_NAME = "entry";
@@ -60,9 +59,9 @@ public class XmlPropertiesFileImpl extends XmlPropertiesFile {
   private void ensurePropertiesLoaded() {
     while (myFileModificationStamp != myFile.getModificationStamp() || myPropertiesMap == null) {
       myFileModificationStamp = myFile.getModificationStamp();
-      MostlySingularMultiMap<String, IProperty> propertiesMap = new MostlySingularMultiMap<String, IProperty>();
+      MostlySingularMultiMap<String, IProperty> propertiesMap = new MostlySingularMultiMap<>();
       XmlTag rootTag = myFile.getRootTag();
-      final List<IProperty> propertiesOrder = new ArrayList<IProperty>();
+      final List<IProperty> propertiesOrder = new ArrayList<>();
       if (rootTag != null) {
         XmlTag[] entries = rootTag.findSubTags(ENTRY_TAG_NAME);
         for (XmlTag entry : entries) {
@@ -74,8 +73,7 @@ public class XmlPropertiesFileImpl extends XmlPropertiesFile {
           }
         }
       }
-      final boolean isAlphaSorted = PropertiesImplUtil.isAlphaSorted(propertiesOrder);
-      myAlphaSorted = isAlphaSorted;
+      myAlphaSorted = PropertiesImplUtil.isAlphaSorted(propertiesOrder);
       myProperties = propertiesOrder;
       myPropertiesMap = propertiesMap;
     }
@@ -153,8 +151,7 @@ public class XmlPropertiesFileImpl extends XmlPropertiesFile {
     final XmlTag rootTag = myFile.getRootTag();
     final XmlTag entry = createPropertyTag(key, value);
     final XmlTag addedEntry = (XmlTag) (anchorTag == null ? myFile.getRootTag().addSubTag(entry, !addToEnd) : rootTag.addAfter(entry, anchorTag));
-    final XmlProperty property = new XmlProperty(addedEntry, this);
-    return property;
+    return new XmlProperty(addedEntry, this);
   }
 
   @NotNull
@@ -198,7 +195,7 @@ public class XmlPropertiesFileImpl extends XmlPropertiesFile {
     return entry;
   }
 
-  public static PropertiesFile getPropertiesFile(final PsiFile file) {
+  public static PropertiesFile getPropertiesFile(@NotNull PsiFile file) {
     CachedValuesManager manager = CachedValuesManager.getManager(file.getProject());
     if (file instanceof XmlFile) {
       return manager.getCachedValue(file, KEY,
@@ -217,7 +214,7 @@ public class XmlPropertiesFileImpl extends XmlPropertiesFile {
   @NotNull
   @Override
   public Map<String, String> getNamesMap() {
-    Map<String, String> result = new THashMap<String, String>();
+    Map<String, String> result = new THashMap<>();
     for (IProperty property : getProperties()) {
       result.put(property.getUnescapedKey(), property.getValue());
     }

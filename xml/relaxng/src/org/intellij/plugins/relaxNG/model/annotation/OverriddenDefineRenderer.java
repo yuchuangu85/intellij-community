@@ -40,7 +40,7 @@ class OverriddenDefineRenderer extends GutterIconRenderer implements DumbAware {
 
   private final Define myDefine;
 
-  public OverriddenDefineRenderer(@NotNull Define define) {
+  OverriddenDefineRenderer(@NotNull Define define) {
     myDefine = define;
   }
 
@@ -55,16 +55,16 @@ class OverriddenDefineRenderer extends GutterIconRenderer implements DumbAware {
   public AnAction getClickAction() {
     return new AnAction() {
       @Override
-      public void actionPerformed(AnActionEvent e) {
+      public void actionPerformed(@NotNull AnActionEvent e) {
         final PsiElement element = myDefine.getPsiElement();
         if (element == null || !element.isValid()) return;
 
-        final PsiElementProcessor.CollectElements<XmlFile> collector = new PsiElementProcessor.CollectElements<XmlFile>();
+        final PsiElementProcessor.CollectElements<XmlFile> collector = new PsiElementProcessor.CollectElements<>();
         final XmlFile localFile = (XmlFile)element.getContainingFile();
         RelaxIncludeIndex.processBackwardDependencies(localFile, collector);
         final Collection<XmlFile> files = collector.getCollection();
 
-        final List<Define> result = new SmartList<Define>();
+        final List<Define> result = new SmartList<>();
         final OverriddenDefineSearcher searcher = new OverriddenDefineSearcher(myDefine, localFile, result);
         for (XmlFile file : files) {
           final Grammar grammar = GrammarFactory.getGrammar(file);

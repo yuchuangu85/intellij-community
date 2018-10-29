@@ -35,11 +35,6 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Created by IntelliJ IDEA.
- * User: sweinreuter
- * Date: 18.08.2007
- */
 public class RngReferenceConverter implements CustomReferenceConverter {
   @Override
   @NotNull
@@ -79,7 +74,7 @@ public class RngReferenceConverter implements CustomReferenceConverter {
                         return EMPTY_ARRAY;
                       }
                       
-                      final Ref<Object[]> ref = new Ref<Object[]>(ArrayUtil.EMPTY_STRING_ARRAY);
+                      final Ref<Object[]> ref = new Ref<>(ArrayUtil.EMPTY_STRING_ARRAY);
                       fileElement.acceptChildren(new RngDomVisitor(){
                         @Override
                         public void visit(RngGrammar grammar) {

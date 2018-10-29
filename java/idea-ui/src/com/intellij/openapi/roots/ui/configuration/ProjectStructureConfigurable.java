@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.roots.ui.configuration;
 
 import com.intellij.compiler.server.BuildManager;
@@ -20,10 +6,11 @@ import com.intellij.facet.Facet;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.AccessToken;
+import com.intellij.openapi.application.TransactionGuard;
 import com.intellij.openapi.components.ServiceManager;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
-import com.intellij.openapi.options.BaseConfigurable;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.SearchableConfigurable;
@@ -41,6 +28,7 @@ import com.intellij.openapi.ui.DetailsComponent;
 import com.intellij.openapi.ui.MasterDetailsComponent;
 import com.intellij.openapi.util.ActionCallback;
 import com.intellij.openapi.util.Ref;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.ex.IdeFocusTraversalPolicy;
 import com.intellij.packaging.artifacts.Artifact;
 import com.intellij.ui.JBSplitter;
@@ -61,12 +49,14 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import static com.intellij.openapi.roots.ui.configuration.ProjectStructureConfigurableFilter.ConfigurableId;
 
-public class ProjectStructureConfigurable extends BaseConfigurable implements SearchableConfigurable, Place.Navigator,
+public class ProjectStructureConfigurable implements SearchableConfigurable, Place.Navigator,
                                                                               Configurable.NoMargin, Configurable.NoScroll {
+  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.roots.ui.configuration.ProjectStructureConfigurable");
 
   public static final DataKey<ProjectStructureConfigurable> KEY = DataKey.create("ProjectStructureConfiguration");
 
@@ -104,12 +94,15 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
 
   private boolean myUiInitialized;
 
-  private final List<Configurable> myName2Config = new ArrayList<Configurable>();
+  private final List<Configurable> myName2Config = new ArrayList<>();
   private final StructureConfigurableContext myContext;
   private final ModulesConfigurator myModuleConfigurator;
   private JdkListConfigurable myJdkListConfig;
 
-  private final JLabel myEmptySelection = new JLabel("<html><body><center>Select a setting to view or edit its details here</center></body></html>", JLabel.CENTER);
+  private final JLabel myEmptySelection = new JLabel("<html><body><center>Select a setting to view or edit its details here</center></body></html>",
+                                                     SwingConstants.CENTER);
+
+  private final ObsoleteLibraryFilesRemover myObsoleteLibraryFilesRemover;
 
   public ProjectStructureConfigurable(final Project project,
                                       final ProjectLibrariesConfigurable projectLibrariesConfigurable,
@@ -128,7 +121,7 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
     myProjectLibrariesConfig = projectLibrariesConfigurable;
     myGlobalLibrariesConfig = globalLibrariesConfigurable;
     myModulesConfig = moduleStructureConfigurable;
-    
+
     myProjectLibrariesConfig.init(myContext);
     myGlobalLibrariesConfig.init(myContext);
     myModulesConfig.init(myContext);
@@ -143,6 +136,7 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
     myUiState.proportion = proportion != null ? Float.parseFloat(proportion) : 0;
     final String sideProportion = propertiesComponent.getValue("project.structure.side.proportion");
     myUiState.sideProportion = sideProportion != null ? Float.parseFloat(sideProportion) : 0;
+    myObsoleteLibraryFilesRemover = new ObsoleteLibraryFilesRemover(project);
   }
 
   @Override
@@ -184,9 +178,9 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
     };
 
     final DefaultActionGroup toolbarGroup = new DefaultActionGroup();
-    toolbarGroup.add(new BackAction(myComponent));
-    toolbarGroup.add(new ForwardAction(myComponent));
-    final ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN, toolbarGroup, true);
+    toolbarGroup.add(new BackAction(myComponent, myContext));
+    toolbarGroup.add(new ForwardAction(myComponent, myContext));
+    final ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar("ProjectStructure", toolbarGroup, true);
     toolbar.setTargetComponent(myComponent);
     myToolbarComponent = toolbar.getComponent();
     left.setBackground(UIUtil.SIDE_PANEL_BACKGROUND);
@@ -207,7 +201,7 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
   private void initSidePanel() {
     boolean isDefaultProject = myProject == ProjectManager.getInstance().getDefaultProject();
 
-    mySidePanel = new SidePanel(this, myHistory);
+    mySidePanel = new SidePanel(this);
     mySidePanel.addSeparator("Project Settings");
     addProjectConfig();
     if (!isDefaultProject) {
@@ -309,6 +303,8 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
 
   @Override
   public void apply() throws ConfigurationException {
+    LOG.assertTrue(TransactionGuard.getInstance().getContextTransaction() != null, "Project Structure should be shown in a transaction, see AnAction#startInTransaction");
+
     for (Configurable each : myName2Config) {
       if (each instanceof BaseStructureConfigurable && each.isModified()) {
         ((BaseStructureConfigurable)each).checkCanApply();
@@ -330,8 +326,9 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
       throw exceptionRef.get();
     }
 
+    myObsoleteLibraryFilesRemover.deleteFiles();
     myContext.getDaemonAnalyzer().clearCaches();
-    SwingUtilities.invokeLater(() -> BuildManager.getInstance().scheduleAutoMake());
+    BuildManager.getInstance().scheduleAutoMake();
   }
 
   @Override
@@ -374,10 +371,6 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
     finally {
       token.finish();
     }
-  }
-
-  public void hideSidePanel() {
-    mySplitter.getFirstComponent().setVisible(false);
   }
 
   @Override
@@ -434,7 +427,7 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
     if (moduleToSelect != null) {
       final Module module = ModuleManager.getInstance(myProject).findModuleByName(moduleToSelect);
       assert module != null;
-      place = place.putPath(ModuleStructureConfigurable.TREE_OBJECT, module).putPath(ModuleEditor.SELECTED_EDITOR_NAME, editorNameToSelect);
+      place = place.putPath(MasterDetailsComponent.TREE_OBJECT, module).putPath(ModuleEditor.SELECTED_EDITOR_NAME, editorNameToSelect);
     }
     return navigateTo(place, requestFocus);
   }
@@ -444,20 +437,20 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
   }
 
   public Place createModulePlace(@NotNull Module module) {
-    return createModulesPlace().putPath(ModuleStructureConfigurable.TREE_OBJECT, module);
+    return createModulesPlace().putPath(MasterDetailsComponent.TREE_OBJECT, module);
   }
 
   public ActionCallback select(@Nullable final Facet facetToSelect, final boolean requestFocus) {
     Place place = createModulesPlace();
     if (facetToSelect != null) {
-      place = place.putPath(ModuleStructureConfigurable.TREE_OBJECT, facetToSelect);
+      place = place.putPath(MasterDetailsComponent.TREE_OBJECT, facetToSelect);
     }
     return navigateTo(place, requestFocus);
   }
 
   public ActionCallback select(@NotNull Sdk sdk, final boolean requestFocus) {
     Place place = createPlaceFor(myJdkListConfig);
-    place.putPath(BaseStructureConfigurable.TREE_NAME, sdk.getName());
+    place.putPath(MasterDetailsComponent.TREE_NAME, sdk.getName());
     return navigateTo(place, requestFocus);
   }
 
@@ -473,7 +466,7 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
 
   public Place createProjectOrGlobalLibraryPlace(Library library) {
     Place place = createPlaceFor(getConfigurableFor(library));
-    place.putPath(BaseStructureConfigurable.TREE_NAME, library.getName());
+    place.putPath(MasterDetailsComponent.TREE_NAME, library.getName());
     return place;
   }
 
@@ -485,7 +478,7 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
   public Place createArtifactPlace(Artifact artifact) {
     Place place = createPlaceFor(myArtifactsStructureConfigurable);
     if (artifact != null) {
-      place.putPath(BaseStructureConfigurable.TREE_NAME, artifact.getName());
+      place.putPath(MasterDetailsComponent.TREE_NAME, artifact.getName());
     }
     return place;
   }
@@ -496,7 +489,7 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
       return selectOrderEntry(libraryOrderEntry.getOwnerModule(), libraryOrderEntry);
     }
     Place place = createPlaceFor(getConfigurableFor(lib));
-    place.putPath(BaseStructureConfigurable.TREE_NAME, libraryOrderEntry.getLibraryName());
+    place.putPath(MasterDetailsComponent.TREE_NAME, libraryOrderEntry.getLibraryName());
     return navigateTo(place, requestFocus);
   }
 
@@ -592,6 +585,7 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
     return ServiceManager.getService(project, ProjectStructureConfigurable.class);
   }
 
+  @NotNull
   public ProjectSdksModel getProjectJdksModel() {
     return myProjectJdksModel;
   }
@@ -600,20 +594,16 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
     return myJdkListConfig;
   }
 
-  public ProjectLibrariesConfigurable getProjectLibrariesConfig() {
-    return myProjectLibrariesConfig;
-  }
-
-  public GlobalLibrariesConfigurable getGlobalLibrariesConfig() {
-    return myGlobalLibrariesConfig;
-  }
-
   public ModuleStructureConfigurable getModulesConfig() {
     return myModulesConfig;
   }
 
   public ProjectConfigurable getProjectConfig() {
     return myProjectConfig;
+  }
+
+  public void registerObsoleteLibraryRoots(@NotNull Collection<? extends VirtualFile> roots) {
+    myObsoleteLibraryFilesRemover.registerObsoleteLibraryRoots(roots);
   }
 
   private void addConfigurable(Configurable configurable, boolean addToSidePanel) {
@@ -634,13 +624,13 @@ public class ProjectStructureConfigurable extends BaseConfigurable implements Se
   }
 
   private class MyPanel extends JPanel implements DataProvider {
-    public MyPanel() {
+    MyPanel() {
       super(new BorderLayout());
     }
 
     @Override
     @Nullable
-    public Object getData(@NonNls final String dataId) {
+    public Object getData(@NotNull @NonNls final String dataId) {
       if (KEY.is(dataId)) {
         return ProjectStructureConfigurable.this;
       } else if (History.KEY.is(dataId)) {

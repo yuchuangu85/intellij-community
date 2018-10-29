@@ -20,14 +20,9 @@ import com.intellij.psi.tree.IElementType;
 import org.intellij.plugins.relaxNG.compact.psi.*;
 import org.intellij.plugins.relaxNG.compact.psi.impl.*;
 
-/*
-* Created by IntelliJ IDEA.
-* User: sweinreuter
-* Date: 01.08.2007
-*/
 public class RncElementTypes {
 
-  public static final IElementType DOCUMENT = new RncElementTypeEx<RncDocument>("DOCUMENT", RncDocument.class);
+  public static final IElementType DOCUMENT = new RncElementTypeEx<>("DOCUMENT", RncDocument.class);
 
   public static final IElementType NS_DECL = new RncElementTypeEx<RncNsDecl>("NS_DECL", RncNsDeclImpl.class);
   public static final IElementType DATATYPES_DECL = new RncElementTypeEx<RncDecl>("DATATYPES_DECL", RncDeclImpl.class);

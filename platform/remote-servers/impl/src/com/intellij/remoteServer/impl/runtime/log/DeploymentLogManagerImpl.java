@@ -21,7 +21,6 @@ import com.intellij.openapi.util.Disposer;
 import com.intellij.remoteServer.runtime.deployment.DeploymentLogManager;
 import com.intellij.remoteServer.runtime.log.LoggingHandler;
 import com.intellij.remoteServer.runtime.log.TerminalHandler;
-import com.intellij.util.ArrayUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.InputStream;
@@ -36,7 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class DeploymentLogManagerImpl implements DeploymentLogManager {
   private final LoggingHandlerImpl myMainLoggingHandler;
   private final Project myProject;
-  private final List<LoggingHandlerBase> myAdditionalLoggingHandlers = new ArrayList<LoggingHandlerBase>();
+  private final List<LoggingHandlerBase> myAdditionalLoggingHandlers = new ArrayList<>();
   private final Runnable myChangeListener;
 
   private final AtomicBoolean myLogsDisposed = new AtomicBoolean(false);
@@ -46,7 +45,7 @@ public class DeploymentLogManagerImpl implements DeploymentLogManager {
   public DeploymentLogManagerImpl(@NotNull Project project, @NotNull Runnable changeListener) {
     myProject = project;
     myChangeListener = changeListener;
-    myMainLoggingHandler = new LoggingHandlerImpl(null, project);
+    myMainLoggingHandler = new LoggingHandlerImpl.Colored(null, project);
     myLogsDisposable = Disposer.newDisposable();
     Disposer.register(myLogsDisposable, myMainLoggingHandler);
     Disposer.register(project, new Disposable() {
@@ -75,9 +74,21 @@ public class DeploymentLogManagerImpl implements DeploymentLogManager {
   @NotNull
   @Override
   public LoggingHandler addAdditionalLog(@NotNull String presentableName) {
-    LoggingHandlerImpl handler = new LoggingHandlerImpl(presentableName, myProject);
+    LoggingHandlerImpl handler = new LoggingHandlerImpl.Colored(presentableName, myProject);
     addAdditionalLoggingHandler(handler);
     return handler;
+  }
+
+  @NotNull
+  public LoggingHandler findOrCreateAdditionalLog(@NotNull String presentableName) {
+    synchronized (myAdditionalLoggingHandlers) {
+      for (LoggingHandlerBase next : myAdditionalLoggingHandlers) {
+        if (next instanceof LoggingHandler && presentableName.equals(next.getPresentableName())) {
+          return (LoggingHandler)next;
+        }
+      }
+      return addAdditionalLog(presentableName);
+    }
   }
 
   @Override
@@ -112,7 +123,7 @@ public class DeploymentLogManagerImpl implements DeploymentLogManager {
   public List<LoggingHandlerBase> getAdditionalLoggingHandlers() {
     List<LoggingHandlerBase> result;
     synchronized (myAdditionalLoggingHandlers) {
-      result = new ArrayList<LoggingHandlerBase>(myAdditionalLoggingHandlers);
+      result = new ArrayList<>(myAdditionalLoggingHandlers);
     }
     return result;
   }

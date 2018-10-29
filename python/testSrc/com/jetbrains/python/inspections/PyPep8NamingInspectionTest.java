@@ -17,9 +17,6 @@ package com.jetbrains.python.inspections;
 
 import com.jetbrains.python.fixtures.PyTestCase;
 
-/**
- * User: ktisha
- */
 public class PyPep8NamingInspectionTest extends PyTestCase {
 
   public void testFunctionVariable() {
@@ -109,6 +106,10 @@ public class PyPep8NamingInspectionTest extends PyTestCase {
   
   // PY-19096
   public void testContentManagerWithCamelCaseName() {
+    doTest();
+  }
+
+  public void testNamedTupleInsideFunction() {
     doTest();
   }
 

@@ -24,12 +24,8 @@ import org.jetbrains.plugins.groovy.annotator.intentions.dynamic.GrDynamicImplic
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * User: Dmitry.Krasilschikov
- * Date: 12.02.2008
- */
 public class DMethodElement extends DItemElement {
-  public List<ParamInfo> myPairs = new ArrayList<ParamInfo>();
+  public List<ParamInfo> myPairs = new ArrayList<>();
   private GrDynamicImplicitMethod myImplicitMethod;
 
   @SuppressWarnings("UnusedDeclaration") //for serialization

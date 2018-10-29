@@ -1,34 +1,14 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.resolve.processors;
 
-import com.intellij.psi.*;
-import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiType;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.plugins.groovy.lang.psi.api.GroovyMethodResult;
 import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrReferenceExpression;
-import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrMethod;
-import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrReflectedMethod;
-import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyMethodResult;
-import org.jetbrains.plugins.groovy.lang.psi.impl.PsiImplUtil;
-import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.GrReferenceExpressionImpl;
-import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.GrBindingVariable;
-import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 import org.jetbrains.plugins.groovy.lang.resolve.GrMethodComparator;
 import org.jetbrains.plugins.groovy.lang.resolve.ResolveUtil;
 
@@ -36,98 +16,49 @@ import java.util.*;
 
 class GroovyResolverProcessorImpl extends GroovyResolverProcessor implements GrMethodComparator.Context {
 
-  private final boolean myIsPartOfFqn;
+  GroovyResolverProcessorImpl(@NotNull final GrReferenceExpression ref, @NotNull EnumSet<GroovyResolveKind> kinds, boolean forceRValue) {
+    super(ref, kinds, forceRValue);
+  }
 
-  GroovyResolverProcessorImpl(@NotNull final GrReferenceExpression ref, @NotNull EnumSet<GroovyResolveKind> kinds) {
-    super(ref, kinds, null);
-    myIsPartOfFqn = ResolveUtil.isPartOfFQN(ref);
+  @Override
+  @NotNull
+  public List<GroovyResolveResult> getCandidates() {
+    final List<GroovyResolveResult> variables = getCandidates(GroovyResolveKind.VARIABLE);
+    if (!variables.isEmpty()) {
+      return variables;
+    }
+
+    final List<GroovyResolveResult> methods = getCandidates(GroovyResolveKind.METHOD);
+    if (!methods.isEmpty()) {
+      return filterMethodCandidates(methods);
+    }
+
+    final List<GroovyResolveResult> properties = getCandidates(GroovyResolveKind.PROPERTY);
+    if (!properties.isEmpty()) {
+      return properties.size() <= 1 ? properties : ContainerUtil.newSmartList(properties.get(0));
+    }
+
+    final List<GroovyResolveResult> fields = getCandidates(GroovyResolveKind.FIELD);
+    if (!fields.isEmpty()) {
+      return fields;
+    }
+
+    if (!properties.isEmpty()) {
+      return properties;
+    }
+
+    final List<GroovyResolveResult> bindings = getCandidates(GroovyResolveKind.BINDING);
+    if (!bindings.isEmpty()) {
+      return bindings;
+    }
+
+    return getAllCandidates();
   }
 
   @NotNull
-  public List<GroovyResolveResult> getCandidates() {
-    List<GroovyResolveResult> candidates;
-
-    // return package if whole ref text is valid class name
-    if (myAcceptableKinds.contains(GroovyResolveKind.PACKAGE) && myIsPartOfFqn) {
-      candidates = getCandidates(GroovyResolveKind.PACKAGE);
-      if (!candidates.isEmpty()) {
-        final GroovyResolveResult candidate = candidates.get(0);
-        final PsiElement element = candidate.getElement();
-        assert element instanceof PsiPackage;
-        final GrReferenceExpressionImpl topRef = getContextReferenceExpression(myRef);
-        if (topRef != null) {
-          final String fqn = topRef.getTextSkipWhiteSpaceAndComments();
-          if (JavaPsiFacade.getInstance(myRef.getProject()).findClass(fqn, myRef.getResolveScope()) != null) {
-            return candidates;
-          }
-        }
-      }
-    }
-
-    candidates = getCandidates(GroovyResolveKind.VARIABLE);
-    if (!candidates.isEmpty()) {
-      return candidates;
-    }
-
-    candidates = getCandidates(GroovyResolveKind.METHOD);
-    if (!candidates.isEmpty()) {
-      final List<GroovyResolveResult> results = filterMethodCandidates(candidates);
-      return myRef.hasMemberPointer() ? collapseReflectedMethods(results) : results;
-    }
-
-    candidates = getCandidates(GroovyResolveKind.ENUM_CONST);
-    if (!candidates.isEmpty()) {
-      return candidates;
-    }
-
-    candidates = getCandidates(GroovyResolveKind.FIELD);
-    if (!candidates.isEmpty()) {
-      assert candidates.size() == 1;
-      final GroovyResolveResult candidate = candidates.get(0);
-      final PsiElement element = candidate.getElement();
-      if (element instanceof PsiField) {
-        final PsiClass containingClass = ((PsiField)element).getContainingClass();
-        if (containingClass != null && PsiUtil.getContextClass(myRef) == containingClass) return candidates;
-      }
-      else if (!(element instanceof GrBindingVariable)) {
-        return candidates;
-      }
-    }
-
-    if (myIsPartOfFqn) {
-      candidates = getCandidates(GroovyResolveKind.PACKAGE, GroovyResolveKind.CLASS);
-      if (!candidates.isEmpty()) {
-        return candidates;
-      }
-    }
-
-    candidates = getCandidates(GroovyResolveKind.PROPERTY);
-    if (!candidates.isEmpty()) {
-      return candidates.size() <= 1 ? candidates : ContainerUtil.newSmartList(candidates.get(0));
-    }
-
-    candidates = getCandidates(GroovyResolveKind.FIELD);
-    if (!candidates.isEmpty()) {
-      return candidates;
-    }
-
-    candidates = getCandidates(GroovyResolveKind.PACKAGE, GroovyResolveKind.CLASS);
-    if (!candidates.isEmpty()) {
-      return candidates;
-    }
-
-    candidates = getCandidates(GroovyResolveKind.PROPERTY);
-    if (!candidates.isEmpty()) {
-      return candidates;
-    }
-
-    candidates = getCandidates(GroovyResolveKind.BINDING);
-    if (!candidates.isEmpty()) {
-      return candidates;
-    }
-
+  protected List<GroovyResolveResult> getAllCandidates() {
     for (GroovyResolveKind kind : myAcceptableKinds) {
-      Collection<GroovyResolveResult> results = myInapplicableCandidates.get(kind);
+      List<GroovyResolveResult> results = getAllCandidates(kind);
       if (!results.isEmpty()) {
         return ContainerUtil.newArrayList(ResolveUtil.filterSameSignatureCandidates(
           filterCorrectParameterCount(results)
@@ -138,19 +69,13 @@ class GroovyResolverProcessorImpl extends GroovyResolverProcessor implements GrM
     return Collections.emptyList();
   }
 
-  private static GrReferenceExpressionImpl getContextReferenceExpression(GrReferenceExpression ref) {
-    final PsiElement firstNonReferenceExprParent = PsiTreeUtil.skipParentsOfType(ref, GrReferenceExpressionImpl.class);
-    return (GrReferenceExpressionImpl)PsiTreeUtil.findFirstParent(
-      ref, parent -> parent.getParent() == firstNonReferenceExprParent && parent instanceof GrReferenceExpressionImpl
-    );
-  }
-
-  private List<GroovyResolveResult> filterCorrectParameterCount(Collection<GroovyResolveResult> candidates) {
-    if (myArgumentTypes == null) return ContainerUtil.newArrayList(candidates);
+  protected List<GroovyResolveResult> filterCorrectParameterCount(Collection<? extends GroovyResolveResult> candidates) {
+    PsiType[] argumentTypes = myArgumentTypes.getValue();
+    if (argumentTypes == null) return ContainerUtil.newArrayList(candidates);
     final List<GroovyResolveResult> result = ContainerUtil.newSmartList();
     for (GroovyResolveResult candidate : candidates) {
       if (candidate instanceof GroovyMethodResult) {
-        if (((GroovyMethodResult)candidate).getElement().getParameterList().getParametersCount() == myArgumentTypes.length) {
+        if (((GroovyMethodResult)candidate).getElement().getParameterList().getParametersCount() == argumentTypes.length) {
           result.add(candidate);
         }
       }
@@ -162,7 +87,7 @@ class GroovyResolverProcessorImpl extends GroovyResolverProcessor implements GrM
     return ContainerUtil.newArrayList(candidates);
   }
 
-  private List<GroovyResolveResult> filterMethodCandidates(List<GroovyResolveResult> candidates) {
+  protected List<GroovyResolveResult> filterMethodCandidates(List<GroovyResolveResult> candidates) {
     if (candidates.size() <= 1) return candidates;
 
     final List<GroovyResolveResult> results = ContainerUtil.newArrayList();
@@ -197,19 +122,13 @@ class GroovyResolverProcessorImpl extends GroovyResolverProcessor implements GrM
   @Nullable
   @Override
   public PsiType[] getArgumentTypes() {
-    return myArgumentTypes;
+    return myArgumentTypes.getValue();
   }
 
   @Nullable
   @Override
   public PsiType[] getTypeArguments() {
     return myTypeArguments;
-  }
-
-  @Nullable
-  @Override
-  public PsiType getThisType() {
-    return myThisType;
   }
 
   @NotNull
@@ -221,23 +140,5 @@ class GroovyResolverProcessorImpl extends GroovyResolverProcessor implements GrM
   @Override
   public boolean isConstructor() {
     return false;
-  }
-
-  private static List<GroovyResolveResult> collapseReflectedMethods(Collection<GroovyResolveResult> candidates) {
-    Set<GrMethod> visited = ContainerUtil.newHashSet();
-    List<GroovyResolveResult> collapsed = ContainerUtil.newArrayList();
-    for (GroovyResolveResult result : candidates) {
-      PsiElement element = result.getElement();
-      if (element instanceof GrReflectedMethod) {
-        GrMethod baseMethod = ((GrReflectedMethod)element).getBaseMethod();
-        if (visited.add(baseMethod)) {
-          collapsed.add(PsiImplUtil.reflectedToBase(result, baseMethod, (GrReflectedMethod)element));
-        }
-      }
-      else {
-        collapsed.add(result);
-      }
-    }
-    return collapsed;
   }
 }

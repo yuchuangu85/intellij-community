@@ -36,10 +36,12 @@ import com.intellij.refactoring.BaseRefactoringProcessor;
 import com.intellij.refactoring.RefactoringBundle;
 import com.intellij.refactoring.ui.ConflictsDialog;
 import com.intellij.refactoring.util.CommonRefactoringUtil;
+import com.intellij.refactoring.util.NonCodeUsageInfo;
 import com.intellij.usageView.UsageInfo;
-import com.intellij.util.containers.HashMap;
-import com.intellij.util.containers.HashSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import com.intellij.util.containers.MultiMap;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -65,12 +67,12 @@ public class GenericInlineHandler {
       allReferences = Collections.singleton(invocationReference);
     }
     else {
-      final Ref<Collection<? extends PsiReference>> usagesRef = new Ref<Collection<? extends PsiReference>>();
+      final Ref<Collection<? extends PsiReference>> usagesRef = new Ref<>();
       ProgressManager.getInstance().runProcessWithProgressSynchronously(() -> usagesRef.set(ReferencesSearch.search(element).findAll()), "Find Usages", false, element.getProject());
       allReferences = usagesRef.get();
     }
 
-    final MultiMap<PsiElement, String> conflicts = new MultiMap<PsiElement, String>();
+    final MultiMap<PsiElement, String> conflicts = new MultiMap<>();
     final Map<Language, InlineHandler.Inliner> inliners = initializeInliners(element, settings, allReferences);
 
     for (PsiReference reference : allReferences) {
@@ -90,7 +92,7 @@ public class GenericInlineHandler {
       }
     }
 
-    HashSet<PsiElement> elements = new HashSet<PsiElement>();
+    HashSet<PsiElement> elements = new HashSet<>();
     for (PsiReference reference : allReferences) {
       PsiElement refElement = reference.getElement();
       if (refElement != null) {
@@ -131,7 +133,7 @@ public class GenericInlineHandler {
   public static Map<Language, InlineHandler.Inliner> initializeInliners(PsiElement element,
                                                                         InlineHandler.Settings settings,
                                                                         Collection<? extends PsiReference> allReferences) {
-    final Map<Language, InlineHandler.Inliner> inliners = new HashMap<Language, InlineHandler.Inliner>();
+    final Map<Language, InlineHandler.Inliner> inliners = new HashMap<>();
     for (PsiReference ref : allReferences) {
       if (ref == null) {
         LOG.error("element: " + element.getClass()+ ", allReferences contains null!");
@@ -155,6 +157,44 @@ public class GenericInlineHandler {
     return inliners;
   }
 
+  public static Map<Language, InlineHandler.Inliner> initInliners(PsiElement elementToInline,
+                                                                  UsageInfo[] usagesIn,
+                                                                  InlineHandler.Settings settings,
+                                                                  MultiMap<PsiElement, String> conflicts,
+                                                                  Language... emptyInliners) {
+    ArrayList<PsiReference> refs = new ArrayList<>();
+    for (UsageInfo info : usagesIn) {
+      if (info instanceof NonCodeUsageInfo) continue;
+      PsiElement element = info.getElement();
+      if (element != null) {
+        PsiReference[] references = element.getReferences();
+        if (references.length > 0) {
+          refs.add(references[0]);
+        }
+      }
+    }
+
+    Map<Language, InlineHandler.Inliner> inliners = initializeInliners(elementToInline, settings, refs);
+    for (Language language : emptyInliners) {
+      inliners.put(language, new InlineHandler.Inliner() {
+        @Nullable
+        @Override
+        public MultiMap<PsiElement, String> getConflicts(@NotNull PsiReference reference, @NotNull PsiElement referenced) {
+          return null;
+        }
+
+        @Override
+        public void inlineUsage(@NotNull UsageInfo usage, @NotNull PsiElement referenced) { }
+      });
+    }
+
+    for (PsiReference ref : refs) {
+      collectConflicts(ref, elementToInline, inliners, conflicts);
+    }
+    
+    return inliners;
+  }
+  
   public static void collectConflicts(final PsiReference reference,
                                       final PsiElement element,
                                       final Map<Language, InlineHandler.Inliner> inliners,
@@ -190,7 +230,7 @@ public class GenericInlineHandler {
 
   //order of usages across different files is irrelevant
   public static PsiReference[] sortDepthFirstRightLeftOrder(final Collection<? extends PsiReference> allReferences) {
-    final PsiReference[] usages = allReferences.toArray(new PsiReference[allReferences.size()]);
+    final PsiReference[] usages = allReferences.toArray(PsiReference.EMPTY_ARRAY);
     Arrays.sort(usages, (usage1, usage2) -> {
       final PsiElement element1 = usage1.getElement();
       final PsiElement element2 = usage2.getElement();

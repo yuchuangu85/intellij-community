@@ -36,7 +36,7 @@ import java.util.List;
 class RncBlock implements Block {
   private final ASTNode myNode;
 
-  public RncBlock(ASTNode element) {
+  RncBlock(ASTNode element) {
     myNode = element;
   }
 
@@ -49,7 +49,7 @@ class RncBlock implements Block {
   @Override
   @NotNull
   public List<Block> getSubBlocks() {
-    final List<Block> list = new ArrayList<Block>();
+    final List<Block> list = new ArrayList<>();
     ASTNode node = myNode.getFirstChildNode();
     while (node != null) {
       if (!RncTokenTypes.WHITESPACE.contains(node.getElementType()) && node.getTextLength() > 0) {

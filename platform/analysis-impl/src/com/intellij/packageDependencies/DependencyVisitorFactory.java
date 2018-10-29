@@ -22,7 +22,7 @@ import org.jetbrains.annotations.NotNull;
 
 public abstract class DependencyVisitorFactory {
   private static final LanguageExtension<DependencyVisitorFactory> EP_NAME =
-    new LanguageExtension<DependencyVisitorFactory>("com.intellij.packageDependencies.visitor");
+    new LanguageExtension<>("com.intellij.packageDependencies.visitor");
 
   public static abstract class VisitorOptions {
     public abstract boolean skipImports();
@@ -67,7 +67,7 @@ public abstract class DependencyVisitorFactory {
   private static class DefaultVisitor extends PsiRecursiveElementVisitor {
     private final DependenciesBuilder.DependencyProcessor myProcessor;
 
-    public DefaultVisitor(@NotNull DependenciesBuilder.DependencyProcessor processor) {
+    DefaultVisitor(@NotNull DependenciesBuilder.DependencyProcessor processor) {
       myProcessor = processor;
     }
 

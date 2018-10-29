@@ -18,7 +18,7 @@ package com.intellij.openapi.fileChooser;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.openapi.wm.IdeFocusManager;
+import com.intellij.openapi.wm.WindowManager;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.Consumer;
 import org.jetbrains.annotations.NotNull;
@@ -68,8 +68,9 @@ public class FileChooser {
                                        @Nullable final Component parent,
                                        @Nullable final Project project,
                                        @Nullable final VirtualFile toSelect) {
+    Component parentComponent = (parent == null) ? KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() : parent;
     LOG.assertTrue(!descriptor.isChooseMultiple());
-    return ArrayUtil.getFirstElement(chooseFiles(descriptor, parent, project, toSelect));
+    return ArrayUtil.getFirstElement(chooseFiles(descriptor, parentComponent, project, toSelect));
   }
 
   /**
@@ -87,7 +88,7 @@ public class FileChooser {
                                  @Nullable final Project project,
                                  @Nullable final VirtualFile toSelect,
                                  @NotNull final Consumer<List<VirtualFile>> callback) {
-    chooseFiles(descriptor, project, IdeFocusManager.getInstance(project).getFocusOwner(), toSelect, callback);
+    chooseFiles(descriptor, project, null, toSelect, callback);
   }
 
   /**
@@ -107,8 +108,9 @@ public class FileChooser {
                                  @Nullable final Component parent,
                                  @Nullable final VirtualFile toSelect,
                                  @NotNull final Consumer<List<VirtualFile>> callback) {
+    Component parentComponent = (parent == null) ? WindowManager.getInstance().suggestParentWindow(project) : parent;
     final FileChooserFactory factory = FileChooserFactory.getInstance();
-    final PathChooserDialog pathChooser = factory.createPathChooser(descriptor, project, parent);
+    final PathChooserDialog pathChooser = factory.createPathChooser(descriptor, project, parentComponent);
     pathChooser.choose(toSelect, callback);
   }
 
@@ -125,8 +127,8 @@ public class FileChooser {
   public static void chooseFile(@NotNull final FileChooserDescriptor descriptor,
                                 @Nullable final Project project,
                                 @Nullable final VirtualFile toSelect,
-                                @NotNull final Consumer<VirtualFile> callback) {
-    chooseFile(descriptor, project, IdeFocusManager.getInstance(project).getFocusOwner(), toSelect, callback);
+                                @NotNull final Consumer<? super VirtualFile> callback) {
+    chooseFile(descriptor, project, null, toSelect, callback);
   }
 
   /**
@@ -144,7 +146,7 @@ public class FileChooser {
                                 @Nullable final Project project,
                                 @Nullable final Component parent,
                                 @Nullable final VirtualFile toSelect,
-                                @NotNull final Consumer<VirtualFile> callback) {
+                                @NotNull final Consumer<? super VirtualFile> callback) {
     LOG.assertTrue(!descriptor.isChooseMultiple());
     chooseFiles(descriptor, project, parent, toSelect, files -> callback.consume(files.get(0)));
   }

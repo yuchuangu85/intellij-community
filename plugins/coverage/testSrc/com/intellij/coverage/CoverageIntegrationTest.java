@@ -15,6 +15,7 @@
  */
 package com.intellij.coverage;
 
+import com.intellij.idea.ExcludeFromTestDiscovery;
 import com.intellij.openapi.application.PluginPathManager;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.ex.ProjectManagerEx;
@@ -32,6 +33,7 @@ import java.util.Map;
 /**
  * @author yole
  */
+@ExcludeFromTestDiscovery
 public class CoverageIntegrationTest extends ModuleTestCase {
   private static String getTestDataPath() {
     return PluginPathManager.getPluginHomePath("coverage") + "/testData/simple";
@@ -56,7 +58,7 @@ public class CoverageIntegrationTest extends ModuleTestCase {
     assertEquals(1, barClassCoverage.coveredMethodCount);
     PackageAnnotator.PackageCoverageInfo barPackageCoverage = consumer.myPackageCoverage.get("foo.bar");
     assertEquals(2, barPackageCoverage.coveredLineCount);
-    assertEquals(9, barPackageCoverage.totalLineCount);
+    assertEquals(8, barPackageCoverage.totalLineCount);
     assertEquals(1, barPackageCoverage.coveredMethodCount);
     assertEquals(7, barPackageCoverage.totalMethodCount);
     PackageAnnotator.ClassCoverageInfo uncoveredClassInfo = consumer.myClassCoverageInfo.get("foo.bar.UncoveredClass");
@@ -84,30 +86,35 @@ public class CoverageIntegrationTest extends ModuleTestCase {
 
   private static class PackageAnnotationConsumer implements PackageAnnotator.Annotator {
     private final Map<VirtualFile, PackageAnnotator.PackageCoverageInfo> myDirectoryCoverage =
-      new HashMap<VirtualFile, PackageAnnotator.PackageCoverageInfo>();
+      new HashMap<>();
     private final Map<String, PackageAnnotator.PackageCoverageInfo> myPackageCoverage =
-      new HashMap<String, PackageAnnotator.PackageCoverageInfo>();
+      new HashMap<>();
     private final Map<String, PackageAnnotator.PackageCoverageInfo> myFlatPackageCoverage =
-      new HashMap<String, PackageAnnotator.PackageCoverageInfo>();
+      new HashMap<>();
     private final Map<String, PackageAnnotator.ClassCoverageInfo> myClassCoverageInfo =
-      new HashMap<String, PackageAnnotator.ClassCoverageInfo>();
+      new HashMap<>();
 
+    @Override
     public void annotateSourceDirectory(VirtualFile virtualFile, PackageAnnotator.PackageCoverageInfo packageCoverageInfo, Module module) {
       myDirectoryCoverage.put(virtualFile, packageCoverageInfo);
     }
 
+    @Override
     public void annotateTestDirectory(VirtualFile virtualFile, PackageAnnotator.PackageCoverageInfo packageCoverageInfo, Module module) {
       myDirectoryCoverage.put(virtualFile, packageCoverageInfo);
     }
 
+    @Override
     public void annotatePackage(String packageQualifiedName, PackageAnnotator.PackageCoverageInfo packageCoverageInfo) {
       myPackageCoverage.put(packageQualifiedName, packageCoverageInfo);
     }
 
+    @Override
     public void annotatePackage(String packageQualifiedName, PackageAnnotator.PackageCoverageInfo packageCoverageInfo, boolean flatten) {
       (flatten ? myFlatPackageCoverage : myPackageCoverage).put(packageQualifiedName, packageCoverageInfo);
     }
 
+    @Override
     public void annotateClass(String classQualifiedName, PackageAnnotator.ClassCoverageInfo classCoverageInfo) {
       myClassCoverageInfo.put(classQualifiedName, classCoverageInfo);
     }

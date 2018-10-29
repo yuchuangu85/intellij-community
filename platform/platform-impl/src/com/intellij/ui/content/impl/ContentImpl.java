@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.content.impl;
 
 import com.intellij.icons.AllIcons;
@@ -37,18 +23,16 @@ import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 
 public class ContentImpl extends UserDataHolderBase implements Content {
-  private static Icon ourEmptyPinIcon = null;
-
   private String myDisplayName;
   private String myDescription;
   private JComponent myComponent;
   private Icon myIcon;
   private final PropertyChangeSupport myChangeSupport = new PropertyChangeSupport(this);
   private ContentManager myManager;
-  private boolean myIsLocked = false;
-  private boolean myPinnable = true;
+  private boolean myIsLocked;
+  private boolean myPinnable;
   private Icon myLayeredIcon = new LayeredIcon(2);
-  private Disposable myDisposer = null;
+  private Disposable myDisposer;
   private boolean myShouldDisposeContent = true;
   private String myTabName;
   private String myToolwindowTitle;
@@ -66,6 +50,7 @@ public class ContentImpl extends UserDataHolderBase implements Content {
   private String mySeparator;
   private Icon myPopupIcon;
   private long myExecutionId;
+  private String myHelpId;
 
   public ContentImpl(JComponent component, String displayName, boolean isPinnable) {
     myComponent = component;
@@ -104,7 +89,7 @@ public class ContentImpl extends UserDataHolderBase implements Content {
   public void setIcon(Icon icon) {
     Icon oldValue = getIcon();
     myIcon = icon;
-    myLayeredIcon = LayeredIcon.create(myIcon, AllIcons.Nodes.PinToolWindow);
+    myLayeredIcon = LayeredIcon.create(myIcon, AllIcons.Nodes.TabPin);
     myChangeSupport.firePropertyChange(PROP_ICON, oldValue, getIcon());
   }
 
@@ -118,14 +103,18 @@ public class ContentImpl extends UserDataHolderBase implements Content {
     }
   }
 
-  @NotNull
-  private static Icon getEmptyPinIcon() {
-    if (ourEmptyPinIcon == null) {
-      Icon icon = AllIcons.Nodes.PinToolWindow;
+  private static class IconHolder {
+    private static final Icon ourEmptyPinIcon;
+    static {
+      Icon icon = AllIcons.Nodes.TabPin;
       int width = icon.getIconWidth();
       ourEmptyPinIcon = IconUtil.cropIcon(icon, new Rectangle(width / 2, 0, width - width / 2, icon.getIconHeight()));
     }
-    return ourEmptyPinIcon;
+  }
+
+  @NotNull
+  private static Icon getEmptyPinIcon() {
+    return IconHolder.ourEmptyPinIcon;
   }
 
   @Override
@@ -261,7 +250,11 @@ public class ContentImpl extends UserDataHolderBase implements Content {
 
   @Override
   public void setCloseable(final boolean closeable) {
+    if(closeable == myCloseable) return;
+
+    boolean old = myCloseable;
     myCloseable = closeable;
+    myChangeSupport.firePropertyChange(IS_CLOSABLE, old, closeable);
   }
 
   @Override
@@ -380,5 +373,16 @@ public class ContentImpl extends UserDataHolderBase implements Content {
   @Override
   public long getExecutionId() {
     return myExecutionId;
+  }
+
+  @Override
+  public void setHelpId(String helpId) {
+    myHelpId = helpId;
+  }
+
+  @Nullable
+  @Override
+  public String getHelpId() {
+    return myHelpId;
   }
 }

@@ -1,7 +1,7 @@
 package com.intellij.tasks.generic;
 
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.containers.HashMap;
+import java.util.HashMap;
 import com.intellij.util.xmlb.annotations.Tag;
 import org.jdom.Document;
 import org.jdom.Element;
@@ -20,7 +20,7 @@ import java.util.Map;
  */
 @Tag("XPathResponseHandler")
 public final class XPathResponseHandler extends SelectorBasedResponseHandler {
-  private final Map<String, XPath> myCompiledCache = new HashMap<String, XPath>();
+  private final Map<String, XPath> myCompiledCache = new HashMap<>();
 
   /**
    * Serialization constructor

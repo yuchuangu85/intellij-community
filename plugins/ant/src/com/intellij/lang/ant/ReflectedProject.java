@@ -32,14 +32,13 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
 * @author Eugene Zhuravlev
-*         Date: Apr 9, 2010
 */
 public final class ReflectedProject {
   private static final Logger LOG = Logger.getInstance("#com.intellij.lang.ant.ReflectedProject");
 
 
   private static final List<SoftReference<Pair<ReflectedProject, ClassLoader>>> ourProjects =
-    new ArrayList<SoftReference<Pair<ReflectedProject, ClassLoader>>>();
+    new ArrayList<>();
 
   private static final ReentrantLock ourProjectsLock = new ReentrantLock();
   
@@ -71,7 +70,7 @@ public final class ReflectedProject {
     final ReflectedProject reflectedProj = new ReflectedProject(classLoader);
     ourProjectsLock.lock();
     try {
-      ourProjects.add(new SoftReference<Pair<ReflectedProject, ClassLoader>>(
+      ourProjects.add(new SoftReference<>(
         Pair.create(reflectedProj, classLoader)
       ));
     }

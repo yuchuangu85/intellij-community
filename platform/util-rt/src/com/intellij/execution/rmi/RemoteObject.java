@@ -69,7 +69,7 @@ public class RemoteObject implements Remote, Unreferenced {
     if (children.isEmpty()) return;
     final ArrayList<RemoteObject> list = new ArrayList<RemoteObject>(children.size());
     for (WeakReference<? extends RemoteObject> child : children) {
-      ContainerUtilRt.addIfNotNull(child.get(), list);
+      ContainerUtilRt.addIfNotNull(list, child.get());
     }
     myChildren.keySet().removeAll(list);
     for (RemoteObject child : list) {
@@ -114,5 +114,9 @@ public class RemoteObject implements Remote, Unreferenced {
 
   protected boolean isKnownException(Throwable ex) {
     return false;
+  }
+
+  protected Iterable<RemoteObject> getExportedChildren() {
+    return myChildren.keySet();
   }
 }

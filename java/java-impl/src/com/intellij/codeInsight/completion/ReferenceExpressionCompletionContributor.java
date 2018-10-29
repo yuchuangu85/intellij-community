@@ -91,7 +91,7 @@ public class ReferenceExpressionCompletionContributor {
   }
 
   @Nullable 
-  public static Runnable fillCompletionVariants(final JavaSmartCompletionParameters parameters, final Consumer<LookupElement> result) {
+  public static Runnable fillCompletionVariants(final JavaSmartCompletionParameters parameters, final Consumer<? super LookupElement> result) {
     final PsiElement element = parameters.getPosition();
     if (JavaSmartCompletionContributor.INSIDE_TYPECAST_EXPRESSION.accepts(element)) return null;
     if (JavaKeywordCompletion.isAfterPrimitiveOrArrayType(element)) return null;
@@ -112,7 +112,7 @@ public class ReferenceExpressionCompletionContributor {
 
       final Set<LookupElement> base =
         JavaSmartCompletionContributor.completeReference(element, reference, filter, false, true, parameters.getParameters(), PrefixMatcher.ALWAYS_TRUE);
-      for (final LookupElement item : new LinkedHashSet<LookupElement>(base)) {
+      for (final LookupElement item : new LinkedHashSet<>(base)) {
         ExpressionLookupItem access = ArrayMemberAccess.accessFirstElement(element, item);
         if (access != null) {
           base.add(access);
@@ -132,7 +132,7 @@ public class ReferenceExpressionCompletionContributor {
 
   static Set<LookupElement> completeFinalReference(final PsiElement element, PsiJavaCodeReferenceElement reference, ElementFilter filter,
                                                            final JavaSmartCompletionParameters parameters) {
-    final Set<PsiField> used = parameters.getParameters().getInvocationCount() < 2 ? findConstantsUsedInSwitch(element) : Collections.<PsiField>emptySet();
+    final Set<PsiField> used = parameters.getParameters().getInvocationCount() < 2 ? findConstantsUsedInSwitch(element) : Collections.emptySet();
 
     final Set<LookupElement> elements =
       JavaSmartCompletionContributor.completeReference(element, reference, new AndFilter(filter, new ElementFilter() {
@@ -166,10 +166,7 @@ public class ReferenceExpressionCompletionContributor {
       if (lookupElement.getObject() instanceof PsiMethod) {
         final JavaMethodCallElement item = lookupElement.as(JavaMethodCallElement.CLASS_CONDITION_KEY);
         if (item != null) {
-          final PsiMethod method = (PsiMethod)lookupElement.getObject();
-          if (SmartCompletionDecorator.hasUnboundTypeParams(method, parameters.getExpectedType())) {
-            item.setInferenceSubstitutor(SmartCompletionDecorator.calculateMethodReturnTypeSubstitutor(method, parameters.getExpectedType()), element);
-          }
+          item.setInferenceSubstitutorFromExpectedType(element, parameters.getExpectedType());
         }
       }
     }
@@ -205,7 +202,7 @@ public class ReferenceExpressionCompletionContributor {
   }
 
   static PsiExpression createExpression(String text, PsiElement element) {
-    return JavaPsiFacade.getInstance(element.getProject()).getElementFactory().createExpressionFromText(text, element);
+    return JavaPsiFacade.getElementFactory(element.getProject()).createExpressionFromText(text, element);
   }
 
   static String getQualifierText(@Nullable final PsiElement qualifier) {
@@ -213,13 +210,18 @@ public class ReferenceExpressionCompletionContributor {
   }
 
   @Nullable
-  public static PsiReferenceExpression createMockReference(final PsiElement place, @NotNull PsiType qualifierType, LookupElement qualifierItem) {
+  static PsiReferenceExpression createMockReference(PsiElement place, @NotNull PsiType qualifierType, LookupElement qualifierItem) {
+    return createMockReference(place, qualifierType, qualifierItem, ".");
+  }
+
+  @Nullable
+  static PsiReferenceExpression createMockReference(PsiElement place, @NotNull PsiType qualifierType, LookupElement qualifierItem, String separator) {
     PsiElementFactory factory = JavaPsiFacade.getElementFactory(place.getProject());
     if (qualifierItem.getObject() instanceof PsiClass) {
       final String qname = ((PsiClass)qualifierItem.getObject()).getQualifiedName();
       if (qname == null) return null;
       
-      final String text = qname + ".xxx";
+      String text = qname + separator + "xxx";
       try {
         final PsiExpression expr = factory.createExpressionFromText(text, place);
         if (expr instanceof PsiReferenceExpression) {
@@ -233,7 +235,7 @@ public class ReferenceExpressionCompletionContributor {
       }
     }
 
-    return (PsiReferenceExpression) factory.createExpressionFromText("xxx.xxx", JavaCompletionUtil
+    return (PsiReferenceExpression) factory.createExpressionFromText("xxx" + separator + "xxx", JavaCompletionUtil
       .createContextWithXxxVariable(place, qualifierType));
   }
 

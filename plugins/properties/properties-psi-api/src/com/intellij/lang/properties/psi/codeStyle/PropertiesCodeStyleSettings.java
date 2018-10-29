@@ -22,6 +22,7 @@ import com.intellij.psi.codeStyle.CodeStyleSettings;
 import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
 import com.intellij.psi.codeStyle.CustomCodeStyleSettings;
 import org.jdom.Element;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * @author Dmitry Batkovich
@@ -37,8 +38,9 @@ public class PropertiesCodeStyleSettings extends CustomCodeStyleSettings {
     return CodeStyleSettingsManager.getSettings(project).getCustomSettings(PropertiesCodeStyleSettings.class);
   }
 
-  public boolean SPACES_AROUND_KEY_VALUE_DELIMITER = false;
-  public int KEY_VALUE_DELIMITER_CODE = 0;
+  public boolean SPACES_AROUND_KEY_VALUE_DELIMITER;
+  public boolean KEEP_BLANK_LINES;
+  public int KEY_VALUE_DELIMITER_CODE;
 
   public char getDelimiter() {
     return DELIMITERS[KEY_VALUE_DELIMITER_CODE];
@@ -72,6 +74,13 @@ public class PropertiesCodeStyleSettings extends CustomCodeStyleSettings {
             break;
         }
       }
+    }
+  }
+
+  @Override
+  protected void importLegacySettings(@NotNull CodeStyleSettings rootSettings) {
+    if (rootSettings.ALIGN_GROUP_FIELD_DECLARATIONS) {
+      rootSettings.getCommonSettings(PropertiesLanguage.INSTANCE).ALIGN_GROUP_FIELD_DECLARATIONS = true;
     }
   }
 }

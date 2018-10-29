@@ -51,12 +51,14 @@ public class AppEngineSdkImpl implements AppEngineSdk {
     myHomePath = homePath;
   }
 
+  @Override
   @NotNull
   public File getAppCfgFile() {
     final String extension = SystemInfo.isWindows ? "cmd" : "sh";
     return new File(myHomePath, "bin/appcfg." + extension);
   }
 
+  @Override
   @NotNull
   public File getWebSchemeFile() {
     return new File(myHomePath, "docs/appengine-web.xsd");
@@ -68,11 +70,13 @@ public class AppEngineSdkImpl implements AppEngineSdk {
     return new File(myHomePath, "docs/appengine-application.xsd");
   }
 
+  @Override
   @NotNull
   public File getToolsApiJarFile() {
     return new File(myHomePath, JpsAppEngineModuleExtensionImpl.LIB_APPENGINE_TOOLS_API_JAR);
   }
 
+  @Override
   @NotNull
   public File[] getLibraries() {
     return getJarsFromDirectory(new File(myHomePath, "lib/shared"));
@@ -84,6 +88,7 @@ public class AppEngineSdkImpl implements AppEngineSdk {
     return getJarsFromDirectory(new File(myHomePath, "lib/shared/jsp"));
   }
 
+  @Override
   public void patchJavaParametersForDevServer(@NotNull ParametersList vmParameters) {
     final String agentPath = myHomePath + "/lib/agent/appengine-agent.jar";
     if (new File(FileUtil.toSystemDependentName(agentPath)).exists()) {
@@ -96,7 +101,7 @@ public class AppEngineSdkImpl implements AppEngineSdk {
   }
 
   private static File[] getJarsFromDirectory(File libFolder) {
-    List<File> jars = new ArrayList<File>();
+    List<File> jars = new ArrayList<>();
     final File[] files = libFolder.listFiles();
     if (files != null) {
       for (File file : files) {
@@ -105,14 +110,16 @@ public class AppEngineSdkImpl implements AppEngineSdk {
         }
       }
     }
-    return jars.toArray(new File[jars.size()]);
+    return jars.toArray(new File[0]);
   }
 
+  @Override
   @NotNull
   public String getSdkHomePath() {
     return myHomePath;
   }
 
+  @Override
   public boolean isClassInWhiteList(@NotNull String className) {
     if (!isValid()) return true;
 
@@ -156,6 +163,7 @@ public class AppEngineSdkImpl implements AppEngineSdk {
     return new File(AppEngineUtil.getAppEngineSystemDir(), fileName);
   }
 
+  @Override
   public boolean isMethodInBlacklist(@NotNull String className, @NotNull String methodName) {
     if (myMethodsBlackList == null) {
       try {
@@ -163,17 +171,19 @@ public class AppEngineSdkImpl implements AppEngineSdk {
       }
       catch (IOException e) {
         LOG.error(e);
-        myMethodsBlackList = new THashMap<String, Set<String>>();
+        myMethodsBlackList = new THashMap<>();
       }
     }
     final Set<String> methods = myMethodsBlackList.get(className);
     return methods != null && methods.contains(methodName);
   }
 
+  @Override
   public boolean isValid() {
     return getToolsApiJarFile().exists() && getAppCfgFile().exists();
   }
 
+  @Override
   @NotNull
   public String getOrmLibDirectoryPath() {
     return getLibUserDirectoryPath() + "/orm";
@@ -182,7 +192,7 @@ public class AppEngineSdkImpl implements AppEngineSdk {
   @NotNull
   @Override
   public List<String> getUserLibraryPaths() {
-    List<String> result = new ArrayList<String>();
+    List<String> result = new ArrayList<>();
     result.add(getLibUserDirectoryPath());
     File opt = new File(myHomePath, "lib/opt/user");
     ContainerUtil.addIfNotNull(result, findLatestVersion(new File(opt, "appengine-endpoints")));
@@ -199,11 +209,12 @@ public class AppEngineSdkImpl implements AppEngineSdk {
     return null;
   }
 
+  @Override
   @NotNull
   public VirtualFile[] getOrmLibSources() {
     final File libsDir = new File(myHomePath, "src/orm");
     final File[] files = libsDir.listFiles();
-    List<VirtualFile> roots = new ArrayList<VirtualFile>();
+    List<VirtualFile> roots = new ArrayList<>();
     if (files != null) {
       for (File file : files) {
         final String url = VfsUtil.getUrlForLibraryRoot(file);
@@ -231,7 +242,7 @@ public class AppEngineSdkImpl implements AppEngineSdk {
   private Map<String, Set<String>> loadBlackList() throws IOException {
     final InputStream stream = getClass().getResourceAsStream("/data/methodsBlacklist.txt");
     LOG.assertTrue(stream != null, "/data/methodsBlacklist.txt not found");
-    final THashMap<String, Set<String>> map = new THashMap<String, Set<String>>();
+    final THashMap<String, Set<String>> map = new THashMap<>();
     BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
     try {
       String line;
@@ -239,7 +250,7 @@ public class AppEngineSdkImpl implements AppEngineSdk {
         final int i = line.indexOf(':');
         String className = line.substring(0, i);
         String methods = line.substring(i + 1);
-        map.put(className, new THashSet<String>(StringUtil.split(methods, ",")));
+        map.put(className, new THashSet<>(StringUtil.split(methods, ",")));
       }
     }
     finally {

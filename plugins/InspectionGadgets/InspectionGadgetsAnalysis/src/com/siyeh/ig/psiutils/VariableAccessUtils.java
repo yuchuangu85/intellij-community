@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2016 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2018 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,9 @@ import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
+import com.intellij.util.ObjectUtils;
 import com.intellij.util.Processor;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -56,12 +58,12 @@ public class VariableAccessUtils {
   }
 
   public static boolean variableIsPassedAsMethodArgument(@NotNull PsiVariable variable, @Nullable PsiElement context,
-                                                         Processor<PsiCall> callProcessor) {
+                                                         Processor<? super PsiCall> callProcessor) {
     return variableIsPassedAsMethodArgument(variable, context, false, callProcessor);
   }
 
   public static boolean variableIsPassedAsMethodArgument(@NotNull PsiVariable variable, @Nullable PsiElement context,
-                                                         boolean builderPattern, Processor<PsiCall> callProcessor) {
+                                                         boolean builderPattern, Processor<? super PsiCall> callProcessor) {
     if (context == null) {
       return false;
     }
@@ -82,19 +84,21 @@ public class VariableAccessUtils {
     return visitor.isPassed();
   }
 
+  /**
+   * This method will return true if the specified variable is a field with greater than private visibility with a common name.
+   * Finding usages for such fields is too expensive.
+   * @param variable  the variable to check assignments for
+   * @return true, if the variable is assigned or too expensive to search. False otherwise.
+   */
   public static boolean variableIsAssigned(@NotNull PsiVariable variable) {
     if (variable instanceof PsiField) {
       if (variable.hasModifierProperty(PsiModifier.PRIVATE)) {
         final PsiClass aClass = PsiUtil.getTopLevelClass(variable);
         return variableIsAssigned(variable, aClass);
       }
-      return !ReferencesSearch.search(variable, variable.getUseScope()).forEach(reference -> {
-        final PsiElement element = reference.getElement();
-        if (!(element instanceof PsiExpression)) {
-          return true;
-        }
-        final PsiExpression expression = (PsiExpression)element;
-        return !PsiUtil.isAccessedForWriting(expression);
+      return DeclarationSearchUtils.isTooExpensiveToSearch(variable, false) || ReferencesSearch.search(variable).anyMatch(reference -> {
+        final PsiExpression expression = ObjectUtils.tryCast(reference.getElement(), PsiExpression.class);
+        return expression != null && PsiUtil.isAccessedForWriting(expression);
       });
     }
     final PsiElement context =
@@ -103,13 +107,11 @@ public class VariableAccessUtils {
     return variableIsAssigned(variable, context);
   }
 
-  public static boolean variableIsAssigned(
-    @NotNull PsiVariable variable, @Nullable PsiElement context) {
+  public static boolean variableIsAssigned(@NotNull PsiVariable variable, @Nullable PsiElement context) {
     if (context == null) {
       return false;
     }
-    final VariableAssignedVisitor visitor =
-      new VariableAssignedVisitor(variable, true);
+    final VariableAssignedVisitor visitor = new VariableAssignedVisitor(variable, true);
     context.accept(visitor);
     return visitor.isAssigned();
   }
@@ -148,17 +150,6 @@ public class VariableAccessUtils {
       new VariableValueUsedVisitor(variable);
     context.accept(visitor);
     return visitor.isVariableValueUsed();
-  }
-
-  public static boolean arrayContentsAreAccessed(
-    @NotNull PsiVariable variable, @Nullable PsiElement context) {
-    if (context == null) {
-      return false;
-    }
-    final ArrayContentsAccessedVisitor visitor =
-      new ArrayContentsAccessedVisitor(variable);
-    context.accept(visitor);
-    return visitor.isAccessed();
   }
 
   public static boolean arrayContentsAreAssigned(
@@ -263,6 +254,7 @@ public class VariableAccessUtils {
     return variable.equals(target);
   }
 
+  @Contract("_, null -> false")
   public static boolean variableIsUsed(@NotNull PsiVariable variable,
                                        @Nullable PsiElement context) {
     return context != null && VariableUsedVisitor.isVariableUsedIn(variable, context);
@@ -284,24 +276,14 @@ public class VariableAccessUtils {
       (PsiExpressionStatement)statement;
     PsiExpression expression = expressionStatement.getExpression();
     expression = ParenthesesUtils.stripParentheses(expression);
-    if (expression instanceof PsiPrefixExpression) {
-      final PsiPrefixExpression prefixExpression =
-        (PsiPrefixExpression)expression;
-      final IElementType tokenType = prefixExpression.getOperationTokenType();
+    if (expression instanceof PsiUnaryExpression) {
+      final PsiUnaryExpression unaryExpression =
+        (PsiUnaryExpression)expression;
+      final IElementType tokenType = unaryExpression.getOperationTokenType();
       if (!tokenType.equals(incremented ? JavaTokenType.PLUSPLUS : JavaTokenType.MINUSMINUS)) {
         return false;
       }
-      final PsiExpression operand = prefixExpression.getOperand();
-      return evaluatesToVariable(operand, variable);
-    }
-    if (expression instanceof PsiPostfixExpression) {
-      final PsiPostfixExpression postfixExpression =
-        (PsiPostfixExpression)expression;
-      final IElementType tokenType = postfixExpression.getOperationTokenType();
-      if (!tokenType.equals(incremented ? JavaTokenType.PLUSPLUS : JavaTokenType.MINUSMINUS)) {
-        return false;
-      }
-      final PsiExpression operand = postfixExpression.getOperand();
+      final PsiExpression operand = unaryExpression.getOperand();
       return evaluatesToVariable(operand, variable);
     }
     if (expression instanceof PsiAssignmentExpression) {
@@ -412,7 +394,7 @@ public class VariableAccessUtils {
     return visitor.getUsedVariables();
   }
 
-  public static boolean isAnyVariableAssigned(@NotNull Collection<PsiVariable> variables, @Nullable PsiElement context) {
+  public static boolean isAnyVariableAssigned(@NotNull Collection<? extends PsiVariable> variables, @Nullable PsiElement context) {
     if (context == null) {
       return false;
     }

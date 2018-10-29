@@ -1,3 +1,4 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.io;
 
 import com.intellij.util.ArrayUtil;
@@ -32,7 +33,7 @@ public class JsonUtil {
 
   public static void escape(@NotNull CharSequence value, @NotNull StringBuilder sb) {
     int length = value.length();
-    sb.ensureCapacity(sb.capacity() + length + 2);
+    sb.ensureCapacity(sb.length() + length + 2);
     sb.append('"');
     int last = 0;
     for (int i = 0; i < length; i++) {
@@ -108,7 +109,7 @@ public class JsonUtil {
       return Collections.emptyList();
     }
 
-    List<T> list = new SmartList<T>();
+    List<T> list = new SmartList<>();
     readListBody(reader, list);
     reader.endArray();
     return list;
@@ -122,7 +123,7 @@ public class JsonUtil {
 
   @NotNull
   public static Map<String, Object> nextObject(@NotNull JsonReaderEx reader) {
-    Map<String, Object> map = new THashMap<String, Object>();
+    Map<String, Object> map = new THashMap<>();
     reader.beginObject();
     while (reader.hasNext()) {
       map.put(reader.nextName(), nextAny(reader));

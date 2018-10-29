@@ -29,17 +29,18 @@ import java.util.Set;
 
 /**
  * @author anna
- * Date: 26-Mar-2008
  */
 public class MigrationUsagesPanel extends UsagesPanel {
   public MigrationUsagesPanel(Project project) {
     super(project);
   }
 
+  @Override
   public String getInitialPositionText() {
     return "Select root to find reasons to migrate";
   }
 
+  @Override
   public String getCodeUsagesString() {
     return "Found reasons to migrate";
   }
@@ -49,13 +50,13 @@ public class MigrationUsagesPanel extends UsagesPanel {
     if (rootElement == null) return;
     final Set<PsiElement> usages = labeler.getTypeUsages((TypeMigrationUsageInfo)migration, ((TypeMigrationUsageInfo)root));
     if (usages != null) {
-      final List<UsageInfo> infos = new ArrayList<UsageInfo>(usages.size());
+      final List<UsageInfo> infos = new ArrayList<>(usages.size());
       for (PsiElement usage : usages) {
         if (usage != null && usage.isValid()) {
           infos.add(new UsageInfo(usage));
         }
       }
-      showUsages(new PsiElement[]{rootElement}, infos.toArray(new UsageInfo[infos.size()]));
+      showUsages(new PsiElement[]{rootElement}, infos.toArray(UsageInfo.EMPTY_ARRAY));
     }
     else {
       showUsages(new PsiElement[]{rootElement}, new UsageInfo[] {migration});

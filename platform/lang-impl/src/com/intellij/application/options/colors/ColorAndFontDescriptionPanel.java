@@ -1,45 +1,34 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options.colors;
 
 import com.intellij.openapi.application.ApplicationBundle;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
+import com.intellij.openapi.editor.colors.EditorSchemeAttributeDescriptor;
+import com.intellij.openapi.editor.colors.EditorSchemeAttributeDescriptorWithPath;
 import com.intellij.openapi.editor.markup.EffectType;
 import com.intellij.openapi.editor.markup.TextAttributes;
-import com.intellij.openapi.options.colors.AttributesDescriptor;
-import com.intellij.openapi.options.colors.ColorSettingsPage;
+import com.intellij.openapi.options.colors.AbstractKeyDescriptor;
+import com.intellij.openapi.options.colors.ColorAndFontDescriptorsProvider;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Pair;
-import com.intellij.ui.*;
+import com.intellij.ui.CollectionComboBoxModel;
+import com.intellij.ui.ColorPanel;
+import com.intellij.ui.JBColor;
+import com.intellij.ui.ListCellRendererWrapper;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.util.BitUtil;
 import com.intellij.util.EventDispatcher;
 import com.intellij.util.FontUtil;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import javax.swing.event.HyperlinkEvent;
 import java.awt.*;
-import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -60,7 +49,7 @@ public class ColorAndFontDescriptionPanel extends JPanel implements OptionsPanel
   private JBCheckBox myCbEffects;
   private JBCheckBox myCbErrorStripe;
 
-  private Map<String, EffectType> myEffectsMap;
+  private final Map<String, EffectType> myEffectsMap;
   {
     Map<String, EffectType> map = ContainerUtil.newLinkedHashMap();
     map.put(ApplicationBundle.message("combobox.effect.underscored"), EffectType.LINE_UNDERSCORE);
@@ -72,7 +61,6 @@ public class ColorAndFontDescriptionPanel extends JPanel implements OptionsPanel
     myEffectsMap = Collections.unmodifiableMap(map);
   }
   private JComboBox myEffectsCombo;
-  private final EffectsComboModel myEffectsModel;
 
   private JBCheckBox myCbBold;
   private JBCheckBox myCbItalic;
@@ -80,15 +68,15 @@ public class ColorAndFontDescriptionPanel extends JPanel implements OptionsPanel
   private JTextPane myInheritanceLabel;
 
   private JBCheckBox myInheritAttributesBox;
+  private boolean myUiEventsEnabled = true;
 
   public ColorAndFontDescriptionPanel() {
     super(new BorderLayout());
     add(myPanel, BorderLayout.CENTER);
 
-    setBorder(BorderFactory.createEmptyBorder(4, 0, 4, 4));
-    myEffectsModel = new EffectsComboModel(ContainerUtil.newArrayList(myEffectsMap.keySet()));
+    setBorder(JBUI.Borders.empty(4, 0, 4, 4));
     //noinspection unchecked
-    myEffectsCombo.setModel(myEffectsModel);
+    myEffectsCombo.setModel(new CollectionComboBoxModel<>(ContainerUtil.newArrayList(myEffectsMap.keySet())));
     //noinspection unchecked
     myEffectsCombo.setRenderer(new ListCellRendererWrapper<String>() {
       @Override
@@ -97,12 +85,18 @@ public class ColorAndFontDescriptionPanel extends JPanel implements OptionsPanel
       }
     });
 
-    ActionListener actionListener = new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        onSettingsChanged(e);
+    ActionListener actionListener = e -> {
+      if (myUiEventsEnabled) {
+        myErrorStripeColorChooser.setEnabled(myCbErrorStripe.isSelected());
+        myForegroundChooser.setEnabled(myCbForeground.isSelected());
+        myBackgroundChooser.setEnabled(myCbBackground.isSelected());
+        myEffectsColorChooser.setEnabled(myCbEffects.isSelected());
+        myEffectsCombo.setEnabled(myCbEffects.isSelected());
+
+        myDispatcher.getMulticaster().onSettingsChanged(e);
       }
     };
+
     for (JBCheckBox c : new JBCheckBox[]{myCbBackground, myCbForeground, myCbEffects, myCbErrorStripe, myCbItalic, myCbBold, myInheritAttributesBox}) {
       c.addActionListener(actionListener);
     }
@@ -110,14 +104,10 @@ public class ColorAndFontDescriptionPanel extends JPanel implements OptionsPanel
       c.addActionListener(actionListener);
     }
     myEffectsCombo.addActionListener(actionListener);
+
     Messages.configureMessagePaneUi(myInheritanceLabel, "<html>", null);
-    myInheritanceLabel.addHyperlinkListener(new HyperlinkAdapter() {
-      @Override
-      protected void hyperlinkActivated(HyperlinkEvent e) {
-        onHyperLinkClicked(e);
-      }
-    });
-    myInheritanceLabel.setBorder(BorderFactory.createEmptyBorder());
+    myInheritanceLabel.addHyperlinkListener(e -> myDispatcher.getMulticaster().onHyperLinkClicked(e));
+    myInheritanceLabel.setBorder(JBUI.Borders.empty(4, 0, 4, 4));
     myLabelFont.setVisible(false); // hide for now as it doesn't look that good
   }
 
@@ -127,33 +117,26 @@ public class ColorAndFontDescriptionPanel extends JPanel implements OptionsPanel
     return this;
   }
 
-  private void onHyperLinkClicked(HyperlinkEvent e) {
-    myDispatcher.getMulticaster().onHyperLinkClicked(e);
-  }
-
-  private void onSettingsChanged(ActionEvent e) {
-    myErrorStripeColorChooser.setEnabled(myCbErrorStripe.isSelected());
-    myForegroundChooser.setEnabled(myCbForeground.isSelected());
-    myBackgroundChooser.setEnabled(myCbBackground.isSelected());
-    myEffectsColorChooser.setEnabled(myCbEffects.isSelected());
-    myEffectsCombo.setEnabled(myCbEffects.isSelected());
-
-    myDispatcher.getMulticaster().onSettingsChanged(e);
-  }
-
+  @Override
   public void resetDefault() {
-    myLabelFont.setEnabled(false);
-    myCbBold.setSelected(false);
-    myCbBold.setEnabled(false);
-    myCbItalic.setSelected(false);
-    myCbItalic.setEnabled(false);
-    updateColorChooser(myCbForeground, myForegroundChooser, false, false, null);
-    updateColorChooser(myCbBackground, myBackgroundChooser, false, false, null);
-    updateColorChooser(myCbErrorStripe, myErrorStripeColorChooser, false, false, null);
-    updateColorChooser(myCbEffects, myEffectsColorChooser, false, false, null);
-    myEffectsCombo.setEnabled(false);
-    myInheritanceLabel.setVisible(false);
-    myInheritAttributesBox.setVisible(false);
+    try {
+      myUiEventsEnabled = false;
+      myLabelFont.setEnabled(false);
+      myCbBold.setSelected(false);
+      myCbBold.setEnabled(false);
+      myCbItalic.setSelected(false);
+      myCbItalic.setEnabled(false);
+      updateColorChooser(myCbForeground, myForegroundChooser, false, false, null);
+      updateColorChooser(myCbBackground, myBackgroundChooser, false, false, null);
+      updateColorChooser(myCbErrorStripe, myErrorStripeColorChooser, false, false, null);
+      updateColorChooser(myCbEffects, myEffectsColorChooser, false, false, null);
+      myEffectsCombo.setEnabled(false);
+      myInheritanceLabel.setVisible(false);
+      myInheritAttributesBox.setVisible(false);
+    }
+    finally {
+      myUiEventsEnabled = true;
+    }
   }
 
   private static void updateColorChooser(JCheckBox checkBox,
@@ -172,61 +155,68 @@ public class ColorAndFontDescriptionPanel extends JPanel implements OptionsPanel
     colorPanel.setEnabled(isChecked);
   }
 
-  public void reset(@NotNull ColorAndFontDescription description) {
-    if (description.isFontEnabled()) {
-      myLabelFont.setEnabled(description.isEditable());
-      myCbBold.setEnabled(description.isEditable());
-      myCbItalic.setEnabled(description.isEditable());
-      int fontType = description.getFontType();
-      myCbBold.setSelected(BitUtil.isSet(fontType, Font.BOLD));
-      myCbItalic.setSelected(BitUtil.isSet(fontType, Font.ITALIC));
+  @Override
+  public void reset(@NotNull EditorSchemeAttributeDescriptor attrDescription) {
+    try {
+      myUiEventsEnabled = false;
+      if (!(attrDescription instanceof ColorAndFontDescription)) return;
+      ColorAndFontDescription description = (ColorAndFontDescription)attrDescription;
+
+      if (description.isFontEnabled()) {
+        myLabelFont.setEnabled(description.isEditable());
+        myCbBold.setEnabled(description.isEditable());
+        myCbItalic.setEnabled(description.isEditable());
+        int fontType = description.getFontType();
+        myCbBold.setSelected(BitUtil.isSet(fontType, Font.BOLD));
+        myCbItalic.setSelected(BitUtil.isSet(fontType, Font.ITALIC));
+      }
+      else {
+        myLabelFont.setEnabled(false);
+        myCbBold.setSelected(false);
+        myCbBold.setEnabled(false);
+        myCbItalic.setSelected(false);
+        myCbItalic.setEnabled(false);
+      }
+
+      updateColorChooser(myCbForeground, myForegroundChooser, description.isForegroundEnabled(),
+                         description.isForegroundChecked(), description.getForegroundColor());
+
+      updateColorChooser(myCbBackground, myBackgroundChooser, description.isBackgroundEnabled(),
+                         description.isBackgroundChecked(), description.getBackgroundColor());
+
+      updateColorChooser(myCbErrorStripe, myErrorStripeColorChooser, description.isErrorStripeEnabled(),
+                         description.isErrorStripeChecked(), description.getErrorStripeColor());
+
+      EffectType effectType = description.getEffectType();
+      updateColorChooser(myCbEffects, myEffectsColorChooser, description.isEffectsColorEnabled(),
+                         description.isEffectsColorChecked(), description.getEffectColor());
+
+      String name = ContainerUtil.reverseMap(myEffectsMap).get(effectType);
+      myEffectsCombo.getModel().setSelectedItem(name);
+      myEffectsCombo
+        .setEnabled((description.isEffectsColorEnabled() && description.isEffectsColorChecked()) && description.isEditable());
+      setInheritanceInfo(description);
+      myLabelFont.setEnabled(myCbBold.isEnabled() || myCbItalic.isEnabled());
     }
-    else {
-      myLabelFont.setEnabled(false);
-      myCbBold.setSelected(false);
-      myCbBold.setEnabled(false);
-      myCbItalic.setSelected(false);
-      myCbItalic.setEnabled(false);
+    finally {
+      myUiEventsEnabled = true;
     }
-
-    updateColorChooser(myCbForeground, myForegroundChooser, description.isForegroundEnabled(),
-                       description.isForegroundChecked(), description.getForegroundColor());
-
-    updateColorChooser(myCbBackground, myBackgroundChooser, description.isBackgroundEnabled(),
-                       description.isBackgroundChecked(), description.getBackgroundColor());
-
-    updateColorChooser(myCbErrorStripe, myErrorStripeColorChooser, description.isErrorStripeEnabled(),
-                       description.isErrorStripeChecked(), description.getErrorStripeColor());
-
-    EffectType effectType = description.getEffectType();
-    updateColorChooser(myCbEffects, myEffectsColorChooser, description.isEffectsColorEnabled(),
-                       description.isEffectsColorChecked(), description.getEffectColor());
-
-    if (description.isEffectsColorEnabled() && description.isEffectsColorChecked()) {
-      myEffectsCombo.setEnabled(description.isEditable());
-      myEffectsModel.setEffectName(ContainerUtil.reverseMap(myEffectsMap).get(effectType));
-    }
-    else {
-      myEffectsCombo.setEnabled(false);
-    }
-    setInheritanceInfo(description);
-    myLabelFont.setEnabled(myCbBold.isEnabled() || myCbItalic.isEnabled());
   }
 
 
   private void setInheritanceInfo(ColorAndFontDescription description) {
-    Pair<ColorSettingsPage, AttributesDescriptor> baseDescriptor = description.getBaseAttributeDescriptor();
+    Pair<ColorAndFontDescriptorsProvider, ? extends AbstractKeyDescriptor> baseDescriptor = description.getFallbackKeyDescriptor();
     if (baseDescriptor != null && baseDescriptor.second.getDisplayName() != null) {
       String attrName = baseDescriptor.second.getDisplayName();
-      String attrLabel = attrName.replaceAll(ColorOptionsTree.NAME_SEPARATOR, FontUtil.rightArrow(UIUtil.getLabelFont()));
-      ColorSettingsPage settingsPage = baseDescriptor.first;
+      String attrLabel = attrName.replaceAll(EditorSchemeAttributeDescriptorWithPath.NAME_SEPARATOR, FontUtil.rightArrow(UIUtil.getLabelFont()));
+      ColorAndFontDescriptorsProvider settingsPage = baseDescriptor.first;
       String style = "<div style=\"text-align:right\" vertical-align=\"top\">";
       String tooltipText;
       String labelText;
       if (settingsPage != null) {
         String pageName = settingsPage.getDisplayName();
-        tooltipText = "'" + attrLabel + "' from<br>'" + pageName + "' section";
-        labelText = style + "'" + attrLabel + "'<br>of <a href=\"" + attrName + "\">" + pageName;
+        tooltipText = "Editor | Color Scheme | " + pageName + "<br>" + attrLabel;
+        labelText = style + "<a href=\"" + pageName + "\">" + attrLabel + "</a><br>(" + pageName + ")";
       }
       else {
         tooltipText = attrLabel;
@@ -235,6 +225,7 @@ public class ColorAndFontDescriptionPanel extends JPanel implements OptionsPanel
 
       myInheritanceLabel.setVisible(true);
       myInheritanceLabel.setText(labelText);
+      myInheritanceLabel.getCaret().setDot(0);
       myInheritanceLabel.setToolTipText(tooltipText);
       myInheritanceLabel.setEnabled(true);
       myInheritAttributesBox.setVisible(true);
@@ -263,7 +254,11 @@ public class ColorAndFontDescriptionPanel extends JPanel implements OptionsPanel
     myBackgroundChooser.setEditable(isEditEnabled);
   }
 
-  public void apply(@NotNull ColorAndFontDescription description, EditorColorsScheme scheme) {
+  @Override
+  public void apply(@NotNull EditorSchemeAttributeDescriptor attrDescription, EditorColorsScheme scheme) {
+    if (!(attrDescription instanceof ColorAndFontDescription)) return;
+    ColorAndFontDescription description = (ColorAndFontDescription)attrDescription;
+
     description.setInherited(myInheritAttributesBox.isSelected());
     if (description.isInherited()) {
       TextAttributes baseAttributes = description.getBaseAttributes();
@@ -312,19 +307,4 @@ public class ColorAndFontDescriptionPanel extends JPanel implements OptionsPanel
     myDispatcher.addListener(listener);
   }
 
-  private static class EffectsComboModel extends CollectionComboBoxModel<String> {
-    public EffectsComboModel(List<String> names) {
-      super(names);
-    }
-
-    /**
-     * Set the current effect name when a text attribute selection changes without notifying the listeners since otherwise it will
-     * be considered as an actual change and lead to unnecessary evens including 'read-only scheme' check.
-     *
-     * @param effectName
-     */
-    public void setEffectName(@NotNull String effectName) {
-      mySelection = effectName;
-    }
-  }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.InputStream;
 
+@SuppressWarnings("NonSynchronizedMethodOverridesSynchronizedMethod")
 public class UnsyncByteArrayInputStream extends InputStream {
   protected byte[] myBuffer;
   private int myPosition;
@@ -29,11 +30,11 @@ public class UnsyncByteArrayInputStream extends InputStream {
     this(buf, 0, buf.length);
   }
 
-  public UnsyncByteArrayInputStream(byte[] buf, int offset, int length) {
+  public UnsyncByteArrayInputStream(@NotNull byte[] buf, int offset, int length) {
     init(buf, offset, length);
   }
 
-  public void init(byte[] buf, int offset, int length) {
+  public void init(@NotNull byte[] buf, int offset, int length) {
     myBuffer = buf;
     myPosition = offset;
     myCount = length;
@@ -86,7 +87,7 @@ public class UnsyncByteArrayInputStream extends InputStream {
   }
 
   @Override
-  public void mark(int readlimit) {
+  public void mark(int readLimit) {
     myMarkedPosition = myPosition;
   }
 

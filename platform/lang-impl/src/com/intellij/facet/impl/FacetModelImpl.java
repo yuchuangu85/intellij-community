@@ -17,10 +17,11 @@
 package com.intellij.facet.impl;
 
 import com.intellij.facet.Facet;
-import com.intellij.facet.ModifiableFacetModel;
 import com.intellij.facet.FacetManagerImpl;
-import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.facet.ModifiableFacetModel;
 import com.intellij.openapi.Disposable;
+import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.roots.ProjectModelExternalSource;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.containers.ContainerUtil;
@@ -34,8 +35,8 @@ import java.util.*;
  */
 public class FacetModelImpl extends FacetModelBase implements ModifiableFacetModel {
   private static final Logger LOG = Logger.getInstance("#com.intellij.facet.impl.FacetModelImpl");
-  private final List<Facet> myFacets = new ArrayList<Facet>();
-  private final Map<Facet, String> myFacet2NewName = new HashMap<Facet, String>();
+  private final List<Facet> myFacets = new ArrayList<>();
+  private final Map<Facet, String> myFacet2NewName = new HashMap<>();
   private final FacetManagerImpl myManager;
   private final List<Listener> myListeners = ContainerUtil.createLockFreeCopyOnWriteList();
 
@@ -57,6 +58,12 @@ public class FacetModelImpl extends FacetModelBase implements ModifiableFacetMod
 
     myFacets.add(facet);
     facetsChanged();
+  }
+
+  @Override
+  public void addFacet(Facet facet, @Nullable ProjectModelExternalSource externalSource) {
+    addFacet(facet);
+    myManager.setExternalSource(facet, externalSource);
   }
 
   @Override
@@ -91,7 +98,7 @@ public class FacetModelImpl extends FacetModelBase implements ModifiableFacetMod
 
   @Override
   public boolean isModified() {
-    return !new HashSet<Facet>(myFacets).equals(new HashSet<Facet>(Arrays.asList(myManager.getAllFacets()))) || !myFacet2NewName.isEmpty();
+    return !new HashSet<>(myFacets).equals(new HashSet<>(Arrays.asList(myManager.getAllFacets()))) || !myFacet2NewName.isEmpty();
   }
 
   @Override
@@ -102,7 +109,7 @@ public class FacetModelImpl extends FacetModelBase implements ModifiableFacetMod
   @Override
   @NotNull
   public Facet[] getAllFacets() {
-    return myFacets.toArray(new Facet[myFacets.size()]);
+    return myFacets.toArray(Facet.EMPTY_ARRAY);
   }
 
   @Override
@@ -112,16 +119,9 @@ public class FacetModelImpl extends FacetModelBase implements ModifiableFacetMod
   }
 
   @Override
-  public void addListener(@NotNull final Listener listener, @Nullable Disposable parentDisposable) {
+  public void addListener(@NotNull final Listener listener, @NotNull Disposable parentDisposable) {
     myListeners.add(listener);
-    if (parentDisposable != null) {
-      Disposer.register(parentDisposable, new Disposable() {
-        @Override
-        public void dispose() {
-          myListeners.remove(listener);
-        }
-      });
-    }
+    Disposer.register(parentDisposable, () -> myListeners.remove(listener));
   }
 
   @Override

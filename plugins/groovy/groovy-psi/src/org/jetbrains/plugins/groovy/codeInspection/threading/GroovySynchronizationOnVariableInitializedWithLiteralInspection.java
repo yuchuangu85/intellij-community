@@ -36,13 +36,6 @@ public class GroovySynchronizationOnVariableInitializedWithLiteralInspection ext
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return THREADING_ISSUES;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Synchronization on variable initialized with literal";
   }
@@ -62,10 +55,10 @@ public class GroovySynchronizationOnVariableInitializedWithLiteralInspection ext
 
   private static class Visitor extends BaseInspectionVisitor {
     @Override
-    public void visitSynchronizedStatement(GrSynchronizedStatement synchronizedStatement) {
+    public void visitSynchronizedStatement(@NotNull GrSynchronizedStatement synchronizedStatement) {
       super.visitSynchronizedStatement(synchronizedStatement);
       final GrExpression lock = synchronizedStatement.getMonitor();
-      if (lock == null || !(lock instanceof GrReferenceExpression)) {
+      if (!(lock instanceof GrReferenceExpression)) {
         return;
       }
       final PsiElement referent = ((PsiReference) lock).resolve();

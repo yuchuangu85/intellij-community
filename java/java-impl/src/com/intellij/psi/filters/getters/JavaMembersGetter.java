@@ -20,6 +20,7 @@ import com.intellij.codeInsight.completion.*;
 import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.TailTypeDecorator;
 import com.intellij.codeInsight.lookup.VariableLookupItem;
+import com.intellij.codeInspection.magicConstant.MagicCompletionContributor;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
@@ -37,13 +38,19 @@ import java.util.Set;
  */
 public class JavaMembersGetter extends MembersGetter {
   private final PsiType myExpectedType;
+  private final CompletionParameters myParameters;
 
   public JavaMembersGetter(@NotNull PsiType expectedType, CompletionParameters parameters) {
     super(new JavaStaticMemberProcessor(parameters), parameters.getPosition());
     myExpectedType = JavaCompletionUtil.originalize(expectedType);
+    myParameters = parameters;
   }
 
   public void addMembers(boolean searchInheritors, final Consumer<LookupElement> results) {
+    if (MagicCompletionContributor.getAllowedValues(myParameters.getPosition()) != null) {
+      return;
+    }
+
     addConstantsFromTargetClass(results, searchInheritors);
     if (myExpectedType instanceof PsiPrimitiveType && PsiType.DOUBLE.isAssignableFrom(myExpectedType)) {
       addConstantsFromReferencedClassesInSwitch(results);
@@ -55,11 +62,15 @@ public class JavaMembersGetter extends MembersGetter {
 
     final PsiClass psiClass = PsiUtil.resolveClassInType(myExpectedType);
     processMembers(results, psiClass, PsiTreeUtil.getParentOfType(myPlace, PsiAnnotation.class) == null, searchInheritors);
+
+    if (psiClass != null && myExpectedType instanceof PsiClassType) {
+      new BuilderCompletion((PsiClassType)myExpectedType, psiClass, myPlace).suggestBuilderVariants().forEach(results::consume);
+    }
   }
 
-  private void addConstantsFromReferencedClassesInSwitch(final Consumer<LookupElement> results) {
+  private void addConstantsFromReferencedClassesInSwitch(final Consumer<? super LookupElement> results) {
     final Set<PsiField> fields = ReferenceExpressionCompletionContributor.findConstantsUsedInSwitch(myPlace);
-    final Set<PsiClass> classes = new HashSet<PsiClass>();
+    final Set<PsiClass> classes = new HashSet<>();
     for (PsiField field : fields) {
       ContainerUtil.addIfNotNull(classes, field.getContainingClass());
     }
@@ -73,7 +84,7 @@ public class JavaMembersGetter extends MembersGetter {
     }
   }
 
-  private void addConstantsFromTargetClass(Consumer<LookupElement> results, boolean searchInheritors) {
+  private void addConstantsFromTargetClass(Consumer<? super LookupElement> results, boolean searchInheritors) {
     PsiElement parent = myPlace.getParent();
     if (!(parent instanceof PsiReferenceExpression)) {
       return;
@@ -106,7 +117,7 @@ public class JavaMembersGetter extends MembersGetter {
         final PsiElement element = result.getElement();
         if (element instanceof PsiMethod) {
           final PsiClass aClass = ((PsiMethod)element).getContainingClass();
-          if (aClass != null && !"java.lang.Math".equals(aClass.getQualifiedName())) {
+          if (aClass != null && !CommonClassNames.JAVA_LANG_MATH.equals(aClass.getQualifiedName())) {
             return aClass;
           }
         }
@@ -139,15 +150,13 @@ public class JavaMembersGetter extends MembersGetter {
   @Override
   @Nullable
   protected LookupElement createMethodElement(PsiMethod method) {
-    PsiSubstitutor substitutor = SmartCompletionDecorator.calculateMethodReturnTypeSubstitutor(method, myExpectedType);
-    PsiType type = substitutor.substitute(method.getReturnType());
+    JavaMethodCallElement item = new JavaMethodCallElement(method, false, false);
+    item.setInferenceSubstitutorFromExpectedType(myPlace, myExpectedType);
+    PsiType type = item.getType();
     if (type == null || !myExpectedType.isAssignableFrom(type)) {
       return null;
     }
 
-
-    JavaMethodCallElement item = new JavaMethodCallElement(method, false, false);
-    item.setInferenceSubstitutor(substitutor, myPlace);
     return item;
   }
 }

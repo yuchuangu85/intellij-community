@@ -15,7 +15,7 @@
  */
 package com.intellij.testFramework
 
-import com.intellij.util.write
+import com.intellij.util.io.write
 import java.nio.file.FileSystem
 
 fun FileSystem.file(path: String, data: ByteArray): FileSystem {
@@ -23,4 +23,4 @@ fun FileSystem.file(path: String, data: ByteArray): FileSystem {
   return this
 }
 
-fun FileSystem.file(path: String, data: String) = file(path, data.toByteArray())
+fun FileSystem.file(path: String, data: String): FileSystem = file(path, data.toByteArray())

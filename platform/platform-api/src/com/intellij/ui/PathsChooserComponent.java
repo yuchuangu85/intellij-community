@@ -21,7 +21,6 @@ import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.components.JBList;
-import com.intellij.util.Consumer;
 import com.intellij.util.ui.ComponentWithEmptyText;
 import com.intellij.util.ui.StatusText;
 import org.jetbrains.annotations.NotNull;
@@ -36,8 +35,8 @@ import java.util.List;
  * This component is used to configure list of folders with add/remove buttons.
  */
 public class PathsChooserComponent implements ComponentWithEmptyText {
-  private JPanel myContentPane;
-  private JBList myList;
+  private final JPanel myContentPane;
+  private final JBList myList;
   private final DefaultListModel myListModel;
 
   private List<String> myWorkingCollection;
@@ -55,7 +54,7 @@ public class PathsChooserComponent implements ComponentWithEmptyText {
     myList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     myInitialCollection = collection;
     myProject = project;
-    myWorkingCollection = new ArrayList<String>(myInitialCollection);
+    myWorkingCollection = new ArrayList<>(myInitialCollection);
     myListModel = new DefaultListModel();
     myList.setModel(myListModel);
 
@@ -110,7 +109,7 @@ public class PathsChooserComponent implements ComponentWithEmptyText {
 
   public void reset() {
     myListModel.clear();
-    myWorkingCollection = new ArrayList<String>(myInitialCollection);
+    myWorkingCollection = new ArrayList<>(myInitialCollection);
     for (String path : myWorkingCollection) {
       myListModel.addElement(path);
     }

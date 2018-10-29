@@ -15,10 +15,19 @@
  */
 package org.intellij.lang.regexp;
 
+import com.intellij.mock.MockSmartPointerManager;
 import com.intellij.openapi.application.ex.PathManagerEx;
+import com.intellij.psi.PsiComment;
+import com.intellij.psi.SmartPointerManager;
+import com.intellij.psi.SmartPsiElementPointer;
+import com.intellij.psi.SyntaxTraverser;
+import com.intellij.psi.impl.source.resolve.FileContextUtil;
 import com.intellij.testFramework.ParsingTestCase;
 
 import java.io.IOException;
+import java.util.EnumSet;
+
+import static org.intellij.lang.regexp.RegExpCapability.POSIX_BRACKET_EXPRESSIONS;
 
 /**
  * @author Bas Leijdekkers
@@ -27,6 +36,12 @@ public class RegExpParsingTest extends ParsingTestCase {
 
   public RegExpParsingTest() {
     super("psi", "regexp", new RegExpParserDefinition());
+  }
+
+  @Override
+  protected void setUp() throws Exception {
+    super.setUp();
+    myProject.registerService(SmartPointerManager.class, new MockSmartPointerManager());
   }
 
   @Override
@@ -56,6 +71,7 @@ public class RegExpParsingTest extends ParsingTestCase {
   public void testSimple20() throws IOException { doCodeTest("a{1,2}"); }
   public void testSimple21() throws IOException { doCodeTest("a{1,foo}"); }
   public void testSimple22() throws IOException { doCodeTest("\\;"); }
+  public void testSimple23() throws IOException { doCodeTest(""); }
 
   public void testQuantifiers1() throws IOException { doCodeTest("a?"); }
   public void testQuantifiers2() throws IOException { doCodeTest("a+"); }
@@ -78,6 +94,7 @@ public class RegExpParsingTest extends ParsingTestCase {
   public void testQuantifiers19() throws IOException { doCodeTest("a{"); }
   public void testQuantifiers20() throws IOException { doCodeTest("a}"); }
   public void testQuantifiers21() throws IOException { doCodeTest("a{}"); }
+  public void testQuantifiers22() throws IOException { doCodeTest("{1,2}"); }
 
   public void testCharclasses1() throws IOException { doCodeTest("a[bc]d"); }
   public void testCharclasses2() throws IOException { doCodeTest("a[b-d]e"); }
@@ -147,6 +164,10 @@ public class RegExpParsingTest extends ParsingTestCase {
   public void testCharclasses66() throws IOException { doCodeTest("\\X"); }
   public void testCharclasses67() throws IOException { doCodeTest("\\-[\\*\\-\\[\\]\\\\\\+]"); }
   public void testCharclasses68() throws IOException { doCodeTest("[\\b]"); }
+  public void testCharClasses69() throws IOException { doCodeTest("\\p{^L}"); }
+  public void testCharClasses70() throws IOException { doCodeTest("[&&&&a]"); }
+  public void testCharClasses71() throws IOException { doCodeTest("[a-\\Qz\\E]"); }
+  public void testCharClasses72() throws IOException { doCodeTest("([\\^])"); }
 
   public void testGroups1() throws IOException { doCodeTest("()ef"); }
   public void testGroups2() throws IOException { doCodeTest("()*"); }
@@ -183,6 +204,14 @@ public class RegExpParsingTest extends ParsingTestCase {
   public void testGroups33() throws IOException { doCodeTest("(?<asdf>[a-c])\\1"); }
   public void testGroups34() throws IOException { doCodeTest("(?<asdf>[a-c])\\k<asdf>"); }
   public void testGroups35() throws IOException { doCodeTest("\\k<adsf>"); }
+  public void testGroups36() throws IOException { doCodeTest("(?P<name>{"); }
+  public void testGroups37() throws IOException { doCodeTest("(?P=name)"); }
+  public void testGroups38() throws IOException { doCodeTest("\\g'name'"); }
+  public void testGroups39() throws IOException { doCodeTest("(?(name)yes-pattern|no-pattern)"); }
+  public void testGroups40() throws IOException { doCodeTest("(?(name)yes-pattern|{"); }
+  public void testGroups41() throws IOException { doCodeTest("(?>atomic)"); }
+  public void testGroups42() throws IOException { doCodeTest("(?:non-capturing)"); }
+  public void testGroups43() throws IOException { doCodeTest("(?(name)yes-pattern|no_pattern|maybe-pattern)"); }
 
   public void testEscapes1() throws IOException { doCodeTest("\\q"); }
   public void testEscapes2() throws IOException { doCodeTest("\\#"); }
@@ -209,6 +238,10 @@ public class RegExpParsingTest extends ParsingTestCase {
   public void testEscapes23() throws IOException { doCodeTest("a\\Qabc?*+.))]][]\\E)"); }
   public void testEscapes24() throws IOException { doCodeTest("\\Q\\j\\E"); }
   public void testEscapes25() throws IOException { doCodeTest("\\c0"); }
+  public void testEscapes26() throws IOException { doCodeTest("[\\]]"); }
+  public void testEscapes27() throws IOException { doCodeTest("[^\\]]"); }
+  public void testEscapes28() throws IOException { doCodeTest("[a\\]]"); }
+  public void testEscapes29() throws IOException { doCodeTest("[^a\\]]"); }
 
   public void testAnchors1() throws IOException { doCodeTest("^*"); }
   public void testAnchors2() throws IOException { doCodeTest("$*"); }
@@ -232,6 +265,10 @@ public class RegExpParsingTest extends ParsingTestCase {
   public void testNamedchars9() throws IOException { doCodeTest("[:xdigit:]+"); }
   public void testNamedchars10() throws IOException { doCodeTest("\\p{unknown}+"); }
   public void testNamedchars11() throws IOException { doCodeTest("[:^xdigit:]+"); }
+  public void testNamedchars12() throws IOException { doCodeTest("\\p{InArabic Extended-A}"); }
+  public void testNamedchars13() throws IOException { doCodeTest("\\N{Mahjong Tile Winter}"); }
+  public void testNamedchars14() throws IOException { doCodeTest("[\\N{Mahjong Tile Winter}]"); }
+  public void testNamedchars15() throws IOException { doCodeTest("[\\N{LATIN SMALL LETTER A}-\\N{LATIN SMALL LETTER Z}]"); }
 
   public void testBackrefs1() throws IOException { doCodeTest("(ac*)c*d[ac]*\\1"); }
   public void testBackrefs2() throws IOException { doCodeTest("(.)=\\1"); }
@@ -273,6 +310,7 @@ public class RegExpParsingTest extends ParsingTestCase {
   public void testOptions1() throws IOException { doCodeTest("(?iZm)abc"); }
   public void testOptions2() throws IOException { doCodeTest("(?idmsuxU)nice"); }
   public void testOptions3() throws IOException { doCodeTest("(?idm-suxU)one(?suxU-idm)two"); }
+  public void testOptions4() throws IOException { doCodeTest("(?i|abc"); }
 
   public void testTests1() throws IOException { doCodeTest("abc)"); }
   public void testTests2() throws IOException { doCodeTest("(abc"); }
@@ -324,4 +362,22 @@ public class RegExpParsingTest extends ParsingTestCase {
   public void testParse1() throws IOException { doCodeTest("123 | 456"); }
   public void testParse2() throws IOException { doCodeTest("1**"); }
   public void testParse3() throws IOException { doCodeTest("(([hH][tT]{2}[pP]|[fF][tT][pP])://)?[a-zA-Z0-9\\-]+(\\.[a-zA-Z0-9\\-]+)*"); }
+
+  public void testCategoryShorthand1() throws IOException { doCodeTest("\\pL"); }
+
+  public void testCapabilitiesProvider() throws IOException {
+    RegExpCapabilitiesProvider provider = (host, def) -> EnumSet.of(POSIX_BRACKET_EXPRESSIONS);
+    try {
+      RegExpCapabilitiesProvider.EP.addExplicitExtension(RegExpLanguage.INSTANCE, provider);
+      PsiComment context = SyntaxTraverser.psiTraverser(createPsiFile("c", "(?#xxx)")).filter(PsiComment.class).first();
+      myFile = createPsiFile("a", "[[:blank:]]");
+      SmartPsiElementPointer<PsiComment> pointer = SmartPointerManager.createPointer(context);
+      myFile.putUserData(FileContextUtil.INJECTED_IN_ELEMENT, pointer);
+      ensureParsed(myFile);
+      checkResult(myFilePrefix + getTestName(), myFile);
+    }
+    finally {
+      RegExpCapabilitiesProvider.EP.removeExplicitExtension(RegExpLanguage.INSTANCE, provider);
+    }
+  }
 }

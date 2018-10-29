@@ -30,6 +30,8 @@ public class UnnecessaryParenthesesQuickFixTest extends IGQuickFixesTestCase {
   }
 
   public void testPolyadic() { doTest(); }
+  public void testPolyadic2() { doTest(); }
+  public void testPolyadic3() { doTest(); }
   public void testCommutative() { doTest(); }
   public void testWrapping() { doTest(); }
   public void testNotCommutative() { assertQuickfixNotAvailable(); }
@@ -40,6 +42,11 @@ public class UnnecessaryParenthesesQuickFixTest extends IGQuickFixesTestCase {
   public void testArrayAccessExpression() { doTest(); }
   public void testArrayAccessExpression2() { doTest(); }
   public void testSimplePrecedence() { assertQuickfixNotAvailable(); }
+  public void testLambdaQualifier() { assertQuickfixNotAvailable(); }
+  public void testLambdaInTernary() { doTest(); }
+  public void testLambdaCast() { doTest(); }
+  public void testLambdaBody() { doTest(); }
+  public void testDivision() { doTest(); }
   @Override
   protected BaseInspection getInspection() {
     return new UnnecessaryParenthesesInspection();

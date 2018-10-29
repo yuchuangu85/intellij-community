@@ -31,6 +31,7 @@ public class HgOutgoingCommand extends HgRemoteChangesetsCommand {
     super(project, "outgoing");
   }
 
+  @Override
   @Nullable
   protected String getRepositoryUrl(VirtualFile root) {
     return HgUtil.getRepositoryDefaultPushPath(project, root);
@@ -43,7 +44,7 @@ public class HgOutgoingCommand extends HgRemoteChangesetsCommand {
                                  @NotNull String destination,
                                  boolean doNotShowAuthorizationRequest) {
 
-    List<String> arguments = new LinkedList<String>();
+    List<String> arguments = new LinkedList<>();
     arguments.add("-n");
     arguments.add("--template");
     arguments.add(template);

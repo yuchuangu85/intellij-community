@@ -7,8 +7,10 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.EditorModificationUtil;
 import com.intellij.openapi.editor.actionSystem.EditorAction;
 import com.intellij.openapi.editor.actionSystem.EditorActionHandler;
-import com.intellij.openapi.util.text.StringUtil;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import static com.intellij.util.DocumentUtil.isLineEmpty;
 
 /**
  * Emulates Emacs 'backward-paragraph' action
@@ -24,7 +26,7 @@ public class BackwardParagraphAction extends EditorAction {
     }
 
     @Override
-    protected void doExecute(Editor editor, @Nullable Caret caret, DataContext dataContext) {
+    protected void doExecute(@NotNull Editor editor, @Nullable Caret caret, DataContext dataContext) {
       assert  caret != null;
 
       Document document = editor.getDocument();
@@ -60,11 +62,6 @@ public class BackwardParagraphAction extends EditorAction {
       caret.removeSelection();
       caret.moveToOffset(targetOffset);
       EditorModificationUtil.scrollToCaret(editor);
-    }
-
-    private static boolean isLineEmpty(Document document, int line) {
-      return StringUtil.equalsIgnoreWhitespaces(
-        document.getImmutableCharSequence().subSequence(document.getLineStartOffset(line), document.getLineEndOffset(line)), "");
     }
   }
 }

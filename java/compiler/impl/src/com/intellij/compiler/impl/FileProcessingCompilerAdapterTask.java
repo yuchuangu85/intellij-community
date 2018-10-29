@@ -24,7 +24,6 @@ import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.ThrowableRunnable;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -34,7 +33,6 @@ import java.util.List;
  * This is an adapter for running any FileProcessingCompiler as a compiler task.
  *
  * @author Eugene Zhuravlev
- *         Date: 9/5/12
  */
 public class FileProcessingCompilerAdapterTask implements CompileTask {
   private static final Logger LOG = Logger.getInstance("#com.intellij.compiler.impl.FileProcessingCompilerAdapterTask");
@@ -59,8 +57,8 @@ public class FileProcessingCompilerAdapterTask implements CompileTask {
         return true;
       }
 
-      final List<FileProcessingCompiler.ProcessingItem> toProcess = new ArrayList<FileProcessingCompiler.ProcessingItem>();
-      final Ref<IOException> ex = new Ref<IOException>(null);
+      final List<FileProcessingCompiler.ProcessingItem> toProcess = new ArrayList<>();
+      final Ref<IOException> ex = new Ref<>(null);
       final FileProcessingCompilerStateCache cache = getCache(context);
       final boolean isMake = context.isMake();
       DumbService.getInstance(project).runReadActionInSmartMode(() -> {
@@ -92,15 +90,15 @@ public class FileProcessingCompilerAdapterTask implements CompileTask {
         return true;
       }
 
-      final FileProcessingCompiler.ProcessingItem[] array = toProcess.toArray(new FileProcessingCompiler.ProcessingItem[toProcess.size()]);
+      final FileProcessingCompiler.ProcessingItem[] array = toProcess.toArray(FileProcessingCompiler.ProcessingItem.EMPTY_ARRAY);
       final FileProcessingCompiler.ProcessingItem[] processed = myCompiler.process(context, array);
       if (processed.length == 0) {
         return true;
       }
 
       CompilerUtil.runInContext(context, CompilerBundle.message("progress.updating.caches"), () -> {
-        final List<VirtualFile> vFiles = new ArrayList<VirtualFile>(processed.length);
-        final List<Pair<FileProcessingCompiler.ProcessingItem, ValidityState>> toUpdate = new ArrayList<Pair<FileProcessingCompiler.ProcessingItem, ValidityState>>(processed.length);
+        final List<VirtualFile> vFiles = new ArrayList<>(processed.length);
+        final List<Pair<FileProcessingCompiler.ProcessingItem, ValidityState>> toUpdate = new ArrayList<>(processed.length);
         ApplicationManager.getApplication().runReadAction(() -> {
           for (FileProcessingCompiler.ProcessingItem item : processed) {
             vFiles.add(item.getFile());

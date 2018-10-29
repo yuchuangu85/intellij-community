@@ -42,11 +42,13 @@ public class HgAnnotationProvider implements AnnotationProviderEx {
     myProject = project;
   }
 
+  @Override
   @NotNull
   public FileAnnotation annotate(@NotNull VirtualFile file) throws VcsException {
     return annotate(file, null);
   }
 
+  @Override
   @NotNull
   public FileAnnotation annotate(@NotNull VirtualFile file, VcsFileRevision revision) throws VcsException {
     final VirtualFile vcsRoot = VcsUtil.getVcsRootFor(myProject, VcsUtil.getFilePath(file.getPath()));
@@ -79,9 +81,5 @@ public class HgAnnotationProvider implements AnnotationProviderEx {
     final List<HgFileRevision> logResult = HgHistoryProvider
       .getHistory(hgFile.toFilePath(), vcsRoot, myProject, (HgRevisionNumber)revision, -1);
     return new HgAnnotation(myProject, hgFile, annotationResult, logResult, revision);
-  }
-
-  public boolean isAnnotationValid(@NotNull VcsFileRevision rev) {
-    return true;
   }
 }

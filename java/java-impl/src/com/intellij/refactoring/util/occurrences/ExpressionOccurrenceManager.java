@@ -45,6 +45,7 @@ public class ExpressionOccurrenceManager extends BaseOccurrenceManager {
     myScope = scope;
     myMaintainStaticContext = maintainStaticContext;
   }
+  @Override
   protected PsiExpression[] defaultOccurrences() {
     return new PsiExpression[]{myMainOccurence};
   }
@@ -53,6 +54,7 @@ public class ExpressionOccurrenceManager extends BaseOccurrenceManager {
     return myMainOccurence;
   }
 
+  @Override
   protected PsiExpression[] findOccurrences() {
     if("null".equals(myMainOccurence.getText())) {
       return defaultOccurrences();
@@ -63,14 +65,14 @@ public class ExpressionOccurrenceManager extends BaseOccurrenceManager {
     final PsiExpression[] expressionOccurrences = findExpressionOccurrences();
     final PsiClass scopeClass = PsiTreeUtil.getNonStrictParentOfType(myScope, PsiClass.class);
     if (myMaintainStaticContext && expressionOccurrences.length > 1 && !RefactoringUtil.isInStaticContext(myMainOccurence, scopeClass)) {
-      final ArrayList<PsiExpression> expressions = new ArrayList<PsiExpression>(Arrays.asList(expressionOccurrences));
+      final ArrayList<PsiExpression> expressions = new ArrayList<>(Arrays.asList(expressionOccurrences));
       for (Iterator<PsiExpression> iterator = expressions.iterator(); iterator.hasNext();) {
         final PsiExpression expression = iterator.next();
         if(RefactoringUtil.isInStaticContext(expression, scopeClass)) {
           iterator.remove();
         }
       }
-      return expressions.toArray(new PsiExpression[expressions.size()]);
+      return expressions.toArray(PsiExpression.EMPTY_ARRAY);
     }
     else {
       return expressionOccurrences;
@@ -90,12 +92,12 @@ public class ExpressionOccurrenceManager extends BaseOccurrenceManager {
       String value = StringUtil.stripQuotesAroundValue(myMainOccurence.getText());
       if (value.length() > 0) {
         findModel.setStringToFind(value);
-        final List<PsiExpression> results = new ArrayList<PsiExpression>();
+        final List<PsiExpression> results = new ArrayList<>();
         final PsiFile file = getScope().getContainingFile();
         final String text = getScope().getText();
         final int offset = getScope().getTextRange().getStartOffset();
         FindResult result = findManager.findString(text, 0, findModel);
-        final Set<PsiLiteralExpression> literals = new HashSet<PsiLiteralExpression>();
+        final Set<PsiLiteralExpression> literals = new HashSet<>();
         while (result.isStringFound()) {
           final int startOffset = offset + result.getStartOffset();
           final int endOffset = result.getEndOffset();
@@ -111,7 +113,7 @@ public class ExpressionOccurrenceManager extends BaseOccurrenceManager {
           }
           result = findManager.findString(text, endOffset, findModel);
         }
-        return results.toArray(new PsiExpression[results.size()]);
+        return results.toArray(PsiExpression.EMPTY_ARRAY);
       }
     }
     return CodeInsightUtil.findExpressionOccurrences(myScope, myMainOccurence);

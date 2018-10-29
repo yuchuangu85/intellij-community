@@ -26,7 +26,6 @@ import javax.swing.*;
 
 /**
  * @author Dmitry Avdeev
- *         Date: 3/5/12
  */
 public class TestRepositoryType extends TaskRepositoryType<TestRepository> {
   @NotNull
@@ -44,7 +43,7 @@ public class TestRepositoryType extends TaskRepositoryType<TestRepository> {
   @NotNull
   @Override
   public TaskRepositoryEditor createEditor(TestRepository repository, Project project, Consumer<TestRepository> changeListener) {
-    return new BaseRepositoryEditor<TestRepository>(project, repository, repository1 -> {
+    return new BaseRepositoryEditor<>(project, repository, repository1 -> {
 
     });
   }

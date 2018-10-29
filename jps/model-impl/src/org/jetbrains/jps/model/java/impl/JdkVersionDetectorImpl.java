@@ -1,30 +1,26 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.jps.model.java.impl;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Bitness;
+import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.vfs.CharsetToolkit;
+import com.intellij.util.io.BaseOutputReader;
+import com.intellij.util.lang.JavaVersion;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.model.java.JdkVersionDetector;
 import org.jetbrains.jps.service.SharedThreadPool;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.List;
+import java.util.Properties;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 
@@ -33,220 +29,117 @@ import java.util.jar.Manifest;
  */
 public class JdkVersionDetectorImpl extends JdkVersionDetector {
   private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.projectRoots.impl.SdkVersionUtil");
-  private static final ActionRunner ACTION_RUNNER = new ActionRunner() {
-    @Override
-    public Future<?> run(Runnable runnable) {
-      return SharedThreadPool.getInstance().executeOnPooledThread(runnable);
-    }
-  };
-
-  @Override
-  @Nullable
-  public String detectJdkVersion(@NotNull String homePath) {
-    return detectJdkVersion(homePath, ACTION_RUNNER);
-  }
+  private static final ActionRunner ACTION_RUNNER = r -> SharedThreadPool.getInstance().executeOnPooledThread(r);
 
   @Nullable
-  public String detectJdkVersion(@NotNull String homePath, @NotNull final ActionRunner actionRunner) {
-    final File path = new File(homePath, "jre/lib/rt.jar");
-    try {
-      JarFile runtimeArchive;
-      try {
-        runtimeArchive = new JarFile(path, false);
-      }
-      catch (IOException e) {
-        try {
-          runtimeArchive = new JarFile(path.getParentFile(), false);
-        }
-        catch (IOException e1) {
-          // jdk9 case. Alternatively, if jrt-fs.jar is not available, we could read the 'release' file
-          runtimeArchive = new JarFile(new File(homePath, "jrt-fs.jar"));
-        }
-      }
-      try {
-        final Manifest manifest = runtimeArchive.getManifest();
-        if (manifest != null) {
-          final String version = manifest.getMainAttributes().getValue("Implementation-Version");
-          if (version != null) {
-            return "java version \"" + version + "\"";
-          }
-        }
-      }
-      finally {
-        runtimeArchive.close();
-      }
-    }
-    catch (IOException ignored) {
-    }
-    JdkVersionInfo info = detectJdkVersionInfo(homePath, actionRunner);
-    if (info != null) {
-      return info.getVersion();
-    }
-    return null;
-  }
-
   @Override
   public JdkVersionInfo detectJdkVersionInfo(@NotNull String homePath) {
     return detectJdkVersionInfo(homePath, ACTION_RUNNER);
   }
 
+  @Nullable
   @Override
-  public JdkVersionInfo detectJdkVersionInfo(@NotNull String homePath, @NotNull ActionRunner actionRunner) {
-    String[] command = {homePath + File.separator + "bin" + File.separator + "java", "-version"};
-    return readVersionInfoFromProcessOutput(homePath, command, null, actionRunner);
-  }
-
-  public String readVersionFromProcessOutput(@NotNull String homePath, @NotNull String[] command, String versionLineMarker,
-                                             @NotNull ActionRunner actionRunner) {
-    JdkVersionInfo info = readVersionInfoFromProcessOutput(homePath, command, versionLineMarker, actionRunner);
-    if (info != null) {
-      return info.getVersion();
+  public JdkVersionInfo detectJdkVersionInfo(@NotNull String homePath, @NotNull ActionRunner runner) {
+    // Java 1.7+
+    File releaseFile = new File(homePath, "release");
+    if (releaseFile.isFile()) {
+      Properties p = new Properties();
+      try (FileInputStream stream = new FileInputStream(releaseFile)) {
+        p.load(stream);
+        String versionString = p.getProperty("JAVA_FULL_VERSION", p.getProperty("JAVA_VERSION"));
+        if (versionString != null) {
+          JavaVersion version = JavaVersion.parse(versionString);
+          String arch = StringUtil.unquoteString(p.getProperty("OS_ARCH", ""));
+          boolean x64 = "x86_64".equals(arch) || "amd64".equals(arch);
+          return new JdkVersionInfo(version, x64 ? Bitness.x64 : Bitness.x32);
+        }
+      }
+      catch (IOException | IllegalArgumentException e) {
+        LOG.info(releaseFile.getPath(), e);
+      }
     }
-    return null;
-  }
 
-  private static JdkVersionInfo readVersionInfoFromProcessOutput(@NotNull String homePath, @NotNull String[] command, String versionLineMarker, @NotNull ActionRunner actionRunner) {
-    if (!new File(homePath).exists()) {
-      return null;
+    // Java 1.2 - 1.8
+    File rtFile = new File(homePath, "jre/lib/rt.jar");
+    if (rtFile.isFile()) {
+      try (JarFile rtJar = new JarFile(rtFile, false)) {
+        Manifest manifest = rtJar.getManifest();
+        if (manifest != null) {
+          String versionString = manifest.getMainAttributes().getValue("Implementation-Version");
+          if (versionString != null) {
+            JavaVersion version = JavaVersion.parse(versionString);
+            boolean x64 = SystemInfo.isMac || new File(rtFile.getParent(), "amd64").isDirectory();
+            return new JdkVersionInfo(version, x64 ? Bitness.x64 : Bitness.x32);
+          }
+        }
+      }
+      catch (IOException | IllegalArgumentException e) {
+        LOG.info(rtFile.getPath(), e);
+      }
     }
-    try {
-      //noinspection HardCodedStringLiteral
-      Process process = Runtime.getRuntime().exec(command);
-      VersionParsingThread parsingThread = new VersionParsingThread(process.getErrorStream(), versionLineMarker);
-      final Future<?> parsingThreadFuture = actionRunner.run(parsingThread);
-      ReadStreamThread readThread = new ReadStreamThread(process.getInputStream());
-      actionRunner.run(readThread);
 
+    // last resort
+    File javaExe = new File(homePath, "bin/" + (SystemInfo.isWindows ? "java.exe" : "java"));
+    if (javaExe.canExecute()) {
       try {
+        Process process = new ProcessBuilder(javaExe.getPath(), "-version").redirectErrorStream(true).start();
+        VersionOutputReader reader = new VersionOutputReader(process.getInputStream(), runner);
         try {
-          process.waitFor();
+          reader.waitFor();
         }
         catch (InterruptedException e) {
           LOG.info(e);
           process.destroy();
         }
-      }
-      finally {
-        try {
-          parsingThreadFuture.get();
+
+        List<String> lines = reader.myLines;
+        while (!lines.isEmpty() && lines.get(0).startsWith("Picked up ")) {
+          lines.remove(0);
         }
-        catch (Exception e) {
-          LOG.info(e);
+        if (!lines.isEmpty()) {
+          JavaVersion base = JavaVersion.parse(lines.get(0));
+          JavaVersion rt = JavaVersion.tryParse(lines.size() > 2 ? lines.get(1) : null);
+          JavaVersion version = rt != null && rt.feature == base.feature && rt.minor == base.minor ? rt : base;
+          boolean x64 = lines.stream().anyMatch(s -> s.contains("64-Bit") || s.contains("x86_64") || s.contains("amd64"));
+          return new JdkVersionInfo(version, x64 ? Bitness.x64 : Bitness.x32);
         }
       }
-      String version = parsingThread.getVersion();
-      if (version != null) {
-        return new JdkVersionInfo(version, parsingThread.getBitness());
+      catch (IOException | IllegalArgumentException e) {
+        LOG.info(javaExe.getPath(), e);
       }
     }
-    catch (IOException ex) {
-      LOG.info(ex);
-    }
+
     return null;
   }
 
-  public static class ReadStreamThread implements Runnable {
-    private final InputStream myStream;
+  private static class VersionOutputReader extends BaseOutputReader {
+    private static final BaseOutputReader.Options OPTIONS = new BaseOutputReader.Options() {
+      @Override public SleepingPolicy policy() { return SleepingPolicy.BLOCKING; }
+      @Override public boolean splitToLines() { return true; }
+      @Override public boolean sendIncompleteLines() { return false; }
+      @Override public boolean withSeparators() { return false; }
+    };
 
-    protected ReadStreamThread(InputStream stream) {
-      myStream = stream;
+    private final ActionRunner myRunner;
+    private final List<String> myLines;
+
+    VersionOutputReader(@NotNull InputStream stream, @NotNull ActionRunner runner) {
+      super(stream, CharsetToolkit.getDefaultSystemCharset(), OPTIONS);
+      myRunner = runner;
+      myLines = new CopyOnWriteArrayList<>();
+      start("java -version");
     }
 
-    public void run() {
-      try {
-        while (true) {
-          int b = myStream.read();
-          if (b == -1) break;
-        }
-      }
-      catch (IOException e) {
-        LOG.info(e);
-      }
-    }
-  }
-
-  public static class VersionParsingThread implements Runnable {
-    private Reader myReader;
-    private final InputStream myStream;
-    private boolean mySkipLF = false;
-    private final String myVersionLineMarker;
-
-    private final AtomicReference<String> myVersionString = new AtomicReference<String>();
-    private final AtomicReference<Bitness> myBitness = new AtomicReference<Bitness>(Bitness.x32);
-    private static final String VERSION_LINE_MARKER = "version";
-    private static final String BITNESS_64_MARKER = "64-Bit";
-
-    protected VersionParsingThread(InputStream input, String versionLineMarker) {
-      myStream = input;
-      myVersionLineMarker = versionLineMarker != null ? versionLineMarker : VERSION_LINE_MARKER;
+    @NotNull
+    @Override
+    protected Future<?> executeOnPooledThread(@NotNull Runnable runnable) {
+      return myRunner.run(runnable);
     }
 
-    Bitness getBitness() {
-      return myBitness.get();
-    }
-
-    String getVersion() {
-      return myVersionString.get();
-    }
-
-    public void run() {
-      try {
-        myReader = new InputStreamReader(myStream);
-        while (true) {
-          String line = readLine();
-          if (line == null) return;
-          if (line.contains(myVersionLineMarker)) {
-            myVersionString.set(line);
-          }
-          if (line.contains(BITNESS_64_MARKER)) {
-            myBitness.set(Bitness.x64);
-          }
-        }
-      }
-      catch (IOException e) {
-        LOG.info(e);
-      }
-      finally {
-        if (myReader != null){
-          try {
-            myReader.close();
-          }
-          catch (IOException e) {
-            LOG.info(e);
-          }
-        }
-      }
-    }
-
-    private String readLine() throws IOException {
-      boolean first = true;
-      StringBuilder buffer = new StringBuilder();
-      while (true) {
-        int c = myReader.read();
-        if (c == -1) break;
-        first = false;
-        if (c == '\n') {
-          if (mySkipLF) {
-            mySkipLF = false;
-            continue;
-          }
-          break;
-        }
-        else if (c == '\r') {
-          mySkipLF = true;
-          break;
-        }
-        else {
-          mySkipLF = false;
-          buffer.append((char)c);
-        }
-      }
-      if (first) return null;
-      String s = buffer.toString();
-      //if (Diagnostic.TRACE_ENABLED){
-      //  Diagnostic.trace(s);
-      //}
-      return s;
+    @Override
+    protected void onTextAvailable(@NotNull String text) {
+      myLines.add(text);
+      LOG.trace("text: " + text);
     }
   }
 }

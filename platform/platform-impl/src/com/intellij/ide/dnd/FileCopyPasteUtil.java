@@ -17,7 +17,6 @@ package com.intellij.ide.dnd;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.ide.CopyPasteManager;
-import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -63,7 +62,6 @@ public class FileCopyPasteUtil {
     }
     catch (ClassNotFoundException e) {
       LOG.error(e);
-      //noinspection ConstantConditions
       return null;
     }
   }
@@ -124,7 +122,7 @@ public class FileCopyPasteUtil {
     else {
       result = null;
     }
-    return result == null? Collections.<File>emptyList() : result;
+    return result == null ? Collections.emptyList() : result;
   }
 
   @NotNull
@@ -135,7 +133,7 @@ public class FileCopyPasteUtil {
       result = Collections.emptyList();
     }
     else {
-      result = new ArrayList<VirtualFile>(fileList.size());
+      result = new ArrayList<>(fileList.size());
       for (File file : fileList) {
         VirtualFile virtualFile = VfsUtil.findFileByIoFile(file, true);
         if (virtualFile == null) continue;

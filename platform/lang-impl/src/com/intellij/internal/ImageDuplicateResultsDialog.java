@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package com.intellij.internal;
 
 import com.intellij.codeInsight.hint.ImplementationViewComponent;
 import com.intellij.ide.DataManager;
+import com.intellij.ide.ui.search.SearchUtil;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.ide.util.PropertyName;
 import com.intellij.openapi.actionSystem.*;
@@ -27,7 +28,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
-import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -39,7 +39,6 @@ import com.intellij.ui.awt.RelativePoint;
 import com.intellij.ui.components.JBList;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.treeStructure.Tree;
-import com.intellij.util.Function;
 import com.intellij.util.NotNullFunction;
 import com.intellij.util.PlatformIcons;
 import com.intellij.util.ui.UIUtil;
@@ -57,18 +56,19 @@ import javax.swing.tree.TreePath;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.io.File;
-import java.util.*;
 import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * @author Konstantin Bulenkov
  */
-@SuppressWarnings("UseOfObsoleteCollectionType")
 public class ImageDuplicateResultsDialog extends DialogWrapper {
   private final Project myProject;
   private final List<VirtualFile> myImages;
   private final Map<String, Set<VirtualFile>> myDuplicates;
   private final Tree myTree;
+  private final TreeSpeedSearch mySpeedSearch;
   private final ResourceModules myResourceModules = new ResourceModules();
 
 
@@ -81,7 +81,9 @@ public class ImageDuplicateResultsDialog extends DialogWrapper {
     setModal(false);
     myTree = new Tree(new MyRootNode());
     myTree.setRootVisible(true);
-    myTree.setCellRenderer(new MyCellRenderer());
+    MyCellRenderer renderer = new MyCellRenderer();
+    myTree.setCellRenderer(renderer);
+    mySpeedSearch = new TreeSpeedSearch(myTree, x -> renderer.getTreeCellRendererComponent(myTree, x.getLastPathComponent(), false, false, false, 0, false).toString());
     init();
     TreeUtil.expandAll(myTree);
     setTitle("Image Duplicates");
@@ -117,7 +119,7 @@ public class ImageDuplicateResultsDialog extends DialogWrapper {
     final JPanel panel = new JPanel(new BorderLayout());
     DataManager.registerDataProvider(panel, new DataProvider() {
       @Override
-      public Object getData(@NonNls String dataId) {
+      public Object getData(@NotNull @NonNls String dataId) {
         final TreePath path = myTree.getSelectionPath();
         if (path != null) {
           Object component = path.getLastPathComponent();
@@ -153,7 +155,7 @@ public class ImageDuplicateResultsDialog extends DialogWrapper {
           modules.installCellRenderer(modulesRenderer);
           JBPopupFactory.getInstance().createListPopupBuilder(modules)
             .setTitle("Add Resource Module")
-            .setFilteringEnabled(o -> ((Module)o).getName())
+            .setNamerForFiltering(o -> ((Module)o).getName())
             .setItemChoosenCallback(() -> {
               final Object value = modules.getSelectedValue();
               if (value instanceof Module && !myResourceModules.contains((Module)value)) {
@@ -190,7 +192,7 @@ public class ImageDuplicateResultsDialog extends DialogWrapper {
     new AnAction() {
 
       @Override
-      public void actionPerformed(AnActionEvent e) {
+      public void actionPerformed(@NotNull AnActionEvent e) {
         VirtualFile file = getFileFromSelection();
         if (file != null) {
           final PsiFile psiFile = PsiManager.getInstance(myProject).findFile(file);
@@ -233,9 +235,7 @@ public class ImageDuplicateResultsDialog extends DialogWrapper {
       }
     }.registerCustomShortcutSet(CustomShortcutSet.fromString("ENTER"), panel);
 
-    int total = 0;
-    for (Set set : myDuplicates.values()) total+=set.size();
-    total-=myDuplicates.size();
+    int total = myDuplicates.values().stream().mapToInt(Set::size).sum() - myDuplicates.size();
     final JLabel label = new JLabel(
       "<html>Press <b>Enter</b> to preview image<br>Total images found: " + myImages.size() + ". Total duplicates found: " + total+"</html>");
     panel.add(label, BorderLayout.SOUTH);
@@ -272,27 +272,18 @@ public class ImageDuplicateResultsDialog extends DialogWrapper {
 
   private class MyRootNode extends DefaultMutableTreeNode {
     private MyRootNode() {
-      final Vector vector = new Vector();
-      for (Set<VirtualFile> files : myDuplicates.values()) {
-        vector.add(new MyDuplicatesNode(this, files));
-      }
-      children = vector;
+      children =
+        myDuplicates.values().stream().map(files -> new MyDuplicatesNode(this, files)).collect(Collectors.toCollection(Vector::new));
     }
   }
 
 
-  private class MyDuplicatesNode extends DefaultMutableTreeNode {
-    private final Set<VirtualFile> myFiles;
+  private static class MyDuplicatesNode extends DefaultMutableTreeNode {
 
-    public MyDuplicatesNode(DefaultMutableTreeNode node, Set<VirtualFile> files) {
+    MyDuplicatesNode(DefaultMutableTreeNode node, Set<? extends VirtualFile> files) {
       super(files);
-      myFiles = files;
       setParent(node);
-      final Vector vector = new Vector();
-      for (VirtualFile file : files) {
-        vector.add(new MyFileNode(this, file));
-      }
-      children = vector;
+      children = files.stream().map(file -> new MyFileNode(this, file)).collect(Collectors.toCollection(Vector::new));
     }
 
     @Override
@@ -302,7 +293,7 @@ public class ImageDuplicateResultsDialog extends DialogWrapper {
   }
 
   private static class MyFileNode extends DefaultMutableTreeNode {
-    public MyFileNode(DefaultMutableTreeNode node, VirtualFile file) {
+    MyFileNode(DefaultMutableTreeNode node, VirtualFile file) {
       super(file);
       setParent(node);
     }
@@ -315,7 +306,7 @@ public class ImageDuplicateResultsDialog extends DialogWrapper {
 
   private class MyCellRenderer extends ColoredTreeCellRenderer {
     @Override
-    public void customizeCellRenderer(JTree tree,
+    public void customizeCellRenderer(@NotNull JTree tree,
                                       Object value,
                                       boolean selected,
                                       boolean expanded,
@@ -327,12 +318,9 @@ public class ImageDuplicateResultsDialog extends DialogWrapper {
         final Module module = ModuleUtil.findModuleForFile(file, myProject);
         if (module != null) {
           setIcon(PlatformIcons.CONTENT_ROOT_ICON_CLOSED);
-          append("[" + module.getName() + "] ", new SimpleTextAttributes(SimpleTextAttributes.STYLE_BOLD, UIUtil.getTreeForeground()));
-          append(getRelativePathToProject(myProject, file));
+          SearchUtil.appendFragments(mySpeedSearch.getEnteredPrefix(), "[" + module.getName() + "] ", SimpleTextAttributes.STYLE_BOLD, UIUtil.getTreeForeground(), UIUtil.getTreeBackground(), this);
         }
-        else {
-          append(getRelativePathToProject(myProject, file));
-        }
+        SearchUtil.appendFragments(mySpeedSearch.getEnteredPrefix(), getRelativePathToProject(myProject, file), SimpleTextAttributes.STYLE_PLAIN, UIUtil.getTreeForeground(), UIUtil.getTreeBackground(), this);
       }
       else if (value instanceof MyDuplicatesNode) {
         final Set<VirtualFile> files = ((MyDuplicatesNode)value).getUserObject();
@@ -384,7 +372,7 @@ public class ImageDuplicateResultsDialog extends DialogWrapper {
     }
 
     public void remove(String value) {
-      final List<String> names = new ArrayList<String>(getModuleNames());
+      final List<String> names = new ArrayList<>(getModuleNames());
       names.remove(value);
       modules = StringUtil.join(names, "\n");
     }

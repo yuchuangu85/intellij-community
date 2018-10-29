@@ -30,7 +30,6 @@ import java.util.ResourceBundle;
 /**
  * TODO: Copy/paste  with Django and PyBDD bundles
  * Resource bundle access.
- * Date: Nov 25, 2008 2:36:10 AM
  */
 public class PyBundle {
 
@@ -56,7 +55,7 @@ public class PyBundle {
     ResourceBundle bundle = SoftReference.dereference(ourBundle);
     if (bundle == null) {
       bundle = ResourceBundle.getBundle(BUNDLE);
-      ourBundle = new SoftReference<ResourceBundle>(bundle);
+      ourBundle = new SoftReference<>(bundle);
     }
     return bundle;
   }

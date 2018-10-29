@@ -23,6 +23,7 @@ import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.PsiClassImplUtil;
 import com.intellij.psi.impl.source.resolve.JavaResolveUtil;
+import com.intellij.psi.impl.source.resolve.graphInference.InferenceSession;
 import com.intellij.psi.infos.ClassCandidateInfo;
 import com.intellij.psi.scope.JavaScopeProcessorEvent;
 import com.intellij.psi.scope.MethodProcessorSetupFailedException;
@@ -110,7 +111,7 @@ public class PsiScopesUtil {
   public static void processTypeDeclarations(PsiType type, PsiElement place, PsiScopeProcessor processor) {
     if (type instanceof PsiArrayType) {
       LanguageLevel languageLevel = PsiUtil.getLanguageLevel(place);
-      final PsiClass arrayClass = JavaPsiFacade.getInstance(place.getProject()).getElementFactory().getArrayClass(languageLevel);
+      final PsiClass arrayClass = JavaPsiFacade.getElementFactory(place.getProject()).getArrayClass(languageLevel);
       final PsiTypeParameter[] arrayTypeParameters = arrayClass.getTypeParameters();
       PsiSubstitutor substitutor = PsiSubstitutor.EMPTY;
       if (arrayTypeParameters.length > 0) {
@@ -128,9 +129,9 @@ public class PsiScopesUtil {
       processTypeDeclarations(lub, place, processor);
     }
     else if (type instanceof PsiCapturedWildcardType) {
-      final PsiType upperBound = getUpperBound((PsiCapturedWildcardType)type, place);
-      if (upperBound != null) {
-        processTypeDeclarations(PsiUtil.captureToplevelWildcards(upperBound, place), place, processor);
+      final PsiType classType = convertToTypeParameter((PsiCapturedWildcardType)type, place);
+      if (classType != null) {
+        processTypeDeclarations(classType, place, processor);
       }
     }
     else {
@@ -140,15 +141,6 @@ public class PsiScopesUtil {
         clazz.processDeclarations(processor, ResolveState.initial().put(PsiSubstitutor.KEY, result.getSubstitutor()), clazz, place);
       }
     }
-  }
-
-  private static PsiType getUpperBound(PsiCapturedWildcardType type, PsiElement place) {
-    GlobalSearchScope placeResolveScope = place.getResolveScope();
-    PsiType upperBound = PsiClassImplUtil.correctType(type.getUpperBound(), placeResolveScope);
-    while (upperBound instanceof PsiCapturedWildcardType) {
-      upperBound = PsiClassImplUtil.correctType(((PsiCapturedWildcardType)upperBound).getUpperBound(), placeResolveScope);
-    }
-    return upperBound;
   }
 
   public static boolean resolveAndWalk(@NotNull PsiScopeProcessor processor,
@@ -270,7 +262,7 @@ public class PsiScopesUtil {
             if (superClass != null) {
               PsiSubstitutor substitutor = PsiSubstitutor.EMPTY;
               PsiClass runSuper = superClass;
-              List<PsiSubstitutor> contextSubstitutors = new ArrayList<PsiSubstitutor>();
+              List<PsiSubstitutor> contextSubstitutors = new ArrayList<>();
               do {
                 if (runSuper != null) {
                   PsiSubstitutor superSubstitutor = TypeConversionUtil.getSuperClassSubstitutor(runSuper, aClass, PsiSubstitutor.EMPTY);
@@ -354,19 +346,13 @@ public class PsiScopesUtil {
               throw new MethodProcessorSetupFailedException("Cant determine qualifier type!");
             }
           }
-          else if (type instanceof PsiIntersectionType) {
-            final PsiType[] conjuncts = ((PsiIntersectionType)type).getConjuncts();
-            for (PsiType conjunct : conjuncts) {
-              if (!processQualifierType(conjunct, processor, manager, methodCall)) break;
-            }
-          }
           else if (type instanceof PsiDisjunctionType) {
             processQualifierType(((PsiDisjunctionType)type).getLeastUpperBound(), processor, manager, methodCall);
           }
           else if (type instanceof PsiCapturedWildcardType) {
-            final PsiType upperBound = getUpperBound((PsiCapturedWildcardType)type, methodCall);
-            if (upperBound != null) {
-              processQualifierType(PsiUtil.captureToplevelWildcards(upperBound, methodCall), processor, manager, methodCall);
+            final PsiType psiType = convertToTypeParameter((PsiCapturedWildcardType)type, methodCall);
+            if (psiType != null) {
+              processQualifierType(psiType, processor, manager, methodCall);
             }
           }
           else {
@@ -404,6 +390,24 @@ public class PsiScopesUtil {
         processDummyConstructor(processor, aClass);
       }
     }
+  }
+
+  private static PsiType convertToTypeParameter(PsiCapturedWildcardType type, PsiElement methodCall) {
+    GlobalSearchScope placeResolveScope = methodCall.getResolveScope();
+    PsiType upperBound = PsiClassImplUtil.correctType(type.getUpperBound(), placeResolveScope);
+    while (upperBound instanceof PsiCapturedWildcardType) {
+      upperBound = PsiClassImplUtil.correctType(((PsiCapturedWildcardType)upperBound).getUpperBound(), placeResolveScope);
+    }
+
+    //arrays can't participate in extends list
+    if (upperBound instanceof PsiArrayType) {
+      return upperBound;
+    }
+
+    if (upperBound != null) {
+      return InferenceSession.createTypeParameterTypeWithUpperBound(upperBound, methodCall);
+    }
+    return null;
   }
 
   private static boolean hasDesiredMethod(PsiMethodCallExpression methodCall, PsiType type, PsiAnonymousClass anonymousClass) {
@@ -450,7 +454,7 @@ public class PsiScopesUtil {
     }
     if (type instanceof PsiArrayType) {
       LanguageLevel languageLevel = PsiUtil.getLanguageLevel(call);
-      PsiElementFactory factory = JavaPsiFacade.getInstance(manager.getProject()).getElementFactory();
+      PsiElementFactory factory = JavaPsiFacade.getElementFactory(manager.getProject());
       JavaResolveResult qualifierResult =
         factory.getArrayClassType(((PsiArrayType)type).getComponentType(), languageLevel).resolveGenerics();
       return processQualifierResult(qualifierResult, processor, call);
@@ -500,7 +504,7 @@ public class PsiScopesUtil {
       if (constructors.length != 0) {
         return;
       }
-      final PsiElementFactory factory = JavaPsiFacade.getInstance(aClass.getProject()).getElementFactory();
+      final PsiElementFactory factory = JavaPsiFacade.getElementFactory(aClass.getProject());
       final PsiMethod dummyConstructor = factory.createConstructor();
       PsiIdentifier nameIdentifier = aClass.getNameIdentifier();
       if (nameIdentifier != null) {

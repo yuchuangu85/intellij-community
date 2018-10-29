@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,20 +16,20 @@
 package com.intellij.testFramework;
 
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
-import com.intellij.codeInsight.generation.actions.CommentByLineCommentAction;
 import com.intellij.codeInsight.highlighting.HighlightUsagesHandler;
 import com.intellij.ide.DataManager;
 import com.intellij.injected.editor.DocumentWindow;
 import com.intellij.injected.editor.EditorWindow;
+import com.intellij.injected.editor.VirtualFileWindow;
+import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.IdeActions;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.Result;
+import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.application.ex.PathManagerEx;
 import com.intellij.openapi.command.CommandProcessor;
 import com.intellij.openapi.command.WriteCommandAction;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.EditorFactory;
@@ -51,7 +51,6 @@ import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.openapi.vfs.LocalFileSystem;
-import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.encoding.EncodingProjectManager;
 import com.intellij.psi.PsiDocumentManager;
@@ -73,8 +72,6 @@ import java.util.Collections;
 import java.util.List;
 
 public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTestCase {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.testFramework.LightCodeInsightTestCase");
-
   protected static Editor myEditor;
   protected static PsiFile myFile;
   protected static VirtualFile myVFile;
@@ -88,17 +85,21 @@ public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTest
       });
     }
     else {
-      new WriteCommandAction.Simple(getProject()){
-        @Override
-        protected void run() throws Throwable {
+      Ref<Throwable> e = new Ref<>();
+      CommandProcessor.getInstance().executeCommand(getProject(), () -> {
+        try {
           doRunTest();
         }
-      }.performCommand();
+        catch (Throwable throwable) {
+          e.set(throwable);
+        }
+      }, null, null);
+      if (e.get() != null) throw e.get();
     }
   }
 
   protected void doRunTest() throws Throwable {
-    LightPlatformCodeInsightTestCase.super.runTest();
+    super.runTest();
   }
 
   protected boolean isRunInWriteAction() {
@@ -113,12 +114,21 @@ public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTest
    */
   protected void configureByFile(@TestDataFile @NonNls @NotNull String filePath) {
     try {
-      final File ioFile = new File(getTestDataPath() + filePath);
+      String fullPath = getTestDataPath() + filePath;
+      final File ioFile = new File(fullPath);
+      checkCaseSensitiveFS(fullPath, ioFile);
       String fileText = FileUtilRt.loadFile(ioFile, CharsetToolkit.UTF8, true);
       configureFromFileText(ioFile.getName(), fileText);
     }
     catch (IOException e) {
       throw new RuntimeException(e);
+    }
+  }
+
+  private static void checkCaseSensitiveFS(String fullOrRelativePath, File ioFile) throws IOException {
+    fullOrRelativePath = FileUtil.toSystemDependentName(FileUtil.toCanonicalPath(fullOrRelativePath));
+    if (!ioFile.getCanonicalPath().endsWith(fullOrRelativePath)) {
+      throw new RuntimeException("Search for: " + fullOrRelativePath + "; but found: " + ioFile.getCanonicalPath());
     }
   }
 
@@ -147,45 +157,55 @@ public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTest
    */
   @NotNull
   protected static Document configureFromFileText(@NonNls @NotNull final String fileName, @NonNls @NotNull final String fileText) {
-    return new WriteCommandAction<Document>(null) {
-      @Override
-      protected void run(@NotNull Result<Document> result) throws Throwable {
-        final Document fakeDocument = new DocumentImpl(fileText);
+    return configureFromFileText(fileName, fileText, false);
+  }
 
-        EditorTestUtil.CaretAndSelectionState caretsState = EditorTestUtil.extractCaretAndSelectionMarkers(fakeDocument);
+  /**
+   * Same as configureByFile but text is provided directly.
+   * @param fileName - name of the file.
+   * @param fileText - data file text.
+   * @param checkCaret - if true, if will be verified that file contains at least one caret or selection marker
+   */
+  @NotNull
+  protected static Document configureFromFileText(@NonNls @NotNull final String fileName,
+                                                  @NonNls @NotNull final String fileText,
+                                                  boolean checkCaret) {
+    return WriteCommandAction.writeCommandAction(null).compute(() -> {
+      final Document fakeDocument = new DocumentImpl(fileText);
 
-        String newFileText = fakeDocument.getText();
-        Document document;
-        try {
-          document = setupFileEditorAndDocument(fileName, newFileText);
-        }
-        catch (IOException e) {
-          throw new RuntimeException(e);
-        }
-        EditorTestUtil.setCaretsAndSelection(myEditor, caretsState);
-        setupEditorForInjectedLanguage();
-        result.setResult(document);
+      EditorTestUtil.CaretAndSelectionState caretsState = EditorTestUtil.extractCaretAndSelectionMarkers(fakeDocument);
+      if (checkCaret) {
+        assertTrue("No caret specified in " + fileName, caretsState.hasExplicitCaret());
       }
-    }.execute().getResultObject();
+
+      String newFileText = fakeDocument.getText();
+      Document document;
+      try {
+        document = setupFileEditorAndDocument(fileName, newFileText);
+      }
+      catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+      EditorTestUtil.setCaretsAndSelection(myEditor, caretsState);
+      setupEditorForInjectedLanguage();
+      return document;
+    });
   }
 
   @NotNull
   protected static Editor configureFromFileTextWithoutPSI(@NonNls @NotNull final String fileText) {
-    return new WriteCommandAction<Editor>(null) {
-      @Override
-      protected void run(@NotNull Result<Editor> result) throws Throwable {
-        final Document fakeDocument = EditorFactory.getInstance().createDocument(fileText);
-        EditorTestUtil.CaretAndSelectionState caretsState = EditorTestUtil.extractCaretAndSelectionMarkers(fakeDocument);
+    return WriteCommandAction.writeCommandAction(getProject()).compute(() -> {
+      final Document fakeDocument = EditorFactory.getInstance().createDocument(fileText);
+      EditorTestUtil.CaretAndSelectionState caretsState = EditorTestUtil.extractCaretAndSelectionMarkers(fakeDocument);
 
-        String newFileText = fakeDocument.getText();
-        Document document = EditorFactory.getInstance().createDocument(newFileText);
-        final Editor editor = EditorFactory.getInstance().createEditor(document);
-        ((EditorImpl)editor).setCaretActive();
+      String newFileText = fakeDocument.getText();
+      Document document = EditorFactory.getInstance().createDocument(newFileText);
+      final Editor editor = EditorFactory.getInstance().createEditor(document, getProject());
+      ((EditorImpl)editor).setCaretActive();
 
-        EditorTestUtil.setCaretsAndSelection(editor, caretsState);
-        result.setResult(editor);
-      }
-    }.execute().getResultObject();
+      EditorTestUtil.setCaretsAndSelection(editor, caretsState);
+      return editor;
+    });
   }
 
   @NotNull
@@ -193,7 +213,7 @@ public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTest
     PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
     Editor editor = FileEditorManager.getInstance(getProject()).openTextEditor(new OpenFileDescriptor(getProject(), file, 0), false);
     DaemonCodeAnalyzer.getInstance(getProject()).restart();
-
+    assertNotNull(editor);
     ((EditorImpl)editor).setCaretActive();
     return editor;
   }
@@ -213,58 +233,44 @@ public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTest
   }
 
   @NotNull
-  protected static Editor createSaveAndOpenFile(@NotNull String relativePath, @NotNull String fileText) throws IOException {
-    return WriteCommandAction.runWriteCommandAction(getProject(), new ThrowableComputable<Editor, IOException>() {
-      @Override
-      public Editor compute() throws IOException {
-        VirtualFile myVFile = VfsTestUtil.createFile(getSourceRoot(),relativePath);
-        VfsUtil.saveText(myVFile, fileText);
-        final FileDocumentManager manager = FileDocumentManager.getInstance();
-        final Document document = manager.getDocument(myVFile);
-        assertNotNull("Can't create document for '" + relativePath + "'", document);
-        manager.reloadFromDisk(document);
-        document.insertString(0, " ");
-        document.deleteString(0, 1);
-        PsiFile myFile = getPsiManager().findFile(myVFile);
-        assertNotNull("Can't create PsiFile for '" + relativePath + "'. Unknown file type most probably.", myFile);
-        assertTrue(myFile.isPhysical());
-        Editor myEditor = createEditor(myVFile);
-        myVFile.setCharset(CharsetToolkit.UTF8_CHARSET);
-
-        PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
-        return myEditor;
-      }
-    });
+  protected static Editor createSaveAndOpenFile(@NotNull String relativePath, @NotNull String fileText) {
+    Editor editor = createEditor(VfsTestUtil.createFile(getSourceRoot(), relativePath, fileText));
+    PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
+    return editor;
   }
 
-  private static void setupEditorForInjectedLanguage() {
+  @NotNull
+  protected static VirtualFile createAndSaveFile(@NotNull String relativePath, @NotNull String fileText) {
+    return VfsTestUtil.createFile(getSourceRoot(), relativePath, fileText);
+  }
+
+  protected static void setupEditorForInjectedLanguage() {
     if (myEditor != null) {
+      Editor hostEditor = myEditor instanceof EditorWindow ? ((EditorWindow)myEditor).getDelegate() : myEditor;
+      PsiFile hostFile = myFile == null ? null : InjectedLanguageManager.getInstance(getProject()).getTopLevelFile(myFile);
       final Ref<EditorWindow> editorWindowRef = new Ref<>();
-      myEditor.getCaretModel().runForEachCaret(caret -> {
-        Editor editor = InjectedLanguageUtil.getEditorForInjectedLanguageNoCommit(myEditor, myFile);
-        if (caret == myEditor.getCaretModel().getPrimaryCaret() && editor instanceof EditorWindow) {
+      hostEditor.getCaretModel().runForEachCaret(caret -> {
+        Editor editor = InjectedLanguageUtil.getEditorForInjectedLanguageNoCommit(hostEditor, hostFile);
+        if (caret == hostEditor.getCaretModel().getPrimaryCaret() && editor instanceof EditorWindow) {
           editorWindowRef.set((EditorWindow)editor);
         }
       });
       if (!editorWindowRef.isNull()) {
         myEditor = editorWindowRef.get();
         myFile = editorWindowRef.get().getInjectedFile();
+        myVFile = myFile.getVirtualFile();
       }
     }
   }
 
   private static void deleteVFile() throws IOException {
     if (myVFile != null) {
-      ApplicationManager.getApplication().runWriteAction(new ThrowableComputable<Void, IOException>() {
-        @Override
-        public Void compute() throws IOException {
-          // avoid messing with invalid files, in case someone calls configureXXX() several times
-          PsiDocumentManager.getInstance(ourProject).commitAllDocuments();
-          FileEditorManager.getInstance(ourProject).closeFile(myVFile);
-
-          myVFile.delete(this);
-          return null;
-        }
+      if (myVFile instanceof VirtualFileWindow) myVFile = ((VirtualFileWindow)myVFile).getDelegate();
+      WriteAction.run(() -> {
+        // avoid messing with invalid files, in case someone calls configureXXX() several times
+        PsiDocumentManager.getInstance(ourProject).commitAllDocuments();
+        FileEditorManager.getInstance(ourProject).closeFile(myVFile);
+        myVFile.delete(ourProject);
       });
     }
   }
@@ -273,8 +279,7 @@ public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTest
   protected void tearDown() throws Exception {
     try {
       FileEditorManager editorManager = FileEditorManager.getInstance(getProject());
-      VirtualFile[] openFiles = editorManager.getOpenFiles();
-      for (VirtualFile openFile : openFiles) {
+      for (VirtualFile openFile : editorManager.getOpenFiles()) {
         editorManager.closeFile(openFile);
       }
       deleteVFile();
@@ -309,7 +314,7 @@ public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTest
     getProject().getComponent(PostprocessReformattingAspect.class).doPostponedFormatting();
     if (ignoreTrailingSpaces) {
       final Editor editor = myEditor;
-      TrailingSpacesStripper.stripIfNotCurrentLine(editor.getDocument(), false);
+      TrailingSpacesStripper.strip(editor.getDocument(), false, true);
       EditorUtil.fillVirtualSpaceUntilCaret(editor);
     }
 
@@ -322,6 +327,7 @@ public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTest
     assertTrue(getMessage("Cannot find file " + fullPath, message), ioFile.exists());
     String fileText;
     try {
+     checkCaseSensitiveFS(fullPath, ioFile);
       fileText = FileUtil.loadFile(ioFile, CharsetToolkit.UTF8_CHARSET);
     }
     catch (IOException e) {
@@ -604,6 +610,14 @@ public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTest
     executeAction("EditorRight");
   }
 
+  protected static void leftWithSelection() {
+    executeAction("EditorLeftWithSelection");
+  }
+
+  protected static void rightWithSelection() {
+    executeAction("EditorRightWithSelection");
+  }
+
   protected static void up() {
     executeAction("EditorUp");
   }
@@ -613,7 +627,7 @@ public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTest
   }
 
   protected static void lineComment() {
-    new CommentByLineCommentAction().actionPerformedImpl(getProject(), getEditor());
+    executeAction(IdeActions.ACTION_COMMENT_LINE);
   }
 
   protected static void executeAction(@NonNls @NotNull final String actionId) {
@@ -655,7 +669,7 @@ public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTest
    * @see FileBasedTestCaseHelperEx
    * @Parameterized.Parameter fields are injected on parameterized test creation.
    */
-  @Parameterized.Parameter(0)
+  @Parameterized.Parameter()
   public String myFileSuffix;
 
   /**
@@ -667,7 +681,7 @@ public abstract class LightPlatformCodeInsightTestCase extends LightPlatformTest
   public String myTestDataPath;
 
   @Parameterized.Parameters(name = "{0}")
-  public static List<Object[]> params() throws Throwable {
+  public static List<Object[]> params() {
     return Collections.emptyList();
   }
 

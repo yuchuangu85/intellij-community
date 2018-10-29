@@ -61,23 +61,23 @@ final class MacScrollBarUI extends DefaultScrollBarUI {
 
   @Override
   boolean isBorderNeeded(JComponent c) {
-    return !c.isOpaque() && myTrackAnimator.myValue > 0 && myThumbAnimator.myValue > 0;
+    return !isOpaque(c) && myTrackAnimator.myValue > 0 && myThumbAnimator.myValue > 0;
   }
 
   @Override
   boolean isTrackClickable() {
-    return myScrollBar.isOpaque() || (myTrackAnimator.myValue > 0 && myThumbAnimator.myValue > 0);
+    return isOpaque(myScrollBar) || (myTrackAnimator.myValue > 0 && myThumbAnimator.myValue > 0);
   }
 
   @Override
   boolean isTrackExpandable() {
-    return true;
+    return !isOpaque(myScrollBar);
   }
 
   @Override
   void onTrackHover(boolean hover) {
     myTrackHovered = hover;
-    if (myScrollBar != null && myScrollBar.isOpaque()) {
+    if (myScrollBar != null && isOpaque(myScrollBar)) {
       myTrackAnimator.start(hover);
       myThumbAnimator.start(hover);
     }
@@ -100,7 +100,7 @@ final class MacScrollBarUI extends DefaultScrollBarUI {
 
   @Override
   void paintThumb(Graphics2D g, int x, int y, int width, int height, JComponent c) {
-    if (c.isOpaque()) {
+    if (isOpaque(c)) {
       RegionPainter<Float> p = ScrollColorProducer.isDark(c) ? ScrollPainter.Thumb.Mac.DARCULA : ScrollPainter.Thumb.Mac.DEFAULT;
       paint(p, g, x, y, width, height, c, myThumbAnimator.myValue, true);
     }
@@ -112,7 +112,7 @@ final class MacScrollBarUI extends DefaultScrollBarUI {
 
   @Override
   void onThumbMove() {
-    if (myScrollBar != null && myScrollBar.isShowing() && !myScrollBar.isOpaque()) {
+    if (myScrollBar != null && myScrollBar.isShowing() && !isOpaque(myScrollBar)) {
       if (!myTrackHovered && myThumbAnimator.myValue == 0) myTrackAnimator.rewind(false);
       myThumbAnimator.rewind(true);
       myAlarm.cancelAllRequests();
@@ -181,7 +181,7 @@ final class MacScrollBarUI extends DefaultScrollBarUI {
    * @param toRemove the object to remove from the static list of references (ignored if {@code null})
    * @param list     the list to collect all available objects (ignored if {@code null})
    */
-  private static void processReferences(MacScrollBarUI toAdd, MacScrollBarUI toRemove, List<MacScrollBarUI> list) {
+  private static void processReferences(MacScrollBarUI toAdd, MacScrollBarUI toRemove, List<? super MacScrollBarUI> list) {
     synchronized (UI) {
       Iterator<Reference<MacScrollBarUI>> iterator = UI.iterator();
       while (iterator.hasNext()) {
@@ -195,7 +195,7 @@ final class MacScrollBarUI extends DefaultScrollBarUI {
         }
       }
       if (toAdd != null) {
-        UI.add(new WeakReference<MacScrollBarUI>(toAdd));
+        UI.add(new WeakReference<>(toAdd));
       }
     }
   }
@@ -220,7 +220,7 @@ final class MacScrollBarUI extends DefaultScrollBarUI {
     return invoke(name, "new");
   }
 
-  private static <T> T callMac(Producer<T> producer) {
+  private static <T> T callMac(Producer<? extends T> producer) {
     if (SystemInfo.isMac) {
       NSAutoreleasePool pool = new NSAutoreleasePool();
       try {
@@ -236,11 +236,6 @@ final class MacScrollBarUI extends DefaultScrollBarUI {
     return null;
   }
 
-  static {
-    callMac(Behavior.INIT);
-    callMac(Style.INIT);
-  }
-
   private enum Behavior {
     NextPage, JumpToSpot;
 
@@ -251,17 +246,28 @@ final class MacScrollBarUI extends DefaultScrollBarUI {
         ID defaults = invoke("NSUserDefaults", "standardUserDefaults");
         invoke(defaults, "synchronize");
         ID behavior = invoke(defaults, "boolForKey:", nsString("AppleScrollerPagingBehavior"));
-        return 1 == behavior.intValue() ? JumpToSpot : NextPage;
+        Behavior value = 1 == behavior.intValue() ? JumpToSpot : NextPage;
+        Logger.getInstance(MacScrollBarUI.class).debug("scroll bar behavior ", value, " from ", behavior);
+        return value;
+      }
+
+      @Override
+      public String toString() {
+        return "scroll bar behavior";
+      }
+
+      @Override
+      ID initialize() {
+        return invoke(invoke("NSDistributedNotificationCenter", "defaultCenter"),
+                      "addObserver:selector:name:object:",
+                      createDelegate("JBScrollBarBehaviorObserver", createSelector("handleBehaviorChanged:"), this),
+                      createSelector("handleBehaviorChanged:"),
+                      nsString("AppleNoRedisplayAppearancePreferenceChanged"),
+                      ID.NIL,
+                      2 // NSNotificationSuspensionBehaviorCoalesce
+        );
       }
     };
-    private static final Producer<ID> INIT = () -> invoke(invoke("NSDistributedNotificationCenter", "defaultCenter"),
-                                                      "addObserver:selector:name:object:",
-                                                      createDelegate("JBScrollBarBehaviorObserver", createSelector("handleBehaviorChanged:"), CURRENT),
-                                                      createSelector("handleBehaviorChanged:"),
-                                                      nsString("AppleNoRedisplayAppearancePreferenceChanged"),
-                                                      ID.NIL,
-                                                      2 // NSNotificationSuspensionBehaviorCoalesce
-    );
   }
 
   private enum Style {
@@ -286,24 +292,39 @@ final class MacScrollBarUI extends DefaultScrollBarUI {
       @Override
       public Style produce() {
         ID style = invoke(getObjcClass("NSScroller"), "preferredScrollerStyle");
-        return 1 == style.intValue() ? Overlay : Legacy;
+        Style value = 1 == style.intValue() ? Overlay : Legacy;
+        Logger.getInstance(MacScrollBarUI.class).debug("scroll bar style ", value, " from ", style);
+        return value;
+      }
+
+      @Override
+      public String toString() {
+        return "scroll bar style";
+      }
+
+      @Override
+      ID initialize() {
+        return invoke(invoke("NSNotificationCenter", "defaultCenter"),
+                      "addObserver:selector:name:object:",
+                      createDelegate("JBScrollBarStyleObserver", createSelector("handleScrollerStyleChanged:"), this),
+                      createSelector("handleScrollerStyleChanged:"),
+                      nsString("NSPreferredScrollerStyleDidChangeNotification"),
+                      ID.NIL
+        );
       }
     };
-    private static final Producer<ID> INIT = () -> invoke(invoke("NSNotificationCenter", "defaultCenter"),
-                                                      "addObserver:selector:name:object:",
-                                                      createDelegate("JBScrollBarStyleObserver", createSelector("handleScrollerStyleChanged:"), CURRENT),
-                                                      createSelector("handleScrollerStyleChanged:"),
-                                                      nsString("NSPreferredScrollerStyleDidChangeNotification"),
-                                                      ID.NIL
-    );
   }
 
   private static abstract class Native<T> implements Callback, Runnable, Producer<T> {
     private T myValue;
 
-    public Native() {
+    Native() {
+      Logger.getInstance(MacScrollBarUI.class).debug("initialize ", this);
+      callMac(() -> initialize());
       UIUtil.invokeLaterIfNeeded(this);
     }
+
+    abstract ID initialize();
 
     T get() {
       return myValue;
@@ -311,6 +332,7 @@ final class MacScrollBarUI extends DefaultScrollBarUI {
 
     @SuppressWarnings("UnusedDeclaration")
     public void callback(ID self, Pointer selector, ID event) {
+      Logger.getInstance(MacScrollBarUI.class).debug("update ", this);
       UIUtil.invokeLaterIfNeeded(this);
     }
 

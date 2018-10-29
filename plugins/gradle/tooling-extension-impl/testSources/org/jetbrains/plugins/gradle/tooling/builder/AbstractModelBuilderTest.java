@@ -15,7 +15,6 @@
  */
 package org.jetbrains.plugins.gradle.tooling.builder;
 
-import com.google.common.collect.Multimap;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.io.StreamUtil;
@@ -24,6 +23,7 @@ import com.intellij.testFramework.UsefulTestCase;
 import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import org.codehaus.groovy.runtime.typehandling.ShortTypeHandling;
+import org.gradle.internal.impldep.com.google.common.collect.Multimap;
 import org.gradle.tooling.BuildActionExecuter;
 import org.gradle.tooling.GradleConnector;
 import org.gradle.tooling.ProjectConnection;
@@ -62,14 +62,15 @@ import static org.junit.Assume.assumeThat;
 
 /**
  * @author Vladislav.Soroka
- * @since 11/29/13
  */
 @RunWith(value = Parameterized.class)
 public abstract class AbstractModelBuilderTest {
 
   public static final Object[][] SUPPORTED_GRADLE_VERSIONS = {
-    {"1.9"}, /*{"1.10"}, {"1.11"},*/ {"1.12"},
-    {"2.0"}, /*{"2.1"}, {"2.2"} , {"2.3"}, {"2.4"}, */{"2.5"}, /*{"2.6"}, {"2.7"}, {"2.8"},*/ {"2.9"}, /*{"2.10"}, {"2.11"}, {"2.12"},*/ {"2.13"}
+    // Support for builds using Gradle older than 2.6 was deprecated and will be removed in Gradle 5.0.
+    {"2.6"}, /*{"2.7"}, {"2.8"}, {"2.9"}, {"2.10"}, {"2.11"}, {"2.12"}, {"2.13"}, */{"2.14.1"},
+    {"3.0"}, /*{"3.1"}, {"3.2"}, {"3.3"}, {"3.4"},*/ {"3.5"},
+    {"4.0"}, /*{"4.1"}, {"4.2"}, {"4.3"}, {"4.4"}, {"4.5.1"}, {"4.6"}, {"4.7"}, {"4.8"}, */{"4.9"}, {"4.10"}
   };
   public static final String BASE_GRADLE_VERSION = String.valueOf(SUPPORTED_GRADLE_VERSIONS[SUPPORTED_GRADLE_VERSIONS.length - 1][0]);
 
@@ -135,7 +136,8 @@ public abstract class AbstractModelBuilderTest {
 
     GradleConnector connector = GradleConnector.newConnector();
 
-    final URI distributionUri = new DistributionLocator().getDistributionFor(GradleVersion.version(gradleVersion));
+    GradleVersion _gradleVersion = GradleVersion.version(gradleVersion);
+    final URI distributionUri = new DistributionLocator().getDistributionFor(_gradleVersion);
     connector.useDistribution(distributionUri);
     connector.forProjectDirectory(testDir);
     int daemonMaxIdleTime = 10;
@@ -148,7 +150,10 @@ public abstract class AbstractModelBuilderTest {
     ProjectConnection connection = connector.connect();
 
     try {
-      final ProjectImportAction projectImportAction = new ProjectImportAction(false);
+      boolean isGradleProjectDirSupported = _gradleVersion.compareTo(GradleVersion.version("2.4")) >= 0;
+      boolean isCompositeBuildsSupported = isGradleProjectDirSupported && _gradleVersion.compareTo(GradleVersion.version("3.1")) >= 0;
+      final ProjectImportAction projectImportAction = new ProjectImportAction(false, isGradleProjectDirSupported,
+                                                                              isCompositeBuildsSupported);
       projectImportAction.addExtraProjectModelClasses(getModels());
       BuildActionExecuter<ProjectImportAction.AllModels> buildActionExecutor = connection.action(projectImportAction);
       File initScript = GradleExecutionHelper.generateInitScript(false, getToolingExtensionClasses());
@@ -166,7 +171,7 @@ public abstract class AbstractModelBuilderTest {
 
   @NotNull
   private Set<Class> getToolingExtensionClasses() {
-    final Set<Class> classes = ContainerUtil.<Class>set(
+    final Set<Class> classes = ContainerUtil.set(
       ExternalProject.class,
       // gradle-tooling-extension-api jar
       ProjectImportAction.class,
@@ -186,7 +191,7 @@ public abstract class AbstractModelBuilderTest {
   }
 
   @After
-  public void tearDown() throws Exception {
+  public void tearDown() {
     if (testDir != null) {
       FileUtil.delete(testDir);
     }
@@ -199,13 +204,10 @@ public abstract class AbstractModelBuilderTest {
     final DomainObjectSet<? extends IdeaModule> ideaModules = allModels.getIdeaProject().getModules();
 
     final String filterKey = "to_filter";
-    final Map<String, T> map = ContainerUtil.map2Map(ideaModules, new Function<IdeaModule, Pair<String, T>>() {
-      @Override
-      public Pair<String, T> fun(IdeaModule module) {
-        final T value = allModels.getExtraProject(module, aClass);
-        final String key = value != null ? module.getGradleProject().getPath() : filterKey;
-        return Pair.create(key, value);
-      }
+    final Map<String, T> map = ContainerUtil.map2Map(ideaModules, (Function<IdeaModule, Pair<String, T>>)module -> {
+      final T value = allModels.getExtraProject(module, aClass);
+      final String key = value != null ? module.getGradleProject().getPath() : filterKey;
+      return Pair.create(key, value);
     });
 
     map.remove(filterKey);

@@ -17,8 +17,6 @@ package org.jetbrains.settingsRepository.actions
 
 import com.intellij.openapi.components.ServiceManager
 import com.intellij.openapi.components.StorageScheme
-import com.intellij.openapi.components.impl.stores.IProjectStore
-import com.intellij.openapi.components.stateStore
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ex.ProjectEx
 import com.intellij.openapi.ui.DialogWrapper
@@ -38,6 +36,7 @@ import com.intellij.openapi.vcs.checkin.BeforeCheckinDialogHandler
 import com.intellij.openapi.vcs.checkin.CheckinHandler
 import com.intellij.openapi.vcs.checkin.CheckinHandlerFactory
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.project.stateStore
 import com.intellij.util.SmartList
 import org.jetbrains.settingsRepository.CommitToIcsDialog
 import org.jetbrains.settingsRepository.ProjectId
@@ -67,14 +66,14 @@ class CommitToIcsAction : CommonCheckinFilesAction() {
     }
   }
 
-  override fun getActionName(dataContext: VcsContext) = icsMessage("action.CommitToIcs.text")
+  override fun getActionName(dataContext: VcsContext): String = icsMessage("action.CommitToIcs.text")
 
   override fun isApplicableRoot(file: VirtualFile, status: FileStatus, dataContext: VcsContext): Boolean {
     val project = dataContext.project
-    return project is ProjectEx && (project.stateStore as IProjectStore).storageScheme == StorageScheme.DIRECTORY_BASED && super.isApplicableRoot(file, status, dataContext) && !file.isDirectory && isProjectConfigFile(file, dataContext.project!!)
+    return project is ProjectEx && project.stateStore.storageScheme == StorageScheme.DIRECTORY_BASED && super.isApplicableRoot(file, status, dataContext) && !file.isDirectory && isProjectConfigFile(file, dataContext.project!!)
   }
 
-  override fun prepareRootsForCommit(roots: Array<FilePath>, project: Project) = roots
+  override fun prepareRootsForCommit(roots: Array<FilePath>, project: Project): Array<FilePath> = roots
 
   override fun performCheckIn(context: VcsContext, project: Project, roots: Array<out FilePath>) {
     val projectId = getProjectId(project) ?: return

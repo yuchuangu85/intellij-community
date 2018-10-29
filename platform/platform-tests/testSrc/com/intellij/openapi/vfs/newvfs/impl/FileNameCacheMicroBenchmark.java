@@ -37,7 +37,6 @@ import java.util.concurrent.Future;
  */
 public class FileNameCacheMicroBenchmark {
   public static void main(String[] args) throws Exception {
-    //noinspection SSBasedInspection
     SwingUtilities.invokeAndWait(() -> {
       try {
         IdeaTestFixture fixture = IdeaTestFixtureFactory.getFixtureFactory().createLightFixtureBuilder(LightProjectDescriptor.EMPTY_PROJECT_DESCRIPTOR).getFixture();
@@ -185,7 +184,7 @@ public class FileNameCacheMicroBenchmark {
   private abstract static class TestIteration {
     abstract void doTest(int threadNumber, int[] ids, Random threadRandom, int queryCount);
     static void failure() {
-      System.out.println("Failure");
+      System.err.println("Failure");
       assert false;
     }
   }
@@ -215,7 +214,7 @@ public class FileNameCacheMicroBenchmark {
   @NotNull
   private static TIntObjectHashMap<CharSequence> generateNames(int nameCount) {
     Random random = new Random();
-    TIntObjectHashMap<CharSequence> map = new TIntObjectHashMap<CharSequence>();
+    TIntObjectHashMap<CharSequence> map = new TIntObjectHashMap<>();
     for (int i = 0; i < nameCount; i++) {
       String name = "some_name_" + random.nextInt() + StringUtil.repeat("a", random.nextInt(10));
       int id = FileNameCache.storeName(name);

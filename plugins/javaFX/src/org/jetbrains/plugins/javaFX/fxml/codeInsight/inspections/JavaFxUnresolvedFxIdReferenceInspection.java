@@ -27,11 +27,10 @@ import com.intellij.lang.LanguageNamesValidation;
 import com.intellij.lang.refactoring.NamesValidator;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
-import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
+import com.intellij.psi.codeStyle.JavaCodeStyleSettings;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.xml.XmlAttribute;
 import com.intellij.psi.xml.XmlAttributeValue;
-import com.intellij.psi.xml.XmlFile;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.util.VisibilityUtil;
 import com.intellij.xml.XmlElementDescriptor;
@@ -40,28 +39,22 @@ import org.jetbrains.plugins.javaFX.fxml.FxmlConstants;
 import org.jetbrains.plugins.javaFX.fxml.JavaFxCommonNames;
 import org.jetbrains.plugins.javaFX.fxml.JavaFxFileTypeFactory;
 import org.jetbrains.plugins.javaFX.fxml.JavaFxPsiUtil;
-import org.jetbrains.plugins.javaFX.fxml.descriptors.JavaFxClassTagDescriptorBase;
 import org.jetbrains.plugins.javaFX.fxml.descriptors.JavaFxBuiltInTagDescriptor;
+import org.jetbrains.plugins.javaFX.fxml.descriptors.JavaFxClassTagDescriptorBase;
 import org.jetbrains.plugins.javaFX.fxml.refs.JavaFxFieldIdReferenceProvider;
 
-/**
- * User: anna
- */
 public class JavaFxUnresolvedFxIdReferenceInspection extends XmlSuppressableInspectionTool {
   @NotNull
   @Override
   public PsiElementVisitor buildVisitor(final @NotNull ProblemsHolder holder,
                                         final boolean isOnTheFly,
                                         @NotNull LocalInspectionToolSession session) {
+    if (!JavaFxFileTypeFactory.isFxml(session.getFile())) return PsiElementVisitor.EMPTY_VISITOR;
+
     return new XmlElementVisitor() {
       @Override
-      public void visitXmlFile(XmlFile file) {
-        if (!JavaFxFileTypeFactory.isFxml(file)) return;
-        super.visitXmlFile(file);
-      }
-
-      @Override
       public void visitXmlAttribute(XmlAttribute attribute) {
+        super.visitXmlAttribute(attribute);
         if (FxmlConstants.FX_ID.equals(attribute.getName())) {
           final XmlAttributeValue valueElement = attribute.getValueElement();
           if (valueElement != null && valueElement.getTextLength() > 0) {
@@ -151,7 +144,7 @@ public class JavaFxUnresolvedFxIdReferenceInspection extends XmlSuppressableInsp
       final PsiModifierList modifierList = field.getModifierList();
       if (modifierList != null) {
         @PsiModifier.ModifierConstant
-        String visibility = CodeStyleSettingsManager.getSettings(targetClass.getProject()).VISIBILITY;
+        String visibility = JavaCodeStyleSettings.getInstance(targetClass.getContainingFile()).VISIBILITY;
         if (VisibilityUtil.ESCALATE_VISIBILITY.equals(visibility)) visibility = PsiModifier.PRIVATE;
         VisibilityUtil.setVisibility(modifierList, visibility);
         if (!PsiModifier.PUBLIC.equals(visibility)) {

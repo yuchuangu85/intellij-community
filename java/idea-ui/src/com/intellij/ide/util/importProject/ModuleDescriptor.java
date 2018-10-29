@@ -35,21 +35,20 @@ import java.util.*;
 
 /**
  * @author Eugene Zhuravlev
-*         Date: Jul 13, 2007
 */
 public class ModuleDescriptor {
   private String myName;
-  private final MultiMap<File, DetectedSourceRoot> myContentToSourceRoots = new MultiMap<File, DetectedSourceRoot>();
-  private final Set<File> myLibraryFiles = new HashSet<File>();
-  private final Set<ModuleDescriptor> myDependencies = new HashSet<ModuleDescriptor>();
-  private static final Set<String> ourModuleNameStopList = new THashSet<String>(
+  private final MultiMap<File, DetectedSourceRoot> myContentToSourceRoots = new MultiMap<>();
+  private final Set<File> myLibraryFiles = new HashSet<>();
+  private final Set<ModuleDescriptor> myDependencies = new HashSet<>();
+  private static final Set<String> ourModuleNameStopList = new THashSet<>(
     Arrays.asList("java", "src", "source", "sources", "C:", "D:", "E:", "F:", "temp", "tmp"),
     CaseInsensitiveStringHashingStrategy.INSTANCE
   );
 
   private boolean myReuseExistingElement;
-  private List<ModuleBuilder.ModuleConfigurationUpdater> myConfigurationUpdaters = new SmartList<ModuleBuilder.ModuleConfigurationUpdater>();
-  private ModuleType myModuleType;
+  private final List<ModuleBuilder.ModuleConfigurationUpdater> myConfigurationUpdaters = new SmartList<>();
+  private final ModuleType myModuleType;
 
   public ModuleDescriptor(final File contentRoot, final ModuleType moduleType, final Collection<? extends DetectedSourceRoot> sourceRoots) {
     myName = suggestModuleName(contentRoot);
@@ -116,7 +115,7 @@ public class ModuleDescriptor {
   }
   
   public void addContentRoot(File contentRoot) {
-    myContentToSourceRoots.put(contentRoot, new HashSet<DetectedSourceRoot>());
+    myContentToSourceRoots.put(contentRoot, new HashSet<>());
   }
   
   public Collection<DetectedSourceRoot> removeContentRoot(File contentRoot) {

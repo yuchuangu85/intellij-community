@@ -29,13 +29,13 @@ import com.intellij.openapi.project.ProjectBundle;
 import com.intellij.openapi.roots.ui.configuration.DefaultModulesProvider;
 import com.intellij.openapi.roots.ui.configuration.ModulesConfigurator;
 import com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
 /**
  * @author Eugene Zhuravlev
- *         Date: Jan 5, 2004
  */
 public class NewModuleAction extends AnAction implements DumbAware {
   public NewModuleAction() {
@@ -43,7 +43,7 @@ public class NewModuleAction extends AnAction implements DumbAware {
   }
 
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public void actionPerformed(@NotNull AnActionEvent e) {
     final Project project = getEventProject(e);
     if (project == null) {
       return;
@@ -64,19 +64,8 @@ public class NewModuleAction extends AnAction implements DumbAware {
 
   @Nullable
   public Module createModuleFromWizard(Project project, @Nullable Object dataFromContext, AbstractProjectWizard wizard) {
-    final ProjectBuilder builder = wizard.getProjectBuilder();
-    if (builder instanceof ModuleBuilder) {
-      final ModuleBuilder moduleBuilder = (ModuleBuilder)builder;
-      if (moduleBuilder.getName() == null) {
-        moduleBuilder.setName(wizard.getProjectName());
-      }
-      if (moduleBuilder.getModuleFilePath() == null) {
-        moduleBuilder.setModuleFilePath(wizard.getModuleFilePath());
-      }
-    }
-    if (!builder.validate(project, project)) {
-      return null;
-    }
+    final ProjectBuilder builder = wizard.getBuilder(project);
+    if (builder == null) return null;
     Module module;
     if (builder instanceof ModuleBuilder) {
       module = ((ModuleBuilder) builder).commitModule(project, null);
@@ -105,7 +94,7 @@ public class NewModuleAction extends AnAction implements DumbAware {
   }
 
   @Override
-  public void update(AnActionEvent e) {
+  public void update(@NotNull AnActionEvent e) {
     super.update(e);
     e.getPresentation().setEnabled(getEventProject(e) != null);
   }

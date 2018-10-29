@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.openapi.fileTypes.impl;
 
@@ -22,18 +8,23 @@ import com.intellij.lang.Language;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.fileTypes.*;
-import com.intellij.openapi.options.*;
+import com.intellij.openapi.options.Configurable;
+import com.intellij.openapi.options.ConfigurationException;
+import com.intellij.openapi.options.SearchableConfigurable;
+import com.intellij.openapi.options.SettingsEditor;
 import com.intellij.openapi.ui.DialogBuilder;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.psi.templateLanguages.TemplateDataLanguagePatterns;
 import com.intellij.ui.*;
 import com.intellij.ui.components.JBList;
-import com.intellij.util.PairConvertor;
-import gnu.trove.THashMap;
+import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.JBDimension;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -45,19 +36,20 @@ import java.awt.event.MouseEvent;
 import java.util.*;
 import java.util.List;
 
+import static com.intellij.openapi.util.Pair.pair;
+
 /**
  * @author Eugene Belyaev
  */
-public class FileTypeConfigurable extends BaseConfigurable implements SearchableConfigurable, Configurable.NoScroll {
+public class FileTypeConfigurable implements SearchableConfigurable, Configurable.NoScroll {
   private RecognizedFileTypes myRecognizedFileType;
   private PatternsPanel myPatterns;
   private FileTypePanel myFileTypePanel;
   private HashSet<FileType> myTempFileTypes;
   private final FileTypeManagerImpl myManager;
   private FileTypeAssocTable<FileType> myTempPatternsTable;
-  private final Map<FileNameMatcher, FileType> myReassigned = new THashMap<FileNameMatcher, FileType>();
   private FileTypeAssocTable<Language> myTempTemplateDataLanguages;
-  private final Map<UserFileType, UserFileType> myOriginalToEditedMap = new HashMap<UserFileType, UserFileType>();
+  private final Map<UserFileType, UserFileType> myOriginalToEditedMap = new HashMap<>();
 
   public FileTypeConfigurable(FileTypeManager fileTypeManager) {
     myManager = (FileTypeManagerImpl)fileTypeManager;
@@ -86,25 +78,14 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
   }
 
   private void updateFileTypeList() {
-    FileType[] types = myTempFileTypes.toArray(new FileType[myTempFileTypes.size()]);
-    Arrays.sort(types, new Comparator() {
-      @Override
-      public int compare(@NotNull Object o1, @NotNull Object o2) {
-        FileType fileType1 = (FileType)o1;
-        FileType fileType2 = (FileType)o2;
-        return fileType1.getDescription().compareToIgnoreCase(fileType2.getDescription());
-      }
-    });
-    myRecognizedFileType.setFileTypes(types);
+    List<FileType> types = ContainerUtil.filter(myTempFileTypes, fileType -> !fileType.isReadOnly());
+    types.sort((o1, o2) -> o1.getDescription().compareToIgnoreCase(o2.getDescription()));
+    myRecognizedFileType.setFileTypes(types.toArray(FileType.EMPTY_ARRAY));
   }
 
-  private static FileType[] getModifiableFileTypes() {
-    FileType[] registeredFileTypes = FileTypeManager.getInstance().getRegisteredFileTypes();
-    ArrayList<FileType> result = new ArrayList<FileType>();
-    for (FileType fileType : registeredFileTypes) {
-      if (!fileType.isReadOnly()) result.add(fileType);
-    }
-    return result.toArray(new FileType[result.size()]);
+  @NotNull
+  private static HashSet<FileType> getRegisteredFilesTypes() {
+    return new HashSet<>(Arrays.asList(FileTypeManager.getInstance().getRegisteredFileTypes()));
   }
 
   @Override
@@ -119,9 +100,10 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
       if (!myManager.isIgnoredFilesListEqualToCurrent(myFileTypePanel.myIgnoreFilesField.getText())) {
         myManager.setIgnoredFilesList(myFileTypePanel.myIgnoreFilesField.getText());
       }
+      Map<FileNameMatcher, FileType> removedMappings = myManager.getExtensionMap().getRemovedMappings(myTempPatternsTable, myTempFileTypes);
       myManager.setPatternsTable(myTempFileTypes, myTempPatternsTable);
-      for (FileNameMatcher matcher : myReassigned.keySet()) {
-        myManager.getRemovedMappings().put(matcher, Pair.create(myReassigned.get(matcher), true));
+      for (FileNameMatcher matcher : removedMappings.keySet()) {
+        myManager.getRemovedMappings().put(matcher, Pair.create(removedMappings.get(matcher), true));
       }
 
       TemplateDataLanguagePatterns.getInstance().setAssocTable(myTempTemplateDataLanguages);
@@ -133,7 +115,7 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
     myTempPatternsTable = myManager.getExtensionMap().copy();
     myTempTemplateDataLanguages = TemplateDataLanguagePatterns.getInstance().getAssocTable();
 
-    myTempFileTypes = new HashSet<FileType>(Arrays.asList(getModifiableFileTypes()));
+    myTempFileTypes = getRegisteredFilesTypes();
     myOriginalToEditedMap.clear();
 
     updateFileTypeList();
@@ -145,8 +127,8 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
   @Override
   public boolean isModified() {
     if (!myManager.isIgnoredFilesListEqualToCurrent(myFileTypePanel.myIgnoreFilesField.getText())) return true;
-    HashSet<FileType> types = new HashSet<FileType>(Arrays.asList(getModifiableFileTypes()));
-    return !myTempPatternsTable.equals(myManager.getExtensionMap()) || !myTempFileTypes.equals(types) ||
+    return !myTempPatternsTable.equals(myManager.getExtensionMap()) ||
+           !myTempFileTypes.equals(getRegisteredFilesTypes()) ||
            !myOriginalToEditedMap.isEmpty() ||
            !myTempTemplateDataLanguages.equals(TemplateDataLanguagePatterns.getInstance().getAssocTable());
   }
@@ -170,14 +152,14 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
 
     @Override
     public Dimension getPreferredSize() {
-      return new Dimension(0, 20);
+      return new JBDimension(0, 20);
     }
   }
 
   private void updateExtensionList() {
     FileType type = myRecognizedFileType.getSelectedFileType();
     if (type == null) return;
-    List<String> extensions = new ArrayList<String>();
+    List<String> extensions = new ArrayList<>();
 
     for (FileNameMatcher assoc : myTempPatternsTable.getAssociations(type)) {
       extensions.add(assoc.getPresentableString());
@@ -222,7 +204,7 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
     //TODO: support adding binary file types...
     AbstractFileType type = new AbstractFileType(new SyntaxTable());
     TypeEditor<AbstractFileType> editor =
-      new TypeEditor<AbstractFileType>(myRecognizedFileType.myFileTypesList, type, FileTypesBundle.message("filetype.edit.new.title"));
+      new TypeEditor<>(myRecognizedFileType.myFileTypesList, type, FileTypesBundle.message("filetype.edit.new.title"));
     if (editor.showAndGet()) {
       myTempFileTypes.add(type);
       updateFileTypeList();
@@ -277,7 +259,6 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
             if (oldLanguage != null) {
               myTempTemplateDataLanguages.removeAssociation(matcher, oldLanguage);
             }
-            myReassigned.put(matcher, registeredFileType);
           }
           else {
             return;
@@ -293,14 +274,17 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
         }
       }
       myTempPatternsTable.addAssociation(matcher, type);
-      myTempTemplateDataLanguages.addAssociation(matcher, dialog.getTemplateDataLanguage());
+      Language language = dialog.getTemplateDataLanguage();
+      if (language != null) myTempTemplateDataLanguages.addAssociation(matcher, language);
 
       updateExtensionList();
       final int index = myPatterns.getListModel().indexOf(matcher.getPresentableString());
       if (index >= 0) {
         ScrollingUtil.selectItem(myPatterns.myPatternsList, index);
       }
-      myPatterns.myPatternsList.requestFocus();
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+        IdeFocusManager.getGlobalInstance().requestFocus(myPatterns.myPatternsList, true);
+      });
     }
   }
 
@@ -332,7 +316,9 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
 
     myTempPatternsTable.addAssociation(matcher, type);
     myPatterns.addPatternAndSelect(pattern);
-    myPatterns.myPatternsList.requestFocus();
+    IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+      IdeFocusManager.getGlobalInstance().requestFocus(myPatterns.myPatternsList, true);
+    });
 
     return null;
   }
@@ -345,7 +331,9 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
     FileNameMatcher matcher = FileTypeManager.parseFromString(extension);
 
     myTempPatternsTable.removeAssociation(matcher, type);
-    myPatterns.myPatternsList.requestFocus();
+    IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+      IdeFocusManager.getGlobalInstance().requestFocus(myPatterns.myPatternsList, true);
+    });
   }
 
   @Override
@@ -366,7 +354,7 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
       myFileTypesList.setCellRenderer(new FileTypeRenderer(new FileTypeRenderer.FileTypeListProvider() {
         @Override
         public Iterable<FileType> getCurrentFileTypeList() {
-          ArrayList<FileType> result = new ArrayList<FileType>();
+          ArrayList<FileType> result = new ArrayList<>();
           for (int i = 0; i < myFileTypesList.getModel().getSize(); i++) {
             result.add((FileType)myFileTypesList.getModel().getElementAt(i));
           }
@@ -403,14 +391,14 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
         })
         .setEditActionUpdater(new AnActionButtonUpdater() {
           @Override
-          public boolean isEnabled(AnActionEvent e) {
+          public boolean isEnabled(@NotNull AnActionEvent e) {
             final FileType fileType = getSelectedFileType();
             return canBeModified(fileType);
           }
         })
         .setRemoveActionUpdater(new AnActionButtonUpdater() {
           @Override
-          public boolean isEnabled(AnActionEvent e) {
+          public boolean isEnabled(@NotNull AnActionEvent e) {
             return canBeModified(getSelectedFileType());
           }
         })
@@ -422,40 +410,60 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
       mySpeedSearch = new MySpeedSearch(myFileTypesList);
     }
 
-    private static class MySpeedSearch extends MultipleTraitsListSpeedSearch {
+    private static class MySpeedSearch extends SpeedSearchBase<JList> {
+      private final List<Condition<Pair<Object, String>>> myOrderedConvertors;
       private FileTypeConfigurable myController;
       private Object myCurrentType;
       private String myExtension;
 
       private MySpeedSearch(JList component) {
-        super(component, new ArrayList<PairConvertor<Object, String, Boolean>>());
-        initConvertors();
+        super(component);
+        myOrderedConvertors = Arrays.asList(
+          // simple
+          p -> {
+            String value = p.first.toString();
+            if (p.first instanceof FileType) {
+              value = ((FileType)p.first).getDescription();
+            }
+            return getComparator().matchingFragments(p.second, value) != null;
+          },
+          // by-extension
+          p -> (p.first instanceof FileType && myCurrentType != null) && myCurrentType.equals(p.first)
+        );
+      }
+
+      @Override
+      protected boolean isMatchingElement(Object element, String pattern) {
+        for (Condition<Pair<Object, String>> convertor : myOrderedConvertors) {
+          boolean matched = convertor.value(pair(element, pattern));
+          if (matched) return true;
+        }
+        return false;
+      }
+
+      @Nullable
+      @Override
+      protected final String getElementText(Object element) {
+        throw new IllegalStateException();
+      }
+
+      @Override
+      protected int getSelectedIndex() {
+        return myComponent.getSelectedIndex();
+      }
+
+      @NotNull
+      @Override
+      protected Object[] getAllElements() {
+        return ListSpeedSearch.getAllListElements(myComponent);
       }
 
       @Override
       protected void selectElement(Object element, String selectedText) {
-        super.selectElement(element, selectedText);
+        ScrollingUtil.selectItem(myComponent, element);
         if (myCurrentType != null && myCurrentType.equals(element) && myController != null) {
           myController.myPatterns.select(myExtension);
         }
-      }
-
-      private void initConvertors() {
-        final PairConvertor<Object, String, Boolean> simpleConvertor = (element, s) -> {
-          String value = element.toString();
-          if (element instanceof FileType) {
-             value = ((FileType)element).getDescription();
-          }
-          return getComparator().matchingFragments(s, value) != null;
-        };
-        final PairConvertor<Object, String, Boolean> byExtensionsConvertor = (element, s) -> {
-          if (element instanceof FileType && myCurrentType != null) {
-            return myCurrentType.equals(element);
-          }
-          return false;
-        };
-        myOrderedConvertors.add(simpleConvertor);
-        myOrderedConvertors.add(byExtensionsConvertor);
       }
 
       @Override
@@ -504,7 +512,9 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
 
     public void selectFileType(FileType fileType) {
       myFileTypesList.setSelectedValue(fileType, true);
-      myFileTypesList.requestFocus();
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+        IdeFocusManager.getGlobalInstance().requestFocus(myFileTypesList, true);
+      });
     }
   }
 
@@ -619,7 +629,7 @@ public class FileTypeConfigurable extends BaseConfigurable implements Searchable
     private final T myFileType;
     private final SettingsEditor<T> myEditor;
 
-    public TypeEditor(Component parent, T fileType, final String title) {
+    TypeEditor(Component parent, T fileType, final String title) {
       super(parent, false);
       myFileType = fileType;
       myEditor = fileType.getEditor();

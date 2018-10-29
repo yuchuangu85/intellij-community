@@ -28,8 +28,8 @@ import java.util.Map;
  * @author Dmitry Avdeev
  */
 public class ResourceRegistrarImpl implements ResourceRegistrar {
-  private final Map<String, Map<String, ExternalResourceManagerExImpl.Resource>> myResources = new THashMap<String, Map<String, ExternalResourceManagerExImpl.Resource>>();
-  private final List<String> myIgnored = new ArrayList<String>();
+  private final Map<String, Map<String, ExternalResourceManagerExImpl.Resource>> myResources = new THashMap<>();
+  private final List<String> myIgnored = new ArrayList<>();
 
   @Override
   public void addStdResource(@NonNls String resource, @NonNls String fileName) {
@@ -44,7 +44,6 @@ public class ResourceRegistrarImpl implements ResourceRegistrar {
   public void addStdResource(@NonNls String resource, @NonNls String version, @NonNls String fileName, @Nullable Class klass, @Nullable ClassLoader classLoader) {
     Map<String, ExternalResourceManagerExImpl.Resource> map = ExternalResourceManagerExImpl.getMap(myResources, version, true);
     assert map != null;
-    resource = new String(resource); // enforce copying; todo remove after final migration to JDK 1.7
     map.put(resource, new ExternalResourceManagerExImpl.Resource(fileName, klass, classLoader));
   }
 

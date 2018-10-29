@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2013 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,11 @@
  */
 package com.jetbrains.python.inspections;
 
-import com.jetbrains.python.fixtures.PyTestCase;
+import com.jetbrains.python.fixtures.PyInspectionTestCase;
+import com.jetbrains.python.psi.LanguageLevel;
+import org.jetbrains.annotations.NotNull;
 
-/**
- * User: ktisha
- */
-public class PyAugmentAssignmentInspectionTest extends PyTestCase {
+public class PyAugmentAssignmentInspectionTest extends PyInspectionTestCase {
 
   public void testMult() {
     doTest();
@@ -71,9 +70,14 @@ public class PyAugmentAssignmentInspectionTest extends PyTestCase {
     doTest();
   }
 
-  private void doTest() {
-    myFixture.configureByFile("inspections/PyAugmentAssignmentInspection/" + getTestName(true) + ".py");
-    myFixture.enableInspections(PyAugmentAssignmentInspection.class);
-    myFixture.checkHighlighting(true, false, true);
+  // PY-20244
+  public void testSequenceConcatenation() {
+    runWithLanguageLevel(LanguageLevel.PYTHON35, this::doTest);
+  }
+
+  @NotNull
+  @Override
+  protected Class<? extends PyInspection> getInspectionClass() {
+    return PyAugmentAssignmentInspection.class;
   }
 }

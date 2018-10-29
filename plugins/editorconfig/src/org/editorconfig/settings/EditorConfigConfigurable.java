@@ -1,6 +1,7 @@
 package org.editorconfig.settings;
 
 import com.intellij.application.options.GeneralCodeStyleOptionsProvider;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.ui.VerticalFlowLayout;
@@ -10,8 +11,11 @@ import com.intellij.psi.codeStyle.CodeStyleSettingsProvider;
 import com.intellij.psi.codeStyle.CustomCodeStyleSettings;
 import com.intellij.ui.IdeBorderFactory;
 import com.intellij.ui.components.JBCheckBox;
+import com.intellij.util.messages.MessageBus;
+import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.editorconfig.Utils;
+import org.editorconfig.language.messages.EditorConfigBundle;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -27,19 +31,19 @@ public class EditorConfigConfigurable extends CodeStyleSettingsProvider implemen
   @Nullable
   @Override
   public JComponent createComponent() {
-    myEnabled = new JBCheckBox("Enable EditorConfig support");
+    myEnabled = new JBCheckBox(EditorConfigBundle.message("config.enable"));
     final JPanel result = new JPanel();
     result.setLayout(new BoxLayout(result, BoxLayout.LINE_AXIS));
     final JPanel panel = new JPanel(new VerticalFlowLayout());
-    result.setBorder(IdeBorderFactory.createTitledBorder("EditorConfig", false));
+    result.setBorder(IdeBorderFactory.createTitledBorder(EditorConfigBundle.message("config.title"), false));
     panel.add(myEnabled);
-    final JLabel warning = new JLabel("EditorConfig may override the IDE code style settings");
+    final JLabel warning = new JLabel(EditorConfigBundle.message("config.warning"));
     warning.setFont(UIUtil.getLabelFont(UIUtil.FontSize.SMALL));
-    warning.setBorder(IdeBorderFactory.createEmptyBorder(0, 20, 0, 0));
+    warning.setBorder(JBUI.Borders.emptyLeft(20));
     panel.add(warning);
     panel.setAlignmentY(Component.TOP_ALIGNMENT);
     result.add(panel);
-    final JButton export = new JButton("Export");
+    final JButton export = new JButton(EditorConfigBundle.message("config.export"));
     export.addActionListener((event) -> {
       final Component parent = UIUtil.findUltimateParent(result);
       if (parent instanceof IdeFrame) {
@@ -58,7 +62,10 @@ public class EditorConfigConfigurable extends CodeStyleSettingsProvider implemen
 
   @Override
   public void apply(CodeStyleSettings settings) {
-    settings.getCustomSettings(EditorConfigSettings.class).ENABLED = myEnabled.isSelected();
+    boolean newValue = myEnabled.isSelected();
+    settings.getCustomSettings(EditorConfigSettings.class).ENABLED = newValue;
+    MessageBus bus = ApplicationManager.getApplication().getMessageBus();
+    bus.syncPublisher(EditorConfigSettings.EDITOR_CONFIG_ENABLED_TOPIC).valueChanged(newValue);
   }
 
   @Override
@@ -84,9 +91,6 @@ public class EditorConfigConfigurable extends CodeStyleSettingsProvider implemen
 
   @Override
   public void apply() throws ConfigurationException {}
-
-  @Override
-  public void reset() {}
 
   @Override
   public boolean hasSettingsPage() {

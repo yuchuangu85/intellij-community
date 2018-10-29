@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui;
 
 import com.intellij.openapi.actionSystem.*;
@@ -25,6 +11,7 @@ import com.intellij.util.IconUtil;
 import com.intellij.util.containers.ContainerUtilRt;
 import com.intellij.util.ui.MacUIUtil;
 import com.intellij.util.ui.UIUtil;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -45,7 +32,7 @@ public class CommonActionsPanel extends JPanel {
   public enum Buttons {
     ADD, REMOVE, EDIT,  UP, DOWN;
 
-    public static Buttons[] ALL = {ADD, REMOVE, EDIT,  UP, DOWN};
+    public static final Buttons[] ALL = {ADD, REMOVE, EDIT,  UP, DOWN};
 
     public Icon getIcon() {
       switch (this) {
@@ -59,11 +46,11 @@ public class CommonActionsPanel extends JPanel {
     }
 
     MyActionButton createButton(final Listener listener, String name, Icon icon) {
-      return new MyActionButton(this, listener, name == null ? StringUtil.capitalize(name().toLowerCase()) : name, icon);
+      return new MyActionButton(this, listener, name == null ? StringUtil.capitalize(name().toLowerCase(Locale.ENGLISH)) : name, icon);
     }
 
     public String getText() {
-      return StringUtil.capitalize(name().toLowerCase());
+      return StringUtil.capitalize(name().toLowerCase(Locale.ENGLISH));
     }
 
     public void performAction(Listener listener) {
@@ -77,28 +64,25 @@ public class CommonActionsPanel extends JPanel {
     }
   }
   public interface Listener {
-    void doAdd();
-    void doRemove();
-    void doUp();
-    void doDown();
-    void doEdit();
+    default void doAdd() {
+    }
 
-    class Adapter implements Listener {
-      @Override
-      public void doAdd() {}
-      @Override
-      public void doRemove() {}
-      @Override
-      public void doUp() {}
-      @Override
-      public void doDown() {}
-      @Override
-      public void doEdit() {}
+    default void doRemove() {
+    }
+
+    default void doUp() {
+    }
+
+    default void doDown() {
+    }
+
+    default void doEdit() {
     }
   }
 
-  private Map<Buttons, MyActionButton> myButtons = new HashMap<Buttons, MyActionButton>();
+  private final Map<Buttons, MyActionButton> myButtons = new HashMap<>();
   private final AnActionButton[] myActions;
+  private EnumMap<Buttons, ShortcutSet> myCustomShortcuts;
 
   CommonActionsPanel(ListenerFactory factory, @Nullable JComponent contextComponent, ActionToolbarPosition position,
                      @Nullable AnActionButton[] additionalActions, @Nullable Comparator<AnActionButton> buttonComparator,
@@ -135,7 +119,7 @@ public class CommonActionsPanel extends JPanel {
     if (buttonComparator != null) {
       Arrays.sort(myActions, buttonComparator);
     }
-    ArrayList<AnAction> toolbarActions = ContainerUtilRt.<AnAction>newArrayList(myActions);
+    ArrayList<AnAction> toolbarActions = ContainerUtilRt.newArrayList(myActions);
     for (int i = 0; i < toolbarActions.size(); i++) {
         if (toolbarActions.get(i) instanceof AnActionButton.CheckedAnActionButton) {
           toolbarActions.set(i, ((AnActionButton.CheckedAnActionButton)toolbarActions.get(i)).getDelegate());
@@ -144,8 +128,8 @@ public class CommonActionsPanel extends JPanel {
     myDecorateButtons = UIUtil.isUnderAquaLookAndFeel() && position == ActionToolbarPosition.BOTTOM;
 
     final ActionManagerEx mgr = (ActionManagerEx)ActionManager.getInstance();
-    myToolbar = mgr.createActionToolbar(ActionPlaces.UNKNOWN,
-                                        new DefaultActionGroup(toolbarActions.toArray(new AnAction[toolbarActions.size()])),
+    myToolbar = mgr.createActionToolbar("ToolbarDecorator",
+                                        new DefaultActionGroup(toolbarActions.toArray(AnAction.EMPTY_ARRAY)),
                                         position == ActionToolbarPosition.BOTTOM || position == ActionToolbarPosition.TOP,
                                         myDecorateButtons);
     myToolbar.getComponent().setBorder(null);
@@ -188,8 +172,14 @@ public class CommonActionsPanel extends JPanel {
     }
     final JRootPane pane = getRootPane();
     for (AnActionButton button : myActions) {
-      final ShortcutSet shortcut = button.getShortcut();
+      ShortcutSet shortcut = button.getShortcut();
       if (shortcut != null) {
+        if (button instanceof MyActionButton && myCustomShortcuts != null ) {
+          ShortcutSet customShortCut = myCustomShortcuts.get(((MyActionButton)button).myButton);
+          if (customShortCut != null) {
+            shortcut = customShortCut;
+          }
+        }
         if (button instanceof MyActionButton
             && ((MyActionButton)button).isAddButton()
             && UIUtil.isDialogRootPane(pane)) {
@@ -209,7 +199,7 @@ public class CommonActionsPanel extends JPanel {
   private static void registerDeleteHook(final MyActionButton removeButton) {
     new AnAction("Delete Hook") {
       @Override
-      public void actionPerformed(AnActionEvent e) {
+      public void actionPerformed(@NotNull AnActionEvent e) {
         removeButton.actionPerformed(e);
       }
 
@@ -219,7 +209,7 @@ public class CommonActionsPanel extends JPanel {
       }
 
       @Override
-      public void update(AnActionEvent e) {
+      public void update(@NotNull AnActionEvent e) {
         final JComponent contextComponent = removeButton.getContextComponent();
         if (contextComponent instanceof JTable && ((JTable)contextComponent).isEditing()) {
           e.getPresentation().setEnabled(false);
@@ -242,6 +232,20 @@ public class CommonActionsPanel extends JPanel {
     }
   }
 
+  public void setCustomShortcuts(@NotNull Buttons button, @Nullable ShortcutSet... shortcutSets) {
+    if (shortcutSets != null) {
+      if (myCustomShortcuts == null) myCustomShortcuts = new EnumMap<>(Buttons.class);
+      myCustomShortcuts.put(button, new CompositeShortcutSet(shortcutSets));
+    } else {
+      if (myCustomShortcuts != null) {
+        myCustomShortcuts.remove(button);
+        if (myCustomShortcuts.isEmpty()) {
+          myCustomShortcuts = null;
+        }
+      }
+    }
+  }
+
   @NotNull
   public ActionToolbarPosition getPosition() {
     return myPosition;
@@ -258,7 +262,7 @@ public class CommonActionsPanel extends JPanel {
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       myButton.performAction(myListener);
     }
 
@@ -268,7 +272,7 @@ public class CommonActionsPanel extends JPanel {
     }
 
     @Override
-    public void updateButton(AnActionEvent e) {
+    public void updateButton(@NotNull AnActionEvent e) {
       super.updateButton(e);
       if (!e.getPresentation().isEnabled()) return;
 
@@ -323,6 +327,7 @@ public class CommonActionsPanel extends JPanel {
     }
   }
 
+  @Contract("!null -> !null")
   public static ShortcutSet getCommonShortcut(Buttons button) {
     switch (button) {
       case ADD: return CommonShortcuts.getNewForDialogs();

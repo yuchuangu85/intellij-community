@@ -22,6 +22,7 @@ import com.intellij.psi.impl.PsiSuperMethodImplUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.usages.PsiElementUsageTarget;
 import com.intellij.usages.UsageTarget;
+import com.siyeh.ig.psiutils.ExpressionUtils;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -109,12 +110,12 @@ public class JavaUsageTypeProvider implements UsageTypeProviderEx {
   }
 
   private static boolean haveCommonSuperMethod(@NotNull PsiMethod m1, @NotNull PsiMethod m2) {
-    final Queue<PsiMethod> supers1Q = new ArrayDeque<PsiMethod>();
+    final Queue<PsiMethod> supers1Q = new ArrayDeque<>();
     supers1Q.add(m1);
-    final Queue<PsiMethod> supers2Q = new ArrayDeque<PsiMethod>();
+    final Queue<PsiMethod> supers2Q = new ArrayDeque<>();
     supers2Q.add(m2);
-    Set<PsiMethod> supers1 = new THashSet<PsiMethod>();
-    Set<PsiMethod> supers2 = new THashSet<PsiMethod>();
+    Set<PsiMethod> supers1 = new THashSet<>();
+    Set<PsiMethod> supers2 = new THashSet<>();
     while (true) {
       PsiMethod me1;
       if ((me1 = supers1Q.poll()) != null) {
@@ -162,7 +163,7 @@ public class JavaUsageTypeProvider implements UsageTypeProviderEx {
       return UsageType.ANNOTATION;
     }
 
-    if (PsiTreeUtil.getParentOfType(element, PsiImportStatement.class, false) != null) return UsageType.CLASS_IMPORT;
+    if (PsiTreeUtil.getParentOfType(element, PsiImportStatementBase.class, false) != null) return UsageType.CLASS_IMPORT;
     PsiReferenceList referenceList = PsiTreeUtil.getParentOfType(element, PsiReferenceList.class);
     if (referenceList != null) {
       if (referenceList.getParent() instanceof PsiClass) return UsageType.CLASS_EXTENDS_IMPLEMENTS_LIST;
@@ -233,7 +234,7 @@ public class JavaUsageTypeProvider implements UsageTypeProviderEx {
         if (isAnonymousClassOf(psiNewExpression.getAnonymousClass(), targets)) {
           return UsageType.CLASS_ANONYMOUS_NEW_OPERATOR;
         }
-        if (isNewArrayCreation(psiNewExpression)) {
+        if (ExpressionUtils.isArrayCreationExpression(psiNewExpression)) {
           return UsageType.CLASS_NEW_ARRAY;
         }
         return UsageType.CLASS_NEW_OPERATOR;
@@ -241,10 +242,6 @@ public class JavaUsageTypeProvider implements UsageTypeProviderEx {
     }
 
     return null;
-  }
-
-  private static boolean isNewArrayCreation(@NotNull PsiNewExpression expression){
-    return expression.getArrayDimensions().length > 0 || expression.getArrayInitializer() != null;
   }
 
   private static boolean isAnonymousClassOf(@Nullable PsiAnonymousClass anonymousClass, @NotNull UsageTarget[] targets) {

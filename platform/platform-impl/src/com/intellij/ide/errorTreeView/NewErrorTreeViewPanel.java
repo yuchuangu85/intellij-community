@@ -1,27 +1,17 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
  */
 package com.intellij.ide.errorTreeView;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.*;
-import com.intellij.ide.actions.*;
+import com.intellij.ide.actions.CloseTabToolbarAction;
+import com.intellij.ide.actions.ExportToTextFileToolbarAction;
 import com.intellij.ide.errorTreeView.impl.ErrorTreeViewConfiguration;
 import com.intellij.ide.errorTreeView.impl.ErrorViewTextExporter;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ModalityState;
+import com.intellij.openapi.application.TransactionGuard;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.ide.CopyPasteManager;
@@ -41,8 +31,8 @@ import com.intellij.ui.content.MessageView;
 import com.intellij.ui.treeStructure.Tree;
 import com.intellij.util.Alarm;
 import com.intellij.util.EditSourceOnDoubleClickHandler;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.MutableErrorTreeView;
 import com.intellij.util.ui.StatusText;
 import com.intellij.util.ui.UIUtil;
@@ -79,7 +69,6 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
   }
 
   private ActionToolbar myLeftToolbar;
-  private ActionToolbar myRightToolbar;
   private final TreeExpander myTreeExpander = new MyTreeExpander();
   private final ExporterToTextFile myExporterToTextFile;
   protected Project myProject;
@@ -131,13 +120,7 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     DefaultMutableTreeNode root = new DefaultMutableTreeNode();
     root.setUserObject(myErrorViewStructure.createDescriptor(myErrorViewStructure.getRootElement(), null));
     final DefaultTreeModel treeModel = new DefaultTreeModel(root);
-    myTree = new Tree(treeModel) {
-      @Override
-      public void setRowHeight(int i) {
-        super.setRowHeight(0);
-        // this is needed in order to make UI calculate the height for each particular row
-      }
-    };
+    myTree = createTree(treeModel);
     myTree.getEmptyText().setText(IdeBundle.message("errortree.noMessages"));
     myBuilder = new ErrorViewTreeBuilder(myTree, treeModel, myErrorViewStructure);
 
@@ -180,6 +163,17 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     EditSourceOnDoubleClickHandler.install(myTree);
   }
 
+  @NotNull
+  protected Tree createTree(@NotNull final DefaultTreeModel treeModel) {
+    return new Tree(treeModel) {
+      @Override
+      public void setRowHeight(int i) {
+        super.setRowHeight(0);
+        // this is needed in order to make UI calculate the height for each particular row
+      }
+    };
+  }
+
   protected ErrorViewStructure createErrorViewStructure(Project project, boolean canHideWarnings) {
     return new ErrorViewStructure(project, canHideWarnings);
   }
@@ -219,12 +213,12 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
   } 
 
   @Override
-  public Object getData(String dataId) {
+  public Object getData(@NotNull String dataId) {
     if (PlatformDataKeys.COPY_PROVIDER.is(dataId)) {
       return this;
     }
     if (CommonDataKeys.NAVIGATABLE.is(dataId)) {
-      final NavigatableMessageElement selectedMessageElement = getSelectedMessageElement();
+      final NavigatableErrorTreeElement selectedMessageElement = getSelectedNavigatableElement();
       return selectedMessageElement != null ? selectedMessageElement.getNavigatable() : null;
     }
     else if (PlatformDataKeys.HELP_ID.is(dataId)) {
@@ -237,7 +231,7 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
       return myExporterToTextFile;
     }
     else if (CURRENT_EXCEPTION_DATA_KEY.is(dataId)) {
-      NavigatableMessageElement selectedMessageElement = getSelectedMessageElement();
+      ErrorTreeElement selectedMessageElement = getSelectedErrorTreeElement();
       return selectedMessageElement != null ? selectedMessageElement.getData() : null;
     }
     return null;
@@ -248,7 +242,7 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     if (firstError != null) {
       selectElement(firstError, () -> {
         if (shouldShowFirstErrorInEditor()) {
-          navigateToSource(false);
+          TransactionGuard.submitTransaction(myBuilder, () -> navigateToSource(false));
         }
       });
     }
@@ -342,9 +336,9 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
   }
 
   @Nullable
-  private NavigatableMessageElement getSelectedMessageElement() {
+  private NavigatableErrorTreeElement getSelectedNavigatableElement() {
     final ErrorTreeElement selectedElement = getSelectedErrorTreeElement();
-    return selectedElement instanceof NavigatableMessageElement ? (NavigatableMessageElement)selectedElement : null;
+    return selectedElement instanceof NavigatableErrorTreeElement ? (NavigatableErrorTreeElement)selectedElement : null;
   }
 
   @Nullable
@@ -376,7 +370,7 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
   }
 
   private void navigateToSource(final boolean focusEditor) {
-    NavigatableMessageElement element = getSelectedMessageElement();
+    NavigatableErrorTreeElement element = getSelectedNavigatableElement();
     if (element == null) {
       return;
     }
@@ -400,7 +394,13 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
       group.add(ActionManager.getInstance().getAction(IdeActions.ACTION_EDIT_SOURCE));
     }
     group.add(ActionManager.getInstance().getAction(IdeActions.ACTION_COPY));
+    group.add(myAutoScrollToSourceHandler.createToggleAction());
     addExtraPopupMenuActions(group);
+    group.addSeparator();
+    group.add(CommonActionsManager.getInstance().createExpandAllAction(myTreeExpander, this));
+    group.add(CommonActionsManager.getInstance().createCollapseAllAction(myTreeExpander, this));
+    group.addSeparator();
+    group.add(new ExportToTextFileToolbarAction(myExporterToTextFile));
 
     ActionPopupMenu menu = ActionManager.getInstance().createActionPopupMenu(ActionPlaces.COMPILER_MESSAGES_POPUP, group);
     menu.getComponent().show(component, x, y);
@@ -516,47 +516,40 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
   }
 
   private JPanel createToolbarPanel(@Nullable Runnable rerunAction) {
+    DefaultActionGroup group = new DefaultActionGroup();
     AnAction closeMessageViewAction = new CloseTabToolbarAction() {
       @Override
-      public void actionPerformed(AnActionEvent e) {
+      public void actionPerformed(@NotNull AnActionEvent e) {
         close();
       }
     };
 
-    DefaultActionGroup leftUpdateableActionGroup = new DefaultActionGroup();
     if (rerunAction != null) {
-      leftUpdateableActionGroup.add(new RerunAction(rerunAction, closeMessageViewAction));
+      group.add(new RerunAction(rerunAction, closeMessageViewAction));
     }
 
-    leftUpdateableActionGroup.add(new StopAction());
-    if (myCreateExitAction) {
-      leftUpdateableActionGroup.add(closeMessageViewAction);
+    group.add(new StopAction());
+    if (canHideWarnings()) {
+      group.addSeparator();
+      group.add(new ShowWarningsAction());
     }
-    leftUpdateableActionGroup.add(new PreviousOccurenceToolbarAction(this));
-    leftUpdateableActionGroup.add(new NextOccurenceToolbarAction(this));
-    leftUpdateableActionGroup.add(new ExportToTextFileToolbarAction(myExporterToTextFile));
-    leftUpdateableActionGroup.add(new ContextHelpAction(myHelpId));
 
-    DefaultActionGroup rightUpdateableActionGroup = new DefaultActionGroup();
-    fillRightToolbarGroup(rightUpdateableActionGroup);
+    fillRightToolbarGroup(group);
 
-    JPanel toolbarPanel = new JPanel(new BorderLayout());
+    //if (myCreateExitAction) {
+    //  leftUpdateableActionGroup.add(closeMessageViewAction);
+    //}
+    //leftUpdateableActionGroup.add(new PreviousOccurenceToolbarAction(this));
+    //leftUpdateableActionGroup.add(new NextOccurenceToolbarAction(this));
+    //leftUpdateableActionGroup.add(new ExportToTextFileToolbarAction(myExporterToTextFile));
+
     ActionManager actionManager = ActionManager.getInstance();
-    myLeftToolbar = actionManager.createActionToolbar(ActionPlaces.COMPILER_MESSAGES_TOOLBAR, leftUpdateableActionGroup, false);
-    myRightToolbar = actionManager.createActionToolbar(ActionPlaces.COMPILER_MESSAGES_TOOLBAR, rightUpdateableActionGroup, false);
-    toolbarPanel.add(myLeftToolbar.getComponent(), BorderLayout.WEST);
-    toolbarPanel.add(myRightToolbar.getComponent(), BorderLayout.CENTER);
-
-    return toolbarPanel;
+    myLeftToolbar = actionManager.createActionToolbar(ActionPlaces.COMPILER_MESSAGES_TOOLBAR, group, false);
+    return JBUI.Panels.simplePanel(myLeftToolbar.getComponent());
   }
 
   protected void fillRightToolbarGroup(DefaultActionGroup group) {
-    group.add(CommonActionsManager.getInstance().createExpandAllAction(myTreeExpander, this));
-    group.add(CommonActionsManager.getInstance().createCollapseAllAction(myTreeExpander, this));
-    if (canHideWarnings()) {
-      group.add(new HideWarningsAction());
-    }
-    group.add(myAutoScrollToSourceHandler.createToggleAction());
+
   }
 
   @Override
@@ -579,11 +572,13 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     return myOccurrenceNavigatorSupport.hasPreviousOccurence();
   }
 
+  @NotNull
   @Override
   public String getNextOccurenceActionName() {
     return myOccurrenceNavigatorSupport.getNextOccurenceActionName();
   }
 
+  @NotNull
   @Override
   public String getPreviousOccurenceActionName() {
     return myOccurrenceNavigatorSupport.getPreviousOccurenceActionName();
@@ -593,41 +588,40 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     private final Runnable myRerunAction;
     private final AnAction myCloseAction;
 
-    public RerunAction(@NotNull Runnable rerunAction, @NotNull AnAction closeAction) {
+    RerunAction(@NotNull Runnable rerunAction, @NotNull AnAction closeAction) {
       super(IdeBundle.message("action.refresh"), null, AllIcons.Actions.Rerun);
       myRerunAction = rerunAction;
       myCloseAction = closeAction;
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       myCloseAction.actionPerformed(e);
       myRerunAction.run();
     }
 
     @Override
-    public void update(AnActionEvent event) {
+    public void update(@NotNull AnActionEvent event) {
       final Presentation presentation = event.getPresentation();
       presentation.setEnabled(canControlProcess() && isProcessStopped());
     }
   }
 
   private class StopAction extends DumbAwareAction {
-    public StopAction() {
+    StopAction() {
       super(IdeBundle.message("action.stop"), null, AllIcons.Actions.Suspend);
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       if (canControlProcess()) {
         stopProcess();
       }
       myLeftToolbar.updateActionsImmediately();
-      myRightToolbar.updateActionsImmediately();
     }
 
     @Override
-    public void update(AnActionEvent event) {
+    public void update(@NotNull AnActionEvent event) {
       Presentation presentation = event.getPresentation();
       presentation.setEnabled(canControlProcess() && !isProcessStopped());
       presentation.setVisible(canControlProcess());
@@ -638,20 +632,20 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     return true;
   }
 
-  private class HideWarningsAction extends ToggleAction implements DumbAware {
-    public HideWarningsAction() {
-      super(IdeBundle.message("action.hide.warnings"), null, AllIcons.General.HideWarnings);
+  private class ShowWarningsAction extends ToggleAction implements DumbAware {
+    ShowWarningsAction() {
+      super(IdeBundle.message("action.show.warnings"), null, AllIcons.General.ShowWarning);
     }
 
     @Override
-    public boolean isSelected(AnActionEvent event) {
-      return isHideWarnings();
+    public boolean isSelected(@NotNull AnActionEvent event) {
+      return !isHideWarnings();
     }
 
     @Override
-    public void setSelected(AnActionEvent event, boolean flag) {
-      if (isHideWarnings() != flag) {
-        myConfiguration.setHideWarnings(flag);
+    public void setSelected(@NotNull AnActionEvent event, boolean showWarnings) {
+      if (showWarnings == isHideWarnings()) {
+        myConfiguration.setHideWarnings(!showWarnings);
         myBuilder.updateTree();
       }
     }
@@ -684,29 +678,31 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
   }
 
   private static class MyOccurrenceNavigatorSupport extends OccurenceNavigatorSupport {
-    public MyOccurrenceNavigatorSupport(final Tree tree) {
+    MyOccurrenceNavigatorSupport(final Tree tree) {
       super(tree);
     }
 
     @Override
-    protected Navigatable createDescriptorForNode(DefaultMutableTreeNode node) {
+    protected Navigatable createDescriptorForNode(@NotNull DefaultMutableTreeNode node) {
       Object userObject = node.getUserObject();
       if (!(userObject instanceof ErrorTreeNodeDescriptor)) {
         return null;
       }
       final ErrorTreeNodeDescriptor descriptor = (ErrorTreeNodeDescriptor)userObject;
       final ErrorTreeElement element = descriptor.getElement();
-      if (element instanceof NavigatableMessageElement) {
-        return ((NavigatableMessageElement)element).getNavigatable();
+      if (element instanceof NavigatableErrorTreeElement) {
+        return ((NavigatableErrorTreeElement)element).getNavigatable();
       }
       return null;
     }
 
+    @NotNull
     @Override
     public String getNextOccurenceActionName() {
       return IdeBundle.message("action.next.message");
     }
 
+    @NotNull
     @Override
     public String getPreviousOccurenceActionName() {
       return IdeBundle.message("action.previous.message");

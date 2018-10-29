@@ -1,22 +1,9 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.psi.types;
 
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiElement;
+import com.intellij.util.ArrayUtil;
 import com.intellij.util.NullableFunction;
 import com.intellij.util.ProcessingContext;
 import com.intellij.util.SmartList;
@@ -36,15 +23,16 @@ public class PyUnionType implements PyType {
   private final Set<PyType> myMembers;
 
   PyUnionType(Collection<PyType> members) {
-    myMembers = new LinkedHashSet<PyType>(members);
+    myMembers = new LinkedHashSet<>(members);
   }
 
+  @Override
   @Nullable
   public List<? extends RatedResolveResult> resolveMember(@NotNull String name,
                                                           @Nullable PyExpression location,
                                                           @NotNull AccessDirection direction,
                                                           @NotNull PyResolveContext resolveContext) {
-    SmartList<RatedResolveResult> ret = new SmartList<RatedResolveResult>();
+    SmartList<RatedResolveResult> ret = new SmartList<>();
     boolean allNulls = true;
     for (PyType member : myMembers) {
       if (member != null) {
@@ -58,16 +46,18 @@ public class PyUnionType implements PyType {
     return allNulls ? null : ret;
   }
 
+  @Override
   public Object[] getCompletionVariants(String completionPrefix, PsiElement location, ProcessingContext context) {
-    Set<Object> variants = new HashSet<Object>();
+    Set<Object> variants = new HashSet<>();
     for (PyType member : myMembers) {
       if (member != null) {
         Collections.addAll(variants, member.getCompletionVariants(completionPrefix, location, context));
       }
     }
-    return variants.toArray(new Object[variants.size()]);
+    return ArrayUtil.toObjectArray(variants);
   }
 
+  @Override
   public String getName() {
     return StringUtil.join(myMembers, (NullableFunction<PyType, String>)type -> type != null ? type.getName() : null, " | ");
   }
@@ -94,7 +84,7 @@ public class PyUnionType implements PyType {
 
   @Nullable
   public static PyType union(@Nullable PyType type1, @Nullable PyType type2) {
-    Set<PyType> members = new LinkedHashSet<PyType>();
+    Set<PyType> members = new LinkedHashSet<>();
     if (type1 instanceof PyUnionType) {
       members.addAll(((PyUnionType)type1).myMembers);
     }
@@ -169,7 +159,7 @@ public class PyUnionType implements PyType {
    */
   @Nullable
   public PyType exclude(@Nullable PyType type, @NotNull TypeEvalContext context) {
-    final List<PyType> members = new ArrayList<PyType>();
+    final List<PyType> members = new ArrayList<>();
     for (PyType m : getMembers()) {
       if (type == null) {
         if (m != null) {
@@ -192,8 +182,7 @@ public class PyUnionType implements PyType {
 
   private static PyType unit(@Nullable PyType type) {
     if (type instanceof PyUnionType) {
-      Set<PyType> members = new LinkedHashSet<PyType>();
-      members.addAll(((PyUnionType)type).getMembers());
+      Set<PyType> members = new LinkedHashSet<>(((PyUnionType)type).getMembers());
       return new PyUnionType(members);
     }
     else {

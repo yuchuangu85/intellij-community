@@ -77,7 +77,7 @@ public class MvcTargetDialogCompletionUtils {
       return getSystemPropertiesVariants();
     }
     if (text.substring(0, offset).matches("\\s*(grails\\s*)?(?:(:?-D\\S+|dev|prod|test)\\s+)*\\S*")) {
-      List<LookupElement> res = new ArrayList<LookupElement>();
+      List<LookupElement> res = new ArrayList<>();
       // Complete command name because command name is not typed.
       for (String completionVariant : getAllTargetNames(module)) {
         res.add(TailTypeDecorator.withTail(LookupElementBuilder.create(completionVariant), TailType.SPACE));
@@ -117,7 +117,7 @@ public class MvcTargetDialogCompletionUtils {
     return res;
   }
 
-  private static void collectClassesAndPackageNames(Collection<LookupElement> res, @NotNull PsiPackage aPackage, GlobalSearchScope scope) {
+  private static void collectClassesAndPackageNames(Collection<? super LookupElement> res, @NotNull PsiPackage aPackage, GlobalSearchScope scope) {
     PsiPackage[] subPackages = aPackage.getSubPackages(scope);
 
     String qualifiedName = aPackage.getQualifiedName();
@@ -133,7 +133,7 @@ public class MvcTargetDialogCompletionUtils {
   }
 
   public static Set<String> getAllTargetNamesInternal(@NotNull Module module) {
-    final Set<String> result = new HashSet<String>();
+    final Set<String> result = new HashSet<>();
 
     MvcFramework.addAvailableSystemScripts(result, module);
 
@@ -154,7 +154,7 @@ public class MvcTargetDialogCompletionUtils {
     return result;
   }
 
-  private static void collectScriptsFromUserHome(Set<String> result) {
+  private static void collectScriptsFromUserHome(Set<? super String> result) {
     String userHome = SystemProperties.getUserHome();
     if (userHome == null) return;
 

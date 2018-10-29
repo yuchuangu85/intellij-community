@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.diagnostic.logging;
 
 import com.intellij.execution.configurations.LogFileOptions;
@@ -34,7 +20,7 @@ import java.util.*;
 
 public class LogFilesManager {
   private final LogConsoleManager myManager;
-  private final List<LogFile> myLogFiles = new ArrayList<LogFile>();
+  private final List<LogFile> myLogFiles = new ArrayList<>();
   private final SingleAlarm myUpdateAlarm;
 
   public LogFilesManager(@NotNull final Project project, @NotNull LogConsoleManager manager, @NotNull Disposable parentDisposable) {
@@ -47,7 +33,7 @@ public class LogFilesManager {
           return;
         }
 
-        for (final LogFile logFile : new ArrayList<LogFile>(myLogFiles)) {
+        for (final LogFile logFile : new ArrayList<>(myLogFiles)) {
           ProcessHandler process = logFile.getProcess();
           if (process != null && process.isProcessTerminated()) {
             myLogFiles.remove(logFile);
@@ -58,7 +44,7 @@ public class LogFilesManager {
           final Set<String> newPaths = logFile.getOptions().getPaths(); // should not be called in UI thread
           logFile.setPaths(newPaths);
 
-          final Set<String> obsoletePaths = new THashSet<String>(oldPaths);
+          final Set<String> obsoletePaths = new THashSet<>(oldPaths);
           obsoletePaths.removeAll(newPaths);
 
           try {
@@ -73,22 +59,17 @@ public class LogFilesManager {
               }
             });
           }
-          catch (InterruptedException ignored) {
-
-          }
-          catch (InvocationTargetException ignored) {
-
-          }
+          catch (InterruptedException | InvocationTargetException ignored) { }
         }
 
-        if (!myLogFiles.isEmpty() && !myUpdateAlarm.isDisposed()) {
-          myUpdateAlarm.request();
+        if (!myLogFiles.isEmpty()) {
+          myUpdateAlarm.cancelAndRequest();
         }
       }
     }, 500, Alarm.ThreadToUse.POOLED_THREAD, parentDisposable);
   }
 
-  public void addLogConsoles(@NotNull RunConfigurationBase runConfiguration, @Nullable ProcessHandler startedProcess) {
+  public void addLogConsoles(@NotNull RunConfigurationBase<?> runConfiguration, @Nullable ProcessHandler startedProcess) {
     for (LogFileOptions logFileOptions : runConfiguration.getAllLogFiles()) {
       if (logFileOptions.isEnabled()) {
         myLogFiles.add(new LogFile(logFileOptions, runConfiguration, startedProcess));
@@ -98,12 +79,12 @@ public class LogFilesManager {
     runConfiguration.createAdditionalTabComponents(myManager, startedProcess);
   }
 
-  private void addConfigurationConsoles(@NotNull LogFileOptions logFile, @NotNull Condition<String> shouldInclude, @NotNull Set<String> paths, @NotNull RunConfigurationBase runConfiguration) {
+  private void addConfigurationConsoles(@NotNull LogFileOptions logFile, @NotNull Condition<? super String> shouldInclude, @NotNull Set<String> paths, @NotNull RunConfigurationBase runConfiguration) {
     if (paths.isEmpty()) {
       return;
     }
 
-    TreeMap<String, String> titleToPath = new TreeMap<String, String>();
+    TreeMap<String, String> titleToPath = new TreeMap<>();
     if (paths.size() == 1) {
       String path = paths.iterator().next();
       if (shouldInclude.value(path)) {
@@ -134,9 +115,9 @@ public class LogFilesManager {
     private final LogFileOptions myOptions;
     private final RunConfigurationBase myConfiguration;
     private final ProcessHandler myProcess;
-    private Set<String> myPaths = new HashSet<String>();
+    private Set<String> myPaths = new HashSet<>();
 
-    public LogFile(LogFileOptions options, RunConfigurationBase configuration, ProcessHandler process) {
+    LogFile(LogFileOptions options, RunConfigurationBase configuration, ProcessHandler process) {
       myOptions = options;
       myConfiguration = configuration;
       myProcess = process;

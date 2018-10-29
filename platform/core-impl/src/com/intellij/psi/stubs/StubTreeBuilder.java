@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,9 +26,9 @@ import com.intellij.psi.FileViewProvider;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.StubBuilder;
 import com.intellij.psi.impl.source.PsiFileImpl;
+import com.intellij.psi.impl.source.PsiFileWithStubSupport;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.tree.IStubFileElementType;
-import com.intellij.util.Function;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.indexing.FileContent;
@@ -38,7 +38,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 public class StubTreeBuilder {
@@ -86,7 +85,7 @@ public class StubTreeBuilder {
             data = stubBuilder.buildStubTree(psi);
 
             final List<Pair<IStubFileElementType, PsiFile>> stubbedRoots = getStubbedRoots(viewProvider);
-            final List<PsiFileStub> stubs = new ArrayList<PsiFileStub>(stubbedRoots.size());
+            final List<PsiFileStub> stubs = new ArrayList<>(stubbedRoots.size());
             stubs.add((PsiFileStub)data);
 
             for (Pair<IStubFileElementType, PsiFile> stubbedRoot : stubbedRoots) {
@@ -100,8 +99,9 @@ public class StubTreeBuilder {
               if (element instanceof PsiFileStub) {
                 stubs.add((PsiFileStub)element);
               }
+              ensureNormalizedOrder(element);
             }
-            final PsiFileStub[] stubsArray = stubs.toArray(new PsiFileStub[stubs.size()]);
+            final PsiFileStub[] stubsArray = stubs.toArray(PsiFileStub.EMPTY_ARRAY);
             for (PsiFileStub stub : stubsArray) {
               if (stub instanceof PsiFileStubImpl) {
                 ((PsiFileStubImpl)stub).setStubRoots(stubsArray);
@@ -115,16 +115,34 @@ public class StubTreeBuilder {
         }
       }
 
+      ensureNormalizedOrder(data);
       inputData.putUserData(stubElementKey, data);
       return data;
     }
   }
 
-  /** Order is deterministic. First element matches {@link FileViewProvider#getStubBindingRoot()} */
+  private static void ensureNormalizedOrder(Stub element) {
+    if (element instanceof StubBase<?>) {
+      ((StubBase)element).myStubList.finalizeLoadingStage();
+    }
+  }
+
+  /**
+   * Order is deterministic. First element matches {@link FileViewProvider#getStubBindingRoot()} if it provides stubbed root.
+   */
   @NotNull
   public static List<Pair<IStubFileElementType, PsiFile>> getStubbedRoots(@NotNull FileViewProvider viewProvider) {
+    return getStubbedRoots(viewProvider, false);
+  }
+
+  /**
+   * Order is deterministic. First element matches {@link FileViewProvider#getStubBindingRoot()} if it provides stubbed root.
+   */
+  @NotNull
+  public static List<Pair<IStubFileElementType, PsiFile>> getStubbedRoots(@NotNull FileViewProvider viewProvider,
+                                                                          boolean includeBinaryRoots) {
     final List<Trinity<Language, IStubFileElementType, PsiFile>> roots =
-      new SmartList<Trinity<Language, IStubFileElementType, PsiFile>>();
+      new SmartList<>();
     final PsiFile stubBindingRoot = viewProvider.getStubBindingRoot();
     for (Language language : viewProvider.getLanguages()) {
       final PsiFile file = viewProvider.getPsi(language);
@@ -134,22 +152,23 @@ public class StubTreeBuilder {
           roots.add(Trinity.create(language, (IStubFileElementType)type, file));
         }
       }
+      else if (includeBinaryRoots && file instanceof PsiFileWithStubSupport) {
+        roots.add(Trinity.create(language, null, file));
+      }
     }
 
-    ContainerUtil.sort(roots, new Comparator<Trinity<Language, IStubFileElementType, PsiFile>>() {
-      @Override
-      public int compare(Trinity<Language, IStubFileElementType, PsiFile> o1, Trinity<Language, IStubFileElementType, PsiFile> o2) {
-        if (o1.third == stubBindingRoot) return o2.third == stubBindingRoot ? 0 : -1;
-        else if (o2.third == stubBindingRoot) return 1;
-        else return StringUtil.compare(o1.first.getID(), o2.first.getID(), false);
+    ContainerUtil.sort(roots, (o1, o2) -> {
+      if (o1.third == stubBindingRoot) {
+        return o2.third == stubBindingRoot ? 0 : -1;
+      }
+      else if (o2.third == stubBindingRoot) {
+        return 1;
+      }
+      else {
+        return StringUtil.compare(o1.first.getID(), o2.first.getID(), false);
       }
     });
 
-    return ContainerUtil.map(roots, new Function<Trinity<Language, IStubFileElementType, PsiFile>, Pair<IStubFileElementType, PsiFile>>() {
-      @Override
-      public Pair<IStubFileElementType, PsiFile> fun(Trinity<Language, IStubFileElementType, PsiFile> trinity) {
-        return Pair.create(trinity.second, trinity.third);
-      }
-    });
+    return ContainerUtil.map(roots, trinity -> Pair.create(trinity.second, trinity.third));
   }
 }

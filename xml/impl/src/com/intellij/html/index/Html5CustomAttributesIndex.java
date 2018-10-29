@@ -27,7 +27,7 @@ import com.intellij.openapi.fileTypes.StdFileTypes;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.xml.XmlTokenType;
-import com.intellij.util.containers.HashMap;
+import java.util.HashMap;
 import com.intellij.util.indexing.*;
 import com.intellij.util.io.EnumeratorStringDescriptor;
 import com.intellij.util.io.KeyDescriptor;
@@ -52,7 +52,7 @@ public class Html5CustomAttributesIndex extends ScalarIndexExtension<String> {
       if (language == HTMLLanguage.INSTANCE || language == XHTMLLanguage.INSTANCE) {
         final Lexer lexer = (language == HTMLLanguage.INSTANCE ? new HtmlHighlightingLexer(FileTypeManager.getInstance().getStdFileType("CSS")) : new XHtmlHighlightingLexer());
         lexer.start(input);
-        Map<String, Void> result = new HashMap<String, Void>();
+        Map<String, Void> result = new HashMap<>();
         IElementType tokenType = lexer.getTokenType();
         while (tokenType != null) {
           if (tokenType == XmlTokenType.XML_NAME) {

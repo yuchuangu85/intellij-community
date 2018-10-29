@@ -30,11 +30,10 @@ import java.util.*;
 
 /**
  * @author Eugene Zhuravlev
- * @since Jan 20, 2003
  */
 public class FileSetCompileScope extends ExportableUserDataHolderBase implements CompileScope {
-  private final Set<VirtualFile> myRootFiles = new HashSet<VirtualFile>();
-  private final Set<String> myDirectoryUrls = new HashSet<String>();
+  private final Set<VirtualFile> myRootFiles = new HashSet<>();
+  private final Set<String> myDirectoryUrls = new HashSet<>();
   private Set<String> myUrls = null; // urls caching
   private final Module[] myAffectedModules;
 
@@ -50,6 +49,7 @@ public class FileSetCompileScope extends ExportableUserDataHolderBase implements
     );
   }
 
+  @Override
   @NotNull
   public Module[] getAffectedModules() {
     return myAffectedModules;
@@ -59,9 +59,10 @@ public class FileSetCompileScope extends ExportableUserDataHolderBase implements
     return Collections.unmodifiableCollection(myRootFiles);
   }
 
+  @Override
   @NotNull
   public VirtualFile[] getFiles(final FileType fileType, boolean inSourceOnly) {
-    final List<VirtualFile> files = new ArrayList<VirtualFile>();
+    final List<VirtualFile> files = new ArrayList<>();
     for (Iterator<VirtualFile> it = myRootFiles.iterator(); it.hasNext();) {
       VirtualFile file = it.next();
       if (!file.isValid()) {
@@ -80,6 +81,7 @@ public class FileSetCompileScope extends ExportableUserDataHolderBase implements
     return VfsUtilCore.toVirtualFileArray(files);
   }
 
+  @Override
   public boolean belongs(String url) {
     //url = CompilerUtil.normalizePath(url, '/');
     if (getUrls().contains(url)) {
@@ -95,7 +97,7 @@ public class FileSetCompileScope extends ExportableUserDataHolderBase implements
 
   private Set<String> getUrls() {
     if (myUrls == null) {
-      myUrls = new HashSet<String>();
+      myUrls = new HashSet<>();
       for (VirtualFile file : myRootFiles) {
         String url = file.getUrl();
         myUrls.add(url);
@@ -112,7 +114,7 @@ public class FileSetCompileScope extends ExportableUserDataHolderBase implements
     myUrls = null;
   }
 
-  private static void addRecursively(final Collection<VirtualFile> container, VirtualFile fromDirectory, final FileType fileType) {
+  private static void addRecursively(final Collection<? super VirtualFile> container, VirtualFile fromDirectory, final FileType fileType) {
     VfsUtilCore.visitChildrenRecursively(fromDirectory, new VirtualFileVisitor(VirtualFileVisitor.SKIP_ROOT) {
       @Override
       public boolean visitFile(@NotNull VirtualFile child) {

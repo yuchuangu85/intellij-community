@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,21 +15,17 @@
  */
 package com.intellij.xdebugger.impl.frame;
 
-import com.intellij.ui.AppUIUtil;
 import com.intellij.util.ui.tree.TreeUtil;
-import com.intellij.xdebugger.XDebugSession;
-import com.intellij.xdebugger.XDebugSessionListener;
 import com.intellij.xdebugger.XExpression;
 import com.intellij.xdebugger.impl.XDebuggerUtilImpl;
 import com.intellij.xdebugger.impl.ui.tree.XDebuggerTreeInplaceEditor;
 import com.intellij.xdebugger.impl.ui.tree.nodes.WatchNode;
 import com.intellij.xdebugger.impl.ui.tree.nodes.WatchesRootNode;
 import com.intellij.xdebugger.impl.ui.tree.nodes.XDebuggerTreeNode;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import javax.swing.*;
+import java.awt.*;
 
 /**
  * @author nik
@@ -38,98 +34,50 @@ public class WatchInplaceEditor extends XDebuggerTreeInplaceEditor {
   private final WatchesRootNode myRootNode;
   private final XWatchesView myWatchesView;
   private final WatchNode myOldNode;
-  private WatchEditorSessionListener mySessionListener;
 
   public WatchInplaceEditor(@NotNull WatchesRootNode rootNode,
-                            @Nullable XDebugSession session,
                             XWatchesView watchesView,
                             WatchNode node,
-                            @NonNls String historyId,
                             @Nullable WatchNode oldNode) {
-    super((XDebuggerTreeNode)node, historyId);
+    super((XDebuggerTreeNode)node, "watch");
     myRootNode = rootNode;
     myWatchesView = watchesView;
     myOldNode = oldNode;
     myExpressionEditor.setExpression(oldNode != null ? oldNode.getExpression() : null);
-    if (session != null) {
-      mySessionListener = new WatchEditorSessionListener(session).install();
-    }
-  }
-
-  @Override
-  protected JComponent createInplaceEditorComponent() {
-    return myExpressionEditor.getComponent();
   }
 
   @Override
   public void cancelEditing() {
     if (!isShown()) return;
     super.cancelEditing();
-    int index = myRootNode.getIndex(getNode());
+    int index = myRootNode.getIndex(myNode);
     if (myOldNode == null && index != -1) {
-      myRootNode.removeChildNode(getNode());
+      myRootNode.removeChildNode(myNode);
     }
-    TreeUtil.selectNode(myTree, getNode());
+    TreeUtil.selectNode(myTree, myNode);
   }
 
   @Override
   public void doOKAction() {
-    XExpression expression = myExpressionEditor.getExpression();
-    myExpressionEditor.saveTextInHistory();
+    XExpression expression = getExpression();
     super.doOKAction();
-    int index = myRootNode.removeChildNode(getNode());
+    int index = myRootNode.removeChildNode(myNode);
     if (!XDebuggerUtilImpl.isEmptyExpression(expression) && index != -1) {
       myWatchesView.addWatchExpression(expression, index, false);
     }
-    TreeUtil.selectNode(myTree, getNode());
+    TreeUtil.selectNode(myTree, myNode);
   }
 
+  @Nullable
   @Override
-  protected void onHidden() {
-    super.onHidden();
-    if (mySessionListener != null) {
-      mySessionListener.remove();
+  protected Rectangle getEditorBounds() {
+    Rectangle bounds = super.getEditorBounds();
+    if (bounds == null) {
+      return null;
     }
-  }
-
-  private class WatchEditorSessionListener implements XDebugSessionListener {
-    private final XDebugSession mySession;
-
-    public WatchEditorSessionListener(@NotNull XDebugSession session) {
-      mySession = session;
-    }
-
-    public WatchEditorSessionListener install() {
-      mySession.addSessionListener(this);
-      return this;
-    }
-
-    public void remove() {
-      mySession.removeSessionListener(this);
-    }
-
-    private void cancel() {
-      AppUIUtil.invokeOnEdt(WatchInplaceEditor.this::cancelEditing);
-    }
-
-    @Override
-    public void sessionPaused() {
-      cancel();
-    }
-
-    @Override
-    public void beforeSessionResume() {
-      cancel();
-    }
-
-    @Override
-    public void sessionResumed() {
-      cancel();
-    }
-
-    @Override
-    public void sessionStopped() {
-      cancel();
-    }
+    int afterIconX = getAfterIconX();
+    bounds.x += afterIconX;
+    bounds.width -= afterIconX;
+    return bounds;
   }
 }

@@ -17,7 +17,6 @@ package com.intellij.openapi.diff.impl;
 
 import com.intellij.execution.ui.RunnerLayoutUi;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.actionSystem.PlatformDataKeys;
 import com.intellij.openapi.diff.DiffRequest;
 import com.intellij.openapi.diff.DiffViewer;
 import com.intellij.openapi.diff.DiffViewerType;
@@ -27,25 +26,18 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Pair;
 import com.intellij.ui.content.Content;
-import com.intellij.util.containers.HashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 
-/**
- * Created with IntelliJ IDEA.
- * User: Irina.Chernushina
- * Date: 2/13/12
- * Time: 1:59 PM
- */
 public class CompositeDiffPanel implements DiffViewer {
+  private final static String ourDefaultTab = "Contents";
   private final static String FICTIVE_KEY = "FICTIVE_KEY";
-  private final static int ourBadHackMagicContentsNumber = 101;
   private final RunnerLayoutUi myUi;
   private final DiscloseMultiRequest myRequest;
   private final Window myWindow;
@@ -60,7 +52,7 @@ public class CompositeDiffPanel implements DiffViewer {
     myUi.getComponent().setBorder(null);
     myUi.getOptions().setMinimizeActionEnabled(false);
     //myUi.getOptions().setTopToolbar()
-    myMap = new HashMap<String, Pair<DiffViewer, Content>>();
+    myMap = new HashMap<>();
   }
 
   @Override
@@ -70,17 +62,16 @@ public class CompositeDiffPanel implements DiffViewer {
 
   @Override
   public void setDiffRequest(DiffRequest request) {
-    final Map<String, DiffRequest> requestMap = myRequest.discloseRequest(request);
+    final Map<String, DiffRequest> requestMap = Collections.singletonMap(ourDefaultTab, request);
 
-    HashMap<String, Pair<DiffViewer, Content>> mapCopy = new HashMap<String, Pair<DiffViewer, Content>>(myMap);
+    HashMap<String, Pair<DiffViewer, Content>> mapCopy = new HashMap<>(myMap);
     myMap.clear();
 
     for (Map.Entry<String, DiffRequest> entry : requestMap.entrySet()) {
       final String key = entry.getKey();
       final DiffRequest diffRequest = entry.getValue();
-      diffRequest.getGenericData().put(PlatformDataKeys.COMPOSITE_DIFF_VIEWER.getName(), this);
       final Pair<DiffViewer, Content> pair = mapCopy.get(key);
-      DiffViewer viewer = pair != null ? pair.first : null;
+      DiffViewer viewer = Pair.getFirst(pair);
       if (viewer != null && viewer.acceptsType(diffRequest.getType()) && viewer.canShowRequest(diffRequest)) {
         viewer.setDiffRequest(diffRequest);
         myMap.put(key, pair);
@@ -106,7 +97,7 @@ public class CompositeDiffPanel implements DiffViewer {
       content.setPinned(true);
       content.setDisposer(myParentDisposable);
       myUi.addContent(content);
-      myMap.put(FICTIVE_KEY, Pair.<DiffViewer, Content>create(errorDiffViewer, content));
+      myMap.put(FICTIVE_KEY, Pair.create(errorDiffViewer, content));
     }
 
     for (Pair<DiffViewer, Content> pair : mapCopy.values()) {
@@ -129,12 +120,7 @@ public class CompositeDiffPanel implements DiffViewer {
   }
 
   @Override
-  public int getContentsNumber() {
-    return ourBadHackMagicContentsNumber;
-  }
-
-  @Override
   public boolean acceptsType(DiffViewerType type) {
-    return DiffViewerType.multiLayer.equals(type) || DiffViewerType.contents.equals(type) || DiffViewerType.merge.equals(type);
+    return DiffViewerType.contents.equals(type) || DiffViewerType.merge.equals(type);
   }
 }

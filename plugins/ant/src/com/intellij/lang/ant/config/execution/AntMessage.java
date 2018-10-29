@@ -15,9 +15,9 @@
  */
 package com.intellij.lang.ant.config.execution;
 
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.ArrayUtil;
-import com.intellij.util.StringBuilderSpinAllocator;
 
 import java.util.ArrayList;
 import java.util.StringTokenizer;
@@ -38,7 +38,7 @@ public final class AntMessage {
     myLine = line;
     myColumn = column;
     myText = text;
-    ArrayList<String> lines = new ArrayList<String>();
+    ArrayList<String> lines = new ArrayList<>();
     StringTokenizer tokenizer = new StringTokenizer(myText, "\r\n");
     while (tokenizer.hasMoreTokens()) {
       lines.add(tokenizer.nextToken());
@@ -53,17 +53,7 @@ public final class AntMessage {
     myLine = line;
     myColumn = column;
     myTextLines = lines;
-    final StringBuilder builder = StringBuilderSpinAllocator.alloc();
-    try {
-      for (final String aLine : lines) {
-        builder.append(aLine);
-        builder.append('\n');
-      }
-      myText = builder.toString();
-    }
-    finally {
-      StringBuilderSpinAllocator.dispose(builder);
-    }
+    myText = StringUtil.join(lines, "\n");
   }
 
   public AntBuildMessageView.MessageType getType() {

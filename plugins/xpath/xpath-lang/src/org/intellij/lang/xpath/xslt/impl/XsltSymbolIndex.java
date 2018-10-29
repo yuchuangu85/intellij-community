@@ -43,11 +43,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-/*
-* Created by IntelliJ IDEA.
-* User: sweinreuter
-* Date: 15.12.2008
-*/
 public class XsltSymbolIndex extends FileBasedIndexExtension<String, XsltSymbolIndex.Kind> {
     @NonNls
     public static final ID<String, Kind> NAME = ID.create("XsltSymbolIndex");
@@ -81,7 +76,7 @@ public class XsltSymbolIndex extends FileBasedIndexExtension<String, XsltSymbolI
                 if (CharArrayUtil.indexOf(inputDataContentAsText, XsltSupport.XSLT_NS, 0) == -1) {
                   return Collections.emptyMap();
                 }
-                final HashMap<String, Kind> map = new HashMap<String, Kind>();
+                final HashMap<String, Kind> map = new HashMap<>();
                 NanoXmlUtil.parse(CharArrayUtil.readerFromCharSequence(inputData.getContentAsText()), new NanoXmlUtil.IXMLBuilderAdapter() {
                     NanoXmlUtil.IXMLBuilderAdapter attributeHandler;
                     int depth;
@@ -122,7 +117,7 @@ public class XsltSymbolIndex extends FileBasedIndexExtension<String, XsltSymbolI
     @NotNull
     @Override
     public DataExternalizer<Kind> getValueExternalizer() {
-        return new EnumDataDescriptor<Kind>(Kind.class);
+        return new EnumDataDescriptor<>(Kind.class);
     }
 
     @NotNull
@@ -184,7 +179,7 @@ public class XsltSymbolIndex extends FileBasedIndexExtension<String, XsltSymbolI
         private final HashMap<String, Kind> myMap;
         private final Kind myKind;
 
-        public MyAttributeHandler(HashMap<String, Kind> map, Kind k) {
+        MyAttributeHandler(HashMap<String, Kind> map, Kind k) {
             myMap = map;
             myKind = k;
         }
@@ -204,16 +199,16 @@ public class XsltSymbolIndex extends FileBasedIndexExtension<String, XsltSymbolI
         private final PsiManager myMgr;
         private final String myName;
 
-        private final Collection<NavigationItem> myResult = new ArrayList<NavigationItem>();
+        private final Collection<NavigationItem> myResult = new ArrayList<>();
 
-        public SymbolCollector(String name, Project project, GlobalSearchScope scope) {
+        SymbolCollector(String name, Project project, GlobalSearchScope scope) {
             myMgr = PsiManager.getInstance(project);
             myScope = scope;
             myName = name;
         }
 
         @Override
-        public boolean process(VirtualFile file, Kind kind) {
+        public boolean process(@NotNull VirtualFile file, Kind kind) {
             if (myScope.contains(file)) {
                 final PsiFile psiFile = myMgr.findFile(file);
                 if (psiFile != null && XsltSupport.isXsltFile(psiFile)) {
@@ -250,7 +245,7 @@ public class XsltSymbolIndex extends FileBasedIndexExtension<String, XsltSymbolI
         }
 
         public NavigationItem[] getResult() {
-            return myResult.toArray(new NavigationItem[myResult.size()]);
+            return myResult.toArray(NavigationItem.EMPTY_NAVIGATION_ITEM_ARRAY);
         }
     }
 }

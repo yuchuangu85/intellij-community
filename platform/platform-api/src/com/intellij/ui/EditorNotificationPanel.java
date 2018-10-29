@@ -24,8 +24,10 @@ import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.EditorBundle;
+import com.intellij.openapi.editor.colors.ColorKey;
 import com.intellij.openapi.editor.colors.EditorColors;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
+import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Iconable;
 import com.intellij.openapi.util.Weighted;
@@ -54,7 +56,19 @@ import java.util.List;
 public class EditorNotificationPanel extends JPanel implements IntentionActionProvider, Weighted {
   protected final JLabel myLabel = new JLabel();
   protected final JLabel myGearLabel = new JLabel();
-  protected final JPanel myLinksPanel = new NonOpaquePanel(new HorizontalLayout(JBUI.scale(5)));
+  protected final JPanel myLinksPanel = new NonOpaquePanel(new HorizontalLayout(JBUI.scale(16)));
+  protected Color myBackgroundColor;
+  protected ColorKey myBackgroundColorKey;
+
+  public EditorNotificationPanel(@Nullable Color backgroundColor) {
+    this();
+    myBackgroundColor = backgroundColor;
+  }
+
+  public EditorNotificationPanel(@Nullable ColorKey backgroundColorKey) {
+    this();
+    myBackgroundColorKey = backgroundColorKey;
+  }
 
   public EditorNotificationPanel() {
     super(new BorderLayout());
@@ -68,6 +82,10 @@ public class EditorNotificationPanel extends JPanel implements IntentionActionPr
     add(BorderLayout.CENTER, panel);
     add(BorderLayout.EAST, myGearLabel);
     setBorder(JBUI.Borders.empty(0, 10));
+  }
+
+  public static Color getToolbarBackground() {
+    return UIUtil.getPanelBackground();
   }
 
   public void setText(String text) {
@@ -86,8 +104,14 @@ public class EditorNotificationPanel extends JPanel implements IntentionActionPr
 
   @Override
   public Color getBackground() {
-    Color color = EditorColorsManager.getInstance().getGlobalScheme().getColor(EditorColors.NOTIFICATION_BACKGROUND);
-    return color == null ? UIUtil.getToolTipBackground() : color;
+    EditorColorsScheme globalScheme = EditorColorsManager.getInstance().getGlobalScheme();
+    if (myBackgroundColor != null) return myBackgroundColor;
+    if (myBackgroundColorKey != null) {
+      Color color = globalScheme.getColor(myBackgroundColorKey);
+      if (color != null) return color;
+    }
+    Color color = globalScheme.getColor(EditorColors.NOTIFICATION_BACKGROUND);
+    return color != null ? color : UIUtil.getToolTipBackground();
   }
 
   public HyperlinkLabel createActionLabel(final String text, @NonNls final String actionId) {
@@ -131,7 +155,7 @@ public class EditorNotificationPanel extends JPanel implements IntentionActionPr
   }
 
   private class MyIntentionAction extends AbstractEmptyIntentionAction implements IntentionActionWithOptions, Iconable {
-    private final List<IntentionAction> myOptions = new ArrayList<IntentionAction>();
+    private final List<IntentionAction> myOptions = new ArrayList<>();
 
     private MyIntentionAction() {
       for (Component component : myLinksPanel.getComponents()) {

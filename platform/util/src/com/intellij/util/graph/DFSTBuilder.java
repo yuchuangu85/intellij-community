@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,27 +23,63 @@ import com.intellij.util.containers.Stack;
 import gnu.trove.TIntArrayList;
 import gnu.trove.TObjectIntHashMap;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
 /**
- *  @author dsl, ven
+ * @author dsl, ven
  */
 public class DFSTBuilder<Node> {
-  private final Graph<Node> myGraph;
+  private final OutboundSemiGraph<Node> myGraph;
   private final TObjectIntHashMap<Node> myNodeToNNumber; // node -> node number in topological order [0..size). Independent nodes are in reversed loading order (loading order is the graph.getNodes() order)
   private final Node[] myInvN; // node number in topological order [0..size) -> node
   private Couple<Node> myBackEdge;
 
-  private Comparator<Node> myComparator;
+  private Comparator<Node> myNComparator;
+  private Comparator<Node> myTComparator;
   private final TIntArrayList mySCCs = new TIntArrayList(); // strongly connected component sizes
   private final TObjectIntHashMap<Node> myNodeToTNumber = new TObjectIntHashMap<Node>(); // node -> number in scc topological order. Independent scc are in reversed loading order
 
   private final Node[] myInvT; // number in (enumerate all nodes scc by scc) order -> node
   private final Node[] myAllNodes;
 
+
+  /**
+   * @see DFSTBuilder#DFSTBuilder(OutboundSemiGraph, Object)
+   */
   public DFSTBuilder(@NotNull Graph<Node> graph) {
+    this(graph, null);
+  }
+
+  /**
+   * @see DFSTBuilder#DFSTBuilder(OutboundSemiGraph, Object)
+   */
+  public DFSTBuilder(@NotNull Graph<Node> graph, @Nullable Node entryNode) {
+    this((OutboundSemiGraph<Node>)graph, entryNode);
+  }
+
+  /**
+   * @see DFSTBuilder#DFSTBuilder(OutboundSemiGraph, Object)
+   */
+  public DFSTBuilder(@NotNull OutboundSemiGraph<Node> graph) {
+    this(graph, null);
+  }
+
+  /**
+   * @param entryNode is a first node for Tarjan's algorithm. Different entry nodes produce different node numbers in topological ordering.
+   *                  if all nodes of the graph is reachable from the entry node and the entry node doesn't have incoming edges then
+   *                  passing the entry node could be used for finding "natural" back edges (like a loop back edge)
+   */
+  @SuppressWarnings("unchecked")
+  public DFSTBuilder(@NotNull OutboundSemiGraph<Node> graph, @Nullable Node entryNode) {
     myAllNodes = (Node[])graph.getNodes().toArray();
+    if (entryNode != null) {
+      int index = ArrayUtil.indexOf(myAllNodes, entryNode);
+      if (index != -1) {
+        ArrayUtil.swap(myAllNodes, 0, index);
+      }
+    }
     myGraph = graph;
     int size = graph.getNodes().size();
     myNodeToNNumber = new TObjectIntHashMap<Node>(size * 2, 0.5f);
@@ -52,17 +88,13 @@ public class DFSTBuilder<Node> {
     new Tarjan().build();
   }
 
-  @Deprecated
-  public void buildDFST() {
-  }
-
   /**
-   * Tarjan strong-connect-components search algorithm.
-   * See e.g. <a href="https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm">https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm</a><br>
-   * This implementation differs from the canonical one above by<br>
+   * Tarjan's strongly connected components search algorithm
+   * (<a href="https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm">Wikipedia article</a>).<br>
+   * This implementation differs from the canonical one above by:<br>
    * <ul>
-   *   <li>- being not recursive</li>
-   *   <li>- computing also topological order during the same single pass</li>
+   *   <li>being non-recursive</li>
+   *   <li>also computing a topological order during the same single pass</li>
    * </ul>
    */
   private class Tarjan {
@@ -73,7 +105,7 @@ public class DFSTBuilder<Node> {
     private final boolean[] isOnStack = new boolean[index.length];
 
     private class Frame {
-      public Frame(int nodeI) {
+      Frame(int nodeI) {
         this.nodeI = nodeI;
         Iterator<Node> outNodes = myGraph.getOut(myAllNodes[nodeI]);
         TIntArrayList list = new TIntArrayList();
@@ -91,11 +123,10 @@ public class DFSTBuilder<Node> {
 
       @Override
       public String toString() {
-        final StringBuilder o = new StringBuilder();
-        for (int id : out) {
-          o.append(myAllNodes[id] + ", ");
-        }
-        return myAllNodes[nodeI] + " -> [" + o + "]";
+        StringBuilder o = new StringBuilder();
+        o.append(myAllNodes[nodeI]).append(" -> [");
+        for (int id : out) o.append(myAllNodes[id]).append(", ");
+        return o.append(']').toString();
       }
     }
 
@@ -149,10 +180,10 @@ public class DFSTBuilder<Node> {
         myNodeToNNumber.put(node, index.length - 1 - i);
         myInvN[index.length - 1 - i] = node;
       }
-      mySCCs.reverse(); // have to place sccs in topological order too
+      mySCCs.reverse(); // have to place SCCs in topological order too
     }
 
-    private void strongConnect(@NotNull List<List<Node>> sccs) {
+    private void strongConnect(@NotNull List<? super List<Node>> sccs) {
       int successor = -1;
       nextNode:
       while (!frames.isEmpty()) {
@@ -174,7 +205,7 @@ public class DFSTBuilder<Node> {
         successor = i;
 
         // if unexplored children left, dfs there
-        while (pair.nextUnexploredIndex<pair.out.length) {
+        while (pair.nextUnexploredIndex < pair.out.length) {
           int nextI = pair.out[pair.nextUnexploredIndex++];
           if (index[nextI] == -1) {
             frames.push(new Frame(nextI));
@@ -210,16 +241,37 @@ public class DFSTBuilder<Node> {
 
   @NotNull
   public Comparator<Node> comparator() {
-    if (myComparator == null) {
-      final TObjectIntHashMap<Node> map = isAcyclic() ? myNodeToNNumber : myNodeToTNumber;
-      myComparator = new Comparator<Node>() {
-        @Override
-        public int compare(@NotNull Node t, @NotNull Node t1) {
-          return map.get(t) - map.get(t1);
-        }
-      };
+    return comparator(isAcyclic());
+  }
+
+  /**
+   * @param useNNumber if true then a node number in topological ordering will be used for comparison
+   *           otherwise a node number in scc topological order will be used
+   */
+  @NotNull
+  public Comparator<Node> comparator(boolean useNNumber) {
+    if (useNNumber) {
+      if (myNComparator == null) {
+        myNComparator = new Comparator<Node>() {
+          @Override
+          public int compare(@NotNull Node t, @NotNull Node t1) {
+            return myNodeToNNumber.get(t) - myNodeToNNumber.get(t1);
+          }
+        };
+      }
+      return myNComparator;
     }
-    return myComparator;
+    else {
+      if (myTComparator == null) {
+        myTComparator = new Comparator<Node>() {
+          @Override
+          public int compare(@NotNull Node t, @NotNull Node t1) {
+            return myNodeToTNumber.get(t) - myNodeToTNumber.get(t1);
+          }
+        };
+      }
+      return myTComparator;
+    }
   }
 
   public Couple<Node> getCircularDependency() {
@@ -247,6 +299,82 @@ public class DFSTBuilder<Node> {
   @NotNull
   public TIntArrayList getSCCs() {
     return mySCCs;
+  }
+
+  @NotNull
+  public Collection<Collection<Node>> getComponents() {
+    final TIntArrayList componentSizes = getSCCs();
+    if (componentSizes.isEmpty()) return Collections.emptyList();
+
+    return new MyCollection<Collection<Node>>(componentSizes.size()) {
+      @NotNull
+      @Override
+      public Iterator<Collection<Node>> iterator() {
+        return new MyIterator<Collection<Node>>(componentSizes.size()) {
+          private int offset;
+
+          @Override
+          protected Collection<Node> get(int i) {
+            final int cSize = componentSizes.get(i);
+            final int cOffset = offset;
+            if (cSize == 0) return Collections.emptyList();
+            offset += cSize;
+            return new MyCollection<Node>(cSize) {
+              @NotNull
+              @Override
+              public Iterator<Node> iterator() {
+                return new MyIterator<Node>(cSize) {
+                  @Override
+                  public Node get(int i) {
+                    return getNodeByTNumber(cOffset + i);
+                  }
+                };
+              }
+            };
+          }
+        };
+      }
+    };
+  }
+
+  private abstract static class MyCollection<T> extends AbstractCollection<T> {
+    private final int size;
+
+    protected MyCollection(int size) {
+      this.size = size;
+    }
+
+    @Override
+    public int size() {
+      return size;
+    }
+  }
+
+  private abstract static class MyIterator<T> implements Iterator<T> {
+    private final int size;
+    private int i;
+
+    protected MyIterator(int size) {
+      this.size = size;
+    }
+
+    @Override
+    public boolean hasNext() {
+      return i < size;
+    }
+
+    @Override
+    public T next() {
+      if (i == size) throw new NoSuchElementException();
+      return get(i++);
+    }
+
+    protected abstract T get(int i);
+
+    @Override
+    public void remove() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   @NotNull

@@ -47,7 +47,7 @@ public class InitializationUtils {
   }
 
   public static boolean blockAssignsVariableOrFails(@Nullable PsiCodeBlock block, @NotNull PsiVariable variable, boolean strict) {
-    return blockAssignsVariableOrFails(block, variable, new HashSet<MethodSignature>(), strict);
+    return blockAssignsVariableOrFails(block, variable, new HashSet<>(), strict);
   }
 
   private static boolean blockAssignsVariableOrFails(@Nullable PsiCodeBlock block, @NotNull PsiVariable variable,
@@ -352,13 +352,9 @@ public class InitializationUtils {
       return expressionAssignsVariableOrFails(accessExpression.getArrayExpression(), variable, checkedMethods, strict) ||
              expressionAssignsVariableOrFails(accessExpression.getIndexExpression(), variable, checkedMethods, strict);
     }
-    else if (expression instanceof PsiPrefixExpression) {
-      final PsiPrefixExpression prefixExpression = (PsiPrefixExpression)expression;
-      return expressionAssignsVariableOrFails(prefixExpression.getOperand(), variable, checkedMethods, strict);
-    }
-    else if (expression instanceof PsiPostfixExpression) {
-      final PsiPostfixExpression postfixExpression = (PsiPostfixExpression)expression;
-      return expressionAssignsVariableOrFails(postfixExpression.getOperand(), variable, checkedMethods, strict);
+    else if (expression instanceof PsiUnaryExpression) {
+      final PsiUnaryExpression unaryOperation = (PsiUnaryExpression)expression;
+      return expressionAssignsVariableOrFails(unaryOperation.getOperand(), variable, checkedMethods, strict);
     }
     else if (expression instanceof PsiPolyadicExpression) {
       final PsiPolyadicExpression polyadicExpression = (PsiPolyadicExpression)expression;

@@ -16,6 +16,7 @@
 
 package com.intellij.refactoring.ui;
 
+import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataKey;
 import com.intellij.openapi.actionSystem.DataSink;
@@ -50,7 +51,7 @@ public abstract class AbstractMemberSelectionTable<T extends PsiElement, M exten
   protected static final int CHECKED_COLUMN = 0;
   protected static final int DISPLAY_NAME_COLUMN = 1;
   protected static final int ABSTRACT_COLUMN = 2;
-  protected static final Icon EMPTY_OVERRIDE_ICON = EmptyIcon.ICON_16;
+  protected static final Icon EMPTY_OVERRIDE_ICON = EmptyIcon.create(AllIcons.General.OverridingMethod);
   protected static final String DISPLAY_NAME_COLUMN_HEADER = RefactoringBundle.message("member.column");
   protected static final int OVERRIDE_ICON_POSITION = 2;
   protected static final int VISIBILITY_ICON_POSITION = 1;
@@ -65,28 +66,28 @@ public abstract class AbstractMemberSelectionTable<T extends PsiElement, M exten
   public AbstractMemberSelectionTable(Collection<M> memberInfos, @Nullable MemberInfoModel<T, M> memberInfoModel, @Nullable String abstractColumnHeader) {
     myAbstractEnabled = abstractColumnHeader != null;
     myAbstractColumnHeader = abstractColumnHeader;
-    myTableModel = new MyTableModel<T, M>(this);
+    myTableModel = new MyTableModel<>(this);
 
-    myMemberInfos = new ArrayList<M>(memberInfos);
+    myMemberInfos = new ArrayList<>(memberInfos);
     if (memberInfoModel != null) {
       myMemberInfoModel = memberInfoModel;
     }
     else {
-      myMemberInfoModel = new DefaultMemberInfoModel<T, M>();
+      myMemberInfoModel = new DefaultMemberInfoModel<>();
     }
 
     setModel(myTableModel);
 
     TableColumnModel model = getColumnModel();
-    model.getColumn(DISPLAY_NAME_COLUMN).setCellRenderer(new MyTableRenderer<T, M>(this));
+    model.getColumn(DISPLAY_NAME_COLUMN).setCellRenderer(new MyTableRenderer<>(this));
     TableColumn checkBoxColumn = model.getColumn(CHECKED_COLUMN);
     TableUtil.setupCheckboxColumn(checkBoxColumn);
-    checkBoxColumn.setCellRenderer(new MyBooleanRenderer<T, M>(this));
+    checkBoxColumn.setCellRenderer(new MyBooleanRenderer<>(this));
     if (myAbstractEnabled) {
       int width = (int)(1.3 * getFontMetrics(getFont()).charsWidth(myAbstractColumnHeader.toCharArray(), 0, myAbstractColumnHeader.length()));
       model.getColumn(ABSTRACT_COLUMN).setMaxWidth(width);
       model.getColumn(ABSTRACT_COLUMN).setPreferredWidth(width);
-      model.getColumn(ABSTRACT_COLUMN).setCellRenderer(new MyBooleanRenderer<T, M>(this));
+      model.getColumn(ABSTRACT_COLUMN).setCellRenderer(new MyBooleanRenderer<>(this));
     }
 
     setPreferredScrollableViewportSize(new Dimension(400, getRowHeight() * 12));
@@ -99,7 +100,7 @@ public abstract class AbstractMemberSelectionTable<T extends PsiElement, M exten
   }
 
   public Collection<M> getSelectedMemberInfos() {
-    ArrayList<M> list = new ArrayList<M>(myMemberInfos.size());
+    ArrayList<M> list = new ArrayList<>(myMemberInfos.size());
     for (M info : myMemberInfos) {
       if (isMemberInfoSelected(info)) {
 //      if (info.isChecked() || (!myMemberInfoModel.isMemberEnabled(info) && myMemberInfoModel.isCheckedWhenDisabled(info))) {
@@ -135,7 +136,7 @@ public abstract class AbstractMemberSelectionTable<T extends PsiElement, M exten
   }
 
   public void setMemberInfos(Collection<M> memberInfos) {
-    myMemberInfos = new ArrayList<M>(memberInfos);
+    myMemberInfos = new ArrayList<>(memberInfos);
     fireMemberInfoChange(memberInfos);
     myTableModel.fireTableDataChanged();
   }
@@ -147,7 +148,7 @@ public abstract class AbstractMemberSelectionTable<T extends PsiElement, M exten
   protected void fireMemberInfoChange(Collection<M> changedMembers) {
     Object[] list = listenerList.getListenerList();
 
-    MemberInfoChange<T, M> event = new MemberInfoChange<T, M>(changedMembers);
+    MemberInfoChange<T, M> event = new MemberInfoChange<>(changedMembers);
     for (Object element : list) {
       if (element instanceof MemberInfoChangeListener) {
         @SuppressWarnings("unchecked") final MemberInfoChangeListener<T, M> changeListener = (MemberInfoChangeListener<T, M>)element;
@@ -157,10 +158,10 @@ public abstract class AbstractMemberSelectionTable<T extends PsiElement, M exten
   }
 
   @Override
-  public void calcData(final DataKey key, final DataSink sink) {
+  public void calcData(@NotNull final DataKey key, @NotNull final DataSink sink) {
     if (key == CommonDataKeys.PSI_ELEMENT) {
       final Collection<M> memberInfos = getSelectedMemberInfos();
-      if (memberInfos.size() > 0) {
+      if (!memberInfos.isEmpty()) {
         sink.put(CommonDataKeys.PSI_ELEMENT, memberInfos.iterator().next().getMember());
       }
     }
@@ -219,7 +220,7 @@ public abstract class AbstractMemberSelectionTable<T extends PsiElement, M exten
     }
 
     @Override
-    public void memberInfoChanged(MemberInfoChange<T, M> event) {
+    public void memberInfoChanged(@NotNull MemberInfoChange<T, M> event) {
     }
 
     @Override
@@ -340,7 +341,7 @@ public abstract class AbstractMemberSelectionTable<T extends PsiElement, M exten
 
     @Override
     protected void applyValue(int[] rows, boolean valueToBeSet) {
-      List<M> changedInfo = new ArrayList<M>();
+      List<M> changedInfo = new ArrayList<>();
       for (int row : rows) {
         final M memberInfo = myMemberInfos.get(row);
         memberInfo.setChecked(valueToBeSet);
@@ -364,7 +365,7 @@ public abstract class AbstractMemberSelectionTable<T extends PsiElement, M exten
   private static class MyTableRenderer<T extends PsiElement, M extends MemberInfoBase<T>> extends ColoredTableCellRenderer {
     private final AbstractMemberSelectionTable<T, M> myTable;
 
-    public MyTableRenderer(AbstractMemberSelectionTable<T, M> table) {
+    MyTableRenderer(AbstractMemberSelectionTable<T, M> table) {
       myTable = table;
     }
 
@@ -375,23 +376,17 @@ public abstract class AbstractMemberSelectionTable<T extends PsiElement, M exten
       final int modelColumn = myTable.convertColumnIndexToModel(column);
       final M memberInfo = myTable.myMemberInfos.get(row);
       setToolTipText(myTable.myMemberInfoModel.getTooltipText(memberInfo));
-      switch (modelColumn) {
-        case DISPLAY_NAME_COLUMN:
-          {
-            Icon memberIcon = myTable.getMemberIcon(memberInfo, 0);
-            Icon overrideIcon = myTable.getOverrideIcon(memberInfo);
-
-            RowIcon icon = new RowIcon(3);
-            icon.setIcon(memberIcon, MEMBER_ICON_POSITION);
-            myTable.setVisibilityIcon(memberInfo, icon);
-            icon.setIcon(overrideIcon, OVERRIDE_ICON_POSITION);
-            setIcon(icon);
-            break;
-          }
-        default:
-          {
-            setIcon(null);
-          }
+      if (modelColumn == DISPLAY_NAME_COLUMN) {
+        Icon memberIcon = myTable.getMemberIcon(memberInfo, 0);
+        Icon overrideIcon = myTable.getOverrideIcon(memberInfo);
+        RowIcon icon = new RowIcon(3);
+        icon.setIcon(memberIcon, MEMBER_ICON_POSITION);
+        myTable.setVisibilityIcon(memberInfo, icon);
+        icon.setIcon(overrideIcon, OVERRIDE_ICON_POSITION);
+        setIcon(icon);
+      }
+      else {
+        setIcon(null);
       }
       setIconOpaque(false);
       setOpaque(false);
@@ -419,7 +414,7 @@ public abstract class AbstractMemberSelectionTable<T extends PsiElement, M exten
   private static class MyBooleanRenderer<T extends PsiElement, M extends MemberInfoBase<T>> extends BooleanTableCellRenderer {
     private final AbstractMemberSelectionTable<T, M> myTable;
 
-    public MyBooleanRenderer(AbstractMemberSelectionTable<T, M> table) {
+    MyBooleanRenderer(AbstractMemberSelectionTable<T, M> table) {
       myTable = table;
     }
 

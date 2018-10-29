@@ -33,8 +33,9 @@ public class GroupSettingsBuilder<T> implements CompositeSettingsBuilder<T> {
     myGroup = group;
   }
 
+  @Override
   public Collection<SettingsEditor<T>> getEditors() {
-    List<SettingsEditor<T>> result = new ArrayList<SettingsEditor<T>>();
+    List<SettingsEditor<T>> result = new ArrayList<>();
     List<Pair<String,SettingsEditor<T>>> editors = myGroup.getEditors();
     for (int i = 0; i < editors.size(); i++) {
       result.add(editors.get(i).getSecond());
@@ -42,6 +43,7 @@ public class GroupSettingsBuilder<T> implements CompositeSettingsBuilder<T> {
     return result;
   }
 
+  @Override
   public JComponent createCompoundEditor() {
     if (myComponent == null) {
       myComponent = doCreateComponent();
@@ -62,6 +64,7 @@ public class GroupSettingsBuilder<T> implements CompositeSettingsBuilder<T> {
       tabs.add(pair.getFirst(), panel);
     }
 
+    tabs.putClientProperty("JTabbedPane.hasFullBorder", Boolean.TRUE);
     return tabs;
   }
 

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.impl.statements;
 
 import com.intellij.lang.ASTNode;
@@ -20,9 +6,7 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
-import com.intellij.psi.scope.ElementClassHint;
 import com.intellij.psi.scope.PsiScopeProcessor;
-import com.intellij.psi.stubs.EmptyStub;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -46,29 +30,29 @@ import org.jetbrains.plugins.groovy.lang.psi.api.types.GrTypeElement;
 import org.jetbrains.plugins.groovy.lang.psi.impl.GrStubElementBase;
 import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyPsiElementImpl;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil;
+import org.jetbrains.plugins.groovy.lang.psi.stubs.GrVariableDeclarationStub;
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 import org.jetbrains.plugins.groovy.lang.resolve.ResolveUtil;
 
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+
+import static org.jetbrains.plugins.groovy.lang.resolve.ResolveUtilKt.shouldProcessLocals;
 
 /**
  * @author: Dmitry.Krasilschikov
  */
-public class GrVariableDeclarationImpl extends GrStubElementBase<EmptyStub> implements GrVariableDeclaration, StubBasedPsiElement<EmptyStub> {
+public class GrVariableDeclarationImpl extends GrStubElementBase<GrVariableDeclarationStub>
+  implements GrVariableDeclaration, StubBasedPsiElement<GrVariableDeclarationStub>, PsiListLikeElement {
+
   private static final Logger LOG = Logger.getInstance(GrVariableDeclarationImpl.class);
 
   public GrVariableDeclarationImpl(@NotNull ASTNode node) {
     super(node);
   }
 
-  public GrVariableDeclarationImpl(EmptyStub stub) {
+  public GrVariableDeclarationImpl(@NotNull GrVariableDeclarationStub stub) {
     super(stub, GroovyElementTypes.VARIABLE_DEFINITION);
-  }
-
-  @Override
-  public PsiElement getParent() {
-    return getDefinitionParent();
   }
 
   @Override
@@ -164,26 +148,27 @@ public class GrVariableDeclarationImpl extends GrStubElementBase<EmptyStub> impl
   @Override
   @Nullable
   public GrTypeElement getTypeElementGroovy() {
+    GrVariableDeclarationStub stub = getStub();
+    if (stub != null) {
+      return stub.getTypeElement();
+    }
     if (isTuple()) return null;
     return findChildByClass(GrTypeElement.class);
   }
 
   @Override
-  public void accept(GroovyElementVisitor visitor) {
+  public void accept(@NotNull GroovyElementVisitor visitor) {
     visitor.visitVariableDeclaration(this);
   }
 
+  @Override
   public String toString() {
     return "Variable definitions";
   }
 
   @Override
   public GrMember[] getMembers() {
-    List<GrMember> result = new ArrayList<GrMember>();
-    for (PsiElement cur = getFirstChild(); cur != null; cur = cur.getNextSibling()) {
-      if (cur instanceof GrMember) result.add((GrMember)cur);
-    }
-    return result.toArray(new GrMember[result.size()]);
+    return findChildrenByClass(GrMember.class);
   }
 
   @Override
@@ -197,7 +182,7 @@ public class GrVariableDeclarationImpl extends GrStubElementBase<EmptyStub> impl
                                      @NotNull ResolveState state,
                                      @Nullable PsiElement lastParent,
                                      @NotNull PsiElement place) {
-    if (!ResolveUtil.shouldProcessProperties(processor.getHint(ElementClassHint.KEY))) return true;
+    if (!shouldProcessLocals(processor)) return true;
 
     if (lastParent != null && !(getParent() instanceof GrTypeDefinitionBody) && lastParent == getTupleInitializer()) {
       return true;
@@ -231,10 +216,10 @@ public class GrVariableDeclarationImpl extends GrStubElementBase<EmptyStub> impl
   private PsiElement findSuitableModifier() {
     final GrModifierList list = getModifierList();
 
-    PsiElement defModifier = PsiUtil.findModifierInList(list, GrModifier.DEF);
+    PsiElement defModifier = list.getModifier(GrModifier.DEF);
     if (defModifier != null) return defModifier;
 
-    PsiElement finalModifier = PsiUtil.findModifierInList(list, PsiModifier.FINAL);
+    PsiElement finalModifier = list.getModifier(PsiModifier.FINAL);
     if (finalModifier != null) return finalModifier;
 
     for (PsiElement element : list.getModifiers()) {
@@ -247,7 +232,7 @@ public class GrVariableDeclarationImpl extends GrStubElementBase<EmptyStub> impl
   }
 
   private class GrTypeReference extends PsiReferenceBase<GrVariableDeclaration> {
-    public GrTypeReference(TextRange range) {
+    GrTypeReference(TextRange range) {
       super(GrVariableDeclarationImpl.this, range, true);
     }
 
@@ -267,15 +252,15 @@ public class GrVariableDeclarationImpl extends GrStubElementBase<EmptyStub> impl
       }
     }
 
-    @NotNull
-    @Override
-    public Object[] getVariants() {
-      return EMPTY_ARRAY;
-    }
-
     @Override
     public PsiElement bindToElement(@NotNull PsiElement element) throws IncorrectOperationException {
       return getElement();
     }
+  }
+
+  @NotNull
+  @Override
+  public List<? extends PsiElement> getComponents() {
+    return Arrays.asList(getVariables());
   }
 }

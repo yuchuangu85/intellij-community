@@ -46,6 +46,8 @@ import java.util.Collections;
 import java.util.List;
 
 /**
+ * Describes step of compilation process which copies resources files from source and resource roots of a Java module.
+ *
  * @author nik
  */
 public final class ResourcesTarget extends JVMModuleBuildTarget<ResourceRootDescriptor> {
@@ -85,7 +87,7 @@ public final class ResourcesTarget extends JVMModuleBuildTarget<ResourceRootDesc
   @NotNull
   @Override
   public List<ResourceRootDescriptor> computeRootDescriptors(JpsModel model, ModuleExcludeIndex index, IgnoredFileIndex ignoredFileIndex, BuildDataPaths dataPaths) {
-    List<ResourceRootDescriptor> roots = new ArrayList<ResourceRootDescriptor>();
+    List<ResourceRootDescriptor> roots = new ArrayList<>();
     JavaSourceRootType type = isTests() ? JavaSourceRootType.TEST_SOURCE : JavaSourceRootType.SOURCE;
     Iterable<ExcludedJavaSourceRootProvider> excludedRootProviders = JpsServiceManager.getInstance().getExtensions(ExcludedJavaSourceRootProvider.class);
 

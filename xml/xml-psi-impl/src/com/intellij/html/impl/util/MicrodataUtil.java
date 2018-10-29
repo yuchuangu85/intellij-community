@@ -74,7 +74,7 @@ public class MicrodataUtil {
       @Nullable
       @Override
       public Result<Map<String, XmlTag>> compute() {
-        final Map<String, XmlTag> result = new THashMap<String, XmlTag>();
+        final Map<String, XmlTag> result = new THashMap<>();
         file.accept(new XmlRecursiveElementVisitor() {
           @Override
           public void visitXmlTag(final XmlTag tag) {
@@ -131,14 +131,14 @@ public class MicrodataUtil {
   }
 
   public static PsiReference[] getReferencesForAttributeValue(@Nullable XmlAttributeValue element,
-                                                              PairFunction<String, Integer, PsiReference> refFun) {
+                                                              PairFunction<? super String, ? super Integer, ? extends PsiReference> refFun) {
     if (element == null) {
       return PsiReference.EMPTY_ARRAY;
     }
     String text = element.getText();
     String urls = StringUtil.unquoteString(text);
     StringTokenizer tokenizer = new StringTokenizer(urls);
-    List<PsiReference> result = new ArrayList<PsiReference>();
+    List<PsiReference> result = new ArrayList<>();
     while (tokenizer.hasMoreTokens()) {
       String token = tokenizer.nextToken();
       int index = text.indexOf(token);
@@ -147,7 +147,7 @@ public class MicrodataUtil {
         result.add(ref);
       }
     }
-    return result.toArray(new PsiReference[result.size()]);
+    return result.toArray(PsiReference.EMPTY_ARRAY);
   }
 
   @Nullable
@@ -157,10 +157,10 @@ public class MicrodataUtil {
   }
 
   private static class CollectNamesVisitor extends XmlRecursiveElementVisitor {
-    protected final Set<String> myValues = new THashSet<String>();
+    protected final Set<String> myValues = new THashSet<>();
 
     public List<String> getValues() {
-      return new ArrayList<String>(myValues);
+      return new ArrayList<>(myValues);
     }
   }
 

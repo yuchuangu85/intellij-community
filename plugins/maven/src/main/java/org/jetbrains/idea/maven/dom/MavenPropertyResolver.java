@@ -114,7 +114,7 @@ public class MavenPropertyResolver {
       assert propertyName != null;
 
       if (resolvedProperties == null) {
-        resolvedProperties = new HashMap<String, String>();
+        resolvedProperties = new HashMap<>();
       }
 
       String propertyValue = resolvedProperties.get(propertyName);
@@ -256,6 +256,12 @@ public class MavenPropertyResolver {
     String result;
 
     result = MavenUtil.getPropertiesFromMavenOpts().get(propName);
+    if (result != null) return result;
+
+    result = mavenProject.getMavenConfig().get(propName);
+    if (result != null) return result;
+
+    result = mavenProject.getJvmConfig().get(propName);
     if (result != null) return result;
 
     result = MavenServerUtil.collectSystemProperties().getProperty(propName);

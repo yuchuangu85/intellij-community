@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.tree.IElementType;
 import org.jetbrains.annotations.Nls;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.codeInspection.BaseInspection;
@@ -65,27 +64,13 @@ public class GrUnusedIncDecInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return GroovyInspectionBundle.message("groovy.dfa.issues");
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return GroovyInspectionBundle.message("unused.inc.dec");
   }
 
-  @Override
-  @NonNls
-  @NotNull
-  public String getShortName() {
-    return "GroovyUnusedIncOrDec";
-  }
-
   private static class GrUnusedIncDecInspectionVisitor extends BaseInspectionVisitor {
     @Override
-    public void visitUnaryExpression(GrUnaryExpression expression) {
+    public void visitUnaryExpression(@NotNull GrUnaryExpression expression) {
       super.visitUnaryExpression(expression);
 
       IElementType opType = expression.getOperationTokenType();
@@ -144,14 +129,8 @@ public class GrUnusedIncDecInspection extends BaseInspection {
     private static class RemoveIncOrDecFix implements LocalQuickFix {
       private final String myMessage;
 
-      public RemoveIncOrDecFix(GrUnaryExpression expression) {
+      RemoveIncOrDecFix(GrUnaryExpression expression) {
         myMessage = GroovyInspectionBundle.message("remove.0", expression.getOperationToken().getText());
-      }
-
-      @NotNull
-      @Override
-      public String getName() {
-        return myMessage;
       }
 
       @NotNull
@@ -172,14 +151,8 @@ public class GrUnusedIncDecInspection extends BaseInspection {
     private static class ReplacePostfixIncWithPrefixFix implements LocalQuickFix {
       private final String myMessage;
 
-      public ReplacePostfixIncWithPrefixFix(GrUnaryExpression expression) {
+      ReplacePostfixIncWithPrefixFix(GrUnaryExpression expression) {
         myMessage = GroovyInspectionBundle.message("replace.postfix.0.with.prefix.0", expression.getOperationToken().getText());
-      }
-
-      @NotNull
-      @Override
-      public String getName() {
-        return myMessage;
       }
 
       @NotNull
@@ -203,15 +176,9 @@ public class GrUnusedIncDecInspection extends BaseInspection {
     private static class ReplaceIncDecWithBinary implements LocalQuickFix {
       private final String myMessage;
 
-      public ReplaceIncDecWithBinary(GrUnaryExpression expression) {
+      ReplaceIncDecWithBinary(GrUnaryExpression expression) {
         String opToken = expression.getOperationToken().getText();
         myMessage = GroovyInspectionBundle.message("replace.0.with.1", opToken, opToken.substring(0, 1));
-      }
-
-      @NotNull
-      @Override
-      public String getName() {
-        return myMessage;
       }
 
       @NotNull

@@ -54,7 +54,6 @@ import static com.intellij.psi.codeStyle.arrangement.std.StdArrangementTokens.Or
 
 /**
  * @author Denis Zhdanov
- * @since 7/20/12 2:31 PM
  */
 public class JavaRearranger implements Rearranger<JavaElementArrangementEntry>,
                                        ArrangementSectionRuleAwareSettings,
@@ -98,9 +97,9 @@ public class JavaRearranger implements Rearranger<JavaElementArrangementEntry>,
     MODIFIERS_BY_TYPE.put(METHOD, concat(commonModifiers, SYNCHRONIZED, ABSTRACT));
     MODIFIERS_BY_TYPE.put(CONSTRUCTOR, concat(commonModifiers, SYNCHRONIZED));
     MODIFIERS_BY_TYPE.put(FIELD, concat(commonModifiers, TRANSIENT, VOLATILE));
-    MODIFIERS_BY_TYPE.put(GETTER, ContainerUtilRt.<ArrangementSettingsToken>newHashSet());
-    MODIFIERS_BY_TYPE.put(SETTER, ContainerUtilRt.<ArrangementSettingsToken>newHashSet());
-    MODIFIERS_BY_TYPE.put(OVERRIDDEN, ContainerUtilRt.<ArrangementSettingsToken>newHashSet());
+    MODIFIERS_BY_TYPE.put(GETTER, ContainerUtilRt.newHashSet());
+    MODIFIERS_BY_TYPE.put(SETTER, ContainerUtilRt.newHashSet());
+    MODIFIERS_BY_TYPE.put(OVERRIDDEN, ContainerUtilRt.newHashSet());
     MODIFIERS_BY_TYPE.put(INIT_BLOCK, ContainerUtilRt.newHashSet(STATIC));
 
     TYPES_WITH_DISABLED_ORDER.add(INIT_BLOCK);
@@ -111,7 +110,7 @@ public class JavaRearranger implements Rearranger<JavaElementArrangementEntry>,
   private static final Map<ArrangementSettingsToken, List<ArrangementSettingsToken>> GROUPING_RULES = ContainerUtilRt.newLinkedHashMap();
 
   static {
-    GROUPING_RULES.put(GETTERS_AND_SETTERS, Collections.<ArrangementSettingsToken>emptyList());
+    GROUPING_RULES.put(GETTERS_AND_SETTERS, Collections.emptyList());
     GROUPING_RULES.put(OVERRIDDEN_METHODS, ContainerUtilRt.newArrayList(BY_NAME, KEEP));
     GROUPING_RULES.put(DEPENDENT_METHODS, ContainerUtilRt.newArrayList(BREADTH_FIRST, DEPTH_FIRST));
   }
@@ -119,7 +118,7 @@ public class JavaRearranger implements Rearranger<JavaElementArrangementEntry>,
   private static final StdArrangementRuleAliasToken VISIBILITY = new StdArrangementRuleAliasToken("visibility");
 
   static {
-    final ArrayList<StdArrangementMatchRule> visibility = new ArrayList<StdArrangementMatchRule>();
+    final ArrayList<StdArrangementMatchRule> visibility = new ArrayList<>();
     and(visibility, PUBLIC);
     and(visibility, PACKAGE_PRIVATE);
     and(visibility, PROTECTED);
@@ -175,9 +174,13 @@ public class JavaRearranger implements Rearranger<JavaElementArrangementEntry>,
     Collection<JavaArrangementPropertyInfo> properties = info.getProperties();
     for (JavaArrangementPropertyInfo propertyInfo : properties) {
       JavaElementArrangementEntry getter = propertyInfo.getGetter();
-      JavaElementArrangementEntry setter = propertyInfo.getSetter();
-      if (getter != null && setter != null && setter.getDependencies() == null) {
-        setter.addDependency(getter);
+      List<JavaElementArrangementEntry> setters = propertyInfo.getSetters();
+      if (getter != null) {
+        JavaElementArrangementEntry previous = getter;
+        for (JavaElementArrangementEntry setter: setters) {
+          setter.addDependency(previous);
+          previous = setter;
+        }
       }
     }
   }
@@ -209,7 +212,7 @@ public class JavaRearranger implements Rearranger<JavaElementArrangementEntry>,
   }
 
   private static void setupBreadthFirstDependency(@NotNull ArrangementEntryDependencyInfo info) {
-    Deque<ArrangementEntryDependencyInfo> toProcess = new ArrayDeque<ArrangementEntryDependencyInfo>();
+    Deque<ArrangementEntryDependencyInfo> toProcess = new ArrayDeque<>();
     toProcess.add(info);
     JavaElementArrangementEntry prev = info.getAnchorEntry();
     while (!toProcess.isEmpty()) {
@@ -285,7 +288,7 @@ public class JavaRearranger implements Rearranger<JavaElementArrangementEntry>,
     return parseInfo.getEntries();
   }
 
-  public void setupFieldInitializationDependencies(@NotNull List<ArrangementEntryDependencyInfo> fieldDependencyRoots,
+  public void setupFieldInitializationDependencies(@NotNull List<? extends ArrangementEntryDependencyInfo> fieldDependencyRoots,
                                                    @NotNull ArrangementSettings settings,
                                                    @NotNull JavaArrangementParseInfo parseInfo)
   {
@@ -419,7 +422,7 @@ public class JavaRearranger implements Rearranger<JavaElementArrangementEntry>,
     return MUTEXES;
   }
 
-  private static void and(@NotNull List<StdArrangementMatchRule> matchRules, @NotNull ArrangementSettingsToken... conditions) {
+  private static void and(@NotNull List<? super StdArrangementMatchRule> matchRules, @NotNull ArrangementSettingsToken... conditions) {
       if (conditions.length == 1) {
         matchRules.add(new StdArrangementMatchRule(new StdArrangementEntryMatcher(new ArrangementAtomMatchCondition(
           conditions[0]

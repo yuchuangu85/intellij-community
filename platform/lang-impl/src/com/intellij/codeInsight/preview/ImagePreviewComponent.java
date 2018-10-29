@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2013 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -106,7 +106,7 @@ public class ImagePreviewComponent extends JPanel implements PreviewHintComponen
       try {
         final byte[] content = file.contentsToByteArray();
         final BufferedImage image = readImageFromBytes(content);
-        file.putUserData(BUFFERED_IMAGE_REF_KEY, new SoftReference<BufferedImage>(image));
+        file.putUserData(BUFFERED_IMAGE_REF_KEY, new SoftReference<>(image));
         return true;
       }
       finally {
@@ -120,8 +120,7 @@ public class ImagePreviewComponent extends JPanel implements PreviewHintComponen
   @NotNull
   public static BufferedImage readImageFromBytes(@NotNull byte[] content) throws IOException {
     InputStream inputStream = new ByteArrayInputStream(content, 0, content.length);
-    ImageInputStream imageInputStream = ImageIO.createImageInputStream(inputStream);
-    try {
+    try (ImageInputStream imageInputStream = ImageIO.createImageInputStream(inputStream)) {
       Iterator<ImageReader> imageReaders = ImageIO.getImageReaders(imageInputStream);
       if (imageReaders.hasNext()) {
         ImageReader imageReader = imageReaders.next();
@@ -131,13 +130,13 @@ public class ImagePreviewComponent extends JPanel implements PreviewHintComponen
           int minIndex = imageReader.getMinIndex();
           return imageReader.read(minIndex, param);
         }
+        catch (Exception e) {
+          throw new IOException("Can't read image from given content", e);
+        }
         finally {
           imageReader.dispose();
         }
       }
-    }
-    finally {
-      imageInputStream.close();
     }
     throw new IOException("Can't read image from given content");
   }

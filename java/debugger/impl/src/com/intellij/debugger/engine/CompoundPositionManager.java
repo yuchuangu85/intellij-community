@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.engine;
 
 import com.intellij.debugger.MultiRequestPositionManager;
@@ -21,17 +7,20 @@ import com.intellij.debugger.PositionManager;
 import com.intellij.debugger.SourcePosition;
 import com.intellij.debugger.engine.evaluation.EvaluationContext;
 import com.intellij.debugger.impl.DebuggerUtilsEx;
+import com.intellij.debugger.impl.DebuggerUtilsImpl;
 import com.intellij.debugger.jdi.StackFrameProxyImpl;
 import com.intellij.debugger.requests.ClassPrepareRequestor;
 import com.intellij.execution.filters.LineNumbersMapping;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileTypes.FileType;
-import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import com.intellij.util.ThreeState;
 import com.intellij.xdebugger.frame.XStackFrame;
-import com.sun.jdi.*;
+import com.sun.jdi.Location;
+import com.sun.jdi.ReferenceType;
+import com.sun.jdi.VMDisconnectedException;
 import com.sun.jdi.request.ClassPrepareRequest;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -40,6 +29,8 @@ import java.util.*;
 
 public class CompoundPositionManager extends PositionManagerEx implements MultiRequestPositionManager{
   private static final Logger LOG = Logger.getInstance(CompoundPositionManager.class);
+
+  public static final CompoundPositionManager EMPTY = new CompoundPositionManager();
 
   private final ArrayList<PositionManager> myPositionManagers = new ArrayList<>();
 
@@ -54,6 +45,11 @@ public class CompoundPositionManager extends PositionManagerEx implements MultiR
   public void appendPositionManager(PositionManager manager) {
     myPositionManagers.remove(manager);
     myPositionManagers.add(0, manager);
+    clearCache();
+  }
+
+  public void clearCache() {
+    DebuggerManagerThreadImpl.assertIsManagerThread();
     mySourcePositionCache.clear();
   }
 
@@ -64,20 +60,26 @@ public class CompoundPositionManager extends PositionManagerEx implements MultiR
   }
 
   private <T> T iterate(Processor<T> processor, T defaultValue, SourcePosition position) {
+    return iterate(processor, defaultValue, position, true);
+  }
+
+  private <T> T iterate(Processor<T> processor, T defaultValue, SourcePosition position, boolean ignorePCE) {
+    FileType fileType = position != null ? position.getFile().getFileType() : null;
     for (PositionManager positionManager : myPositionManagers) {
-      try {
-        if (position != null) {
-          Set<? extends FileType> types = positionManager.getAcceptedFileTypes();
-          if (types != null && !types.contains(position.getFile().getFileType())) {
-            continue;
-          }
+      if (fileType != null) {
+        Set<? extends FileType> types = positionManager.getAcceptedFileTypes();
+        if (types != null && !types.contains(fileType)) {
+          continue;
         }
-        return processor.process(positionManager);
       }
-      catch (NoDataException | ProcessCanceledException ignored) {}
-      catch (VMDisconnectedException | ObjectCollectedException e) {throw e;}
-      catch (InternalException e) {LOG.info(e);}
-      catch (Exception | AssertionError e) {LOG.error(e);}
+      try {
+        if (!ignorePCE) {
+          ProgressManager.checkCanceled();
+        }
+        return DebuggerUtilsImpl.suppressExceptions(() -> processor.process(positionManager), defaultValue, ignorePCE, NoDataException.class);
+      }
+      catch (NoDataException ignored) {
+      }
     }
     return defaultValue;
   }
@@ -86,17 +88,28 @@ public class CompoundPositionManager extends PositionManagerEx implements MultiR
   @Override
   public SourcePosition getSourcePosition(final Location location) {
     if (location == null) return null;
-    SourcePosition res = mySourcePositionCache.get(location);
-    if (checkCacheEntry(res, location)) return res;
+    return DebuggerUtilsImpl.runInReadActionWithWriteActionPriorityWithRetries(() -> {
+      SourcePosition res = null;
+      try {
+        res = mySourcePositionCache.get(location);
+      }
+      catch (IllegalArgumentException ignored) { // Invalid method id
+      }
+      if (checkCacheEntry(res, location)) return res;
 
-    return iterate(positionManager -> {
-      SourcePosition res1 = positionManager.getSourcePosition(location);
-      mySourcePositionCache.put(location, res1);
-      return res1;
-    }, null, null);
+      return iterate(positionManager -> {
+        SourcePosition res1 = positionManager.getSourcePosition(location);
+        try {
+          mySourcePositionCache.put(location, res1);
+        }
+        catch (IllegalArgumentException ignored) { // Invalid method id
+        }
+        return res1;
+      }, null, null, false);
+    });
   }
 
-  private static boolean checkCacheEntry(SourcePosition position, Location location) {
+  private static boolean checkCacheEntry(@Nullable SourcePosition position, @NotNull Location location) {
     if (position == null) return false;
     PsiFile psiFile = position.getFile();
     if (!psiFile.isValid()) return false;

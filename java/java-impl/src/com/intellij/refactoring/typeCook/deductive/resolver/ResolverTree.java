@@ -34,6 +34,7 @@ import com.intellij.util.graph.Graph;
 import gnu.trove.TIntArrayList;
 import gnu.trove.TIntProcedure;
 import gnu.trove.TObjectIntHashMap;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
@@ -77,7 +78,7 @@ public class ResolverTree {
   }
 
   private static class PsiTypeVarCollector extends PsiExtendedTypeVisitor {
-    final Set<PsiTypeVariable> mySet = new HashSet<PsiTypeVariable>();
+    final Set<PsiTypeVariable> mySet = new HashSet<>();
 
     @Override
     public Object visitTypeVariable(final PsiTypeVariable var) {
@@ -110,7 +111,7 @@ public class ResolverTree {
   }
 
   private TObjectIntHashMap<PsiTypeVariable> calculateDegree() {
-    final TObjectIntHashMap<PsiTypeVariable> result = new TObjectIntHashMap<PsiTypeVariable>();
+    final TObjectIntHashMap<PsiTypeVariable> result = new TObjectIntHashMap<>();
 
     for (final Constraint constr : myConstraints) {
       final PsiTypeVarCollector collector = new PsiTypeVarCollector();
@@ -128,7 +129,7 @@ public class ResolverTree {
   }
 
   private Set<Constraint> apply(final Binding b) {
-    final Set<Constraint> result = new HashSet<Constraint>();
+    final Set<Constraint> result = new HashSet<>();
 
     for (final Constraint constr : myConstraints) {
       result.add(constr.apply(b));
@@ -138,7 +139,7 @@ public class ResolverTree {
   }
 
   private Set<Constraint> apply(final Binding b, final Set<Constraint> additional) {
-    final Set<Constraint> result = new HashSet<Constraint>();
+    final Set<Constraint> result = new HashSet<>();
 
     for (final Constraint constr : myConstraints) {
       result.add(constr.apply(b));
@@ -164,11 +165,11 @@ public class ResolverTree {
   }
 
   private void reduceCyclicVariables() {
-    final Set<PsiTypeVariable> nodes = new HashSet<PsiTypeVariable>();
-    final Set<Constraint> candidates = new HashSet<Constraint>();
+    final Set<PsiTypeVariable> nodes = new HashSet<>();
+    final Set<Constraint> candidates = new HashSet<>();
 
-    final Map<PsiTypeVariable, Set<PsiTypeVariable>> ins = new HashMap<PsiTypeVariable, Set<PsiTypeVariable>>();
-    final Map<PsiTypeVariable, Set<PsiTypeVariable>> outs = new HashMap<PsiTypeVariable, Set<PsiTypeVariable>>();
+    final Map<PsiTypeVariable, Set<PsiTypeVariable>> ins = new HashMap<>();
+    final Map<PsiTypeVariable, Set<PsiTypeVariable>> outs = new HashMap<>();
 
     for (final Constraint constraint : myConstraints) {
       final PsiType left = constraint.getLeft();
@@ -187,7 +188,7 @@ public class ResolverTree {
         Set<PsiTypeVariable> out = outs.get(rightVar);
 
         if (in == null) {
-          final Set<PsiTypeVariable> newIn = new HashSet<PsiTypeVariable>();
+          final Set<PsiTypeVariable> newIn = new HashSet<>();
 
           newIn.add(rightVar);
 
@@ -198,7 +199,7 @@ public class ResolverTree {
         }
 
         if (out == null) {
-          final Set<PsiTypeVariable> newOut = new HashSet<PsiTypeVariable>();
+          final Set<PsiTypeVariable> newOut = new HashSet<>();
 
           newOut.add(leftVar);
 
@@ -210,12 +211,14 @@ public class ResolverTree {
       }
     }
 
-    final DFSTBuilder<PsiTypeVariable> dfstBuilder = new DFSTBuilder<PsiTypeVariable>(new Graph<PsiTypeVariable>() {
+    final DFSTBuilder<PsiTypeVariable> dfstBuilder = new DFSTBuilder<>(new Graph<PsiTypeVariable>() {
+      @NotNull
       @Override
       public Collection<PsiTypeVariable> getNodes() {
         return nodes;
       }
 
+      @NotNull
       @Override
       public Iterator<PsiTypeVariable> getIn(final PsiTypeVariable n) {
         final Set<PsiTypeVariable> in = ins.get(n);
@@ -227,6 +230,7 @@ public class ResolverTree {
         return in.iterator();
       }
 
+      @NotNull
       @Override
       public Iterator<PsiTypeVariable> getOut(final PsiTypeVariable n) {
         final Set<PsiTypeVariable> out = outs.get(n);
@@ -237,11 +241,10 @@ public class ResolverTree {
 
         return out.iterator();
       }
-
     });
 
     final TIntArrayList sccs = dfstBuilder.getSCCs();
-    final Map<PsiTypeVariable, Integer> index = new HashMap<PsiTypeVariable, Integer>();
+    final Map<PsiTypeVariable, Integer> index = new HashMap<>();
 
     sccs.forEach(new TIntProcedure() {
       int myTNumber;
@@ -285,9 +288,9 @@ public class ResolverTree {
   private void reduceTypeType(final Constraint constr) {
     final PsiType left = constr.getLeft();
     final PsiType right = constr.getRight();
-    final Set<Constraint> addendumRise = new HashSet<Constraint>();
-    final Set<Constraint> addendumSink = new HashSet<Constraint>();
-    final Set<Constraint> addendumWcrd = new HashSet<Constraint>();
+    final Set<Constraint> addendumRise = new HashSet<>();
+    final Set<Constraint> addendumSink = new HashSet<>();
+    final Set<Constraint> addendumWcrd = new HashSet<>();
 
     int numSons = 0;
     Binding riseBinding = myBindingFactory.rise(left, right, addendumRise);
@@ -368,7 +371,7 @@ public class ResolverTree {
       if (lowerClass != null && upperClass != null && !lowerClass.equals(upperClass)) {
         final PsiSubstitutor upperSubst = resultUpper.getSubstitutor();
         final PsiClass[] parents = upperClass.getSupers();
-        final PsiElementFactory factory = JavaPsiFacade.getInstance(myProject).getElementFactory();
+        final PsiElementFactory factory = JavaPsiFacade.getElementFactory(myProject);
 
         for (final PsiClass parent : parents) {
           final PsiSubstitutor superSubstitutor = TypeConversionUtil.getClassSubstitutor(parent, upperClass, upperSubst);
@@ -386,7 +389,7 @@ public class ResolverTree {
   }
 
   private PsiType[] getTypeRange(final PsiType lowerBound, final PsiType upperBound) {
-    Set<PsiType> range = new HashSet<PsiType>();
+    Set<PsiType> range = new HashSet<>();
 
     range.add(lowerBound);
     range.add(upperBound);
@@ -465,8 +468,8 @@ public class ResolverTree {
       reduceCyclicVariables();
     }
 
-    final Map<PsiTypeVariable, Constraint> myTypeVarConstraints = new HashMap<PsiTypeVariable, Constraint>();
-    final Map<PsiTypeVariable, Constraint> myVarTypeConstraints = new HashMap<PsiTypeVariable, Constraint>();
+    final Map<PsiTypeVariable, Constraint> myTypeVarConstraints = new HashMap<>();
+    final Map<PsiTypeVariable, Constraint> myVarTypeConstraints = new HashMap<>();
 
     for (final Constraint constr : myConstraints) {
       final PsiType left = constr.getLeft();
@@ -562,10 +565,10 @@ public class ResolverTree {
 
     //T1 < a < b < ...
     {
-      Set<PsiTypeVariable> haveLeftBound = new HashSet<PsiTypeVariable>();
+      Set<PsiTypeVariable> haveLeftBound = new HashSet<>();
 
       Constraint target = null;
-      Set<PsiTypeVariable> boundVariables = new HashSet<PsiTypeVariable>();
+      Set<PsiTypeVariable> boundVariables = new HashSet<>();
 
       for (final Constraint constr : myConstraints) {
         final PsiType leftType = constr.getLeft();

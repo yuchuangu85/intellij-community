@@ -21,7 +21,6 @@ import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.TextFieldWithBrowseButton;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.Base64Converter;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.Nullable;
 
@@ -29,11 +28,9 @@ import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
-/**
- * User: anna
- * Date: 3/15/13
- */
 public class JavaFxEditCertificatesDialog extends DialogWrapper {
 
   Panel myPanel;
@@ -58,9 +55,9 @@ public class JavaFxEditCertificatesDialog extends DialogWrapper {
     myPanel.myAliasTF.setText(properties.getAlias());
     myPanel.myKeystore.setText(properties.getKeystore());
     final String keypass = properties.getKeypass();
-    myPanel.myKeypassTF.setText(keypass != null ? Base64Converter.decode(keypass) : "");
+    myPanel.myKeypassTF.setText(keypass != null ? new String(Base64.getDecoder().decode(keypass), StandardCharsets.UTF_8) : "");
     final String storepass = properties.getStorepass();
-    myPanel.myStorePassTF.setText(storepass != null ? Base64Converter.decode(storepass) : "");
+    myPanel.myStorePassTF.setText(storepass != null ? new String(Base64.getDecoder().decode(storepass), StandardCharsets.UTF_8) : "");
     myPanel.myKeystore.addBrowseFolderListener("Choose Keystore File", "Select file containing generated keys", project, BrowseFilesListener.SINGLE_FILE_DESCRIPTOR);
   }
 

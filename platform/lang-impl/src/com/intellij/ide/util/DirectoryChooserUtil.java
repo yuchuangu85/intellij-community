@@ -55,7 +55,7 @@ public class DirectoryChooserUtil {
                                              String postfixToShow) {
     ProjectFileIndex projectFileIndex = getInstance(project).getFileIndex();
 
-    ArrayList<PsiDirectory> possibleDirs = new ArrayList<PsiDirectory>();
+    ArrayList<PsiDirectory> possibleDirs = new ArrayList<>();
     for (PsiDirectory dir : packageDirectories) {
       if (!dir.isValid()) continue;
       if (!dir.isWritable()) continue;
@@ -71,7 +71,7 @@ public class DirectoryChooserUtil {
 
     DirectoryChooser chooser = new DirectoryChooser(project);
     chooser.setTitle(message("title.choose.destination.directory"));
-    chooser.fillList(possibleDirs.toArray(new PsiDirectory[possibleDirs.size()]), defaultDirectory, project, postfixToShow);
+    chooser.fillList(possibleDirs.toArray(PsiDirectory.EMPTY_ARRAY), defaultDirectory, project, postfixToShow);
     return chooser.showAndGet() ? chooser.getSelectedDirectory() : null;
   }
 

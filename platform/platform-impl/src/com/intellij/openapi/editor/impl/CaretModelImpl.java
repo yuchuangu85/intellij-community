@@ -1,27 +1,5 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
-/*
- * Created by IntelliJ IDEA.
- * User: max
- * Date: Jun 18, 2002
- * Time: 9:12:05 PM
- * To change template for new class use
- * Code Style | Class Templates options (Tools | IDE Options).
- */
 package com.intellij.openapi.editor.impl;
 
 import com.intellij.diagnostic.Dumpable;
@@ -32,69 +10,82 @@ import com.intellij.openapi.editor.colors.EditorColors;
 import com.intellij.openapi.editor.event.CaretEvent;
 import com.intellij.openapi.editor.event.CaretListener;
 import com.intellij.openapi.editor.event.DocumentEvent;
+import com.intellij.openapi.editor.event.SelectionEvent;
+import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.ex.PrioritizedDocumentListener;
-import com.intellij.openapi.editor.impl.event.DocumentEventImpl;
 import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.util.EventDispatcher;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.EmptyClipboardOwner;
+import gnu.trove.TIntArrayList;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.TestOnly;
 
+import java.awt.*;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.StringSelection;
+import java.util.List;
 import java.util.*;
 
-public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, Disposable, Dumpable {
+public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, Disposable, Dumpable, InlayModel.Listener {
   private final EditorImpl myEditor;
-  
+
   private final EventDispatcher<CaretListener> myCaretListeners = EventDispatcher.create(CaretListener.class);
 
   private TextAttributes myTextAttributes;
 
   boolean myIsInUpdate;
-  boolean isDocumentChanged;
 
-  private final LinkedList<CaretImpl> myCarets = new LinkedList<CaretImpl>();
+  final RangeMarkerTree<CaretImpl.PositionMarker> myPositionMarkerTree;
+  final RangeMarkerTree<CaretImpl.SelectionMarker> mySelectionMarkerTree;
+
+  private final List<CaretImpl> myCarets = ContainerUtil.createLockFreeCopyOnWriteList();
   private CaretImpl myCurrentCaret; // active caret in the context of 'runForEachCaret' call
   private boolean myPerformCaretMergingAfterCurrentOperation;
 
-  public CaretModelImpl(EditorImpl editor) {
+  int myDocumentUpdateCounter;
+
+  public CaretModelImpl(@NotNull EditorImpl editor) {
     myEditor = editor;
-    myCarets.add(new CaretImpl(myEditor));
+    myEditor.addPropertyChangeListener(evt -> {
+      if (EditorEx.PROP_COLUMN_MODE.equals(evt.getPropertyName()) && !myEditor.isColumnMode()) {
+        for (CaretImpl caret : myCarets) {
+          caret.resetVirtualSelection();
+        }
+      }
+    }, this);
+
+    myPositionMarkerTree = new RangeMarkerTree<>(myEditor.getDocument());
+    mySelectionMarkerTree = new RangeMarkerTree<>(myEditor.getDocument());
+    myCarets.add(new CaretImpl(myEditor, this));
   }
 
   void onBulkDocumentUpdateStarted() {
-    for (CaretImpl caret : myCarets) {
-      caret.onBulkDocumentUpdateStarted();
-    }
   }
 
   void onBulkDocumentUpdateFinished() {
-    doWithCaretMerging(() -> {
-      for (CaretImpl caret : myCarets) {
-        caret.onBulkDocumentUpdateFinished();
-      }
-    });
+    doWithCaretMerging(() -> {}); // do caret merging if it's not scheduled for later
   }
 
   @Override
-  public void documentChanged(final DocumentEvent e) {
-    isDocumentChanged = true;
-    try {
-      myIsInUpdate = false;
-      doWithCaretMerging(() -> {
-        for (CaretImpl caret : myCarets) {
-          caret.updateCaretPosition((DocumentEventImpl)e);
-        }
-      });
-    }
-    finally {
-      isDocumentChanged = false;
+  public void documentChanged(@NotNull final DocumentEvent e) {
+    myIsInUpdate = false;
+    myDocumentUpdateCounter++;
+    if (!myEditor.getDocument().isInBulkUpdate()) {
+      doWithCaretMerging(() -> {}); // do caret merging if it's not scheduled for later
     }
   }
 
   @Override
-  public void beforeDocumentChange(DocumentEvent e) {
+  public void beforeDocumentChange(@NotNull DocumentEvent e) {
     myIsInUpdate = true;
+    if (!myEditor.getDocument().isInBulkUpdate() && e.isWholeTextReplaced()) {
+      for (CaretImpl caret : myCarets) {
+        caret.updateCachedStateIfNeeded(); // logical position will be needed to restore caret position via diff
+      }
+    }
   }
 
   @Override
@@ -107,6 +98,8 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
     for (CaretImpl caret : myCarets) {
       Disposer.dispose(caret);
     }
+    mySelectionMarkerTree.dispose(myEditor.getDocument());
+    myPositionMarkerTree.dispose(myEditor.getDocument());
   }
 
   public void updateVisualPosition() {
@@ -116,7 +109,11 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
   }
 
   @Override
-  public void moveCaretRelatively(final int columnShift, final int lineShift, final boolean withSelection, final boolean blockSelection, final boolean scrollToCaret) {
+  public void moveCaretRelatively(final int columnShift,
+                                  final int lineShift,
+                                  final boolean withSelection,
+                                  final boolean blockSelection,
+                                  final boolean scrollToCaret) {
     getCurrentCaret().moveCaretRelatively(columnShift, lineShift, withSelection, scrollToCaret);
   }
 
@@ -191,15 +188,17 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
   }
 
   @Override
+  @NotNull
   public TextAttributes getTextAttributes() {
-    if (myTextAttributes == null) {
-      myTextAttributes = new TextAttributes();
+    TextAttributes textAttributes = myTextAttributes;
+    if (textAttributes == null) {
+      myTextAttributes = textAttributes = new TextAttributes();
       if (myEditor.getSettings().isCaretRowShown()) {
-        myTextAttributes.setBackgroundColor(myEditor.getColorsScheme().getColor(EditorColors.CARET_ROW_COLOR));
+        textAttributes.setBackgroundColor(myEditor.getColorsScheme().getColor(EditorColors.CARET_ROW_COLOR));
       }
     }
 
-    return myTextAttributes;
+    return textAttributes;
   }
 
   public void reinitSettings() {
@@ -221,40 +220,28 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
   @Override
   @NotNull
   public CaretImpl getPrimaryCaret() {
-    synchronized (myCarets) {
-      return myCarets.get(myCarets.size() - 1);
-    }
+    if (ApplicationManager.getApplication().isDispatchThread()) return myCarets.get(myCarets.size() - 1);
+    CaretImpl[] carets = myCarets.toArray(CaretImpl.EMPTY_ARRAY);
+    return carets[carets.length - 1];
   }
 
   @Override
   public int getCaretCount() {
-    synchronized (myCarets) {
-      return myCarets.size();
-    }
+    return myCarets.size();
   }
 
   @Override
   @NotNull
   public List<Caret> getAllCarets() {
-    List<Caret> carets;
-    synchronized (myCarets) {
-      carets = new ArrayList<Caret>(myCarets);
-    }
-    Collections.sort(carets, CaretPositionComparator.INSTANCE);
+    List<Caret> carets = new ArrayList<>(myCarets);
+    Collections.sort(carets, CARET_POSITION_COMPARATOR);
     return carets;
   }
 
   @Nullable
   @Override
   public Caret getCaretAt(@NotNull VisualPosition pos) {
-    synchronized (myCarets) {
-      for (CaretImpl caret : myCarets) {
-        if (caret.getVisualPosition().equals(pos)) {
-          return caret;
-        }
-      }
-      return null;
-    }
+    return ContainerUtil.find(myCarets, caret -> caret.getVisualPosition().equals(pos));
   }
 
   @Nullable
@@ -267,31 +254,24 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
   @Override
   public Caret addCaret(@NotNull VisualPosition pos, boolean makePrimary) {
     EditorImpl.assertIsDispatchThread();
-    CaretImpl caret = new CaretImpl(myEditor);
-    caret.moveToVisualPosition(pos, false);
+    CaretImpl caret = new CaretImpl(myEditor, this);
+    caret.doMoveToVisualPosition(pos, false);
     if (addCaret(caret, makePrimary)) {
       return caret;
     }
-    else {
-      Disposer.dispose(caret);
-      return null;
-    }
+    Disposer.dispose(caret);
+    return null;
   }
 
   boolean addCaret(@NotNull CaretImpl caretToAdd, boolean makePrimary) {
+    EditorImpl.assertIsDispatchThread();
     for (CaretImpl caret : myCarets) {
       if (caretsOverlap(caret, caretToAdd)) {
         return false;
       }
     }
-    synchronized (myCarets) {
-      if (makePrimary) {
-        myCarets.addLast(caretToAdd);
-      }
-      else {
-        myCarets.addFirst(caretToAdd);
-      }
-    }
+    int index = makePrimary ? myCarets.size() : 0;
+    myCarets.add(index, caretToAdd);
     fireCaretAdded(caretToAdd);
     return true;
   }
@@ -302,10 +282,8 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
     if (myCarets.size() <= 1 || !(caret instanceof CaretImpl)) {
       return false;
     }
-    synchronized (myCarets) {
-      if (!myCarets.remove(caret)) {
-        return false;
-      }
+    if (!myCarets.remove(caret)) {
+      return false;
     }
     fireCaretRemoved(caret);
     Disposer.dispose(caret);
@@ -318,9 +296,7 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
     ListIterator<CaretImpl> caretIterator = myCarets.listIterator(myCarets.size() - 1);
     while (caretIterator.hasPrevious()) {
       CaretImpl caret = caretIterator.previous();
-      synchronized (myCarets) {
-        caretIterator.remove();
-      }
+      caretIterator.remove();
       fireCaretRemoved(caret);
       Disposer.dispose(caret);
     }
@@ -335,7 +311,7 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
   public void runForEachCaret(@NotNull final CaretAction action, final boolean reverseOrder) {
     EditorImpl.assertIsDispatchThread();
     if (myCurrentCaret != null) {
-      throw new IllegalStateException("Current caret is defined, cannot operate on other ones");
+      throw new IllegalStateException("Recursive runForEachCaret invocations are not allowed");
     }
     doWithCaretMerging(() -> {
       try {
@@ -361,11 +337,12 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
   }
 
   private void mergeOverlappingCaretsAndSelections() {
+    EditorImpl.assertIsDispatchThread();
     if (myCarets.size() <= 1) {
       return;
     }
-    LinkedList<CaretImpl> carets = new LinkedList<CaretImpl>(myCarets);
-    Collections.sort(carets, CaretPositionComparator.INSTANCE);
+    LinkedList<CaretImpl> carets = new LinkedList<>(myCarets);
+    Collections.sort(carets, CARET_POSITION_COMPARATOR);
     ListIterator<CaretImpl> it = carets.listIterator();
     CaretImpl keepPrimary = getPrimaryCaret();
     while (it.hasNext()) {
@@ -378,7 +355,8 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
       if (prevCaret != null && caretsOverlap(currCaret, prevCaret)) {
         int newSelectionStart = Math.min(currCaret.getSelectionStart(), prevCaret.getSelectionStart());
         int newSelectionEnd = Math.max(currCaret.getSelectionEnd(), prevCaret.getSelectionEnd());
-        CaretImpl toRetain, toRemove;
+        CaretImpl toRetain;
+        CaretImpl toRemove;
         if (currCaret.getOffset() >= prevCaret.getSelectionStart() && currCaret.getOffset() <= prevCaret.getSelectionEnd()) {
           toRetain = prevCaret;
           toRemove = currCaret;
@@ -402,10 +380,8 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
       }
     }
     if (keepPrimary != getPrimaryCaret()) {
-      synchronized (myCarets) {
-        myCarets.remove(keepPrimary);
-        myCarets.add(keepPrimary);
-      }
+      myCarets.remove(keepPrimary);
+      myCarets.add(keepPrimary);
     }
   }
 
@@ -423,11 +399,12 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
       || (hasPureVirtualSelection(firstCaret) || hasPureVirtualSelection(secondCaret)) && (firstStart == secondStart || firstEnd == secondEnd);
   }
 
-  private static boolean hasPureVirtualSelection(CaretImpl firstCaret) {
+  private static boolean hasPureVirtualSelection(@NotNull CaretImpl firstCaret) {
     return firstCaret.getSelectionStart() == firstCaret.getSelectionEnd() && firstCaret.hasVirtualSelection();
   }
 
-  void doWithCaretMerging(Runnable runnable) {
+  void doWithCaretMerging(@NotNull Runnable runnable) {
+    EditorImpl.assertIsDispatchThread();
     if (myPerformCaretMergingAfterCurrentOperation) {
       runnable.run();
     }
@@ -458,43 +435,62 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
       int index = 0;
       int oldCaretCount = myCarets.size();
       Iterator<CaretImpl> caretIterator = myCarets.iterator();
+      TIntArrayList selectionStartsBefore = null;
+      TIntArrayList selectionStartsAfter = null;
+      TIntArrayList selectionEndsBefore = null;
+      TIntArrayList selectionEndsAfter = null;
       for (CaretState caretState : caretStates) {
         CaretImpl caret;
-        boolean caretAdded;
         if (index++ < oldCaretCount) {
           caret = caretIterator.next();
-          caretAdded = false;
+          if (caretState != null && caretState.getCaretPosition() != null) {
+            caret.moveToLogicalPosition(caretState.getCaretPosition());
+          }
         }
         else {
-          caret = new CaretImpl(myEditor);
+          caret = new CaretImpl(myEditor, this);
           if (caretState != null && caretState.getCaretPosition() != null) {
-            caret.moveToLogicalPosition(caretState.getCaretPosition(), false, null, false);
+            caret.moveToLogicalPosition(caretState.getCaretPosition(), false, null, false, false);
           }
-          synchronized (myCarets) {
-            myCarets.add(caret);
-          }
+          myCarets.add(caret);
           fireCaretAdded(caret);
-          caretAdded = true;
         }
-        if (caretState != null && caretState.getCaretPosition() != null && !caretAdded) {
-          caret.moveToLogicalPosition(caretState.getCaretPosition());
+        if (caretState != null && caretState.getCaretPosition() != null && caretState.getVisualColumnAdjustment() != 0) {
+          caret.myVisualColumnAdjustment = caretState.getVisualColumnAdjustment();
+          caret.updateVisualPosition();
         }
         if (caretState != null && caretState.getSelectionStart() != null && caretState.getSelectionEnd() != null) {
-          caret.setSelection(myEditor.logicalToVisualPosition(caretState.getSelectionStart()),
-                             myEditor.logicalPositionToOffset(caretState.getSelectionStart()),
-                             myEditor.logicalToVisualPosition(caretState.getSelectionEnd()),
-                             myEditor.logicalPositionToOffset(caretState.getSelectionEnd()),
-                             updateSystemSelection);
+          if (selectionStartsBefore == null) {
+            int capacity = caretStates.size();
+            selectionStartsBefore = new TIntArrayList(capacity);
+            selectionStartsAfter = new TIntArrayList(capacity);
+            selectionEndsBefore = new TIntArrayList(capacity);
+            selectionEndsAfter = new TIntArrayList(capacity);
+          }
+          selectionStartsBefore.add(caret.getSelectionStart());
+          selectionEndsBefore.add(caret.getSelectionEnd());
+          caret.doSetSelection(myEditor.logicalToVisualPosition(caretState.getSelectionStart()),
+                               myEditor.logicalPositionToOffset(caretState.getSelectionStart()),
+                               myEditor.logicalToVisualPosition(caretState.getSelectionEnd()),
+                               myEditor.logicalPositionToOffset(caretState.getSelectionEnd()),
+                               true, false, false);
+          selectionStartsAfter.add(caret.getSelectionStart());
+          selectionEndsAfter.add(caret.getSelectionEnd());
         }
       }
       int caretsToRemove = myCarets.size() - caretStates.size();
       for (int i = 0; i < caretsToRemove; i++) {
-        CaretImpl caret;
-        synchronized (myCarets) {
-          caret = myCarets.removeLast();
-        }
+        CaretImpl caret = myCarets.remove(myCarets.size()-1);
         fireCaretRemoved(caret);
         Disposer.dispose(caret);
+      }
+      if (updateSystemSelection) {
+        updateSystemSelection();
+      }
+      if (selectionStartsBefore != null) {
+        SelectionEvent event = new SelectionEvent(myEditor, selectionStartsBefore.toNativeArray(), selectionEndsBefore.toNativeArray(),
+                                                  selectionStartsAfter.toNativeArray(), selectionEndsAfter.toNativeArray());
+        myEditor.getSelectionModel().fireSelectionChanged(event);
       }
     });
   }
@@ -502,57 +498,100 @@ public class CaretModelImpl implements CaretModel, PrioritizedDocumentListener, 
   @NotNull
   @Override
   public List<CaretState> getCaretsAndSelections() {
-    synchronized (myCarets) {
-      List<CaretState> states = new ArrayList<CaretState>(myCarets.size());
-      for (CaretImpl caret : myCarets) {
-        states.add(new CaretState(caret.getLogicalPosition(),
-                                  myEditor.visualToLogicalPosition(caret.getSelectionStartPosition()),
-                                  myEditor.visualToLogicalPosition(caret.getSelectionEndPosition())));
-      }
-      return states;
+    List<CaretState> states = new ArrayList<>(myCarets.size());
+    for (CaretImpl caret : myCarets) {
+      states.add(new CaretState(caret.getLogicalPosition(),
+                                caret.myVisualColumnAdjustment,
+                                caret.getSelectionStartLogicalPosition(),
+                                caret.getSelectionEndLogicalPosition()));
+    }
+    return states;
+  }
+
+  void updateSystemSelection() {
+    if (GraphicsEnvironment.isHeadless()) return;
+
+    final Clipboard clip = myEditor.getComponent().getToolkit().getSystemSelection();
+    if (clip != null) {
+      clip.setContents(new StringSelection(myEditor.getSelectionModel().getSelectedText(true)), EmptyClipboardOwner.INSTANCE);
     }
   }
 
-  void fireCaretPositionChanged(CaretEvent caretEvent) {
+  void fireCaretPositionChanged(@NotNull CaretEvent caretEvent) {
     myCaretListeners.getMulticaster().caretPositionChanged(caretEvent);
   }
 
-  void fireCaretAdded(@NotNull Caret caret) {
-    myCaretListeners.getMulticaster().caretAdded(new CaretEvent(myEditor, caret, caret.getLogicalPosition(), caret.getLogicalPosition()));
+  private void fireCaretAdded(@NotNull Caret caret) {
+    myCaretListeners.getMulticaster().caretAdded(new CaretEvent(caret, caret.getLogicalPosition(), caret.getLogicalPosition()));
   }
 
-  void fireCaretRemoved(@NotNull Caret caret) {
-    myCaretListeners.getMulticaster().caretRemoved(new CaretEvent(myEditor, caret, caret.getLogicalPosition(), caret.getLogicalPosition()));
+  private void fireCaretRemoved(@NotNull Caret caret) {
+    myCaretListeners.getMulticaster().caretRemoved(new CaretEvent(caret, caret.getLogicalPosition(), caret.getLogicalPosition()));
+  }
+
+  public boolean isIteratingOverCarets() {
+    return myCurrentCaret != null;
   }
 
   @NotNull
   @Override
   public String dumpState() {
     return "[in update: " + myIsInUpdate +
-           ", document changed: " + isDocumentChanged +
+           ", update counter: " + myDocumentUpdateCounter +
            ", perform caret merging: " + myPerformCaretMergingAfterCurrentOperation +
            ", current caret: " + myCurrentCaret +
            ", all carets: " + ContainerUtil.map(myCarets, CaretImpl::dumpState) + "]";
   }
 
-  private static class VisualPositionComparator implements Comparator<VisualPosition> {
-    private static final VisualPositionComparator INSTANCE = new VisualPositionComparator();
-
-    @Override
-    public int compare(VisualPosition o1, VisualPosition o2) {
-      if (o1.line != o2.line) {
-        return o1.line - o2.line;
+  @Override
+  public void onAdded(@NotNull Inlay inlay) {
+    if (myEditor.getDocument().isInBulkUpdate()) return;
+    if (inlay.getVerticalAlignment() == Inlay.VerticalAlignment.INLINE) {
+      int offset = inlay.getOffset();
+      for (CaretImpl caret : myCarets) {
+        caret.onInlayAdded(offset);
       }
-      return o1.column - o2.column;
+    }
+    else {
+      updateVisualPosition();
     }
   }
 
-  private static class CaretPositionComparator implements Comparator<Caret> {
-    private static final CaretPositionComparator INSTANCE = new CaretPositionComparator();
-
-    @Override
-    public int compare(Caret o1, Caret o2) {
-      return VisualPositionComparator.INSTANCE.compare(o1.getVisualPosition(), o2.getVisualPosition());
+  @Override
+  public void onRemoved(@NotNull Inlay inlay) {
+    if (myEditor.getDocument().isInEventsHandling() || myEditor.getDocument().isInBulkUpdate()) return;
+    if (inlay.getVerticalAlignment() == Inlay.VerticalAlignment.INLINE) {
+      doWithCaretMerging(() -> {
+        for (CaretImpl caret : myCarets) {
+          caret.onInlayRemoved(inlay.getOffset(), ((InlayImpl)inlay).getOrder());
+        }
+      });
+    }
+    else {
+      updateVisualPosition();
     }
   }
+
+  @Override
+  public void onUpdated(@NotNull Inlay inlay) {
+    if (myEditor.getDocument().isInBulkUpdate()) return;
+    updateVisualPosition();
+  }
+
+  @TestOnly
+  public void validateState() {
+    for (CaretImpl caret : myCarets) {
+      caret.validateState();
+    }
+  }
+
+  private static final Comparator<VisualPosition> VISUAL_POSITION_COMPARATOR = (o1, o2) -> {
+    if (o1.line != o2.line) {
+      return o1.line - o2.line;
+    }
+    return o1.column - o2.column;
+  };
+
+  private static final Comparator<Caret> CARET_POSITION_COMPARATOR =
+    (o1, o2) -> VISUAL_POSITION_COMPARATOR.compare(o1.getVisualPosition(), o2.getVisualPosition());
 }

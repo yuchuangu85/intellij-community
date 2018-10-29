@@ -55,9 +55,10 @@ public class HgCommitCommand extends HgCommitTypeCommand {
     this(project, repo, message, false);
   }
 
-  protected void executeChunked(@NotNull List<List<String>> chunkedCommits) throws HgCommandException, VcsException {
+  @Override
+  protected void executeChunked(@NotNull List<List<String>> chunkedCommits) throws VcsException {
     if (chunkedCommits.isEmpty()) {
-      commitChunkFiles(ContainerUtil.<String>emptyList(), myAmend, myCloseBranch);
+      commitChunkFiles(ContainerUtil.emptyList(), myAmend, myCloseBranch);
     }
     else {
       int size = chunkedCommits.size();
@@ -80,7 +81,7 @@ public class HgCommitCommand extends HgCommitTypeCommand {
 
   private void commitChunkFiles(@NotNull List<String> chunk, boolean amendCommit, boolean withSubrepos, boolean closeBranch)
     throws VcsException {
-    List<String> parameters = new LinkedList<String>();
+    List<String> parameters = new LinkedList<>();
     parameters.add("--logfile");
     parameters.add(saveCommitMessage().getAbsolutePath());
     // note: for now mercurial could not perform amend commit with -S option

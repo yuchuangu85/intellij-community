@@ -32,7 +32,7 @@ import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.containers.HashMap;
+import java.util.HashMap;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -128,7 +128,7 @@ public class ClsJavaCodeReferenceElementImpl extends ClsElementImpl implements P
     PsiElement resolve = resolveElement(containingFile);
     if (resolve == null) return null;
     if (resolve instanceof PsiClass) {
-      Map<PsiTypeParameter, PsiType> substitutionMap = new HashMap<PsiTypeParameter, PsiType>();
+      Map<PsiTypeParameter, PsiType> substitutionMap = new HashMap<>();
       int index = 0;
       for (PsiTypeParameter parameter : PsiUtil.typeParametersIterable((PsiClass)resolve)) {
         if (index >= typeElements.length) {
@@ -283,7 +283,7 @@ public class ClsJavaCodeReferenceElementImpl extends ClsElementImpl implements P
   }
 
   @Override
-  public PsiElement handleElementRename(String newElementName) throws IncorrectOperationException {
+  public PsiElement handleElementRename(@NotNull String newElementName) throws IncorrectOperationException {
     throw cannotModifyException(this);
   }
 
@@ -293,7 +293,7 @@ public class ClsJavaCodeReferenceElementImpl extends ClsElementImpl implements P
   }
 
   @Override
-  public boolean isReferenceTo(PsiElement element) {
+  public boolean isReferenceTo(@NotNull PsiElement element) {
     if (!(element instanceof PsiClass)) return false;
     PsiClass aClass = (PsiClass)element;
     return myCanonicalText.equals(aClass.getQualifiedName()) || getManager().areElementsEquivalent(resolve(), element);
@@ -330,11 +330,13 @@ public class ClsJavaCodeReferenceElementImpl extends ClsElementImpl implements P
     }
   }
 
+  @NotNull
   @Override
   public TextRange getRangeInElement() {
     return new TextRange(0, getTextLength());
   }
 
+  @NotNull
   @Override
   public PsiElement getElement() {
     return this;

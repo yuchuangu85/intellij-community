@@ -26,6 +26,7 @@ import com.intellij.xml.impl.dtd.BaseXmlElementDescriptorImpl;
 import com.intellij.xml.impl.schema.XmlNSDescriptorImpl;
 import com.intellij.xml.util.HtmlUtil;
 import com.intellij.xml.util.XmlUtil;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
 
@@ -105,7 +106,7 @@ public class HtmlElementDescriptorImpl extends BaseXmlElementDescriptorImpl {
   // Read-only calculation
   @Override
   protected HashMap<String, XmlElementDescriptor> collectElementDescriptorsMap(final XmlTag element) {
-    final HashMap<String, XmlElementDescriptor> hashMap = new HashMap<String, XmlElementDescriptor>();
+    final HashMap<String, XmlElementDescriptor> hashMap = new HashMap<>();
     final XmlElementDescriptor[] elementDescriptors = myDelegate.getElementsDescriptors(element);
 
     for (XmlElementDescriptor elementDescriptor : elementDescriptors) {
@@ -152,7 +153,7 @@ public class HtmlElementDescriptorImpl extends BaseXmlElementDescriptorImpl {
   // Read-only calculation
   @Override
   protected HashMap<String, XmlAttributeDescriptor> collectAttributeDescriptorsMap(final XmlTag context) {
-    final HashMap<String, XmlAttributeDescriptor> hashMap = new HashMap<String, XmlAttributeDescriptor>();
+    final HashMap<String, XmlAttributeDescriptor> hashMap = new HashMap<>();
     XmlAttributeDescriptor[] elementAttributeDescriptors = myDelegate.getAttributesDescriptors(context);
 
     for (final XmlAttributeDescriptor attributeDescriptor : elementAttributeDescriptors) {
@@ -194,9 +195,10 @@ public class HtmlElementDescriptorImpl extends BaseXmlElementDescriptorImpl {
     myDelegate.init(element);
   }
 
+  @NotNull
   @Override
-  public Object[] getDependences() {
-    return myDelegate.getDependences();
+  public Object[] getDependencies() {
+    return myDelegate.getDependencies();
   }
 
   @Override

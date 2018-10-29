@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,20 +26,28 @@ import javax.swing.*;
 
 /**
  * SearchableConfigurable instances would be instantiated on buildSearchableOptions step during Installer's build to index of all available options. 
- * {@link #com.intellij.ide.ui.search.TraverseUIStarter}
+ * {@link com.intellij.ide.ui.search.TraverseUIStarter}
  * 
  * @see SearchableOptionContributor
  */
 public interface SearchableConfigurable extends Configurable {
+
+  /**
+   * Unique configurable id.
+   * Note this id should be THE SAME as the one specified in XML.
+   * @see ConfigurableEP#id
+   */
   @NotNull
-  @NonNls String getId();
+  @NonNls
+  String getId();
 
   /**
    * @param option setting search query
    * @return an action to perform when this configurable is opened when a search filter query is entered by the user in setting dialog.
    * This action, for example, can select something in a tree or a list embedded in this setting page that matches the query. 
    */
-  default @Nullable Runnable enableSearch(String option) {
+  @Nullable
+  default Runnable enableSearch(String option) {
     return null;
   }
 
@@ -76,14 +84,11 @@ public interface SearchableConfigurable extends Configurable {
       }
 
       @Override
-      public void reset() {
-      }
-
-      @Override
       public void disposeUIResources() {
         myKids = null;
       }
 
+      @NotNull
       @Override
       public final Configurable[] getConfigurables() {
         if (myKids != null) return myKids;
@@ -110,7 +115,7 @@ public interface SearchableConfigurable extends Configurable {
     @NotNull
     @Override
     public String getId() {
-      return (myConfigurable instanceof SearchableConfigurable)
+      return myConfigurable instanceof SearchableConfigurable
              ? ((SearchableConfigurable)myConfigurable).getId()
              : myConfigurable.getClass().getName();
     }
@@ -118,7 +123,7 @@ public interface SearchableConfigurable extends Configurable {
     @Nullable
     @Override
     public Runnable enableSearch(String option) {
-      return (myConfigurable instanceof SearchableConfigurable)
+      return myConfigurable instanceof SearchableConfigurable
              ? ((SearchableConfigurable)myConfigurable).enableSearch(option)
              : null;
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import com.intellij.ui.LayeredIcon;
 import com.intellij.ui.UIBundle;
 import com.intellij.util.IconUtil;
 import com.intellij.util.PlatformIcons;
+import gnu.trove.THashMap;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -49,13 +50,14 @@ public class FileChooserDescriptor implements Cloneable {
   private String myDescription;
 
   private boolean myHideIgnored = true;
-  private final List<VirtualFile> myRoots = new ArrayList<VirtualFile>();
+  private final List<VirtualFile> myRoots = new ArrayList<>();
   private boolean myShowFileSystemRoots = true;
   private boolean myTreeRootVisible = false;
   private boolean myShowHiddenFiles = false;
   private Condition<VirtualFile> myFileFilter = null;
+  private boolean myForcedToUseIdeaFileChooser = false;
 
-  private final Map<String, Object> myUserData = new HashMap<String, Object>();
+  private final Map<String, Object> myUserData = new THashMap<>();
 
   /**
    * Creates new instance. Use methods from {@link FileChooserDescriptorFactory} for most used descriptors.
@@ -171,7 +173,8 @@ public class FileChooserDescriptor implements Cloneable {
     return withRoots(Arrays.asList(roots));
   }
 
-  public FileChooserDescriptor withRoots(@NotNull List<VirtualFile> roots) {
+  public FileChooserDescriptor withRoots(@NotNull List<? extends VirtualFile> roots) {
+    if (roots.contains(null)) throw new IllegalArgumentException("'null' in roots: " + roots);
     myRoots.clear();
     myRoots.addAll(roots);
     return this;
@@ -261,17 +264,12 @@ public class FileChooserDescriptor implements Cloneable {
     if (file.isDirectory() && myChooseFolders) {
       return true;
     }
-    if (acceptAsJarFile(file)) {
-      return true;
-    }
-    if (acceptAsGeneralFile(file)) {
-      return true;
-    }
-    if (myFileFilter != null && !file.isDirectory() && myFileFilter.value(file)) {
-      return true;
+
+    if (myFileFilter != null && !file.isDirectory()) {
+      return myFileFilter.value(file);
     }
 
-    return false;
+    return acceptAsJarFile(file) || acceptAsGeneralFile(file);
   }
 
   public Icon getIcon(final VirtualFile file) {
@@ -298,6 +296,14 @@ public class FileChooserDescriptor implements Cloneable {
    * @throws Exception if the the files cannot be accepted
    */
   public void validateSelectedFiles(VirtualFile[] files) throws Exception {
+  }
+
+  public boolean isForcedToUseIdeaFileChooser() {
+    return myForcedToUseIdeaFileChooser;
+  }
+
+  public void setForcedToUseIdeaFileChooser(boolean forcedToUseIdeaFileChooser) {
+    myForcedToUseIdeaFileChooser = forcedToUseIdeaFileChooser;
   }
 
   private boolean acceptAsGeneralFile(VirtualFile file) {
@@ -339,7 +345,7 @@ public class FileChooserDescriptor implements Cloneable {
   }
 
   @Nullable
-  public Object getUserData(String dataId) {
+  public Object getUserData(@NotNull String dataId) {
     return myUserData.get(dataId);
   }
 

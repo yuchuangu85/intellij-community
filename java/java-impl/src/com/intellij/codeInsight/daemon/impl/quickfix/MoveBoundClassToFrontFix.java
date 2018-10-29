@@ -15,7 +15,6 @@
  */
 package com.intellij.codeInsight.daemon.impl.quickfix;
 
-import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.daemon.QuickFixBundle;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.openapi.command.undo.UndoUtil;
@@ -33,8 +32,10 @@ public class MoveBoundClassToFrontFix extends ExtendsListFix {
 
   public MoveBoundClassToFrontFix(@NotNull PsiClass aClass, @NotNull PsiClassType classToExtendFrom) {
     super(aClass, classToExtendFrom, true);
+    PsiClass classToExtendFromPointer = myClassToExtendFromPointer != null ? myClassToExtendFromPointer.getElement() : null;
+
     myName = QuickFixBundle.message("move.bound.class.to.front.fix.text",
-                                    HighlightUtil.formatClass(myClassToExtendFrom),
+                                    classToExtendFromPointer == null ? "<null>" : HighlightUtil.formatClass(classToExtendFromPointer),
                                     HighlightUtil.formatClass(aClass));
   }
 
@@ -57,7 +58,6 @@ public class MoveBoundClassToFrontFix extends ExtendsListFix {
                      @NotNull PsiElement startElement,
                      @NotNull PsiElement endElement) {
     final PsiClass myClass = (PsiClass)startElement;
-    if (!FileModificationService.getInstance().prepareFileForWrite(myClass.getContainingFile())) return;
     PsiReferenceList extendsList = myClass.getExtendsList();
     if (extendsList == null) return;
     try {
@@ -76,11 +76,12 @@ public class MoveBoundClassToFrontFix extends ExtendsListFix {
                              @NotNull PsiElement startElement,
                              @NotNull PsiElement endElement) {
     final PsiClass myClass = (PsiClass)startElement;
+    PsiClass classToExtendFrom = myClassToExtendFromPointer != null ? myClassToExtendFromPointer.getElement() : null;
+
     return
-      myClass.isValid()
-      && myClass.getManager().isInProject(myClass)
-      && myClassToExtendFrom != null
-      && myClassToExtendFrom.isValid()
+      myClass.getManager().isInProject(myClass)
+      && classToExtendFrom != null
+      && classToExtendFrom.isValid()
     ;
   }
 }

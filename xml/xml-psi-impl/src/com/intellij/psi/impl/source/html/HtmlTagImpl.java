@@ -48,7 +48,7 @@ public class HtmlTagImpl extends XmlTagImpl implements HtmlTag {
 
         if (name == null || name.equals(tagName)) {
           if (result == null) {
-            result = new ArrayList<XmlTag>(3);
+            result = new ArrayList<>(3);
           }
 
           result.add(subTag);
@@ -58,18 +58,18 @@ public class HtmlTagImpl extends XmlTagImpl implements HtmlTag {
                (name == null || name.equals(subTag.getLocalName()))
         ) {
         if (result == null) {
-          result = new ArrayList<XmlTag>(3);
+          result = new ArrayList<>(3);
         }
 
         result.add(subTag);
       }
     }
 
-    return result == null ? EMPTY : result.toArray(new XmlTag[result.size()]);
+    return result == null ? EMPTY : result.toArray(XmlTag.EMPTY);
   }
 
   @Override
-  protected boolean isCaseSensitive() {
+  public boolean isCaseSensitive() {
     return false;
   }
 
@@ -114,6 +114,7 @@ public class HtmlTagImpl extends XmlTagImpl implements HtmlTag {
     return value;
   }
 
+  @Override
   public String toString() {
     return "HtmlTag:" + getName();
   }

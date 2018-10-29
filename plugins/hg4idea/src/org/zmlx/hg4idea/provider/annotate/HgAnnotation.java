@@ -47,13 +47,13 @@ public class HgAnnotation extends FileAnnotation {
   private final HgLineAnnotationAspect revisionAnnotationAspect = new HgLineAnnotationAspect(FIELD.REVISION);
 
   @NotNull private final Project myProject;
-  @NotNull private final List<HgAnnotationLine> myLines;
-  @NotNull private final List<HgFileRevision> myFileRevisions;
+  @NotNull private final List<? extends HgAnnotationLine> myLines;
+  @NotNull private final List<? extends HgFileRevision> myFileRevisions;
   @NotNull private final HgFile myFile;
   private final VcsRevisionNumber myCurrentRevision;
 
-  public HgAnnotation(@NotNull Project project, @NotNull HgFile hgFile, @NotNull List<HgAnnotationLine> lines,
-                      @NotNull List<HgFileRevision> vcsFileRevisions, VcsRevisionNumber revision) {
+  public HgAnnotation(@NotNull Project project, @NotNull HgFile hgFile, @NotNull List<? extends HgAnnotationLine> lines,
+                      @NotNull List<? extends HgFileRevision> vcsFileRevisions, VcsRevisionNumber revision) {
     super(project);
     myProject = project;
     myLines = lines;
@@ -63,20 +63,8 @@ public class HgAnnotation extends FileAnnotation {
   }
 
   @Override
-  @Nullable
-  public AnnotationSourceSwitcher getAnnotationSourceSwitcher() {
-    return null;
-  }
-
-  @Override
   public int getLineCount() {
     return myLines.size();
-  }
-
-  @Override
-  @Nullable
-  public VcsRevisionNumber originalRevision(int lineNumber) {
-    return getLineRevisionNumber(lineNumber);
   }
 
   @Override
@@ -148,14 +136,9 @@ public class HgAnnotation extends FileAnnotation {
   @Override
   @Nullable
   public List<VcsFileRevision> getRevisions() {
-    List<VcsFileRevision> result = new LinkedList<VcsFileRevision>();
+    List<VcsFileRevision> result = new LinkedList<>();
     result.addAll(myFileRevisions);
     return result;
-  }
-
-  @Override
-  public boolean revisionsNotEmpty() {
-    return true;
   }
 
   @Nullable

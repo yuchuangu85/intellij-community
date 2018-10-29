@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,12 +35,6 @@ import org.jetbrains.plugins.groovy.lang.psi.api.types.GrCodeReferenceElement;
  * @author Max Medvedev
  */
 public class GroovyDocCheckInspection extends BaseInspection {
-  @Nls
-  @NotNull
-  @Override
-  public String getGroupDisplayName() {
-    return PROBABLE_BUGS;
-  }
 
   @Nls
   @NotNull
@@ -64,17 +58,17 @@ public class GroovyDocCheckInspection extends BaseInspection {
   protected BaseInspectionVisitor buildVisitor() {
     return new BaseInspectionVisitor() {
       @Override
-      public void visitDocMethodReference(GrDocMethodReference reference) {
+      public void visitDocMethodReference(@NotNull GrDocMethodReference reference) {
         checkGrDocMemberReference(reference);
       }
 
       @Override
-      public void visitDocFieldReference(GrDocFieldReference reference) {
+      public void visitDocFieldReference(@NotNull GrDocFieldReference reference) {
         checkGrDocMemberReference(reference);
       }
 
       @Override
-      public void visitCodeReferenceElement(GrCodeReferenceElement refElement) {
+      public void visitCodeReferenceElement(@NotNull GrCodeReferenceElement refElement) {
         GroovyResolveResult resolveResult = refElement.advancedResolve();
         if (refElement.getReferenceName() == null) return;
 

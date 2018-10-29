@@ -56,6 +56,7 @@ final class JavadocGenerationPanel extends JPanel {
 
     myIndex.addChangeListener(
       new ChangeListener() {
+        @Override
         public void stateChanged(ChangeEvent e) {
           mySeparateIndex.setEnabled(myIndex.isSelected());
         }
@@ -64,6 +65,7 @@ final class JavadocGenerationPanel extends JPanel {
 
       myTagDeprecated.addChangeListener(
       new ChangeListener() {
+        @Override
         public void stateChanged(ChangeEvent e) {
           myDeprecatedList.setEnabled(myTagDeprecated.isSelected());
         }
@@ -71,7 +73,7 @@ final class JavadocGenerationPanel extends JPanel {
    );
 
     //noinspection UseOfObsoleteCollectionType
-    Hashtable<Integer, JComponent> labelTable = new Hashtable<Integer, JComponent>();
+    Hashtable<Integer, JComponent> labelTable = new Hashtable<>();
     labelTable.put(new Integer(1), new JLabel(PsiKeyword.PUBLIC));
     labelTable.put(new Integer(2), new JLabel(PsiKeyword.PROTECTED));
     labelTable.put(new Integer(3), new JLabel(PsiKeyword.PACKAGE));
@@ -86,6 +88,7 @@ final class JavadocGenerationPanel extends JPanel {
     myScopeSlider.setPaintLabels(true);
     myScopeSlider.setSnapToTicks(true);
     myScopeSlider.addChangeListener(new ChangeListener() {
+      @Override
       public void stateChanged(ChangeEvent e) {
         handleSlider();
       }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.source.xml;
 
 import com.intellij.codeInsight.AutoPopupController;
@@ -31,6 +17,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.impl.source.html.dtd.HtmlElementDescriptorImpl;
 import com.intellij.psi.meta.PsiPresentableMetaData;
 import com.intellij.psi.search.EverythingGlobalScope;
 import com.intellij.psi.search.GlobalSearchScope;
@@ -60,15 +47,15 @@ public class DefaultXmlTagNameProvider implements XmlTagNameProvider {
   public void addTagNameVariants(List<LookupElement> elements, @NotNull XmlTag tag, String prefix) {
     final List<String> namespaces;
     if (prefix.isEmpty()) {
-      namespaces = new ArrayList<String>(Arrays.asList(tag.knownNamespaces()));
+      namespaces = new ArrayList<>(Arrays.asList(tag.knownNamespaces()));
       namespaces.add(XmlUtil.EMPTY_URI); // empty namespace
     }
     else {
-      namespaces = new ArrayList<String>(Collections.singletonList(tag.getNamespace()));
+      namespaces = new ArrayList<>(Collections.singletonList(tag.getNamespace()));
     }
     PsiFile psiFile = tag.getContainingFile();
     XmlExtension xmlExtension = XmlExtension.getExtension(psiFile);
-    List<String> nsInfo = new ArrayList<String>();
+    List<String> nsInfo = new ArrayList<>();
     List<XmlElementDescriptor> variants = TagNameVariantCollector.getTagDescriptors(tag, namespaces, nsInfo);
 
     if (variants.isEmpty() && psiFile instanceof XmlFile && ((XmlFile)psiFile).getRootTag() == tag) {
@@ -76,7 +63,7 @@ public class DefaultXmlTagNameProvider implements XmlTagNameProvider {
       return;
     }
 
-    final Set<String> visited = new HashSet<String>();
+    final Set<String> visited = new HashSet<>();
     for (int i = 0; i < variants.size(); i++) {
       XmlElementDescriptor descriptor = variants.get(i);
       String qname = descriptor.getName(tag);
@@ -104,7 +91,7 @@ public class DefaultXmlTagNameProvider implements XmlTagNameProvider {
       if (xmlExtension.useXmlTagInsertHandler()) {
         lookupElement = lookupElement.withInsertHandler(XmlTagInsertHandler.INSTANCE);
       }
-
+      lookupElement = lookupElement.withCaseSensitivity(!(descriptor instanceof HtmlElementDescriptorImpl));
       elements.add(PrioritizedLookupElement.withPriority(lookupElement, separator > 0 ? 0 : 1));
     }
   }
@@ -114,7 +101,7 @@ public class DefaultXmlTagNameProvider implements XmlTagNameProvider {
     elements.add(LookupElementBuilder.create("?xml version=\"1.0\" encoding=\"\" ?>").withPresentableText("<?xml version=\"1.0\" encoding=\"\" ?>").withInsertHandler(
       new InsertHandler<LookupElement>() {
         @Override
-        public void handleInsert(InsertionContext context, LookupElement item) {
+        public void handleInsert(@NotNull InsertionContext context, @NotNull LookupElement item) {
           int offset = context.getEditor().getCaretModel().getOffset();
           context.getEditor().getCaretModel().moveToOffset(offset - 4);
           AutoPopupController.getInstance(context.getProject()).scheduleAutoPopup(context.getEditor());
@@ -130,12 +117,12 @@ public class DefaultXmlTagNameProvider implements XmlTagNameProvider {
       if (ns.startsWith("file://")) continue;
       fbi.processValues(XmlNamespaceIndex.NAME, ns, null, new FileBasedIndex.ValueProcessor<XsdNamespaceBuilder>() {
         @Override
-        public boolean process(final VirtualFile file, XsdNamespaceBuilder value) {
+        public boolean process(@NotNull final VirtualFile file, XsdNamespaceBuilder value) {
           List<String> tags = value.getRootTags();
           for (String s : tags) {
             elements.add(LookupElementBuilder.create(s).withTypeText(ns).withInsertHandler(new XmlTagInsertHandler() {
               @Override
-              public void handleInsert(InsertionContext context, LookupElement item) {
+              public void handleInsert(@NotNull InsertionContext context, @NotNull LookupElement item) {
                 final Editor editor = context.getEditor();
                 final Document document = context.getDocument();
                 final int caretOffset = editor.getCaretModel().getOffset();

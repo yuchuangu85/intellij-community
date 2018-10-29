@@ -53,11 +53,11 @@ public final class EmptyAction extends AnAction {
   }
 
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public void actionPerformed(@NotNull AnActionEvent e) {
   }
 
   @Override
-  public void update(AnActionEvent e) {
+  public void update(@NotNull AnActionEvent e) {
     e.getPresentation().setEnabledAndVisible(myEnabled);
   }
 
@@ -93,7 +93,7 @@ public final class EmptyAction extends AnAction {
            new MyDelegatingAction(action);
   }
 
-  private static class MyDelegatingAction extends AnAction {
+  public static class MyDelegatingAction extends AnAction {
     @NotNull private final AnAction myDelegate;
 
     public MyDelegatingAction(@NotNull AnAction action) {
@@ -103,12 +103,12 @@ public final class EmptyAction extends AnAction {
     }
 
     @Override
-    public void update(final AnActionEvent e) {
+    public void update(@NotNull final AnActionEvent e) {
       myDelegate.update(e);
     }
 
     @Override
-    public void actionPerformed(final AnActionEvent e) {
+    public void actionPerformed(@NotNull final AnActionEvent e) {
       myDelegate.actionPerformed(e);
     }
 
@@ -128,13 +128,18 @@ public final class EmptyAction extends AnAction {
     }
   }
 
-  private static class MyDelegatingActionGroup extends ActionGroup {
+  public static class MyDelegatingActionGroup extends ActionGroup {
     @NotNull private final ActionGroup myDelegate;
 
     public MyDelegatingActionGroup(@NotNull ActionGroup action) {
       myDelegate = action;
       copyFrom(action);
       setEnabledInModalContext(action.isEnabledInModalContext());
+    }
+    
+    @NotNull
+    public ActionGroup getDelegate() {
+      return myDelegate;
     }
 
     @Override
@@ -149,17 +154,17 @@ public final class EmptyAction extends AnAction {
     }
 
     @Override
-    public void update(final AnActionEvent e) {
+    public void update(@NotNull final AnActionEvent e) {
       myDelegate.update(e);
     }
 
     @Override
-    public boolean canBePerformed(DataContext context) {
+    public boolean canBePerformed(@NotNull DataContext context) {
       return myDelegate.canBePerformed(context);
     }
 
     @Override
-    public void actionPerformed(final AnActionEvent e) {
+    public void actionPerformed(@NotNull final AnActionEvent e) {
       myDelegate.actionPerformed(e);
     }
 

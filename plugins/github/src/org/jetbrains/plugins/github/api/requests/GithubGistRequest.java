@@ -16,7 +16,7 @@
 package org.jetbrains.plugins.github.api.requests;
 
 import com.google.gson.annotations.SerializedName;
-import com.intellij.util.containers.HashMap;
+import java.util.HashMap;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -42,7 +42,7 @@ public class GithubGistRequest {
     this.description = description;
     this.isPublic = isPublic;
 
-    this.files = new HashMap<String, GistFile>();
+    this.files = new HashMap<>();
     for (FileContent file : files) {
       this.files.put(file.getFileName(), new GistFile(file.getContent()));
     }

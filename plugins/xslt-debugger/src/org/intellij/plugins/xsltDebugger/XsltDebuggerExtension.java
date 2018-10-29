@@ -28,7 +28,6 @@ import com.intellij.icons.AllIcons;
 import com.intellij.ide.plugins.IdeaPluginDescriptor;
 import com.intellij.ide.plugins.PluginManager;
 import com.intellij.ide.plugins.PluginManagerCore;
-import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.application.ex.ApplicationManagerEx;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.PluginId;
@@ -39,8 +38,10 @@ import com.intellij.openapi.util.UserDataHolder;
 import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiManager;
+import com.intellij.util.PathUtil;
 import com.intellij.util.PlatformIcons;
 import com.intellij.util.net.NetUtils;
+import gnu.trove.THashMap;
 import org.intellij.lang.xpath.xslt.XsltSupport;
 import org.intellij.lang.xpath.xslt.impl.XsltChecker;
 import org.intellij.lang.xpath.xslt.run.XsltRunConfiguration;
@@ -48,6 +49,7 @@ import org.intellij.lang.xpath.xslt.run.XsltRunnerExtension;
 import org.intellij.plugins.xsltDebugger.ui.OutputTabComponent;
 import org.intellij.plugins.xsltDebugger.ui.StructureTabComponent;
 import org.jetbrains.annotations.NonNls;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
@@ -73,20 +75,23 @@ public class XsltDebuggerExtension extends XsltRunnerExtension {
   @NonNls
   private static final String SAXON_9_JAR = "saxon9he.jar";
 
+  @Override
   protected boolean supports(XsltRunConfiguration config, boolean debugger) {
     return (debugger || XsltDebuggerRunner.ACTIVE.get() == Boolean.TRUE) &&
            config.getOutputType() == XsltRunConfiguration.OutputType.CONSOLE; // ?
   }
 
+  @Override
   public ProcessListener createProcessListener(Project project, UserDataHolder extensionData) {
     final Integer port = extensionData.getUserData(PORT);
     assert port != null;
     return new DebugProcessListener(project, port);
   }
 
+  @Override
   public boolean createTabs(Project project,
                             AdditionalTabComponentManager manager,
-                            AdditionalTabComponent outputConsole,
+                            @NotNull AdditionalTabComponent outputConsole,
                             ProcessHandler process) {
     if (manager instanceof RunTab) {
       LogConsoleManagerBase runTab = ((RunTab)manager).getLogConsoleManager();
@@ -100,6 +105,7 @@ public class XsltDebuggerExtension extends XsltRunnerExtension {
     return true;
   }
 
+  @Override
   public void patchParameters(final SimpleJavaParameters parameters, XsltRunConfiguration configuration, UserDataHolder extensionData)
     throws CantRunException {
     final XsltRunConfiguration.OutputType outputType = configuration.getOutputType();
@@ -137,7 +143,7 @@ public class XsltDebuggerExtension extends XsltRunnerExtension {
       assert descriptor != null;
       pluginPath = descriptor.getPath();
     } else {
-      // -Dxslt-debugger.plugin.path=C:\work\java\intellij/ultimate\out\classes\production\xslt-debugger-engine
+      // -Dxslt-debugger.plugin.path=C:\work\java\intellij/ultimate\out\classes\production\intellij.xslt.debugger.engine
       pluginPath = new File(System.getProperty("xslt-debugger.plugin.path"));
     }
 
@@ -156,7 +162,7 @@ public class XsltDebuggerExtension extends XsltRunnerExtension {
       if (!(rtClasspath = new File(pluginPath, "classes")).exists()) {
         if (ApplicationManagerEx.getApplicationEx().isInternal() && new File(pluginPath, "org").exists()) {
           rtClasspath = pluginPath;
-          final File engineImplInternal = new File(pluginPath, ".." + c + "xslt-debugger-engine-impl");
+          final File engineImplInternal = new File(pluginPath, ".." + c + "intellij.xslt.debugger.engine.impl");
           assert engineImplInternal.exists() : engineImplInternal.getAbsolutePath();
           parameters.getClassPath().addTail(engineImplInternal.getAbsolutePath());
         } else {
@@ -171,11 +177,7 @@ public class XsltDebuggerExtension extends XsltRunnerExtension {
       parameters.getClassPath().addTail(rmiStubs.getAbsolutePath());
     }
 
-    File trove4j = new File(PathManager.getLibPath() + c + "trove4j.jar");
-    if (!trove4j.exists()) {
-      trove4j = new File(PathManager.getHomePath() + c + "community" + c + "lib" + c + "trove4j.jar");
-      assert trove4j.exists() : trove4j.getAbsolutePath();
-    }
+    File trove4j = new File(PathUtil.getJarPathForClass(THashMap.class));
     parameters.getClassPath().addTail(trove4j.getAbsolutePath());
 
     final String type = parameters.getVMParametersList().getPropertyValue("xslt.transformer.type");
@@ -285,7 +287,7 @@ public class XsltDebuggerExtension extends XsltRunnerExtension {
     File transformerFile = new File(pluginPath, "lib" + c + "rt" + c + jarFile);
     if (!transformerFile.exists()) {
       if (!(transformerFile = new File(pluginPath, "lib" + c + jarFile)).exists()) {
-        if (!(transformerFile = new File(new File(pluginPath, ".." + c + "xslt-debugger-engine-impl"), jarFile)).exists()) {
+        if (!(transformerFile = new File(new File(pluginPath, ".." + c + "intellij.xslt.debugger.engine.impl"), jarFile)).exists()) {
           transformerFile = new File(pluginPath, jarFile);
           assert transformerFile.exists() : transformerFile.getAbsolutePath();
         }

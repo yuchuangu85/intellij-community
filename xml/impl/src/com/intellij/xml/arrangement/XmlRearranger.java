@@ -21,7 +21,6 @@ import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.codeStyle.CodeStyleSettings;
 import com.intellij.psi.codeStyle.arrangement.*;
-import com.intellij.psi.codeStyle.arrangement.group.ArrangementGroupingRule;
 import com.intellij.psi.codeStyle.arrangement.match.ArrangementEntryMatcher;
 import com.intellij.psi.codeStyle.arrangement.match.StdArrangementEntryMatcher;
 import com.intellij.psi.codeStyle.arrangement.match.StdArrangementMatchRule;
@@ -49,7 +48,7 @@ public class XmlRearranger
              ArrangementStandardSettingsAware {
 
   private static final Set<ArrangementSettingsToken> SUPPORTED_TYPES = ContainerUtilRt.newLinkedHashSet(XML_TAG, XML_ATTRIBUTE); 
-  private static final List<StdArrangementMatchRule> DEFAULT_MATCH_RULES = new ArrayList<StdArrangementMatchRule>();
+  private static final List<StdArrangementMatchRule> DEFAULT_MATCH_RULES = new ArrayList<>();
 
   private static final StdArrangementSettings DEFAULT_SETTINGS;
 
@@ -57,7 +56,7 @@ public class XmlRearranger
     DEFAULT_MATCH_RULES.add(new StdArrangementMatchRule(new StdArrangementEntryMatcher(
       new ArrangementAtomMatchCondition(StdArrangementTokens.Regexp.NAME, "xmlns:.*"))));
     DEFAULT_SETTINGS = StdArrangementSettings.createByMatchRules(
-      Collections.<ArrangementGroupingRule>emptyList(), DEFAULT_MATCH_RULES);
+      Collections.emptyList(), DEFAULT_MATCH_RULES);
   }
 
   private static final DefaultArrangementSettingsSerializer SETTINGS_SERIALIZER = new DefaultArrangementSettingsSerializer(DEFAULT_SETTINGS);

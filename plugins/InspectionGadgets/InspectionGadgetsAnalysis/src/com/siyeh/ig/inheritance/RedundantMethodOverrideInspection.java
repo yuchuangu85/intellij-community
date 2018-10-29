@@ -1,5 +1,5 @@
 /*
- * Copyright 2005-2016 Bas Leijdekkers
+ * Copyright 2005-2018 Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,21 +18,21 @@ package com.siyeh.ig.inheritance;
 import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
+import com.intellij.psi.search.PackageScope;
+import com.intellij.psi.search.PsiSearchHelper;
+import com.intellij.psi.search.searches.ReferencesSearch;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
+import com.intellij.util.Query;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.InspectionGadgetsFix;
 import com.siyeh.ig.psiutils.EquivalenceChecker;
 import com.siyeh.ig.psiutils.MethodCallUtils;
-import com.siyeh.ig.psiutils.MethodUtils;
 import com.siyeh.ig.psiutils.ParenthesesUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
 
 public class RedundantMethodOverrideInspection extends BaseInspection {
 
@@ -58,15 +58,10 @@ public class RedundantMethodOverrideInspection extends BaseInspection {
 
   private static class RedundantMethodOverrideFix
     extends InspectionGadgetsFix {
-    @Override
-    @NotNull
-    public String getFamilyName() {
-      return getName();
-    }
 
     @Override
     @NotNull
-    public String getName() {
+    public String getFamilyName() {
       return InspectionGadgetsBundle.message(
         "redundant.method.override.quickfix");
     }
@@ -90,29 +85,26 @@ public class RedundantMethodOverrideInspection extends BaseInspection {
     public void visitMethod(PsiMethod method) {
       super.visitMethod(method);
       final PsiCodeBlock body = method.getBody();
-      if (body == null) {
+      if (body == null || method.getNameIdentifier() == null) {
         return;
       }
-      if (method.getNameIdentifier() == null) {
+      final PsiMethod[] methods = method.findSuperMethods();
+      if (methods.length == 0) {
         return;
       }
-      final PsiMethod superMethod = MethodUtils.getSuper(method);
-      if (superMethod == null) {
+      final PsiMethod superMethod = methods[0];
+      if (superMethod.hasModifierProperty(PsiModifier.DEFAULT) && methods.length > 1) {
         return;
       }
-      if (!modifierListsAreEquivalent(method.getModifierList(), superMethod.getModifierList())) {
+      if (!AbstractMethodOverridesAbstractMethodInspection.methodsHaveSameAnnotationsAndModifiers(method, superMethod) ||
+          !AbstractMethodOverridesAbstractMethodInspection.methodsHaveSameReturnTypes(method, superMethod) ||
+          !AbstractMethodOverridesAbstractMethodInspection.haveSameExceptionSignatures(method, superMethod) ||
+          method.isVarArgs() != superMethod.isVarArgs()) {
         return;
-      }
-      final PsiType superReturnType = superMethod.getReturnType();
-      if (superReturnType == null || !superReturnType.equals(method.getReturnType())) {
-        return;
-      }
-      if (method.hasModifierProperty(PsiModifier.FINAL)) {
-        return;  // method overridden and made final - not redundant
       }
       final PsiCodeBlock superBody = superMethod.getBody();
 
-      EquivalenceChecker checker = new ParameterEquivalenceChecker(method, superMethod);
+      final EquivalenceChecker checker = new ParameterEquivalenceChecker(method, superMethod);
       if (checker.codeBlocksAreEquivalent(body, superBody) || isSuperCallWithSameArguments(body, method, superMethod)) {
         registerMethodError(method);
       }
@@ -128,12 +120,12 @@ public class RedundantMethodOverrideInspection extends BaseInspection {
       }
 
       @Override
-      protected Decision referenceExpressionsAreEquivalentDecision(PsiReferenceExpression referenceExpression1,
-                                                                   PsiReferenceExpression referenceExpression2) {
+      protected Match referenceExpressionsMatch(PsiReferenceExpression referenceExpression1,
+                                                PsiReferenceExpression referenceExpression2) {
         if (areSameParameters(referenceExpression1, referenceExpression2)) {
-          return EXACTLY_MATCHES;
+          return EXACT_MATCH;
         }
-        return super.referenceExpressionsAreEquivalentDecision(referenceExpression1, referenceExpression2);
+        return super.referenceExpressionsMatch(referenceExpression1, referenceExpression2);
       }
 
       private boolean areSameParameters(PsiReferenceExpression referenceExpression1, PsiReferenceExpression referenceExpression2) {
@@ -158,7 +150,7 @@ public class RedundantMethodOverrideInspection extends BaseInspection {
       }
     }
 
-    private static boolean isSuperCallWithSameArguments(PsiCodeBlock body, PsiMethod method, PsiMethod superMethod) {
+    private boolean isSuperCallWithSameArguments(PsiCodeBlock body, PsiMethod method, PsiMethod superMethod) {
       final PsiStatement[] statements = body.getStatements();
       if (statements.length != 1) {
         return false;
@@ -190,10 +182,31 @@ public class RedundantMethodOverrideInspection extends BaseInspection {
       if (!MethodCallUtils.isSuperMethodCall(methodCallExpression, method)) return false;
 
       if (superMethod.hasModifierProperty(PsiModifier.PROTECTED)) {
-        final PsiJavaFile superFile = (PsiJavaFile)superMethod.getContainingFile();
         final PsiJavaFile file = (PsiJavaFile)method.getContainingFile();
         // implementing a protected method in another package makes it available to that package.
-        if (!superFile.getPackageName().equals(file.getPackageName())) return false;
+        PsiPackage aPackage = JavaPsiFacade.getInstance(method.getProject()).findPackage(file.getPackageName());
+        if (aPackage == null) {
+          return false; // when package statement is incorrect
+        }
+        final PackageScope scope = new PackageScope(aPackage, false, false);
+        if (isOnTheFly()) {
+          final PsiSearchHelper searchHelper = PsiSearchHelper.getInstance(method.getProject());
+          final PsiSearchHelper.SearchCostResult cost =
+            searchHelper.isCheapEnoughToSearch(method.getName(), scope, null, null);
+          if (cost == PsiSearchHelper.SearchCostResult.ZERO_OCCURRENCES) {
+            return true;
+          }
+          if (cost == PsiSearchHelper.SearchCostResult.TOO_MANY_OCCURRENCES) {
+            return false;
+          }
+        }
+        final Query<PsiReference> search = ReferencesSearch.search(method, scope);
+        final PsiClass containingClass = method.getContainingClass();
+        for (PsiReference reference : search) {
+          if (!PsiTreeUtil.isAncestor(containingClass, reference.getElement(), true)) {
+            return false;
+          }
+        }
       }
 
       return areSameArguments(methodCallExpression, method);
@@ -214,47 +227,6 @@ public class RedundantMethodOverrideInspection extends BaseInspection {
         }
       }
       return true;
-    }
-
-    private static boolean modifierListsAreEquivalent(@Nullable PsiModifierList list1, @Nullable PsiModifierList list2) {
-      if (list1 == null) {
-        return list2 == null;
-      }
-      else if (list2 == null) {
-        return false;
-      }
-      final Set<String> annotations1 = new HashSet();
-      for (PsiAnnotation annotation : list1.getAnnotations()) {
-        annotations1.add(annotation.getQualifiedName());
-      }
-      final Set<String> annotations2 = new HashSet();
-      for (PsiAnnotation annotation : list2.getAnnotations()) {
-        annotations2.add(annotation.getQualifiedName());
-      }
-      final Set<String> uniques = disjunction(annotations1, annotations2);
-      uniques.remove(CommonClassNames.JAVA_LANG_OVERRIDE);
-      if (!uniques.isEmpty()) {
-        return false;
-      }
-      return list1.hasModifierProperty(PsiModifier.STRICTFP) == list2.hasModifierProperty(PsiModifier.STRICTFP) &&
-             list1.hasModifierProperty(PsiModifier.SYNCHRONIZED) == list2.hasModifierProperty(PsiModifier.SYNCHRONIZED) &&
-             list1.hasModifierProperty(PsiModifier.PUBLIC) == list2.hasModifierProperty(PsiModifier.PUBLIC) &&
-             list1.hasModifierProperty(PsiModifier.PROTECTED) == list2.hasModifierProperty(PsiModifier.PROTECTED);
-    }
-
-    private static <T> Set<T> disjunction(Collection<T> set1, Collection<T> set2) {
-      final Set<T> result = new HashSet();
-      for (T t : set1) {
-        if (!set2.contains(t)) {
-          result.add(t);
-        }
-      }
-      for (T t : set2) {
-        if (!set1.contains(t)) {
-          result.add(t);
-        }
-      }
-      return result;
     }
   }
 }

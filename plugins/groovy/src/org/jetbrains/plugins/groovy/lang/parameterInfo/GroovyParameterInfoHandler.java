@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.parameterInfo;
 
 import com.intellij.codeInsight.CodeInsightSettings;
@@ -47,10 +33,10 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrMe
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrReflectedMethod;
 import org.jetbrains.plugins.groovy.lang.psi.api.types.GrClosureParameter;
 import org.jetbrains.plugins.groovy.lang.psi.impl.GrClosureType;
-import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyResolveResultImpl;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil;
 import org.jetbrains.plugins.groovy.lang.psi.util.GrInnerClassConstructorUtil;
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
+import org.jetbrains.plugins.groovy.lang.resolve.ElementResolveResult;
 import org.jetbrains.plugins.groovy.lang.resolve.ResolveUtil;
 
 import java.util.*;
@@ -66,11 +52,11 @@ public class GroovyParameterInfoHandler implements ParameterInfoHandlerWithTabAc
     return true;
   }
 
-  private static final Set<? extends Class> ourStopSearch = Collections.singleton(GrMethod.class);
+  private static final Set<Class> ourStopSearch = Collections.singleton(GrMethod.class);
 
   @NotNull
   @Override
-  public Set<? extends Class> getArgListStopSearchClasses() {
+  public Set<Class> getArgListStopSearchClasses() {
     return ourStopSearch;
   }
 
@@ -80,28 +66,16 @@ public class GroovyParameterInfoHandler implements ParameterInfoHandlerWithTabAc
     List<? extends PsiElement> elements = JavaCompletionUtil.getAllPsiElements(item);
 
     if (elements != null) {
-      List<GroovyResolveResult> methods = new ArrayList<GroovyResolveResult>();
+      List<GroovyResolveResult> methods = new ArrayList<>();
       for (PsiElement element : elements) {
         if (element instanceof PsiMethod) {
-          methods.add(new GroovyResolveResultImpl(element, true));
+          methods.add(new ElementResolveResult<>(element));
         }
       }
       return ArrayUtil.toObjectArray(methods);
     }
 
     return null;
-  }
-
-  @Override
-  public Object[] getParametersForDocumentation(Object resolveResult, ParameterInfoContext context) {
-    if (resolveResult instanceof GroovyResolveResult) {
-      final PsiElement element = ((GroovyResolveResult)resolveResult).getElement();
-      if (element instanceof PsiMethod) {
-        return ((PsiMethod)element).getParameterList().getParameters();
-      }
-    }
-
-    return ArrayUtil.EMPTY_OBJECT_ARRAY;
   }
 
   @Override
@@ -192,7 +166,7 @@ public class GroovyParameterInfoHandler implements ParameterInfoHandlerWithTabAc
   }
 
   private static void filterOutReflectedMethods(List toShow) {
-    Set<GrMethod> methods = new HashSet<GrMethod>();
+    Set<GrMethod> methods = new HashSet<>();
 
     for (Iterator iterator = toShow.iterator(); iterator.hasNext(); ) {
       Object next = iterator.next();
@@ -314,16 +288,6 @@ public class GroovyParameterInfoHandler implements ParameterInfoHandlerWithTabAc
     if (!(child instanceof GrNamedArgument)) return false;
     final PsiElement element = PsiUtil.skipWhitespacesAndComments(child.getPrevSibling(), false);
     return element != null && element.getNode().getElementType() == GroovyTokenTypes.mCOMMA;
-  }
-
-  @Override
-  public String getParameterCloseChars() {
-    return ",){}";
-  }
-
-  @Override
-  public boolean tracksParameterIndex() {
-    return true;
   }
 
   @Override
@@ -513,7 +477,7 @@ public class GroovyParameterInfoHandler implements ParameterInfoHandlerWithTabAc
     return GroovyTokenTypes.mRPAREN;
   }
 
-  private static final Set<Class> ALLOWED_PARAM_CLASSES = Collections.<Class>singleton(GroovyPsiElement.class);
+  private static final Set<Class> ALLOWED_PARAM_CLASSES = Collections.singleton(GroovyPsiElement.class);
 
   @NotNull
   @Override

@@ -24,6 +24,7 @@ import com.intellij.openapi.vcs.VcsTaskHandler;
 import com.intellij.tasks.LocalTask;
 import com.intellij.tasks.Task;
 import com.intellij.tasks.TaskManager;
+import com.intellij.tasks.config.TaskSettings;
 import com.intellij.tasks.impl.TaskManagerImpl;
 import com.intellij.tasks.ui.TaskDialogPanel;
 import com.intellij.ui.ColoredListCellRenderer;
@@ -37,6 +38,7 @@ import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.Arrays;
+import java.util.Locale;
 
 /**
  * @author Dmitry Avdeev
@@ -48,10 +50,11 @@ public class VcsOpenTaskPanel extends TaskDialogPanel {
   private JTextField myChangelistName;
   private JBCheckBox myCreateBranch;
   private JBCheckBox myCreateChangelist;
-  private ComboBox myBranchFrom;
+  private ComboBox<VcsTaskHandler.TaskInfo> myBranchFrom;
   private JBLabel myFromLabel;
   private JBCheckBox myUseBranch;
-  private ComboBox myUseBranchCombo;
+  private ComboBox<VcsTaskHandler.TaskInfo> myUseBranchCombo;
+  private JBCheckBox myShelveChanges;
 
   private VcsTaskHandler myVcsTaskHandler;
   private static final String START_FROM_BRANCH = "start.from.branch";
@@ -84,6 +87,7 @@ public class VcsOpenTaskPanel extends TaskDialogPanel {
       }
     });
     myCreateChangelist.setSelected(myTaskManager.getState().createChangelist);
+    myShelveChanges.setSelected(myTaskManager.getState().shelveChanges);
 
     VcsTaskHandler[] handlers = VcsTaskHandler.getAllHandlers(project);
     if (handlers.length == 0) {
@@ -94,6 +98,7 @@ public class VcsOpenTaskPanel extends TaskDialogPanel {
       myBranchFrom.setVisible(false);
     }
     else {
+      String branchName = getBranchName(task);
       for (VcsTaskHandler handler : handlers) {
         VcsTaskHandler.TaskInfo[] tasks = handler.getAllExistingTasks();
         if (tasks.length > 0) {
@@ -102,7 +107,15 @@ public class VcsOpenTaskPanel extends TaskDialogPanel {
           //noinspection unchecked
           myBranchFrom.setModel(new DefaultComboBoxModel(tasks));
           myBranchFrom.setEnabled(true);
-          myUseBranchCombo.setModel(new DefaultComboBoxModel(tasks));
+
+          myUseBranchCombo.setModel(new DefaultComboBoxModel<>(tasks));
+          for (VcsTaskHandler.TaskInfo info : tasks) {
+            if (branchName.equals(info.getName())) {
+              myUseBranchCombo.setSelectedItem(info);
+              myUseBranch.setSelected(true);
+              break;
+            }
+          }
           final String startFrom = PropertiesComponent.getInstance(project).getValue(START_FROM_BRANCH);
           VcsTaskHandler.TaskInfo info = null;
           if (startFrom != null) {
@@ -125,16 +138,30 @@ public class VcsOpenTaskPanel extends TaskDialogPanel {
           break;
         }
       }
-      myCreateBranch.setSelected(myTaskManager.getState().createBranch && myBranchFrom.getItemCount() > 0);
-      myUseBranch.setSelected(myTaskManager.getState().useBranch && myUseBranchCombo.getItemCount() > 0);
+      if (!myUseBranch.isSelected()) {
+        myCreateBranch.setSelected(myTaskManager.getState().createBranch && myBranchFrom.getItemCount() > 0);
+        myUseBranch.setSelected(myTaskManager.getState().useBranch && myUseBranchCombo.getItemCount() > 0);
+      }
       myBranchFrom.setRenderer(new TaskInfoCellRenderer(myBranchFrom));
       myUseBranchCombo.setRenderer(new TaskInfoCellRenderer(myUseBranchCombo));
+
+      myBranchName.setText(branchName);
+      myChangelistName.setText(getChangelistName(task));
     }
-    myBranchName.setText(myVcsTaskHandler != null
-                         ? myVcsTaskHandler.cleanUpBranchName(myTaskManager.constructDefaultBranchName(task))
-                         : myTaskManager.suggestBranchName(task));
-    myChangelistName.setText(myTaskManager.getChangelistName(task));
+
     updateFields(true);
+  }
+
+  private String getChangelistName(Task task) {
+    return myTaskManager.getChangelistName(task);
+  }
+
+  @NotNull
+  private String getBranchName(Task task) {
+    String branchName = myVcsTaskHandler != null
+               ? myVcsTaskHandler.cleanUpBranchName(myTaskManager.constructDefaultBranchName(task))
+               : myTaskManager.suggestBranchName(task);
+    return TaskSettings.getInstance().LOWER_CASE_BRANCH ? branchName.toLowerCase(Locale.ENGLISH) : branchName;
   }
 
   private void updateFields(boolean initial) {
@@ -158,10 +185,14 @@ public class VcsOpenTaskPanel extends TaskDialogPanel {
   @Override
   public void commit() {
     myTaskManager.getState().createChangelist = myCreateChangelist.isSelected();
+    myTaskManager.getState().shelveChanges = myShelveChanges.isSelected();
     myTaskManager.getState().createBranch = myCreateBranch.isSelected();
     myTaskManager.getState().useBranch = myUseBranch.isSelected();
 
     LocalTask localTask = myTaskManager.getActiveTask();
+    if (myShelveChanges.isSelected()) {
+      myTaskManager.shelveChanges(myPreviousTask, myPreviousTask.getSummary());
+    }
     if (myCreateChangelist.isSelected()) {
       myTaskManager.createChangeList(localTask, myChangelistName.getText());
     }
@@ -229,8 +260,18 @@ public class VcsOpenTaskPanel extends TaskDialogPanel {
     return null;
   }
 
+  @Override
+  public void taskNameChanged(Task oldTask, Task newTask) {
+    if (getBranchName(oldTask).equals(myBranchName.getText())) {
+      myBranchName.setText(getBranchName(newTask));
+    }
+    if (getChangelistName(oldTask).equals(myChangelistName.getText())) {
+      myChangelistName.setText(getChangelistName(newTask));
+    }
+  }
+
   private static class TaskInfoCellRenderer extends ColoredListCellRenderer<VcsTaskHandler.TaskInfo> {
-    public TaskInfoCellRenderer(ComboBox from) {
+    TaskInfoCellRenderer(ComboBox from) {
       super(from);
     }
 

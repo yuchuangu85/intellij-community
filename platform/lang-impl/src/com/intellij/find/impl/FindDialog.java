@@ -1,39 +1,21 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.find.impl;
 
 import com.intellij.CommonBundle;
-import com.intellij.find.FindBundle;
-import com.intellij.find.FindManager;
-import com.intellij.find.FindModel;
-import com.intellij.find.FindSettings;
+import com.intellij.find.*;
 import com.intellij.find.actions.ShowUsagesAction;
 import com.intellij.ide.util.scopeChooser.ScopeChooserCombo;
 import com.intellij.ide.util.scopeChooser.ScopeDescriptor;
 import com.intellij.lang.Language;
-import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.application.TransactionGuard;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
-import com.intellij.openapi.editor.event.DocumentAdapter;
 import com.intellij.openapi.editor.event.DocumentEvent;
+import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory;
@@ -41,7 +23,6 @@ import com.intellij.openapi.fileEditor.UniqueVFilePathBuilder;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.LanguageFileType;
 import com.intellij.openapi.fileTypes.PlainTextFileType;
-import com.intellij.openapi.help.HelpManager;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.module.ModuleUtilCore;
@@ -56,28 +37,31 @@ import com.intellij.openapi.ui.*;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Disposer;
-import com.intellij.openapi.util.Ref;
+import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.newvfs.VfsPresentationUtil;
 import com.intellij.projectImport.ProjectAttachProcessor;
 import com.intellij.psi.PsiBundle;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiFileFactory;
+import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.search.GlobalSearchScopeUtil;
 import com.intellij.psi.search.SearchScope;
 import com.intellij.ui.*;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.table.JBTable;
 import com.intellij.usageView.UsageInfo;
+import com.intellij.usageView.UsageViewBundle;
 import com.intellij.usages.*;
 import com.intellij.usages.impl.UsagePreviewPanel;
 import com.intellij.util.Alarm;
 import com.intellij.util.ArrayUtil;
-import com.intellij.util.Consumer;
 import com.intellij.util.SmartList;
-import com.intellij.util.containers.Convertor;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
@@ -85,30 +69,27 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.PropertyKey;
 
 import javax.swing.*;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.text.JTextComponent;
 import java.awt.*;
 import java.awt.event.*;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
-import static com.intellij.ui.SimpleTextAttributes.STYLE_PLAIN;
-
-public class FindDialog extends DialogWrapper {
+public class FindDialog extends DialogWrapper implements FindUI {
   private static final Logger LOG = Logger.getInstance("#com.intellij.find.impl.FindDialog");
+  private final FindUIHelper myHelper;
 
-  private ComboBox myInputComboBox;
-  private ComboBox myReplaceComboBox;
+  private ComboBox<String> myInputComboBox;
+  private ComboBox<String> myReplaceComboBox;
   private StateRestoringCheckBox myCbCaseSensitive;
   private StateRestoringCheckBox myCbPreserveCase;
   private StateRestoringCheckBox myCbWholeWordsOnly;
-  private ComboBox mySearchContext;
+  private ComboBox<String> mySearchContext;
   private StateRestoringCheckBox myCbRegularExpressions;
   private JRadioButton myRbGlobal;
   private JRadioButton myRbSelectedText;
@@ -119,26 +100,23 @@ public class FindDialog extends DialogWrapper {
   private JRadioButton myRbProject;
   private JRadioButton myRbDirectory;
   private JRadioButton myRbModule;
-  private ComboBox myModuleComboBox;
-  private ComboBox myDirectoryComboBox;
+  private ComboBox<String> myModuleComboBox;
+  private ComboBox<String> myDirectoryComboBox;
   private StateRestoringCheckBox myCbWithSubdirectories;
   private JCheckBox myCbToOpenInNewTab;
-  private FindModel myModel;
-  private FindModel myPreviousModel;
-  private Consumer<FindModel> myOkHandler;
   private FixedSizeButton mySelectDirectoryButton;
   private StateRestoringCheckBox myUseFileFilter;
-  private ComboBox myFileFilter;
+  private ComboBox<String> myFileFilter;
   private JCheckBox myCbToSkipResultsWhenOneUsage;
   private final Project myProject;
-  private final Map<EditorTextField, DocumentAdapter> myComboBoxListeners = new HashMap<EditorTextField, DocumentAdapter>();
+  private final Map<EditorTextField, DocumentListener> myComboBoxListeners = new HashMap<>();
 
   private Action myFindAllAction;
   private JRadioButton myRbCustomScope;
   private ScopeChooserCombo myScopeCombo;
-  protected JLabel myReplacePrompt;
+  private JLabel myReplacePrompt;
   private HideableTitledPanel myScopePanel;
-  private static boolean myPreviousResultsExpandedState;
+  private static boolean myPreviousResultsExpandedState = true;
   private static boolean myPreviewResultsTabWasSelected;
   private static final int RESULTS_PREVIEW_TAB_INDEX = 1;
 
@@ -150,49 +128,40 @@ public class FindDialog extends DialogWrapper {
   private static final String PREVIEW_TITLE = UIBundle.message("tool.window.name.preview");
   private volatile ProgressIndicatorBase myResultsPreviewSearchProgress;
 
-  public FindDialog(@NotNull Project project, @NotNull FindModel model, @NotNull Consumer<FindModel> myOkHandler){
-    super(project, true);
-    myProject = project;
-    myModel = model;
+  FindDialog(FindUIHelper helper){
+    super(helper.getProject(), true);
+    myHelper = helper;
+    myProject = myHelper.getProject();
 
-    this.myOkHandler = myOkHandler;
-
-    updateTitle();
-    setOKButtonText(FindBundle.message("find.button"));
+    setTitle(myHelper.getTitle());
     init();
-    initByModel();
-    updateReplaceVisibility();
-    validateFindButton();
-
-    if (haveResultsPreview()) {
-      ApplicationManager.getApplication().invokeLater(() -> scheduleResultsUpdate(), ModalityState.any());
-    }
   }
 
-  private void updateTitle() {
-    if (myModel.isReplaceState()){
-      if (myModel.isMultipleFiles()){
-        setTitle(FindBundle.message("find.replace.in.project.dialog.title"));
-      }
-      else{
-        setTitle(FindBundle.message("find.replace.text.dialog.title"));
-      }
+  @Override
+  public void showUI() {
+    if (haveResultsPreview()) {
+      ApplicationManager.getApplication().invokeLater(this::scheduleResultsUpdate, ModalityState.any());
     }
-    else{
-      setButtonsMargin(null);
-      if (myModel.isMultipleFiles()){
-        setTitle(FindBundle.message("find.in.path.dialog.title"));
-      }
-      else{
-        setTitle(FindBundle.message("find.text.dialog.title"));
-      }
+    if (Registry.is("ide.find.as.popup") && !SystemInfo.isJetBrainsJvm) {
+      setErrorText("<font color=\"#"+ColorUtil.toHex(UIUtil.getInactiveTextColor())+"\">" +
+                   "There is another version of this dialog in a form of lightweight popup. To use it, run the IDE with the bundled JRE." +
+                   "</font>");
     }
+    show();
   }
 
   @Override
   public void doCancelAction() { // doCancel disposes fields and then calls dispose
-    rememberResultsPreviewWasOpen();
+    saveSettings();
     super.doCancelAction();
+  }
+
+  @Override
+  public void saveSettings() {
+    FindSettings.getInstance().setDefaultScopeName(myScopeCombo.getSelectedScopeName());
+    myHelper.updateFindSettings();
+    applyTo(FindManager.getInstance(myProject).getFindInProjectModel(), false);
+    rememberResultsPreviewWasOpen();
   }
 
   private void rememberResultsPreviewWasOpen() {
@@ -207,7 +176,7 @@ public class FindDialog extends DialogWrapper {
     finishPreviousPreviewSearch();
     if (mySearchRescheduleOnCancellationsAlarm != null) Disposer.dispose(mySearchRescheduleOnCancellationsAlarm);
     if (myUsagePreviewPanel != null) Disposer.dispose(myUsagePreviewPanel);
-    for(Map.Entry<EditorTextField, DocumentAdapter> e: myComboBoxListeners.entrySet()) {
+    for(Map.Entry<EditorTextField, DocumentListener> e: myComboBoxListeners.entrySet()) {
       e.getKey().removeDocumentListener(e.getValue());
     }
     myComboBoxListeners.clear();
@@ -222,19 +191,20 @@ public class FindDialog extends DialogWrapper {
 
   @Override
   protected String getDimensionServiceKey() {
-    return myModel.isReplaceState() ? "replaceTextDialog" : "findTextDialog";
+    return myHelper.getModel().isReplaceState() ? "replaceTextDialog" : "findTextDialog";
   }
 
   @NotNull
   @Override
   protected Action[] createActions() {
-    if (!myModel.isMultipleFiles() && !myModel.isReplaceState() && myModel.isFindAllEnabled()) {
-      return new Action[] { getFindAllAction(), getOKAction(), getCancelAction(), getHelpAction() };
+    Action[] actions = super.createActions();
+    FindModel model = myHelper.getModel();
+    if (!model.isMultipleFiles() && !model.isReplaceState() && model.isFindAllEnabled()) {
+      actions = ArrayUtil.prepend(getFindAllAction(), actions);
     }
-    return new Action[] { getOKAction(), getCancelAction(), getHelpAction() };
+    return actions;
   }
 
-  @NotNull
   private Action getFindAllAction() {
     return myFindAllAction = new AbstractAction(FindBundle.message("find.all.button")) {
       @Override
@@ -251,11 +221,11 @@ public class FindDialog extends DialogWrapper {
     JLabel prompt = new JLabel(FindBundle.message("find.text.to.find.label"));
     panel.add(prompt, new GridBagConstraints(0,0,1,1,0,1, GridBagConstraints.WEST, GridBagConstraints.NONE, new Insets(0,0,UIUtil.DEFAULT_VGAP,UIUtil.DEFAULT_HGAP), 0,0));
 
-    myInputComboBox = new ComboBox(300);
+    myInputComboBox = new ComboBox<>(300);
     revealWhitespaces(myInputComboBox);
     initCombobox(myInputComboBox);
 
-    myReplaceComboBox = new ComboBox(300);
+    myReplaceComboBox = new ComboBox<>(300);
     revealWhitespaces(myReplaceComboBox);
 
     initCombobox(myReplaceComboBox);
@@ -283,16 +253,7 @@ public class FindDialog extends DialogWrapper {
     return panel;
   }
 
-  private void updateReplaceVisibility() {
-    myReplacePrompt.setVisible(myModel.isReplaceState());
-    myReplaceComboBox.setVisible(myModel.isReplaceState());
-    if (myCbToSkipResultsWhenOneUsage != null) {
-      myCbToSkipResultsWhenOneUsage.setVisible(!myModel.isReplaceState());
-    }
-    myCbPreserveCase.setVisible(myModel.isReplaceState());
-  }
-
-  private void revealWhitespaces(@NotNull ComboBox comboBox) {
+  private void revealWhitespaces(@NotNull ComboBox<String> comboBox) {
     ComboBoxEditor comboBoxEditor = new RevealingSpaceComboboxEditor(myProject, comboBox);
     comboBox.setEditor(comboBoxEditor);
     comboBox.setRenderer(new EditorComboBoxRenderer(comboBoxEditor));
@@ -302,21 +263,16 @@ public class FindDialog extends DialogWrapper {
     comboBox.setEditable(true);
     comboBox.setMaximumRowCount(8);
 
-    comboBox.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        validateFindButton();
-      }
-    });
+    comboBox.addActionListener(__ -> validateFindButton());
 
     final Component editorComponent = comboBox.getEditor().getEditorComponent();
 
     if (editorComponent instanceof EditorTextField) {
       final EditorTextField etf = (EditorTextField) editorComponent;
 
-      DocumentAdapter listener = new DocumentAdapter() {
+      DocumentListener listener = new DocumentListener() {
         @Override
-        public void documentChanged(final DocumentEvent e) {
+        public void documentChanged(@NotNull final DocumentEvent e) {
           handleComboBoxValueChanged(comboBox);
         }
       };
@@ -326,25 +282,20 @@ public class FindDialog extends DialogWrapper {
     else {
       if (editorComponent instanceof JTextComponent) {
         final javax.swing.text.Document document = ((JTextComponent)editorComponent).getDocument();
-        final com.intellij.ui.DocumentAdapter documentAdapter = new com.intellij.ui.DocumentAdapter() {
+        final DocumentAdapter documentAdapter = new DocumentAdapter() {
           @Override
-          protected void textChanged(javax.swing.event.DocumentEvent e) {
+          protected void textChanged(@NotNull javax.swing.event.DocumentEvent e) {
             handleAnyComboBoxValueChanged(comboBox);
           }
         };
         document.addDocumentListener(documentAdapter);
-        Disposer.register(myDisposable, new Disposable() {
-          @Override
-          public void dispose() {
-            document.removeDocumentListener(documentAdapter);
-          }
-        });
+        Disposer.register(myDisposable, () -> document.removeDocumentListener(documentAdapter));
       } else {
         assert false;
       }
     }
 
-    if (!myModel.isReplaceState()) {
+    if (!myHelper.getModel().isReplaceState()) {
       makeResultsPreviewActionOverride(
         comboBox,
         KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0),
@@ -369,14 +320,56 @@ public class FindDialog extends DialogWrapper {
         }
       );
 
-      new AnAction() {
+      makeResultsPreviewActionOverride(
+        comboBox,
+        KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_UP, 0),
+        "scrollUp",
+        () -> ScrollingUtil.movePageUp(myResultsPreviewTable)
+      );
+
+      makeResultsPreviewActionOverride(
+        comboBox,
+        KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_DOWN, 0),
+        "scrollDown",
+        () -> ScrollingUtil.movePageDown(myResultsPreviewTable)
+      );
+
+      AnAction action = new AnAction() {
         @Override
-        public void actionPerformed(AnActionEvent e) {
+        public void actionPerformed(@NotNull AnActionEvent e) {
           if (isResultsPreviewTabActive()) {
             navigateToSelectedUsage(myResultsPreviewTable);
           }
         }
-      }.registerCustomShortcutSet(CommonShortcuts.getEditSource(), comboBox, myDisposable);
+      };
+      action.registerCustomShortcutSet(CommonShortcuts.getEditSource(), comboBox, myDisposable);
+      new AnAction() {
+        @Override
+        public void actionPerformed(@NotNull AnActionEvent e) {
+          if (!isResultsPreviewTabActive() || myResultsPreviewTable.getSelectedRowCount() == 0) doOKAction();
+          else action.actionPerformed(e);
+        }
+      }.registerCustomShortcutSet(CommonShortcuts.ENTER, comboBox, myDisposable);
+      DumbAwareAction escAction = new DumbAwareAction() {
+        @Override
+        public void actionPerformed(@NotNull AnActionEvent e) {
+          doCancelAction();
+        }
+
+        @Override
+        public void update(@NotNull AnActionEvent e) {
+          if (myInputComboBox.isPopupVisible()
+              || myReplaceComboBox.isPopupVisible()
+              || mySearchContext.isPopupVisible()
+              || myDirectoryComboBox.isPopupVisible()
+              || myFileFilter.isPopupVisible()
+              || myScopeCombo.getComboBox().isPopupVisible()
+          ) {
+            e.getPresentation().setEnabled(false);
+          }
+        }
+      };
+      escAction.registerCustomShortcutSet(CommonShortcuts.ESCAPE, this.getRootPane(), myDisposable);
     }
   }
 
@@ -385,7 +378,7 @@ public class FindDialog extends DialogWrapper {
         myContent.getSelectedIndex() == RESULTS_PREVIEW_TAB_INDEX;
   }
 
-  private void makeResultsPreviewActionOverride(final JComboBox component, KeyStroke keyStroke, String newActionKey, final Runnable newAction) {
+  private void makeResultsPreviewActionOverride(final JComboBox<?> component, KeyStroke keyStroke, String newActionKey, final Runnable newAction) {
     InputMap inputMap = component.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
     Object action = inputMap.get(keyStroke);
     inputMap.put(keyStroke, newActionKey);
@@ -426,7 +419,7 @@ public class FindDialog extends DialogWrapper {
 
       finishPreviousPreviewSearch();
       mySearchRescheduleOnCancellationsAlarm.cancelAllRequests();
-      final FindModel findModel = myModel.clone();
+      final FindModel findModel = myHelper.getModel().clone();
       applyTo(findModel, false);
 
       ValidationInfo result = getValidationInfo(findModel);
@@ -442,9 +435,9 @@ public class FindDialog extends DialogWrapper {
       };
 
       // Use previously shown usage files as hint for faster search and better usage preview performance if pattern length increased
-      final LinkedHashSet<VirtualFile> filesToScanInitially = new LinkedHashSet<VirtualFile>();
+      final LinkedHashSet<VirtualFile> filesToScanInitially = new LinkedHashSet<>();
 
-      if (myPreviousModel != null && myPreviousModel.getStringToFind().length() < findModel.getStringToFind().length()) {
+      if (myHelper.myPreviousModel != null && myHelper.myPreviousModel.getStringToFind().length() < findModel.getStringToFind().length()) {
         final DefaultTableModel previousModel = (DefaultTableModel)myResultsPreviewTable.getModel();
         for (int i = 0, len = previousModel.getRowCount(); i < len; ++i) {
           final UsageInfo2UsageAdapter usage = (UsageInfo2UsageAdapter)previousModel.getValueAt(i, 0);
@@ -453,7 +446,7 @@ public class FindDialog extends DialogWrapper {
         }
       }
 
-      myPreviousModel = findModel;
+      myHelper.myPreviousModel = findModel;
 
       model.addColumn("Usages");
 
@@ -465,7 +458,9 @@ public class FindDialog extends DialogWrapper {
         return;
       }
 
-      myResultsPreviewTable.getColumnModel().getColumn(0).setCellRenderer(new UsageTableCellRenderer(false, true));
+      GlobalSearchScope scope = GlobalSearchScopeUtil.toGlobalSearchScope(
+        FindInProjectUtil.getScopeFromModel(myProject, findModel), myProject);
+      myResultsPreviewTable.getColumnModel().getColumn(0).setCellRenderer(new UsageTableCellRenderer(false, true, scope));
 
       myResultsPreviewTable.getEmptyText().setText("Searching...");
       myContent.setTitleAt(RESULTS_PREVIEW_TAB_INDEX, PREVIEW_TITLE);
@@ -495,9 +490,12 @@ public class FindDialog extends DialogWrapper {
 
           final FindUsagesProcessPresentation processPresentation =
             FindInProjectUtil.setupProcessPresentation(myProject, showPanelIfOnlyOneUsage, presentation);
-          Ref<VirtualFile> lastUsageFileRef = new Ref<VirtualFile>();
+          ThreadLocal<VirtualFile> lastUsageFileRef = new ThreadLocal<>();
 
-          FindInProjectUtil.findUsages(findModel, myProject, info -> {
+          FindInProjectUtil.findUsages(findModel, myProject, processPresentation, filesToScanInitially, info -> {
+            if(isCancelled()) {
+              return false;
+            }
             final Usage usage = UsageInfo2UsageAdapter.CONVERTER.fun(info);
             usage.getPresentation().getIcon(); // cache icon
 
@@ -509,22 +507,20 @@ public class FindDialog extends DialogWrapper {
             }
 
             ApplicationManager.getApplication().invokeLater(() -> {
+              if (isCancelled()) return;
               model.addRow(new Object[]{usage});
-              if (model.getRowCount() == 1 && myResultsPreviewTable.getModel() == model && isResultsPreviewTabActive()) {
-                myResultsPreviewTable.setRowSelectionInterval(0, 0);
-              }
             }, state);
-            return resultsCount.incrementAndGet() < ShowUsagesAction.USAGES_PAGE_SIZE;
-          }, processPresentation, filesToScanInitially);
+            return resultsCount.incrementAndGet() < ShowUsagesAction.getUsagesPageSize();
+          });
 
           boolean succeeded = !progressIndicatorWhenSearchStarted.isCanceled();
           if (succeeded) {
             return new Continuation(() -> {
-              if (progressIndicatorWhenSearchStarted == myResultsPreviewSearchProgress && !myResultsPreviewSearchProgress.isCanceled()) {
+              if (!isCancelled()) {
                 int occurrences = resultsCount.get();
                 int filesWithOccurrences = resultsFilesCount.get();
                 if (occurrences == 0) myResultsPreviewTable.getEmptyText().setText(UIBundle.message("message.nothingToShow"));
-                boolean foundAllUsages = occurrences < ShowUsagesAction.USAGES_PAGE_SIZE;
+                boolean foundAllUsages = occurrences < ShowUsagesAction.getUsagesPageSize();
 
                 myContent.setTitleAt(RESULTS_PREVIEW_TAB_INDEX,
                                      PREVIEW_TITLE +
@@ -537,6 +533,10 @@ public class FindDialog extends DialogWrapper {
             }, state);
           }
           return null;
+        }
+
+        boolean isCancelled() {
+          return progressIndicatorWhenSearchStarted != myResultsPreviewSearchProgress || myResultsPreviewSearchProgress.isCanceled();
         }
 
         @Override
@@ -562,34 +562,10 @@ public class FindDialog extends DialogWrapper {
     }
   }
 
-  @NotNull
-  public FindModel getModel() {
-    return myModel;
-  }
-
-  public void setOkHandler(@NotNull Consumer<FindModel> okHandler) {
-    myOkHandler = okHandler;
-  }
-
-  public void setModel(@NotNull FindModel model) {
-    String previousStringToFind = getStringToFind();
-    String newStringToFind = model.getStringToFind();
-    myModel = model;
-    updateReplaceVisibility();
-    updateTitle();
-    if (!Comparing.equal(newStringToFind, previousStringToFind)) {
-      myInputComboBox.getEditor().setItem(newStringToFind);
-    }
-  }
-
   private void validateFindButton() {
-    boolean okStatus = canSearchThisString() ||
+    boolean okStatus = myHelper.canSearchThisString() ||
                        myRbDirectory != null && myRbDirectory.isSelected() && StringUtil.isEmpty(getDirectory());
     setOKStatus(okStatus);
-  }
-
-  private boolean canSearchThisString() {
-    return !StringUtil.isEmpty(getStringToFind()) || !myModel.isReplaceState() && !myModel.isFindAllEnabled() && getFileTypeMask() != null;
   }
 
   private void setOKStatus(boolean value) {
@@ -614,10 +590,10 @@ public class FindDialog extends DialogWrapper {
     topOptionsPanel.setLayout(new GridLayout(1, 2, UIUtil.DEFAULT_HGAP, 0));
     topOptionsPanel.add(createFindOptionsPanel());
     optionsPanel.add(topOptionsPanel, gbConstraints);
-    
+
     JPanel resultsOptionPanel = null;
-    
-    if (myModel.isMultipleFiles()) {
+
+    if (myHelper.getModel().isMultipleFiles()) {
       optionsPanel.add(createGlobalScopePanel(), gbConstraints);
       gbConstraints.weightx = 1;
       gbConstraints.weighty = 1;
@@ -626,11 +602,12 @@ public class FindDialog extends DialogWrapper {
       gbConstraints.gridwidth = GridBagConstraints.REMAINDER;
       optionsPanel.add(createFilterPanel(),gbConstraints);
 
-      myCbToSkipResultsWhenOneUsage = createCheckbox(FindSettings.getInstance().isSkipResultsWithOneUsage(), FindBundle.message("find.options.skip.results.tab.with.one.occurrence.checkbox"));
+      myCbToSkipResultsWhenOneUsage = createCheckbox(myHelper.isSkipResultsWithOneUsage(), FindBundle.message("find.options.skip.results.tab.with.one.occurrence.checkbox"));
+      myCbToSkipResultsWhenOneUsage.addActionListener(e -> myHelper.setSkipResultsWithOneUsage(myCbToSkipResultsWhenOneUsage.isSelected()));
       resultsOptionPanel = createResultsOptionPanel(optionsPanel, gbConstraints);
       resultsOptionPanel.add(myCbToSkipResultsWhenOneUsage);
 
-      myCbToSkipResultsWhenOneUsage.setVisible(!myModel.isReplaceState());
+      myCbToSkipResultsWhenOneUsage.setVisible(!myHelper.isReplaceState());
 
       if (haveResultsPreview()) {
         final JBTable table = new JBTable() {
@@ -649,24 +626,19 @@ public class FindDialog extends DialogWrapper {
         myUsagePreviewPanel.setBorder(IdeBorderFactory.createBorder());
         registerNavigateToSourceShortcutOnComponent(table, myUsagePreviewPanel);
         myResultsPreviewTable = table;
-        new TableSpeedSearch(table, new Convertor<Object, String>() {
-          @Override
-          public String convert(Object o) {
-            return ((UsageInfo2UsageAdapter)o).getFile().getName();
+        new TableSpeedSearch(table, o -> ((UsageInfo2UsageAdapter)o).getFile().getName());
+        myResultsPreviewTable.getSelectionModel().addListSelectionListener(e -> {
+          if (e.getValueIsAdjusting()) return;
+          int index = myResultsPreviewTable.getSelectionModel().getLeadSelectionIndex();
+          if (index != -1) {
+            UsageInfo usageInfo = ((UsageInfo2UsageAdapter)myResultsPreviewTable.getModel().getValueAt(index, 0)).getUsageInfo();
+            myUsagePreviewPanel.updateLayout(usageInfo.isValid() ? Collections.singletonList(usageInfo) : null);
+            VirtualFile file = usageInfo.getVirtualFile();
+            myUsagePreviewPanel.setBorder(IdeBorderFactory.createTitledBorder(file != null ? file.getPath() : "", false));
           }
-        });
-        myResultsPreviewTable.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
-          @Override
-          public void valueChanged(ListSelectionEvent e) {
-            if (e.getValueIsAdjusting()) return;
-            int index = myResultsPreviewTable.getSelectionModel().getLeadSelectionIndex();
-            if (index != -1) {
-              UsageInfo usageInfo = ((UsageInfo2UsageAdapter)myResultsPreviewTable.getModel().getValueAt(index, 0)).getUsageInfo();
-              myUsagePreviewPanel.updateLayout(Collections.singletonList(usageInfo));
-            }
-            else {
-              myUsagePreviewPanel.updateLayout(null);
-            }
+          else {
+            myUsagePreviewPanel.updateLayout(null);
+            myUsagePreviewPanel.setBorder(IdeBorderFactory.createBorder());
           }
         });
         mySearchRescheduleOnCancellationsAlarm = new Alarm();
@@ -685,28 +657,24 @@ public class FindDialog extends DialogWrapper {
       topOptionsPanel.add(leftOptionsPanel);
     }
 
-    if (myModel.isOpenInNewTabVisible()){
-      myCbToOpenInNewTab = new JCheckBox(FindBundle.message("find.open.in.new.tab.checkbox"));
-      myCbToOpenInNewTab.setFocusable(false);
-      myCbToOpenInNewTab.setSelected(myModel.isOpenInNewTab());
-      myCbToOpenInNewTab.setEnabled(myModel.isOpenInNewTabEnabled());
+    myCbToOpenInNewTab = new JCheckBox(FindBundle.message("find.open.in.new.tab.checkbox"));
+    myCbToOpenInNewTab.setFocusable(false);
+    myCbToOpenInNewTab.setSelected(myHelper.isUseSeparateView());
+    myCbToOpenInNewTab.setEnabled(myHelper.getModel().isOpenInNewTabEnabled());
+    myCbToOpenInNewTab.addActionListener(e -> myHelper.setUseSeparateView(myCbToOpenInNewTab.isSelected()));
 
-      if (resultsOptionPanel == null) resultsOptionPanel = createResultsOptionPanel(optionsPanel, gbConstraints);
-      resultsOptionPanel.add(myCbToOpenInNewTab);
-    }
+    if (resultsOptionPanel == null) resultsOptionPanel = createResultsOptionPanel(optionsPanel, gbConstraints);
+    resultsOptionPanel.add(myCbToOpenInNewTab);
 
     if (myPreviewSplitter != null) {
       TabbedPane pane = new JBTabsPaneImpl(myProject, SwingConstants.TOP, myDisposable);
       pane.insertTab("Options", null, optionsPanel, null, 0);
       pane.insertTab(PREVIEW_TITLE, null, myPreviewSplitter, null, RESULTS_PREVIEW_TAB_INDEX);
       myContent = pane;
-      final AnAction anAction = new DumbAwareAction() {
-        @Override
-        public void actionPerformed(AnActionEvent e) {
-          int selectedIndex = myContent.getSelectedIndex();
-          myContent.setSelectedIndex(1 - selectedIndex);
-        }
-      };
+      AnAction anAction = DumbAwareAction.create(e -> {
+        int selectedIndex = myContent.getSelectedIndex();
+        myContent.setSelectedIndex(1 - selectedIndex);
+      });
 
       final ShortcutSet shortcutSet = ActionManager.getInstance().getAction(IdeActions.ACTION_SWITCHER).getShortcutSet();
 
@@ -721,7 +689,7 @@ public class FindDialog extends DialogWrapper {
   }
 
   private boolean haveResultsPreview() {
-    return Registry.is("ide.find.show.preview") && myModel.isMultipleFiles();
+    return Registry.is("ide.find.show.preview") && myHelper.getModel().isMultipleFiles();
   }
 
   private JPanel createResultsOptionPanel(JPanel optionsPanel, GridBagConstraints gbConstraints) {
@@ -741,22 +709,19 @@ public class FindDialog extends DialogWrapper {
     filterPanel.setBorder(IdeBorderFactory.createTitledBorder(FindBundle.message("find.filter.file.name.group"),
                                                               true));
 
-    myFileFilter = new ComboBox(100);
+    myFileFilter = new ComboBox<>(100);
     initCombobox(myFileFilter);
     filterPanel.add(myUseFileFilter = createCheckbox(FindBundle.message("find.filter.file.mask.checkbox")),BorderLayout.WEST);
     filterPanel.add(myFileFilter,BorderLayout.CENTER);
     initFileFilter(myFileFilter, myUseFileFilter);
-    myUseFileFilter.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        scheduleResultsUpdate();
-        validateFindButton();
-      }
+    myUseFileFilter.addActionListener(__ -> {
+      scheduleResultsUpdate();
+      validateFindButton();
     });
     return filterPanel;
   }
 
-  public static void initFileFilter(@NotNull final JComboBox fileFilter, @NotNull final JCheckBox useFileFilter) {
+  public static void initFileFilter(@NotNull final JComboBox<? super String> fileFilter, @NotNull final JCheckBox useFileFilter) {
     fileFilter.setEditable(true);
     String[] fileMasks = FindSettings.getInstance().getRecentFileMasks();
     for(int i=fileMasks.length-1; i >= 0; i--) {
@@ -765,17 +730,14 @@ public class FindDialog extends DialogWrapper {
     fileFilter.setEnabled(false);
 
     useFileFilter.addActionListener(
-      new ActionListener() {
-        @Override
-        public void actionPerformed(ActionEvent e) {
-          if (useFileFilter.isSelected()) {
-            fileFilter.setEnabled(true);
-            fileFilter.getEditor().selectAll();
-            fileFilter.getEditor().getEditorComponent().requestFocusInWindow();
-          }
-          else {
-            fileFilter.setEnabled(false);
-          }
+      __ -> {
+        if (useFileFilter.isSelected()) {
+          fileFilter.setEnabled(true);
+          fileFilter.getEditor().selectAll();
+          fileFilter.getEditor().getEditorComponent().requestFocusInWindow();
+        }
+        else {
+          fileFilter.setEnabled(false);
         }
       }
     );
@@ -787,18 +749,17 @@ public class FindDialog extends DialogWrapper {
   }
 
   private void doOKAction(boolean findAll) {
-    FindModel validateModel = myModel.clone();
+    FindModel validateModel = myHelper.getModel().clone();
     applyTo(validateModel, findAll);
 
     ValidationInfo validationInfo = getValidationInfo(validateModel);
 
     if (validationInfo == null) {
-      myModel.copyFrom(validateModel);
-      updateFindSettings();
+      myHelper.getModel().copyFrom(validateModel);
 
       rememberResultsPreviewWasOpen();
       super.doOKAction();
-      myOkHandler.consume(myModel);
+      myHelper.doOKAction();
     }
     else {
       String message = validationInfo.message;
@@ -811,50 +772,6 @@ public class FindDialog extends DialogWrapper {
     }
   }
 
-  private void updateFindSettings() {
-    FindSettings findSettings = FindSettings.getInstance();
-    findSettings.setCaseSensitive(myModel.isCaseSensitive());
-    if (myModel.isReplaceState()) {
-      findSettings.setPreserveCase(myModel.isPreserveCase());
-    }
-
-    findSettings.setWholeWordsOnly(myModel.isWholeWordsOnly());
-    boolean saveContextBetweenRestarts = false;
-    findSettings.setInStringLiteralsOnly(saveContextBetweenRestarts && myModel.isInStringLiteralsOnly());
-    findSettings.setInCommentsOnly(saveContextBetweenRestarts && myModel.isInCommentsOnly());
-    findSettings.setExceptComments(saveContextBetweenRestarts && myModel.isExceptComments());
-    findSettings.setExceptStringLiterals(saveContextBetweenRestarts && myModel.isExceptStringLiterals());
-    findSettings.setExceptCommentsAndLiterals(saveContextBetweenRestarts && myModel.isExceptCommentsAndStringLiterals());
-
-    findSettings.setRegularExpressions(myModel.isRegularExpressions());
-    if (!myModel.isMultipleFiles()){
-      findSettings.setForward(myModel.isForward());
-      findSettings.setFromCursor(myModel.isFromCursor());
-
-      findSettings.setGlobal(myModel.isGlobal());
-    } else{
-      String directoryName = myModel.getDirectoryName();
-      if (directoryName != null && !directoryName.isEmpty()) {
-        findSettings.setWithSubdirectories(myModel.isWithSubdirectories());
-      }
-      else if (myRbModule.isSelected()) {
-      }
-      else if (myRbCustomScope.isSelected()) {
-        SearchScope selectedScope = myScopeCombo.getSelectedScope();
-        String customScopeName = selectedScope == null ? null : selectedScope.getDisplayName();
-        findSettings.setCustomScope(customScopeName);
-      }
-    }
-
-    if (myCbToSkipResultsWhenOneUsage != null){
-      findSettings.setSkipResultsWithOneUsage(
-        isSkipResultsWhenOneUsage()
-      );
-    }
-
-    findSettings.setFileMask(myModel.getFileFilter());
-  }
-
   @Nullable("null means OK")
   private ValidationInfo getValidationInfo(@NotNull FindModel model) {
     if (myRbDirectory != null && myRbDirectory.isEnabled() && myRbDirectory.isSelected()) {
@@ -864,8 +781,8 @@ public class FindDialog extends DialogWrapper {
       }
     }
 
-    if (!canSearchThisString()) {
-      return new ValidationInfo("String to find is empty", myInputComboBox);
+    if (!myHelper.canSearchThisString()) {
+      return new ValidationInfo(FindBundle.message("find.empty.search.text.error"), myInputComboBox);
     }
 
     if (myCbRegularExpressions != null && myCbRegularExpressions.isSelected() && myCbRegularExpressions.isEnabled()) {
@@ -908,7 +825,7 @@ public class FindDialog extends DialogWrapper {
 
   @Override
   protected ValidationInfo doValidate() {
-    FindModel validateModel = myModel.clone();
+    FindModel validateModel = myHelper.getModel().clone();
     applyTo(validateModel, false);
 
     ValidationInfo result = getValidationInfo(validateModel);
@@ -919,15 +836,8 @@ public class FindDialog extends DialogWrapper {
   }
 
   @Override
-  public void doHelpAction() {
-    String id = myModel.isReplaceState()
-                ? myModel.isMultipleFiles() ? HelpID.REPLACE_IN_PATH : HelpID.REPLACE_OPTIONS
-                : myModel.isMultipleFiles() ? HelpID.FIND_IN_PATH : HelpID.FIND_OPTIONS;
-    HelpManager.getInstance().invokeHelp(id);
-  }
-
-  private boolean isSkipResultsWhenOneUsage() {
-    return myCbToSkipResultsWhenOneUsage!=null && myCbToSkipResultsWhenOneUsage.isSelected();
+  protected String getHelpId() {
+    return myHelper.getModel().isReplaceState() ? HelpID.REPLACE_IN_PATH : HelpID.FIND_IN_PATH;
   }
 
   @NotNull
@@ -938,18 +848,13 @@ public class FindDialog extends DialogWrapper {
 
     myCbCaseSensitive = createCheckbox(FindBundle.message("find.options.case.sensitive"));
     findOptionsPanel.add(myCbCaseSensitive);
-    ItemListener liveResultsPreviewUpdateListener = new ItemListener() {
-      @Override
-      public void itemStateChanged(ItemEvent e) {
-        scheduleResultsUpdate();
-      }
-    };
+    ItemListener liveResultsPreviewUpdateListener = __ -> scheduleResultsUpdate();
     myCbCaseSensitive.addItemListener(liveResultsPreviewUpdateListener);
 
     myCbPreserveCase = createCheckbox(FindBundle.message("find.options.replace.preserve.case"));
     myCbPreserveCase.addItemListener(liveResultsPreviewUpdateListener);
     findOptionsPanel.add(myCbPreserveCase);
-    myCbPreserveCase.setVisible(myModel.isReplaceState());
+    myCbPreserveCase.setVisible(myHelper.isReplaceState());
     myCbWholeWordsOnly = createCheckbox(FindBundle.message("find.options.whole.words.only"));
     myCbWholeWordsOnly.addItemListener(liveResultsPreviewUpdateListener);
 
@@ -967,18 +872,13 @@ public class FindDialog extends DialogWrapper {
 
     findOptionsPanel.add(regExPanel);
 
-    mySearchContext = new ComboBox(new Object[] { getPresentableName(FindModel.SearchContext.ANY),
+    mySearchContext = new ComboBox<>(new String[]{getPresentableName(FindModel.SearchContext.ANY),
       getPresentableName(FindModel.SearchContext.IN_COMMENTS),
       getPresentableName(FindModel.SearchContext.IN_STRING_LITERALS),
       getPresentableName(FindModel.SearchContext.EXCEPT_COMMENTS),
       getPresentableName(FindModel.SearchContext.EXCEPT_STRING_LITERALS),
       getPresentableName(FindModel.SearchContext.EXCEPT_COMMENTS_AND_STRING_LITERALS)});
-    mySearchContext.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        scheduleResultsUpdate();
-      }
-    });
+    mySearchContext.addActionListener(__ -> scheduleResultsUpdate());
     final JPanel searchContextPanel = new JPanel(new BorderLayout());
     searchContextPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -995,19 +895,9 @@ public class FindDialog extends DialogWrapper {
 
     findOptionsPanel.add(searchContextPanel);
 
-    ActionListener actionListener = new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        updateControls();
-      }
-    };
+    ActionListener actionListener = __ -> updateControls();
     myCbRegularExpressions.addActionListener(actionListener);
-    myCbRegularExpressions.addItemListener(new ItemListener() {
-      @Override
-      public void itemStateChanged(final ItemEvent e) {
-        setupRegExpSetting();
-      }
-    });
+    myCbRegularExpressions.addItemListener(__ -> setupRegExpSetting());
 
     myCbCaseSensitive.addActionListener(actionListener);
     myCbPreserveCase.addActionListener(actionListener);
@@ -1034,7 +924,7 @@ public class FindDialog extends DialogWrapper {
   }
 
   @NotNull
-  public static FindModel.SearchContext parseSearchContext(String presentableName) {
+  static FindModel.SearchContext parseSearchContext(String presentableName) {
     FindModel.SearchContext searchContext = FindModel.SearchContext.ANY;
     if (FindBundle.message("find.context.in.literals.scope.label").equals(presentableName)) {
       searchContext = FindModel.SearchContext.IN_STRING_LITERALS;
@@ -1054,7 +944,7 @@ public class FindDialog extends DialogWrapper {
   }
 
   @NotNull
-  public static String getSearchContextName(FindModel model) {
+  static String getSearchContextName(FindModel model) {
     String searchContext = FindBundle.message("find.context.anywhere.scope.label");
     if (model.isInCommentsOnly()) searchContext = FindBundle.message("find.context.in.comments.scope.label");
     else if (model.isInStringLiteralsOnly()) searchContext = FindBundle.message("find.context.in.literals.scope.label");
@@ -1098,7 +988,7 @@ public class FindDialog extends DialogWrapper {
     else {
       myCbWholeWordsOnly.makeSelectable();
     }
-    if (myModel.isReplaceState()) {
+    if (myHelper.isReplaceState()) {
       if (myCbRegularExpressions.isSelected() || myCbCaseSensitive.isSelected()) {
         myCbPreserveCase.makeUnselectable(false);
       }
@@ -1116,7 +1006,7 @@ public class FindDialog extends DialogWrapper {
       }
     }
 
-    if (!myModel.isMultipleFiles()) {
+    if (!myHelper.getModel().isMultipleFiles()) {
       myRbFromCursor.setEnabled(myRbGlobal.isSelected());
       myRbEntireScope.setEnabled(myRbGlobal.isSelected());
     }
@@ -1157,12 +1047,7 @@ public class FindDialog extends DialogWrapper {
                                    ? FindBundle.message("find.scope.all.projects.radio")
                                    : FindBundle.message("find.scope.whole.project.radio"), true);
     scopePanel.add(myRbProject, gbConstraints);
-    ItemListener resultsPreviewUpdateListener = new ItemListener() {
-      @Override
-      public void itemStateChanged(ItemEvent e) {
-        scheduleResultsUpdate();
-      }
-    };
+    ItemListener resultsPreviewUpdateListener = __ -> scheduleResultsUpdate();
     myRbProject.addItemListener(resultsPreviewUpdateListener);
 
     gbConstraints.gridx = 0;
@@ -1185,13 +1070,8 @@ public class FindDialog extends DialogWrapper {
     }
 
     Arrays.sort(names,String.CASE_INSENSITIVE_ORDER);
-    myModuleComboBox = new ComboBox(names);
-    myModuleComboBox.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        scheduleResultsUpdate();
-      }
-    });
+    myModuleComboBox = new ComboBox<>(names);
+    myModuleComboBox.addActionListener(__ -> scheduleResultsUpdate());
     scopePanel.add(myModuleComboBox, gbConstraints);
 
     if (modules.length == 1) {
@@ -1209,7 +1089,7 @@ public class FindDialog extends DialogWrapper {
 
     gbConstraints.gridx = 1;
     gbConstraints.weightx = 1;
-    myDirectoryComboBox = new ComboBox(200);
+    myDirectoryComboBox = new ComboBox<>(200);
     Component editorComponent = myDirectoryComboBox.getEditor().getEditorComponent();
     if (editorComponent instanceof JTextField) {
       JTextField field = (JTextField)editorComponent;
@@ -1217,12 +1097,7 @@ public class FindDialog extends DialogWrapper {
     }
     initCombobox(myDirectoryComboBox);
     myDirectoryComboBox.setSwingPopup(false);
-    myDirectoryComboBox.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        scheduleResultsUpdate();
-      }
-    });
+    myDirectoryComboBox.addActionListener(__ -> scheduleResultsUpdate());
     scopePanel.add(myDirectoryComboBox, gbConstraints);
 
     gbConstraints.weightx = 0;
@@ -1269,12 +1144,7 @@ public class FindDialog extends DialogWrapper {
         return /*!projectFilesScopeName.equals(display) &&*/ !display.startsWith(moduleFilesScopeName);
       }
     });
-    myScopeCombo.getComboBox().addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        scheduleResultsUpdate();
-      }
-    });
+    myScopeCombo.getComboBox().addActionListener(__ -> scheduleResultsUpdate());
     myRbCustomScope.addItemListener(resultsPreviewUpdateListener);
 
     Disposer.register(myDisposable, myScopeCombo);
@@ -1287,60 +1157,45 @@ public class FindDialog extends DialogWrapper {
     bgScope.add(myRbDirectory);
     bgScope.add(myRbCustomScope);
 
-    myRbProject.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        validateScopeControls();
-        validateFindButton();
-      }
+    myRbProject.addActionListener(__ -> {
+      validateScopeControls();
+      validateFindButton();
     });
-    myRbCustomScope.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        validateScopeControls();
-        validateFindButton();
-        myScopeCombo.getComboBox().requestFocusInWindow();
-      }
+    myRbCustomScope.addActionListener(__ -> {
+      validateScopeControls();
+      validateFindButton();
+      myScopeCombo.getComboBox().requestFocusInWindow();
     });
 
-    myRbDirectory.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        validateScopeControls();
-        validateFindButton();
-        myDirectoryComboBox.getEditor().getEditorComponent().requestFocusInWindow();
-      }
+    myRbDirectory.addActionListener(__ -> {
+      validateScopeControls();
+      validateFindButton();
+      myDirectoryComboBox.getEditor().getEditorComponent().requestFocusInWindow();
     });
 
-    myRbModule.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        validateScopeControls();
-        validateFindButton();
-        myModuleComboBox.requestFocusInWindow();
-      }
+    myRbModule.addActionListener(__ -> {
+      validateScopeControls();
+      validateFindButton();
+      myModuleComboBox.requestFocusInWindow();
     });
 
-    mySelectDirectoryButton.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        FileChooserDescriptor descriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor();
-        FileChooser.chooseFiles(descriptor, myProject, null, files -> myDirectoryComboBox.setSelectedItem(files.get(0).getPresentableUrl()));
-      }
+    mySelectDirectoryButton.addActionListener(__ -> {
+      FileChooserDescriptor descriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor();
+      FileChooser.chooseFiles(descriptor, myProject, null, files -> myDirectoryComboBox.setSelectedItem(files.get(0).getPresentableUrl()));
     });
 
     return scopePanel;
   }
 
   @NotNull
-  static StateRestoringCheckBox createCheckbox(@NotNull String message) {
+  private static StateRestoringCheckBox createCheckbox(@NotNull String message) {
     final StateRestoringCheckBox cb = new StateRestoringCheckBox(message);
     cb.setFocusable(false);
     return cb;
   }
 
   @NotNull
-  static StateRestoringCheckBox createCheckbox(boolean selected, @NotNull String message) {
+  private static StateRestoringCheckBox createCheckbox(boolean selected, @NotNull String message) {
     final StateRestoringCheckBox cb = new StateRestoringCheckBox(message, selected);
     cb.setFocusable(false);
     return cb;
@@ -1374,12 +1229,7 @@ public class FindDialog extends DialogWrapper {
     bgScope.add(myRbGlobal);
     bgScope.add(myRbSelectedText);
 
-    ActionListener actionListener = new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        updateControls();
-      }
-    };
+    ActionListener actionListener = __ -> updateControls();
     myRbGlobal.addActionListener(actionListener);
     myRbSelectedText.addActionListener(actionListener);
 
@@ -1403,8 +1253,9 @@ public class FindDialog extends DialogWrapper {
     return originPanel;
   }
 
+  @Override
   @NotNull
-  private String getStringToFind() {
+  public String getStringToFind() {
     String string = (String)myInputComboBox.getEditor().getItem();
     return string == null ? "" : string;
   }
@@ -1419,9 +1270,10 @@ public class FindDialog extends DialogWrapper {
     return (String)myDirectoryComboBox.getEditor().getItem();
   }
 
-  private static void setStringsToComboBox(@NotNull String[] strings, @NotNull ComboBox combo, String selected) {
+  private static void setStringsToComboBox(@NotNull String[] strings, @NotNull ComboBox<? super String> combo, String selected) {
     if (combo.getItemCount() > 0){
       combo.removeAllItems();
+      combo.setSelectedItem(null);
     }
     if (selected != null && selected.indexOf('\n') < 0) {
       strings = ArrayUtil.remove(strings, selected);
@@ -1437,13 +1289,13 @@ public class FindDialog extends DialogWrapper {
     if (myDirectoryComboBox.getItemCount() > 0){
       myReplaceComboBox.removeAllItems();
     }
+    int ignoredIdx = -1;
     if (directoryName != null && !directoryName.isEmpty()){
-      if (strings.contains(directoryName)){
-        strings.remove(directoryName);
-      }
+      ignoredIdx = strings.indexOf(directoryName);
       myDirectoryComboBox.addItem(directoryName);
     }
     for(int i = strings.size() - 1; i >= 0; i--){
+      if (i == ignoredIdx) continue;
       myDirectoryComboBox.addItem(strings.get(i));
     }
     if (myDirectoryComboBox.getItemCount() == 0){
@@ -1505,7 +1357,7 @@ public class FindDialog extends DialogWrapper {
         SearchScope selectedScope = myScopeCombo.getSelectedScope();
         String customScopeName = selectedScope == null ? null : selectedScope.getDisplayName();
         model.setCustomScopeName(customScopeName);
-        model.setCustomScope(selectedScope == null ? null : selectedScope);
+        model.setCustomScope(selectedScope);
         model.setCustomScope(true);
       }
     }
@@ -1516,8 +1368,9 @@ public class FindDialog extends DialogWrapper {
     model.setFileFilter(mask);
   }
 
+  @Override
   @Nullable
-  private String getFileTypeMask() {
+  public String getFileTypeMask() {
     String mask = null;
     if (myUseFileFilter !=null && myUseFileFilter.isSelected()) {
       mask = (String)myFileFilter.getEditor().getItem();
@@ -1525,8 +1378,9 @@ public class FindDialog extends DialogWrapper {
     return mask;
   }
 
-
-  private void initByModel() {
+  @Override
+  public void initByModel() {
+    FindModel myModel = myHelper.getModel();
     myCbCaseSensitive.setSelected(myModel.isCaseSensitive());
     myCbWholeWordsOnly.setSelected(myModel.isWholeWordsOnly());
     String searchContext = getSearchContextName(myModel);
@@ -1536,7 +1390,7 @@ public class FindDialog extends DialogWrapper {
 
     if (myModel.isMultipleFiles()) {
       final String dirName = myModel.getDirectoryName();
-      setDirectories(FindSettings.getInstance().getRecentDirectories(), dirName);
+      setDirectories(FindInProjectSettings.getInstance(myProject).getRecentDirectories(), dirName);
 
       if (!StringUtil.isEmptyOrSpaces(dirName)) {
         VirtualFile dir = LocalFileSystem.getInstance().findFileByPath(dirName);
@@ -1623,12 +1477,23 @@ public class FindDialog extends DialogWrapper {
       }
     }
 
-    setStringsToComboBox(FindSettings.getInstance().getRecentFindStrings(), myInputComboBox, myModel.getStringToFind());
+    FindInProjectSettings findInProjectSettings = FindInProjectSettings.getInstance(myProject);
+    setStringsToComboBox(findInProjectSettings.getRecentFindStrings(), myInputComboBox, myModel.getStringToFind());
     if (myModel.isReplaceState()){
       myCbPreserveCase.setSelected(myModel.isPreserveCase());
-      setStringsToComboBox(FindSettings.getInstance().getRecentReplaceStrings(), myReplaceComboBox, myModel.getStringToReplace());
+      setStringsToComboBox(findInProjectSettings.getRecentReplaceStrings(), myReplaceComboBox, myModel.getStringToReplace());
     }
     updateControls();
+    boolean isReplaceState = myModel.isReplaceState();
+    myReplacePrompt.setVisible(isReplaceState);
+    myReplaceComboBox.setVisible(isReplaceState);
+    if (myCbToSkipResultsWhenOneUsage != null) {
+      myCbToSkipResultsWhenOneUsage.setVisible(!isReplaceState);
+    }
+    myCbPreserveCase.setVisible(isReplaceState);
+    setTitle(myHelper.getTitle());
+    setOKButtonText(FindBundle.message(myHelper.isReplaceState() ? "find.replace.command" : "find.button"));
+    validateFindButton();
   }
 
   private void navigateToSelectedUsage(JBTable source) {
@@ -1637,14 +1502,13 @@ public class FindDialog extends DialogWrapper {
     for(int row:rows) {
       Object valueAt = source.getModel().getValueAt(row, 0);
       if (valueAt instanceof Usage) {
-        if (navigations == null) navigations = new SmartList<Usage>();
+        if (navigations == null) navigations = new SmartList<>();
         Usage at = (Usage)valueAt;
         navigations.add(at);
       }
     }
 
     if (navigations != null) {
-      applyTo(FindManager.getInstance(myProject).getFindInProjectModel(), false);
       doCancelAction();
       navigations.get(0).navigate(true);
       for(int i = 1; i < navigations.size(); ++i) navigations.get(i).highlightInEditor();
@@ -1656,6 +1520,9 @@ public class FindDialog extends DialogWrapper {
       @Override
       protected void customizeCellRenderer(JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
         if (value instanceof UsageInfo2UsageAdapter) {
+          if (!((UsageInfo2UsageAdapter)value).isValid()) {
+            myUsageRenderer.append(" "+UsageViewBundle.message("node.invalid") + " ", SimpleTextAttributes.ERROR_ATTRIBUTES);
+          }
           TextChunk[] text = ((UsageInfo2UsageAdapter)value).getPresentation().getText();
 
           // skip line number / file info
@@ -1675,15 +1542,15 @@ public class FindDialog extends DialogWrapper {
         boolean highlighted = textChunk.getType() != null || at.getFontStyle() == Font.BOLD;
         return highlighted
                ? new SimpleTextAttributes(null, at.getFgColor(), at.getWaveColor(),
-                                          (at.getStyle() & ~SimpleTextAttributes.STYLE_BOLD) |
+                                          at.getStyle() & ~SimpleTextAttributes.STYLE_BOLD |
                                           SimpleTextAttributes.STYLE_SEARCH_MATCH)
                : at;
       }
     };
     private final ColoredTableCellRenderer myFileAndLineNumber = new ColoredTableCellRenderer() {
-      private final SimpleTextAttributes REPEATED_FILE_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, new JBColor(0xCCCCCC, 0x5E5E5E));
-      private final SimpleTextAttributes ORDINAL_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, new JBColor(0x999999, 0x999999));
-      
+      private final SimpleTextAttributes REPEATED_FILE_ATTRIBUTES = new SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, new JBColor(0xCCCCCC, 0x5E5E5E));
+      private final SimpleTextAttributes ORDINAL_ATTRIBUTES = new SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, new JBColor(0x999999, 0x999999));
+
       @Override
       protected void customizeCellRenderer(JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
         if (value instanceof UsageInfo2UsageAdapter) {
@@ -1703,8 +1570,8 @@ public class FindDialog extends DialogWrapper {
       @NotNull
       private String getFilePath(@NotNull UsageInfo2UsageAdapter ua) {
         String uniquePath =
-          UniqueVFilePathBuilder.getInstance().getUniqueVirtualFilePath(ua.getUsageInfo().getProject(), ua.getFile());
-        return myOmitFileExtension ? StringUtil.trimExtension(uniquePath) : uniquePath;
+          UniqueVFilePathBuilder.getInstance().getUniqueVirtualFilePath(ua.getUsageInfo().getProject(), ua.getFile(), myScope);
+        return myOmitFileExtension ? FileUtilRt.getNameWithoutExtension(uniquePath) : uniquePath;
       }
 
       @Nullable
@@ -1718,14 +1585,16 @@ public class FindDialog extends DialogWrapper {
     private static final int MARGIN = 2;
     private final boolean myOmitFileExtension;
     private final boolean myUseBold;
+    private final GlobalSearchScope myScope;
 
-    UsageTableCellRenderer(boolean omitFileExtension, boolean useBold) {
+    UsageTableCellRenderer(boolean omitFileExtension, boolean useBold, GlobalSearchScope scope) {
       myOmitFileExtension = omitFileExtension;
       myUseBold = useBold;
+      myScope = scope;
       setLayout(new BorderLayout());
-      add(myUsageRenderer, BorderLayout.WEST);
+      add(myUsageRenderer, BorderLayout.CENTER);
       add(myFileAndLineNumber, BorderLayout.EAST);
-      setBorder(IdeBorderFactory.createEmptyBorder(MARGIN, MARGIN, MARGIN, 0));
+      setBorder(JBUI.Borders.empty(MARGIN, MARGIN, MARGIN, 0));
     }
 
     @Override
@@ -1735,7 +1604,8 @@ public class FindDialog extends DialogWrapper {
       setBackground(myUsageRenderer.getBackground());
       if (!isSelected && value instanceof UsageInfo2UsageAdapter) {
         UsageInfo2UsageAdapter usageAdapter = (UsageInfo2UsageAdapter)value;
-        Color color = FileColorManager.getInstance(usageAdapter.getUsageInfo().getProject()).getFileColor(usageAdapter.getFile());
+        Project project = usageAdapter.getUsageInfo().getProject();
+        Color color = VfsPresentationUtil.getFileBackgroundColor(project, usageAdapter.getFile());
         setBackground(color);
         myUsageRenderer.setBackground(color);
         myFileAndLineNumber.setBackground(color);
@@ -1775,10 +1645,10 @@ public class FindDialog extends DialogWrapper {
     }
   }
 
-  protected void registerNavigateToSourceShortcutOnComponent(@NotNull final JBTable c, JComponent component) {
+  private void registerNavigateToSourceShortcutOnComponent(@NotNull final JBTable c, JComponent component) {
     AnAction anAction = new AnAction() {
       @Override
-      public void actionPerformed(AnActionEvent e) {
+      public void actionPerformed(@NotNull AnActionEvent e) {
         navigateToSelectedUsage(c);
       }
     };

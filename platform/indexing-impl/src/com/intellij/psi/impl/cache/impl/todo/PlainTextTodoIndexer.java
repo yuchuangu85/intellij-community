@@ -15,6 +15,7 @@
  */
 package com.intellij.psi.impl.cache.impl.todo;
 
+import com.intellij.patterns.StringPattern;
 import com.intellij.psi.impl.cache.impl.IndexPatternUtil;
 import com.intellij.psi.impl.cache.impl.OccurrenceConsumer;
 import com.intellij.psi.search.IndexPattern;
@@ -41,7 +42,7 @@ public class PlainTextTodoIndexer extends VersionedTodoIndexer {
     for (IndexPattern indexPattern : indexPatterns) {
       Pattern pattern = indexPattern.getOptimizedIndexingPattern();
       if (pattern != null) {
-        Matcher matcher = pattern.matcher(chars);
+        Matcher matcher = pattern.matcher(StringPattern.newBombedCharSequence(chars));
         while (matcher.find()) {
           if (matcher.start() != matcher.end()) {
             occurrenceConsumer.incTodoOccurrence(indexPattern);
@@ -49,7 +50,7 @@ public class PlainTextTodoIndexer extends VersionedTodoIndexer {
         }
       }
     }
-    Map<TodoIndexEntry, Integer> map = new HashMap<TodoIndexEntry, Integer>();
+    Map<TodoIndexEntry, Integer> map = new HashMap<>();
     for (IndexPattern indexPattern : indexPatterns) {
       final int count = occurrenceConsumer.getOccurrenceCount(indexPattern);
       if (count > 0) {

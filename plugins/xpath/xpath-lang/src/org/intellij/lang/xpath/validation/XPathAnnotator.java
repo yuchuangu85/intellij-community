@@ -56,6 +56,7 @@ public final class XPathAnnotator extends XPath2ElementVisitor implements Annota
 
   private AnnotationHolder myHolder;
 
+  @Override
   public void annotate(@NotNull PsiElement psiElement, @NotNull AnnotationHolder holder) {
 
     try {
@@ -150,7 +151,7 @@ public final class XPathAnnotator extends XPath2ElementVisitor implements Annota
                 annotation.registerFix(new ExpressionReplacementFix(replacement, display, expression));
               }
             } else if (number == expression.getROperand()) {
-              final PsiElement next = PsiTreeUtil.getParentOfType(PsiTreeUtil.nextLeaf(expression), XPathExpression.class, true);
+              final XPathExpression next = PsiTreeUtil.getParentOfType(PsiTreeUtil.nextLeaf(expression), XPathExpression.class, true);
               if (next instanceof XPathBinaryExpression) {
                 final XPathBinaryExpression left = (XPathBinaryExpression)next;
                 final XPathExpression rOperand = left.getROperand();
@@ -159,7 +160,7 @@ public final class XPathAnnotator extends XPath2ElementVisitor implements Annota
                   final String replacement = lOperand.getText() + " " + expression.getOperationSign() + " " + display + " " + rOperand.getText();
 
                   assert PsiEquivalenceUtil.areElementsEquivalent(next, XPathChangeUtil.createExpression(next, replacement));
-                  annotation.registerFix(new ExpressionReplacementFix(replacement, display, (XPathExpression)next));
+                  annotation.registerFix(new ExpressionReplacementFix(replacement, display, next));
                 }
               }
             }
@@ -262,12 +263,12 @@ public final class XPathAnnotator extends XPath2ElementVisitor implements Annota
       if (!variableResolver.canResolve()) {
         final Object[] variablesInScope = variableResolver.getVariablesInScope(reference);
         if (variablesInScope instanceof String[]) {
-          final Set<String> variables = new HashSet<String>(Arrays.asList((String[])variablesInScope));
+          final Set<String> variables = new HashSet<>(Arrays.asList((String[])variablesInScope));
           if (!variables.contains(reference.getReferencedName())) {
             markUnresolvedVariable(reference, holder);
           }
         } else if (variablesInScope instanceof QName[]) {
-          final Set<QName> variables = new HashSet<QName>(Arrays.asList((QName[])variablesInScope));
+          final Set<QName> variables = new HashSet<>(Arrays.asList((QName[])variablesInScope));
           if (!variables.contains(contextProvider.getQName(reference))) {
             markUnresolvedVariable(reference, holder);
           }

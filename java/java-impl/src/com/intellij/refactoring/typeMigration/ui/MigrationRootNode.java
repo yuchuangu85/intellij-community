@@ -24,7 +24,6 @@ import com.intellij.psi.PsiType;
 import com.intellij.refactoring.typeMigration.TypeMigrationLabeler;
 import com.intellij.refactoring.typeMigration.usageInfo.TypeMigrationUsageInfo;
 import com.intellij.ui.DuplicateNodeRenderer;
-import com.intellij.util.containers.HashSet;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -32,16 +31,15 @@ import java.util.*;
 
 /**
  * @author anna
- * Date: 16-Apr-2008
  */
 public class MigrationRootNode extends AbstractTreeNode<TypeMigrationLabeler> implements DuplicateNodeRenderer.DuplicatableNode  {
   private final TypeMigrationLabeler myLabeler;
   private List<MigrationNode> myCachedChildren;
-  private final PsiElement myRoots[];
+  private final PsiElement[] myRoots;
   private final boolean myPreviewUsages;
 
   protected MigrationRootNode(Project project,
-                              TypeMigrationLabeler labeler, 
+                              TypeMigrationLabeler labeler,
                               final PsiElement[] roots,
                               final boolean previewUsages) {
     super(project, labeler);
@@ -50,10 +48,11 @@ public class MigrationRootNode extends AbstractTreeNode<TypeMigrationLabeler> im
     myPreviewUsages = previewUsages;
   }
 
+  @Override
   @NotNull
   public Collection<? extends AbstractTreeNode> getChildren() {
     if (myCachedChildren == null) {
-      myCachedChildren = new ArrayList<MigrationNode>();
+      myCachedChildren = new ArrayList<>();
       if (myPreviewUsages) {
         for (Pair<TypeMigrationUsageInfo, PsiType> root : myLabeler.getMigrationRoots()) {
           addRoot(root.getFirst(), root.getSecond());
@@ -69,18 +68,20 @@ public class MigrationRootNode extends AbstractTreeNode<TypeMigrationLabeler> im
   }
 
   private void addRoot(TypeMigrationUsageInfo info, PsiType migrationType) {
-    final HashSet<TypeMigrationUsageInfo> parents = new HashSet<TypeMigrationUsageInfo>();
+    final HashSet<TypeMigrationUsageInfo> parents = new HashSet<>();
     parents.add(info);
     final MigrationNode migrationNode =
-        new MigrationNode(getProject(), info, migrationType, myLabeler, parents, new HashMap<TypeMigrationUsageInfo, Set<MigrationNode>>());
+        new MigrationNode(getProject(), info, migrationType, myLabeler, parents, new HashMap<>());
 
     myCachedChildren.add(migrationNode);
   }
 
-  protected void update(final PresentationData presentation) {
+  @Override
+  protected void update(@NotNull final PresentationData presentation) {
 
   }
 
+  @Override
   public DefaultMutableTreeNode getDuplicate() {
     return null;
   }

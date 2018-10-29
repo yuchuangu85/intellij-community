@@ -40,11 +40,10 @@ import java.util.List;
  * Not thread-safe.
  *
  * @author Denis Zhdanov
- * @since 8/31/12 12:06 PM
  */
 public class ArrangementEntryWrapper<E extends ArrangementEntry> {
 
-  @NotNull private final List<ArrangementEntryWrapper<E>> myChildren = new ArrayList<ArrangementEntryWrapper<E>>();
+  @NotNull private final List<ArrangementEntryWrapper<E>> myChildren = new ArrayList<>();
   @NotNull private final E myEntry;
 
   @Nullable private ArrangementEntryWrapper<E> myParent;
@@ -62,7 +61,7 @@ public class ArrangementEntryWrapper<E extends ArrangementEntry> {
     myEndOffset = entry.getEndOffset();
     ArrangementEntryWrapper<E> previous = null;
     for (ArrangementEntry child : entry.getChildren()) {
-      ArrangementEntryWrapper<E> childWrapper = new ArrangementEntryWrapper<E>((E)child);
+      ArrangementEntryWrapper<E> childWrapper = new ArrangementEntryWrapper<>((E)child);
       childWrapper.setParent(this);
       if (previous != null) {
         previous.setNext(childWrapper);

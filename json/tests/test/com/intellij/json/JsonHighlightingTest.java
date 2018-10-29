@@ -6,14 +6,11 @@ import com.intellij.json.codeinsight.JsonStandardComplianceInspection;
 /**
  * @author Mikhail Golubev
  */
-public class JsonHighlightingTest extends JsonTestCase {
+public class JsonHighlightingTest extends JsonHighlightingTestBase {
 
-  private void doTest() {
-    doTestHighlighting(true, true, true);
-  }
-
-  private long doTestHighlighting(boolean checkInfo, boolean checkWeakWarning, boolean checkWarning) {
-    return myFixture.testHighlighting(checkWarning, checkInfo, checkWeakWarning, "/highlighting/" + getTestName(false) + ".json");
+  @Override
+  protected String getExtension() {
+    return "json";
   }
 
   private void enableStandardComplianceInspection(boolean checkComments, boolean checkTopLevelValues) {
@@ -55,17 +52,22 @@ public class JsonHighlightingTest extends JsonTestCase {
 
   // Moved from JavaScript
 
-  public void testJSON_with_comment() throws Exception {
+  public void testJSON_with_comment() {
     enableStandardComplianceInspection(false, true);
     doTestHighlighting(false, true, true);
   }
 
-  public void testJSON() throws Exception {
+  public void testJSON() {
     enableStandardComplianceInspection(true, true);
     doTestHighlighting(false, true, true);
   }
 
-  public void testSemanticHighlighting() throws Exception {
+  public void testTabInString() {
+    enableStandardComplianceInspection(true, true);
+    doTestHighlighting(false, true, true);
+  }
+
+  public void testSemanticHighlighting() {
     // WEB-11239
     doTest();
   }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.featureStatistics.ui;
 
 import com.intellij.CommonBundle;
@@ -24,7 +10,6 @@ import com.intellij.ide.util.TipUIUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.ui.ScrollPaneFactory;
-import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -35,7 +20,7 @@ public class AdaptiveTipDialog extends DialogWrapper {
   private static final int DEFAULT_WIDTH = 400;
   private static final int DEFAULT_HEIGHT = 200;
 
-  private JEditorPane myBrowser;
+  private TipUIUtil.Browser myBrowser;
   private final String[] myFeatures;
   private int myCurrentFeature;
 
@@ -59,16 +44,18 @@ public class AdaptiveTipDialog extends DialogWrapper {
   }
 
 
+  @Override
   protected JComponent createCenterPanel() {
     JPanel panel = new JPanel(new BorderLayout());
 
-    myBrowser = new JEditorPane(UIUtil.HTML_MIME, "");
+    myBrowser = TipUIUtil.createBrowser();
 
-    panel.add(ScrollPaneFactory.createScrollPane(myBrowser));
+    panel.add(ScrollPaneFactory.createScrollPane(myBrowser.getComponent()));
     panel.setPreferredSize(new Dimension(DEFAULT_WIDTH, DEFAULT_HEIGHT));
     return panel;
   }
 
+  @Override
   @NotNull
   protected Action[] createActions() {
     if (myFeatures.length == 1) {
@@ -80,10 +67,11 @@ public class AdaptiveTipDialog extends DialogWrapper {
   }
 
   private class NextAction extends AbstractAction{
-    public NextAction() {
+    NextAction() {
       super(FeatureStatisticsBundle.message("feature.statistics.action.next.tip"));
     }
 
+    @Override
     public void actionPerformed(ActionEvent e) {
       myCurrentFeature++;
       if (myCurrentFeature >= myFeatures.length) {
@@ -94,10 +82,11 @@ public class AdaptiveTipDialog extends DialogWrapper {
   }
 
   private class PrevAction extends AbstractAction{
-    public PrevAction() {
+    PrevAction() {
       super(FeatureStatisticsBundle.message("feature.statistics.action.prev.tip"));
     }
 
+    @Override
     public void actionPerformed(ActionEvent e) {
       myCurrentFeature--;
       if (myCurrentFeature < 0) {

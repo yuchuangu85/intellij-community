@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.daemon.impl;
 
@@ -22,23 +8,22 @@ import com.intellij.codeInsight.daemon.impl.analysis.HighlightLevelUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightingLevelManager;
 import com.intellij.icons.AllIcons;
 import com.intellij.lang.Language;
-import com.intellij.openapi.Disposable;
+import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.EditorBundle;
 import com.intellij.openapi.editor.HectorComponentPanel;
 import com.intellij.openapi.editor.HectorComponentPanelsProvider;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.ShowSettingsUtil;
+import com.intellij.openapi.options.ex.ConfigurableExtensionPointUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
-import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.profile.codeInspection.ui.ErrorsConfigurable;
+import com.intellij.profile.codeInspection.ui.ErrorsConfigurableProvider;
 import com.intellij.psi.FileViewProvider;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
@@ -52,20 +37,11 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
-import javax.swing.event.HyperlinkEvent;
-import javax.swing.event.HyperlinkListener;
-import javax.swing.plaf.basic.BasicSliderUI;
 import java.awt.*;
 import java.lang.ref.WeakReference;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 
-/**
- * User: anna
- * Date: Jun 27, 2005
- */
 public class HectorComponent extends JPanel {
   private static final Logger LOG = Logger.getInstance("com.intellij.openapi.editor.impl.HectorComponent");
 
@@ -74,13 +50,11 @@ public class HectorComponent extends JPanel {
   private final Map<Language, JSlider> mySliders;
   private final PsiFile myFile;
 
-  private final String myTitle = EditorBundle.message("hector.highlighting.level.title");
-
   public HectorComponent(@NotNull PsiFile file) {
     super(new GridBagLayout());
     setBorder(BorderFactory.createEmptyBorder(0, 0, 7, 0));
     myFile = file;
-    mySliders = new HashMap<Language, JSlider>();
+    mySliders = new HashMap<>();
 
     final Project project = myFile.getProject();
     final ProjectFileIndex fileIndex = ProjectRootManager.getInstance(project).getFileIndex();
@@ -89,11 +63,11 @@ public class HectorComponent extends JPanel {
     final boolean notInLibrary =
       !fileIndex.isInLibrarySource(virtualFile) && !fileIndex.isInLibraryClasses(virtualFile) || fileIndex.isInContent(virtualFile);
     final FileViewProvider viewProvider = myFile.getViewProvider();
-    List<Language> languages = new ArrayList<Language>(viewProvider.getLanguages());
+    List<Language> languages = new ArrayList<>(viewProvider.getLanguages());
     Collections.sort(languages, PsiUtilBase.LANGUAGE_COMPARATOR);
     for (Language language : languages) {
       @SuppressWarnings("UseOfObsoleteCollectionType")
-      final Hashtable<Integer, JComponent> sliderLabels = new Hashtable<Integer, JComponent>();
+      final Hashtable<Integer, JComponent> sliderLabels = new Hashtable<>();
       sliderLabels.put(1, new JLabel(EditorBundle.message("hector.none.slider.label"), AllIcons.Ide.HectorOff, SwingConstants.LEFT));
       sliderLabels.put(2, new JLabel(EditorBundle.message("hector.syntax.slider.label"), AllIcons.Ide.HectorSyntax, SwingConstants.LEFT));
       if (notInLibrary) {
@@ -101,23 +75,15 @@ public class HectorComponent extends JPanel {
       }
 
       final JSlider slider = new JSlider(SwingConstants.VERTICAL, 1, notInLibrary ? 3 : 2, 1);
-      if (UIUtil.isUnderGTKLookAndFeel()) {
-        // default GTK+ slider UI is way too ugly
-        slider.putClientProperty("Slider.paintThumbArrowShape", true);
-        slider.setUI(new BasicSliderUI(slider));
-      }
       slider.setLabelTable(sliderLabels);
       UIUtil.setSliderIsFilled(slider, true);
       slider.setPaintLabels(true);
       slider.setSnapToTicks(true);
-      slider.addChangeListener(new ChangeListener() {
-        @Override
-        public void stateChanged(ChangeEvent e) {
-          int value = slider.getValue();
-          for (Enumeration<Integer> enumeration = sliderLabels.keys(); enumeration.hasMoreElements(); ) {
-            Integer key = enumeration.nextElement();
-            sliderLabels.get(key).setForeground(key.intValue() <= value ? UIUtil.getLabelForeground() : UIUtil.getLabelDisabledForeground());
-          }
+      slider.addChangeListener(e -> {
+        int value = slider.getValue();
+        for (Enumeration<Integer> enumeration = sliderLabels.keys(); enumeration.hasMoreElements(); ) {
+          Integer key = enumeration.nextElement();
+          sliderLabels.get(key).setForeground(key.intValue() <= value ? UIUtil.getLabelForeground() : UIUtil.getLabelDisabledForeground());
         }
       });
 
@@ -132,7 +98,7 @@ public class HectorComponent extends JPanel {
                                                    GridBagConstraints.NONE, new Insets(0, 5, 0, 0), 0, 0);
 
     JPanel panel = new JPanel(new GridBagLayout());
-    panel.setBorder(IdeBorderFactory.createTitledBorder(myTitle, false));
+    panel.setBorder(IdeBorderFactory.createTitledBorder(EditorBundle.message("hector.highlighting.level.title"), false));
     final boolean addLabel = mySliders.size() > 1;
     if (addLabel) {
       layoutVertical(panel);
@@ -156,27 +122,23 @@ public class HectorComponent extends JPanel {
     gc.fill = GridBagConstraints.NONE;
     gc.anchor = GridBagConstraints.EAST;
     add(configurator, gc);
-    configurator.addHyperlinkListener(new HyperlinkListener() {
-      @Override
-      public void hyperlinkUpdate(HyperlinkEvent e) {
-        final JBPopup hector = getOldHector();
-        if (hector != null) {
-          hector.cancel();
-        }
-        if (!DaemonCodeAnalyzer.getInstance(myFile.getProject()).isHighlightingAvailable(myFile)) return;
-        final Project project = myFile.getProject();
-        final ErrorsConfigurable errorsConfigurable = ErrorsConfigurable.SERVICE.createConfigurable(project);
-        assert errorsConfigurable != null;
-        ShowSettingsUtil.getInstance().editConfigurable(project, errorsConfigurable);
+    configurator.addHyperlinkListener(e -> {
+      final JBPopup hector = getOldHector();
+      if (hector != null) {
+        hector.cancel();
       }
+      if (!DaemonCodeAnalyzer.getInstance(myFile.getProject()).isHighlightingAvailable(myFile)) return;
+      final Project project1 = myFile.getProject();
+      ShowSettingsUtil.getInstance().editConfigurable(project1, ConfigurableExtensionPointUtil
+        .createProjectConfigurableForProvider(project1, ErrorsConfigurableProvider.class));
     });
 
     gc.anchor = GridBagConstraints.WEST;
     gc.weightx = 1.0;
     gc.insets.right = 0;
     gc.fill = GridBagConstraints.HORIZONTAL;
-    myAdditionalPanels = new ArrayList<HectorComponentPanel>();
-    for (HectorComponentPanelsProvider provider : Extensions.getExtensions(HectorComponentPanelsProvider.EP_NAME, project)) {
+    myAdditionalPanels = new ArrayList<>();
+    for (HectorComponentPanelsProvider provider : HectorComponentPanelsProvider.EP_NAME.getExtensions(project)) {
       final HectorComponentPanel componentPanel = provider.createConfigurable(file);
       if (componentPanel != null) {
         myAdditionalPanels.add(componentPanel);
@@ -189,7 +151,7 @@ public class HectorComponent extends JPanel {
   @Override
   public Dimension getPreferredSize() {
     final Dimension preferredSize = super.getPreferredSize();
-    final int width = 300;
+    final int width = JBUI.scale(300);
     if (preferredSize.width < width){
       preferredSize.width = width;
     }
@@ -231,21 +193,18 @@ public class HectorComponent extends JPanel {
         return Boolean.TRUE;
       })
       .createPopup();
-    Disposer.register(myFile.getProject(), new Disposable() {
-      @Override
-      public void dispose() {
-        final JBPopup oldHector = getOldHector();
-        if (oldHector != null && !oldHector.isDisposed()) {
-          Disposer.dispose(oldHector);
-        }
-        Disposer.dispose(hector);
+    Disposer.register(myFile.getProject(), () -> {
+      final JBPopup oldHector = getOldHector();
+      if (oldHector != null && !oldHector.isDisposed()) {
+        Disposer.dispose(oldHector);
       }
+      Disposer.dispose(hector);
     });
     final JBPopup oldHector = getOldHector();
     if (oldHector != null){
       oldHector.cancel();
     } else {
-      myHectorRef = new WeakReference<JBPopup>(hector);
+      myHectorRef = new WeakReference<>(hector);
       hector.show(point);
     }
   }
@@ -272,7 +231,6 @@ public class HectorComponent extends JPanel {
         }
       }
       forceDaemonRestart();
-      DaemonListeners.getInstance(myFile.getProject()).updateStatusBar();
     }
   }
 
@@ -293,6 +251,7 @@ public class HectorComponent extends JPanel {
         HighlightLevelUtil.forceRootHighlighting(root, FileHighlightingSetting.FORCE_HIGHLIGHTING);
       }
     }
+    InjectedLanguageManager.getInstance(myFile.getProject()).dropFileCaches(myFile);
     final DaemonCodeAnalyzer analyzer = DaemonCodeAnalyzer.getInstance(myFile.getProject());
     analyzer.restart();
   }

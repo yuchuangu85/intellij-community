@@ -18,11 +18,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 
-/*
-* Created by IntelliJ IDEA.
-* User: sweinreuter
-* Date: 09.06.2010
-*/
 public class RelaxIncludeProvider extends FileIncludeProvider {
   @NotNull
   @Override
@@ -50,10 +45,10 @@ public class RelaxIncludeProvider extends FileIncludeProvider {
     if (content.getFileType() == XmlFileType.INSTANCE) {
       CharSequence inputDataContentAsText = content.getContentAsText();
       if (CharArrayUtil.indexOf(inputDataContentAsText, ApplicationLoader.RNG_NAMESPACE, 0) == -1) return FileIncludeInfo.EMPTY;
-      infos = new ArrayList<FileIncludeInfo>();
+      infos = new ArrayList<>();
       NanoXmlUtil.parse(CharArrayUtil.readerFromCharSequence(content.getContentAsText()), new RngBuilderAdapter(infos));
     } else if (content.getFileType() == RncFileType.getInstance()) {
-      infos = new ArrayList<FileIncludeInfo>();
+      infos = new ArrayList<>();
       content.getPsiFile().acceptChildren(new RncElementVisitor() {
         @Override
         public void visitElement(RncElement element) {
@@ -71,7 +66,7 @@ public class RelaxIncludeProvider extends FileIncludeProvider {
     } else {
       return FileIncludeInfo.EMPTY;
     }
-    return infos.toArray(new FileIncludeInfo[infos.size()]);
+    return infos.toArray(FileIncludeInfo.EMPTY);
   }
 
   private static class RngBuilderAdapter extends NanoXmlUtil.IXMLBuilderAdapter {
@@ -79,7 +74,7 @@ public class RelaxIncludeProvider extends FileIncludeProvider {
     boolean isInclude;
     private final ArrayList<FileIncludeInfo> myInfos;
 
-    public RngBuilderAdapter(ArrayList<FileIncludeInfo> infos) {
+    RngBuilderAdapter(ArrayList<FileIncludeInfo> infos) {
       myInfos = infos;
     }
 

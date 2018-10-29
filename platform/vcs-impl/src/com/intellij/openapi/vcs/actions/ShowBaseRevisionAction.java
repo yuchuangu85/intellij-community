@@ -15,7 +15,6 @@
  */
 package com.intellij.openapi.vcs.actions;
 
-import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.Presentation;
 import com.intellij.openapi.editor.colors.EditorColors;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
@@ -41,12 +40,6 @@ import java.awt.*;
 
 import static com.intellij.util.ObjectUtils.assertNotNull;
 
-/**
- * Created by IntelliJ IDEA.
- * User: Irina.Chernushina
- * Date: 8/2/11
- * Time: 1:22 PM
- */
 public class ShowBaseRevisionAction extends AbstractVcsAction {
   @Override
   protected void actionPerformed(@NotNull VcsContext vcsContext) {
@@ -61,7 +54,7 @@ public class ShowBaseRevisionAction extends AbstractVcsAction {
     private final AbstractVcs vcs;
     private final VirtualFile selectedFile;
     private VcsRevisionDescription myDescription;
-    private VcsContext vcsContext;
+    private final VcsContext vcsContext;
 
     private MyTask(VirtualFile selectedFile, AbstractVcs vcs, VcsContext vcsContext) {
       super(vcsContext.getProject(), "Loading current revision", true);
@@ -100,19 +93,14 @@ public class ShowBaseRevisionAction extends AbstractVcsAction {
   }
 
   @Override
-  protected void update(VcsContext vcsContext, Presentation presentation) {
-    presentation.setEnabled(AbstractShowDiffAction.isEnabled(vcsContext, null));
-  }
-
-  @Override
-  protected boolean forceSyncUpdate(AnActionEvent e) {
-    return true;
+  protected void update(@NotNull VcsContext vcsContext, @NotNull Presentation presentation) {
+    presentation.setEnabled(AbstractShowDiffAction.isEnabled(vcsContext, false));
   }
 
   static class NotificationPanel extends JPanel {
     protected final JEditorPane myLabel;
 
-    public NotificationPanel() {
+    NotificationPanel() {
       super(new BorderLayout());
 
       myLabel = new JEditorPane(UIUtil.HTML_MIME, "");

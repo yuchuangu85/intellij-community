@@ -15,7 +15,6 @@
  */
 package com.intellij.codeInsight.daemon.impl.quickfix;
 
-import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.daemon.QuickFixBundle;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.intention.IntentionAction;
@@ -26,7 +25,9 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.infos.CandidateInfo;
 import com.intellij.psi.infos.MethodCandidateInfo;
+import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.IncorrectOperationException;
+import com.intellij.util.ObjectUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -66,11 +67,9 @@ public class ChangeStringLiteralToCharInMethodCallFix implements IntentionAction
 
   @Override
   public void invoke(@NotNull final Project project, final Editor editor, final PsiFile file) throws IncorrectOperationException {
-    if (!FileModificationService.getInstance().prepareFileForWrite(file)) return;
-
     final Object value = myLiteral.getValue();
     if (value != null && value.toString().length() == 1) {
-      final PsiElementFactory factory = JavaPsiFacade.getInstance(project).getElementFactory();
+      final PsiElementFactory factory = JavaPsiFacade.getElementFactory(project);
 
       final PsiExpression newExpression = factory.createExpressionFromText(quote(convertedValue(), ! isString(myLiteral.getType())),
                                                                            myLiteral.getParent());
@@ -97,7 +96,7 @@ public class ChangeStringLiteralToCharInMethodCallFix implements IntentionAction
 
   public static void registerFixes(@NotNull final PsiMethod[] candidates, @NotNull final PsiConstructorCall call,
                                         @NotNull final HighlightInfo out) {
-    final Set<PsiLiteralExpression> literals = new HashSet<PsiLiteralExpression>();
+    final Set<PsiLiteralExpression> literals = new HashSet<>();
     if (call.getArgumentList() == null) {
       return;
     }
@@ -114,7 +113,7 @@ public class ChangeStringLiteralToCharInMethodCallFix implements IntentionAction
                                    @NotNull final PsiMethodCallExpression methodCall,
                                    @Nullable final HighlightInfo info) {
     if (info == null) return;
-    final Set<PsiLiteralExpression> literals = new HashSet<PsiLiteralExpression>();
+    final Set<PsiLiteralExpression> literals = new HashSet<>();
     boolean exactMatch = false;
     for (CandidateInfo candidate : candidates) {
       if (candidate instanceof MethodCandidateInfo) {
@@ -127,7 +126,7 @@ public class ChangeStringLiteralToCharInMethodCallFix implements IntentionAction
     }
   }
 
-  private static void processLiterals(@NotNull final Set<PsiLiteralExpression> literals,
+  private static void processLiterals(@NotNull final Set<? extends PsiLiteralExpression> literals,
                                       @NotNull final PsiCall call,
                                       @NotNull final HighlightInfo info) {
     for (PsiLiteralExpression literal : literals) {
@@ -137,10 +136,10 @@ public class ChangeStringLiteralToCharInMethodCallFix implements IntentionAction
   }
 
   /**
-   * @return <code>true</code> if exact TYPEs match
+   * @return {@code true} if exact TYPEs match
    */
   private static boolean findMatchingExpressions(final PsiExpression[] arguments, final PsiMethod existingMethod,
-                                                                   final Set<PsiLiteralExpression> result) {
+                                                 final Set<? super PsiLiteralExpression> result) {
     final PsiParameterList parameterList = existingMethod.getParameterList();
     final PsiParameter[] parameters = parameterList.getParameters();
 
@@ -149,19 +148,20 @@ public class ChangeStringLiteralToCharInMethodCallFix implements IntentionAction
     }
 
     boolean typeMatch = true;
-    for (int i = 0; i < parameters.length && i < arguments.length; i++) {
+    for (int i = 0; i < parameters.length; i++) {
       final PsiParameter parameter = parameters[i];
       final PsiType parameterType = parameter.getType();
       final PsiType argumentType = arguments[i].getType();
 
       typeMatch &= Comparing.equal(parameterType, argumentType);
 
-      if (arguments[i] instanceof PsiLiteralExpression && ! result.contains(arguments[i]) &&
+      PsiLiteralExpression argument = ObjectUtils.tryCast(PsiUtil.skipParenthesizedExprDown(arguments[i]), PsiLiteralExpression.class);
+      if (argument != null && !result.contains(argument) &&
           (charToString(parameterType, argumentType) || charToString(argumentType, parameterType))) {
 
-        final String value = String.valueOf(((PsiLiteralExpression) arguments[i]).getValue());
+        final String value = String.valueOf(argument.getValue());
         if (value != null && value.length() == 1) {
-          result.add((PsiLiteralExpression) arguments[i]);
+          result.add(argument);
         }
       }
     }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn.info;
 
 import com.intellij.openapi.util.Getter;
@@ -22,10 +8,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.svn.SvnUtil;
 import org.jetbrains.idea.svn.api.NodeKind;
+import org.jetbrains.idea.svn.commandLine.SvnBindException;
 import org.jetbrains.idea.svn.lock.Lock;
-import org.tmatesoft.svn.core.SVNException;
-import org.tmatesoft.svn.core.SVNURL;
-import org.tmatesoft.svn.core.internal.util.SVNDate;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
@@ -33,30 +17,27 @@ import org.xml.sax.helpers.DefaultHandler;
 import java.io.File;
 import java.util.*;
 
-/**
- * Created with IntelliJ IDEA.
- * User: Irina.Chernushina
- * Date: 1/27/12
- * Time: 1:00 PM
- */
+import static com.intellij.openapi.util.text.StringUtil.notNullize;
+import static org.jetbrains.idea.svn.SvnUtil.createUrl;
+
 public class SvnInfoHandler extends DefaultHandler {
   @Nullable private final File myBase;
-  private final Consumer<org.jetbrains.idea.svn.info.Info> myInfoConsumer;
-  private Map<File, org.jetbrains.idea.svn.info.Info> myResultsMap;
+  private final Consumer<? super org.jetbrains.idea.svn.info.Info> myInfoConsumer;
+  private final Map<File, org.jetbrains.idea.svn.info.Info> myResultsMap;
   private SvnInfoStructure myPending;
   private final Map<String, Getter<ElementHandlerBase>> myElementsMap;
   private final List<ElementHandlerBase> myParseStack;
   private final StringBuilder mySb;
 
-  public SvnInfoHandler(@Nullable File base, final Consumer<org.jetbrains.idea.svn.info.Info> infoConsumer) {
+  public SvnInfoHandler(@Nullable File base, final Consumer<? super org.jetbrains.idea.svn.info.Info> infoConsumer) {
     myBase = base;
     myInfoConsumer = infoConsumer;
     myPending = createPending();
-    myElementsMap = new HashMap<String, Getter<ElementHandlerBase>>();
+    myElementsMap = new HashMap<>();
     fillElements();
-    myParseStack = new ArrayList<ElementHandlerBase>();
+    myParseStack = new ArrayList<>();
     myParseStack.add(new Fake());
-    myResultsMap = new HashMap<File, org.jetbrains.idea.svn.info.Info>();
+    myResultsMap = new HashMap<>();
     mySb = new StringBuilder();
   }
 
@@ -65,7 +46,7 @@ public class SvnInfoHandler extends DefaultHandler {
     try {
       info = myPending.convert();
     }
-    catch (SVNException e) {
+    catch (SvnBindException e) {
       throw new SAXException(e);
     }
     if (myInfoConsumer != null) {
@@ -144,204 +125,39 @@ public class SvnInfoHandler extends DefaultHandler {
   }
 
   private void fillElements() {
-    myElementsMap.put("copy-from-url", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new CopyFromUrl();
-      }
-    });
-    myElementsMap.put("copy-from-rev", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new CopyFromRev();
-      }
-    });
-    myElementsMap.put("changelist", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new ChangeList();
-      }
-    });
-    myElementsMap.put("author", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Author();
-      }
-    });
-    myElementsMap.put("checksum", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Checksum();
-      }
-    });
-    myElementsMap.put("commit", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Commit();
-      }
-    });
-    myElementsMap.put("conflict", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Conflict();
-      }
-    });
-    myElementsMap.put("cur-base-file", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new CurBase();
-      }
-    });
-    myElementsMap.put("date", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Date();
-      }
-    });
-    myElementsMap.put("depth", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Depth();
-      }
-    });
-    myElementsMap.put("entry", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Entry(myBase);
-      }
-    });
-    myElementsMap.put("info", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Info();
-      }
-    });
-    myElementsMap.put("prev-base-file", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new PrevBase();
-      }
-    });
-    myElementsMap.put("prev-wc-file", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new PrevWc();
-      }
-    });
-    myElementsMap.put("prop-file", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new PropFile();
-      }
-    });
-    myElementsMap.put("repository", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Repository();
-      }
-    });
-    myElementsMap.put("root", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Root();
-      }
-    });
-    myElementsMap.put("schedule", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Schedule();
-      }
-    });
-    myElementsMap.put("text-updated", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new TextUpdated();
-      }
-    });
-    myElementsMap.put("tree-conflict", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new TreeConflict();
-      }
-    });
-    myElementsMap.put("url", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Url();
-      }
-    });
-    myElementsMap.put("relative-url", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new RelativeUrl();
-      }
-    });
-    myElementsMap.put("lock", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new LockElement();
-      }
-    });
-    myElementsMap.put("token", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new LockToken();
-      }
-    });
-    myElementsMap.put("owner", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new LockOwner();
-      }
-    });
-    myElementsMap.put("comment", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new LockComment();
-      }
-    });
-    myElementsMap.put("created", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new LockCreated();
-      }
-    });
-    myElementsMap.put("uuid", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Uuid();
-      }
-    });
-    myElementsMap.put("version", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new Version();
-      }
-    });
-    myElementsMap.put("wc-info", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new WcInfo();
-      }
-    });
-    myElementsMap.put("moved-to", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new MovedPath();
-      }
-    });
-    myElementsMap.put("moved-from", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new MovedPath();
-      }
-    });
-    myElementsMap.put("wcroot-abspath", new Getter<ElementHandlerBase>() {
-      @Override
-      public ElementHandlerBase get() {
-        return new WcRoot();
-      }
-    });
+    myElementsMap.put("copy-from-url", () -> new CopyFromUrl());
+    myElementsMap.put("copy-from-rev", () -> new CopyFromRev());
+    myElementsMap.put("changelist", () -> new ChangeList());
+    myElementsMap.put("author", () -> new Author());
+    myElementsMap.put("checksum", () -> new Checksum());
+    myElementsMap.put("commit", () -> new Commit());
+    myElementsMap.put("conflict", () -> new Conflict());
+    myElementsMap.put("cur-base-file", () -> new CurBase());
+    myElementsMap.put("date", () -> new Date());
+    myElementsMap.put("depth", () -> new Depth());
+    myElementsMap.put("entry", () -> new Entry(myBase));
+    myElementsMap.put("info", () -> new Info());
+    myElementsMap.put("prev-base-file", () -> new PrevBase());
+    myElementsMap.put("prev-wc-file", () -> new PrevWc());
+    myElementsMap.put("prop-file", () -> new PropFile());
+    myElementsMap.put("repository", () -> new Repository());
+    myElementsMap.put("root", () -> new Root());
+    myElementsMap.put("schedule", () -> new Schedule());
+    myElementsMap.put("text-updated", () -> new TextUpdated());
+    myElementsMap.put("tree-conflict", () -> new TreeConflict());
+    myElementsMap.put("url", () -> new Url());
+    myElementsMap.put("relative-url", () -> new RelativeUrl());
+    myElementsMap.put("lock", () -> new LockElement());
+    myElementsMap.put("token", () -> new LockToken());
+    myElementsMap.put("owner", () -> new LockOwner());
+    myElementsMap.put("comment", () -> new LockComment());
+    myElementsMap.put("created", () -> new LockCreated());
+    myElementsMap.put("uuid", () -> new Uuid());
+    myElementsMap.put("version", () -> new Version());
+    myElementsMap.put("wc-info", () -> new WcInfo());
+    myElementsMap.put("moved-to", () -> new MovedPath());
+    myElementsMap.put("moved-from", () -> new MovedPath());
+    myElementsMap.put("wcroot-abspath", () -> new WcRoot());
   }
 
   public Map<File, org.jetbrains.idea.svn.info.Info> getResultsMap() {
@@ -360,7 +176,7 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
       // TODO: Currently information for conflict (not tree-conflict) available in svn 1.8 is not used
       // TODO: And it also not suite well for SVNKit api
       if (getParent() instanceof Conflict) {
@@ -387,7 +203,7 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
     }
   }
 
@@ -397,7 +213,7 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
       final SvnInfoStructure.TreeConflictDescription d = new SvnInfoStructure.TreeConflictDescription();
       structure.myTreeConflict = d;
       final String operation = attributes.getValue("operation");
@@ -423,7 +239,7 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
     }
   }
   
@@ -433,11 +249,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       // todo check whether base should be added
       structure.myPropRejectFile = s;
     }
@@ -449,11 +265,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.myConflictNew = new File(s).getName();
     }
   }
@@ -464,11 +280,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.myConflictWorking = new File(s).getName();
     }
   }
@@ -479,11 +295,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.myConflictOld = new File(s).getName();
     }
   }
@@ -494,11 +310,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
     }
   }
 
@@ -508,11 +324,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.myCommittedDate = s;
     }
   }
@@ -523,11 +339,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.myAuthor = s;
     }
   }
@@ -541,15 +357,14 @@ public class SvnInfoHandler extends DefaultHandler {
     protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
       final String revision = attributes.getValue("revision");
       try {
-        final long number = Long.parseLong(revision);
-        structure.myCommittedRevision = number;
+        structure.myCommittedRevision = Long.parseLong(revision);
       } catch (NumberFormatException e) {
         throw new SAXException(e);
       }
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
     }
   }
 
@@ -559,11 +374,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.myChecksum = s;
     }
   }
@@ -578,11 +393,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       // TODO: is there some field to initialize from this value?
     }
   }
@@ -593,11 +408,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.myTextTime = s;
     }
   }
@@ -608,11 +423,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.myDepth = org.jetbrains.idea.svn.api.Depth.from(s);
     }
   }
@@ -623,11 +438,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.mySchedule = s;
     }
   }
@@ -638,11 +453,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       // there is no such thing???
     }
   }
@@ -653,11 +468,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.myChangelistName = s;
     }
   }
@@ -668,15 +483,15 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
     public void characters(String s, SvnInfoStructure structure) throws SAXException {
       try {
-        structure.myCopyFromURL = SVNURL.parseURIEncoded(s);
+        structure.myCopyFromURL = createUrl(s);
       }
-      catch (SVNException e) {
+      catch (SvnBindException e) {
         throw new SAXException(e);
       }
     }
@@ -688,14 +503,13 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
     public void characters(String s, SvnInfoStructure structure) throws SAXException {
       try {
-        final long number = Long.parseLong(s);
-        structure.myCopyFromRevision = number;
+        structure.myCopyFromRevision = Long.parseLong(s);
       } catch (NumberFormatException e) {
         throw new SAXException(e);
       }
@@ -709,11 +523,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
     }
   }
   
@@ -723,11 +537,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.myUuid = s;
     }
   }
@@ -738,15 +552,15 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
     public void characters(String s, SvnInfoStructure structure) throws SAXException {
       try {
-        structure.myRootURL = SVNURL.parseURIEncoded(s);
+        structure.myRootURL = createUrl(s);
       }
-      catch (SVNException e) {
+      catch (SvnBindException e) {
         throw new SAXException(e);
       }
     }
@@ -758,11 +572,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
     }
   }
 
@@ -772,15 +586,15 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
     public void characters(String s, SvnInfoStructure structure) throws SAXException {
       try {
-        structure.myUrl = SVNURL.parseURIEncoded(s);
+        structure.myUrl = createUrl(s);
       }
-      catch (SVNException e) {
+      catch (SvnBindException e) {
         throw new SAXException(e);
       }
     }
@@ -788,7 +602,7 @@ public class SvnInfoHandler extends DefaultHandler {
 
   private static class RelativeUrl extends Url{
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.relativeUrl = s;
     }
   }
@@ -799,12 +613,12 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
       structure.myLockBuilder = new Lock.Builder();
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
     }
   }
 
@@ -814,11 +628,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.myLockBuilder.setToken(s);
     }
   }
@@ -829,11 +643,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.myLockBuilder.setOwner(s);
     }
   }
@@ -844,11 +658,11 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
+    public void characters(String s, SvnInfoStructure structure) {
       structure.myLockBuilder.setComment(s);
     }
   }
@@ -859,12 +673,12 @@ public class SvnInfoHandler extends DefaultHandler {
     }
 
     @Override
-    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
+    protected void updateInfo(Attributes attributes, SvnInfoStructure structure) {
     }
 
     @Override
-    public void characters(String s, SvnInfoStructure structure) throws SAXException {
-      structure.myLockBuilder.setCreationDate(SVNDate.parseDate(s));
+    public void characters(String s, SvnInfoStructure structure) {
+      structure.myLockBuilder.setCreationDate(SvnUtil.parseDate(s));
     }
   }
 
@@ -879,8 +693,7 @@ public class SvnInfoHandler extends DefaultHandler {
     @Override
     protected void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException {
       final String kind = attributes.getValue("kind");
-      assertSAX(! StringUtil.isEmptyOrSpaces(kind));
-      structure.myKind = NodeKind.from(kind);
+      structure.myKind = NodeKind.from(notNullize(kind));
 
       if (myBase != null) {
         final String path = attributes.getValue("path");
@@ -891,8 +704,7 @@ public class SvnInfoHandler extends DefaultHandler {
       final String revision = attributes.getValue("revision");
       assertSAX(! StringUtil.isEmptyOrSpaces(revision));
       try {
-        final long number = Long.parseLong(revision);
-        structure.myRevision = number;
+        structure.myRevision = Long.parseLong(revision);
       } catch (NumberFormatException e) {
         structure.myRevision = -1;
         //throw new SAXException(e);
@@ -938,8 +750,8 @@ public class SvnInfoHandler extends DefaultHandler {
     private ElementHandlerBase parent;
 
     ElementHandlerBase(String[] awaitedChildren, String[] awaitedChildrenMultiple) {
-      myAwaitedChildren = new HashSet<String>(Arrays.asList(awaitedChildren));
-      myAwaitedChildrenMultiple = new HashSet<String>(Arrays.asList(awaitedChildrenMultiple));
+      myAwaitedChildren = new HashSet<>(Arrays.asList(awaitedChildren));
+      myAwaitedChildrenMultiple = new HashSet<>(Arrays.asList(awaitedChildrenMultiple));
     }
 
     @NotNull
@@ -953,7 +765,7 @@ public class SvnInfoHandler extends DefaultHandler {
 
     protected abstract void updateInfo(Attributes attributes, SvnInfoStructure structure) throws SAXException;
 
-    public boolean startElement(String uri, String localName, String qName, Attributes attributes) throws SAXException {
+    public boolean startElement(String uri, String localName, String qName, Attributes attributes) {
       if (myAwaitedChildrenMultiple.contains(qName)) {
         return true;
       }

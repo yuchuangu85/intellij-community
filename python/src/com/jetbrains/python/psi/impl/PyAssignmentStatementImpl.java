@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.psi.impl;
 
 import com.google.common.collect.Lists;
@@ -25,9 +11,11 @@ import com.intellij.psi.tree.TokenSet;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.SmartList;
+import com.intellij.util.containers.ContainerUtil;
 import com.jetbrains.python.PyTokenTypes;
 import com.jetbrains.python.psi.*;
-import com.jetbrains.python.toolbox.FP;
+import one.util.streamex.IntStreamEx;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -39,7 +27,7 @@ import java.util.List;
  * @author yole
  */
 public class PyAssignmentStatementImpl extends PyElementImpl implements PyAssignmentStatement {
-  private PyExpression[] myTargets;
+  @Nullable private volatile PyExpression[] myTargets;
 
   public PyAssignmentStatementImpl(ASTNode astNode) {
     super(astNode);
@@ -50,11 +38,14 @@ public class PyAssignmentStatementImpl extends PyElementImpl implements PyAssign
     pyVisitor.visitPyAssignmentStatement(this);
   }
 
+  @Override
+  @NotNull
   public PyExpression[] getTargets() {
-    if (myTargets == null) {
-      myTargets = calcTargets(false);
+    PyExpression[] result = myTargets;
+    if (result == null) {
+      myTargets = result = calcTargets(false);
     }
-    return myTargets;
+    return result;
   }
 
   @NotNull
@@ -63,13 +54,14 @@ public class PyAssignmentStatementImpl extends PyElementImpl implements PyAssign
     return calcTargets(true);
   }
 
+  @NotNull
   private PyExpression[] calcTargets(boolean raw) {
     final ASTNode[] eqSigns = getNode().getChildren(TokenSet.create(PyTokenTypes.EQ));
     if (eqSigns.length == 0) {
       return PyExpression.EMPTY_ARRAY;
     }
     final ASTNode lastEq = eqSigns[eqSigns.length - 1];
-    List<PyExpression> candidates = new ArrayList<PyExpression>();
+    List<PyExpression> candidates = new ArrayList<>();
     ASTNode node = getNode().getFirstChildNode();
     while (node != null && node != lastEq) {
       final PsiElement psi = node.getPsi();
@@ -83,7 +75,7 @@ public class PyAssignmentStatementImpl extends PyElementImpl implements PyAssign
       }
       node = node.getTreeNext();
     }
-    List<PyExpression> targets = new ArrayList<PyExpression>();
+    List<PyExpression> targets = new ArrayList<>();
     for (PyExpression expr : candidates) { // only filter out targets
       if (raw ||
           expr instanceof PyTargetExpression ||
@@ -93,7 +85,19 @@ public class PyAssignmentStatementImpl extends PyElementImpl implements PyAssign
         targets.add(expr);
       }
     }
-    return targets.toArray(new PyExpression[targets.size()]);
+    return targets.toArray(PyExpression.EMPTY_ARRAY);
+  }
+
+  @Nullable
+  @Override
+  public PyAnnotation getAnnotation() {
+    return findChildByClass(PyAnnotation.class);
+  }
+
+  @Nullable
+  @Override
+  public String getAnnotationValue() {
+    return getAnnotationContentFromPsi(this);
   }
 
   private static void addCandidate(List<PyExpression> candidates, PyExpression psi) {
@@ -120,6 +124,7 @@ public class PyAssignmentStatementImpl extends PyElementImpl implements PyAssign
   /**
    * @return rightmost expression in statement, which is supposedly the assigned value, or null.
    */
+  @Override
   @Nullable
   public PyExpression getAssignedValue() {
     PsiElement child = getLastChild();
@@ -130,9 +135,10 @@ public class PyAssignmentStatementImpl extends PyElementImpl implements PyAssign
     return (PyExpression)child;
   }
 
+  @Override
   @NotNull
   public List<Pair<PyExpression, PyExpression>> getTargetsToValuesMapping() {
-    List<Pair<PyExpression, PyExpression>> ret = new SmartList<Pair<PyExpression, PyExpression>>();
+    List<Pair<PyExpression, PyExpression>> ret = new SmartList<>();
     if (!PsiTreeUtil.hasErrorElements(this)) { // no parse errors
       PyExpression[] constituents = PsiTreeUtil.getChildrenOfType(this, PyExpression.class); // "a = b = c" -> [a, b, c]
       if (constituents != null && constituents.length > 1) {
@@ -145,6 +151,7 @@ public class PyAssignmentStatementImpl extends PyElementImpl implements PyAssign
     return ret;
   }
 
+  @Override
   @Nullable
   public PyExpression getLeftHandSideExpression() {
     PsiElement child = getFirstChild();
@@ -167,7 +174,7 @@ public class PyAssignmentStatementImpl extends PyElementImpl implements PyAssign
     PyExpression lhs_one = null;
     if (lhs instanceof PySequenceExpression) lhs_tuple = (PySequenceExpression)lhs;
     else if (lhs != null) lhs_one = lhs;
-    
+
     PySequenceExpression rhs_tuple = null;
     PyExpression rhs_one = null;
     if (rhs instanceof PyParenthesizedExpression) {
@@ -198,17 +205,28 @@ public class PyAssignmentStatementImpl extends PyElementImpl implements PyAssign
         }
         ++counter;
       }
-      //  map.addAll(FP.zipList(Arrays.asList(lhs_tuple.getElements()), new RepeatIterable<PyExpression>(rhs_one)));
     }
     else if (lhs_tuple != null && rhs_tuple != null) { // multiple both sides: piecewise mapping
-      map.addAll(FP.zipList(Arrays.asList(lhs_tuple.getElements()), Arrays.asList(rhs_tuple.getElements()), null, null));
+      final List<PyExpression> lhsTupleElements = Arrays.asList(lhs_tuple.getElements());
+      final List<PyExpression> rhsTupleElements = Arrays.asList(rhs_tuple.getElements());
+      final int size = Math.max(lhsTupleElements.size(), rhsTupleElements.size());
+
+      map.addAll(StreamEx.zip(alignToSize(lhsTupleElements, size), alignToSize(rhsTupleElements, size), Pair::create).toList());
     }
   }
 
   @NotNull
+  private static <T> List<T> alignToSize(@NotNull List<T> list, int size) {
+    return list.size() == size
+           ? list
+           : IntStreamEx.range(size).mapToObj(index -> ContainerUtil.getOrElse(list, index, null)).toList();
+  }
+
+  @Override
+  @NotNull
   public List<PsiNamedElement> getNamedElements() {
     final List<PyExpression> expressions = PyUtil.flattenedParensAndStars(getTargets());
-    List<PsiNamedElement> result = new ArrayList<PsiNamedElement>();
+    List<PsiNamedElement> result = new ArrayList<>();
     for (PyExpression expression : expressions) {
       if (expression instanceof PyQualifiedExpression && ((PyQualifiedExpression)expression).isQualified()) {
         continue;

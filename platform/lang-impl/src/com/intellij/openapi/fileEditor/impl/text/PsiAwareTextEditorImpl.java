@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
 import com.intellij.ui.EditorNotifications;
@@ -50,7 +51,9 @@ public class PsiAwareTextEditorImpl extends TextEditorImpl {
     Runnable baseAction = super.loadEditorInBackground();
     PsiFile psiFile = PsiManager.getInstance(myProject).findFile(myFile);
     Document document = FileDocumentManager.getInstance().getDocument(myFile);
-    CodeFoldingState foldingState = document != null && !myProject.isDefault()
+    boolean shouldBuildInitialFoldings =
+      document != null && !myProject.isDefault() && PsiDocumentManager.getInstance(myProject).isCommitted(document);
+    CodeFoldingState foldingState = shouldBuildInitialFoldings
                                     ? CodeFoldingManager.getInstance(myProject).buildInitialFoldings(document)
                                     : null;
     return () -> {
@@ -58,7 +61,7 @@ public class PsiAwareTextEditorImpl extends TextEditorImpl {
       if (foldingState != null) {
         foldingState.setToEditor(getEditor());
       }
-      if (psiFile != null) {
+      if (psiFile != null && psiFile.isValid()) {
         DaemonCodeAnalyzer.getInstance(myProject).restart(psiFile);
       }
       EditorNotifications.getInstance(myProject).updateNotifications(myFile);
@@ -96,16 +99,16 @@ public class PsiAwareTextEditorImpl extends TextEditorImpl {
     }
 
     @Override
-    void dispose() {
+    public void dispose() {
+      super.dispose();
       CodeFoldingManager foldingManager = CodeFoldingManager.getInstance(myProject);
       if (foldingManager != null) {
         foldingManager.releaseFoldings(getEditor());
       }
-      super.dispose();
     }
 
     @Override
-    public Object getData(final String dataId) {
+    public Object getData(@NotNull final String dataId) {
       if (PlatformDataKeys.DOMINANT_HINT_AREA_RECTANGLE.is(dataId)) {
         final LookupImpl lookup = (LookupImpl)LookupManager.getInstance(myProject).getActiveLookup();
         if (lookup != null && lookup.isVisible()) {

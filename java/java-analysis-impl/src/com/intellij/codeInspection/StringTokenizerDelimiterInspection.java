@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection;
 
 import com.intellij.openapi.project.Project;
@@ -27,7 +13,7 @@ import java.util.Set;
 /**
  * @author Dmitry Batkovich
  */
-public class StringTokenizerDelimiterInspection extends BaseJavaBatchLocalInspectionTool {
+public class StringTokenizerDelimiterInspection extends AbstractBaseJavaLocalInspectionTool {
 
   private final static String NEXT_TOKEN = "nextToken";
   private final static String STRING_TOKENIZER = "java.util.StringTokenizer";
@@ -66,7 +52,7 @@ public class StringTokenizerDelimiterInspection extends BaseJavaBatchLocalInspec
       final Object value = ((PsiLiteralExpression)delimiterArgument).getValue();
       if (value instanceof String) {
         String delimiters = (String)value;
-        final Set<Character> chars = new THashSet<Character>();
+        final Set<Character> chars = new THashSet<>();
         for (char c : delimiters.toCharArray()) {
           if (!chars.add(c)) {
             holder.registerProblem(delimiterArgument, "Delimiters argument contains duplicated characters", new ReplaceDelimitersWithUnique(delimiterArgument));
@@ -78,7 +64,7 @@ public class StringTokenizerDelimiterInspection extends BaseJavaBatchLocalInspec
   }
 
   private final static class ReplaceDelimitersWithUnique extends LocalQuickFixOnPsiElement {
-    public ReplaceDelimitersWithUnique(@NotNull PsiElement element) {
+    ReplaceDelimitersWithUnique(@NotNull PsiElement element) {
       super(element);
     }
 
@@ -96,14 +82,16 @@ public class StringTokenizerDelimiterInspection extends BaseJavaBatchLocalInspec
 
     @Override
     public void invoke(@NotNull Project project, @NotNull PsiFile file, @NotNull PsiElement startElement, @NotNull PsiElement endElement) {
-      final Set<Character> uniqueChars = new LinkedHashSet<Character>();
+      final Set<Character> uniqueChars = new LinkedHashSet<>();
       final PsiLiteralExpression delimiterArgument = (PsiLiteralExpression)startElement;
-      for (char c : ((String)delimiterArgument.getValue()).toCharArray()) {
+      final Object literal = delimiterArgument.getValue();
+      if(!(literal instanceof String)) return;
+      for (char c : ((String)literal).toCharArray()) {
         uniqueChars.add(c);
       }
       final String newDelimiters = StringUtil.join(uniqueChars, "");
       final PsiElementFactory elementFactory = JavaPsiFacade.getElementFactory(project);
-      delimiterArgument.replace(elementFactory.createExpressionFromText(StringUtil.wrapWithDoubleQuote(StringUtil.escaper(true, null).fun(
+      delimiterArgument.replace(elementFactory.createExpressionFromText(StringUtil.wrapWithDoubleQuote(StringUtil.escaper(true, "\"").fun(
         newDelimiters)), null));
     }
   }

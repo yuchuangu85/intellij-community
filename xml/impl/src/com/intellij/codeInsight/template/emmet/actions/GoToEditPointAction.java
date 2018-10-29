@@ -15,6 +15,7 @@
  */
 package com.intellij.codeInsight.template.emmet.actions;
 
+import com.intellij.codeInsight.editorActions.XmlGtTypedHandler;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.Presentation;
@@ -24,6 +25,7 @@ import com.intellij.openapi.editor.actionSystem.EditorAction;
 import com.intellij.openapi.editor.actionSystem.EditorActionHandler;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.psi.PsiFile;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -38,7 +40,7 @@ public abstract class GoToEditPointAction extends EditorAction implements DumbAw
   public void update(Editor editor, Presentation presentation, DataContext dataContext) {
     super.update(editor, presentation, dataContext);
     final PsiFile file = getFile(dataContext);
-    if (!EmmetEditPointUtil.isApplicableFile(file)) {
+    if (!XmlGtTypedHandler.fileContainsXmlLanguage(file)) {
       presentation.setEnabledAndVisible(false);
     }
   }
@@ -51,7 +53,7 @@ public abstract class GoToEditPointAction extends EditorAction implements DumbAw
     public Forward() {
       super(new EditorActionHandler(true) {
         @Override
-        protected void doExecute(Editor editor, @Nullable Caret caret, DataContext dataContext) {
+        protected void doExecute(@NotNull Editor editor, @Nullable Caret caret, DataContext dataContext) {
           EmmetEditPointUtil.moveForward(editor, getFile(dataContext));
         }
       });
@@ -62,7 +64,7 @@ public abstract class GoToEditPointAction extends EditorAction implements DumbAw
     public Backward() {
       super(new EditorActionHandler(true) {
         @Override
-        protected void doExecute(Editor editor, @Nullable Caret caret, DataContext dataContext) {
+        protected void doExecute(@NotNull Editor editor, @Nullable Caret caret, DataContext dataContext) {
           EmmetEditPointUtil.moveBackward(editor, getFile(dataContext));
         }
       });

@@ -38,7 +38,7 @@ import java.util.*;
  * @author peter
  */
 public class MockDomElementsEditor {
-  private final Map<EditedElementDescription<? extends DomElement>, DomElement> myDomElements = new HashMap<EditedElementDescription<? extends DomElement>, DomElement>();
+  private final Map<EditedElementDescription<? extends DomElement>, DomElement> myDomElements = new HashMap<>();
   private final Module myModule;
   private CommittablePanel myContents;
   private DomFileEditor myFileEditor;
@@ -47,7 +47,7 @@ public class MockDomElementsEditor {
     myModule = module;
   }
 
-  protected final <T extends DomElement> T addEditedElement(final Class<T> aClass, final EditedElementDescription<T> description) {
+  protected final <T extends DomElement> T addEditedElement(final Class<? extends T> aClass, final EditedElementDescription<T> description) {
     final DomManager domManager = DomManager.getDomManager(myModule.getProject());
     final T t = domManager.createStableValue(() -> {
       T t1 = description.find();
@@ -100,32 +100,29 @@ public class MockDomElementsEditor {
       @Override
       public void commit() {
         super.commit();
-        final List<EditedElementDescription> descriptions = new ArrayList<EditedElementDescription>();
-        final Set<PsiFile> changedFiles = new HashSet<PsiFile>();
+        final List<EditedElementDescription> descriptions = new ArrayList<>();
+        final Set<PsiFile> changedFiles = new HashSet<>();
         for (final Map.Entry<EditedElementDescription<? extends DomElement>, DomElement> entry : myDomElements.entrySet()) {
           final EditedElementDescription description = entry.getKey();
-            final DomElement editedElement = entry.getValue();
-            if (description.find() == null && editedElement.getXmlTag() != null) {
-              descriptions.add(description);
-              final XmlFile xmlFile = description.getEditedFile();
-              if (xmlFile != null) {
-                changedFiles.add(xmlFile);
-              }
-            }
-        }
-        new WriteCommandAction(project, PsiUtilCore.toPsiFileArray(changedFiles)) {
-          @Override
-          protected void run(@NotNull Result result) throws Throwable {
-            for (EditedElementDescription description : descriptions) {
-              final DomElement editedElement = myDomElements.get(description);
-              DomElement element = description.addElement();
-              element.copyFrom(editedElement);
-              description.initialize(element);
-              removeWatchedElement(editedElement);
-              ((StableElement)editedElement).invalidate();
+          final DomElement editedElement = entry.getValue();
+          if (description.find() == null && editedElement.getXmlTag() != null) {
+            descriptions.add(description);
+            final XmlFile xmlFile = description.getEditedFile();
+            if (xmlFile != null) {
+              changedFiles.add(xmlFile);
             }
           }
-        }.execute();
+        }
+        WriteCommandAction.writeCommandAction(project, PsiUtilCore.toPsiFileArray(changedFiles)).run(() -> {
+          for (EditedElementDescription description : descriptions) {
+            final DomElement editedElement = myDomElements.get(description);
+            DomElement element = description.addElement();
+            element.copyFrom(editedElement);
+            description.initialize(element);
+            removeWatchedElement(editedElement);
+            ((StableElement)editedElement).invalidate();
+          }
+        });
       }
     };
     final DomManager domManager = DomManager.getDomManager(project);

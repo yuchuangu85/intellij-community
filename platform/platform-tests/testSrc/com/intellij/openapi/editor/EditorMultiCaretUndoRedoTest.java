@@ -15,10 +15,9 @@
  */
 package com.intellij.openapi.editor;
 
-import com.intellij.openapi.application.Result;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.command.CommandProcessor;
-import com.intellij.openapi.command.impl.CurrentEditorProvider;
+import com.intellij.openapi.fileEditor.impl.CurrentEditorProvider;
 import com.intellij.openapi.command.impl.UndoManagerImpl;
 import com.intellij.openapi.command.undo.UndoManager;
 import com.intellij.openapi.editor.ex.EditorEx;
@@ -27,18 +26,17 @@ import com.intellij.openapi.fileEditor.FileEditor;
 import com.intellij.openapi.fileEditor.TextEditor;
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider;
 import com.intellij.testFramework.TestFileType;
-import org.jetbrains.annotations.NotNull;
-
-import java.io.IOException;
 
 public class EditorMultiCaretUndoRedoTest extends AbstractEditorTest {
   private CurrentEditorProvider mySavedCurrentEditorProvider;
 
+  @Override
   public void setUp() throws Exception {
     super.setUp();
     mySavedCurrentEditorProvider = getUndoManager().getEditorProvider();
   }
 
+  @Override
   public void tearDown() throws Exception {
     getUndoManager().setEditorProvider(mySavedCurrentEditorProvider);
     super.tearDown();
@@ -47,15 +45,10 @@ public class EditorMultiCaretUndoRedoTest extends AbstractEditorTest {
   @Override
   // disabling execution of tests in command
   protected void runTest() throws Throwable {
-    new WriteAction<Void>() {
-      @Override
-      protected void run(@NotNull Result<Void> result) throws Throwable {
-        doRunTest();
-      }
-    }.execute();
+    WriteAction.runAndWait(() -> doRunTest());
   }
 
-  public void testUndoRedo() throws Exception {
+  public void testUndoRedo() {
     init("some<caret> text<caret>\n" +
          "some <selection><caret>other</selection> <selection>text<caret></selection>\n" +
          "<selection>ano<caret>ther</selection> line");
@@ -78,7 +71,7 @@ public class EditorMultiCaretUndoRedoTest extends AbstractEditorTest {
                       "A<caret> line");
   }
 
-  public void testBlockSelectionStateAfterUndo() throws Exception {
+  public void testBlockSelectionStateAfterUndo() {
     init("a");
     ((EditorEx)myEditor).setColumnMode(true);
     mouse().clickAt(0, 2);
@@ -88,7 +81,7 @@ public class EditorMultiCaretUndoRedoTest extends AbstractEditorTest {
     verifyCaretsAndSelections(0, 3, 2, 3);
   }
 
-  public void testBlockSelectionStateAfterUndo2() throws Exception {
+  public void testBlockSelectionStateAfterUndo2() {
     init("a");
     ((EditorEx)myEditor).setColumnMode(true);
     mouse().pressAt(0, 0).dragTo(0, 2).release();
@@ -97,7 +90,7 @@ public class EditorMultiCaretUndoRedoTest extends AbstractEditorTest {
     verifyCaretsAndSelections(0, 2, 0, 2);
   }
 
-  public void testPrimaryCaretPositionAfterUndo() throws Exception {
+  public void testPrimaryCaretPositionAfterUndo() {
     init("line1\n" +
          "line2");
     mouse().alt().pressAt(1, 1).dragTo(0, 0).release();
@@ -126,7 +119,7 @@ public class EditorMultiCaretUndoRedoTest extends AbstractEditorTest {
     return TextEditorProvider.getInstance().getTextEditor(myEditor);
   }
 
-  private void init(String text) throws IOException {
+  private void init(String text) {
     init(text, TestFileType.TEXT);
     setEditorVisibleSize(1000, 1000);
     getUndoManager().setEditorProvider(new CurrentEditorProvider() {

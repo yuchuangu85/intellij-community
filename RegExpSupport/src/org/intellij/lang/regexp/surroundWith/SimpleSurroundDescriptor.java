@@ -36,8 +36,14 @@ public class SimpleSurroundDescriptor implements SurroundDescriptor {
   private static final Surrounder[] SURROUNDERS = {
     new GroupSurrounder("Capturing Group (pattern)", "("),
     new GroupSurrounder("Non-Capturing Group (?:pattern)", "(?:"),
+    new GroupSurrounder("Atomic Group (?:pattern)", "(?:"),
+    new GroupSurrounder("Positive Lookbehind (?<=pattern)", "(?<="),
+    new GroupSurrounder("Negative Lookbehind (?<!pattern)", "(?<!"),
+    new GroupSurrounder("Positive Lookahead (?=pattern)", "(?="),
+    new GroupSurrounder("Negative Lookahead (?!pattern)", "(?!"),
   };
 
+  @Override
   @NotNull
   public PsiElement[] getElementsToSurround(PsiFile file, int startOffset, int endOffset) {
     // adjust start/end
@@ -56,7 +62,7 @@ public class SimpleSurroundDescriptor implements SurroundDescriptor {
     RegExpElement branch = findElementAtStrict(file, startOffset, endOffset, RegExpBranch.class);
     if (branch != null) return new RegExpElement[]{branch};
 
-    List<PsiElement> atoms = new ArrayList<PsiElement>();
+    List<PsiElement> atoms = new ArrayList<>();
     RegExpAtom atom = PsiTreeUtil.findElementOfClassAtRange(file, startOffset, endOffset, RegExpAtom.class);
     for (; atom != null; atom = PsiTreeUtil.findElementOfClassAtRange(file, startOffset, endOffset, RegExpAtom.class)) {
       atoms.add(atom);
@@ -78,6 +84,7 @@ public class SimpleSurroundDescriptor implements SurroundDescriptor {
     return PsiElement.EMPTY_ARRAY;
   }
 
+  @Override
   @NotNull
   public Surrounder[] getSurrounders() {
     return SURROUNDERS;

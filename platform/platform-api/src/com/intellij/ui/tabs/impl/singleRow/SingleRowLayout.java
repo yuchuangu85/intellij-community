@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.lang.ref.WeakReference;
 import java.util.List;
 
 public class SingleRowLayout extends TabLayout {
@@ -37,6 +38,7 @@ public class SingleRowLayout extends TabLayout {
   private final SingleRowLayoutStrategy myRight;
 
   public final MoreTabsIcon myMoreIcon = new MoreTabsIcon() {
+    @Override
     @Nullable
     protected Rectangle getIconRec() {
       return myLastSingRowLayout != null ? myLastSingRowLayout.moreRect : null;
@@ -166,7 +168,7 @@ public class SingleRowLayout extends TabLayout {
     }
 
     if (selected != null) {
-      data.comp = selected.getComponent();
+      data.comp = new WeakReference<>(selected.getComponent());
       getStrategy().layoutComp(data);
     }
 
@@ -196,11 +198,15 @@ public class SingleRowLayout extends TabLayout {
 
   protected void prepareLayoutPassInfo(SingleRowPassInfo data, TabInfo selected) {
     data.insets = myTabs.getLayoutInsets();
-    data.insets.left += myTabs.getFirstTabOffset();
+    if (myTabs.isHorizontalTabs()) {
+      data.insets.left += myTabs.getFirstTabOffset();
+    }
 
     final JBTabsImpl.Toolbar selectedToolbar = myTabs.myInfo2Toolbar.get(selected);
-    data.hToolbar = selectedToolbar != null && myTabs.myHorizontalSide && !selectedToolbar.isEmpty() ? selectedToolbar : null;
-    data.vToolbar = selectedToolbar != null && !myTabs.myHorizontalSide && !selectedToolbar.isEmpty() ? selectedToolbar : null;
+    data.hToolbar =
+      new WeakReference<>(selectedToolbar != null && myTabs.myHorizontalSide && !selectedToolbar.isEmpty() ? selectedToolbar : null);
+    data.vToolbar =
+      new WeakReference<>(selectedToolbar != null && !myTabs.myHorizontalSide && !selectedToolbar.isEmpty() ?  selectedToolbar : null);
     data.toFitLength = getStrategy().getToFitLength(data);
 
     if (myTabs.isGhostsAlwaysVisible()) {
@@ -209,10 +215,7 @@ public class SingleRowLayout extends TabLayout {
   }
 
   protected void updateMoreIconVisibility(SingleRowPassInfo data) {
-    int counter = 0;
-    for (TabInfo tabInfo : data.myVisibleInfos) {
-      if (isTabHidden(tabInfo)) counter++;
-    }
+    int counter = (int)data.myVisibleInfos.stream().filter(this::isTabHidden).count();
     myMoreIcon.updateCounter(counter);
   }
 
@@ -367,6 +370,7 @@ public class SingleRowLayout extends TabLayout {
 
     private GhostComponent(final RowDropPolicy before, final RowDropPolicy after) {
       addMouseListener(new MouseAdapter() {
+        @Override
         public void mousePressed(final MouseEvent e) {
           if (JBTabsImpl.isSelectionClick(e, true) && myInfo != null) {
             myRowDropPolicy = before;

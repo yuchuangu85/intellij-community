@@ -26,7 +26,6 @@ import java.util.ResourceBundle;
 
 /**
  * @author Vladislav.Soroka
- * @since 8/29/13
  */
 public class GradleDocumentationBundle extends AbstractBundle {
 
@@ -52,7 +51,7 @@ public class GradleDocumentationBundle extends AbstractBundle {
     ResourceBundle bundle = SoftReference.dereference(ourBundle);
     if (bundle == null) {
       bundle = ResourceBundle.getBundle(PATH_TO_BUNDLE);
-      ourBundle = new SoftReference<ResourceBundle>(bundle);
+      ourBundle = new SoftReference<>(bundle);
     }
     return bundle;
   }

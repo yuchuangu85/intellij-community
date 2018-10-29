@@ -1,3 +1,4 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.javaFX.sceneBuilder;
 
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil;
@@ -104,7 +105,7 @@ public class SceneBuilderInfo {
   private static VirtualFile getPredefinedPath() {
     String path = null;
     if (SystemInfo.isWindows) {
-      List<String> suspiciousPaths = new ArrayList<String>();
+      List<String> suspiciousPaths = new ArrayList<>();
       String programFiles = "C:\\Program Files";
 
       String sb20 = "\\JavaFX Scene Builder 2.0\\JavaFX Scene Builder 2.0.exe";

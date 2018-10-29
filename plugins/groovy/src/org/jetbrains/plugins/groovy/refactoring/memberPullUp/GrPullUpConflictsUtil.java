@@ -44,9 +44,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Created by Max Medvedev on 9/28/13
- */
 public class GrPullUpConflictsUtil {
   private GrPullUpConflictsUtil() {}
 
@@ -94,7 +91,7 @@ public class GrPullUpConflictsUtil {
       }
     }
 
-    final Set<PsiMethod> allAbstractMethods = new HashSet<PsiMethod>(abstractMethods);
+    final Set<PsiMethod> allAbstractMethods = new HashSet<>(abstractMethods);
     if (superClass != null) {
       for (PsiMethod method : subclass.getMethods()) {
         if (!movedMembers.contains(method) && !method.hasModifierProperty(PsiModifier.PRIVATE)) {
@@ -105,7 +102,7 @@ public class GrPullUpConflictsUtil {
       }
     }
 
-    final MultiMap<PsiElement, String> conflicts = new MultiMap<PsiElement, String>();
+    final MultiMap<PsiElement, String> conflicts = new MultiMap<>();
 
     GrRefactoringConflictsUtil.analyzeAccessibilityConflicts(movedMembers, superClass, conflicts, VisibilityUtil.ESCALATE_VISIBILITY, targetRepresentativeElement,
                                                              allAbstractMethods);
@@ -127,7 +124,7 @@ public class GrPullUpConflictsUtil {
       }
     }
     // check if moved methods use other members in the classes between Subclass and Superclass
-    List<PsiElement> checkModuleConflictsList = new ArrayList<PsiElement>();
+    List<PsiElement> checkModuleConflictsList = new ArrayList<>();
     for (PsiMember member : movedMembers) {
       if (member instanceof PsiMethod || member instanceof PsiClass && !(member instanceof PsiCompiledElement)) {
         GrClassMemberReferenceVisitor visitor =
@@ -278,7 +275,7 @@ public class GrPullUpConflictsUtil {
     private final Set<GrMember> myMovedMembers;
     private final MultiMap<PsiElement, String> myConflicts;
 
-    public ConflictingUsagesOfSuperClassMembers(PsiMember member, PsiClass aClass,
+    ConflictingUsagesOfSuperClassMembers(PsiMember member, PsiClass aClass,
                                                 PsiPackage targetPackage,
                                                 Set<GrMember> movedMembers,
                                                 MultiMap<PsiElement, String> conflicts) {

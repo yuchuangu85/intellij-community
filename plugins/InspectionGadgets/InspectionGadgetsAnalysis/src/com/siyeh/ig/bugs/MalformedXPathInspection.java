@@ -34,10 +34,9 @@ import java.util.Set;
 public class MalformedXPathInspection extends BaseInspection {
 
   /**
-   * @noinspection StaticCollection
    */
   @NonNls
-  private static final Set<String> xpathMethodNames = new HashSet<String>(2);
+  private static final Set<String> xpathMethodNames = new HashSet<>(2);
 
   static {
     xpathMethodNames.add("compile");
@@ -96,7 +95,7 @@ public class MalformedXPathInspection extends BaseInspection {
       }
       final XPathFactory xpathFactory = XPathFactory.newInstance();
       final XPath xpath = xpathFactory.newXPath();
-      //noinspection UnusedCatchParameter,ProhibitedExceptionCaught
+      // noinspection ProhibitedExceptionCaught
       try {
         xpath.compile(value);
       }

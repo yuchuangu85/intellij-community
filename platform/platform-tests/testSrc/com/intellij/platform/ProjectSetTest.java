@@ -48,7 +48,7 @@ import java.util.Map;
 public class ProjectSetTest extends LightPlatformTestCase {
 
   private static String getTestDataPath() {
-    return PlatformTestUtil.getCommunityPath() + "/platform/platform-tests/testData/projectSet/";
+    return PlatformTestUtil.getPlatformTestDataPath() + "projectSet/";
   }
 
   public void testProjectSetReader() throws IOException {
@@ -77,7 +77,7 @@ public class ProjectSetTest extends LightPlatformTestCase {
 
   public void testVcsCheckoutProcessor() throws IOException {
 
-    final List<Pair<String, String>> pairs = new ArrayList<Pair<String, String>>();
+    final List<Pair<String, String>> pairs = new ArrayList<>();
     PlatformTestUtil.registerExtension(VcsCheckoutProcessor.EXTENSION_POINT_NAME, new VcsCheckoutProcessor() {
       @NotNull
       @Override
@@ -126,14 +126,9 @@ public class ProjectSetTest extends LightPlatformTestCase {
   }
 
   private static void readDescriptor(@NotNull File descriptor, @Nullable ProjectSetProcessor.Context context) throws IOException {
-    InputStreamReader input = new InputStreamReader(new FileInputStream(descriptor), CharsetToolkit.UTF8_CHARSET);
-    JsonElement parse;
-    try {
-      parse = new JsonParser().parse(input);
+    try (InputStreamReader input = new InputStreamReader(new FileInputStream(descriptor), CharsetToolkit.UTF8_CHARSET)) {
+      JsonElement parse = new JsonParser().parse(input);
+      new ProjectSetReader().readDescriptor(parse.getAsJsonObject(), context);
     }
-    finally {
-      input.close();
-    }
-    new ProjectSetReader().readDescriptor(parse.getAsJsonObject(), context);
   }
 }

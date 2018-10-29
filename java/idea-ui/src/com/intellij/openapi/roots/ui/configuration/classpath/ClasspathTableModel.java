@@ -38,7 +38,7 @@ import java.util.List;
 * @author nik
 */
 class ClasspathTableModel extends ListTableModel<ClasspathTableItem<?>> implements ItemRemovable {
-  private static final String EXPORT_COLUMN_NAME = ProjectBundle.message("modules.order.export.export.column");
+  static final String EXPORT_COLUMN_NAME = ProjectBundle.message("modules.order.export.export.column");
   private static final ColumnInfo<ClasspathTableItem<?>, Boolean> EXPORT_COLUMN_INFO = new ColumnInfo<ClasspathTableItem<?>, Boolean>(EXPORT_COLUMN_NAME) {
     @Nullable
     @Override
@@ -98,9 +98,9 @@ class ClasspathTableModel extends ListTableModel<ClasspathTableItem<?>> implemen
   public static final int ITEM_COLUMN = 1;
   public static final int SCOPE_COLUMN = 2;
   private final ModuleConfigurationState myState;
-  private StructureConfigurableContext myContext;
+  private final StructureConfigurableContext myContext;
 
-  public ClasspathTableModel(final ModuleConfigurationState state, StructureConfigurableContext context) {
+  ClasspathTableModel(final ModuleConfigurationState state, StructureConfigurableContext context) {
     super(EXPORT_COLUMN_INFO, new ClasspathTableItemClasspathColumnInfo(context), SCOPE_COLUMN_INFO);
     myState = state;
     myContext = context;
@@ -119,7 +119,7 @@ class ClasspathTableModel extends ListTableModel<ClasspathTableItem<?>> implemen
   public void init() {
     final OrderEntry[] orderEntries = getModel().getOrderEntries();
     boolean hasJdkOrderEntry = false;
-    List<ClasspathTableItem<?>> items = new ArrayList<ClasspathTableItem<?>>();
+    List<ClasspathTableItem<?>> items = new ArrayList<>();
     for (final OrderEntry orderEntry : orderEntries) {
       if (orderEntry instanceof JdkOrderEntry) {
         hasJdkOrderEntry = true;
@@ -136,16 +136,16 @@ class ClasspathTableModel extends ListTableModel<ClasspathTableItem<?>> implemen
   public void exchangeRows(int idx1, int idx2) {
     super.exchangeRows(idx1, idx2);
     List<OrderEntry> entries = getEntries();
-    myState.getRootModel().rearrangeOrderEntries(entries.toArray(new OrderEntry[entries.size()]));
+    myState.getRootModel().rearrangeOrderEntries(entries.toArray(OrderEntry.EMPTY_ARRAY));
   }
 
   public void clear() {
-    setItems(Collections.<ClasspathTableItem<?>>emptyList());
+    setItems(Collections.emptyList());
   }
 
   private List<OrderEntry> getEntries() {
     final int count = getRowCount();
-    final List<OrderEntry> entries = new ArrayList<OrderEntry>(count);
+    final List<OrderEntry> entries = new ArrayList<>(count);
     for (int row = 0; row < count; row++) {
       final OrderEntry entry = getItem(row).getEntry();
       if (entry != null) {
@@ -158,7 +158,7 @@ class ClasspathTableModel extends ListTableModel<ClasspathTableItem<?>> implemen
   private static class ClasspathTableItemClasspathColumnInfo extends ColumnInfo<ClasspathTableItem<?>, ClasspathTableItem<?>> {
     private final Comparator<ClasspathTableItem<?>> myItemComparator;
 
-    public ClasspathTableItemClasspathColumnInfo(final StructureConfigurableContext context) {
+    ClasspathTableItemClasspathColumnInfo(final StructureConfigurableContext context) {
       super("");
       myItemComparator = (o1, o2) -> {
         String text1 = ClasspathPanelImpl.getCellAppearance(o1, context, false).getText();
@@ -177,11 +177,6 @@ class ClasspathTableModel extends ListTableModel<ClasspathTableItem<?>> implemen
     @Override
     public ClasspathTableItem<?> valueOf(ClasspathTableItem<?> item) {
       return item;
-    }
-
-    @Override
-    public boolean isCellEditable(ClasspathTableItem<?> item) {
-      return false;
     }
 
     @Override

@@ -24,7 +24,7 @@ import java.util.List;
 public abstract class LanguageCaseCollector<T> {
 
   public CredentialsCase[] collectCases(Class<T> languageContributionClass, CredentialsCase... cases) {
-    List<CredentialsCase> exCases = new ArrayList<CredentialsCase>();
+    List<CredentialsCase> exCases = new ArrayList<>();
     for (final CredentialsLanguageContribution contribution : CredentialsLanguageContribution.EP_NAME.getExtensions()) {
       if (contribution.getLanguageContributionClass() == languageContributionClass) {
         exCases.add(new CredentialsCase() {
@@ -41,7 +41,7 @@ public abstract class LanguageCaseCollector<T> {
       }
     }
 
-    return ArrayUtil.mergeArrays(cases, exCases.toArray(new CredentialsCase[exCases.size()]));
+    return ArrayUtil.mergeArrays(cases, exCases.toArray(new CredentialsCase[0]));
   }
 
   protected abstract void processLanguageContribution(T languageContribution, Object credentials);

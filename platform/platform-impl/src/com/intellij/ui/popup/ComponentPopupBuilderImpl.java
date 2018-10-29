@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,6 @@ import java.util.List;
 
 /**
  * @author anna
- * @since 15-Mar-2006
  */
 public class ComponentPopupBuilderImpl implements ComponentPopupBuilder {
   private String myTitle = "";
@@ -52,7 +51,7 @@ public class ComponentPopupBuilderImpl implements ComponentPopupBuilder {
   private Project myProject;
   private boolean myCancelOnClickOutside = true;
   private boolean myCancelOnWindowDeactivation = true;
-  private final Set<JBPopupListener> myListeners = new LinkedHashSet<JBPopupListener>();
+  private final Set<JBPopupListener> myListeners = new LinkedHashSet<>();
   private boolean myUseDimServiceForXYLocation;
 
   private IconButton myCancelButton;
@@ -77,11 +76,12 @@ public class ComponentPopupBuilderImpl implements ComponentPopupBuilder {
   private boolean myShowBorder = true;
   private boolean myFocusable = true;
   private ActiveComponent myCommandButton;
-  private List<Pair<ActionListener, KeyStroke>> myKeyboardActions = Collections.emptyList();
+  private List<? extends Pair<ActionListener, KeyStroke>> myKeyboardActions = Collections.emptyList();
   private Component mySettingsButtons;
   private boolean myMayBeParent;
   private int myAdAlignment = SwingConstants.LEFT;
   private BooleanFunction<KeyEvent> myKeyEventHandler;
+  private Color myBorderColor;
 
   public ComponentPopupBuilderImpl(@NotNull JComponent component, JComponent preferredFocusedComponent) {
     myComponent = component;
@@ -189,7 +189,7 @@ public class ComponentPopupBuilderImpl implements ComponentPopupBuilder {
 
   @Override
   @NotNull
-  public ComponentPopupBuilder setKeyboardActions(@NotNull List<Pair<ActionListener, KeyStroke>> keyboardActions) {
+  public ComponentPopupBuilder setKeyboardActions(@NotNull List<? extends Pair<ActionListener, KeyStroke>> keyboardActions) {
     myKeyboardActions = keyboardActions;
     return this;
   }
@@ -237,7 +237,7 @@ public class ComponentPopupBuilderImpl implements ComponentPopupBuilder {
       myCancelButton, myCancelOnMouseOutCallback, myCancelOnWindow, myTitleIcon, myCancelKeyEnabled, myLocateByContent,
       myPlaceWithinScreen, myMinSize, myAlpha, myMaskProvider, myInStack, myModalContext, myFocusOwners, myAd, myAdAlignment,
       false, myKeyboardActions, mySettingsButtons, myPinCallback, myMayBeParent,
-      myShowShadow, myShowBorder, myCancelOnWindowDeactivation, myKeyEventHandler
+      myShowShadow, myShowBorder, myBorderColor, myCancelOnWindowDeactivation, myKeyEventHandler
     );
     if (myUserData != null) {
       popup.setUserData(myUserData);
@@ -313,7 +313,7 @@ public class ComponentPopupBuilderImpl implements ComponentPopupBuilder {
   @NotNull
   public ComponentPopupBuilder addUserData(final Object object) {
     if (myUserData == null) {
-      myUserData = new ArrayList<Object>();
+      myUserData = new ArrayList<>();
     }
     myUserData.add(object);
     return this;
@@ -358,6 +358,13 @@ public class ComponentPopupBuilderImpl implements ComponentPopupBuilder {
   @Override
   public ComponentPopupBuilder setShowBorder(boolean show) {
     myShowBorder = show;
+    return this;
+  }
+
+  @NotNull
+  @Override
+  public ComponentPopupBuilder setBorderColor(Color color) {
+    myBorderColor = color;
     return this;
   }
 }

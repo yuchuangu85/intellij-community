@@ -31,7 +31,10 @@ import com.jetbrains.python.psi.types.TypeEvalContext;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
 
 /**
  * @author Ilya.Kazakevich
@@ -123,16 +126,13 @@ public final class NameResolverTools {
 
     final String callableName = callee.getName();
 
-    final Collection<String> possibleNames = new LinkedList<String>();
-    for (final String lastComponent : getLastComponents(function)) {
-      possibleNames.add(lastComponent);
-    }
+    final Collection<String> possibleNames = getLastComponents(function);
     return possibleNames.contains(callableName) && call.isCallee(function);
   }
 
   @NotNull
   private static List<String> getLastComponents(@NotNull final FQNamesProvider provider) {
-    final List<String> result = new ArrayList<String>();
+    final List<String> result = new ArrayList<>();
     for (final String name : provider.getNames()) {
       final String component = QualifiedName.fromDottedString(name).getLastComponent();
       if (component != null) {

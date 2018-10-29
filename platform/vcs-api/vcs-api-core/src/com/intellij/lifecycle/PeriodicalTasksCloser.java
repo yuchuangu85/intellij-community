@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,24 @@
 package com.intellij.lifecycle;
 
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.components.ApplicationComponent;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import com.intellij.util.ExceptionUtil;
 import org.jetbrains.annotations.NotNull;
 
-public class PeriodicalTasksCloser implements ApplicationComponent {
+/**
+ * @deprecated Use {@link ServiceManager#getService(Project, Class)} and {@link Project#getComponent(Class)}.
+ * <br/><br/>
+ * To avoid "Already Disposed" exceptions and NPEs the calls to getService/getComponent should happen either from a Read Action
+ * with a dispose check, or from a background task with a proper dispose-aware ProgressIndicator,
+ * e.g. via {@link ProgressManager#run(Task)} or {@code BackgroundTaskUtil#executeOnPooledThread}.
+ */
+@Deprecated
+public class PeriodicalTasksCloser {
   private static final Logger LOG = Logger.getInstance("#com.intellij.lifecycle.PeriodicalTasksCloser");
   private final Object myLock = new Object();
 
@@ -32,28 +41,12 @@ public class PeriodicalTasksCloser implements ApplicationComponent {
     return ApplicationManager.getApplication().getComponent(PeriodicalTasksCloser.class);
   }
 
-  @Override
-  public void disposeComponent() {
-  }
-
-  @NotNull
-  @Override
-  public String getComponentName() {
-    return PeriodicalTasksCloser.class.getName();
-  }
-
-  @Override
-  public void initComponent() {
-  }
-
   public <T> T safeGetComponent(@NotNull final Project project, final Class<T> componentClass) throws ProcessCanceledException {
     T component = null;
     try {
       component = project.getComponent(componentClass);
     }
-    catch (NullPointerException e) {
-      throwCanceledException(project, e);
-    } catch (AssertionError e) {
+    catch (NullPointerException | AssertionError e) {
       throwCanceledException(project, e);
     }
     if (component == null) {
@@ -68,14 +61,15 @@ public class PeriodicalTasksCloser implements ApplicationComponent {
   public <T> T safeGetService(@NotNull final Project project, final Class<T> componentClass) throws ProcessCanceledException {
     try {
       T service = ServiceManager.getService(project, componentClass);
-      if (service == null && project.isDefault()) {
-        LOG.info("no service in default project: " + componentClass.getName());
+      if (service == null) {
+        ProgressManager.checkCanceled();
+        if (project.isDefault()) {
+          LOG.info("no service in default project: " + componentClass.getName());
+        }
       }
       return service;
     }
-    catch (NullPointerException e) {
-      throwCanceledException(project, e);
-    } catch (AssertionError e) {
+    catch (NullPointerException | AssertionError e) {
       throwCanceledException(project, e);
     }
     return null;

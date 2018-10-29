@@ -1,3 +1,4 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.io.jsonRpc
 
 import com.google.gson.Gson
@@ -15,14 +16,14 @@ import com.intellij.util.ArrayUtil
 import com.intellij.util.ArrayUtilRt
 import com.intellij.util.Consumer
 import com.intellij.util.SmartList
+import com.intellij.util.io.releaseIfError
+import com.intellij.util.io.writeUtf8
 import gnu.trove.THashMap
 import gnu.trove.TIntArrayList
 import io.netty.buffer.*
 import org.jetbrains.concurrency.Promise
 import org.jetbrains.io.JsonReaderEx
 import org.jetbrains.io.JsonUtil
-import org.jetbrains.io.releaseIfError
-import org.jetbrains.io.writeUtf8
 import java.io.IOException
 import java.lang.reflect.Method
 import java.util.concurrent.atomic.AtomicInteger
@@ -40,7 +41,7 @@ private val INT_LIST_TYPE_ADAPTER_FACTORY = object : TypeAdapterFactory {
     if (typeAdapter == null) {
       typeAdapter = IntArrayListTypeAdapter<TIntArrayList>()
     }
-    @Suppress("CAST_NEVER_SUCCEEDS")
+    @Suppress("UNCHECKED_CAST")
     return typeAdapter as TypeAdapter<T>?
   }
 }
@@ -114,7 +115,7 @@ class JsonRpcServer(private val clientManager: ClientManager) : MessageServer {
     if (reader.hasNext()) {
       val list = SmartList<Any>()
       JsonUtil.readListBody(reader, list)
-      parameters = ArrayUtil.toObjectArray(list)
+      parameters = ArrayUtil.toObjectArray(list[0] as List<*>)
     }
     else {
       parameters = ArrayUtilRt.EMPTY_OBJECT_ARRAY
@@ -320,9 +321,9 @@ private class IntArrayListTypeAdapter<T> : TypeAdapter<T>() {
   override fun write(out: JsonWriter, value: T) {
     var error: IOException? = null
     out.beginArray()
-    (value as TIntArrayList).forEach { value ->
+    (value as TIntArrayList).forEach { intValue ->
       try {
-        out.value(value.toLong())
+        out.value(intValue.toLong())
       }
       catch (e: IOException) {
         error = e

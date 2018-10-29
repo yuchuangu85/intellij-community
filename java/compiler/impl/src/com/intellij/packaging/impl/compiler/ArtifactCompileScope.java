@@ -27,10 +27,7 @@ import com.intellij.packaging.artifacts.ArtifactManager;
 import com.intellij.packaging.elements.PackagingElementResolvingContext;
 import com.intellij.packaging.impl.artifacts.ArtifactUtil;
 import com.intellij.packaging.impl.elements.ArtifactElementType;
-import com.intellij.packaging.impl.elements.ArtifactPackagingElement;
-import com.intellij.packaging.impl.elements.ModuleOutputPackagingElement;
 import com.intellij.packaging.impl.elements.ProductionModuleOutputElementType;
-import com.intellij.util.Processor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -49,7 +46,7 @@ public class ArtifactCompileScope {
 
   public static ModuleCompileScope createScopeForModulesInArtifacts(@NotNull Project project, @NotNull Collection<? extends Artifact> artifacts) {
     final Set<Module> modules = ArtifactUtil.getModulesIncludedInArtifacts(artifacts, project);
-    return new ModuleCompileScope(project, modules.toArray(new Module[modules.size()]), true);
+    return new ModuleCompileScope(project, modules.toArray(Module.EMPTY_ARRAY), true);
   }
 
   public static CompileScope createArtifactsScope(@NotNull Project project,
@@ -69,7 +66,7 @@ public class ArtifactCompileScope {
   }
 
   public static CompileScope createScopeWithArtifacts(final CompileScope baseScope, @NotNull Collection<Artifact> artifacts, final boolean forceArtifactBuild) {
-    baseScope.putUserData(ARTIFACTS_KEY, artifacts.toArray(new Artifact[artifacts.size()]));
+    baseScope.putUserData(ARTIFACTS_KEY, artifacts.toArray(new Artifact[0]));
     if (forceArtifactBuild) {
       baseScope.putUserData(FORCE_ARTIFACT_BUILD, Boolean.TRUE);
     }
@@ -91,8 +88,8 @@ public class ArtifactCompileScope {
       return cached;
     }
 
-    Set<Artifact> artifacts = new HashSet<Artifact>();
-    final Set<Module> modules = new HashSet<Module>(Arrays.asList(compileScope.getAffectedModules()));
+    Set<Artifact> artifacts = new HashSet<>();
+    final Set<Module> modules = new HashSet<>(Arrays.asList(compileScope.getAffectedModules()));
     final List<Module> allModules = Arrays.asList(ModuleManager.getInstance(project).getModules());
     for (Artifact artifact : artifactManager.getArtifacts()) {
       if (artifact.isBuildOnMake()) {
@@ -118,27 +115,25 @@ public class ArtifactCompileScope {
 
   private static boolean containsModuleOutput(Artifact artifact, final Set<Module> modules, final PackagingElementResolvingContext context) {
     return !ArtifactUtil.processPackagingElements(artifact, ProductionModuleOutputElementType.ELEMENT_TYPE,
-                                                         new Processor<ModuleOutputPackagingElement>() {
-                                                           public boolean process(ModuleOutputPackagingElement moduleOutputPackagingElement) {
-                                                             final Module module = moduleOutputPackagingElement.findModule(context);
-                                                             return module == null || !modules.contains(module);
-                                                           }
-                                                         }, context, true);
+                                                  moduleOutputPackagingElement -> {
+                                                    final Module module = moduleOutputPackagingElement.findModule(context);
+                                                    return module == null || !modules.contains(module);
+                                                  }, context, true);
   }
 
   @NotNull
   private static Set<Artifact> addIncludedArtifacts(@NotNull Collection<Artifact> artifacts,
                                                     @NotNull PackagingElementResolvingContext context,
                                                     final boolean withOutputPathOnly) {
-    Set<Artifact> result = new HashSet<Artifact>();
+    Set<Artifact> result = new HashSet<>();
     for (Artifact artifact : artifacts) {
-      collectIncludedArtifacts(artifact, context, new HashSet<Artifact>(), result, withOutputPathOnly);
+      collectIncludedArtifacts(artifact, context, new HashSet<>(), result, withOutputPathOnly);
     }
     return result;
   }
 
   private static void collectIncludedArtifacts(Artifact artifact, final PackagingElementResolvingContext context,
-                                               final Set<Artifact> processed, final Set<Artifact> result, final boolean withOutputPathOnly) {
+                                               final Set<? super Artifact> processed, final Set<? super Artifact> result, final boolean withOutputPathOnly) {
     if (!processed.add(artifact)) {
       return;
     }

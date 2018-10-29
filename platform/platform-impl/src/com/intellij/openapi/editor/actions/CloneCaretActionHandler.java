@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import com.intellij.openapi.editor.actionSystem.EditorActionHandler;
 import com.intellij.openapi.editor.ex.EditorSettingsExternalizable;
 import com.intellij.openapi.keymap.impl.ModifierKeyDoubleClickHandler;
 import com.intellij.openapi.util.Key;
-import com.intellij.util.containers.HashSet;
+import java.util.HashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -38,7 +38,7 @@ import java.util.Set;
 public class CloneCaretActionHandler extends EditorActionHandler {
   private static final Key<Integer> LEVEL = Key.create("CloneCaretActionHandler.level");
 
-  private static final Set<String> OUR_ACTIONS = new HashSet<String>(Arrays.asList(
+  private static final Set<String> OUR_ACTIONS = new HashSet<>(Arrays.asList(
     IdeActions.ACTION_EDITOR_CLONE_CARET_ABOVE,
     IdeActions.ACTION_EDITOR_CLONE_CARET_BELOW,
     IdeActions.ACTION_EDITOR_MOVE_CARET_LEFT_WITH_SELECTION,
@@ -46,10 +46,16 @@ public class CloneCaretActionHandler extends EditorActionHandler {
     IdeActions.ACTION_EDITOR_MOVE_CARET_UP_WITH_SELECTION,
     IdeActions.ACTION_EDITOR_MOVE_CARET_DOWN_WITH_SELECTION,
     IdeActions.ACTION_EDITOR_MOVE_LINE_START_WITH_SELECTION,
-    IdeActions.ACTION_EDITOR_MOVE_LINE_END_WITH_SELECTION
+    IdeActions.ACTION_EDITOR_MOVE_LINE_END_WITH_SELECTION,
+    IdeActions.ACTION_EDITOR_MOVE_CARET_PAGE_UP_WITH_SELECTION,
+    IdeActions.ACTION_EDITOR_MOVE_CARET_PAGE_DOWN_WITH_SELECTION,
+    IdeActions.ACTION_EDITOR_PREVIOUS_WORD_WITH_SELECTION,
+    IdeActions.ACTION_EDITOR_NEXT_WORD_WITH_SELECTION
   ));
 
   private final boolean myCloneAbove;
+
+  private boolean myRepeatedInvocation;
 
   public CloneCaretActionHandler(boolean above) {
     myCloneAbove = above;
@@ -62,7 +68,7 @@ public class CloneCaretActionHandler extends EditorActionHandler {
   }
 
   @Override
-  protected void doExecute(Editor editor, @Nullable Caret targetCaret, DataContext dataContext) {
+  protected void doExecute(@NotNull Editor editor, @Nullable Caret targetCaret, DataContext dataContext) {
     if (ModifierKeyDoubleClickHandler.getInstance().isRunningAction() && !isRepeatedActionInvocation()) {
       FeatureUsageTracker.getInstance().triggerFeatureUsed("editing.add.carets.using.double.ctrl");
     }
@@ -71,7 +77,7 @@ public class CloneCaretActionHandler extends EditorActionHandler {
       return;
     }
     int currentLevel = 0;
-    List<Caret> currentCarets = new ArrayList<Caret>();
+    List<Caret> currentCarets = new ArrayList<>();
     for (Caret caret : editor.getCaretModel().getAllCarets()) {
       int level = getLevel(caret);
       if (Math.abs(level) > Math.abs(currentLevel)) {
@@ -107,7 +113,11 @@ public class CloneCaretActionHandler extends EditorActionHandler {
     }
   }
 
-  private static int getLevel(Caret caret) {
+  public void setRepeatedInvocation(boolean value) {
+    myRepeatedInvocation = value;
+  }
+
+  private int getLevel(Caret caret) {
     if (isRepeatedActionInvocation()) {
       Integer value = caret.getUserData(LEVEL);
       return value == null ? 0 : value;
@@ -118,7 +128,8 @@ public class CloneCaretActionHandler extends EditorActionHandler {
     }
   }
 
-  private static boolean isRepeatedActionInvocation() {
+  private boolean isRepeatedActionInvocation() {
+    if (myRepeatedInvocation) return true;
     String lastActionId = EditorLastActionTracker.getInstance().getLastActionId();
     return OUR_ACTIONS.contains(lastActionId);
   }

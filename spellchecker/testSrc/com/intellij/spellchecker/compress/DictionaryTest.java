@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,11 +24,11 @@ import com.intellij.spellchecker.dictionary.Loader;
 import com.intellij.spellchecker.engine.Transformation;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.util.Consumer;
-import com.intellij.util.ThrowableRunnable;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Set;
 
 import static com.intellij.openapi.util.Pair.pair;
@@ -41,22 +41,22 @@ public class DictionaryTest {
   private final Transformation myTransformation = new Transformation();
 
   @Test
-  public void testJBDictionary() {
-    Dictionary dictionary = loadDictionaryPerformanceTest(JETBRAINS_DIC, 1000);
-    containsWordPerformanceTest(dictionary, 2000);
+  public void testJBDictionaryPerformance() {
+    Dictionary dictionary = loadDictionaryPerformanceTest(JETBRAINS_DIC, 10);
+    containsWordPerformanceTest(dictionary, 5);
     containsWordTest(dictionary);
   }
 
   @Test
-  public void testEnglishDictionary() {
-    Dictionary dictionary = loadDictionaryPerformanceTest(ENGLISH_DIC, 50000);
-    containsWordPerformanceTest(dictionary, 2000);
+  public void testEnglishDictionaryPerformance() {
+    Dictionary dictionary = loadDictionaryPerformanceTest(ENGLISH_DIC, 500);
+    containsWordPerformanceTest(dictionary, 200);
     containsWordTest(dictionary);
   }
 
   @Test
   public void testDictionaryLoadedFully() {
-    final Set<String> onDisk = new THashSet<String>();
+    final Set<String> onDisk = new THashSet<>();
     getLoader(JETBRAINS_DIC).load(s -> {
       assertNotNull(s);
       String t = myTransformation.transform(s);
@@ -69,26 +69,43 @@ public class DictionaryTest {
 
     assertEquals(onDisk, dictionary.getWords());
   }
+  
+  @Test
+  public void testGetSuggestions(){
+    final ArrayList<String> suggestions = new ArrayList<>();
+    Dictionary dictionary = CompressedDictionary.create(getLoader(ENGLISH_DIC), myTransformation);
+    dictionary.getSuggestions("typpo",suggestions::add);
+    assert suggestions.contains("typo");
+    assert suggestions.stream().anyMatch(a -> a.charAt(0) == 't');
+  }
+
+  @Test
+  public void testNoSuggestions(){
+    final ArrayList<String> suggestions = new ArrayList<>();
+    Dictionary dictionary = CompressedDictionary.create(getLoader(ENGLISH_DIC), myTransformation);
+    dictionary.getSuggestions("руссский",suggestions::add);
+    assert suggestions.isEmpty();
+  }
+
 
   private Dictionary loadDictionaryPerformanceTest(final String name, int time) {
     final Ref<Dictionary> ref = Ref.create();
 
-    PlatformTestUtil.startPerformanceTest("load dictionary", time,
-                                          () -> ref.set(CompressedDictionary.create(getLoader(name), myTransformation))).cpuBound().useLegacyScaling().assertTiming();
+    PlatformTestUtil.startPerformanceTest(
+      "load dictionary", time, () -> ref.set(CompressedDictionary.create(getLoader(name), myTransformation))
+    ).assertTiming();
 
     assertFalse(ref.isNull());
     return ref.get();
   }
 
   private void containsWordPerformanceTest(final Dictionary dictionary, int time) {
-    if (PlatformTestUtil.COVERAGE_ENABLED_BUILD) return;
-
     final Set<String> wordsToCheck = createWordSets(dictionary, 50000, 1).first;
     PlatformTestUtil.startPerformanceTest("contains word", time, () -> {
       for (String s : wordsToCheck) {
         assertEquals(Boolean.TRUE, dictionary.contains(s));
       }
-    }).cpuBound().useLegacyScaling().assertTiming();
+    }).assertTiming();
   }
 
   private void containsWordTest(Dictionary dictionary) {
@@ -106,8 +123,8 @@ public class DictionaryTest {
   }
 
   private Pair<Set<String>, Set<String>> createWordSets(Dictionary dictionary, int maxCount, int mod) {
-    Set<String> wordsToStore = new THashSet<String>();
-    Set<String> wordsToCheck = new THashSet<String>();
+    Set<String> wordsToStore = new THashSet<>();
+    Set<String> wordsToCheck = new THashSet<>();
 
     Set<String> words = dictionary.getWords();
     assertNotNull(words);
@@ -126,7 +143,7 @@ public class DictionaryTest {
   private static class TestLoader implements Loader {
     private final Set<String> myWords;
 
-    public TestLoader(Set<String> words) {
+    TestLoader(Set<String> words) {
       myWords = words;
     }
 

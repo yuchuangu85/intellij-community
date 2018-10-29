@@ -24,7 +24,6 @@ import java.util.Set;
 
 /**
  * @author Vladislav.Soroka
- * @since 11/5/13
  */
 public interface WebConfiguration extends Serializable {
 
@@ -33,6 +32,8 @@ public interface WebConfiguration extends Serializable {
   interface WarModel extends Serializable {
     @NotNull
     String getWarName();
+
+    File getArchivePath();
 
     String getWebAppDirName();
 

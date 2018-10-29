@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 /*
  * @author max
@@ -39,7 +25,7 @@ public class MergeQuery<T> implements Query<T>{
   @Override
   @NotNull
   public Collection<T> findAll() {
-    List<T> results = new ArrayList<T>();
+    List<T> results = new ArrayList<>();
     Processor<T> processor = Processors.cancelableCollectProcessor(results);
     forEach(processor);
     return results;
@@ -47,19 +33,19 @@ public class MergeQuery<T> implements Query<T>{
 
   @Override
   public T findFirst() {
-    final CommonProcessors.FindFirstProcessor<T> processor = new CommonProcessors.FindFirstProcessor<T>();
+    final CommonProcessors.FindFirstProcessor<T> processor = new CommonProcessors.FindFirstProcessor<>();
     forEach(processor);
     return processor.getFoundValue();
   }
 
   @Override
-  public boolean forEach(@NotNull final Processor<T> consumer) {
+  public boolean forEach(@NotNull final Processor<? super T> consumer) {
     return processSubQuery(myQuery1, consumer) && processSubQuery(myQuery2, consumer);
   }
 
   @NotNull
   @Override
-  public AsyncFuture<Boolean> forEachAsync(@NotNull final Processor<T> consumer) {
+  public AsyncFuture<Boolean> forEachAsync(@NotNull final Processor<? super T> consumer) {
     final AsyncFutureResult<Boolean> result = AsyncFutureFactory.getInstance().createAsyncFutureResult();
 
     final AsyncFuture<Boolean> fq = processSubQueryAsync(myQuery1, consumer);
@@ -69,7 +55,7 @@ public class MergeQuery<T> implements Query<T>{
       public void onSuccess(Boolean value) {
         if (value.booleanValue()) {
           final AsyncFuture<Boolean> fq2 = processSubQueryAsync(myQuery2, consumer);
-          fq2.addConsumer(SameThreadExecutor.INSTANCE, new DefaultResultConsumer<Boolean>(result));
+          fq2.addConsumer(SameThreadExecutor.INSTANCE, new DefaultResultConsumer<>(result));
         }
         else {
           result.set(false);
@@ -80,13 +66,12 @@ public class MergeQuery<T> implements Query<T>{
   }
 
 
-  private <V extends T> boolean processSubQuery(@NotNull Query<V> subQuery, @NotNull final Processor<T> consumer) {
-    // Query.forEach(Processor<T> consumer) should be actually Query.forEach(Processor<? super T> consumer) but it is too late now
-    return subQuery.forEach((Processor<V>)consumer);
+  private <V extends T> boolean processSubQuery(@NotNull Query<V> subQuery, @NotNull final Processor<? super T> consumer) {
+    return subQuery.forEach(consumer);
   }
 
-  private <V extends T> AsyncFuture<Boolean> processSubQueryAsync(@NotNull Query<V> query1, @NotNull final Processor<T> consumer) {
-    return query1.forEachAsync((Processor<V>)consumer);
+  private <V extends T> AsyncFuture<Boolean> processSubQueryAsync(@NotNull Query<V> query1, @NotNull final Processor<? super T> consumer) {
+    return query1.forEachAsync(consumer);
   }
 
   @NotNull

@@ -1,21 +1,8 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger;
 
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
@@ -28,6 +15,7 @@ import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.pom.Navigatable;
 import com.intellij.psi.*;
+import com.intellij.reference.SoftReference;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -35,11 +23,6 @@ import org.jetbrains.annotations.Nullable;
 import java.lang.ref.WeakReference;
 import java.util.List;
 
-/**
- * User: lex
- * Date: Oct 24, 2003
- * Time: 8:23:06 PM
- */
 public abstract class SourcePosition implements Navigatable{
   private static final Logger LOG = Logger.getInstance("#com.intellij.debugger.SourcePosition");
   @NotNull
@@ -58,21 +41,25 @@ public abstract class SourcePosition implements Navigatable{
 
   private abstract static class SourcePositionCache extends SourcePosition {
     @NotNull private final PsiFile myFile;
-    private long myModificationStamp = -1L;
+    @Nullable private final SmartPsiElementPointer<PsiFile> myFilePointer;
+    private long myModificationStamp;
 
     private WeakReference<PsiElement> myPsiElementRef;
     private Integer myLine;
     private Integer myOffset;
 
-    public SourcePositionCache(@NotNull PsiFile file) {
+    SourcePositionCache(@NotNull PsiFile file) {
       myFile = file;
-      updateData();
+      myFilePointer = ReadAction.compute(
+        () -> file.isValid() ? SmartPointerManager.getInstance(file.getProject()).createSmartPsiElementPointer(file) : null);
+      myModificationStamp = file.getModificationStamp();
     }
 
     @Override
     @NotNull
     public PsiFile getFile() {
-      return myFile;
+      PsiFile file = myFilePointer != null ? ReadAction.compute(myFilePointer::getElement) : null;
+      return file != null ? file : myFile; // in case of full invalidation, rollback to the original psiFile
     }
 
     @Override
@@ -115,7 +102,7 @@ public abstract class SourcePosition implements Navigatable{
 
     private void updateData() {
       if(dataUpdateNeeded()) {
-        myModificationStamp = myFile.getModificationStamp();
+        myModificationStamp = getFile().getModificationStamp();
         myLine = null;
         myOffset = null;
         myPsiElementRef = null;
@@ -123,16 +110,11 @@ public abstract class SourcePosition implements Navigatable{
     }
 
     private boolean dataUpdateNeeded() {
-      if (myModificationStamp != myFile.getModificationStamp()) {
+      if (myModificationStamp != getFile().getModificationStamp()) {
         return true;
       }
-      final PsiElement psiElement = myPsiElementRef != null ? myPsiElementRef.get() : null;
-      return psiElement != null && !ApplicationManager.getApplication().runReadAction(new Computable<Boolean>() {
-        @Override
-        public Boolean compute() {
-          return psiElement.isValid();
-        }
-      });
+      PsiElement psiElement = SoftReference.dereference(myPsiElementRef);
+      return psiElement != null && !ReadAction.compute(psiElement::isValid);
     }
 
     @Override
@@ -156,9 +138,9 @@ public abstract class SourcePosition implements Navigatable{
     @Override
     public PsiElement getElementAt() {
       updateData();
-      PsiElement element = myPsiElementRef != null ? myPsiElementRef.get() : null;
+      PsiElement element = SoftReference.dereference(myPsiElementRef);
       if (element == null) {
-        element = calcPsiElement();
+        element = ReadAction.compute(this::calcPsiElement);
         myPsiElementRef = new WeakReference<>(element);
         return element;
       }
@@ -216,66 +198,64 @@ public abstract class SourcePosition implements Navigatable{
     protected PsiElement calcPsiElement() {
       // currently PsiDocumentManager does not store documents for mirror file, so we store original file
       PsiFile psiFile = getFile();
+      if (!psiFile.isValid()) {
+        return null;
+      }
+
       int lineNumber = getLine();
-      if(lineNumber < 0) {
+      if (lineNumber < 0) {
         return psiFile;
       }
 
-      final Document document = getDocument(getFile());
+      Document document = getDocument(psiFile);
       if (document == null) {
         return null;
       }
       if (lineNumber >= document.getLineCount()) {
         return psiFile;
       }
-      final int startOffset = document.getLineStartOffset(lineNumber);
-      if(startOffset == -1) {
+      int startOffset = document.getLineStartOffset(lineNumber);
+      if (startOffset == -1) {
         return null;
       }
 
-      return ApplicationManager.getApplication().runReadAction(new Computable<PsiElement>() {
-        @Override
-        public PsiElement compute() {
-          PsiElement rootElement = psiFile;
-
-          List<PsiFile> allFiles = psiFile.getViewProvider().getAllFiles();
-          if (allFiles.size() > 1) { // jsp & gsp
-            PsiClassOwner owner = ContainerUtil.findInstance(allFiles, PsiClassOwner.class);
-            if (owner != null) {
-              PsiClass[] classes = owner.getClasses();
-              if (classes.length == 1 && classes[0] instanceof SyntheticElement) {
-                rootElement = classes[0];
-              }
-            }
+      PsiElement rootElement = psiFile;
+      List<PsiFile> allFiles = psiFile.getViewProvider().getAllFiles();
+      if (allFiles.size() > 1) { // jsp & gsp
+        PsiClassOwner owner = ContainerUtil.findInstance(allFiles, PsiClassOwner.class);
+        if (owner != null) {
+          PsiClass[] classes = owner.getClasses();
+          if (classes.length == 1 && classes[0] instanceof SyntheticElement) {
+            rootElement = classes[0];
           }
-
-          PsiElement element = null;
-          int offset = getOffset();
-          while (true) {
-            final CharSequence charsSequence = document.getCharsSequence();
-            for (; offset < charsSequence.length(); offset++) {
-              char c = charsSequence.charAt(offset);
-              if (c != ' ' && c != '\t') {
-                break;
-              }
-            }
-            if (offset >= charsSequence.length()) break;
-
-            element = rootElement.findElementAt(offset);
-
-            if (element instanceof PsiComment) {
-              offset = element.getTextRange().getEndOffset() + 1;
-            }
-            else {
-              break;
-            }
-          }
-          if (element != null && element.getParent() instanceof PsiForStatement) {
-            return ((PsiForStatement)element.getParent()).getInitialization();
-          }
-          return element;
         }
-      });
+      }
+
+      PsiElement element = null;
+      int offset = getOffset();
+      while (true) {
+        final CharSequence charsSequence = document.getCharsSequence();
+        for (; offset < charsSequence.length(); offset++) {
+          char c = charsSequence.charAt(offset);
+          if (c != ' ' && c != '\t') {
+            break;
+          }
+        }
+        if (offset >= charsSequence.length()) break;
+
+        element = rootElement.findElementAt(offset);
+
+        if (element instanceof PsiComment) {
+          offset = element.getTextRange().getEndOffset() + 1;
+        }
+        else {
+          break;
+        }
+      }
+      if (element != null && element.getParent() instanceof PsiForStatement) {
+        return ((PsiForStatement)element.getParent()).getInitialization();
+      }
+      return element;
     }
   }
 
@@ -333,18 +313,14 @@ public abstract class SourcePosition implements Navigatable{
     return new SourcePositionCache(psiFile) {
       @Override
       protected PsiElement calcPsiElement() {
-        ApplicationManager.getApplication().assertReadAccessAllowed();
         return pointer.getElement();
       }
 
       @Override
       protected int calcOffset() {
-        return ApplicationManager.getApplication().runReadAction(new Computable<Integer>() {
-          @Override
-          public Integer compute() {
+        return ReadAction.compute(() -> {
             PsiElement elem = pointer.getElement();
             return elem != null ? elem.getTextOffset() : -1;
-          }
         });
       }
     };

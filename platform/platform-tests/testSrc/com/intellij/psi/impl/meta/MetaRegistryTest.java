@@ -16,7 +16,6 @@
 
 package com.intellij.psi.impl.meta;
 
-import com.intellij.openapi.application.Result;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.filters.ElementFilter;
@@ -32,7 +31,7 @@ import org.jetbrains.annotations.NotNull;
 * @author peter
 */
 public class MetaRegistryTest extends LightPlatformTestCase {
-  public void testChangingMetaData() throws Throwable {
+  public void testChangingMetaData() {
     final boolean[] flag = {false};
     MetaRegistry.addMetadataBinding(new ElementFilter() {
       @Override
@@ -44,7 +43,7 @@ public class MetaRegistryTest extends LightPlatformTestCase {
       public boolean isClassAcceptable(Class hintClass) {
         return true;
       }
-    }, MyTrueMetaData.class, getTestRootDisposable());
+    }, MyTrueMetaData::new, getTestRootDisposable());
     MetaRegistry.addMetadataBinding(new ElementFilter() {
       @Override
       public boolean isAcceptable(Object element, PsiElement context) {
@@ -55,17 +54,14 @@ public class MetaRegistryTest extends LightPlatformTestCase {
       public boolean isClassAcceptable(Class hintClass) {
         return true;
       }
-    }, MyFalseMetaData.class, getTestRootDisposable());
+    }, MyFalseMetaData::new, getTestRootDisposable());
 
     final XmlTag tag = ((XmlFile)LightPlatformTestCase.createFile("a.xml", "<a/>")).getDocument().getRootTag();
     UsefulTestCase.assertInstanceOf(tag.getMetaData(), MyFalseMetaData.class);
     flag[0] = true;
-    new WriteCommandAction(LightPlatformTestCase.getProject()) {
-      @Override
-      protected void run(@NotNull Result result) throws Throwable {
-        tag.setName("b");
-      }
-    }.execute();
+    WriteCommandAction.runWriteCommandAction(LightPlatformTestCase.getProject(), () -> {
+      tag.setName("b");
+    });
     UsefulTestCase.assertInstanceOf(tag.getMetaData(), MyTrueMetaData.class);
   }
 
@@ -77,8 +73,9 @@ public class MetaRegistryTest extends LightPlatformTestCase {
       return myDeclaration;
     }
 
+    @NotNull
     @Override
-    public Object[] getDependences() {
+    public Object[] getDependencies() {
       return new Object[]{myDeclaration};
     }
 

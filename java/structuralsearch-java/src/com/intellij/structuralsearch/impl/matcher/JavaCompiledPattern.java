@@ -1,8 +1,8 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.structuralsearch.impl.matcher;
 
-import com.intellij.openapi.util.Key;
 import com.intellij.psi.*;
-import com.intellij.structuralsearch.impl.matcher.strategies.ExprMatchingStrategy;
+import com.intellij.structuralsearch.impl.matcher.strategies.JavaMatchingStrategy;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -16,13 +16,15 @@ public class JavaCompiledPattern extends CompiledPattern {
   private boolean requestsSuperInners;
 
   public JavaCompiledPattern() {
-    setStrategy(ExprMatchingStrategy.getInstance());
+    setStrategy(JavaMatchingStrategy.getInstance());
   }
 
+  @Override
   public String[] getTypedVarPrefixes() {
     return new String[] {TYPED_VAR_PREFIX};
   }
 
+  @Override
   public boolean isTypedVar(final String str) {
     if (str.isEmpty()) return false;
     if (str.charAt(0)=='@') {
@@ -62,8 +64,6 @@ public class JavaCompiledPattern extends CompiledPattern {
     }
     return null;
   }
-
-  public static final Key<String> ALL_CLASS_CONTENT_VAR_NAME_KEY = Key.create("AllClassContent");
 
   public boolean isRequestsSuperFields() {
     return requestsSuperFields;

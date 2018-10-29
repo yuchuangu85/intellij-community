@@ -28,12 +28,12 @@ import java.util.LinkedHashSet;
 */
 class IntroduceFieldTestHandler extends GrIntroduceFieldHandler {
 
-  private boolean myIsStatic;
-  private boolean myRemoveLocal;
-  private boolean myDeclareFinal;
-  private GrIntroduceFieldSettings.Init myInitializeIn;
-  private boolean replaceAll;
-  private PsiType mySelectedType;
+  private final boolean myIsStatic;
+  private final boolean myRemoveLocal;
+  private final boolean myDeclareFinal;
+  private final GrIntroduceFieldSettings.Init myInitializeIn;
+  private final boolean replaceAll;
+  private final PsiType mySelectedType;
 
   IntroduceFieldTestHandler(boolean isStatic,
                             boolean removeLocal,
@@ -110,7 +110,7 @@ class IntroduceFieldTestHandler extends GrIntroduceFieldHandler {
       @NotNull
       @Override
       public LinkedHashSet<String> suggestNames() {
-        LinkedHashSet<String> strings = new LinkedHashSet<String>();
+        LinkedHashSet<String> strings = new LinkedHashSet<>();
         strings.add("f");
         return strings;
       }

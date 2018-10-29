@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,11 @@
 package com.intellij.ide.ui;
 
 import com.intellij.ide.GeneralSettings;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.ui.search.BooleanOptionDescription;
+import com.intellij.ide.ui.search.OptionDescription;
 import com.intellij.openapi.project.Project;
+import com.intellij.ui.IdeUICustomization;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -29,9 +32,9 @@ import java.util.Collections;
  * @author Sergey.Malenkov
  */
 public final class SystemOptionsTopHitProvider extends OptionsTopHitProvider {
-  private static final Collection<BooleanOptionDescription> ourOptions = Collections.unmodifiableCollection(Arrays.asList(
+  private static final Collection<OptionDescription> ourOptions = Collections.unmodifiableCollection(Arrays.asList(
     option(messageIde("checkbox.show.tips.on.startup"), "showTipsOnStartup", "setShowTipsOnStartup"),
-    option(messageIde("checkbox.reopen.last.project.on.startup"), "isReopenLastProject", "setReopenLastProject"),
+    option(IdeBundle.message("checkbox.reopen.last.project.on.startup", IdeUICustomization.getInstance().getProjectConceptName()), "isReopenLastProject", "setReopenLastProject"),
     option(messageIde("checkbox.support.screen.readers"), "isSupportScreenReaders", "setSupportScreenReaders"),
     option(messageIde("checkbox.confirm.application.exit"), "isConfirmExit", "setConfirmExit"),
     option(messageIde("checkbox.synchronize.files.on.frame.activation"), "isSyncOnFrameActivation", "setSyncOnFrameActivation"),
@@ -44,7 +47,7 @@ public final class SystemOptionsTopHitProvider extends OptionsTopHitProvider {
 
   @NotNull
   @Override
-  public Collection<BooleanOptionDescription> getOptions(@Nullable Project project) {
+  public Collection<OptionDescription> getOptions(@Nullable Project project) {
     return ourOptions;
   }
 

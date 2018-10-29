@@ -25,7 +25,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 
 public class SimpleActionGroup extends ActionGroup {
-  private final ArrayList<AnAction> myChildren = new ArrayList<AnAction>();
+  private final ArrayList<AnAction> myChildren = new ArrayList<>();
 
   public SimpleActionGroup() {
     super(null, false);
@@ -38,7 +38,7 @@ public class SimpleActionGroup extends ActionGroup {
   @Override
   @NotNull
   public AnAction[] getChildren(@Nullable AnActionEvent e) {
-    return myChildren.toArray(new AnAction[myChildren.size()]);
+    return myChildren.toArray(AnAction.EMPTY_ARRAY);
   }
 
   public int getChildrenCount() {

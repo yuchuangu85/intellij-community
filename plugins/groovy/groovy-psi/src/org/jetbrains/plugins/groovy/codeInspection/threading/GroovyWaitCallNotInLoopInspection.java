@@ -33,13 +33,6 @@ public class GroovyWaitCallNotInLoopInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return THREADING_ISSUES;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "'wait()' not in loop";
   }
@@ -59,7 +52,7 @@ public class GroovyWaitCallNotInLoopInspection extends BaseInspection {
 
   private static class Visitor extends BaseInspectionVisitor {
     @Override
-    public void visitMethodCallExpression(GrMethodCallExpression grMethodCallExpression) {
+    public void visitMethodCallExpression(@NotNull GrMethodCallExpression grMethodCallExpression) {
       super.visitMethodCallExpression(grMethodCallExpression);
       final GrExpression methodExpression = grMethodCallExpression.getInvokedExpression();
       if (!(methodExpression instanceof GrReferenceExpression)) {

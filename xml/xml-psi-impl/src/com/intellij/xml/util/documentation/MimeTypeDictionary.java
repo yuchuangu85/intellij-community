@@ -39,7 +39,7 @@ public class MimeTypeDictionary {
   }
 
   private static Set<String> loadContentTypes() {
-    final TreeSet<String> result = new TreeSet<String>();
+    final TreeSet<String> result = new TreeSet<>();
     result.add("*/*");
     // IANA Media Types: http://www.iana.org/assignments/media-types/media-types.xhtml
     readMediaTypes(result, "application");
@@ -53,7 +53,7 @@ public class MimeTypeDictionary {
     return result;
   }
 
-  private static void readMediaTypes(TreeSet<String> result, final String category) {
+  private static void readMediaTypes(TreeSet<? super String> result, final String category) {
     final InputStream stream = MimeTypeDictionary.class.getResourceAsStream("mimeTypes/" + category + ".csv");
     String csv = "";
     try {

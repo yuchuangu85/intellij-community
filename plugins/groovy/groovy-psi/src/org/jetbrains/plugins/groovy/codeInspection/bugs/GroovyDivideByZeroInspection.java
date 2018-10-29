@@ -32,13 +32,6 @@ public class GroovyDivideByZeroInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return PROBABLE_BUGS;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Divide by zero";
   }
@@ -83,8 +76,7 @@ public class GroovyDivideByZeroInspection extends BaseInspection {
     }
 
     @Override
-    public void visitAssignmentExpression(
-        GrAssignmentExpression expression) {
+    public void visitAssignmentExpression(@NotNull GrAssignmentExpression expression) {
       super.visitAssignmentExpression(expression);
       final GrExpression rhs = expression.getRValue();
       if (rhs == null) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,7 +46,7 @@ public class FileReferenceSet {
 
   public static final CustomizableReferenceProvider.CustomizationKey<Function<PsiFile, Collection<PsiFileSystemItem>>>
     DEFAULT_PATH_EVALUATOR_OPTION =
-    new CustomizableReferenceProvider.CustomizationKey<Function<PsiFile, Collection<PsiFileSystemItem>>>(
+    new CustomizableReferenceProvider.CustomizationKey<>(
       PsiBundle.message("default.path.evaluator.option"));
   public static final Function<PsiFile, Collection<PsiFileSystemItem>> ABSOLUTE_TOP_LEVEL =
     file -> getAbsoluteTopLevelDirLocations(file);
@@ -204,13 +204,14 @@ public class FileReferenceSet {
     return myStartInElement;
   }
 
+  @Nullable
   public FileReference createFileReference(final TextRange range, final int index, final String text) {
     return new FileReference(this, range, index, text);
   }
 
   protected void reparse() {
     List<FileReference> referencesList = reparse(myPathStringNonTrimmed, myStartInElement);
-    myReferences = referencesList.toArray(new FileReference[referencesList.size()]);
+    myReferences = referencesList.toArray(FileReference.EMPTY);
   }
 
   protected List<FileReference> reparse(String str, int startInElement) {
@@ -250,7 +251,10 @@ public class FileReferenceSet {
     if (curSep >= 0 && decoded.length() == wsHead + sepLen + wsTail) {
       // add extra reference for the only & leading "/"
       TextRange r = TextRange.create(startInElement, offset(curSep + Math.max(0, sepLen - 1), escaper, valueRange) + 1);
-      referencesList.add(createFileReference(r, index ++, decoded.subSequence(curSep, curSep + sepLen).toString()));
+      FileReference reference = createFileReference(r, index++, decoded.subSequence(curSep, curSep + sepLen).toString());
+      if (reference != null) {
+        referencesList.add(reference);
+      }
     }
     curSep = curSep == wsHead ? curSep + sepLen : wsHead; // reset offsets & start again for simplicity
     sepLen = 0;
@@ -258,14 +262,20 @@ public class FileReferenceSet {
       int nextSep = findSeparatorOffset(decoded, curSep + sepLen);
       int start = curSep + sepLen;
       int endTrimmed = nextSep > 0 ? nextSep : Math.max(start, decoded.length() - wsTail);
-      int endInclusive = nextSep > 0 ? nextSep : Math.max(start, decoded.length() - 1 - wsTail);
       // todo move ${placeholder} support (the str usage below) to a reference implementation
       // todo reference-set should be bound to exact range & text in a file, consider: ${slash}path${slash}file&amp;.txt
       String refText = index == 0 && nextSep < 0 && !StringUtil.contains(decoded, str) ? str :
                                 decoded.subSequence(start, endTrimmed).toString();
-      TextRange r = new TextRange(offset(start, escaper, valueRange),
-                                  offset(endInclusive, escaper, valueRange) + (nextSep < 0 && refText.length() > 0 ? 1 : 0));
-      referencesList.add(createFileReference(r, index++, refText));
+      int refStart = offset(start, escaper, valueRange);
+      int refEnd = offset(endTrimmed, escaper, valueRange);
+      if (!(refStart <= refEnd && refStart >= 0)) {
+        LOG.error("Invalid range: (" + (refText + ", " + refEnd) + "), escaper=" + escaper + "\n" +
+                  "text=" + refText + ", start=" + startInElement);
+      }
+      FileReference reference = createFileReference(new TextRange(refStart, refEnd), index++, refText);
+      if (reference != null) {
+        referencesList.add(reference);
+      }
       curSep = nextSep;
       sepLen = curSep > 0 ? findSeparatorLength(decoded, curSep) : 0;
     }
@@ -361,32 +371,43 @@ public class FileReferenceSet {
   }
 
   @NotNull
-  protected final Collection<PsiFileSystemItem> getContextByFileSystemItem(@NotNull PsiFileSystemItem file) {
+  protected Collection<PsiFileSystemItem> getContextByFileSystemItem(@NotNull PsiFileSystemItem file) {
     VirtualFile virtualFile = file.getVirtualFile();
     if (virtualFile != null) {
       final FileReferenceHelper[] helpers = FileReferenceHelperRegistrar.getHelpers();
-      final ArrayList<PsiFileSystemItem> list = new ArrayList<PsiFileSystemItem>();
+      final ArrayList<PsiFileSystemItem> list = new ArrayList<>();
       final Project project = file.getProject();
+      boolean hasRealContexts = false;
       for (FileReferenceHelper helper : helpers) {
         if (helper.isMine(project, virtualFile)) {
           if (!list.isEmpty() && helper.isFallback()) {
             continue;
           }
-          list.addAll(helper.getContexts(project, virtualFile));
+          Collection<PsiFileSystemItem> contexts = helper.getContexts(project, virtualFile);
+          for (PsiFileSystemItem context : contexts) {
+            list.add(context);
+            hasRealContexts |= !(context instanceof FileReferenceResolver);
+          }
         }
       }
       if (!list.isEmpty()) {
+        if (!hasRealContexts) {
+          list.addAll(getParentDirectoryContext());
+        }
         return list;
       }
-      final VirtualFile parent = virtualFile.getParent();
-      if (parent != null) {
-        final PsiDirectory directory = file.getManager().findDirectory(parent);
-        if (directory != null) {
-          return Collections.singleton(directory);
-        }
-      }
+      return getParentDirectoryContext();
     }
     return Collections.emptyList();
+  }
+
+  @NotNull
+  protected Collection<PsiFileSystemItem> getParentDirectoryContext() {
+    PsiFile file = getContainingFile();
+    VirtualFile virtualFile = file == null ? null : file.getOriginalFile().getVirtualFile();
+    final VirtualFile parent = virtualFile == null ? null : virtualFile.getParent();
+    final PsiDirectory directory = parent == null ? null :file.getManager().findDirectory(parent);
+    return directory != null ? Collections.singleton(directory) : Collections.emptyList();
   }
 
   public String getPathString() {
@@ -421,7 +442,7 @@ public class FileReferenceSet {
     final Module module = ModuleUtilCore.findModuleForPsiElement(parent == null ? file : parent);
     if (module == null) return Collections.emptyList();
 
-    final List<PsiFileSystemItem> list = new ArrayList<PsiFileSystemItem>();
+    final List<PsiFileSystemItem> list = new ArrayList<>();
     final Project project = file.getProject();
     for (FileReferenceHelper helper : FileReferenceHelperRegistrar.getHelpers()) {
       if (helper.isMine(project, virtualFile)) {
@@ -448,7 +469,7 @@ public class FileReferenceSet {
   @NotNull
   protected Collection<PsiFileSystemItem> toFileSystemItems(@NotNull Collection<VirtualFile> files) {
     final PsiManager manager = getElement().getManager();
-    return ContainerUtil.mapNotNull(files, (NullableFunction<VirtualFile, PsiFileSystemItem>)file -> file != null ? manager.findDirectory(file) : null);
+    return ContainerUtil.mapNotNull(files, (NullableFunction<VirtualFile, PsiFileSystemItem>)file -> file != null && file.isValid() ? manager.findDirectory(file) : null);
   }
 
   protected Condition<PsiFileSystemItem> getReferenceCompletionFilter() {
@@ -457,7 +478,7 @@ public class FileReferenceSet {
 
   public <Option> void addCustomization(CustomizableReferenceProvider.CustomizationKey<Option> key, Option value) {
     if (myOptions == null) {
-      myOptions = new HashMap<CustomizableReferenceProvider.CustomizationKey, Object>(5);
+      myOptions = new HashMap<>(5);
     }
     myOptions.put(key, value);
   }

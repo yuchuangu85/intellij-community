@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2011 Bas Leijdekkers
+ * Copyright 2008-2018 Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,12 +22,12 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.TypeConversionUtil;
-import com.intellij.util.IncorrectOperationException;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.InspectionGadgetsFix;
 import com.siyeh.ig.PsiReplacementUtil;
+import com.siyeh.ig.psiutils.CommentTracker;
 import com.siyeh.ig.psiutils.ComparisonUtils;
 import com.siyeh.ig.psiutils.ExpressionUtils;
 import com.siyeh.ig.psiutils.TypeUtils;
@@ -53,7 +53,7 @@ public class CharUsedInArithmeticContextInspection extends BaseInspection {
   @NotNull
   @Override
   protected InspectionGadgetsFix[] buildFixes(Object... infos) {
-    final List<InspectionGadgetsFix> result = new ArrayList<InspectionGadgetsFix>();
+    final List<InspectionGadgetsFix> result = new ArrayList<>();
     final PsiElement expression = (PsiElement)infos[0];
     PsiElement parent = expression.getParent();
     if (parent instanceof PsiExpression) {
@@ -65,7 +65,7 @@ public class CharUsedInArithmeticContextInspection extends BaseInspection {
       }
     }
     if (!(expression instanceof PsiLiteralExpression)) {
-      return result.toArray(new InspectionGadgetsFix[result.size()]);
+      return result.toArray(InspectionGadgetsFix.EMPTY_ARRAY);
     }
     while (parent instanceof PsiPolyadicExpression) {
       if (ExpressionUtils.hasStringType((PsiExpression)parent)) {
@@ -75,24 +75,19 @@ public class CharUsedInArithmeticContextInspection extends BaseInspection {
       parent = parent.getParent();
     }
 
-    return result.toArray(new InspectionGadgetsFix[result.size()]);
+    return result.toArray(InspectionGadgetsFix.EMPTY_ARRAY);
   }
 
   private static class CharUsedInArithmeticContentFix extends InspectionGadgetsFix {
-    @Override
-    @NotNull
-    public String getFamilyName() {
-      return getName();
-    }
 
     @Override
     @NotNull
-    public String getName() {
+    public String getFamilyName() {
       return InspectionGadgetsBundle.message("char.used.in.arithmetic.context.quickfix");
     }
 
     @Override
-    protected void doFix(Project project, ProblemDescriptor descriptor) throws IncorrectOperationException {
+    protected void doFix(Project project, ProblemDescriptor descriptor) {
       final PsiElement element = descriptor.getPsiElement();
       if (!(element instanceof PsiLiteralExpression)) {
         return;
@@ -128,14 +123,15 @@ public class CharUsedInArithmeticContextInspection extends BaseInspection {
     }
 
     @Override
-    protected void doFix(Project project, ProblemDescriptor descriptor) throws IncorrectOperationException {
+    protected void doFix(Project project, ProblemDescriptor descriptor) {
       final PsiElement element = descriptor.getPsiElement();
       if (!(element instanceof PsiExpression)) {
         return;
       }
       final PsiExpression expression = (PsiExpression)element;
-      final String expressionText = expression.getText();
-      PsiReplacementUtil.replaceExpression(expression, '(' + typeText + ')' + expressionText);
+      CommentTracker commentTracker = new CommentTracker();
+      final String expressionText = commentTracker.text(expression);
+      PsiReplacementUtil.replaceExpression(expression, '(' + typeText + ')' + expressionText, commentTracker);
     }
   }
 

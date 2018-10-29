@@ -34,12 +34,9 @@ import java.util.Map;
  */
 class HiDPIScaledGraphics extends Graphics2D {
   protected final Graphics2D myPeer;
-  private BufferedImage myImage;
 
-  public HiDPIScaledGraphics(Graphics g, BufferedImage image) {
-    myImage = image;
+  HiDPIScaledGraphics(/*scaled*/Graphics g) {
     myPeer = (Graphics2D)g;
-    scale(2, 2);
     GraphicsUtil.setupAAPainting(myPeer);
   }
 

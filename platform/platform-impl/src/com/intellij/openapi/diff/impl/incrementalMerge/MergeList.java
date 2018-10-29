@@ -104,8 +104,8 @@ public class MergeList implements UserDataHolder {
       mergeList = new MergeList(project, left, base, right, e.getMessage());
     }
 
-    ArrayList<Change> leftChanges = new ArrayList<Change>();
-    ArrayList<Change> rightChanges = new ArrayList<Change>();
+    ArrayList<Change> leftChanges = new ArrayList<>();
+    ArrayList<Change> rightChanges = new ArrayList<>();
     for (MergeFragment mergeFragment : fragmentList) {
       TextRange baseRange = mergeFragment.getBase();
       TextRange leftRange = mergeFragment.getLeft();
@@ -234,18 +234,8 @@ public class MergeList implements UserDataHolder {
       final Change change = changeList.getChange(i);
       if (!change.canHasActions(originalSide)) continue;
       Icon arrowIcon = side == FragmentSide.SIDE1 ? AllIcons.Diff.ArrowRight : AllIcons.Diff.Arrow;
-      AnAction applyAction = new DumbAwareAction(DiffBundle.message("merge.dialog.apply.change.action.name"), null, arrowIcon) {
-        @Override
-        public void actionPerformed(@Nullable AnActionEvent e) {
-          apply(change);
-        }
-      };
-      AnAction ignoreAction = new DumbAwareAction(DiffBundle.message("merge.dialog.ignore.change.action.name"), null, AllIcons.Diff.Remove) {
-        @Override
-        public void actionPerformed(@Nullable AnActionEvent e) {
-          change.removeFromList();
-        }
-      };
+      AnAction applyAction = new ApplyAction(arrowIcon, change);
+      AnAction ignoreAction = new IgnoreAction(change);
       change.getChangeSide(originalSide).getHighlighterHolder().setActions(new AnAction[]{applyAction, ignoreAction});
     }
   }
@@ -337,5 +327,41 @@ public class MergeList implements UserDataHolder {
     ((DocumentEx)document1).setInBulkUpdate(false);
     ((DocumentEx)document2).setInBulkUpdate(false);
     ((DocumentEx)document3).setInBulkUpdate(false);
+  }
+
+  static class ApplyAction extends DumbAwareAction {
+    private final Change myChange;
+
+    ApplyAction(Icon arrowIcon, Change change) {
+      super(DiffBundle.message("merge.dialog.apply.change.action.name"), null, arrowIcon);
+      myChange = change;
+    }
+
+    @Override
+    public void actionPerformed(@NotNull AnActionEvent e) {
+      perform();
+    }
+
+    void perform() {
+      apply(myChange);
+    }
+  }
+
+  static class IgnoreAction extends DumbAwareAction {
+    private final Change myChange;
+
+    IgnoreAction(Change change) {
+      super(DiffBundle.message("merge.dialog.ignore.change.action.name"), null, AllIcons.Diff.Remove);
+      myChange = change;
+    }
+
+    @Override
+    public void actionPerformed(@NotNull AnActionEvent e) {
+      perform();
+    }
+
+    void perform() {
+      myChange.removeFromList();
+    }
   }
 }

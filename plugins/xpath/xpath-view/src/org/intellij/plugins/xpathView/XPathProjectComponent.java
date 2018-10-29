@@ -20,6 +20,7 @@ import com.intellij.openapi.project.Project;
 import org.intellij.plugins.xpathView.util.Namespace;
 import org.intellij.plugins.xpathView.util.Variable;
 import org.jdom.Element;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -45,17 +46,17 @@ public class XPathProjectComponent implements PersistentStateComponent<Element> 
     protected static final String URI = "uri";
 
     /** A set that maintains the history */
-    private final LinkedHashMap<String, HistoryElement> history = new LinkedHashMap<String, HistoryElement>();
-    private final LinkedHashMap<String, HistoryElement> findHistory = new LinkedHashMap<String, HistoryElement>();
+    private final LinkedHashMap<String, HistoryElement> history = new LinkedHashMap<>();
+    private final LinkedHashMap<String, HistoryElement> findHistory = new LinkedHashMap<>();
 
 //    private Set<Namespace> namespaces = new HashSet();
 
-  public void loadState(Element state) {
+  @Override
+  public void loadState(@NotNull Element state) {
     readHistory(state, HISTORY, history);
     readHistory(state, FIND_HISTORY, findHistory);
   }
 
-    @SuppressWarnings({"unchecked"})
     private static void readHistory(Element element, String s, LinkedHashMap<String, HistoryElement> hst) {
         final Element historyElement = element.getChild(s);
         if (historyElement != null) {
@@ -64,13 +65,13 @@ public class XPathProjectComponent implements PersistentStateComponent<Element> 
                 final String expression = entry.getAttributeValue(EXPRESSION);
                 if (expression != null) {
                     List<Element> children = entry.getChildren(VARIABLE);
-                    final Collection<Variable> variables = new ArrayList<Variable>(children.size());
+                    final Collection<Variable> variables = new ArrayList<>(children.size());
                     for (Element e : children) {
                         variables.add(new Variable(e.getAttributeValue(NAME), e.getAttributeValue(EXPRESSION)));
                     }
 
                     children = entry.getChildren(NAMESPACE);
-                    final Collection<Namespace> namespaces = new ArrayList<Namespace>(children.size());
+                    final Collection<Namespace> namespaces = new ArrayList<>(children.size());
                     for (Element namespaceElement : children) {
                         namespaces.add(new Namespace(namespaceElement.getAttributeValue(PREFIX), namespaceElement.getAttributeValue(URI)));
                     }
@@ -80,6 +81,7 @@ public class XPathProjectComponent implements PersistentStateComponent<Element> 
         }
     }
 
+  @Override
   public Element getState() {
     Element element = new Element("xpathview");
     writeHistory(element, HISTORY, history);
@@ -137,11 +139,11 @@ public class XPathProjectComponent implements PersistentStateComponent<Element> 
      * @return the history as an array of strings
      */
     public HistoryElement[] getHistory() {
-        return history.values().toArray(new HistoryElement[history.values().size()]);
+        return history.values().toArray(new HistoryElement[0]);
     }
 
     public HistoryElement[] getFindHistory() {
-        return findHistory.values().toArray(new HistoryElement[findHistory.values().size()]);
+        return findHistory.values().toArray(new HistoryElement[0]);
     }
 
     public static XPathProjectComponent getInstance(Project project) {

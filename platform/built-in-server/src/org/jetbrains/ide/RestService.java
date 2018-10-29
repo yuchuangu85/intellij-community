@@ -41,6 +41,7 @@ import com.intellij.openapi.wm.IdeFrame;
 import com.intellij.util.ExceptionUtil;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.io.NettyKt;
 import com.intellij.util.net.NetUtils;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
@@ -50,7 +51,6 @@ import io.netty.handler.codec.http.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.builtInWebServer.BuiltInWebServerKt;
-import org.jetbrains.io.NettyKt;
 import org.jetbrains.io.Responses;
 
 import javax.swing.*;
@@ -226,7 +226,7 @@ public abstract class RestService extends HttpRequestHandler {
   }
 
   /**
-   * Return error or send response using {@link #sendOk(FullHttpRequest, ChannelHandlerContext)}, {@link #send(BufferExposingByteArrayOutputStream, FullHttpRequest, ChannelHandlerContext)}
+   * Return error or send response using {@link #sendOk(FullHttpRequest, ChannelHandlerContext)}, {@link #send(BufferExposingByteArrayOutputStream, HttpRequest, ChannelHandlerContext)}
    */
   @Nullable("error text or null if successful")
   public abstract String execute(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException;

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.stubs.hierarchy;
 
 import com.intellij.openapi.vfs.VirtualFile;
@@ -67,8 +53,8 @@ public class GrStubIndexer extends StubHierarchyIndexer {
     new StubTree(grFileStub, false);
 
     String pid = "";
-    ArrayList<ClassDecl> classList = new ArrayList<ClassDecl>();
-    Set<String> usedNames = new HashSet<String>();
+    ArrayList<ClassDecl> classList = new ArrayList<>();
+    Set<String> usedNames = new HashSet<>();
     for (StubElement<?> el : grFileStub.getChildrenStubs()) {
       if (el instanceof GrPackageDefinitionStub) {
         GrPackageDefinitionStub packageStub = (GrPackageDefinitionStub)el;
@@ -85,14 +71,14 @@ public class GrStubIndexer extends StubHierarchyIndexer {
         }
       }
     }
-    ArrayList<Import> importList = new ArrayList<Import>();
+    ArrayList<Import> importList = new ArrayList<>();
     for (StubElement<?> el : grFileStub.getChildrenStubs()) {
       if (el instanceof GrImportStatementStub) {
         processImport((GrImportStatementStub) el, importList, usedNames);
       }
     }
-    ClassDecl[] classes = classList.isEmpty() ? ClassDecl.EMPTY_ARRAY : classList.toArray(new ClassDecl[classList.size()]);
-    Import[] imports = importList.isEmpty() ? Import.EMPTY_ARRAY : importList.toArray(new Import[importList.size()]);
+    ClassDecl[] classes = classList.isEmpty() ? ClassDecl.EMPTY_ARRAY : classList.toArray(ClassDecl.EMPTY_ARRAY);
+    Import[] imports = importList.isEmpty() ? Import.EMPTY_ARRAY : importList.toArray(Import.EMPTY_ARRAY);
     return new Unit(pid, IndexTree.GROOVY, imports, classes);
   }
 
@@ -110,20 +96,20 @@ public class GrStubIndexer extends StubHierarchyIndexer {
     if (el instanceof GrTypeDefinitionStub) {
       return processClassDecl((GrTypeDefinitionStub)el, namesCache, true);
     }
-    ArrayList<Decl> innerList = new ArrayList<Decl>();
+    ArrayList<Decl> innerList = new ArrayList<>();
     for (StubElement childElement : el.getChildrenStubs()) {
       Decl innerDef = processMember(childElement, namesCache);
       if (innerDef != null) {
         innerList.add(innerDef);
       }
     }
-    return innerList.isEmpty() ? null : new MemberDecl(innerList.toArray(new Decl[innerList.size()]));
+    return innerList.isEmpty() ? null : new MemberDecl(innerList.toArray(Decl.EMPTY_ARRAY));
   }
 
   @Nullable
   private static ClassDecl processClassDecl(GrTypeDefinitionStub classStub, Set<String> namesCache, boolean inner) {
-    ArrayList<String> superList = new ArrayList<String>();
-    ArrayList<Decl> innerList = new ArrayList<Decl>();
+    ArrayList<String> superList = new ArrayList<>();
+    ArrayList<Decl> innerList = new ArrayList<>();
     if (classStub.isAnonymous()) {
       String name = classStub.getBaseClassName();
       if (name != null) {
@@ -150,8 +136,8 @@ public class GrStubIndexer extends StubHierarchyIndexer {
       flags |= IndexTree.SUPERS_UNRESOLVED; // 'extends' list resolves to classes from the current package first, and those can be in a language unknown to this hierarchy
     }
     String[] supers = superList.isEmpty() ? ArrayUtil.EMPTY_STRING_ARRAY : ArrayUtil.toStringArray(superList);
-    Decl[] inners = innerList.isEmpty() ? Decl.EMPTY_ARRAY : innerList.toArray(new Decl[innerList.size()]);
-    return new ClassDecl(classStub.id, flags, classStub.getName(), supers, inners);
+    Decl[] inners = innerList.isEmpty() ? Decl.EMPTY_ARRAY : innerList.toArray(Decl.EMPTY_ARRAY);
+    return new ClassDecl(classStub.getStubId(), flags, classStub.getName(), supers, inners);
   }
 
   private static int translateFlags(GrTypeDefinitionStub classStub) {
@@ -161,16 +147,15 @@ public class GrStubIndexer extends StubHierarchyIndexer {
     return flags;
   }
 
-  private static void processImport(GrImportStatementStub imp, List<Import> imports, Set<String> namesCache) {
-    String referenceText = imp.getReferenceText();
-    if (referenceText == null) return;
-    String fullName = PsiNameHelper.getQualifiedClassName(referenceText, true);
+  private static void processImport(GrImportStatementStub imp, List<? super Import> imports, Set<String> namesCache) {
+    String fullName = imp.getFqn();
+    if (fullName == null) return;
     if (imp.isOnDemand() || namesCache.contains(shortName(fullName))) {
       imports.add(new Import(fullName, imp.isStatic(), imp.isOnDemand(), imp.getAliasName()));
     }
   }
 
-  private static String id(String s, boolean cacheFirstId, Set<String> namesCache) {
+  private static String id(String s, boolean cacheFirstId, Set<? super String> namesCache) {
     String id = PsiNameHelper.getQualifiedClassName(s, true);
     if (cacheFirstId) {
       int index = id.indexOf('.');

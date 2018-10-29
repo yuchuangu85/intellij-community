@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2015 Bas Leijdekkers
+ * Copyright 2003-2018 Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +20,8 @@ import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.searches.SuperMethodsSearch;
 import com.intellij.psi.tree.IElementType;
-import com.intellij.psi.util.MethodSignatureBackedByPsiMethod;
 import com.intellij.psi.util.PsiFormatUtil;
 import com.intellij.psi.util.PsiUtil;
-import com.intellij.util.Processor;
 import com.siyeh.ig.psiutils.ClassUtils;
 import com.siyeh.ig.psiutils.TypeUtils;
 import org.jetbrains.annotations.NonNls;
@@ -48,7 +46,7 @@ public class SerialVersionUIDBuilder extends JavaRecursiveElementVisitor {
   private final Set<MemberSignature> nonPrivateFields;
   private final List<MemberSignature> staticInitializers;
   private boolean assertStatement = false;
-  private final Map<PsiElement, String> memberMap = new HashMap<PsiElement, String>();
+  private final Map<PsiElement, String> memberMap = new HashMap<>();
 
   private static final Comparator<PsiClass> INTERFACE_COMPARATOR =
     (object1, object2) -> {
@@ -75,9 +73,9 @@ public class SerialVersionUIDBuilder extends JavaRecursiveElementVisitor {
       return name1.compareTo(name2);
     };
 
-  private SerialVersionUIDBuilder(PsiClass clazz) {
+  private SerialVersionUIDBuilder(@NotNull PsiClass clazz) {
     this.clazz = clazz;
-    nonPrivateMethods = new HashSet<MemberSignature>();
+    nonPrivateMethods = new HashSet<>();
     final PsiMethod[] methods = clazz.getMethods();
     for (final PsiMethod method : methods) {
       if (!method.isConstructor() && !method.hasModifierProperty(PsiModifier.PRIVATE)) {
@@ -91,7 +89,7 @@ public class SerialVersionUIDBuilder extends JavaRecursiveElementVisitor {
         });
       }
     }
-    nonPrivateFields = new HashSet<MemberSignature>();
+    nonPrivateFields = new HashSet<>();
     final PsiField[] fields = clazz.getFields();
     for (final PsiField field : fields) {
       if (!field.hasModifierProperty(PsiModifier.PRIVATE) ||
@@ -103,7 +101,7 @@ public class SerialVersionUIDBuilder extends JavaRecursiveElementVisitor {
       }
     }
 
-    staticInitializers = new ArrayList<MemberSignature>(1);
+    staticInitializers = new ArrayList<>(1);
     final PsiClassInitializer[] initializers = clazz.getInitializers();
     if (initializers.length > 0) {
       for (final PsiClassInitializer initializer : initializers) {
@@ -131,7 +129,7 @@ public class SerialVersionUIDBuilder extends JavaRecursiveElementVisitor {
     }
 
     final PsiMethod[] constructors = clazz.getConstructors();
-    nonPrivateConstructors = new HashSet<MemberSignature>(constructors.length);
+    nonPrivateConstructors = new HashSet<>(constructors.length);
     if (constructors.length == 0 && !clazz.isInterface()) {
       // generated empty constructor if no constructor is defined in the source
       final MemberSignature constructorSignature;
@@ -153,9 +151,10 @@ public class SerialVersionUIDBuilder extends JavaRecursiveElementVisitor {
   }
 
   /**
-   * @see java.io.ObjectStreamClass#computeDefaultSUID(java.lang.Class)
+   * @see java.io.ObjectStreamClass#computeDefaultSUID(Class)
    */
-  public static long computeDefaultSUID(PsiClass psiClass) {
+  @SuppressWarnings("JavadocReference")
+  public static long computeDefaultSUID(@NotNull PsiClass psiClass) {
     final Project project = psiClass.getProject();
     final GlobalSearchScope scope = GlobalSearchScope.allScope(project);
     final JavaPsiFacade psiFacade = JavaPsiFacade.getInstance(project);
@@ -177,7 +176,9 @@ public class SerialVersionUIDBuilder extends JavaRecursiveElementVisitor {
       final DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
 
       final String className = PsiFormatUtil.getExternalName(psiClass);
-      dataOutputStream.writeUTF(className);
+      if (className != null) {
+        dataOutputStream.writeUTF(className);
+      }
 
       final PsiModifierList classModifierList = psiClass.getModifierList();
       int classModifiers = classModifierList != null ? MemberSignature.calculateModifierBitmap(classModifierList) : 0;
@@ -196,7 +197,9 @@ public class SerialVersionUIDBuilder extends JavaRecursiveElementVisitor {
       Arrays.sort(interfaces, INTERFACE_COMPARATOR);
       for (PsiClass aInterfaces : interfaces) {
         final String name = aInterfaces.getQualifiedName();
-        dataOutputStream.writeUTF(name);
+        if (name != null) {
+          dataOutputStream.writeUTF(name);
+        }
       }
 
       final MemberSignature[] fields = serialVersionUIDBuilder.getNonPrivateFields();
@@ -221,14 +224,10 @@ public class SerialVersionUIDBuilder extends JavaRecursiveElementVisitor {
       return serialVersionUID;
     }
     catch (IOException exception) {
-      final InternalError internalError = new InternalError(exception.getMessage());
-      internalError.initCause(exception);
-      throw internalError;
+      throw new InternalError(exception.getMessage(), exception);
     }
     catch (NoSuchAlgorithmException exception) {
-      final SecurityException securityException = new SecurityException(exception.getMessage());
-      securityException.initCause(exception);
-      throw securityException;
+      throw new SecurityException(exception.getMessage(), exception);
     }
   }
 
@@ -251,24 +250,28 @@ public class SerialVersionUIDBuilder extends JavaRecursiveElementVisitor {
     return cache;
   }
 
+  @NotNull
   public MemberSignature[] getNonPrivateConstructors() {
     init();
-    return nonPrivateConstructors.toArray(new MemberSignature[nonPrivateConstructors.size()]);
+    return nonPrivateConstructors.toArray(new MemberSignature[0]);
   }
 
+  @NotNull
   public MemberSignature[] getNonPrivateFields() {
     init();
-    return nonPrivateFields.toArray(new MemberSignature[nonPrivateFields.size()]);
+    return nonPrivateFields.toArray(new MemberSignature[0]);
   }
 
+  @NotNull
   public MemberSignature[] getNonPrivateMethodSignatures() {
     init();
-    return nonPrivateMethods.toArray(new MemberSignature[nonPrivateMethods.size()]);
+    return nonPrivateMethods.toArray(new MemberSignature[0]);
   }
 
+  @NotNull
   public MemberSignature[] getStaticInitializers() {
     init();
-    return staticInitializers.toArray(new MemberSignature[staticInitializers.size()]);
+    return staticInitializers.toArray(new MemberSignature[0]);
   }
 
   private static boolean hasStaticInitializer(PsiField field) {
@@ -404,7 +407,7 @@ public class SerialVersionUIDBuilder extends JavaRecursiveElementVisitor {
           signatureBuffer.append('L').append(className).append(';');
         }
         final String accessMethodIndex = getAccessMethodIndex(field);
-        if (!field.getContainingClass().equals(clazz)) {
+        if (!clazz.equals(field.getContainingClass())) {
           return;
         }
         @NonNls String name = null;
@@ -454,8 +457,7 @@ public class SerialVersionUIDBuilder extends JavaRecursiveElementVisitor {
     }
     else if (element instanceof PsiMethod) {
       final PsiMethod method = (PsiMethod)element;
-      if (method.hasModifierProperty(PsiModifier.PRIVATE) &&
-          method.getContainingClass().equals(clazz)) {
+      if (method.hasModifierProperty(PsiModifier.PRIVATE) && clazz.equals(method.getContainingClass())) {
         final String signature;
         if (method.hasModifierProperty(PsiModifier.STATIC)) {
           signature =

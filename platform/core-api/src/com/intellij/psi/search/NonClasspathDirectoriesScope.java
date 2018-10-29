@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import com.intellij.openapi.module.Module;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
@@ -58,11 +57,6 @@ public class NonClasspathDirectoriesScope extends GlobalSearchScope {
   }
 
   @Override
-  public int compare(@NotNull VirtualFile file1, @NotNull VirtualFile file2) {
-    return 0;
-  }
-
-  @Override
   public boolean isSearchInModuleContent(@NotNull Module aModule) {
     return false;
   }
@@ -86,9 +80,7 @@ public class NonClasspathDirectoriesScope extends GlobalSearchScope {
 
   @Override
   public int hashCode() {
-    int result = super.hashCode();
-    result = 31 * result + myRoots.hashCode();
-    return result;
+    return myRoots.hashCode();
   }
 
   @NotNull
@@ -98,11 +90,6 @@ public class NonClasspathDirectoriesScope extends GlobalSearchScope {
       VirtualFile root = myRoots.iterator().next();
       return "Directory '" + root.getName() + "'";
     }
-    return "Directories " + StringUtil.join(myRoots, new Function<VirtualFile, String>() {
-      @Override
-      public String fun(VirtualFile file) {
-        return "'" + file.getName() + "'";
-      }
-    }, ", ");
+    return "Directories " + StringUtil.join(myRoots, file -> "'" + file.getName() + "'", ", ");
   }
 }

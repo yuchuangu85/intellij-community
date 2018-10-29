@@ -36,7 +36,6 @@ import java.util.Map;
 
 /**
  * @author Dmitry Avdeev
- *         Date: 2/1/13
  */
 public class BasePackageParameterFactory extends ProjectTemplateParameterFactory {
 
@@ -73,7 +72,7 @@ public class BasePackageParameterFactory extends ProjectTemplateParameterFactory
 
       @Override
       public Map<String, String> getValues() {
-        HashMap<String, String> map = new HashMap<String, String>(2);
+        HashMap<String, String> map = new HashMap<>(2);
         map.put(getId(), getValue());
         map.put("IJ_BASE_PACKAGE_DIR", getValue().replace('.', '/'));
         map.put("IJ_BASE_PACKAGE_PREFIX", StringUtil.isEmpty(getValue()) ? "" : getValue() + ".");

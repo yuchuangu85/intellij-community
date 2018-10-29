@@ -47,7 +47,7 @@ public class DGMReferenceContributor extends PsiReferenceContributor {
           return PsiReference.EMPTY_ARRAY;
         }
 
-        ArrayList<PsiReference> result = new ArrayList<PsiReference>();
+        ArrayList<PsiReference> result = new ArrayList<>();
 
         String text = element.getText();
 
@@ -65,7 +65,7 @@ public class DGMReferenceContributor extends PsiReferenceContributor {
           i = skipWhiteSpace(i, text);
         }
 
-        return result.toArray(new PsiReference[result.size()]);
+        return result.toArray(PsiReference.EMPTY_ARRAY);
       }
     });
   }

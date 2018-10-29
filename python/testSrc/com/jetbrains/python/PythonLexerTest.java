@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2013 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -155,7 +155,7 @@ public class PythonLexerTest extends PyLexerTestCase {
   }
 
 
-  public void _testWithKeyword() throws Exception {
+  public void _testWithKeyword() {
     // processing of 'from __future__ import' is now done on parser level, so a pure lexer test won't handle
     // this correctly
     doTest("from __future__ import with_statement\nwith x as y", new String[] { "Py:FROM_KEYWORD", "Py:SPACE", "Py:IDENTIFIER", "Py:SPACE", "Py:IMPORT_KEYWORD", "Py:SPACE", "Py:IDENTIFIER",
@@ -211,8 +211,8 @@ public class PythonLexerTest extends PyLexerTestCase {
            "def foo(sender):\n" +
            "    pass",
            "Py:CLASS_KEYWORD", "Py:SPACE", "Py:IDENTIFIER", "Py:COLON", "Py:STATEMENT_BREAK", "Py:LINE_BREAK",
-           "Py:INDENT", "Py:PASS_KEYWORD", "Py:STATEMENT_BREAK", "Py:LINE_BREAK",
-           "Py:DEDENT", "Py:END_OF_LINE_COMMENT", "Py:LINE_BREAK",
+           "Py:INDENT", "Py:PASS_KEYWORD", "Py:STATEMENT_BREAK",
+           "Py:DEDENT", "Py:LINE_BREAK", "Py:END_OF_LINE_COMMENT", "Py:LINE_BREAK",
            "Py:DEF_KEYWORD", "Py:SPACE", "Py:IDENTIFIER", "Py:LPAR", "Py:IDENTIFIER", "Py:RPAR", "Py:COLON", "Py:STATEMENT_BREAK", "Py:LINE_BREAK",
            "Py:INDENT", "Py:PASS_KEYWORD", "Py:STATEMENT_BREAK");
   }
@@ -313,6 +313,192 @@ public class PythonLexerTest extends PyLexerTestCase {
            "Py:SPACE", "Py:LINE_BREAK",
            "Py:RBRACKET", "Py:STATEMENT_BREAK", "Py:LINE_BREAK",
            "Py:STATEMENT_BREAK");
+  }
+
+  // PY-18973
+  public void testUnderscoresInHexInteger() {
+    doTest("0xCAFE_F00D", "Py:INTEGER_LITERAL", "Py:STATEMENT_BREAK");
+  }
+
+  // PY-18973
+  public void testUnderscoresInOctInteger() {
+    doTest("0o1_23","Py:INTEGER_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("01_23", "Py:INTEGER_LITERAL", "Py:STATEMENT_BREAK");
+  }
+
+  // PY-18973
+  public void testUnderscoresInBinInteger() {
+    doTest("0b_0011_1111_0100_1110", "Py:INTEGER_LITERAL", "Py:STATEMENT_BREAK");
+  }
+
+  // PY-18973
+  public void testUnderscoresInDecimalInteger() {
+    doTest("10_000_000", "Py:INTEGER_LITERAL", "Py:STATEMENT_BREAK");
+  }
+
+  // PY-18973
+  public void testUnderscoresInPointFloat() {
+    doTest("10_00.00_23", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00.", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+  }
+
+  // PY-18973
+  public void testUnderscoresInExponentFloat() {
+    doTest("10_00.00_23e1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00.00_23E1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00.e1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00.E1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+
+    doTest("10_00.00_23e+1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00.00_23E+1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00.e+1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00.E+1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+
+    doTest("10_00.00_23e-1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00.00_23E-1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00.e-1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00.E-1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+
+
+    doTest("10_0000_23e1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_0000_23E1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00e1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00E1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+
+    doTest("10_0000_23e+1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_0000_23E+1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00e+1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00E+1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+
+    doTest("10_0000_23e-1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_0000_23E-1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00e-1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00E-1_2", "Py:FLOAT_LITERAL", "Py:STATEMENT_BREAK");
+  }
+
+  // PY-18973
+  public void testUnderscoresInImagNumber() {
+    doTest("10_00.00_23j", "Py:IMAGINARY_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00.00_23J", "Py:IMAGINARY_LITERAL", "Py:STATEMENT_BREAK");
+
+    doTest("10_00.00_23e1_2j", "Py:IMAGINARY_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_00.00_23e1_2J", "Py:IMAGINARY_LITERAL", "Py:STATEMENT_BREAK");
+
+    doTest("10_000_000j", "Py:IMAGINARY_LITERAL", "Py:STATEMENT_BREAK");
+    doTest("10_000_000J", "Py:IMAGINARY_LITERAL", "Py:STATEMENT_BREAK");
+  }
+
+
+  public void testFStringMatchingQuoteRecoveryInsideContentOfNestedStringLiteral() {
+    doTest("s = f'{ur\"foo'bar\"}'", 
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", 
+           "Py:FSTRING_START", "Py:FSTRING_FRAGMENT_START", "Py:SINGLE_QUOTED_STRING", "Py:FSTRING_END", 
+           "Py:IDENTIFIER", "Py:SINGLE_QUOTED_STRING", "Py:STATEMENT_BREAK");
+  }
+
+  public void testFStringMatchingQuoteRecoveryQuoteOfNestedStringLiteralWithPrefix() {
+    doTest("s = f'{ur'foo'}'",
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", 
+           "Py:FSTRING_START", "Py:FSTRING_FRAGMENT_START", "Py:IDENTIFIER", "Py:FSTRING_END", 
+           "Py:IDENTIFIER", "Py:SINGLE_QUOTED_STRING", "Py:STATEMENT_BREAK");
+  }
+
+  public void testFStringMatchingQuoteRecoveryQuoteOfNestedStringLiteralWithoutPrefix() {
+    doTest("s = f'{'foo'}'",
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", "Py:FSTRING_START", "Py:FSTRING_FRAGMENT_START", "Py:FSTRING_END",
+           "Py:IDENTIFIER", "Py:SINGLE_QUOTED_STRING", "Py:STATEMENT_BREAK");
+  }
+
+  public void testNoStatementBreakInsideFragmentOfMultilineFString() {
+    doTest("s = f'''{1 + \n" +
+           "2}'''",
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", 
+           "Py:FSTRING_START", "Py:FSTRING_FRAGMENT_START", "Py:INTEGER_LITERAL", "Py:SPACE", "Py:PLUS", "Py:LINE_BREAK", 
+           "Py:INTEGER_LITERAL", "Py:FSTRING_FRAGMENT_END", "Py:FSTRING_END", "Py:STATEMENT_BREAK");
+  }
+
+  public void testStatementBreakInsideFragmentOfSingleLineFString() {
+    doTest("s = f'{1 +\n" +
+           "    2}'",
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", 
+           "Py:FSTRING_START", "Py:FSTRING_FRAGMENT_START", "Py:INTEGER_LITERAL", "Py:SPACE", "Py:PLUS", "Py:STATEMENT_BREAK", 
+           "Py:LINE_BREAK", "Py:INDENT", "Py:INTEGER_LITERAL", "Py:RBRACE", "Py:SINGLE_QUOTED_STRING", "Py:STATEMENT_BREAK");
+  }
+
+  public void testFStringUnmatchedQuotesAsTextParts() {
+    doTest("s = f'foo\"bar'", 
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", 
+           "Py:FSTRING_START", "Py:FSTRING_TEXT", "Py:FSTRING_TEXT", "Py:FSTRING_TEXT", "Py:FSTRING_END", "Py:STATEMENT_BREAK");
+  }
+
+  public void testFStringUnmatchedLineBreaksAsTextParts() {
+    doTest("s = f'''foo\n" +
+           "bar'''",
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", 
+           "Py:FSTRING_START", "Py:FSTRING_TEXT", "Py:FSTRING_TEXT", "Py:FSTRING_TEXT", "Py:FSTRING_END", "Py:STATEMENT_BREAK");
+  }
+
+  public void testFStringNamedUnicodeEscapes() {
+    doTest("s = f'\\N{LATIN SMALL LETTER A}'", 
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", 
+           "Py:FSTRING_START", "Py:FSTRING_TEXT", "Py:FSTRING_END", "Py:STATEMENT_BREAK");
+    doTest("s = f'\\N{LATIN SMALL LETTER A'",
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", 
+           "Py:FSTRING_START", "Py:FSTRING_TEXT", "Py:FSTRING_END", "Py:STATEMENT_BREAK");
+    doTest("s = f'\\N{'",
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", 
+           "Py:FSTRING_START", "Py:FSTRING_TEXT", "Py:FSTRING_END", "Py:STATEMENT_BREAK");
+  }
+
+  public void testFStringBackslashEscapedBraces() {
+    doTest("s = f'foo\\{x}'", 
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", 
+           "Py:FSTRING_START", "Py:FSTRING_TEXT", "Py:FSTRING_TEXT", 
+           "Py:FSTRING_FRAGMENT_START", "Py:IDENTIFIER", "Py:FSTRING_FRAGMENT_END", 
+           "Py:FSTRING_END", "Py:STATEMENT_BREAK");
+    doTest("s = f'{x:foo\\{y}bar\\}'", 
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", 
+           "Py:FSTRING_START", "Py:FSTRING_FRAGMENT_START", "Py:IDENTIFIER", 
+           "Py:FSTRING_FRAGMENT_FORMAT_START", "Py:FSTRING_TEXT", "Py:FSTRING_TEXT", 
+           "Py:FSTRING_FRAGMENT_START", "Py:IDENTIFIER", "Py:FSTRING_FRAGMENT_END", 
+           "Py:FSTRING_TEXT", "Py:FSTRING_TEXT", 
+           "Py:FSTRING_FRAGMENT_END", "Py:FSTRING_END", "Py:STATEMENT_BREAK");
+  }
+
+  // PY-21697
+  public void testTripleSingleQuotedStringWithEscapedSlashAfterOneQuote() {
+    doTest("s = '''\n" +
+           "'\\\\'''\n" +
+           "'''\n",
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", "Py:TRIPLE_QUOTED_STRING",
+           "Py:STATEMENT_BREAK", "Py:LINE_BREAK", "Py:TRIPLE_QUOTED_STRING", "Py:STATEMENT_BREAK");
+  }
+  
+  // PY-21697
+  public void testTripleSingleQuotedStringWithEscapedSlashAfterTwoQuotes() {
+    doTest("s = '''\n" +
+           "''\\\\'''\n" +
+           "'''\n",
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", "Py:TRIPLE_QUOTED_STRING",
+           "Py:STATEMENT_BREAK", "Py:LINE_BREAK", "Py:TRIPLE_QUOTED_STRING", "Py:STATEMENT_BREAK");
+  }
+  
+  // PY-21697
+  public void testTripleDoubleQuotedStringWithEscapedSlashAfterOneQuote() {
+        doTest("s = \"\"\"\n" +
+           "\"\\\\\"\"\"\n" +
+           "\"\"\"\n",
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", "Py:TRIPLE_QUOTED_STRING",
+           "Py:STATEMENT_BREAK", "Py:LINE_BREAK", "Py:TRIPLE_QUOTED_STRING", "Py:STATEMENT_BREAK");
+  }
+  
+  // PY-21697
+  public void testTripleDoubleQuotedStringWithEscapedSlashAfterTwoQuotes() {
+        doTest("s = \"\"\"\n" +
+           "\"\"\\\\\"\"\"\n" +
+           "\"\"\"\n",
+           "Py:IDENTIFIER", "Py:SPACE", "Py:EQ", "Py:SPACE", "Py:TRIPLE_QUOTED_STRING",
+           "Py:STATEMENT_BREAK", "Py:LINE_BREAK", "Py:TRIPLE_QUOTED_STRING", "Py:STATEMENT_BREAK");
   }
 
   private static void doTest(String text, String... expectedTokens) {

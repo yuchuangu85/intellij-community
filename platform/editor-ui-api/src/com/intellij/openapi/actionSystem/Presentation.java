@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package com.intellij.openapi.actionSystem;
 
 import com.intellij.ide.ui.UISettings;
 import com.intellij.openapi.util.Comparing;
+import com.intellij.openapi.util.Key;
 import com.intellij.util.SmartFMap;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NonNls;
@@ -110,7 +111,6 @@ public final class Presentation implements Cloneable {
     myChangeSupport.removePropertyChangeListener(l);
   }
 
-  @Nullable
   public String getText() {
     return myText;
   }
@@ -129,6 +129,7 @@ public final class Presentation implements Cloneable {
 
       if (mayContainMnemonic) {
         StringBuilder plainText = new StringBuilder();
+        int backShift = 0;
         for (int i = 0; i < text.length(); i++) {
           char ch = text.charAt(i);
           if (myMnemonic == 0 && (ch == '_' || ch == '&')) {
@@ -137,14 +138,17 @@ public final class Presentation implements Cloneable {
             if (i >= text.length()) break;
             ch = text.charAt(i);
             if (ch != '_' && ch != '&') {
-              if (UISettings.getInstance().DISABLE_MNEMONICS_IN_CONTROLS) {
+              if (UISettings.getInstance().getDisableMnemonicsInControls()) {
                 myMnemonic = 0;
                 myDisplayedMnemonicIndex = -1;
               }
               else {
                 myMnemonic = Character.toUpperCase(ch);  // mnemonics are case insensitive
-                myDisplayedMnemonicIndex = i - 1;
+                myDisplayedMnemonicIndex = i - 1 - backShift;
               }
+            }
+            else {
+              backShift++;
             }
           }
           plainText.append(ch);
@@ -268,7 +272,7 @@ public final class Presentation implements Cloneable {
   /**
    * Returns the state of this action.
    *
-   * @return <code>true</code> if action is enabled, <code>false</code> otherwise
+   * @return {@code true} if action is enabled, {@code false} otherwise
    */
   public boolean isEnabled() {
     return myEnabled;
@@ -279,7 +283,7 @@ public final class Presentation implements Cloneable {
    * won't be called. In case when action represents a button or a menu item, the
    * representing button or item will be greyed out.
    *
-   * @param enabled <code>true</code> if you want to enable action, <code>false</code> otherwise
+   * @param enabled {@code true} if you want to enable action, {@code false} otherwise
    */
   public void setEnabled(boolean enabled) {
     boolean oldEnabled = myEnabled;
@@ -309,10 +313,21 @@ public final class Presentation implements Cloneable {
     setText(presentation.getTextWithMnemonic(), presentation.myDisplayedMnemonicIndex > -1);
     setDescription(presentation.getDescription());
     setIcon(presentation.getIcon());
+    setSelectedIcon(presentation.getSelectedIcon());
     setDisabledIcon(presentation.getDisabledIcon());
     setHoveredIcon(presentation.getHoveredIcon());
     setVisible(presentation.isVisible());
     setEnabled(presentation.isEnabled());
+  }
+
+  @Nullable
+  public <T> T getClientProperty(@NotNull Key<T> key) {
+    //noinspection unchecked
+    return (T)myUserMap.get(key.toString());
+  }
+
+  public <T> void putClientProperty(@NotNull Key<T> key, @Nullable T value) {
+    putClientProperty(key.toString(), value);
   }
 
   @Nullable

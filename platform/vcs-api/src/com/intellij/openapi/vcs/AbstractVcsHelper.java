@@ -1,29 +1,14 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs;
 
 import com.intellij.ide.errorTreeView.HotfixData;
-import com.intellij.lifecycle.PeriodicalTasksCloser;
+import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.annotate.AnnotationProvider;
 import com.intellij.openapi.vcs.annotate.FileAnnotation;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.CommitResultHandler;
 import com.intellij.openapi.vcs.changes.LocalChangeList;
-import com.intellij.openapi.vcs.history.VcsFileRevision;
 import com.intellij.openapi.vcs.history.VcsHistoryProvider;
 import com.intellij.openapi.vcs.history.VcsRevisionNumber;
 import com.intellij.openapi.vcs.merge.MergeDialogCustomizer;
@@ -36,9 +21,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
-import java.io.File;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 
 /**
  * Component which provides means to invoke different VCS-related services.
@@ -53,7 +37,7 @@ public abstract class AbstractVcsHelper {
 
   @NotNull
   public static AbstractVcsHelper getInstance(Project project) {
-    return PeriodicalTasksCloser.getInstance().safeGetService(project, AbstractVcsHelper.class);
+    return ServiceManager.getService(project, AbstractVcsHelper.class);
   }
 
   public abstract void showErrors(List<VcsException> abstractVcsExceptions, @NotNull String tabDisplayName);
@@ -74,13 +58,9 @@ public abstract class AbstractVcsHelper {
 
   public abstract void showAnnotation(FileAnnotation annotation, VirtualFile file, AbstractVcs vcs, int line);
 
-  public abstract void showDifferences(final VcsFileRevision cvsVersionOn, final VcsFileRevision cvsVersionOn1, final File file);
-
   public abstract void showChangesListBrowser(CommittedChangeList changelist, @Nls String title);
 
-  public void showChangesListBrowser(CommittedChangeList changelist, @Nullable VirtualFile toSelect, @Nls String title) {
-    showChangesListBrowser(changelist, title);
-  }
+  public abstract void showChangesListBrowser(CommittedChangeList changelist, @Nullable VirtualFile toSelect, @Nls String title);
 
   public abstract void showChangesBrowser(List<CommittedChangeList> changelists);
 
@@ -92,10 +72,6 @@ public abstract class AbstractVcsHelper {
                                           @Nullable final Component parent);
 
   public abstract void showWhatDiffersBrowser(@Nullable Component parent, Collection<Change> changes, @Nls String title);
-
-  @Nullable
-  public abstract <T extends CommittedChangeList, U extends ChangeBrowserSettings> T chooseCommittedChangeList(@NotNull CommittedChangesProvider<T, U> provider,
-                                                                                                               RepositoryLocation location);
 
   public abstract void openCommittedChangesTab(AbstractVcs vcs,
                                                VirtualFile root,
@@ -125,7 +101,7 @@ public abstract class AbstractVcsHelper {
    */
   @NotNull
   public final List<VirtualFile> showMergeDialog(List<VirtualFile> files, MergeProvider provider) {
-    return showMergeDialog(files, provider, new MergeDialogCustomizer());
+    return showMergeDialog(files, provider, provider.createDefaultMergeDialogCustomizer());
   }
 
   /**
@@ -147,16 +123,12 @@ public abstract class AbstractVcsHelper {
     return showMergeDialog(files, provider);
   }
 
-  public abstract void showFileHistory(@NotNull VcsHistoryProvider historyProvider,
-                                       @NotNull FilePath path,
-                                       @NotNull AbstractVcs vcs,
-                                       @Nullable String repositoryPath);
+  public abstract void showFileHistory(@NotNull VcsHistoryProvider historyProvider, @NotNull FilePath path, @NotNull AbstractVcs vcs);
 
   public abstract void showFileHistory(@NotNull VcsHistoryProvider historyProvider,
                                        @Nullable AnnotationProvider annotationProvider,
                                        @NotNull FilePath path,
-                                       @Nullable String repositoryPath,
-                                       @NotNull final AbstractVcs vcs);
+                                       @NotNull AbstractVcs vcs);
   
   /**
    * Shows the "Rollback Changes" dialog with the specified list of changes.
@@ -167,31 +139,29 @@ public abstract class AbstractVcsHelper {
 
   @Nullable
   public abstract Collection<VirtualFile> selectFilesToProcess(List<VirtualFile> files,
-                                                               final String title,
-                                                               @Nullable final String prompt,
-                                                               final String singleFileTitle,
-                                                               final String singleFilePromptTemplate,
-                                                               final VcsShowConfirmationOption confirmationOption);
+                                                               String title,
+                                                               @Nullable String prompt,
+                                                               @Nullable String singleFileTitle,
+                                                               @Nullable String singleFilePromptTemplate,
+                                                               @NotNull VcsShowConfirmationOption confirmationOption);
 
   @Nullable
-  public abstract Collection<FilePath> selectFilePathsToProcess(List<FilePath> files,
-                                                                final String title,
-                                                                @Nullable final String prompt,
-                                                                final String singleFileTitle,
-                                                                final String singleFilePromptTemplate,
-                                                                final VcsShowConfirmationOption confirmationOption);
+  public abstract Collection<FilePath> selectFilePathsToProcess(@NotNull List<FilePath> files,
+                                                                String title,
+                                                                @Nullable String prompt,
+                                                                @Nullable String singleFileTitle,
+                                                                @Nullable String singleFilePromptTemplate,
+                                                                @NotNull VcsShowConfirmationOption confirmationOption);
 
   @Nullable
-  public Collection<FilePath> selectFilePathsToProcess(List<FilePath> files,
-                                                                final String title,
-                                                                @Nullable final String prompt,
-                                                                final String singleFileTitle,
-                                                                final String singleFilePromptTemplate,
-                                                                final VcsShowConfirmationOption confirmationOption,
+  public abstract Collection<FilePath> selectFilePathsToProcess(@NotNull List<FilePath> files,
+                                                                String title,
+                                                                @Nullable String prompt,
+                                                                @Nullable String singleFileTitle,
+                                                                @Nullable String singleFilePromptTemplate,
+                                                                @NotNull VcsShowConfirmationOption confirmationOption,
                                                                 @Nullable String okActionName,
-                                                                @Nullable String cancelActionName) {
-    return selectFilePathsToProcess(files, title, prompt, singleFileTitle, singleFilePromptTemplate, confirmationOption);
-  };
+                                                                @Nullable String cancelActionName);
   
   
   /**

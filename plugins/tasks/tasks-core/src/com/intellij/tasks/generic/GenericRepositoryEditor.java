@@ -1,9 +1,7 @@
 package com.intellij.tasks.generic;
 
-import com.intellij.codeInsight.completion.CompletionParameters;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.ComboBox;
-import com.intellij.openapi.util.Condition;
 import com.intellij.tasks.TaskManager;
 import com.intellij.tasks.config.BaseRepositoryEditor;
 import com.intellij.ui.EditorTextField;
@@ -54,7 +52,7 @@ public class GenericRepositoryEditor<T extends GenericRepository> extends BaseRe
   private JBCheckBox myDownloadTasksInSeparateRequests;
 
   private Map<JTextField, TemplateVariable> myField2Variable;
-  private Map<JRadioButton, ResponseType> myRadio2ResponseType;
+  private final Map<JRadioButton, ResponseType> myRadio2ResponseType;
 
   public GenericRepositoryEditor(final Project project,
                                  final T repository,
@@ -62,6 +60,7 @@ public class GenericRepositoryEditor<T extends GenericRepository> extends BaseRe
     super(project, repository, changeListener);
 
     myTest2Button.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent e) {
         afterTestConnection(TaskManager.getManager(project).testConnection(repository));
       }
@@ -115,7 +114,7 @@ public class GenericRepositoryEditor<T extends GenericRepository> extends BaseRe
     myCardPanel.add(jsonHandler.getConfigurationComponent(myProject), ResponseType.JSON.getMimeType());
     myCardPanel.add(textHandler.getConfigurationComponent(myProject), ResponseType.TEXT.getMimeType());
 
-    myRadio2ResponseType = new IdentityHashMap<JRadioButton, ResponseType>();
+    myRadio2ResponseType = new IdentityHashMap<>();
     myRadio2ResponseType.put(myJsonRadioButton, ResponseType.JSON);
     myRadio2ResponseType.put(myXmlRadioButton, ResponseType.XML);
     myRadio2ResponseType.put(myTextRadioButton, ResponseType.TEXT);
@@ -176,7 +175,7 @@ public class GenericRepositoryEditor<T extends GenericRepository> extends BaseRe
   @Nullable
   @Override
   protected JComponent createCustomPanel() {
-    myField2Variable = new IdentityHashMap<JTextField, TemplateVariable>();
+    myField2Variable = new IdentityHashMap<>();
     FormBuilder builder = FormBuilder.createFormBuilder();
     for (final TemplateVariable variable : myRepository.getTemplateVariables()) {
       if (variable.isShownOnFirstTab()) {
@@ -261,7 +260,7 @@ public class GenericRepositoryEditor<T extends GenericRepository> extends BaseRe
         return text.substring(i, offset);
       }
     };
-    return new TextFieldWithAutoCompletion<String>(myProject, provider, true, text);
+    return new TextFieldWithAutoCompletion<>(myProject, provider, true, text);
   }
 
   @Override

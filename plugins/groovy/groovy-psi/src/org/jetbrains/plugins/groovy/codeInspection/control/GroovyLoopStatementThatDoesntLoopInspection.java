@@ -30,13 +30,6 @@ public class GroovyLoopStatementThatDoesntLoopInspection extends BaseInspection 
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return CONTROL_FLOW;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Loop statement that doesn't loop";
   }
@@ -57,7 +50,7 @@ public class GroovyLoopStatementThatDoesntLoopInspection extends BaseInspection 
   private static class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitForStatement(GrForStatement forStatement) {
+    public void visitForStatement(@NotNull GrForStatement forStatement) {
       super.visitForStatement(forStatement);
       final GrStatement body = forStatement.getBody();
       if (body == null) {
@@ -73,7 +66,7 @@ public class GroovyLoopStatementThatDoesntLoopInspection extends BaseInspection 
     }
 
     @Override
-    public void visitWhileStatement(GrWhileStatement whileStatement) {
+    public void visitWhileStatement(@NotNull GrWhileStatement whileStatement) {
       super.visitWhileStatement(whileStatement);
       final GrStatement body = whileStatement.getBody();
       if (body == null) {

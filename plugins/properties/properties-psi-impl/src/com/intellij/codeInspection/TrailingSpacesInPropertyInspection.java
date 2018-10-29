@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import com.intellij.codeInspection.ui.SingleCheckboxOptionsPanel;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.properties.IProperty;
 import com.intellij.lang.properties.PropertiesBundle;
-import com.intellij.lang.properties.PropertySuppressableInspectionBase;
+import com.intellij.lang.properties.PropertiesInspectionBase;
 import com.intellij.lang.properties.psi.PropertiesFile;
 import com.intellij.lang.properties.psi.impl.PropertyImpl;
 import com.intellij.openapi.editor.Document;
@@ -43,14 +43,16 @@ import java.util.List;
 /**
  * @author cdr
  */
-public class TrailingSpacesInPropertyInspection extends PropertySuppressableInspectionBase {
+public class TrailingSpacesInPropertyInspection extends PropertiesInspectionBase {
   public boolean myIgnoreVisibleSpaces;
 
+  @Override
   @NotNull
   public String getDisplayName() {
     return PropertiesBundle.message("trail.spaces.property.inspection.display.name");
   }
 
+  @Override
   @NotNull
   public String getShortName() {
     return "TrailingSpacesInProperty";
@@ -77,10 +79,11 @@ public class TrailingSpacesInPropertyInspection extends PropertySuppressableInsp
      return new SingleCheckboxOptionsPanel(PropertiesBundle.message("trailing.spaces.in.property.inspection.ignore.visible.spaces"), this, "myIgnoreVisibleSpaces");
   }
 
+  @Override
   public ProblemDescriptor[] checkFile(@NotNull PsiFile file, @NotNull final InspectionManager manager, final boolean isOnTheFly) {
     if (!(file instanceof PropertiesFile)) return null;
     final List<IProperty> properties = ((PropertiesFile)file).getProperties();
-    final List<ProblemDescriptor> descriptors = new SmartList<ProblemDescriptor>();
+    final List<ProblemDescriptor> descriptors = new SmartList<>();
     for (IProperty property : properties) {
       ProgressManager.checkCanceled();
       final PropertyImpl propertyImpl = (PropertyImpl)property;
@@ -94,7 +97,7 @@ public class TrailingSpacesInPropertyInspection extends PropertySuppressableInsp
         }
       }
     }
-    return descriptors.toArray(new ProblemDescriptor[descriptors.size()]);
+    return descriptors.toArray(ProblemDescriptor.EMPTY_ARRAY);
   }
 
   @Nullable
@@ -119,16 +122,13 @@ public class TrailingSpacesInPropertyInspection extends PropertySuppressableInsp
       myIgnoreVisibleSpaces = ignoreVisibleSpaces;
     }
 
-    @NotNull
-    public String getName() {
-      return "Remove Trailing Spaces";
-    }
-
+    @Override
     @NotNull
     public String getFamilyName() {
-      return getName();
+      return "Remove trailing spaces";
     }
 
+    @Override
     public void applyFix(@NotNull Project project, @NotNull ProblemDescriptor descriptor) {
       PsiElement element = descriptor.getPsiElement();
       PsiElement parent = element == null ? null : element.getParent();

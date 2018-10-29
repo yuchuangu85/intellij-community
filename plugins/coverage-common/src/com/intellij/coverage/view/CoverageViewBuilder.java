@@ -20,14 +20,10 @@ import javax.swing.*;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * User: anna
- * Date: 1/2/12
- */
 public class CoverageViewBuilder extends AbstractListBuilder {
   private final JBTable myTable;
   private final FileStatusListener myFileStatusListener;
-  private CoverageViewExtension myCoverageViewExtension;
+  private final CoverageViewExtension myCoverageViewExtension;
 
   CoverageViewBuilder(final Project project,
                       final JList list,
@@ -87,7 +83,7 @@ public class CoverageViewBuilder extends AbstractListBuilder {
 
   @Override
   protected List<AbstractTreeNode> getAllAcceptableNodes(Object[] childElements, VirtualFile file) {
-    ArrayList<AbstractTreeNode> result = new ArrayList<AbstractTreeNode>();
+    ArrayList<AbstractTreeNode> result = new ArrayList<>();
 
     for (Object childElement1 : childElements) {
       CoverageListNode childElement = (CoverageListNode)childElement1;

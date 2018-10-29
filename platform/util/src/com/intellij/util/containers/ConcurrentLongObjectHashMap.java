@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.util.containers;
 
@@ -24,15 +10,15 @@ import java.util.*;
 import java.util.concurrent.locks.LockSupport;
 
 /**
- * Adapted from java.util.concurrent.ConcurrentHashMap to long keys
+ * Adapted from Doug Lea ConcurrentHashMap (see http://gee.cs.oswego.edu/dl/concurrency-interest/index.html) to long keys
+ * with following additions/changes:
+ * - added hashing strategy argument
+ * - added cacheOrGet convenience method
+ * - Null values are NOT allowed
  * @author Doug Lea
  * @param <V> the type of mapped values
- * @deprecated Use {@link ContainerUtil#createConcurrentLongObjectMap()} instead
+ * Use {@link ContainerUtil#createConcurrentLongObjectMap()} to create this map
  */
-// added hashing strategy argument
-// added cacheOrGet convenience method
-// Null values are NOT allowed
-
 class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
 
     /* ---------------- Constants -------------- */
@@ -305,7 +291,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
   /**
    * Table of counter cells. When non-null, size is a power of 2.
    */
-  private transient volatile ConcurrentHashMap.CounterCell[] counterCells;
+  private transient volatile ConcurrentIntObjectHashMap.CounterCell[] counterCells;
 
   // views
   private transient ValuesView<V> values;
@@ -317,7 +303,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
   /**
    * Creates a new, empty map with the default initial table size (16).
    */
-  public ConcurrentLongObjectHashMap() {
+  ConcurrentLongObjectHashMap() {
   }
 
   /**
@@ -330,7 +316,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
    * @throws IllegalArgumentException if the initial capacity of
    *                                  elements is negative
    */
-  public ConcurrentLongObjectHashMap(int initialCapacity) {
+  ConcurrentLongObjectHashMap(int initialCapacity) {
     if (initialCapacity < 0) {
       throw new IllegalArgumentException();
     }
@@ -355,7 +341,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
    *                                  elements is negative or the load factor is nonpositive
    * @since 1.6
    */
-  public ConcurrentLongObjectHashMap(int initialCapacity, float loadFactor) {
+  ConcurrentLongObjectHashMap(int initialCapacity, float loadFactor) {
     this(initialCapacity, loadFactor, 1);
   }
 
@@ -377,7 +363,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
    *                                  negative or the load factor or concurrencyLevel are
    *                                  nonpositive
    */
-  public ConcurrentLongObjectHashMap(int initialCapacity,
+  ConcurrentLongObjectHashMap(int initialCapacity,
                                      float loadFactor, int concurrencyLevel) {
     if (!(loadFactor > 0.0f) || initialCapacity < 0 || concurrencyLevel <= 0) {
       throw new IllegalArgumentException();
@@ -948,6 +934,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
    * @return an enumeration of the values in this table
    * @see #values()
    */
+  @Override
   @NotNull
   public Enumeration<V> elements() {
     Node<V>[] t;
@@ -1069,11 +1056,11 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
    * @param check if <0, don't check resize, if <= 1 only check if uncontended
    */
   private void addCount(long x, int check) {
-    ConcurrentHashMap.CounterCell[] as;
+    ConcurrentIntObjectHashMap.CounterCell[] as;
     long b, s;
     if ((as = counterCells) != null ||
         !U.compareAndSwapLong(this, BASECOUNT, b = baseCount, s = b + x)) {
-      ConcurrentHashMap.CounterCell a;
+      ConcurrentIntObjectHashMap.CounterCell a;
       long v;
       int m;
       boolean uncontended = true;
@@ -1346,8 +1333,8 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
     /* ---------------- Counter support -------------- */
 
   final long sumCount() {
-    ConcurrentHashMap.CounterCell[] as = counterCells;
-    ConcurrentHashMap.CounterCell a;
+    ConcurrentIntObjectHashMap.CounterCell[] as = counterCells;
+    ConcurrentIntObjectHashMap.CounterCell a;
     long sum = baseCount;
     if (as != null) {
       for (int i = 0; i < as.length; ++i) {
@@ -1369,19 +1356,19 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
     }
     boolean collide = false;                // True if last slot nonempty
     for (; ; ) {
-      ConcurrentHashMap.CounterCell[] as;
-      ConcurrentHashMap.CounterCell a;
+      ConcurrentIntObjectHashMap.CounterCell[] as;
+      ConcurrentIntObjectHashMap.CounterCell a;
       int n;
       long v;
       if ((as = counterCells) != null && (n = as.length) > 0) {
         if ((a = as[(n - 1) & h]) == null) {
           if (cellsBusy == 0) {            // Try to attach new Cell
-            ConcurrentHashMap.CounterCell r = new ConcurrentHashMap.CounterCell(x); // Optimistic create
+            ConcurrentIntObjectHashMap.CounterCell r = new ConcurrentIntObjectHashMap.CounterCell(x); // Optimistic create
             if (cellsBusy == 0 &&
                 U.compareAndSwapInt(this, CELLSBUSY, 0, 1)) {
               boolean created = false;
               try {               // Recheck under lock
-                ConcurrentHashMap.CounterCell[] rs;
+                ConcurrentIntObjectHashMap.CounterCell[] rs;
                 int m, j;
                 if ((rs = counterCells) != null &&
                     (m = rs.length) > 0 &&
@@ -1418,7 +1405,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
                  U.compareAndSwapInt(this, CELLSBUSY, 0, 1)) {
           try {
             if (counterCells == as) {// Expand table unless stale
-              ConcurrentHashMap.CounterCell[] rs = new ConcurrentHashMap.CounterCell[n << 1];
+              ConcurrentIntObjectHashMap.CounterCell[] rs = new ConcurrentIntObjectHashMap.CounterCell[n << 1];
               for (int i = 0; i < n; ++i) {
                 rs[i] = as[i];
               }
@@ -1438,8 +1425,8 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
         boolean init = false;
         try {                           // Initialize table
           if (counterCells == as) {
-            ConcurrentHashMap.CounterCell[] rs = new ConcurrentHashMap.CounterCell[2];
-            rs[h & 1] = new ConcurrentHashMap.CounterCell(x);
+            ConcurrentIntObjectHashMap.CounterCell[] rs = new ConcurrentIntObjectHashMap.CounterCell[2];
+            rs[h & 1] = new ConcurrentIntObjectHashMap.CounterCell(x);
             counterCells = rs;
             init = true;
           }
@@ -2761,7 +2748,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
         (k.getDeclaredField("baseCount"));
       CELLSBUSY = U.objectFieldOffset
         (k.getDeclaredField("cellsBusy"));
-      Class<?> ck = ConcurrentHashMap.CounterCell.class;
+      Class<?> ck = ConcurrentIntObjectHashMap.CounterCell.class;
       CELLVALUE = U.objectFieldOffset
         (ck.getDeclaredField("value"));
       Class<?> ak = Node[].class;

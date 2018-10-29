@@ -23,11 +23,6 @@ import javax.swing.*;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Created by IntelliJ IDEA.
- * User: sweinreuter
- * Date: 18.11.2007
- */
 public class AdvancedXsdOptions implements AdvancedOptions {
   @NonNls
   private static final String DISABLE_ABSTRACT_ELEMENTS = "disable-abstract-elements";
@@ -49,7 +44,7 @@ public class AdvancedXsdOptions implements AdvancedOptions {
 
   @Override
   public Map<String, ?> getOptions() {
-    final Map<String, Object> strings = new HashMap<String, Object>();
+    final Map<String, Object> strings = new HashMap<>();
     if (myDisableAbstractElements.isSelected()) {
       strings.put(DISABLE_ABSTRACT_ELEMENTS, Boolean.TRUE);
     }

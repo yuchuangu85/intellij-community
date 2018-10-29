@@ -18,6 +18,7 @@ package org.jetbrains.plugins.groovy.lang.actions
 import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings
 import org.jetbrains.plugins.groovy.GroovyFileType
+import org.jetbrains.plugins.groovy.GroovyLanguage
 
 /**
  * @author Max Medvedev
@@ -113,27 +114,22 @@ for (;a;) <caret>print 2''')
   }
 
   void testIfWithForceBraces() {
-    def current = getCurrentCodeStyleSettings().IF_BRACE_FORCE
-    try {
-      getCurrentCodeStyleSettings().IF_BRACE_FORCE = CommonCodeStyleSettings.FORCE_BRACES_ALWAYS
+    def settings = getCurrentCodeStyleSettings(getProject()).getCommonSettings(GroovyLanguage.INSTANCE)
+      settings.IF_BRACE_FORCE = CommonCodeStyleSettings.FORCE_BRACES_ALWAYS
       doTest('''\
 if (a)
   print 2
 ''', '''\
 if (a) <caret>print 2
 ''')
-    }
-    finally {
-      getCurrentCodeStyleSettings().IF_BRACE_FORCE = current
-    }
 
   }
 
 
   private void doTest(String before, String after) {
-    myFixture.configureByText(GroovyFileType.GROOVY_FILE_TYPE, before);
-    performAction(IdeActions.ACTION_EDITOR_JOIN_LINES);
-    myFixture.checkResult(after);
+    myFixture.configureByText(GroovyFileType.GROOVY_FILE_TYPE, before)
+    performAction(IdeActions.ACTION_EDITOR_JOIN_LINES)
+    myFixture.checkResult(after)
 
   }
 }

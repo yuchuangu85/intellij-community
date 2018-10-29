@@ -18,19 +18,20 @@ package com.intellij.codeInsight.editorActions.wordSelection;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.*;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class CodeBlockOrInitializerSelectioner extends BasicSelectioner {
   @Override
-  public boolean canSelect(PsiElement e) {
-    return e instanceof PsiCodeBlock || e instanceof PsiArrayInitializerExpression;
+  public boolean canSelect(@NotNull PsiElement e) {
+    return e instanceof PsiCodeBlock || e instanceof PsiArrayInitializerExpression || e instanceof PsiClass;
   }
 
   @Override
-  public List<TextRange> select(PsiElement e, CharSequence editorText, int cursorOffset, Editor editor) {
-    List<TextRange> result = new ArrayList<TextRange>();
+  public List<TextRange> select(@NotNull PsiElement e, @NotNull CharSequence editorText, int cursorOffset, @NotNull Editor editor) {
+    List<TextRange> result = new ArrayList<>();
     result.add(e.getTextRange());
 
     PsiElement[] children = e.getChildren();

@@ -1,24 +1,9 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.eclipse.config;
 
-import com.intellij.openapi.application.AccessToken;
+import com.intellij.configurationStore.StorageUtilKt;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.components.StateStorage;
-import com.intellij.openapi.components.impl.stores.StorageUtil;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.roots.impl.ModuleRootManagerImpl;
 import com.intellij.openapi.util.JDOMUtil;
@@ -44,9 +29,9 @@ import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Set;
 
-final class ClasspathSaveSession implements StateStorage.ExternalizationSession, StateStorage.SaveSession, SafeWriteRequestor {
-  private final Map<String, Element> modifiedContent = new THashMap<String, Element>();
-  private final Set<String> deletedContent = new THashSet<String>();
+final class ClasspathSaveSession implements StateStorage.SaveSessionProducer, StateStorage.SaveSession, SafeWriteRequestor {
+  private final Map<String, Element> modifiedContent = new THashMap<>();
+  private final Set<String> deletedContent = new THashSet<>();
 
   private final Module module;
 
@@ -65,42 +50,37 @@ final class ClasspathSaveSession implements StateStorage.ExternalizationSession,
   }
 
   @Override
-  public void setState(Object component, @NotNull String componentName, @NotNull Object state) {
+  public void setState(Object component, @NotNull String componentName, @Nullable Object state) throws IOException {
+    CachedXmlDocumentSet fileSet = EclipseClasspathStorageProvider.getFileCache(module);
+
+    Element oldClassPath;
     try {
-      CachedXmlDocumentSet fileSet = EclipseClasspathStorageProvider.getFileCache(module);
+      oldClassPath = fileSet.load(EclipseXml.CLASSPATH_FILE, true);
+    }
+    catch (Exception e) {
+      EclipseClasspathWriter.LOG.warn(e);
+      oldClassPath = null;
+    }
 
-      Element oldClassPath;
-      try {
-        oldClassPath = fileSet.load(EclipseXml.CLASSPATH_FILE, true);
-      }
-      catch (Exception e) {
-        EclipseClasspathWriter.LOG.warn(e);
-        oldClassPath = null;
-      }
-
-      ModuleRootManagerImpl moduleRootManager = (ModuleRootManagerImpl)component;
-      if (oldClassPath != null || moduleRootManager.getSourceRoots().length > 0 || moduleRootManager.getOrderEntries().length > 2) {
-        Element newClassPathElement = new EclipseClasspathWriter().writeClasspath(oldClassPath, moduleRootManager);
-        if (oldClassPath == null || !JDOMUtil.areElementsEqual(newClassPathElement, oldClassPath)) {
-          update(newClassPathElement, EclipseXml.CLASSPATH_FILE);
-        }
-      }
-
-      if (fileSet.getFile(EclipseXml.PROJECT_FILE, true) == null) {
-        DotProjectFileHelper.saveDotProjectFile(module, fileSet.getParent(EclipseXml.PROJECT_FILE));
-      }
-
-      Element ideaSpecific = new Element(IdeaXml.COMPONENT_TAG);
-      String emlFilename = moduleRootManager.getModule().getName() + EclipseXml.IDEA_SETTINGS_POSTFIX;
-      if (IdeaSpecificSettings.writeIdeaSpecificClasspath(ideaSpecific, moduleRootManager)) {
-        update(ideaSpecific, emlFilename);
-      }
-      else {
-        delete(emlFilename);
+    ModuleRootManagerImpl moduleRootManager = (ModuleRootManagerImpl)component;
+    if (oldClassPath != null || moduleRootManager.getSourceRoots().length > 0 || moduleRootManager.getOrderEntries().length > 2) {
+      Element newClassPathElement = new EclipseClasspathWriter().writeClasspath(oldClassPath, moduleRootManager);
+      if (oldClassPath == null || !JDOMUtil.areElementsEqual(newClassPathElement, oldClassPath)) {
+        update(newClassPathElement, EclipseXml.CLASSPATH_FILE);
       }
     }
-    catch (IOException e) {
-      throw new RuntimeException(e);
+
+    if (fileSet.getFile(EclipseXml.PROJECT_FILE, true) == null) {
+      DotProjectFileHelper.saveDotProjectFile(module, fileSet.getParent(EclipseXml.PROJECT_FILE));
+    }
+
+    Element ideaSpecific = new Element(IdeaXml.COMPONENT_TAG);
+    String emlFilename = moduleRootManager.getModule().getName() + EclipseXml.IDEA_SETTINGS_POSTFIX;
+    if (IdeaSpecificSettings.writeIdeaSpecificClasspath(ideaSpecific, moduleRootManager)) {
+      update(ideaSpecific, emlFilename);
+    }
+    else {
+      delete(emlFilename);
     }
   }
 
@@ -114,12 +94,11 @@ final class ClasspathSaveSession implements StateStorage.ExternalizationSession,
   public void save() throws IOException {
     CachedXmlDocumentSet fileSet = EclipseClasspathStorageProvider.getFileCache(module);
 
-    AccessToken token = WriteAction.start();
-    try {
+    WriteAction.run(() -> {
       for (String key : modifiedContent.keySet()) {
         Element content = modifiedContent.get(key);
         String path = fileSet.getParent(key) + '/' + key;
-        Writer writer = new OutputStreamWriter(StorageUtil.getOrCreateVirtualFile(this, Paths.get(path)).getOutputStream(this), CharsetToolkit.UTF8_CHARSET);
+        Writer writer = new OutputStreamWriter(StorageUtilKt.getOrCreateVirtualFile(this, Paths.get(path)).getOutputStream(this), CharsetToolkit.UTF8_CHARSET);
         try {
           EclipseJDOMUtil.output(content, writer, module.getProject());
         }
@@ -143,9 +122,6 @@ final class ClasspathSaveSession implements StateStorage.ExternalizationSession,
         }
       }
       deletedContent.clear();
-    }
-    finally {
-      token.finish();
-    }
+    });
   }
 }

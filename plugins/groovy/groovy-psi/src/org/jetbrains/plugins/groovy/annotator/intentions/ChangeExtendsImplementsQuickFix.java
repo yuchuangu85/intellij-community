@@ -37,10 +37,6 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-/**
- * User: Dmitry.Krasilschikov
- * Date: 21.09.2007
- */
 public class ChangeExtendsImplementsQuickFix implements IntentionAction {
   @Nullable
   private final GrExtendsClause myExtendsClause;
@@ -74,10 +70,10 @@ public class ChangeExtendsImplementsQuickFix implements IntentionAction {
 
   @Override
   public void invoke(@NotNull Project project, Editor editor, PsiFile file) throws IncorrectOperationException {
-    Set<String> classes = new LinkedHashSet<String>();
-    Set<String> interfaces = new LinkedHashSet<String>();
-    Set<String> unknownClasses = new LinkedHashSet<String>();
-    Set<String> unknownInterfaces = new LinkedHashSet<String>();
+    Set<String> classes = new LinkedHashSet<>();
+    Set<String> interfaces = new LinkedHashSet<>();
+    Set<String> unknownClasses = new LinkedHashSet<>();
+    Set<String> unknownInterfaces = new LinkedHashSet<>();
 
     if (myExtendsClause != null) {
       collectRefs(myExtendsClause.getReferenceElementsGroovy(), classes, interfaces, myClass.isInterface() ? unknownInterfaces : unknownClasses);
@@ -100,7 +96,7 @@ public class ChangeExtendsImplementsQuickFix implements IntentionAction {
     }
   }
 
-  private static void collectRefs(GrCodeReferenceElement[] refs, Collection<String> classes, Collection<String> interfaces, Collection<String> unknown) {
+  private static void collectRefs(GrCodeReferenceElement[] refs, Collection<? super String> classes, Collection<? super String> interfaces, Collection<? super String> unknown) {
     for (GrCodeReferenceElement ref : refs) {
       final PsiElement extendsElement = ref.resolve();
       String canonicalText = ref.getCanonicalText();

@@ -20,7 +20,6 @@ import com.intellij.codeInspection.InspectionManager;
 import com.intellij.codeInspection.LocalQuickFix;
 import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.codeInspection.ProblemHighlightType;
-import com.intellij.codeInspection.ex.BaseLocalInspectionTool;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.properties.psi.PropertiesFile;
 import com.intellij.lang.properties.psi.Property;
@@ -35,34 +34,29 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * User: anna
- * Date: 07-Sep-2005
- */
-public class UnusedMessageFormatParameterInspection extends PropertySuppressableInspectionBase {
+public class UnusedMessageFormatParameterInspection extends PropertiesInspectionBase {
   public static final String REGEXP = "regexp";
-  @NotNull
-  public String getGroupDisplayName() {
-    return PropertiesBundle.message("properties.files.inspection.group.display.name");
-  }
 
+  @Override
   @NotNull
   public String getDisplayName() {
     return PropertiesBundle.message("unused.message.format.parameter.display.name");
   }
 
+  @Override
   @NotNull
   @NonNls
   public String getShortName() {
     return "UnusedMessageFormatParameter";
   }
 
+  @Override
   @Nullable
   public ProblemDescriptor[] checkFile(@NotNull PsiFile file, @NotNull InspectionManager manager, boolean isOnTheFly) {
     if (!(file instanceof PropertiesFile)) return null;
     PropertiesFile propertiesFile = (PropertiesFile)file;
     final List<IProperty> properties = propertiesFile.getProperties();
-    List<ProblemDescriptor> problemDescriptors = new ArrayList<ProblemDescriptor>();
+    List<ProblemDescriptor> problemDescriptors = new ArrayList<>();
     for (IProperty property : properties) {
       @NonNls String name = property.getName();
       if (name != null) {
@@ -70,7 +64,7 @@ public class UnusedMessageFormatParameterInspection extends PropertySuppressable
         if (name.startsWith(REGEXP + ".") || name.endsWith("." + REGEXP)) continue;
       }
       String value = property.getValue();
-      Set<Integer> parameters = new HashSet<Integer>();
+      Set<Integer> parameters = new HashSet<>();
       if (value != null) {
         int index = value.indexOf('{');
         while (index != -1) {
@@ -107,6 +101,6 @@ public class UnusedMessageFormatParameterInspection extends PropertySuppressable
         }
       }
     }
-    return problemDescriptors.isEmpty() ? null : problemDescriptors.toArray(new ProblemDescriptor[problemDescriptors.size()]);
+    return problemDescriptors.isEmpty() ? null : problemDescriptors.toArray(ProblemDescriptor.EMPTY_ARRAY);
   }
 }

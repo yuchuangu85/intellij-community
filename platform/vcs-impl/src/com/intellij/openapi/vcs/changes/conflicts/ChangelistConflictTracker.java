@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.openapi.vcs.changes.conflicts;
 
@@ -20,8 +6,8 @@ import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.EditorFactory;
-import com.intellij.openapi.editor.event.DocumentAdapter;
 import com.intellij.openapi.editor.event.DocumentEvent;
+import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectUtil;
@@ -30,11 +16,11 @@ import com.intellij.openapi.util.ZipperUpdater;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.FileStatusManager;
 import com.intellij.openapi.vcs.changes.*;
+import com.intellij.openapi.vcs.impl.LineStatusTrackerManager;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.EditorNotifications;
 import com.intellij.util.Alarm;
-import com.intellij.util.NullableFunction;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.hash.HashSet;
 import com.intellij.util.xmlb.XmlSerializer;
@@ -59,7 +45,7 @@ public class ChangelistConflictTracker {
   private final ChangeListAdapter myChangeListListener;
 
   private final FileDocumentManager myDocumentManager;
-  private final DocumentAdapter myDocumentListener;
+  private final DocumentListener myDocumentListener;
 
   private final FileStatusManager myFileStatusManager;
   private final Set<VirtualFile> myCheckSet;
@@ -76,26 +62,26 @@ public class ChangelistConflictTracker {
     myDocumentManager = FileDocumentManager.getInstance();
     myFileStatusManager = fileStatusManager;
     myCheckSetLock = new Object();
-    myCheckSet = new HashSet<VirtualFile>();
+    myCheckSet = new HashSet<>();
 
     final Application application = ApplicationManager.getApplication();
-    final ZipperUpdater zipperUpdater = new ZipperUpdater(300, Alarm.ThreadToUse.SWING_THREAD, myProject);
+    final ZipperUpdater zipperUpdater = new ZipperUpdater(300, Alarm.ThreadToUse.SWING_THREAD, project);
     final Runnable runnable = () -> {
       if (application.isDisposed() || myProject.isDisposed() || !myProject.isOpen()) {
         return;
       }
       final Set<VirtualFile> localSet;
       synchronized (myCheckSetLock) {
-        localSet = new HashSet<VirtualFile>();
+        localSet = new HashSet<>();
         localSet.addAll(myCheckSet);
         myCheckSet.clear();
       }
       checkFiles(localSet);
     };
-    myDocumentListener = new DocumentAdapter() {
+    myDocumentListener = new DocumentListener() {
       @Override
-      public void documentChanged(DocumentEvent e) {
-        if (!myOptions.TRACKING_ENABLED) {
+      public void documentChanged(@NotNull DocumentEvent e) {
+        if (!myOptions.isTrackingEnabled()) {
           return;
         }
         Document document = e.getDocument();
@@ -112,14 +98,14 @@ public class ChangelistConflictTracker {
     myChangeListListener = new ChangeListAdapter() {
       @Override
       public void changeListChanged(ChangeList list) {
-        if (myChangeListManager.isDefaultChangeList(list)) {
+        if (((LocalChangeList)list).isDefault()) {
           clearChanges(list.getChanges());
         }
       }
 
       @Override
       public void changesMoved(Collection<Change> changes, ChangeList fromList, ChangeList toList) {
-        if (myChangeListManager.isDefaultChangeList(toList)) {
+        if (((LocalChangeList)toList).isDefault() || ((LocalChangeList)fromList).isDefault()) {
           clearChanges(changes);
         }
       }
@@ -137,19 +123,16 @@ public class ChangelistConflictTracker {
   }
 
   private void checkFiles(final Collection<VirtualFile> files) {
-    myChangeListManager.invokeAfterUpdate(new Runnable() {
-      @Override
-      public void run() {
-        final LocalChangeList list = myChangeListManager.getDefaultChangeList();
-        for (VirtualFile file : files) {
-          checkOneFile(file, list);
-        }
+    myChangeListManager.invokeAfterUpdate(() -> {
+      final LocalChangeList list = myChangeListManager.getDefaultChangeList();
+      for (VirtualFile file : files) {
+        checkOneFile(file, list);
       }
     }, InvokeAfterUpdateMode.SILENT, null, null);
   }
 
   private void checkOneFile(VirtualFile file, LocalChangeList defaultList) {
-    if (file == null) {
+    if (file == null || !shouldDetectConflictsFor(file)) {
       return;
     }
     LocalChangeList changeList = myChangeListManager.getChangeList(file);
@@ -181,8 +164,12 @@ public class ChangelistConflictTracker {
   }
 
   public boolean isFromActiveChangelist(VirtualFile file) {
-    LocalChangeList changeList = myChangeListManager.getChangeList(file);
-    return changeList == null || myChangeListManager.isDefaultChangeList(changeList);
+    List<LocalChangeList> changeLists = myChangeListManager.getChangeLists(file);
+    return changeLists.isEmpty() || ContainerUtil.exists(changeLists, list -> list.isDefault());
+  }
+
+  public boolean shouldDetectConflictsFor(@NotNull VirtualFile file) {
+    return !LineStatusTrackerManager.getInstance(myProject).arePartialChangelistsEnabled(file);
   }
 
   private void clearChanges(Collection<Change> changes) {
@@ -193,8 +180,11 @@ public class ChangelistConflictTracker {
         String path = filePath.getPath();
         final Conflict wasRemoved = myConflicts.remove(path);
         final VirtualFile file = filePath.getVirtualFile();
-        if (wasRemoved != null && file != null) {
-          myEditorNotifications.updateNotifications(file);
+        if (file != null) {
+          if (wasRemoved != null) {
+            myEditorNotifications.updateNotifications(file);
+          }
+
           // we need to update status
           myFileStatusManager.fileStatusChanged(file);
         }
@@ -212,11 +202,13 @@ public class ChangelistConflictTracker {
   }
 
   public void saveState(Element to) {
-    for (Map.Entry<String,Conflict> entry : myConflicts.entrySet()) {
-      Element fileElement = new Element("file");
-      fileElement.setAttribute("path", entry.getKey());
-      fileElement.setAttribute("ignored", Boolean.toString(entry.getValue().ignored));
-      to.addContent(fileElement);
+    synchronized (myConflicts) {
+      for (Map.Entry<String, Conflict> entry : myConflicts.entrySet()) {
+        Element fileElement = new Element("file");
+        fileElement.setAttribute("path", entry.getKey());
+        fileElement.setAttribute("ignored", Boolean.toString(entry.getValue().ignored));
+        to.addContent(fileElement);
+      }
     }
     XmlSerializer.serializeInto(myOptions, to);
   }
@@ -242,7 +234,12 @@ public class ChangelistConflictTracker {
   }
 
   public void optionsChanged() {
-    for (Map.Entry<String, Conflict> entry : myConflicts.entrySet()) {
+    Map<String, Conflict> copyMap;
+    synchronized (myConflicts) {
+      copyMap = new HashMap<>(myConflicts);
+    }
+
+    for (Map.Entry<String, Conflict> entry : copyMap.entrySet()) {
       VirtualFile file = LocalFileSystem.getInstance().findFileByPath(entry.getKey());
       if (file != null) {
         myFileStatusManager.fileStatusChanged(file);
@@ -256,12 +253,9 @@ public class ChangelistConflictTracker {
   }
 
   public Collection<String> getIgnoredConflicts() {
-    return ContainerUtil.mapNotNull(myConflicts.entrySet(), new NullableFunction<Map.Entry<String, Conflict>, String>() {
-      @Override
-      public String fun(Map.Entry<String, Conflict> entry) {
-        return entry.getValue().ignored ? entry.getKey() : null;
-      }
-    });
+    synchronized (myConflicts) {
+      return ContainerUtil.mapNotNull(myConflicts.entrySet(), entry -> entry.getValue().ignored ? entry.getKey() : null);
+    }
   }
 
   public static class Conflict {
@@ -269,13 +263,14 @@ public class ChangelistConflictTracker {
   }
 
   public boolean hasConflict(@NotNull VirtualFile file) {
-    if (!myOptions.TRACKING_ENABLED) {
+    if (!myOptions.isTrackingEnabled()) {
       return false;
     }
     String path = file.getPath();
     Conflict conflict = myConflicts.get(path);
     if (conflict != null && !conflict.ignored) {
-      if (isFromActiveChangelist(file)) {
+      if (!shouldDetectConflictsFor(file) ||
+          isFromActiveChangelist(file)) {
         myConflicts.remove(path);
         return false;
       }
@@ -311,11 +306,13 @@ public class ChangelistConflictTracker {
   }
 
   public static class Options {
-    public boolean TRACKING_ENABLED = true;
     public boolean SHOW_DIALOG = false;
     public boolean HIGHLIGHT_CONFLICTS = true;
     public boolean HIGHLIGHT_NON_ACTIVE_CHANGELIST = false;
     public ChangelistConflictResolution LAST_RESOLUTION = ChangelistConflictResolution.IGNORE;
-  }
 
+    public boolean isTrackingEnabled() {
+      return SHOW_DIALOG || HIGHLIGHT_CONFLICTS;
+    }
+  }
 }

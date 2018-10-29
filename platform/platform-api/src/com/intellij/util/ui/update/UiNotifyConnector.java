@@ -36,7 +36,7 @@ public class UiNotifyConnector implements Disposable, HierarchyListener{
   private Activatable myTarget;
 
   public UiNotifyConnector(@NotNull final Component component, @NotNull final Activatable target) {
-    myComponent = new WeakReference<Component>(component);
+    myComponent = new WeakReference<>(component);
     myTarget = target;
     if (component.isShowing()) {
       showNotify();
@@ -47,21 +47,20 @@ public class UiNotifyConnector implements Disposable, HierarchyListener{
     component.addHierarchyListener(this);
   }
 
+  @Override
   public void hierarchyChanged(@NotNull HierarchyEvent e) {
     if (isDisposed()) return;
 
     if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) > 0) {
-      final Runnable runnable = new DumbAwareRunnable() {
-        public void run() {
-          final Component c = myComponent.get();
-          if (isDisposed() || c == null) return;
+      final Runnable runnable = (DumbAwareRunnable)() -> {
+        final Component c = myComponent.get();
+        if (isDisposed() || c == null) return;
 
-          if (c.isShowing()) {
-            showNotify();
-          }
-          else {
-            hideNotify();
-          }
+        if (c.isShowing()) {
+          showNotify();
+        }
+        else {
+          hideNotify();
         }
       };
       final Application app = ApplicationManager.getApplication();
@@ -82,6 +81,7 @@ public class UiNotifyConnector implements Disposable, HierarchyListener{
     myTarget.showNotify();
   }
 
+  @Override
   public void dispose() {
     if (isDisposed()) return;
 
@@ -108,12 +108,14 @@ public class UiNotifyConnector implements Disposable, HierarchyListener{
       super(component, target);
     }
 
+    @Override
     protected final void hideNotify() {
       super.hideNotify();
       myHidden = true;
       disposeIfNeeded();
     }
 
+    @Override
     protected final void showNotify() {
       super.showNotify();
       myShown = true;
@@ -128,11 +130,17 @@ public class UiNotifyConnector implements Disposable, HierarchyListener{
   }
 
   public static void doWhenFirstShown(@NotNull JComponent c, @NotNull final Runnable runnable) {
+    doWhenFirstShown((Component)c, runnable);
+  }
+
+  public static void doWhenFirstShown(@NotNull Component c, @NotNull final Runnable runnable) {
     Activatable activatable = new Activatable() {
+      @Override
       public void showNotify() {
         runnable.run();
       }
 
+      @Override
       public void hideNotify() {
       }
     };

@@ -26,7 +26,11 @@ public class LanguageSlicing extends LanguageExtension<SliceLanguageSupportProvi
     super("com.intellij.lang.sliceProvider");
   }
 
-  public static SliceLanguageSupportProvider getProvider(@NotNull PsiElement element){
+  static boolean hasAnyProviders() {
+    return INSTANCE.hasAnyExtensions();
+  }
+
+  public static SliceLanguageSupportProvider getProvider(@NotNull PsiElement element) {
     return INSTANCE.forLanguage(element.getLanguage());
   }
 }

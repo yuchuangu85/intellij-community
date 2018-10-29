@@ -33,7 +33,7 @@ public abstract class Filter<T extends AbstractTestProxy> {
   public abstract boolean shouldAccept(T test);
 
   public List<T> select(final List<? extends T> tests) {
-    final List<T> result = new ArrayList<T>();
+    final List<T> result = new ArrayList<>();
     for (final T test : tests) {
       if (shouldAccept(test)) result.add(test);
     }
@@ -146,7 +146,7 @@ public abstract class Filter<T extends AbstractTestProxy> {
     private final Filter myFilter1;
     private final Filter myFilter2;
 
-    public AndFilter(final Filter filter1, final Filter filter2) {
+    AndFilter(final Filter filter1, final Filter filter2) {
       myFilter1 = filter1;
       myFilter2 = filter2;
     }
@@ -160,7 +160,7 @@ public abstract class Filter<T extends AbstractTestProxy> {
   private static class NotFilter extends Filter {
     private final Filter myFilter;
 
-    public NotFilter(final Filter filter) {
+    NotFilter(final Filter filter) {
       myFilter = filter;
     }
 
@@ -174,7 +174,7 @@ public abstract class Filter<T extends AbstractTestProxy> {
     private final Filter myFilter1;
     private final Filter myFilter2;
 
-    public OrFilter(final Filter filter1, final Filter filter2) {
+    OrFilter(final Filter filter1, final Filter filter2) {
       myFilter1 = filter1;
       myFilter2 = filter2;
     }

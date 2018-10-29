@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2013 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 package org.jetbrains.plugins.gradle.service.project;
 
 import com.intellij.execution.configurations.SimpleJavaParameters;
-import com.intellij.externalSystem.JavaProjectData;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.externalSystem.model.DataNode;
 import com.intellij.openapi.externalSystem.model.ExternalSystemException;
@@ -24,7 +23,7 @@ import com.intellij.openapi.externalSystem.model.project.ModuleData;
 import com.intellij.openapi.externalSystem.model.project.ProjectData;
 import com.intellij.openapi.externalSystem.model.task.TaskData;
 import com.intellij.openapi.externalSystem.service.ParametersEnhancer;
-import com.intellij.openapi.util.KeyValue;
+import com.intellij.openapi.util.Pair;
 import com.intellij.util.Consumer;
 import org.gradle.tooling.model.idea.IdeaModule;
 import org.gradle.tooling.model.idea.IdeaProject;
@@ -33,6 +32,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.gradle.GradleManager;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -44,7 +44,6 @@ import java.util.Set;
  *
  * @author Denis Zhdanov, Vladislav Soroka
  * @see GradleManager#enhanceRemoteProcessing(SimpleJavaParameters)   sample enhanceParameters() implementation
- * @since 4/17/13 11:24 AM
  */
 public interface GradleProjectResolverExtension extends ParametersEnhancer {
 
@@ -59,9 +58,6 @@ public interface GradleProjectResolverExtension extends ParametersEnhancer {
 
   @NotNull
   ProjectData createProject();
-
-  @NotNull
-  JavaProjectData createJavaProjectData();
 
   void populateProjectExtraModels(@NotNull IdeaProject gradleProject, @NotNull DataNode<ProjectData> ideProject);
 
@@ -107,8 +103,16 @@ public interface GradleProjectResolverExtension extends ParametersEnhancer {
   @NotNull
   Set<Class> getToolingExtensionsClasses();
 
+  /**
+   * add target types to be used in the polymorphic containers
+   * @return
+   */
+  default Set<Class> getTargetTypes() {
+    return Collections.emptySet();
+  }
+
   @NotNull
-  List<KeyValue<String, String>> getExtraJvmArgs();
+  List<Pair<String, String>> getExtraJvmArgs();
 
   @NotNull
   List<String> getExtraCommandLineArgs();
@@ -121,5 +125,5 @@ public interface GradleProjectResolverExtension extends ParametersEnhancer {
    */
   void preImportCheck();
 
-  void enhanceTaskProcessing(@NotNull List<String> taskNames, @Nullable String debuggerSetup, @NotNull Consumer<String> initScriptConsumer);
+  void enhanceTaskProcessing(@NotNull List<String> taskNames, @Nullable String jvmAgentSetup, @NotNull Consumer<String> initScriptConsumer);
 }

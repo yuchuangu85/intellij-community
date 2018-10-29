@@ -19,6 +19,7 @@ import com.intellij.codeInsight.daemon.HighlightDisplayKey;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.ShowIntentionsPass;
 import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.codeInsight.intention.impl.CachedIntentions;
 import com.intellij.codeInsight.intention.impl.IntentionListStep;
 import com.intellij.codeInspection.QuickFix;
 import com.intellij.icons.AllIcons;
@@ -27,17 +28,18 @@ import com.intellij.lang.properties.editor.inspections.ResourceBundleEditorProbl
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.PlatformDataKeys;
+import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.fileEditor.FileEditor;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.openapi.util.Pair;
 import com.intellij.psi.PsiFile;
-import com.intellij.ui.popup.PopupFactoryImpl;
 import com.intellij.util.IncorrectOperationException;
+import com.intellij.util.ThrowableRunnable;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 /**
  * @author Dmitry Batkovich
@@ -50,7 +52,7 @@ public class ResourceBundleEditorShowQuickFixesAction extends AnAction {
   }
 
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public void actionPerformed(@NotNull AnActionEvent e) {
     final ResourceBundleEditor editor = getEditor(e);
     LOG.assertTrue(editor != null);
     final ResourceBundlePropertyStructureViewElement element = (ResourceBundlePropertyStructureViewElement)editor.getSelectedElementIfOnlyOne();
@@ -85,20 +87,20 @@ public class ResourceBundleEditorShowQuickFixesAction extends AnAction {
 
     final Project project = e.getProject();
     LOG.assertTrue(project != null);
-    PopupFactoryImpl
+    JBPopupFactory
       .getInstance()
-      .createListPopup(new IntentionListStep(null, intentions, null, file, project))
+      .createListPopup(new IntentionListStep(null, null, file, project, CachedIntentions.create(project, file, null, intentions)))
       .showInBestPositionFor(e.getDataContext());
   }
 
   @Override
-  public void update(AnActionEvent e) {
+  public void update(@NotNull AnActionEvent e) {
     final ResourceBundleEditor editor = getEditor(e);
     e.getPresentation().setEnabledAndVisible(editor != null &&
                                              editor.getSelectedElementIfOnlyOne() instanceof ResourceBundlePropertyStructureViewElement);
   }
 
-  private ResourceBundleEditor getEditor(AnActionEvent e) {
+  private static ResourceBundleEditor getEditor(@NotNull AnActionEvent e) {
     final FileEditor editor = PlatformDataKeys.FILE_EDITOR.getData(e.getDataContext());
     return editor instanceof ResourceBundleEditor ? (ResourceBundleEditor)editor : null;
   }
@@ -133,7 +135,13 @@ public class ResourceBundleEditorShowQuickFixesAction extends AnAction {
 
     @Override
     public void invoke(@NotNull Project project, Editor editor, PsiFile file) throws IncorrectOperationException {
-      getQuickFix().applyFix(project, myDescriptor);
+      final QuickFix<ResourceBundleEditorProblemDescriptor> fix = getQuickFix();
+      ThrowableRunnable<RuntimeException> fixAction = () -> fix.applyFix(project, myDescriptor);
+      if (fix.startInWriteAction()) {
+        WriteAction.run(fixAction);
+      } else {
+        fixAction.run();
+      }
     }
 
     @Override

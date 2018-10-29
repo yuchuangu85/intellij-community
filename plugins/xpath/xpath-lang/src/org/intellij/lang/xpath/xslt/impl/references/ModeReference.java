@@ -44,7 +44,7 @@ class ModeReference extends SimpleAttributeReference implements PsiPolyVariantRe
   private final boolean myIsDeclaration;
   private final ImplicitModeElement myImplicitModeElement;
 
-  public ModeReference(XmlAttribute attribute, boolean isDeclaration) {
+  ModeReference(XmlAttribute attribute, boolean isDeclaration) {
     super(attribute);
     if (isDeclaration) {
       myIsDeclaration = true;
@@ -68,11 +68,12 @@ class ModeReference extends SimpleAttributeReference implements PsiPolyVariantRe
     return myImplicitModeElement.getModeRange();
   }
 
+  @Override
   @NotNull
   public Object[] getVariants() {
     final PsiFile containingFile = myAttribute.getContainingFile();
     if (containingFile instanceof XmlFile && XsltSupport.isXsltFile(containingFile)) {
-      final List<Object> l = new ArrayList<Object>();
+      final List<Object> l = new ArrayList<>();
       if (!myImplicitModeElement.hasPrefix()) {
         final Object[] prefixes = getPrefixCompletions(myAttribute);
         ContainerUtil.addAll(l, prefixes);
@@ -87,6 +88,7 @@ class ModeReference extends SimpleAttributeReference implements PsiPolyVariantRe
     return ArrayUtil.EMPTY_OBJECT_ARRAY;
   }
 
+  @Override
   public boolean isSoft() {
     return myIsDeclaration;
   }
@@ -103,6 +105,7 @@ class ModeReference extends SimpleAttributeReference implements PsiPolyVariantRe
     }
   }
 
+  @Override
   @NotNull
   public ResolveResult[] multiResolve(final boolean incompleteCode) {
     final PsiFile containingFile = myAttribute.getContainingFile();
@@ -148,7 +151,7 @@ class ModeReference extends SimpleAttributeReference implements PsiPolyVariantRe
     final ModeReference.MyModeMatcher matcher = new ModeReference.MyModeMatcher(attribute, QNameUtil.ANY);
     final PsiElement[] modes = ResolveUtil.collect(matcher);
     final Collection<String> prefixes = XsltNamespaceContext.getPrefixes(attribute);
-    final Set<NamespaceLookup> lookups = new HashSet<NamespaceLookup>(prefixes.size());
+    final Set<NamespaceLookup> lookups = new HashSet<>(prefixes.size());
 
     for (PsiElement mode : modes) {
       final QName qName = ((ImplicitModeElement)mode).getQName();
@@ -163,18 +166,20 @@ class ModeReference extends SimpleAttributeReference implements PsiPolyVariantRe
   }
 
   private static class MyModeMatcher extends MatchTemplateMatcher {
-    public MyModeMatcher(XmlDocument document, QName mode) {
+    MyModeMatcher(XmlDocument document, QName mode) {
       super(document, mode);
     }
 
-    public MyModeMatcher(XmlElement element, QName mode) {
+    MyModeMatcher(XmlElement element, QName mode) {
       super(XsltCodeInsightUtil.getDocument(element), mode);
     }
 
+    @Override
     protected PsiElement transform(XmlTag element) {
       return new ImplicitModeElement(element.getAttribute("mode", null));
     }
 
+    @Override
     public boolean matches(XmlTag element) {
       final String s = element.getAttributeValue("mode");
       return myMode != null &&
@@ -187,11 +192,13 @@ class ModeReference extends SimpleAttributeReference implements PsiPolyVariantRe
       return new MyModeMatcher(document, myMode);
     }
 
+    @Override
     public ResolveUtil.Matcher variantMatcher() {
       return new MyModeMatcher(myDocument, myMode != null ? QNameUtil.createAnyLocalName(myMode.getNamespaceURI()) : null);
     }
   }
 
+  @Override
   @NotNull
   public String getUnresolvedMessagePattern() {
     final QName qName = myImplicitModeElement.getQName();
@@ -204,7 +211,7 @@ class ModeReference extends SimpleAttributeReference implements PsiPolyVariantRe
   }
 
   private static class MyPrefixReference extends PrefixReference implements LocalQuickFixProvider {
-    public MyPrefixReference(XmlAttribute attribute) {
+    MyPrefixReference(XmlAttribute attribute) {
       super(attribute);
     }
 

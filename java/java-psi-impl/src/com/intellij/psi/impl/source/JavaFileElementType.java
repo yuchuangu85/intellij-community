@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ import java.io.IOException;
  * @author max
  */
 public class JavaFileElementType extends ILightStubFileElementType<PsiJavaFileStub> {
-  public static final int STUB_VERSION = 34;
+  public static final int STUB_VERSION = 41;
 
   public JavaFileElementType() {
     super("java.FILE", JavaLanguage.INSTANCE);
@@ -56,6 +56,10 @@ public class JavaFileElementType extends ILightStubFileElementType<PsiJavaFileSt
 
   @Override
   public boolean shouldBuildStubFor(final VirtualFile file) {
+    return isInSourceContent(file);
+  }
+
+  public static boolean isInSourceContent(@NotNull VirtualFile file) {
     final VirtualFile dir = file.getParent();
     return dir == null || dir.getUserData(LanguageLevel.KEY) != null;
   }
@@ -73,7 +77,7 @@ public class JavaFileElementType extends ILightStubFileElementType<PsiJavaFileSt
   }
 
   @Override
-  public ASTNode parseContents(final ASTNode chameleon) {
+  public ASTNode parseContents(@NotNull final ASTNode chameleon) {
     final PsiBuilder builder = JavaParserUtil.createBuilder(chameleon);
     doParse(builder);
     return builder.getTreeBuilt().getFirstChildNode();
@@ -104,11 +108,10 @@ public class JavaFileElementType extends ILightStubFileElementType<PsiJavaFileSt
   public PsiJavaFileStub deserialize(@NotNull StubInputStream dataStream, StubElement parentStub) throws IOException {
     boolean compiled = dataStream.readBoolean();
     int level = dataStream.readByte();
-    StringRef packageName = dataStream.readName();
-    return new PsiJavaFileStubImpl(null, StringRef.toString(packageName), level >= 0 ? LanguageLevel.values()[level] : null, compiled);
+    String packageName = dataStream.readNameString();
+    return new PsiJavaFileStubImpl(null, packageName, level >= 0 ? LanguageLevel.values()[level] : null, compiled);
   }
 
   @Override
-  @SuppressWarnings("LambdaUnfriendlyMethodOverload")
   public void indexStub(@NotNull PsiJavaFileStub stub, @NotNull IndexSink sink) { }
 }

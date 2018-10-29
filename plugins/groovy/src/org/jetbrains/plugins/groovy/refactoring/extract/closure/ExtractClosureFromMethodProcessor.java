@@ -74,7 +74,7 @@ public class ExtractClosureFromMethodProcessor extends ExtractClosureProcessorBa
   @Override
   protected boolean preprocessUsages(@NotNull Ref<UsageInfo[]> refUsages) {
     UsageInfo[] usagesIn = refUsages.get();
-    MultiMap<PsiElement, String> conflicts = new MultiMap<PsiElement, String>();
+    MultiMap<PsiElement, String> conflicts = new MultiMap<>();
     final GrStatement[] statements = myHelper.getStatements();
 
     for (GrStatement statement : statements) {
@@ -126,7 +126,7 @@ public class ExtractClosureFromMethodProcessor extends ExtractClosureProcessorBa
   @NotNull
   @Override
   protected UsageInfo[] findUsages() {
-    List<UsageInfo> result = new ArrayList<UsageInfo>();
+    List<UsageInfo> result = new ArrayList<>();
 
     final PsiMethod toSearchFor = (PsiMethod)myHelper.getToSearchFor();
 
@@ -159,7 +159,7 @@ public class ExtractClosureFromMethodProcessor extends ExtractClosureProcessorBa
       result.add(new UsageInfo(overridingMethod));
     }
 
-    final UsageInfo[] usageInfos = result.toArray(new UsageInfo[result.size()]);
+    final UsageInfo[] usageInfos = result.toArray(UsageInfo.EMPTY_ARRAY);
     return UsageViewUtil.removeDuplicatedUsages(usageInfos);
   }
 

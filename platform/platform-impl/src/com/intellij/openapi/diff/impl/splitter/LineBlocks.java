@@ -29,7 +29,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.*;
 
 public class LineBlocks {
-  public static final LineBlocks EMPTY = new LineBlocks(Collections.<Diff>emptyList());
+  public static final LineBlocks EMPTY = new LineBlocks(Collections.emptyList());
   private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.diff.impl.splitter.LineBlocks");
   private final List<Diff> myDiffs;
 
@@ -76,7 +76,7 @@ public class LineBlocks {
    * @param unappliedOnly If true - only unapplied changes will be considered, if false - all changes (both applied and not applied).
    */
   public int[] getBeginnings(FragmentSide side, boolean unappliedOnly) {
-    List<Integer> result = new ArrayList<Integer>(myDiffs.size());
+    List<Integer> result = new ArrayList<>(myDiffs.size());
     int previousBeginning = Integer.MIN_VALUE;
 
     for (Diff diff : myDiffs) {
@@ -165,17 +165,17 @@ public class LineBlocks {
     return LinearTransformation.oneToOne(location, leftInterval.getStart(), rightInterval);
   }
 
-  public static LineBlocks fromLineFragments(List<LineFragment> lines) {
-    ArrayList<LineBlock> filtered = new ArrayList<LineBlock>();
+  public static LineBlocks fromLineFragments(List<? extends LineFragment> lines) {
+    ArrayList<LineBlock> filtered = new ArrayList<>();
     for (LineFragment fragment : lines) {
       if (fragment.getType() != null) filtered.add(fragment);
     }
-    return createLineBlocks(filtered.toArray(new LineBlock[filtered.size()]));
+    return createLineBlocks(filtered.toArray(new LineBlock[0]));
   }
 
   static LineBlocks createLineBlocks(LineBlock[] blocks) {
     Arrays.sort(blocks, LineBlock.COMPARATOR);
-    List<Diff> diffs = new ArrayList<Diff>(blocks.length);
+    List<Diff> diffs = new ArrayList<>(blocks.length);
     for (LineBlock block : blocks) {
       Interval interval1 = new Interval(block.getStartingLine1(), block.getModifiedLines1());
       Interval interval2 = new Interval(block.getStartingLine2(), block.getModifiedLines2());
@@ -193,11 +193,11 @@ public class LineBlocks {
   }
 
   @NotNull
-  public static LineBlocks fromChanges(@NotNull List<Change> changes) {
+  public static LineBlocks fromChanges(@NotNull List<? extends Change> changes) {
     // changes may come mixed, need to sort them to get correct intervals
     Collections.sort(changes, ChangeList.CHANGE_ORDER);
 
-    List<Diff> diffs = new ArrayList<Diff>(changes.size());
+    List<Diff> diffs = new ArrayList<>(changes.size());
     for (Change change : changes) {
       if (!change.isValid()) { continue; }
       int start1 = change.getChangeSide(FragmentSide.SIDE1).getStartLine();

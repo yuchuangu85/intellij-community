@@ -26,7 +26,7 @@ class NestingDepthVisitor extends JavaRecursiveElementWalkingVisitor {
   private int m_maximumDepth;
   private int m_currentDepth;
 
-  public NestingDepthVisitor(int limit) {
+  NestingDepthVisitor(int limit) {
     myLimit = limit;
   }
 
@@ -107,7 +107,7 @@ class NestingDepthVisitor extends JavaRecursiveElementWalkingVisitor {
     exitScope(element);
   }
 
-  private final Set<PsiElement> scopeEntered = new THashSet<PsiElement>();
+  private final Set<PsiElement> scopeEntered = new THashSet<>();
   private void enterScope(PsiElement element) {
     scopeEntered.add(element);
     m_currentDepth++;

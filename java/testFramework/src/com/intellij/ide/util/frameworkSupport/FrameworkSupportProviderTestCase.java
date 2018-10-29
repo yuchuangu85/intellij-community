@@ -23,6 +23,7 @@ import com.intellij.testFramework.IdeaTestCase;
 import com.intellij.testFramework.PsiTestUtil;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.IOException;
 import java.util.*;
 
 /**
@@ -38,7 +39,7 @@ public abstract class FrameworkSupportProviderTestCase extends IdeaTestCase {
     super.setUp();
     final Project project = getProject();
     myFrameworkSupportModel = new FrameworkSupportModelImpl(project, "", LibrariesContainerFactory.createContainer(project));
-    myNodes = new LinkedHashMap<FrameworkType, FrameworkSupportNode>();
+    myNodes = new LinkedHashMap<>();
     final List<FrameworkSupportInModuleProvider> providers = FrameworkSupportUtil.getAllProviders();
     Collections.sort(providers, FrameworkSupportUtil.getFrameworkSupportProvidersComparator(providers));
     for (FrameworkSupportInModuleProvider provider : providers) {
@@ -46,25 +47,25 @@ public abstract class FrameworkSupportProviderTestCase extends IdeaTestCase {
       myNodes.put(provider.getFrameworkType(), node);
       myFrameworkSupportModel.registerComponent(provider, node);
     }
-    myConfigurables = new HashMap<FrameworkType, FrameworkSupportInModuleConfigurable>();
+    myConfigurables = new HashMap<>();
   }
 
   protected void addSupport() {
-    new WriteCommandAction.Simple(getProject()) {
-      @Override
-      protected void run() throws Throwable {
+    try {
+      WriteCommandAction.writeCommandAction(getProject()).run(() -> {
         final VirtualFile root = getVirtualFile(createTempDir("contentRoot"));
         PsiTestUtil.addContentRoot(myModule, root);
         final ModifiableRootModel model = ModuleRootManager.getInstance(myModule).getModifiableModel();
         try {
-          List<FrameworkSupportConfigurable> selectedConfigurables = new ArrayList<FrameworkSupportConfigurable>();
+          List<FrameworkSupportConfigurable> selectedConfigurables = new ArrayList<>();
           final IdeaModifiableModelsProvider modelsProvider = new IdeaModifiableModelsProvider();
           for (FrameworkSupportNode node : myNodes.values()) {
             if (node.isChecked()) {
               final FrameworkSupportInModuleConfigurable configurable = getOrCreateConfigurable(node.getUserObject());
               configurable.addSupport(myModule, model, modelsProvider);
               if (configurable instanceof OldFrameworkSupportProviderWrapper.FrameworkSupportConfigurableWrapper) {
-                selectedConfigurables.add(((OldFrameworkSupportProviderWrapper.FrameworkSupportConfigurableWrapper)configurable).getConfigurable());
+                selectedConfigurables
+                  .add(((OldFrameworkSupportProviderWrapper.FrameworkSupportConfigurableWrapper)configurable).getConfigurable());
               }
             }
           }
@@ -78,8 +79,11 @@ public abstract class FrameworkSupportProviderTestCase extends IdeaTestCase {
         for (FrameworkSupportInModuleConfigurable configurable : myConfigurables.values()) {
           Disposer.dispose(configurable);
         }
-      }
-    }.execute().throwException();
+      });
+    }
+    catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   protected FrameworkSupportInModuleConfigurable selectFramework(@NotNull FacetTypeId<?> id) {

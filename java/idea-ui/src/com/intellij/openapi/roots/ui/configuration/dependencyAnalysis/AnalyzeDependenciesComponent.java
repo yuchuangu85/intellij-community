@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.roots.ui.configuration.dependencyAnalysis;
 
 import com.intellij.ProjectTopics;
@@ -24,8 +10,8 @@ import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleType;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.DumbAwareAction;
-import com.intellij.openapi.roots.ModuleRootAdapter;
 import com.intellij.openapi.roots.ModuleRootEvent;
+import com.intellij.openapi.roots.ModuleRootListener;
 import com.intellij.openapi.roots.ModuleSourceOrderEntry;
 import com.intellij.openapi.roots.OrderEntry;
 import com.intellij.openapi.roots.ui.CellAppearanceEx;
@@ -54,6 +40,7 @@ import javax.swing.tree.TreeSelectionModel;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 /**
  * The classpath details component
@@ -62,7 +49,7 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
   /**
    * Data key for order path element
    */
-  public static DataKey<ModuleDependenciesAnalyzer.OrderPathElement> ORDER_PATH_ELEMENT_KEY = DataKey.create("ORDER_PATH_ELEMENT");
+  public static final DataKey<ModuleDependenciesAnalyzer.OrderPathElement> ORDER_PATH_ELEMENT_KEY = DataKey.create("ORDER_PATH_ELEMENT");
   /**
    * The module being analyzed
    */
@@ -75,12 +62,12 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
    * The cached analyzed classpaths for this module
    */
   private final HashMap<Pair<ClasspathType, Boolean>, ModuleDependenciesAnalyzer> myClasspaths =
-    new HashMap<Pair<ClasspathType, Boolean>, ModuleDependenciesAnalyzer>();
+    new HashMap<>();
 
   /**
    * The message bus connection to use
    */
-  private MessageBusConnection myMessageBusConnection;
+  private final MessageBusConnection myMessageBusConnection;
 
   /**
    * The constructor
@@ -94,9 +81,9 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
     init();
     getSplitter().setProportion(0.3f);
     myMessageBusConnection = myModule.getProject().getMessageBus().connect();
-    myMessageBusConnection.subscribe(ProjectTopics.PROJECT_ROOTS, new ModuleRootAdapter() {
+    myMessageBusConnection.subscribe(ProjectTopics.PROJECT_ROOTS, new ModuleRootListener() {
       @Override
-      public void rootsChanged(ModuleRootEvent event) {
+      public void rootsChanged(@NotNull ModuleRootEvent event) {
         myClasspaths.clear();
         updateTree();
       }
@@ -146,34 +133,16 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
    * {@inheritDoc}
    */
   @Override
-  protected ArrayList<AnAction> createActions(boolean fromPopup) {
-    if (!fromPopup) {
-      ArrayList<AnAction> rc = new ArrayList<AnAction>();
-      rc.add(new ClasspathTypeAction());
-      rc.add(new SdkFilterAction());
-      rc.add(new UrlModeAction());
-      return rc;
+  protected List<AnAction> createActions(boolean fromPopup) {
+    if (fromPopup) {
+      return super.createActions(true);
     }
-    else {
-      return super.createActions(fromPopup);
-    }
-  }
 
-  /**
-   * {@inheritDoc}
-   */
-  @Override
-  protected void processRemovedItems() {
-    // no remove action so far
-  }
-
-  /**
-   * {@inheritDoc}
-   */
-  @Override
-  protected boolean wasObjectStored(Object editableObject) {
-    // no modifications so far
-    return false;
+    List<AnAction> rc = new ArrayList<>();
+    rc.add(new ClasspathTypeAction());
+    rc.add(new SdkFilterAction());
+    rc.add(new UrlModeAction());
+    return rc;
   }
 
   /**
@@ -251,13 +220,13 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
      * {@inheritDoc}
      */
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       final Module module = e.getData(LangDataKeys.MODULE);
       if (module == null) {
         return;
       }
       final ModuleDependenciesAnalyzer.OrderPathElement element = e.getData(ORDER_PATH_ELEMENT_KEY);
-      if (element != null && element instanceof ModuleDependenciesAnalyzer.OrderEntryPathElement) {
+      if (element instanceof ModuleDependenciesAnalyzer.OrderEntryPathElement) {
         final ModuleDependenciesAnalyzer.OrderEntryPathElement o = (ModuleDependenciesAnalyzer.OrderEntryPathElement)element;
         final OrderEntry entry = o.entry();
         final Module m = entry.getOwnerModule();
@@ -291,7 +260,7 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
      *
      * @param explanation the wrapped explanation
      */
-    public PathNode(T explanation) {
+    PathNode(T explanation) {
       myExplanation = explanation;
     }
 
@@ -324,7 +293,7 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
      * {@inheritDoc}
      */
     @Override
-    public Object getData(@NonNls String dataId) {
+    public Object getData(@NotNull @NonNls String dataId) {
       if (CommonDataKeys.PROJECT.is(dataId)) {
         return myModule.getProject();
       }
@@ -415,14 +384,6 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
      * {@inheritDoc}
      */
     @Override
-    public void disposeUIResources() {
-      //Do nothing
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
     public String getHelpTopic() {
       return null;
     }
@@ -441,14 +402,6 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
     @Override
     public void apply() throws ConfigurationException {
       // Do nothing
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void reset() {
-      //Do nothing
     }
 
     /**
@@ -485,7 +438,6 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
    * Cell renderer for explanation tree
    */
   static class ExplanationTreeRenderer extends ColoredTreeCellRenderer {
-
     @Override
     public void customizeCellRenderer(JTree tree,
                                       Object value,
@@ -515,7 +467,7 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
      *
      * @param url the wrapped explanation
      */
-    public UrlNode(ModuleDependenciesAnalyzer.UrlExplanation url) {
+    UrlNode(ModuleDependenciesAnalyzer.UrlExplanation url) {
       super(url);
       setNameFieldShown(false);
     }
@@ -593,7 +545,7 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
      *
      * @param orderEntryExplanation the explanation to wrap
      */
-    public OrderEntryNode(ModuleDependenciesAnalyzer.OrderEntryExplanation orderEntryExplanation) {
+    OrderEntryNode(ModuleDependenciesAnalyzer.OrderEntryExplanation orderEntryExplanation) {
       super(orderEntryExplanation);
       setNameFieldShown(false);
     }
@@ -665,15 +617,15 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
     /**
      * The constructor
      */
-    public SdkFilterAction() {
-      super("Include SDK", "If selected, the SDK classes are included", AllIcons.General.Jdk);
+    SdkFilterAction() {
+      super("Include SDK", "If selected, the SDK classes are included", AllIcons.Nodes.PpJdk);
     }
 
     /**
      * {@inheritDoc}
      */
     @Override
-    public boolean isSelected(AnActionEvent e) {
+    public boolean isSelected(@NotNull AnActionEvent e) {
       return mySettings.isSdkIncluded();
     }
 
@@ -681,7 +633,7 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
      * {@inheritDoc}
      */
     @Override
-    public void setSelected(AnActionEvent e, boolean state) {
+    public void setSelected(@NotNull AnActionEvent e, boolean state) {
       mySettings.setIncludeSdk(state);
       updateTree();
     }
@@ -694,15 +646,15 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
     /**
      * The constructor
      */
-    public UrlModeAction() {
-      super("Use URL mode", "If selected, the URLs are displayed, otherwise order entries", AllIcons.Nodes.PpFile);
+    UrlModeAction() {
+      super("Use URL mode", "If selected, the URLs are displayed, otherwise order entries", AllIcons.Nodes.Folder);
     }
 
     /**
      * {@inheritDoc}
      */
     @Override
-    public boolean isSelected(AnActionEvent e) {
+    public boolean isSelected(@NotNull AnActionEvent e) {
       return mySettings.isUrlMode();
     }
 
@@ -710,7 +662,7 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
      * {@inheritDoc}
      */
     @Override
-    public void setSelected(AnActionEvent e, boolean state) {
+    public void setSelected(@NotNull AnActionEvent e, boolean state) {
       mySettings.setUrlMode(state);
       updateTree();
     }
@@ -736,7 +688,7 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
         for (final ClasspathType classpathType : ClasspathType.values()) {
           myItems.addAction(new DumbAwareAction(classpathType.getDescription()) {
             @Override
-            public void actionPerformed(AnActionEvent e) {
+            public void actionPerformed(@NotNull AnActionEvent e) {
               mySettings.setRuntime(classpathType.isRuntime());
               mySettings.setTest(classpathType.isTest());
               updateTree();
@@ -751,7 +703,7 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
      * {@inheritDoc}
      */
     @Override
-    public void update(AnActionEvent e) {
+    public void update(@NotNull AnActionEvent e) {
       final Presentation presentation = e.getPresentation();
       updateText(presentation);
     }
@@ -771,7 +723,7 @@ public class AnalyzeDependenciesComponent extends MasterDetailsComponent {
   /**
    * The enumeration type that represents classpath entry filter
    */
-  private static enum ClasspathType {
+  private enum ClasspathType {
     /**
      * The production compile mode
      */

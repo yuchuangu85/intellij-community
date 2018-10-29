@@ -1,25 +1,14 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.settings;
 
 import com.intellij.debugger.DebuggerBundle;
 import com.intellij.openapi.options.ConfigurableUi;
 import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.ui.StateRestoringCheckBox;
 import com.intellij.ui.components.panels.VerticalBox;
+import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -31,6 +20,8 @@ class DebuggerLaunchingConfigurable implements ConfigurableUi<DebuggerSettings> 
   private StateRestoringCheckBox myCbForceClassicVM;
   private JCheckBox myCbDisableJIT;
   private JCheckBox myCbShowAlternativeSource;
+  private JCheckBox myCbKillImmediately;
+  private JCheckBox myCbAlwaysDebug;
 
   @Override
   public void reset(@NotNull DebuggerSettings settings) {
@@ -50,6 +41,8 @@ class DebuggerLaunchingConfigurable implements ConfigurableUi<DebuggerSettings> 
     myCbForceClassicVM.setSelected(settings.FORCE_CLASSIC_VM);
     myCbDisableJIT.setSelected(settings.DISABLE_JIT);
     myCbShowAlternativeSource.setSelected(settings.SHOW_ALTERNATIVE_SOURCE);
+    myCbKillImmediately.setSelected(settings.KILL_PROCESS_IMMEDIATELY);
+    myCbAlwaysDebug.setSelected(settings.ALWAYS_DEBUG);
   }
 
   @Override
@@ -67,6 +60,8 @@ class DebuggerLaunchingConfigurable implements ConfigurableUi<DebuggerSettings> 
     settings.FORCE_CLASSIC_VM = myCbForceClassicVM.isSelectedWhenSelectable();
     settings.DISABLE_JIT = myCbDisableJIT.isSelected();
     settings.SHOW_ALTERNATIVE_SOURCE = myCbShowAlternativeSource.isSelected();
+    settings.KILL_PROCESS_IMMEDIATELY = myCbKillImmediately.isSelected();
+    settings.ALWAYS_DEBUG = myCbAlwaysDebug.isSelected();
   }
 
   @Override
@@ -84,12 +79,16 @@ class DebuggerLaunchingConfigurable implements ConfigurableUi<DebuggerSettings> 
     myCbShowAlternativeSource = new JCheckBox(DebuggerBundle.message("label.debugger.general.configurable.show.alternative.source"));
     myRbSocket = new JRadioButton(DebuggerBundle.message("label.debugger.launching.configurable.socket"));
     myRbShmem = new JRadioButton(DebuggerBundle.message("label.debugger.launching.configurable.shmem"));
+    myCbKillImmediately = new JCheckBox(DebuggerBundle.message("label.debugger.general.configurable.kill.immediately"));
+    myCbAlwaysDebug = new JCheckBox(DebuggerBundle.message("label.debugger.general.configurable.always.debug"));
 
     final ButtonGroup gr = new ButtonGroup();
     gr.add(myRbSocket);
     gr.add(myRbShmem);
     final Box box = Box.createHorizontalBox();
+    box.add(Box.createRigidArea(JBUI.size(UIUtil.DEFAULT_HGAP, 0)));
     box.add(myRbSocket);
+    box.add(Box.createRigidArea(JBUI.size(UIUtil.DEFAULT_HGAP, 0)));
     box.add(myRbShmem);
     final JPanel transportPanel = new JPanel(new BorderLayout());
     transportPanel.add(new JLabel(DebuggerBundle.message("label.debugger.launching.configurable.debugger.transport")), BorderLayout.WEST);
@@ -101,6 +100,10 @@ class DebuggerLaunchingConfigurable implements ConfigurableUi<DebuggerSettings> 
     panel.add(myCbForceClassicVM);
     panel.add(myCbDisableJIT);
     panel.add(myCbShowAlternativeSource);
+    panel.add(myCbKillImmediately);
+    if (Registry.is("execution.java.always.debug")) {
+      panel.add(myCbAlwaysDebug);
+    }
 
     JPanel result = new JPanel(new BorderLayout());
     result.add(panel, BorderLayout.NORTH);

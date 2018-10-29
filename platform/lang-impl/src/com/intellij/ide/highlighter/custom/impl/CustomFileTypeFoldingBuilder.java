@@ -56,7 +56,7 @@ public class CustomFileTypeFoldingBuilder extends CustomFoldingBuilder {
     buildBraceMatcherBasedFolding(descriptors, root, document, highlighter);
   }
 
-  public static void buildBraceMatcherBasedFolding(List<FoldingDescriptor> descriptors,
+  public static void buildBraceMatcherBasedFolding(List<? super FoldingDescriptor> descriptors,
                                                    PsiElement root,
                                                    Document document,
                                                    SyntaxHighlighter highlighter) {
@@ -67,7 +67,7 @@ public class CustomFileTypeFoldingBuilder extends CustomFoldingBuilder {
     TextRange totalRange = root.getTextRange();
     final HighlighterIterator iterator = editorHighlighter.createIterator(totalRange.getStartOffset());
 
-    final LinkedList<Trinity<Integer, Integer, IElementType>> stack = new LinkedList<Trinity<Integer, Integer, IElementType>>();
+    final LinkedList<Trinity<Integer, Integer, IElementType>> stack = new LinkedList<>();
     String editorText = document.getText();
     while (!iterator.atEnd() && iterator.getStart() < totalRange.getEndOffset()) {
       final Trinity<Integer, Integer, IElementType> last;

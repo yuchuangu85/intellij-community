@@ -50,23 +50,23 @@ public abstract class FunctionalParserBase<R, T> implements FunctionalParser<R, 
 
   @NotNull
   public static <T> FunctionalParser<Token<T>, T> token(@NotNull final T type, @Nullable final String text) {
-    return new TokenParser<T>(type, text);
+    return new TokenParser<>(type, text);
   }
 
   @NotNull
   public static <R, T> FunctionalParser<List<R>, T> many(@NotNull final FunctionalParser<R, T> parser) {
-    return new ManyParser<R, T>(parser);
+    return new ManyParser<>(parser);
   }
 
   @NotNull
   public static <R, T> FunctionalParser<R, T> maybe(@NotNull final FunctionalParser<R, T> parser) {
-    return parser.or(FunctionalParserBase.<R, T>pure(null));
+    return parser.or(FunctionalParserBase.pure(null));
   }
 
   @NotNull
   @Override
   public FunctionalParser<R, T> endOfInput() {
-    return this.thenSkip(FunctionalParserBase.<T>finished());
+    return this.thenSkip(FunctionalParserBase.finished());
   }
 
   @NotNull
@@ -79,13 +79,13 @@ public abstract class FunctionalParserBase<R, T> implements FunctionalParser<R, 
   @NotNull
   @Override
   public FunctionalParser<R, T> cached() {
-    return new CachedParser<R, T>(this);
+    return new CachedParser<>(this);
   }
 
   @NotNull
   @Override
   public <R2> FunctionalParser<Pair<R, R2>, T> then(@NotNull final FunctionalParser<R2, T> parser) {
-    return new ThenParser<R, R2, T>(this, parser);
+    return new ThenParser<>(this, parser);
   }
 
   @NotNull
@@ -103,40 +103,40 @@ public abstract class FunctionalParserBase<R, T> implements FunctionalParser<R, 
   @NotNull
   @Override
   public FunctionalParser<R, T> or(@NotNull final FunctionalParser<R, T> parser) {
-    return new OrParser<R, T>(this, parser);
+    return new OrParser<>(this, parser);
   }
 
   @NotNull
   @Override
   public <R2> FunctionalParser<R2, T> map(@NotNull final Function<R, R2> f) {
-    return new MapParser<R2, T, R>(this, f);
+    return new MapParser<>(this, f);
   }
 
   @NotNull
   private static <R, R2, T> FunctionalParser<R, T> first(@NotNull final FunctionalParser<Pair<R, R2>, T> parser) {
-    return new FirstParser<R, T, R2>(parser);
+    return new FirstParser<>(parser);
   }
 
   @NotNull
   private static <R, R2, T> FunctionalParser<R2, T> second(@NotNull final FunctionalParser<Pair<R, R2>, T> parser) {
-    return new SecondParser<R2, T, R>(parser);
+    return new SecondParser<>(parser);
   }
 
   @NotNull
   private static <T> FunctionalParser<Object, T> finished() {
-    return new FinishedParser<T>();
+    return new FinishedParser<>();
   }
 
   @NotNull
   private static <R, T> FunctionalParser<R, T> pure(@Nullable final R value) {
-    return new PureParser<R, T>(value);
+    return new PureParser<>(value);
   }
 
   private static class TokenParser<T> extends FunctionalParserBase<Token<T>, T> {
     @NotNull private final T myType;
     @Nullable private final String myText;
 
-    public TokenParser(@NotNull T type, @Nullable String text) {
+    TokenParser(@NotNull T type, @Nullable String text) {
       myType = type;
       myText = text;
     }
@@ -162,14 +162,14 @@ public abstract class FunctionalParserBase<R, T> implements FunctionalParser<R, 
   private static class ManyParser<R, T> extends FunctionalParserBase<List<R>, T> {
     @NotNull private final FunctionalParser<R, T> myParser;
 
-    public ManyParser(@NotNull FunctionalParser<R, T> parser) {
+    ManyParser(@NotNull FunctionalParser<R, T> parser) {
       myParser = parser;
     }
 
     @NotNull
     @Override
     public Pair<List<R>, State> parse(@NotNull List<Token<T>> tokens, @NotNull State state) throws ParserException {
-      final List<R> list = new ArrayList<R>();
+      final List<R> list = new ArrayList<>();
       try {
         //noinspection InfiniteLoopStatement
         while (true) {
@@ -187,12 +187,12 @@ public abstract class FunctionalParserBase<R, T> implements FunctionalParser<R, 
   private static class CachedParser<R, T> extends FunctionalParserBase<R, T> {
     @NotNull private final FunctionalParser<R, T> myParser;
     @Nullable private Object myKey;
-    @NotNull private Map<Integer, SoftReference<Pair<R, State>>> myCache;
+    @NotNull private final Map<Integer, SoftReference<Pair<R, State>>> myCache;
 
-    public CachedParser(@NotNull FunctionalParser<R, T> parser) {
+    CachedParser(@NotNull FunctionalParser<R, T> parser) {
       myParser = parser;
       myKey = null;
-      myCache = new HashMap<Integer, SoftReference<Pair<R, State>>>();
+      myCache = new HashMap<>();
     }
 
     @NotNull
@@ -208,7 +208,7 @@ public abstract class FunctionalParserBase<R, T> implements FunctionalParser<R, 
         return cached;
       }
       final Pair<R, State> result = myParser.parse(tokens, state);
-      myCache.put(state.getPos(), new SoftReference<Pair<R, State>>(result));
+      myCache.put(state.getPos(), new SoftReference<>(result));
       return result;
     }
   }
@@ -217,7 +217,7 @@ public abstract class FunctionalParserBase<R, T> implements FunctionalParser<R, 
    @NotNull private final FunctionalParserBase<R, T> myFirst;
    @NotNull private final FunctionalParser<R, T> mySecond;
 
-    public OrParser(@NotNull FunctionalParserBase<R, T> first, @NotNull FunctionalParser<R, T> second) {
+    OrParser(@NotNull FunctionalParserBase<R, T> first, @NotNull FunctionalParser<R, T> second) {
       myFirst = first;
       mySecond = second;
     }
@@ -237,7 +237,7 @@ public abstract class FunctionalParserBase<R, T> implements FunctionalParser<R, 
   private static class FirstParser<R, T, R2> extends FunctionalParserBase<R, T> {
     @NotNull private final FunctionalParser<Pair<R, R2>, T> myParser;
 
-    public FirstParser(@NotNull FunctionalParser<Pair<R, R2>, T> parser) {
+    FirstParser(@NotNull FunctionalParser<Pair<R, R2>, T> parser) {
       myParser = parser;
     }
 
@@ -252,7 +252,7 @@ public abstract class FunctionalParserBase<R, T> implements FunctionalParser<R, 
   private static class SecondParser<R2, T, R> extends FunctionalParserBase<R2, T> {
     @NotNull private final FunctionalParser<Pair<R, R2>, T> myParser;
 
-    public SecondParser(@NotNull FunctionalParser<Pair<R, R2>, T> parser) {
+    SecondParser(@NotNull FunctionalParser<Pair<R, R2>, T> parser) {
       myParser = parser;
     }
 
@@ -279,7 +279,7 @@ public abstract class FunctionalParserBase<R, T> implements FunctionalParser<R, 
   private static class PureParser<R, T> extends FunctionalParserBase<R, T> {
     @Nullable private final R myValue;
 
-    public PureParser(@Nullable R value) {
+    PureParser(@Nullable R value) {
       myValue = value;
     }
 
@@ -294,7 +294,7 @@ public abstract class FunctionalParserBase<R, T> implements FunctionalParser<R, 
     @NotNull private final FunctionalParser<R, T> myFirst;
     @NotNull private final FunctionalParser<R2, T> mySecond;
 
-    public ThenParser(@NotNull FunctionalParser<R, T> first, @NotNull FunctionalParser<R2, T> second) {
+    ThenParser(@NotNull FunctionalParser<R, T> first, @NotNull FunctionalParser<R2, T> second) {
       myFirst = first;
       mySecond = second;
     }
@@ -312,7 +312,7 @@ public abstract class FunctionalParserBase<R, T> implements FunctionalParser<R, 
     @NotNull private final FunctionalParserBase<R, T> myParser;
     @NotNull private final Function<R, R2> myFunction;
 
-    public MapParser(@NotNull FunctionalParserBase<R, T> parser, @NotNull Function<R, R2> function) {
+    MapParser(@NotNull FunctionalParserBase<R, T> parser, @NotNull Function<R, R2> function) {
       myParser = parser;
       myFunction = function;
     }

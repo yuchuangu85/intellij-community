@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiElement;
 import com.intellij.util.IncorrectOperationException;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElement;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElementFactory;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyRecursiveElementVisitor;
@@ -27,10 +28,6 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.blocks.GrClosableBlo
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrReferenceExpression;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.path.GrMethodCallExpression;
 
-/**
- * User: Dmitry.Krasilschikov
- * Date: 22.05.2007
- */
 public class SurrounderByClosure extends GroovyManyStatementsSurrounder {
   private static final Key<GroovyResolveResult> REF_RESOLVE_RESULT_KEY = Key.create("REF_RESOLVE_RESULT");
 
@@ -65,7 +62,7 @@ public class SurrounderByClosure extends GroovyManyStatementsSurrounder {
 
   private static class MyMemoizingVisitor extends GroovyRecursiveElementVisitor {
     @Override
-    public void visitReferenceExpression(GrReferenceExpression ref) {
+    public void visitReferenceExpression(@NotNull GrReferenceExpression ref) {
       if (ref.getQualifierExpression() == null) { //only unqualified references could change their targets
         final GroovyResolveResult resolveResult = ref.advancedResolve();
         ref.putCopyableUserData(REF_RESOLVE_RESULT_KEY, resolveResult);
@@ -76,7 +73,7 @@ public class SurrounderByClosure extends GroovyManyStatementsSurrounder {
 
   private static class MyRestoringVisitor extends GroovyRecursiveElementVisitor {
     @Override
-    public void visitReferenceExpression(GrReferenceExpression ref) {
+    public void visitReferenceExpression(@NotNull GrReferenceExpression ref) {
       final GroovyResolveResult oldResult = ref.getCopyableUserData(REF_RESOLVE_RESULT_KEY);
       if (oldResult != null) {
         assert ref.getQualifierExpression() == null;

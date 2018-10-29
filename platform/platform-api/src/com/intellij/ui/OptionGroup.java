@@ -29,15 +29,15 @@ import java.util.List;
  * This class creates a nicely formatted panel with components.  Useful for option panels.
  */
 public class OptionGroup implements PanelWithAnchor {
-  private String myTitle;
-  private List myOptions;
-  private List<Boolean> myIsShifted;
+  private final String myTitle;
+  private final List myOptions;
+  private final List<Boolean> myIsShifted;
   private JComponent anchor;
 
   public OptionGroup(@Nullable String title) {
     myTitle = title;
     myOptions = new ArrayList();
-    myIsShifted = new ArrayList<Boolean>();
+    myIsShifted = new ArrayList<>();
   }
 
   /**
@@ -132,7 +132,7 @@ public class OptionGroup implements PanelWithAnchor {
   }
 
   public JComponent[] getComponents() {
-    ArrayList<JComponent> components = new ArrayList<JComponent>();
+    ArrayList<JComponent> components = new ArrayList<>();
     for (Object o : myOptions) {
       if (o instanceof Pair) {
         components.add((JComponent)((Pair)o).first);
@@ -142,7 +142,7 @@ public class OptionGroup implements PanelWithAnchor {
         components.add((JComponent)o);
       }
     }
-    return components.toArray(new JComponent[components.size()]);
+    return components.toArray(new JComponent[0]);
   }
 
   @Nullable

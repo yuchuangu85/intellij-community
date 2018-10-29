@@ -17,9 +17,6 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
-* Created by Maxim.Mossienko on 3/19/2014.
-*/
 public class TracingData {
   private static final String tracingDataLocation = "E:\\ultimate\\system\\occurrences";
   private final PersistentHashMap<Integer, Integer> keys;
@@ -49,7 +46,8 @@ public class TracingData {
   }
 
   private static PersistentHashMap<Integer, Integer> createOrOpenMap() throws IOException {
-    return new PersistentHashMap<Integer, Integer>(new File(tracingDataLocation), EnumeratorIntegerDescriptor.INSTANCE, EnumeratorIntegerDescriptor.INSTANCE);
+    return new PersistentHashMap<>(new File(tracingDataLocation), EnumeratorIntegerDescriptor.INSTANCE,
+                                   EnumeratorIntegerDescriptor.INSTANCE);
   }
 
   public void record(int hash, int cost, PsiFragment frag) {

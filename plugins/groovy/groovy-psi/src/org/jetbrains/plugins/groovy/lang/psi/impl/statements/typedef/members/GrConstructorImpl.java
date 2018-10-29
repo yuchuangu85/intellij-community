@@ -39,6 +39,7 @@ public class GrConstructorImpl extends GrMethodBaseImpl implements GrMethod {
     super(stub, GroovyElementTypes.CONSTRUCTOR_DEFINITION);
   }
 
+  @Override
   public String toString() {
     return "Constructor";
   }
@@ -53,6 +54,6 @@ public class GrConstructorImpl extends GrMethodBaseImpl implements GrMethod {
   public GrReflectedMethod[] getReflectedMethods() {
     return CachedValuesManager.getCachedValue(this,
                                               () -> CachedValueProvider.Result
-                                                .create(GrReflectedMethodImpl.createReflectedConstructors(GrConstructorImpl.this), PsiModificationTracker.OUT_OF_CODE_BLOCK_MODIFICATION_COUNT));
+                                                .create(GrReflectedMethodImpl.createReflectedConstructors(this), PsiModificationTracker.OUT_OF_CODE_BLOCK_MODIFICATION_COUNT));
   }
 }

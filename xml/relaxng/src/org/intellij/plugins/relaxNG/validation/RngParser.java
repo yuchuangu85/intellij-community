@@ -69,11 +69,6 @@ import org.xml.sax.helpers.DefaultHandler;
 import java.io.StringReader;
 import java.util.concurrent.ConcurrentMap;
 
-/*
-* Created by IntelliJ IDEA.
-* User: sweinreuter
-* Date: 19.07.2007
-*/
 public class RngParser {
   private static final Logger LOG = Logger.getInstance("#org.intellij.plugins.relaxNG.validation.RngParser");
 
@@ -91,7 +86,7 @@ public class RngParser {
     }
   };
 
-  private static final ConcurrentMap<String, DPattern> ourCache = ContainerUtil.createConcurrentSoftMap();
+  private static final ConcurrentMap<String, DPattern> ourCache = ContainerUtil.createConcurrentSoftValueMap();
 
   private static DatatypeLibraryFactory createXsdDatatypeFactory() {
     try {
@@ -126,10 +121,7 @@ public class RngParser {
       pattern = parsePattern(descriptorFile, eh, false);
     }
     if (pattern != null) {
-      DPattern oldPattern = ourCache.putIfAbsent(url, pattern);
-      if (oldPattern != null) {
-        return oldPattern;
-      }
+      ourCache.put(url, pattern);
     }
     return pattern;
   }
@@ -200,7 +192,7 @@ public class RngParser {
 
         try {
           final Schema schema = new MySchemaReader(descriptorFile).createSchema(inputSource, EMPTY_PROPS);
-          final PsiElementProcessor.CollectElements<XmlFile> processor = new PsiElementProcessor.CollectElements<XmlFile>();
+          final PsiElementProcessor.CollectElements<XmlFile> processor = new PsiElementProcessor.CollectElements<>();
           RelaxIncludeIndex.processForwardDependencies(descriptorFile, processor);
           if (processor.getCollection().size() > 0) {
             return CachedValueProvider.Result.create(schema, processor.toArray(), descriptorFile);
@@ -232,7 +224,7 @@ public class RngParser {
   static class MySchemaReader extends SchemaReaderImpl {
     private final PsiFile myDescriptorFile;
 
-    public MySchemaReader(PsiFile descriptorFile) {
+    MySchemaReader(PsiFile descriptorFile) {
       myDescriptorFile = descriptorFile;
     }
 

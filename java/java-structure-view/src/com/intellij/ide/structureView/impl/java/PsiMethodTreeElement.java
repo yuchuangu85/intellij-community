@@ -28,11 +28,13 @@ import com.intellij.psi.*;
 import com.intellij.psi.search.searches.SuperMethodsSearch;
 import com.intellij.psi.util.MethodSignatureBackedByPsiMethod;
 import com.intellij.psi.util.PsiFormatUtil;
-import com.intellij.util.Function;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 
 import static com.intellij.psi.util.PsiFormatUtilBase.*;
 
@@ -60,12 +62,12 @@ public class PsiMethodTreeElement extends JavaClassTreeElementBase<PsiMethod> im
 
     if (!range.substring(fileText).contains(PsiKeyword.CLASS)) return emptyResult;
 
-    final ArrayList<StructureViewTreeElement> result = new ArrayList<StructureViewTreeElement>();
+    final ArrayList<StructureViewTreeElement> result = new ArrayList<>();
 
     element.accept(new JavaRecursiveElementWalkingVisitor(){
       @Override public void visitClass(PsiClass aClass) {
         if (!(aClass instanceof PsiAnonymousClass) && !(aClass instanceof PsiTypeParameter)) {
-          result.add(new JavaClassTreeElement(aClass, isInherited(), new HashSet<PsiClass>(Arrays.asList(aClass.getSupers()))));
+          result.add(new JavaClassTreeElement(aClass, isInherited()));
         }
       }
     });

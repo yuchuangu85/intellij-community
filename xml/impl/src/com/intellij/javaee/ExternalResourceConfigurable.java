@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.javaee;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -28,7 +14,6 @@ import com.intellij.ui.AddEditRemovePanel;
 import com.intellij.ui.table.JBTable;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.ui.UIUtil;
 import com.intellij.xml.XmlBundle;
 import org.jetbrains.annotations.Nullable;
 
@@ -42,22 +27,21 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class ExternalResourceConfigurable extends BaseConfigurable
-  implements Configurable.NoScroll {
+public class ExternalResourceConfigurable extends BaseConfigurable implements Configurable.NoScroll {
   private JPanel myPanel;
   private List<NameLocationPair> myPairs;
   private List<String> myIgnoredUrls;
   private AddEditRemovePanel<NameLocationPair> myExtPanel;
   private AddEditRemovePanel<String> myIgnorePanel;
   @Nullable private final Project myProject;
-  private final List<NameLocationPair> myNewPairs;
+  private final List<? extends NameLocationPair> myNewPairs;
 
   @SuppressWarnings("UnusedDeclaration")
   public ExternalResourceConfigurable(@Nullable Project project) {
-    this(project, Collections.<NameLocationPair>emptyList());
+    this(project, Collections.emptyList());
   }
 
-  public ExternalResourceConfigurable(@Nullable Project project, List<NameLocationPair> newResources) {
+  public ExternalResourceConfigurable(@Nullable Project project, List<? extends NameLocationPair> newResources) {
     myProject = project;
     myNewPairs = newResources;
   }
@@ -163,10 +147,7 @@ public class ExternalResourceConfigurable extends BaseConfigurable
         }
       }
 
-      for (Object myIgnoredUrl : myIgnoredUrls) {
-        String url = (String)myIgnoredUrl;
-        manager.addIgnoredResource(url);
-      }
+      manager.addIgnoredResources(myIgnoredUrls, null);
     });
 
     setModified(false);
@@ -175,7 +156,7 @@ public class ExternalResourceConfigurable extends BaseConfigurable
   @Override
   public void reset() {
 
-    myPairs = new ArrayList<NameLocationPair>(myNewPairs);
+    myPairs = new ArrayList<>(myNewPairs);
     ExternalResourceManagerEx manager = ExternalResourceManagerEx.getInstanceEx();
 
     String[] urls = manager.getAvailableUrls();
@@ -193,7 +174,7 @@ public class ExternalResourceConfigurable extends BaseConfigurable
 
     Collections.sort(myPairs);
 
-    myIgnoredUrls = new ArrayList<String>();
+    myIgnoredUrls = new ArrayList<>();
     final String[] ignoredResources = manager.getIgnoredResources();
     ContainerUtil.addAll(myIgnoredUrls, ignoredResources);
 
@@ -283,8 +264,9 @@ public class ExternalResourceConfigurable extends BaseConfigurable
         } else {
           path = LocalFileSystem.getInstance().findFileByPath(loc);
         }
-
-        setForeground(path != null ? isSelected ? UIUtil.getTableSelectionForeground() : Color.black : new Color(210, 0, 0));
+        if (path == null) {
+          setForeground(new Color(210, 0, 0));
+        }
       }
       return rendererComponent;
     }
@@ -304,21 +286,6 @@ public class ExternalResourceConfigurable extends BaseConfigurable
     }
 
     @Override
-    public Class getColumnClass(int columnIndex) {
-      return String.class;
-    }
-
-    @Override
-    public boolean isEditable(int column) {
-      return false;
-    }
-
-    @Override
-    public void setValue(Object aValue, String data, int columnIndex) {
-
-    }
-
-    @Override
     public String getColumnName(int column) {
       return myNames[column];
     }
@@ -328,7 +295,7 @@ public class ExternalResourceConfigurable extends BaseConfigurable
     final String[] myNames;
 
     {
-      List<String> names = new ArrayList<String>();
+      List<String> names = new ArrayList<>();
       names.add(XmlBundle.message("column.name.edit.external.resource.uri"));
       names.add(XmlBundle.message("column.name.edit.external.resource.location"));
       if (myProject != null) {

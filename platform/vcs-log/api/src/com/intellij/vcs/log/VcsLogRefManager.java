@@ -56,17 +56,24 @@ public interface VcsLogRefManager {
   Comparator<VcsRef> getLabelsOrderComparator();
 
   /**
-   * <p>Groups VCS references to show them on the branches panel.</p>
+   * <p>Groups VCS references to show them in branch filter.</p>
    * <p>Groups containing only one element will be displayed as a single ref. Others will provide a popup menu.</p>
    * <p>Groups must be pre-sorted in the order which they are to be painted on the panel.</p>
    */
   @NotNull
-  List<RefGroup> group(Collection<VcsRef> refs);
+  List<RefGroup> groupForBranchFilter(@NotNull Collection<VcsRef> refs);
+
+  /**
+   * Groups VCS references to show them in graph table.
+   * All references given to this method are from the same commit.
+   */
+  @NotNull
+  List<RefGroup> groupForTable(@NotNull Collection<VcsRef> refs, boolean compact, boolean showTagNames);
 
   /**
    * Writes given reference type to the output.
    *
-   * @param out output to write type into
+   * @param out  output to write type into
    * @param type type to serialize
    */
   void serialize(@NotNull DataOutput out, @NotNull VcsRefType type) throws IOException;
@@ -79,4 +86,20 @@ public interface VcsLogRefManager {
    */
   @NotNull
   VcsRefType deserialize(@NotNull DataInput in) throws IOException;
+
+  /**
+   * Checks whether a reference is a favorite.
+   *
+   * @param reference reference to check
+   * @return true if provided reference is a favorite, false otherwise
+   */
+  boolean isFavorite(@NotNull VcsRef reference);
+
+  /**
+   * Marks or unmarks a reference as favorite.
+   *
+   * @param reference a reference to mark or unmark as favorite
+   * @param favorite  true means to mark as favorite, false to unmark
+   */
+  void setFavorite(@NotNull VcsRef reference, boolean favorite);
 }

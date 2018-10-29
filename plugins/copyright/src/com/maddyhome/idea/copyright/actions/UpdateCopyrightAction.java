@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.maddyhome.idea.copyright.actions;
 
@@ -20,6 +6,7 @@ import com.intellij.analysis.AnalysisScope;
 import com.intellij.analysis.BaseAnalysisAction;
 import com.intellij.analysis.BaseAnalysisActionDialog;
 import com.intellij.codeInsight.FileModificationService;
+import com.intellij.copyright.CopyrightManager;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.command.CommandProcessor;
@@ -37,7 +24,6 @@ import com.intellij.psi.*;
 import com.intellij.ui.TitledSeparator;
 import com.intellij.util.SequentialModalProgressTask;
 import com.intellij.util.SequentialTask;
-import com.maddyhome.idea.copyright.CopyrightManager;
 import com.maddyhome.idea.copyright.pattern.FileUtil;
 import com.maddyhome.idea.copyright.util.FileTypeUtil;
 import org.jetbrains.annotations.NotNull;
@@ -56,7 +42,8 @@ public class UpdateCopyrightAction extends BaseAnalysisAction {
     super(UpdateCopyrightProcessor.TITLE, UpdateCopyrightProcessor.TITLE);
   }
 
-  public void update(AnActionEvent event) {
+  @Override
+  public void update(@NotNull AnActionEvent event) {
     final boolean enabled = isEnabled(event);
     event.getPresentation().setEnabled(enabled);
     if (ActionPlaces.isPopupPlace(event.getPlace())) {
@@ -124,7 +111,7 @@ public class UpdateCopyrightAction extends BaseAnalysisAction {
   protected JComponent getAdditionalActionSettings(Project project, BaseAnalysisActionDialog dialog) {
     final JPanel panel = new JPanel(new VerticalFlowLayout());
     panel.add(new TitledSeparator());
-    myUpdateExistingCopyrightsCb = new JCheckBox("Update existing copyrights", 
+    myUpdateExistingCopyrightsCb = new JCheckBox("Update existing copyrights",
                                                  PropertiesComponent.getInstance().getBoolean(UPDATE_EXISTING_COPYRIGHTS, true));
     panel.add(myUpdateExistingCopyrightsCb);
     return panel;
@@ -133,7 +120,7 @@ public class UpdateCopyrightAction extends BaseAnalysisAction {
   @Override
   protected void analyze(@NotNull final Project project, @NotNull final AnalysisScope scope) {
     PropertiesComponent.getInstance().setValue(UPDATE_EXISTING_COPYRIGHTS, String.valueOf(myUpdateExistingCopyrightsCb.isSelected()), "true");
-    final Map<PsiFile, Runnable> preparations = new LinkedHashMap<PsiFile, Runnable>();
+    final Map<PsiFile, Runnable> preparations = new LinkedHashMap<>();
     Task.Backgroundable task = new Task.Backgroundable(project, "Prepare Copyright...", true) {
       @Override
       public void run(@NotNull final ProgressIndicator indicator) {

@@ -1,30 +1,20 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide;
 
+import com.intellij.ide.impl.ProjectUtil;
+import com.intellij.ide.ui.ProductIcons;
 import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.application.ApplicationInfo;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.JetBrainsProtocolHandler;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.application.ex.ApplicationInfoEx;
+import com.intellij.openapi.components.PathMacroManager;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
-import com.intellij.openapi.project.ProjectManagerAdapter;
+import com.intellij.openapi.project.ProjectManagerListener;
 import com.intellij.openapi.project.impl.ProjectImpl;
-import com.intellij.openapi.util.IconLoader;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.SystemInfo;
@@ -32,12 +22,13 @@ import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.CharsetToolkit;
+import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.impl.SystemDock;
+import com.intellij.platform.PlatformProjectOpenProcessor;
+import com.intellij.project.ProjectKt;
 import com.intellij.ui.IconDeferrer;
-import com.intellij.util.Alarm;
-import com.intellij.util.IconUtil;
-import com.intellij.util.ImageLoader;
-import com.intellij.util.SmartList;
+import com.intellij.util.*;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.messages.MessageBus;
 import com.intellij.util.messages.MessageBusConnection;
@@ -50,14 +41,15 @@ import gnu.trove.THashSet;
 import org.imgscalr.Scalr;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.SystemIndependent;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.MalformedURLException;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 
 /**
  * @author yole
@@ -65,7 +57,7 @@ import java.util.List;
  */
 public abstract class RecentProjectsManagerBase extends RecentProjectsManager implements PersistentStateComponent<RecentProjectsManagerBase.State> {
   private static final int MAX_PROJECTS_IN_MAIN_MENU = 6;
-  private static final Map<String, MyIcon> ourProjectIcons = new HashMap<String, MyIcon>();
+  private static final Map<String, MyIcon> ourProjectIcons = new HashMap<>();
   private static Icon ourSmallAppIcon;
   private final Alarm myNamesResolver = new Alarm(Alarm.ThreadToUse.POOLED_THREAD, ApplicationManager.getApplication());
   private final Set<String> myNamesToResolve = new HashSet<>(MAX_PROJECTS_IN_MAIN_MENU);
@@ -75,12 +67,13 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
   }
 
   public static class State {
-    public List<String> recentPaths = new SmartList<String>();
-    public List<String> openPaths = new SmartList<String>();
-    public Map<String, String> names = ContainerUtil.newLinkedHashMap();
-    public List<ProjectGroup> groups = new SmartList<ProjectGroup>();
+    public final List<String> recentPaths = new SmartList<>();
+    public final List<String> openPaths = new SmartList<>();
+    public final Map<String, String> names = ContainerUtil.newLinkedHashMap();
+    public final List<ProjectGroup> groups = new SmartList<>();
     public String lastPath;
-    public Map<String, RecentProjectMetaInfo> additionalInfo = ContainerUtil.newLinkedHashMap();
+    public String pid;
+    public final Map<String, RecentProjectMetaInfo> additionalInfo = ContainerUtil.newLinkedHashMap();
 
     public String lastProjectLocation;
 
@@ -97,51 +90,122 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
         recentPaths.remove(index);
       }
     }
+
+    // TODO Should be removed later (required to convert the already saved system-dependent paths).
+    private void makePathsSystemIndependent() {
+      ApplicationInfo appInfo = ApplicationInfo.getInstance();
+      String version = appInfo.getMajorVersion() + "." + appInfo.getMinorVersion();
+      PathMacroManager pathMacroManager = PathMacroManager.getInstance(ApplicationManager.getApplication());
+      Function<String, String> convert = depPath -> {
+        String result = PathUtil.toSystemIndependentName(depPath);
+        if (!result.startsWith("$APP") && result.contains("2017.1")) {
+          String migrated = result.replace("2017.1", version);
+          // check for possible PathMacroUtil.APPLICATION_*
+          if (pathMacroManager.collapsePath(migrated).startsWith("$APP")) {
+            return migrated;
+          }
+        }
+        return result;
+      };
+      Consumer<List<String>> convertList = o -> {
+        for (ListIterator<String> it = o.listIterator(); it.hasNext(); ) {
+          it.set(convert.fun(it.next()));
+        }
+      };
+
+      convertList.consume(recentPaths);
+      convertList.consume(openPaths);
+
+      Map<String, String> namesCopy = new HashMap<>(names);
+      names.clear();
+      for (Map.Entry<String, String> entry : namesCopy.entrySet()) {
+        names.put(convert.fun(entry.getKey()), entry.getValue());
+      }
+
+      for (ProjectGroup group : groups) {
+        List<String> paths = new ArrayList<>(group.getProjects());
+        convertList.consume(paths);
+        group.save(paths);
+      }
+
+      if (lastPath != null) {
+        lastPath = convert.fun(lastPath);
+      }
+
+      Map<String, RecentProjectMetaInfo> additionalInfoCopy = new HashMap<>(additionalInfo);
+      additionalInfo.clear();
+      for (Map.Entry<String, RecentProjectMetaInfo> entry : additionalInfoCopy.entrySet()) {
+        entry.getValue().binFolder = convert.fun(entry.getValue().binFolder);
+        additionalInfo.put(convert.fun(entry.getKey()), entry.getValue());
+      }
+
+      if (lastProjectLocation != null) {
+        lastProjectLocation = convert.fun(lastProjectLocation);
+      }
+    }
+
+    public void updateOpenProjectsTimestamps(RecentProjectsManagerBase mgr) {
+      for (Project project : ProjectManager.getInstance().getOpenProjects()) {
+        String path = PathUtil.toSystemIndependentName(mgr.getProjectPath(project));
+        RecentProjectMetaInfo info = additionalInfo.get(path);
+        if (info != null) {
+          info.projectOpenTimestamp = System.currentTimeMillis();
+        }
+      }
+    }
   }
 
   private final Object myStateLock = new Object();
   private State myState = new State();
 
   private final Map<String, String> myNameCache = Collections.synchronizedMap(new THashMap<String, String>());
-  private Set<String> myDuplicatesCache = null;
-  private boolean isDuplicatesCacheUpdating = false;
+  private boolean myBatchOpening;
 
   protected RecentProjectsManagerBase(@NotNull MessageBus messageBus) {
     MessageBusConnection connection = messageBus.connect();
     connection.subscribe(AppLifecycleListener.TOPIC, new MyAppLifecycleListener());
-    if (!ApplicationManager.getApplication().isHeadlessEnvironment()) {
-      connection.subscribe(ProjectManager.TOPIC, new MyProjectListener());
-    }
+    connection.subscribe(ProjectManager.TOPIC, new MyProjectListener());
   }
 
   @Override
   public State getState() {
     synchronized (myStateLock) {
+      if (myState.pid == null) {
+        //todo[kb] uncomment when we will fix JRE-251 The pid is needed for 3rd parties like Toolbox App to show the project is open now
+        myState.pid = "";//OSProcessUtil.getApplicationPid();
+      }
+      updateLastProjectPath();
       myState.validateRecentProjects();
+      myState.updateOpenProjectsTimestamps(this);
       return myState;
     }
   }
 
+  @NotNull
+  protected State getStateInner() {
+    return myState;
+  }
+
   @Override
-  public void loadState(final State state) {
+  public void loadState(@NotNull final State state) {
+    state.makePathsSystemIndependent();
     removeDuplicates(state);
-    if (state.lastPath != null && !new File(state.lastPath).exists()) {
-      state.lastPath = null;
-    }
     if (state.lastPath != null) {
-      File lastFile = new File(state.lastPath);
-      if (lastFile.isDirectory() && !new File(lastFile, Project.DIRECTORY_STORE_FOLDER).exists()) {
+      File lastFile = new File(PathUtil.toSystemDependentName(state.lastPath));
+      if (!lastFile.exists() ||
+          lastFile.isDirectory() && !new File(lastFile, Project.DIRECTORY_STORE_FOLDER).exists()) {
         state.lastPath = null;
       }
     }
     synchronized (myStateLock) {
       myState = state;
+      myState.pid = null;
     }
   }
 
   protected void removeDuplicates(State state) {
-    for (String path : new ArrayList<String>(state.recentPaths)) {
-      if (path.endsWith(File.separator)) {
+    for (String path : new ArrayList<>(state.recentPaths)) {
+      if (path.endsWith("/")) {
         state.recentPaths.remove(path);
         state.additionalInfo.remove(path);
         state.openPaths.remove(path);
@@ -159,7 +223,7 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
   }
 
   @Override
-  public void removePath(@Nullable String path) {
+  public void removePath(@Nullable @SystemIndependent String path) {
     if (path == null) {
       return;
     }
@@ -174,7 +238,7 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
   }
 
   @Override
-  public boolean hasPath(String path) {
+  public boolean hasPath(@SystemIndependent String path) {
     final State state = getState();
     return state != null && state.recentPaths.contains(path);
   }
@@ -184,16 +248,19 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
    */
   @Override
   @Nullable
+  @SystemIndependent
   public String getLastProjectCreationLocation() {
     return myState.lastProjectLocation;
   }
 
   @Override
-  public void setLastProjectCreationLocation(@Nullable String lastProjectLocation) {
-    myState.lastProjectLocation = StringUtil.nullize(lastProjectLocation, true);
+  public void setLastProjectCreationLocation(@Nullable @SystemIndependent String lastProjectLocation) {
+    String location = StringUtil.nullize(lastProjectLocation, true);
+    myState.lastProjectLocation = PathUtil.toSystemIndependentName(location);
   }
 
   @Override
+  @SystemIndependent
   public String getLastProjectPath() {
     return myState.lastPath;
   }
@@ -225,7 +292,7 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
   }
 
   @Nullable
-  public static Icon getProjectIcon(String path, boolean isDark) {
+  public static Icon getProjectIcon(@SystemIndependent String path, boolean isDark) {
     final MyIcon icon = ourProjectIcons.get(path);
     if (icon != null) {
       return icon.getIcon();
@@ -236,7 +303,7 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
   }
 
   @Nullable
-  protected static Icon calculateIcon(String path, boolean isDark) {
+  protected static Icon calculateIcon(@SystemIndependent String path, boolean isDark) {
     File file = new File(path + (isDark ? "/.idea/icon_dark.png" : "/.idea/icon.png"));
     if (file.exists()) {
       final long timestamp = file.lastModified();
@@ -268,10 +335,12 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
     return new Icon() {
       @Override
       public void paintIcon(Component c, Graphics g, int x, int y) {
-        if (UIUtil.isRetina()) {
+        // [tav] todo: the icon is created in def screen scale
+        if (UIUtil.isJreHiDPI()) {
           final Graphics2D newG = (Graphics2D)g.create(x, y, image.getWidth(), image.getHeight());
-          newG.scale(0.5, 0.5);
-          newG.drawImage(image, x/2, y/2, null);
+          float s = JBUI.sysScale();
+          newG.scale(1/s, 1/s);
+          newG.drawImage(image, (int)(x / s), (int)(y / s), null);
           newG.scale(1, 1);
           newG.dispose();
         }
@@ -282,12 +351,12 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
 
       @Override
       public int getIconWidth() {
-        return UIUtil.isRetina() ? image.getWidth() / 2 : image.getWidth();
+        return UIUtil.isJreHiDPI() ? (int)(image.getWidth() / JBUI.sysScale()) : image.getWidth();
       }
 
       @Override
       public int getIconHeight() {
-        return UIUtil.isRetina() ? image.getHeight() / 2 : image.getHeight();
+        return UIUtil.isJreHiDPI() ? (int)(image.getHeight() / JBUI.sysScale()) : image.getHeight();
       }
     };
   }
@@ -295,7 +364,7 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
   private static BufferedImage loadAndScaleImage(File file) {
     try {
       Image img = ImageLoader.loadFromUrl(file.toURL());
-      return Scalr.resize(ImageUtil.toBufferedImage(img), Scalr.Method.ULTRA_QUALITY, UIUtil.isRetina() ? 32 : JBUI.scale(16));
+      return Scalr.resize(ImageUtil.toBufferedImage(img), Scalr.Method.ULTRA_QUALITY, UIUtil.isRetina() ? 32 : (int)JBUI.pixScale(16));
     }
     catch (MalformedURLException e) {//
     }
@@ -322,16 +391,15 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
   protected static Icon getSmallApplicationIcon() {
     if (ourSmallAppIcon == null) {
       try {
-        Icon appIcon = IconLoader.findIcon(ApplicationInfoEx.getInstanceEx().getIconUrl());
+        Icon appIcon = ProductIcons.getInstance().getProductIcon();
 
-        if (appIcon != null) {
-          if (appIcon.getIconWidth() == JBUI.scale(16) && appIcon.getIconHeight() == JBUI.scale(16)) {
-            ourSmallAppIcon = appIcon;
-          } else {
-            BufferedImage image = ImageUtil.toBufferedImage(IconUtil.toImage(appIcon));
-            image = Scalr.resize(image, Scalr.Method.ULTRA_QUALITY, UIUtil.isRetina() ? 32 : JBUI.scale(16));
-            ourSmallAppIcon = toRetinaAwareIcon(image);
-          }
+        if (appIcon.getIconWidth() == JBUI.pixScale(16) && appIcon.getIconHeight() == JBUI.pixScale(16)) {
+          ourSmallAppIcon = appIcon;
+        }
+        else {
+          BufferedImage image = ImageUtil.toBufferedImage(IconUtil.toImage(appIcon));
+          image = Scalr.resize(image, Scalr.Method.ULTRA_QUALITY, UIUtil.isRetina() ? 32 : (int)JBUI.pixScale(16));
+          ourSmallAppIcon = toRetinaAwareIcon(image);
         }
       }
       catch (Exception e) {//
@@ -345,25 +413,14 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
   }
 
   private Set<String> getDuplicateProjectNames(Set<String> openedPaths, Set<String> recentPaths) {
-    if (myDuplicatesCache != null) {
-      return myDuplicatesCache;
+    Set<String> names = ContainerUtil.newHashSet();
+    Set<String> duplicates = ContainerUtil.newHashSet();
+    for (String path : ContainerUtil.concat(openedPaths, recentPaths)) {
+      if (!names.add(getProjectName(path))) {
+        duplicates.add(path);
+      }
     }
-
-    if (!isDuplicatesCacheUpdating) {
-      isDuplicatesCacheUpdating = true; //assuming that this check happens only on EDT. So, no synchronised block or double-checked locking needed
-      ApplicationManager.getApplication().executeOnPooledThread(() -> {
-        Set<String> names = ContainerUtil.newHashSet();
-        final HashSet<String> duplicates = ContainerUtil.newHashSet();
-        for (String path : ContainerUtil.concat(openedPaths, recentPaths)) {
-          if (!names.add(getProjectName(path))) {
-            duplicates.add(path);
-          }
-        }
-        myDuplicatesCache = duplicates;
-        isDuplicatesCacheUpdating = false;
-      });
-    }
-    return ContainerUtil.newHashSet();
+    return duplicates;
   }
 
   @Override
@@ -379,19 +436,19 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
       paths = ContainerUtil.newLinkedHashSet(myState.recentPaths);
     }
 
-    Set<String> openedPaths = new THashSet<String>();
+    Set<String> openedPaths = new THashSet<>();
     for (Project openProject : ProjectManager.getInstance().getOpenProjects()) {
       ContainerUtil.addIfNotNull(openedPaths, getProjectPath(openProject));
     }
 
     paths.remove(null);
-    paths.removeAll(openedPaths);
+    //paths.removeAll(openedPaths);
 
-    List<AnAction> actions = new SmartList<AnAction>();
+    List<AnAction> actions = new SmartList<>();
     Set<String> duplicates = getDuplicateProjectNames(openedPaths, paths);
     if (useGroups) {
-      final List<ProjectGroup> groups = new ArrayList<ProjectGroup>(new ArrayList<ProjectGroup>(myState.groups));
-      final List<String> projectPaths = new ArrayList<String>(paths);
+      final List<ProjectGroup> groups = new ArrayList<>(new ArrayList<>(myState.groups));
+      final List<String> projectPaths = new ArrayList<>(paths);
       Collections.sort(groups, new Comparator<ProjectGroup>() {
         @Override
         public int compare(ProjectGroup o1, ProjectGroup o2) {
@@ -401,10 +458,10 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
         }
 
         private int getGroupIndex(ProjectGroup group) {
-          int index = -1;
+          int index = Integer.MAX_VALUE;
           for (String path : group.getProjects()) {
             final int i = projectPaths.indexOf(path);
-            if (index >= 0 && index > i) {
+            if (i >= 0 && index > i) {
               index = i;
             }
           }
@@ -417,7 +474,7 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
       }
 
       for (ProjectGroup group : groups) {
-        final List<AnAction> children = new ArrayList<AnAction>();
+        final List<AnAction> children = new ArrayList<>();
         for (String path : group.getProjects()) {
           final AnAction action = createOpenAction(path, duplicates);
           if (action != null) {
@@ -430,9 +487,7 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
         }
         actions.add(new ProjectGroupActionGroup(group, children));
         if (group.isExpanded()) {
-          for (AnAction child : children) {
-            actions.add(child);
-          }
+          actions.addAll(children);
         }
       }
     }
@@ -448,10 +503,10 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
       return AnAction.EMPTY_ARRAY;
     }
 
-    return actions.toArray(new AnAction[actions.size()]);
+    return actions.toArray(AnAction.EMPTY_ARRAY);
   }
 
-  private AnAction createOpenAction(String path, Set<String> duplicates) {
+  private AnAction createOpenAction(@SystemIndependent String path, Set<String> duplicates) {
     String projectName = getProjectName(path);
     String displayName;
     synchronized (myStateLock) {
@@ -470,7 +525,7 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
     //return null;
   }
 
-  private void markPathRecent(String path) {
+  private void markPathRecent(@SystemIndependent String path, @NotNull Project project) {
     synchronized (myStateLock) {
       if (path.endsWith(File.separator)) {
         path = path.substring(0, path.length() - File.separator.length());
@@ -485,12 +540,19 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
         group.save(projects);
       }
       myState.additionalInfo.remove(path);
-      myState.additionalInfo.put(path, RecentProjectMetaInfo.create());
+
+      String additionalMetadata = getRecentProjectMetadata(path, project);
+      myState.additionalInfo.put(path, RecentProjectMetaInfo.create(additionalMetadata));
     }
   }
 
   @Nullable
-  private ProjectGroup getProjectGroup(String path) {
+  protected String getRecentProjectMetadata(@SystemIndependent String path, @NotNull Project project) {
+    return null;
+  }
+
+  @Nullable
+  private ProjectGroup getProjectGroup(@SystemIndependent String path) {
     if (path == null) return null;
     for (ProjectGroup group : myState.groups) {
       if (group.getProjects().contains(path)) {
@@ -501,42 +563,65 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
   }
 
   @Nullable
+  @SystemIndependent
   protected abstract String getProjectPath(@NotNull Project project);
 
-  protected abstract void doOpenProject(@NotNull String projectPath, @Nullable Project projectToClose, boolean forceOpenInNewFrame);
+  public Project doOpenProject(@NotNull @SystemIndependent String projectPath, Project projectToClose, boolean forceOpenInNewFrame) {
+    VirtualFile dotIdea  = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(
+      new File(projectPath, Project.DIRECTORY_STORE_FOLDER));
 
-  public static boolean isValidProjectPath(String projectPath) {
-    final File file = new File(projectPath);
-    return file.exists() && (!file.isDirectory() || new File(file, Project.DIRECTORY_STORE_FOLDER).exists());
+    if (dotIdea != null) {
+      EnumSet<PlatformProjectOpenProcessor.Option> options = EnumSet.of(PlatformProjectOpenProcessor.Option.REOPEN);
+      if (forceOpenInNewFrame) options.add(PlatformProjectOpenProcessor.Option.FORCE_NEW_FRAME);
+      return PlatformProjectOpenProcessor.doOpenProject(dotIdea.getParent(), projectToClose, -1, null, options);
+    }
+    else {
+      // If .idea is missing in the recent project's dir; this might mean, for instance, that 'git clean' was called.
+      // Reopening such a project should be similar to opening the dir first time (and trying to import known project formats)
+      // IDEA-144453 IDEA rejects opening recent project if there are no .idea subfolder
+      // CPP-12106 Auto-load CMakeLists.txt on opening from Recent projects when .idea and cmake-build-debug were deleted
+      return ProjectUtil.openOrImport(projectPath, projectToClose, forceOpenInNewFrame);
+    }
   }
 
-  private class MyProjectListener extends ProjectManagerAdapter {
+  private class MyProjectListener implements ProjectManagerListener {
     @Override
-    public void projectOpened(final Project project) {
+    public void projectOpened(@NotNull final Project project) {
       String path = getProjectPath(project);
       if (path != null) {
-        markPathRecent(path);
+        markPathRecent(path, project);
       }
-      SystemDock.updateMenu();
+      updateUI();
+    }
+
+    private void updateUI() {
+      if (!ApplicationManager.getApplication().isHeadlessEnvironment()) {
+        SystemDock.updateMenu();
+      }
     }
 
     @Override
-    public void projectClosing(Project project) {
+    public void projectClosing(@NotNull Project project) {
+      String path = getProjectPath(project);
+      if (path == null) return;
+
       synchronized (myStateLock) {
-        myState.names.put(getProjectPath(project), getProjectDisplayName(project));
+        myState.names.put(path, getProjectDisplayName(project));
       }
+      myNameCache.put(path, project.getName());
     }
 
     @Override
-    public void projectClosed(final Project project) {
+    public void projectClosed(@NotNull final Project project) {
       Project[] openProjects = ProjectManager.getInstance().getOpenProjects();
       if (openProjects.length > 0) {
-        String path = getProjectPath(openProjects[openProjects.length - 1]);
+        Project openProject = openProjects[openProjects.length - 1];
+        String path = getProjectPath(openProject);
         if (path != null) {
-          markPathRecent(path);
+          markPathRecent(path, openProject);
         }
       }
-      SystemDock.updateMenu();
+      updateUI();
     }
   }
 
@@ -553,7 +638,7 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
     myNamesResolver.addRequest(() -> {
       final Set<String> paths;
       synchronized (myNamesToResolve) {
-        paths = new HashSet<String>(myNamesToResolve);
+        paths = new HashSet<>(myNamesToResolve);
         myNamesToResolve.clear();
       }
       for (String p : paths) {
@@ -564,27 +649,17 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
     return path.endsWith(".ipr") ? FileUtilRt.getNameWithoutExtension(name) : name;
   }
 
-  @Override
-  public void clearNameCache() {
-    myNameCache.clear();
-    myDuplicatesCache = null;
-  }
-
   private static String readProjectName(@NotNull String path) {
     final File file = new File(path);
     if (file.isDirectory()) {
       final File nameFile = new File(new File(path, Project.DIRECTORY_STORE_FOLDER), ProjectImpl.NAME_FILE);
       if (nameFile.exists()) {
         try {
-          final BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(nameFile), CharsetToolkit.UTF8_CHARSET));
-          try {
+          try (BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(nameFile), CharsetToolkit.UTF8_CHARSET))) {
             String name = in.readLine();
             if (!StringUtil.isEmpty(name)) {
               return name.trim();
             }
-          }
-          finally {
-            in.close();
           }
         }
         catch (IOException ignored) { }
@@ -612,12 +687,23 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
           forceNewFrame = false;
         }
       }
-      for (String openPath : openPaths) {
-        if (isValidProjectPath(openPath)) {
-          doOpenProject(openPath, null, forceNewFrame);
+      try {
+        myBatchOpening = true;
+        for (String openPath : openPaths) {
+          // https://youtrack.jetbrains.com/issue/IDEA-166321
+          if (ProjectKt.isValidProjectPath(openPath, true)) {
+            doOpenProject(openPath, null, forceNewFrame);
+          }
         }
       }
+      finally {
+        myBatchOpening = false;
+      }
     }
+  }
+
+  public boolean isBatchOpening() {
+    return myBatchOpening;
   }
 
   @Override
@@ -637,7 +723,7 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
     myState.groups.remove(group);
   }
 
-  private class MyAppLifecycleListener extends AppLifecycleListener.Adapter {
+  private class MyAppLifecycleListener implements AppLifecycleListener {
     @Override
     public void appFrameCreated(final String[] commandLineArgs, @NotNull final Ref<Boolean> willOpenProject) {
       if (willReopenProjectOnStart()) {
@@ -647,7 +733,10 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
 
     @Override
     public void appStarting(Project projectFromCommandLine) {
-      if (projectFromCommandLine != null) return;
+      if (projectFromCommandLine != null || JetBrainsProtocolHandler.appStartedWithCommand()) {
+        return;
+      }
+
       doReopenLastProject();
     }
 
@@ -668,7 +757,7 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
   }
 
   private static class MyIcon extends Pair<Icon, Long> {
-    public MyIcon(Icon icon, Long timestamp) {
+    MyIcon(Icon icon, Long timestamp) {
       super(icon, timestamp);
     }
 
@@ -688,15 +777,17 @@ public abstract class RecentProjectsManagerBase extends RecentProjectsManager im
     public String binFolder;
     public long projectOpenTimestamp;
     public long buildTimestamp;
+    public String metadata;
 
-    public static RecentProjectMetaInfo create() {
+    public static RecentProjectMetaInfo create(String metadata) {
       RecentProjectMetaInfo info = new RecentProjectMetaInfo();
       info.build = ApplicationInfoEx.getInstanceEx().getBuild().asString();
       info.productionCode = ApplicationInfoEx.getInstanceEx().getBuild().getProductCode();
       info.eap = ApplicationInfoEx.getInstanceEx().isEAP();
-      info.binFolder = PathManager.getBinPath();
+      info.binFolder = PathUtil.toSystemIndependentName(PathManager.getBinPath());
       info.projectOpenTimestamp = System.currentTimeMillis();
       info.buildTimestamp = ApplicationInfoEx.getInstanceEx().getBuildDate().getTimeInMillis();
+      info.metadata = metadata;
       return info;
     }
   }

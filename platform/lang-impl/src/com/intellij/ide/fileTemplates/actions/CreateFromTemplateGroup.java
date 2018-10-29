@@ -41,11 +41,11 @@ import java.util.List;
 public class CreateFromTemplateGroup extends ActionGroup implements DumbAware {
 
   @Override
-  public void update(AnActionEvent e){
+  public void update(@NotNull AnActionEvent e){
     super.update(e);
     Presentation presentation = e.getPresentation();
     Project project = e.getProject();
-    if (project != null) {
+    if (project != null && !project.isDisposed()) {
       FileTemplate[] allTemplates = FileTemplateManager.getInstance(project).getAllTemplates();
       for (FileTemplate template : allTemplates) {
         if (canCreateFromTemplate(e, template)) {
@@ -95,7 +95,7 @@ public class CreateFromTemplateGroup extends ActionGroup implements DumbAware {
       // group by name if same type
       return template1.getName().compareTo(template2.getName());
     });
-    List<AnAction> result = new ArrayList<AnAction>();
+    List<AnAction> result = new ArrayList<>();
 
     for (FileTemplate template : templates) {
       if (canCreateFromTemplate(e, template)) {
@@ -116,7 +116,7 @@ public class CreateFromTemplateGroup extends ActionGroup implements DumbAware {
       result.add(new EditFileTemplatesAction(IdeBundle.message("action.edit.file.templates")));
     }
 
-    return result.toArray(new AnAction[result.size()]);
+    return result.toArray(AnAction.EMPTY_ARRAY);
 }
 
   private static AnAction replaceAction(final FileTemplate template) {
@@ -131,7 +131,7 @@ public class CreateFromTemplateGroup extends ActionGroup implements DumbAware {
     return null;
   }
 
-  static boolean canCreateFromTemplate(AnActionEvent e, FileTemplate template){
+  static boolean canCreateFromTemplate(AnActionEvent e, @NotNull FileTemplate template){
     if (e == null) return false;
     DataContext dataContext = e.getDataContext();
     IdeView view = LangDataKeys.IDE_VIEW.getData(dataContext);
@@ -145,7 +145,7 @@ public class CreateFromTemplateGroup extends ActionGroup implements DumbAware {
 
   private static class CreateFromTemplatesAction extends CreateFromTemplateActionBase{
 
-    public CreateFromTemplatesAction(String title){
+    CreateFromTemplatesAction(String title){
       super(title,null,null);
     }
 

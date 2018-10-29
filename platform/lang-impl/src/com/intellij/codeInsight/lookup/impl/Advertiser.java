@@ -18,11 +18,10 @@ package com.intellij.codeInsight.lookup.impl;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.util.Pair;
 import com.intellij.ui.ClickListener;
-import com.intellij.ui.JBColor;
 import com.intellij.ui.components.panels.NonOpaquePanel;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.GridBag;
+import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -47,7 +46,7 @@ public class Advertiser {
     public Dimension getPreferredSize() {
       Dimension dimension = myCachedPrefSize;
       if (dimension == null) {
-        dimension = myCachedPrefSize = calcPreferredSize();
+        myCachedPrefSize = dimension = calcPreferredSize();
       }
       return dimension;
     }
@@ -75,7 +74,7 @@ public class Advertiser {
     myNextLabel = new JLabel(">>");
     myNextLabel.setFont(adFont().deriveFont(
       ContainerUtil.<TextAttribute, Object>immutableMapBuilder().put(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON).build()));
-    myNextLabel.setForeground(JBColor.blue);
+    myNextLabel.setForeground(JBUI.CurrentTheme.Link.linkColor());
     new ClickListener() {
       @Override
       public boolean onClick(@NotNull MouseEvent e, int clickCount) {
@@ -91,6 +90,8 @@ public class Advertiser {
     myComponent.add(myTextPanel, gb.next());
     myComponent.add(myNextLabel, gb.next());
     myComponent.add(new NonOpaquePanel(), gb.next().fillCellHorizontally().weightx(1));
+    myComponent.setOpaque(true);
+    myComponent.setBackground(JBUI.CurrentTheme.Advertiser.background());
   }
 
   private void updateAdvertisements() {
@@ -113,6 +114,7 @@ public class Advertiser {
   private static JLabel createLabel() {
     JLabel label = new JLabel();
     label.setFont(adFont());
+    label.setForeground(JBUI.CurrentTheme.Advertiser.foreground());
     return label;
   }
 

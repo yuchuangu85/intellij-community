@@ -28,13 +28,6 @@ public class GroovySwitchStatementWithNoDefaultInspection extends BaseInspection
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return CONTROL_FLOW;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Switch statement with no default case";
   }
@@ -55,7 +48,7 @@ public class GroovySwitchStatementWithNoDefaultInspection extends BaseInspection
   private static class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitSwitchStatement(GrSwitchStatement switchStatement) {
+    public void visitSwitchStatement(@NotNull GrSwitchStatement switchStatement) {
       super.visitSwitchStatement(switchStatement);
       final GrCaseSection[] caseSections = switchStatement.getCaseSections();
       for (GrCaseSection caseSection : caseSections) {

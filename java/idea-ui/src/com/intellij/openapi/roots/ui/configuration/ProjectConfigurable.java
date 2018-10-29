@@ -1,24 +1,9 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.openapi.roots.ui.configuration;
 
 import com.intellij.core.JavaCoreBundle;
 import com.intellij.icons.AllIcons;
-import com.intellij.ide.impl.ProjectUtil;
 import com.intellij.ide.util.BrowseFilesListener;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
@@ -47,9 +32,11 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.pom.java.LanguageLevel;
+import com.intellij.project.ProjectKt;
 import com.intellij.ui.DocumentAdapter;
 import com.intellij.ui.FieldPanel;
 import com.intellij.ui.InsertPathAction;
+import com.intellij.ui.components.fields.ExtendableTextField;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -65,7 +52,6 @@ import java.io.IOException;
 
 /**
  * @author Eugene Zhuravlev
- *         Date: Dec 15, 2003
  */
 public class ProjectConfigurable extends ProjectStructureElementConfigurable<Project> implements DetailsComponent.Facade {
 
@@ -131,7 +117,7 @@ public class ProjectConfigurable extends ProjectStructureElementConfigurable<Pro
     myPanel = new JPanel(new GridBagLayout());
     myPanel.setPreferredSize(JBUI.size(700, 500));
 
-    if (ProjectUtil.isDirectoryBased(myProject)) {
+    if (ProjectKt.isDirectoryBased(myProject)) {
       final JPanel namePanel = new JPanel(new BorderLayout());
       final JLabel label =
         new JLabel("<html><body><b>Project name:</b></body></html>", SwingConstants.LEFT);
@@ -165,7 +151,7 @@ public class ProjectConfigurable extends ProjectStructureElementConfigurable<Pro
     myPanel.setBorder(new EmptyBorder(0, 10, 0, 10));
     myProjectCompilerOutput.getTextField().getDocument().addDocumentListener(new DocumentAdapter() {
       @Override
-      protected void textChanged(DocumentEvent e) {
+      protected void textChanged(@NotNull DocumentEvent e) {
         if (myFreeze) return;
         myModulesConfigurator.processModuleCompilerOutputChanged(getCompilerOutputUrl());
       }
@@ -292,7 +278,6 @@ public class ProjectConfigurable extends ProjectStructureElementConfigurable<Pro
 
 
   @Override
-  @SuppressWarnings({"SimplifiableIfStatement"})
   public boolean isModified() {
     LanguageLevelProjectExtension extension = LanguageLevelProjectExtension.getInstance(myProject);
     if (extension.isDefault() != myLanguageLevelCombo.isDefault() ||
@@ -329,7 +314,7 @@ public class ProjectConfigurable extends ProjectStructureElementConfigurable<Pro
         return version == null ? null : version.getMaxLanguageLevel();
       }
     };
-    final JTextField textField = new JTextField();
+    final JTextField textField = new ExtendableTextField();
     final FileChooserDescriptor outputPathsChooserDescriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor();
     InsertPathAction.addTo(textField, outputPathsChooserDescriptor);
     outputPathsChooserDescriptor.setHideIgnored(false);

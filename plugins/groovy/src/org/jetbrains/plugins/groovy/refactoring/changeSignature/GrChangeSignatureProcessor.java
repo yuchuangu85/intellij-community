@@ -27,7 +27,7 @@ import com.intellij.refactoring.rename.RenameUtil;
 import com.intellij.refactoring.ui.ConflictsDialog;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.usageView.UsageViewDescriptor;
-import com.intellij.util.containers.HashSet;
+import java.util.HashSet;
 import com.intellij.util.containers.MultiMap;
 import org.jetbrains.annotations.NotNull;
 
@@ -65,12 +65,12 @@ public class GrChangeSignatureProcessor extends ChangeSignatureProcessorBase {
 
   @Override
   protected boolean preprocessUsages(@NotNull Ref<UsageInfo[]> refUsages) {
-    MultiMap<PsiElement, String> conflictDescriptions = new MultiMap<PsiElement, String>();
+    MultiMap<PsiElement, String> conflictDescriptions = new MultiMap<>();
     collectConflictsFromExtensions(refUsages, conflictDescriptions, myChangeInfo);
 
     final UsageInfo[] usagesIn = refUsages.get();
     RenameUtil.addConflictDescriptions(usagesIn, conflictDescriptions);
-    Set<UsageInfo> usagesSet = new HashSet<UsageInfo>(Arrays.asList(usagesIn));
+    Set<UsageInfo> usagesSet = new HashSet<>(Arrays.asList(usagesIn));
     RenameUtil.removeConflictUsages(usagesSet);
     if (!conflictDescriptions.isEmpty()) {
       if (ApplicationManager.getApplication().isUnitTestMode()) {
@@ -83,7 +83,7 @@ public class GrChangeSignatureProcessor extends ChangeSignatureProcessorBase {
         return false;
       }
     }
-    refUsages.set(usagesSet.toArray(new UsageInfo[usagesSet.size()]));
+    refUsages.set(usagesSet.toArray(UsageInfo.EMPTY_ARRAY));
     prepareSuccessful();
     return true;
   }

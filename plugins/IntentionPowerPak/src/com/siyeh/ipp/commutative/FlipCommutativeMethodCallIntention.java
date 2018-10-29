@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2013 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2018 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@
 package com.siyeh.ipp.commutative;
 
 import com.intellij.psi.*;
-import com.intellij.util.IncorrectOperationException;
 import com.siyeh.IntentionPowerPackBundle;
 import com.siyeh.ig.PsiReplacementUtil;
+import com.siyeh.ig.psiutils.CommentTracker;
 import com.siyeh.ig.psiutils.ParenthesesUtils;
 import com.siyeh.ipp.base.MutablyNamedIntention;
 import com.siyeh.ipp.base.PsiElementPredicate;
@@ -27,6 +27,7 @@ import org.jetbrains.annotations.NotNull;
 
 public class FlipCommutativeMethodCallIntention extends MutablyNamedIntention {
 
+  @Override
   protected String getTextForElement(PsiElement element) {
     final PsiMethodCallExpression call = (PsiMethodCallExpression)element;
     final PsiReferenceExpression methodExpression =
@@ -44,17 +45,16 @@ public class FlipCommutativeMethodCallIntention extends MutablyNamedIntention {
     }
   }
 
+  @Override
   @NotNull
   public PsiElementPredicate getElementPredicate() {
     return new FlipCommutativeMethodCallPredicate();
   }
 
-  public void processIntention(PsiElement element)
-    throws IncorrectOperationException {
-    final PsiMethodCallExpression call =
-      (PsiMethodCallExpression)element;
-    final PsiReferenceExpression methodExpression =
-      call.getMethodExpression();
+  @Override
+  public void processIntention(PsiElement element) {
+    final PsiMethodCallExpression call = (PsiMethodCallExpression)element;
+    final PsiReferenceExpression methodExpression = call.getMethodExpression();
     final String methodName = methodExpression.getReferenceName();
     final PsiExpression target = methodExpression.getQualifierExpression();
     if (target == null) {
@@ -82,6 +82,9 @@ public class FlipCommutativeMethodCallIntention extends MutablyNamedIntention {
       callString = strippedArg.getText() + '.' + methodName + '(' +
                    strippedTarget.getText() + ')';
     }
-    PsiReplacementUtil.replaceExpression(call, callString);
+    CommentTracker commentTracker = new CommentTracker();
+    commentTracker.markUnchanged(strippedArg);
+    commentTracker.markUnchanged(strippedTarget);
+    PsiReplacementUtil.replaceExpression(call, callString, commentTracker);
   }
 }

@@ -31,7 +31,6 @@ import javax.swing.*;
 /**
  * Describes the buildout facet.
  * User: dcheryasov
- * Date: Jul 26, 2010 5:47:24 PM
  */
 public class BuildoutFacetType extends FacetType<BuildoutFacet, BuildoutFacetConfiguration> {
   private BuildoutFacetType() {
@@ -57,7 +56,7 @@ public class BuildoutFacetType extends FacetType<BuildoutFacet, BuildoutFacetCon
     return moduleType instanceof PythonModuleTypeBase;
   }
 
-  public static final FacetTypeId<BuildoutFacet> ID = new FacetTypeId<BuildoutFacet>("buildout-python");
+  public static final FacetTypeId<BuildoutFacet> ID = new FacetTypeId<>("buildout-python");
 
   public static BuildoutFacetType getInstance() {
     return (BuildoutFacetType)FacetTypeRegistry.getInstance().findFacetType(ID);

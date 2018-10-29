@@ -49,14 +49,14 @@ public class PropertiesPlaceholdersInspectionProvider implements InconsistentRes
 
   @Override
   public void check(BidirectionalMap<PropertiesFile, PropertiesFile> parents,
-                    List<PropertiesFile> files,
+                    List<? extends PropertiesFile> files,
                     Map<PropertiesFile, Set<String>> keysUpToParent,
                     Map<PropertiesFile, Map<String, String>> propertiesFilesNamesMaps,
                     InspectionManager manager,
                     RefManager refManager,
                     ProblemDescriptionsProcessor processor) {
     for (PropertiesFile file : files) {
-      final Set<String> filePropertyKeys = new THashSet<String>(propertiesFilesNamesMaps.get(file).keySet());
+      final Set<String> filePropertyKeys = new THashSet<>(propertiesFilesNamesMaps.get(file).keySet());
       PropertiesFile parent = parents.get(file);
       while (parent != null) {
         final Collection<String> commonKeys = ContainerUtil.intersection(propertiesFilesNamesMaps.get(parent).keySet(), filePropertyKeys);

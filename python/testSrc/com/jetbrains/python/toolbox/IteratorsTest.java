@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2013 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import java.util.List;
 /**
  * Tests all iterators and iterables.
  * User: dcheryasov
- * Date: Nov 20, 2009 3:42:51 AM
  */
 public class IteratorsTest extends TestCase {
 
@@ -36,11 +35,11 @@ public class IteratorsTest extends TestCase {
     List<String> list1 = Arrays.asList("foo", "bar", "baz");
     List<String> list2 = Arrays.asList("ichi", "ni", "san");
     List<String> list3 = Arrays.asList("a", "s", "d", "f");
-    List<String> all = new ArrayList<String>();
+    List<String> all = new ArrayList<>();
     all.addAll(list1);
     all.addAll(list2);
     all.addAll(list3);
-    ChainIterable<String> tested = new ChainIterable<String>(list1).add(list2).add(list3);
+    ChainIterable<String> tested = new ChainIterable<>(list1).add(list2).add(list3);
     int count = 0;
     for (String what : tested) {
       assertEquals(all.get(count), what);
@@ -53,11 +52,11 @@ public class IteratorsTest extends TestCase {
     List<String> list1 = Arrays.asList();
     List<String> list2 = Arrays.asList("ichi", "ni", "san");
     List<String> list3 = Arrays.asList("a", "s", "d", "f");
-    List<String> all = new ArrayList<String>();
+    List<String> all = new ArrayList<>();
     all.addAll(list1);
     all.addAll(list2);
     all.addAll(list3);
-    ChainIterable<String> tested = new ChainIterable<String>(list1).add(list2).add(list3);
+    ChainIterable<String> tested = new ChainIterable<>(list1).add(list2).add(list3);
     int count = 0;
     for (String what : tested) {
       assertEquals(all.get(count), what);
@@ -70,11 +69,11 @@ public class IteratorsTest extends TestCase {
     List<String> list1 = Arrays.asList("foo", "bar", "baz");
     List<String> list2 = Arrays.asList("ichi", "ni", "san");
     List<String> list3 = Arrays.asList();
-    List<String> all = new ArrayList<String>();
+    List<String> all = new ArrayList<>();
     all.addAll(list1);
     all.addAll(list2);
     all.addAll(list3);
-    ChainIterable<String> tested = new ChainIterable<String>(list1).add(list2).add(list3);
+    ChainIterable<String> tested = new ChainIterable<>(list1).add(list2).add(list3);
     int count = 0;
     for (String what : tested) {
       assertEquals(all.get(count), what);
@@ -87,11 +86,11 @@ public class IteratorsTest extends TestCase {
     List<String> list1 = Arrays.asList("foo", "bar", "baz");
     List<String> list2 = Arrays.asList();
     List<String> list3 = Arrays.asList("a", "s", "d", "f");
-    List<String> all = new ArrayList<String>();
+    List<String> all = new ArrayList<>();
     all.addAll(list1);
     all.addAll(list2);
     all.addAll(list3);
-    ChainIterable<String> tested = new ChainIterable<String>(list1).add(list2).add(list3);
+    ChainIterable<String> tested = new ChainIterable<>(list1).add(list2).add(list3);
     int count = 0;
     for (String what : tested) {
       assertEquals(all.get(count), what);
@@ -101,9 +100,9 @@ public class IteratorsTest extends TestCase {
   }
 
   public void testToStringDoesntExhaustIterator() {
-    final ChainIterable<String> initial = new ChainIterable<String>();
+    final ChainIterable<String> initial = new ChainIterable<>();
     initial.addItem("foo");
-    assertEquals("foo", initial.toString());;
+    assertEquals("foo", initial.toString());
     assertEquals("foo", initial.toString());
   }
 }

@@ -22,11 +22,10 @@ import java.util.List;
 
 /**
  * @author Denis Zhdanov
- * @since 9/19/12 6:41 PM
  */
 public class ArrangementEntryDependencyInfo {
 
-  @NotNull private final List<ArrangementEntryDependencyInfo> myDependentEntries = new ArrayList<ArrangementEntryDependencyInfo>();
+  @NotNull private final List<ArrangementEntryDependencyInfo> myDependentEntries = new ArrayList<>();
   
   @NotNull private final JavaElementArrangementEntry myAnchorEntry;
 

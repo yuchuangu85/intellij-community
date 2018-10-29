@@ -1,23 +1,9 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testFramework;
 
-import com.intellij.openapi.application.AccessToken;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.WriteAction;
+import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.FileUtil;
@@ -30,7 +16,6 @@ import com.intellij.openapi.vfs.newvfs.BulkFileListener;
 import com.intellij.openapi.vfs.newvfs.events.*;
 import com.intellij.util.PathUtil;
 import com.intellij.util.messages.MessageBusConnection;
-import com.intellij.util.text.StringTokenizer;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
 
@@ -48,30 +33,27 @@ public class VfsTestUtil {
 
   private VfsTestUtil() { }
 
-  public static VirtualFile createFile(final VirtualFile root, final String relativePath) {
+  @NotNull
+  public static VirtualFile createFile(@NotNull VirtualFile root, @NotNull String relativePath) {
     return createFile(root, relativePath, "");
   }
 
-  public static VirtualFile createFile(final VirtualFile root, final String relativePath, final String text) {
+  @NotNull
+  public static VirtualFile createFile(@NotNull VirtualFile root, @NotNull String relativePath, @NotNull String text) {
     return createFileOrDir(root, relativePath, text, false);
   }
 
-  public static VirtualFile createDir(final VirtualFile root, final String relativePath) {
+  @NotNull
+  public static VirtualFile createDir(@NotNull VirtualFile root, @NotNull String relativePath) {
     return createFileOrDir(root, relativePath, "", true);
   }
 
-  private static VirtualFile createFileOrDir(final VirtualFile root,
-                                             final String relativePath,
-                                             final String text,
-                                             final boolean dir) {
+  @NotNull
+  private static VirtualFile createFileOrDir(VirtualFile root, String relativePath, String text, boolean dir) {
     try {
-      AccessToken token = WriteAction.start();
-      try {
+      return WriteAction.computeAndWait(() -> {
         VirtualFile parent = root;
-        Assert.assertNotNull(parent);
-        StringTokenizer parents = new StringTokenizer(PathUtil.getParentPath(relativePath), "/");
-        while (parents.hasMoreTokens()) {
-          final String name = parents.nextToken();
+        for (String name : StringUtil.tokenize(PathUtil.getParentPath(relativePath), "/")) {
           VirtualFile child = parent.findChild(name);
           if (child == null || !child.isValid()) {
             child = parent.createChildDirectory(VfsTestUtil.class, name);
@@ -79,23 +61,24 @@ public class VfsTestUtil {
           parent = child;
         }
 
-        VirtualFile file;
         parent.getChildren();//need this to ensure that fileCreated event is fired
+
+        String name = PathUtil.getFileName(relativePath);
+        VirtualFile file;
         if (dir) {
-          file = parent.createChildDirectory(VfsTestUtil.class, PathUtil.getFileName(relativePath));
+          file = parent.createChildDirectory(VfsTestUtil.class, name);
         }
         else {
-          file = parent.findFileByRelativePath(relativePath);
+          file = parent.findChild(name);
           if (file == null) {
-            file = parent.createChildData(VfsTestUtil.class, PathUtil.getFileName(relativePath));
+            file = parent.createChildData(VfsTestUtil.class, name);
           }
           VfsUtil.saveText(file, text);
+          // update the document now, otherwise MemoryDiskConflictResolver will do it later at unexpected moment of time
+          FileDocumentManager.getInstance().reloadFiles(file);
         }
         return file;
-      }
-      finally {
-        token.finish();
-      }
+      });
     }
     catch (IOException e) {
       throw new RuntimeException(e);
@@ -117,8 +100,7 @@ public class VfsTestUtil {
     });
   }
 
-  @SuppressWarnings("UnusedDeclaration")
-  public static void overwriteTestData(String filePath, String actual) {
+  public static void overwriteTestData(@NotNull String filePath, @NotNull String actual) {
     try {
       FileUtil.writeToFile(new File(filePath), actual);
     }
@@ -159,7 +141,7 @@ public class VfsTestUtil {
     List<VFileEvent> allEvents = new ArrayList<>();
 
     MessageBusConnection connection = ApplicationManager.getApplication().getMessageBus().connect();
-    connection.subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener.Adapter() {
+    connection.subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
       @Override
       public void after(@NotNull List<? extends VFileEvent> events) {
         allEvents.addAll(events);

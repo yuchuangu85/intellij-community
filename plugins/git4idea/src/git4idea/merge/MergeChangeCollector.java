@@ -26,8 +26,9 @@ import com.intellij.openapi.vfs.VirtualFile;
 import git4idea.GitRevisionNumber;
 import git4idea.GitUtil;
 import git4idea.GitVcs;
+import git4idea.commands.Git;
 import git4idea.commands.GitCommand;
-import git4idea.commands.GitSimpleHandler;
+import git4idea.commands.GitLineHandler;
 import git4idea.repo.GitRepository;
 import git4idea.util.StringScanner;
 import org.jetbrains.annotations.NotNull;
@@ -43,7 +44,7 @@ import static com.intellij.util.ObjectUtils.assertNotNull;
  * Collect change for merge or pull operations
  */
 public class MergeChangeCollector {
-  private final HashSet<String> myUnmergedPaths = new HashSet<String>();
+  private final HashSet<String> myUnmergedPaths = new HashSet<>();
   private final Project myProject;
   private final VirtualFile myRoot;
   private final GitRevisionNumber myStart; // Revision number before update (used for diff)
@@ -57,7 +58,7 @@ public class MergeChangeCollector {
   }
 
   /**
-   * Collects changed files during or after merge operation to the supplied <code>updates</code> container.
+   * Collects changed files during or after merge operation to the supplied {@code updates} container.
    */
   public void collect(final UpdatedFiles updates, List<VcsException> exceptions) {
     try {
@@ -66,9 +67,9 @@ public class MergeChangeCollector {
       addAll(updates, FileGroup.MERGED_WITH_CONFLICT_ID, paths);
 
       // collect other changes (ignoring unmerged)
-      TreeSet<String> updated = new TreeSet<String>();
-      TreeSet<String> created = new TreeSet<String>();
-      TreeSet<String> removed = new TreeSet<String>();
+      TreeSet<String> updated = new TreeSet<>();
+      TreeSet<String> created = new TreeSet<>();
+      TreeSet<String> removed = new TreeSet<>();
 
       String revisionsForDiff = getRevisionsForDiff();
       if (revisionsForDiff ==  null) {
@@ -88,12 +89,12 @@ public class MergeChangeCollector {
    */
   public @NotNull Set<String> getUnmergedPaths() throws VcsException {
     String root = myRoot.getPath();
-    final GitSimpleHandler h = new GitSimpleHandler(myProject, myRoot, GitCommand.LS_FILES);
+    final GitLineHandler h = new GitLineHandler(myProject, myRoot, GitCommand.LS_FILES);
     h.setSilent(true);
     h.addParameters("--unmerged");
-    final String result = h.run();
+    final String result = Git.getInstance().runCommand(h).getOutputOrThrow();
 
-    final Set<String> paths = new HashSet<String>();
+    final Set<String> paths = new HashSet<>();
     for (StringScanner s = new StringScanner(result); s.hasMoreData();) {
       if (s.isEol()) {
         s.nextLine();
@@ -138,7 +139,6 @@ public class MergeChangeCollector {
           }
         }
       } catch (IOException e) {
-        //noinspection ThrowableInstanceNeverThrown
         throw new VcsException("Unable to read the file " + mergeHeadsFile + ": " + e.getMessage(), e);
       }
     } else {
@@ -160,11 +160,11 @@ public class MergeChangeCollector {
       return;
     }
     String root = myRoot.getPath();
-    GitSimpleHandler h = new GitSimpleHandler(myProject, myRoot, GitCommand.DIFF);
+    GitLineHandler h = new GitLineHandler(myProject, myRoot, GitCommand.DIFF);
     h.setSilent(true);
     // note that moves are not detected here
     h.addParameters("--name-status", "--diff-filter=ADMRUX", "--no-renames", revisions);
-    for (StringScanner s = new StringScanner(h.run()); s.hasMoreData();) {
+    for (StringScanner s = new StringScanner(Git.getInstance().runCommand(h).getOutputOrThrow()); s.hasMoreData();) {
       if (s.isEol()) {
         s.nextLine();
         continue;

@@ -15,6 +15,7 @@
  */
 package com.intellij.ui.stripe;
 
+import com.intellij.util.ui.ImageUtil;
 import com.intellij.util.ui.RegionPainter;
 
 import java.awt.AlphaComposite;
@@ -164,8 +165,8 @@ public class ErrorStripePainter extends RegionPainter.Image {
   }
 
   private void updateImage(BufferedImage image, boolean force) {
-    int width = image.getWidth();
-    int height = image.getHeight();
+    int width = ImageUtil.getUserWidth(image);
+    int height = ImageUtil.getUserHeight(image);
     Graphics2D g = image.createGraphics();
 
     myImageHeight = 0;
@@ -309,7 +310,7 @@ public class ErrorStripePainter extends RegionPainter.Image {
     @Override
     boolean add(ErrorStripe stripe) {
       if (stripe == null) return false;
-      if (mySet == null) mySet = new TreeSet<ErrorStripe>();
+      if (mySet == null) mySet = new TreeSet<>();
       mySet.add(stripe);
       myModified = true;
       return true;

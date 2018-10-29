@@ -22,11 +22,10 @@ import org.jetbrains.annotations.NotNull;
  * Extension point for providing custom jre to be shown at run configuration control.
  * 
  * @author Denis Zhdanov
- * @since 5/9/13 10:04 PM
  */
 public interface JreProvider {
 
-  ExtensionPointName<JreProvider> EP_NAME = new ExtensionPointName<JreProvider>("com.intellij.jreProvider");
+  ExtensionPointName<JreProvider> EP_NAME = new ExtensionPointName<>("com.intellij.jreProvider");
   
   @NotNull
   String getJrePath();

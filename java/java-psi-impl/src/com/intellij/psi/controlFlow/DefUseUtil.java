@@ -21,19 +21,19 @@ import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.PsiUtilCore;
+import com.intellij.util.ExceptionUtil;
 import com.intellij.util.containers.IntArrayList;
 import com.intellij.util.containers.Queue;
+import com.intellij.util.containers.Stack;
+import gnu.trove.THashMap;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * @author max
- * Date: Mar 22, 2002
  */
 public class DefUseUtil {
   private static final Logger LOG = Logger.getInstance("#com.intellij.codeInspection.defUse.DefUseUtil");
@@ -41,20 +41,24 @@ public class DefUseUtil {
   private DefUseUtil() { }
 
   public static class Info {
+    @NotNull
     private final PsiVariable myVariable;
+    @NotNull
     private final PsiElement myContext;
     private final boolean myIsRead;
 
-    public Info(PsiVariable variable, PsiElement context, boolean read) {
+    public Info(@NotNull PsiVariable variable, @NotNull PsiElement context, boolean read) {
       myVariable = variable;
       myContext = context;
       myIsRead = read;
     }
 
+    @NotNull
     public PsiVariable getVariable() {
       return myVariable;
     }
 
+    @NotNull
     public PsiElement getContext() {
       return myContext;
     }
@@ -64,78 +68,85 @@ public class DefUseUtil {
     }
   }
 
-  private static class InstructionState {
-    private Set<PsiVariable> myVariablesUseArmed;
-    private final int myInstructionIdx;
-    private final IntArrayList myBackwardTraces;
+  private static class InstructionState implements Comparable<InstructionState> {
+    private Set<PsiVariable> myUsed;
+    @NotNull
+    private final InstructionKey myInstructionKey;
+    private final List<InstructionKey> myBackwardTraces;
     private boolean myIsVisited;
 
-    public InstructionState(int instructionIdx) {
-      myInstructionIdx = instructionIdx;
-      myBackwardTraces = new IntArrayList();
-      myVariablesUseArmed = null;
+    InstructionState(@NotNull InstructionKey instructionKey) {
+      myInstructionKey = instructionKey;
+      myBackwardTraces = new ArrayList<>(2);
+      myUsed = null;
     }
 
-    public void addBackwardTrace(int i) {
-      myBackwardTraces.add(i);
+    void addBackwardTrace(@NotNull InstructionKey key) {
+      myBackwardTraces.add(key);
     }
 
-    public IntArrayList getBackwardTraces() {
+    @NotNull
+    List<InstructionKey> getBackwardTraces() {
       return myBackwardTraces;
     }
 
-    public int getInstructionIdx() {
-      return myInstructionIdx;
+    @NotNull
+    InstructionKey getInstructionKey() {
+      return myInstructionKey;
     }
 
-    void mergeUseArmed(PsiVariable psiVariable) {
+    void addUsed(@NotNull PsiVariable psiVariable) {
       touch();
-      myVariablesUseArmed.add(psiVariable);
+      myUsed.add(psiVariable);
     }
 
-    boolean mergeUseDisarmed(PsiVariable psiVariable) {
+    boolean removeUsed(PsiVariable psiVariable) {
       touch();
-
-      boolean result = myVariablesUseArmed.contains(psiVariable);
-      myVariablesUseArmed.remove(psiVariable);
-
-      return result;
+      return myUsed.remove(psiVariable);
     }
 
     private void touch() {
-      if (myVariablesUseArmed == null) myVariablesUseArmed = new THashSet<PsiVariable>();
+      if (myUsed == null) myUsed = new THashSet<>();
     }
 
-    public void merge(InstructionState state) {
+    void addUsedFrom(InstructionState state) {
       touch();
-      myVariablesUseArmed.addAll(state.myVariablesUseArmed);
+      myUsed.addAll(state.myUsed);
     }
 
     public boolean contains(InstructionState state) {
-      return myVariablesUseArmed != null && state.myVariablesUseArmed != null &&
-             myVariablesUseArmed.containsAll(state.myVariablesUseArmed);
+      return myUsed != null && state.myUsed != null &&
+             myUsed.containsAll(state.myUsed);
     }
 
-    public boolean markVisited() {
-      boolean old = myIsVisited;
+    void markVisited() {
       myIsVisited = true;
-      return old;
     }
 
     public boolean isVisited() {
       return myIsVisited;
     }
+
+    @Override
+    public int compareTo(@NotNull InstructionState other) {
+      return myInstructionKey.compareTo(other.myInstructionKey);
+    }
+
+    @Override
+    public String toString() {
+      return myInstructionKey + " " + myBackwardTraces + (myIsVisited ? "(v)" : "(n)") + " " + (myUsed != null ? myUsed : "-");
+    }
   }
 
   @Nullable
-  public static List<Info> getUnusedDefs(PsiCodeBlock body, Set<PsiVariable> outUsedVariables) {
+  public static List<Info> getUnusedDefs(PsiCodeBlock body, Set<? super PsiVariable> outUsedVariables) {
     if (body == null) {
       return null;
     }
 
     ControlFlow flow;
     try {
-      flow = ControlFlowFactory.getInstance(body.getProject()).getControlFlow(body, ourPolicy);
+      flow = ControlFlowFactory.getInstance(body.getProject()).getControlFlow(body, ourPolicy, false);
     }
     catch (AnalysisCanceledException e) {
       return null;
@@ -145,8 +156,8 @@ public class DefUseUtil {
       LOG.debug(flow.toString());
     }
 
-    Set<PsiVariable> assignedVariables = new THashSet<PsiVariable>();
-    Set<PsiVariable> readVariables = new THashSet<PsiVariable>();
+    Set<PsiVariable> assignedVariables = new THashSet<>();
+    Set<PsiVariable> readVariables = new THashSet<>();
     for (int i = 0; i < instructions.size(); i++) {
       Instruction instruction = instructions.get(i);
       ProgressManager.checkCanceled();
@@ -165,11 +176,20 @@ public class DefUseUtil {
       }
     }
 
-    InstructionState[] states = getStates(instructions);
+    Map<InstructionKey, InstructionState> stateMap;
+    try {
+      stateMap = InstructionStateWalker.getStates(instructions);
+    }
+    catch (InstructionKey.OverflowException e) {
+      LOG.error("Failed to compute paths in the control flow graph", e, flow.toString());
+      return null;
+    }
+    InstructionState[] states = stateMap.values().toArray(new InstructionState[0]);
+    Arrays.sort(states);
 
-    boolean[] defsArmed = new boolean[instructions.size()];
+    BitSet usefulWrites = new BitSet(instructions.size());
 
-    Queue<InstructionState> queue = new Queue<InstructionState>(8);
+    Queue<InstructionState> queue = new Queue<>(8);
 
     for (int i = states.length - 1; i >= 0; i--) {
       final InstructionState outerState = states[i];
@@ -178,7 +198,7 @@ public class DefUseUtil {
 
       for (PsiVariable psiVariable : assignedVariables) {
         if (psiVariable instanceof PsiField) {
-          outerState.mergeUseArmed(psiVariable);
+          outerState.addUsed(psiVariable);
         }
       }
       queue.addLast(outerState);
@@ -188,21 +208,21 @@ public class DefUseUtil {
         InstructionState state = queue.pullFirst();
         state.markVisited();
 
-        int idx = state.getInstructionIdx();
-        if (idx < instructions.size()) {
-          Instruction instruction = instructions.get(idx);
+        InstructionKey key = state.getInstructionKey();
+        if (key.getOffset() < instructions.size()) {
+          Instruction instruction = instructions.get(key.getOffset());
 
           if (instruction instanceof WriteVariableInstruction) {
             WriteVariableInstruction writeInstruction = (WriteVariableInstruction)instruction;
             PsiVariable psiVariable = writeInstruction.variable;
             outUsedVariables.add(psiVariable);
-            if (state.mergeUseDisarmed(psiVariable)) {
-              defsArmed[idx] = true;
+            if (state.removeUsed(psiVariable)) {
+              usefulWrites.set(key.getOffset());
             }
           }
           else if (instruction instanceof ReadVariableInstruction) {
             ReadVariableInstruction readInstruction = (ReadVariableInstruction)instruction;
-            state.mergeUseArmed(readInstruction.variable);
+            state.addUsed(readInstruction.variable);
             outUsedVariables.add(readInstruction.variable);
           }
           else {
@@ -210,28 +230,27 @@ public class DefUseUtil {
           }
         }
 
-        IntArrayList backwardTraces = state.getBackwardTraces();
-        for (int j = 0; j < backwardTraces.size(); j++) {
-          int prevIdx = backwardTraces.get(j);
-          InstructionState prevState = states[prevIdx];
-          if (!prevState.contains(state)) {
-            prevState.merge(state);
+        List<InstructionKey> backwardTraces = state.getBackwardTraces();
+        for (InstructionKey prevKeys : backwardTraces) {
+          InstructionState prevState = stateMap.get(prevKeys);
+          if (prevState != null && !prevState.contains(state)) {
+            prevState.addUsedFrom(state);
             queue.addLast(prevState);
           }
         }
       }
     }
 
-    List<Info> unusedDefs = new ArrayList<Info>();
+    List<Info> unusedDefs = new ArrayList<>();
 
     for (int i = 0; i < instructions.size(); i++) {
       Instruction instruction = instructions.get(i);
       if (instruction instanceof WriteVariableInstruction) {
         WriteVariableInstruction writeInstruction = (WriteVariableInstruction)instruction;
-        if (!defsArmed[i]) {
+        if (!usefulWrites.get(i)) {
           PsiElement context = PsiTreeUtil.getNonStrictParentOfType(flow.getElement(i),
                                                                     PsiStatement.class, PsiAssignmentExpression.class,
-                                                                    PsiPostfixExpression.class, PsiPrefixExpression.class);
+                                                                    PsiUnaryExpression.class);
           PsiVariable psiVariable = writeInstruction.variable;
           if (context != null && !(context instanceof PsiTryStatement)) {
             if (context instanceof PsiDeclarationStatement && psiVariable.getInitializer() == null) {
@@ -251,19 +270,24 @@ public class DefUseUtil {
   }
 
   @NotNull
-  public static PsiElement[] getDefs(PsiCodeBlock body, final PsiVariable def, PsiElement ref) {
+  public static PsiElement[] getDefs(@NotNull PsiCodeBlock body, @NotNull PsiVariable def, @NotNull PsiElement ref) {
+    return getDefs(body, def, ref, false);
+  }
+
+  @NotNull
+  public static PsiElement[] getDefs(@NotNull PsiCodeBlock body, @NotNull PsiVariable def, @NotNull PsiElement ref, boolean rethrow) {
     try {
       RefsDefs refsDefs = new RefsDefs(body) {
-        private final InstructionState[] states = getStates(instructions);
+        private final IntArrayList[] myBackwardTraces = getBackwardTraces(instructions);
 
         @Override
         protected int nNext(int index) {
-          return states[index].getBackwardTraces().size();
+          return myBackwardTraces[index].size();
         }
 
         @Override
         protected int getNext(int index, int no) {
-          return states[index].getBackwardTraces().get(no);
+          return myBackwardTraces[index].get(no);
         }
 
         @Override
@@ -272,7 +296,7 @@ public class DefUseUtil {
         }
 
         @Override
-        protected void processInstruction(final Set<PsiElement> res, final Instruction instruction, int index) {
+        protected void processInstruction(@NotNull final Set<? super PsiElement> res, @NotNull final Instruction instruction, int index) {
           if (instruction instanceof WriteVariableInstruction) {
             WriteVariableInstruction instructionW = (WriteVariableInstruction)instruction;
             if (instructionW.variable == def) {
@@ -302,35 +326,42 @@ public class DefUseUtil {
       return refsDefs.get(def, ref);
     }
     catch (AnalysisCanceledException e) {
+      if (rethrow) {
+        ExceptionUtil.rethrowAllAsUnchecked(e);
+      }
       return PsiElement.EMPTY_ARRAY;
     }
   }
 
   @NotNull
-  public static PsiElement[] getRefs(PsiCodeBlock body, final PsiVariable def, PsiElement ref) {
+  public static PsiElement[] getRefs(@NotNull PsiCodeBlock body, @NotNull PsiVariable def, @NotNull PsiElement ref) {
+    return getRefs(body, def, ref, false);
+  }
+
+  public static PsiElement[] getRefs(@NotNull PsiCodeBlock body, @NotNull PsiVariable def, @NotNull PsiElement ref, boolean rethrow) {
     try {
       RefsDefs refsDefs = new RefsDefs(body) {
         @Override
         protected int nNext(int index) {
           return instructions.get(index).nNext();
         }
-
+  
         @Override
         protected int getNext(int index, int no) {
           return instructions.get(index).getNext(index, no);
         }
-
+  
         @Override
         protected boolean defs() {
           return false;
         }
-
+  
         @Override
-        protected void processInstruction(final Set<PsiElement> res, final Instruction instruction, int index) {
+        protected void processInstruction(@NotNull final Set<? super PsiElement> res, @NotNull final Instruction instruction, int index) {
           if (instruction instanceof ReadVariableInstruction) {
             ReadVariableInstruction instructionR = (ReadVariableInstruction)instruction;
             if (instructionR.variable == def) {
-
+  
               final PsiElement element = flow.getElement(index);
               element.accept(new JavaRecursiveElementWalkingVisitor() {
                 @Override
@@ -347,6 +378,9 @@ public class DefUseUtil {
       return refsDefs.get(def, ref);
     }
     catch (AnalysisCanceledException e) {
+      if (rethrow) {
+        ExceptionUtil.rethrowAllAsUnchecked(e);
+      }
       return PsiElement.EMPTY_ARRAY;
     }
   }
@@ -355,22 +389,23 @@ public class DefUseUtil {
     protected abstract int   nNext(int index);
     protected abstract int getNext(int index, int no);
 
+    @NotNull
     final List<Instruction> instructions;
     final ControlFlow flow;
     final PsiCodeBlock body;
 
 
-    protected RefsDefs(PsiCodeBlock body) throws AnalysisCanceledException {
+    RefsDefs(@NotNull PsiCodeBlock body) throws AnalysisCanceledException {
       this.body = body;
-      flow = ControlFlowFactory.getInstance(body.getProject()).getControlFlow(body, ourPolicy);
+      flow = ControlFlowFactory.getInstance(body.getProject()).getControlFlow(body, ourPolicy, false, false);
       instructions = flow.getInstructions();
     }
 
-    protected abstract void processInstruction(Set<PsiElement> res, final Instruction instruction, int index);
+    protected abstract void processInstruction(@NotNull Set<? super PsiElement> res, @NotNull Instruction instruction, int index);
     protected abstract boolean defs ();
 
     @NotNull
-    private PsiElement[] get (final PsiVariable def, PsiElement refOrDef) {
+    private PsiElement[] get(@NotNull PsiVariable def, @NotNull PsiElement refOrDef) {
       if (body == null) {
         return PsiElement.EMPTY_ARRAY;
       }
@@ -391,10 +426,12 @@ public class DefUseUtil {
           elem += 1;
         }
 
-        final Set<PsiElement> res = new THashSet<PsiElement>();
+        final Set<PsiElement> res = new THashSet<>();
         class Inner {
-
-          void traverse (int index) {
+          private void traverse(int index) {
+            if (visited[index]) {
+              return;
+            }
             visited [index] = true;
 
             if (defs ()) {
@@ -407,7 +444,7 @@ public class DefUseUtil {
                 }
               }
 
-              // hack: ControlFlow doesnn't contains parameters initialization
+              // hack: ControlFlow doesn't contains parameters initialization
               if (index == 0 && def instanceof PsiParameter) {
                 res.add(def.getNameIdentifier());
               }
@@ -424,7 +461,8 @@ public class DefUseUtil {
                     if (instructionW.variable == def) {
                       continue;
                     }
-                  } else {
+                  }
+                  else {
                     processInstruction(res, instruction, prev);
                   }
                 }
@@ -434,7 +472,7 @@ public class DefUseUtil {
             }
           }
         }
-        new Inner ().traverse (elem);
+        new Inner ().traverse(elem);
         return PsiUtilCore.toPsiElementArray(res);
       }
       return PsiElement.EMPTY_ARRAY;
@@ -442,10 +480,11 @@ public class DefUseUtil {
   }
 
 
-  private static InstructionState[] getStates(final List<Instruction> instructions) {
-    final InstructionState[] states = new InstructionState[instructions.size()];
+  @NotNull
+  private static IntArrayList[] getBackwardTraces(@NotNull List<? extends Instruction> instructions) {
+    final IntArrayList[] states = new IntArrayList[instructions.size()];
     for (int i = 0; i < states.length; i++) {
-      states[i] = new InstructionState(i);
+      states[i] = new IntArrayList();
     }
 
     for (int i = 0; i < instructions.size(); i++) {
@@ -453,11 +492,121 @@ public class DefUseUtil {
       for (int j = 0; j != instruction.nNext(); ++ j) {
         final int next = instruction.getNext(i, j);
         if (next < states.length) {
-          states[next].addBackwardTrace(i);
+          states[next].add(i);
         }
       }
     }
     return states;
+  }
+
+  private static class WalkThroughStack {
+    private final Stack<InstructionKey> myFrom;
+    private final Stack<InstructionKey> myNext;
+
+    WalkThroughStack(int size) {
+      if (size < 2) size = 2;
+      myFrom = new Stack<>(size);
+      myNext = new Stack<>(size);
+    }
+
+    void push(@NotNull InstructionKey fromKey, @NotNull InstructionKey nextKey) {
+      myFrom.push(fromKey);
+      myNext.push(nextKey);
+    }
+
+    @NotNull
+    InstructionKey peekFrom() {
+      return myFrom.peek();
+    }
+
+    @NotNull
+    InstructionKey popNext() {
+      myFrom.pop();
+      return myNext.pop();
+    }
+
+    boolean isEmpty() {
+      return myFrom.isEmpty();
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder();
+      for (int i = 0, limit = Math.min(myFrom.size(), myNext.size()); i < limit; i++) {
+        if (sb.length() != 0) sb.append(", ");
+        sb.append(myFrom.get(i)).append("->").append(myNext.get(i));
+      }
+      return sb.toString();
+    }
+  }
+
+  private static class InstructionStateWalker {
+    private final Map<InstructionKey, InstructionState> myStates;
+    private final WalkThroughStack myWalkThroughStack;
+    private final List<? extends Instruction> myInstructions;
+
+    private InstructionStateWalker(@NotNull List<? extends Instruction> instructions) {
+      myStates = new THashMap<>(instructions.size());
+      myWalkThroughStack = new WalkThroughStack(instructions.size() / 2);
+      myInstructions = instructions;
+    }
+
+    @NotNull
+    private Map<InstructionKey, InstructionState> walk() {
+      InstructionKey startKey = InstructionKey.create(0);
+      myStates.put(startKey, new InstructionState(startKey));
+      myWalkThroughStack.push(InstructionKey.create(-1), startKey);
+
+      InstructionKeySet visited = new InstructionKeySet(myInstructions.size() + 1);
+      while (!myWalkThroughStack.isEmpty()) {
+        ProgressManager.checkCanceled();
+        InstructionKey fromKey = myWalkThroughStack.peekFrom();
+        InstructionKey nextKey = myWalkThroughStack.popNext();
+        addBackwardTrace(fromKey, nextKey);
+        if (!visited.contains(nextKey)) {
+          visit(nextKey);
+          visited.add(nextKey);
+        }
+      }
+      return myStates;
+    }
+
+    private void visit(@NotNull InstructionKey fromKey) {
+      if (fromKey.getOffset() >= myInstructions.size()) return;
+      final Instruction instruction = myInstructions.get(fromKey.getOffset());
+      if (instruction instanceof CallInstruction) {
+        int nextOffset = ((CallInstruction)instruction).offset;
+        LOG.assertTrue(nextOffset != 0);
+        int returnOffset = fromKey.getOffset() + 1;
+        InstructionKey nextKey = fromKey.push(nextOffset, returnOffset);
+        myWalkThroughStack.push(fromKey, nextKey);
+      }
+      else if (instruction instanceof ReturnInstruction) {
+        int overriddenOffset = ((ReturnInstruction)instruction).offset;
+        InstructionKey nextKey = fromKey.pop(overriddenOffset);
+        myWalkThroughStack.push(fromKey, nextKey);
+      }
+      else {
+        for (int no = 0; no != instruction.nNext(); no++) {
+          final int nextOffset = instruction.getNext(fromKey.getOffset(), no);
+          InstructionKey nextKey = fromKey.next(nextOffset);
+          myWalkThroughStack.push(fromKey, nextKey);
+        }
+      }
+    }
+
+    private void addBackwardTrace(@NotNull InstructionKey fromKey, @NotNull InstructionKey nextKey) {
+      if (fromKey.getOffset() >= 0 && nextKey.getOffset() < myInstructions.size()) {
+        InstructionState state = myStates.get(nextKey);
+        if (state == null) myStates.put(nextKey, state = new InstructionState(nextKey));
+        state.addBackwardTrace(fromKey);
+      }
+    }
+
+    @NotNull
+    static Map<InstructionKey, InstructionState> getStates(@NotNull List<? extends Instruction> instructions) {
+      return new InstructionStateWalker(instructions).walk();
+    }
   }
 
   private static final ControlFlowPolicy ourPolicy = new ControlFlowPolicy() {

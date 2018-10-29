@@ -25,7 +25,8 @@ public class IpnbPyReference extends PyReferenceImpl {
 
   @Override
   public HighlightSeverity getUnresolvedHighlightSeverity(TypeEvalContext context) {
-    return HighlightSeverity.WARNING;
+    final HighlightSeverity severity = super.getUnresolvedHighlightSeverity(context);
+    return severity != null ? HighlightSeverity.WARNING : null;
   }
 
   @NotNull
@@ -41,7 +42,8 @@ public class IpnbPyReference extends PyReferenceImpl {
       for (IpnbEditablePanel editablePanel : panels) {
         if (!(editablePanel instanceof IpnbCodePanel)) continue;
         final Editor editor = ((IpnbCodePanel)editablePanel).getEditor();
-        final IpnbPyFragment psiFile = (IpnbPyFragment)PsiDocumentManager.getInstance(myElement.getProject()).getPsiFile(editor.getDocument());
+        final IpnbPyFragment psiFile =
+          (IpnbPyFragment)PsiDocumentManager.getInstance(myElement.getProject()).getPsiFile(editor.getDocument());
         if (psiFile == null) continue;
         final CompletionVariantsProcessor processor = new CompletionVariantsProcessor(myElement);
         PyResolveUtil.scopeCrawlUp(processor, psiFile, null, null);
@@ -67,7 +69,8 @@ public class IpnbPyReference extends PyReferenceImpl {
         for (IpnbEditablePanel editablePanel : panels) {
           if (!(editablePanel instanceof IpnbCodePanel)) continue;
           final Editor editor = ((IpnbCodePanel)editablePanel).getEditor();
-          final IpnbPyFragment psiFile = (IpnbPyFragment)PsiDocumentManager.getInstance(myElement.getProject()).getPsiFile(editor.getDocument());
+          final IpnbPyFragment psiFile =
+            (IpnbPyFragment)PsiDocumentManager.getInstance(myElement.getProject()).getPsiFile(editor.getDocument());
           if (psiFile == null) continue;
           final PyResolveProcessor processor = new PyResolveProcessor(referencedName);
 
@@ -75,12 +78,11 @@ public class IpnbPyReference extends PyReferenceImpl {
           final List<RatedResolveResult> resultList = getResultsFromProcessor(referencedName, processor, psiFile, psiFile);
           if (resultList.size() > 0) {
             List<RatedResolveResult> ret = RatedResolveResult.sorted(resultList);
-            return ret.toArray(new RatedResolveResult[ret.size()]);
+            return ret.toArray(RatedResolveResult.EMPTY_ARRAY);
           }
         }
       }
     }
     return results;
   }
-
 }

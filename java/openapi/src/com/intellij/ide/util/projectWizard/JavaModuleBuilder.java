@@ -16,6 +16,7 @@
 package com.intellij.ide.util.projectWizard;
 
 
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.ModifiableModuleModel;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleType;
@@ -44,11 +45,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class JavaModuleBuilder extends ModuleBuilder implements SourcePathsBuilder {
+  private static final Logger LOG = Logger.getInstance("#com.intellij.ide.util.projectWizard.JavaModuleBuilder");
   private String myCompilerOutputPath;
   // Pair<Source Path, Package Prefix>
   private List<Pair<String,String>> mySourcePaths;
   // Pair<Library path, Source path>
-  private final List<Pair<String, String>> myModuleLibraries = new ArrayList<Pair<String, String>>();
+  private final List<Pair<String, String>> myModuleLibraries = new ArrayList<>();
   public static final int JAVA_WEIGHT = 100;
   public static final int BUILD_SYSTEM_WEIGHT = 80;
   public static final int JAVA_MOBILE_WEIGHT = 60;
@@ -57,9 +59,10 @@ public class JavaModuleBuilder extends ModuleBuilder implements SourcePathsBuild
     myCompilerOutputPath = acceptParameter(compilerOutputPath);
   }
 
+  @Override
   public List<Pair<String,String>> getSourcePaths() {
     if (mySourcePaths == null) {
-      final List<Pair<String, String>> paths = new ArrayList<Pair<String, String>>();
+      final List<Pair<String, String>> paths = new ArrayList<>();
       @NonNls final String path = getContentEntryPath() + File.separator + "src";
       new File(path).mkdirs();
       paths.add(Pair.create(path, ""));
@@ -68,24 +71,27 @@ public class JavaModuleBuilder extends ModuleBuilder implements SourcePathsBuild
     return mySourcePaths;
   }
 
+  @Override
   public void setSourcePaths(List<Pair<String,String>> sourcePaths) {
-    mySourcePaths = sourcePaths != null? new ArrayList<Pair<String, String>>(sourcePaths) : null;
+    mySourcePaths = sourcePaths != null ? new ArrayList<>(sourcePaths) : null;
   }
 
+  @Override
   public void addSourcePath(Pair<String,String> sourcePathInfo) {
     if (mySourcePaths == null) {
-      mySourcePaths = new ArrayList<Pair<String, String>>();
+      mySourcePaths = new ArrayList<>();
     }
     mySourcePaths.add(sourcePathInfo);
   }
 
+  @Override
   public ModuleType getModuleType() {
     return StdModuleTypes.JAVA;
   }
 
   @Override
   public boolean isSuitableSdkType(SdkTypeId sdkType) {
-    return sdkType instanceof JavaSdkType;
+    return sdkType instanceof JavaSdkType && !((JavaSdkType)sdkType).isDependent();
   }
 
   @Nullable
@@ -94,6 +100,7 @@ public class JavaModuleBuilder extends ModuleBuilder implements SourcePathsBuild
     return StdModuleTypes.JAVA.modifySettingsStep(settingsStep, this);
   }
 
+  @Override
   public void setupRootModel(ModifiableRootModel rootModel) throws ConfigurationException {
     final CompilerModuleExtension compilerModuleExtension = rootModel.getModuleExtension(CompilerModuleExtension.class);
     compilerModuleExtension.setExcludeOutput(true);
@@ -155,6 +162,7 @@ public class JavaModuleBuilder extends ModuleBuilder implements SourcePathsBuild
   public List<Module> commit(@NotNull Project project, ModifiableModuleModel model, ModulesProvider modulesProvider) {
     LanguageLevelProjectExtension extension = LanguageLevelProjectExtension.getInstance(ProjectManager.getInstance().getDefaultProject());
     Boolean aDefault = extension.getDefault();
+    LOG.debug("commit: aDefault=" + aDefault);
     LanguageLevelProjectExtension instance = LanguageLevelProjectExtension.getInstance(project);
     if (aDefault != null && !aDefault) {
       instance.setLanguageLevel(extension.getLanguageLevel());
@@ -163,8 +171,10 @@ public class JavaModuleBuilder extends ModuleBuilder implements SourcePathsBuild
     else {
       //setup language level according to jdk, then setup default flag
       Sdk sdk = ProjectRootManager.getInstance(project).getProjectSdk();
+      LOG.debug("commit: projectSdk=" + sdk);
       if (sdk != null) {
         JavaSdkVersion version = JavaSdk.getInstance().getVersion(sdk);
+        LOG.debug("commit: sdk.version=" + version);
         if (version != null) {
           instance.setLanguageLevel(version.getMaxLanguageLevel());
           instance.setDefault(true);

@@ -54,7 +54,7 @@ public class DetectedFrameworksComponent {
       }
     };
     myTreePanel.add(ScrollPaneFactory.createScrollPane(myTree), BorderLayout.CENTER);
-    myGroupByComboBox.setModel(new EnumComboBoxModel<GroupByOption>(GroupByOption.class));
+    myGroupByComboBox.setModel(new EnumComboBoxModel<>(GroupByOption.class));
     myGroupByComboBox.setRenderer(new GroupByListCellRenderer());
     myGroupByComboBox.addActionListener(new ActionListener() {
       @Override
@@ -104,7 +104,7 @@ public class DetectedFrameworksComponent {
   public enum GroupByOption { TYPE, DIRECTORY }
 
   private static class GroupByListCellRenderer extends ListCellRendererWrapper<GroupByOption> {
-    public GroupByListCellRenderer() {
+    GroupByListCellRenderer() {
       super();
     }
 

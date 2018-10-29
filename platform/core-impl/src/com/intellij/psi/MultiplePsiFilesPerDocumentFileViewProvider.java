@@ -24,12 +24,12 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.impl.PsiDocumentManagerBase;
+import com.intellij.psi.impl.PsiFileEx;
 import com.intellij.psi.impl.SharedPsiElementImplUtil;
 import com.intellij.psi.impl.source.PsiFileImpl;
 import com.intellij.psi.impl.source.tree.FileElement;
 import com.intellij.psi.templateLanguages.OuterLanguageElement;
 import com.intellij.util.ConcurrencyUtil;
-import com.intellij.util.NullableFunction;
 import com.intellij.util.ReflectionUtil;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
@@ -39,12 +39,14 @@ import org.jetbrains.annotations.TestOnly;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 
-public abstract class MultiplePsiFilesPerDocumentFileViewProvider extends SingleRootFileViewProvider {
-  private final ConcurrentMap<Language, PsiFileImpl> myRoots = ContainerUtil.newConcurrentMap(1, 0.75f, 1);
-  private MultiplePsiFilesPerDocumentFileViewProvider myOriginal = null;
+public abstract class MultiplePsiFilesPerDocumentFileViewProvider extends AbstractFileViewProvider {
+  private final ConcurrentMap<Language, PsiFile> myRoots = ContainerUtil.newConcurrentMap(1, 0.75f, 1);
+  private MultiplePsiFilesPerDocumentFileViewProvider myOriginal;
 
-  public MultiplePsiFilesPerDocumentFileViewProvider(PsiManager manager, VirtualFile virtualFile, boolean eventSystemEnabled) {
-    super(manager, virtualFile, eventSystemEnabled, Language.ANY);
+  public MultiplePsiFilesPerDocumentFileViewProvider(@NotNull PsiManager manager,
+                                                     @NotNull VirtualFile virtualFile,
+                                                     boolean eventSystemEnabled) {
+    super(manager, virtualFile, eventSystemEnabled, virtualFile.getFileType());
   }
 
   @Override
@@ -54,7 +56,7 @@ public abstract class MultiplePsiFilesPerDocumentFileViewProvider extends Single
   @Override
   @NotNull
   public List<PsiFile> getAllFiles() {
-    final List<PsiFile> roots = new ArrayList<PsiFile>();
+    final List<PsiFile> roots = new ArrayList<>();
     for (Language language : getLanguages()) {
       PsiFile psi = getPsi(language);
       if (psi != null) roots.add(psi);
@@ -67,34 +69,27 @@ public abstract class MultiplePsiFilesPerDocumentFileViewProvider extends Single
     return roots;
   }
 
-  protected void removeFile(final Language language) {
-    PsiFileImpl file = myRoots.remove(language);
-    if (file != null) {
-      file.markInvalidated();
+  protected final void removeFile(@NotNull Language language) {
+    PsiFile file = myRoots.remove(language);
+    if (file instanceof PsiFileEx) {
+      ((PsiFileEx)file).markInvalidated();
     }
   }
 
   @Override
   protected PsiFile getPsiInner(@NotNull final Language target) {
-    PsiFileImpl file = myRoots.get(target);
+    PsiFile file = myRoots.get(target);
     if (file == null) {
-      if (isPhysical()) {
-        VirtualFile virtualFile = getVirtualFile();
-        if (isIgnored()) return null;
-        VirtualFile parent = virtualFile.getParent();
-        if (parent != null) {
-          getManager().findDirectory(parent);
-        }
-      }
+      if (!shouldCreatePsi()) return null;
       if (target != getBaseLanguage() && !getLanguages().contains(target)) {
         return null;
       }
-      file = (PsiFileImpl)createFile(target);
+      file = createFile(target);
       if (file == null) return null;
       if (myOriginal != null) {
         final PsiFile originalFile = myOriginal.getPsi(target);
-        if (originalFile != null) {
-          file.setOriginalFile(originalFile);
+        if (originalFile != null && file instanceof PsiFileImpl) {
+          ((PsiFileImpl)file).setOriginalFile(originalFile);
         }
       }
       file = ConcurrencyUtil.cacheOrGet(myRoots, target, file);
@@ -104,42 +99,39 @@ public abstract class MultiplePsiFilesPerDocumentFileViewProvider extends Single
 
 
   @Override
-  public PsiFile getCachedPsi(@NotNull Language target) {
+  public final PsiFile getCachedPsi(@NotNull Language target) {
     return myRoots.get(target);
-  }
-
-  @Override
-  public List<PsiFile> getCachedPsiFiles() {
-    return ContainerUtil.mapNotNull(myRoots.keySet(), new NullableFunction<Language, PsiFile>() {
-      @Nullable
-      @Override
-      public PsiFile fun(Language language) {
-        return getCachedPsi(language);
-      }
-    });
   }
 
   @NotNull
   @Override
-  public List<FileElement> getKnownTreeRoots() {
-    List<FileElement> files = new ArrayList<FileElement>(myRoots.size());
+  public final List<PsiFile> getCachedPsiFiles() {
+    return ContainerUtil.mapNotNull(myRoots.keySet(), this::getCachedPsi);
+  }
+
+  @NotNull
+  @Override
+  public final List<FileElement> getKnownTreeRoots() {
+    List<FileElement> files = new ArrayList<>(myRoots.size());
     for (PsiFile file : myRoots.values()) {
-      final FileElement treeElement = ((PsiFileImpl)file).getTreeElement();
-      if (treeElement != null) {
-        files.add(treeElement);
+      if (file instanceof PsiFileImpl) {
+        final FileElement treeElement = ((PsiFileImpl)file).getTreeElement();
+        if (treeElement != null) {
+          files.add(treeElement);
+        }
       }
     }
-
     return files;
   }
 
   @TestOnly
   public void checkAllTreesEqual() {
-    Collection<PsiFileImpl> roots = myRoots.values();
+    Collection<PsiFile> roots = myRoots.values();
     PsiDocumentManager documentManager = PsiDocumentManager.getInstance(getManager().getProject());
     documentManager.commitAllDocuments();
     for (PsiFile root : roots) {
       Document document = documentManager.getDocument(root);
+      assert document != null;
       PsiDocumentManagerBase.checkConsistency(root, document);
       assert root.getText().equals(document.getText());
     }
@@ -153,7 +145,8 @@ public abstract class MultiplePsiFilesPerDocumentFileViewProvider extends Single
     return copy;
   }
 
-  protected abstract MultiplePsiFilesPerDocumentFileViewProvider cloneInner(VirtualFile fileCopy);
+  @NotNull
+  protected abstract MultiplePsiFilesPerDocumentFileViewProvider cloneInner(@NotNull VirtualFile fileCopy);
 
   @Override
   @Nullable
@@ -201,22 +194,16 @@ public abstract class MultiplePsiFilesPerDocumentFileViewProvider extends Single
   @Override
   public void contentsSynchronized() {
     Set<Language> languages = getLanguages();
-    for (Iterator<Map.Entry<Language, PsiFileImpl>> iterator = myRoots.entrySet().iterator(); iterator.hasNext(); ) {
-      Map.Entry<Language, PsiFileImpl> entry = iterator.next();
+    for (Iterator<Map.Entry<Language, PsiFile>> iterator = myRoots.entrySet().iterator(); iterator.hasNext(); ) {
+      Map.Entry<Language, PsiFile> entry = iterator.next();
       if (!languages.contains(entry.getKey())) {
-        PsiFileImpl file = entry.getValue();
+        PsiFile file = entry.getValue();
         iterator.remove();
-        file.markInvalidated();
+        if (file instanceof PsiFileEx) {
+          ((PsiFileEx)file).markInvalidated();
+        }
       }
     }
     super.contentsSynchronized();
-  }
-
-  @Override
-  public void markInvalidated() {
-    for (PsiFileImpl file : myRoots.values()) {
-      file.markInvalidated();
-    }
-    super.markInvalidated();
   }
 }

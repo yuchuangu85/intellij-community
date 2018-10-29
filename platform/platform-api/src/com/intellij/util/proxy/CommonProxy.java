@@ -1,17 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
  */
 package com.intellij.util.proxy;
 
@@ -33,6 +21,7 @@ import java.io.IOException;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class CommonProxy extends ProxySelector {
@@ -41,24 +30,24 @@ public class CommonProxy extends ProxySelector {
   private final static CommonProxy ourInstance = new CommonProxy();
   private final CommonAuthenticator myAuthenticator = new CommonAuthenticator();
 
-  private final static ThreadLocal<Boolean> ourReenterDefence = new ThreadLocal<Boolean>();
+  private final static ThreadLocal<Boolean> ourReenterDefence = new ThreadLocal<>();
 
   public final static List<Proxy> NO_PROXY_LIST = Collections.singletonList(Proxy.NO_PROXY);
   private final static long ourErrorInterval = TimeUnit.MINUTES.toMillis(3);
-  private static volatile int ourNotificationCount;
+  private static final AtomicInteger ourNotificationCount = new AtomicInteger();
   private volatile static long ourErrorTime;
   private volatile static ProxySelector ourWrong;
-  private static final AtomicReference<Map<String, String>> ourProps = new AtomicReference<Map<String, String>>();
+  private static final AtomicReference<Map<String, String>> ourProps = new AtomicReference<>();
 
   static {
     ProxySelector.setDefault(ourInstance);
   }
 
   private final Object myLock = new Object();
-  private final Set<Pair<HostInfo, Thread>> myNoProxy = new THashSet<Pair<HostInfo, Thread>>();
+  private final Set<Pair<HostInfo, Thread>> myNoProxy = new THashSet<>();
 
-  private final Map<String, ProxySelector> myCustom = new THashMap<String, ProxySelector>();
-  private final Map<String, NonStaticAuthenticator> myCustomAuth = new THashMap<String, NonStaticAuthenticator>();
+  private final Map<String, ProxySelector> myCustom = new THashMap<>();
+  private final Map<String, NonStaticAuthenticator> myCustomAuth = new THashMap<>();
 
   public static CommonProxy getInstance() {
     return ourInstance;
@@ -85,10 +74,10 @@ public class CommonProxy extends ProxySelector {
   }
 
   private static boolean itsTime() {
-    final boolean b = System.currentTimeMillis() - ourErrorTime > ourErrorInterval && ourNotificationCount < 5;
+    final boolean b = System.currentTimeMillis() - ourErrorTime > ourErrorInterval && ourNotificationCount.get() < 5;
     if (b) {
       ourErrorTime = System.currentTimeMillis();
-      ++ ourNotificationCount;
+      ourNotificationCount.incrementAndGet();
     }
     return b;
   }
@@ -121,7 +110,7 @@ public class CommonProxy extends ProxySelector {
   }
 
   public static Map<String, String> getOldStyleProperties() {
-    final Map<String, String> props = new HashMap<String, String>();
+    final Map<String, String> props = new HashMap<>();
     props.put(JavaProxyProperty.HTTP_HOST, System.getProperty(JavaProxyProperty.HTTP_HOST));
     props.put(JavaProxyProperty.HTTPS_HOST, System.getProperty(JavaProxyProperty.HTTPS_HOST));
     props.put(JavaProxyProperty.SOCKS_HOST, System.getProperty(JavaProxyProperty.SOCKS_HOST));
@@ -218,7 +207,7 @@ public class CommonProxy extends ProxySelector {
           LOG.debug("CommonProxy.select returns no proxy (in no proxy list) for " + uri.toString());
           return NO_PROXY_LIST;
         }
-        copy = new THashMap<String, ProxySelector>(myCustom);
+        copy = new THashMap<>(myCustom);
       }
       for (Map.Entry<String, ProxySelector> entry : copy.entrySet()) {
         final List<Proxy> proxies = entry.getValue().select(uri);
@@ -252,7 +241,7 @@ public class CommonProxy extends ProxySelector {
 
     final Map<String, ProxySelector> copy;
     synchronized (myLock) {
-      copy = new THashMap<String, ProxySelector>(myCustom);
+      copy = new THashMap<>(myCustom);
     }
     for (Map.Entry<String, ProxySelector> entry : copy.entrySet()) {
       entry.getValue().connectFailed(uri, sa, ioe);
@@ -276,7 +265,7 @@ public class CommonProxy extends ProxySelector {
           LOG.debug("CommonAuthenticator.getPasswordAuthentication found host in no proxies set (" + siteStr + ")");
           return null;
         }
-        copy = new HashMap<String, NonStaticAuthenticator>(myCustomAuth);
+        copy = new HashMap<>(myCustomAuth);
       }
 
       if (! copy.isEmpty()) {

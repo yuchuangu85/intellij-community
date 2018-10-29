@@ -13,7 +13,7 @@ import java.io.OutputStream;
  */
 public class CloudSilentLoggingHandlerImpl implements CloudAgentLoggingHandler {
 
-  private static final Logger LOG = Logger.getInstance("#" + CloudSilentLoggingHandlerImpl.class.getName());
+  private static final Logger LOG = Logger.getInstance(CloudSilentLoggingHandlerImpl.class);
 
   @Override
   public void println(String message) {
@@ -41,7 +41,7 @@ public class CloudSilentLoggingHandlerImpl implements CloudAgentLoggingHandler {
   }
 
   @Override
-  public TerminalListener createTerminal(String pipeName, OutputStream terminalInput, InputStream terminalOutput) {
+  public TerminalListener createTerminal(String pipeName, OutputStream terminalInput, InputStream terminalOutput, InputStream stderr) {
     return TerminalListener.NULL;
   }
 }

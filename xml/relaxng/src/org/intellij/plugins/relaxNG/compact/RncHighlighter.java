@@ -29,11 +29,6 @@ import org.jetbrains.annotations.NotNull;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Created by IntelliJ IDEA.
- * User: sweinreuter
- * Date: 04.08.2007
- */
 public class RncHighlighter extends SyntaxHighlighterBase {
   @Override
   @NotNull
@@ -44,7 +39,7 @@ public class RncHighlighter extends SyntaxHighlighterBase {
   private static final Map<IElementType, TextAttributesKey> ourMap1;
 
   static {
-    ourMap1 = new HashMap<IElementType, TextAttributesKey>();
+    ourMap1 = new HashMap<>();
 
     fillMap(ourMap1, RncTokenTypes.KEYWORDS, DefaultLanguageHighlighterColors.KEYWORD);
     fillMap(ourMap1, RncTokenTypes.OPERATORS, DefaultLanguageHighlighterColors.OPERATION_SIGN);

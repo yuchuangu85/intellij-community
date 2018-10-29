@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package com.intellij.ui.content;
 
 import com.intellij.openapi.util.Pair;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.util.List;
@@ -30,13 +29,34 @@ public interface TabbedContent extends Content {
   String SPLIT_PROPERTY_PREFIX = "tabbed.toolwindow.expanded.";
 
   void addContent(@NotNull JComponent content, @NotNull String name, boolean selectTab);
+
   void removeContent(@NotNull JComponent content);
-  void renameContent(@NotNull JComponent tab, @NotNull String newTabName);
+
+  /**
+   * This method is used for preselecting popup menu items
+   *
+   * @return index of selected tab
+   * @see #selectContent(int)
+   */
+  default int getSelectedIndex() { return -1; }
+
+  /**
+   * This method is invoked before content is selected with {@link ContentManager#setSelectedContent(Content)}
+   *
+   * @param index index of tab in {@link #getTabs()}
+   */
   void selectContent(int index);
+
+  @NotNull
   List<Pair<String, JComponent>> getTabs();
+
+  default boolean hasMultipleTabs() {
+    return getTabs().size() > 1;
+  }
+
   String getTitlePrefix();
+
   void setTitlePrefix(String titlePrefix);
-  @Nullable
-  String getTabNameWithoutPrefix(String fullTabName);
+
   void split();
 }

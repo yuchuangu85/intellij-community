@@ -58,10 +58,9 @@ public class PyStringLiteralFileReferenceSet extends RootFileReferenceSet {
 
   @Override
   protected void reparse() {
-    //noinspection ConstantConditions
     if (myStringLiteralExpression != null) {
       final List<FileReference> references = getFileReferences(myStringLiteralExpression);
-      myReferences = references.toArray(new FileReference[references.size()]);
+      myReferences = references.toArray(FileReference.EMPTY);
     }
   }
 
@@ -71,7 +70,7 @@ public class PyStringLiteralFileReferenceSet extends RootFileReferenceSet {
     final Matcher matcher = DELIMITERS.matcher(value);
     int start = 0;
     int index = 0;
-    final List<FileReference> results = new ArrayList<FileReference>();
+    final List<FileReference> results = new ArrayList<>();
     while (matcher.find()) {
       final String s = value.substring(start, matcher.start());
       if (!s.isEmpty()) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,9 @@
  */
 package com.intellij.codeInsight.daemon.impl.quickfix;
 
-import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.daemon.QuickFixBundle;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
+import com.intellij.codeInsight.intention.HighPriorityAction;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
@@ -38,8 +38,8 @@ import java.util.List;
 /**
  * @author cdr
  */
-public class PermuteArgumentsFix implements IntentionAction {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.daemon.impl.quickfix.PermuteArgumentsFix");
+public class PermuteArgumentsFix implements IntentionAction, HighPriorityAction {
+  private static final Logger LOG = Logger.getInstance(PermuteArgumentsFix.class);
   private final PsiCall myCall;
   private final PsiCall myPermutation;
 
@@ -74,14 +74,13 @@ public class PermuteArgumentsFix implements IntentionAction {
 
   @Override
   public void invoke(@NotNull Project project, Editor editor, PsiFile file) throws IncorrectOperationException {
-    if (!FileModificationService.getInstance().prepareFileForWrite(file)) return;
     myCall.getArgumentList().replace(myPermutation.getArgumentList());
   }
 
   public static void registerFix(HighlightInfo info, PsiCall callExpression, final CandidateInfo[] candidates, final TextRange fixRange) {
     PsiExpression[] expressions = callExpression.getArgumentList().getExpressions();
     if (expressions.length < 2) return;
-    List<PsiCall> permutations = new ArrayList<PsiCall>();
+    List<PsiCall> permutations = new ArrayList<>();
 
     for (CandidateInfo candidate : candidates) {
       if (candidate instanceof MethodCandidateInfo) {
@@ -118,7 +117,7 @@ public class PermuteArgumentsFix implements IntentionAction {
     }
   }
 
-  private static void registerShiftFixes(final PsiExpression[] expressions, final PsiCall callExpression, final List<PsiCall> permutations,
+  private static void registerShiftFixes(final PsiExpression[] expressions, final PsiCall callExpression, final List<? super PsiCall> permutations,
                                          final MethodCandidateInfo methodCandidate, final int minIncompatibleIndex, final int maxIncompatibleIndex)
     throws IncorrectOperationException {
     PsiMethod method = methodCandidate.getElement();
@@ -129,17 +128,7 @@ public class PermuteArgumentsFix implements IntentionAction {
         {
           ArrayUtil.rotateLeft(expressions, i, j);
           if (PsiUtil.isApplicable(method, substitutor, expressions)) {
-            PsiCall copy = (PsiCall)callExpression.copy();
-            PsiExpression[] copyExpressions = copy.getArgumentList().getExpressions();
-            for (int k = i; k < copyExpressions.length; k++) {
-              copyExpressions[k].replace(expressions[k]);
-            }
-
-            JavaResolveResult result = copy.resolveMethodGenerics();
-            if (result.getElement() != null && result.isValidResult()) {
-              permutations.add(copy);
-              if (permutations.size() > 1) return;
-            }
+            if (canShift(expressions, callExpression, permutations, i)) return;
           }
           ArrayUtil.rotateRight(expressions, i, j);
         }
@@ -147,17 +136,7 @@ public class PermuteArgumentsFix implements IntentionAction {
         {
           ArrayUtil.rotateRight(expressions, i, j);
           if (PsiUtil.isApplicable(method, substitutor, expressions)) {
-            PsiCall copy = (PsiCall)callExpression.copy();
-            PsiExpression[] copyExpressions = copy.getArgumentList().getExpressions();
-            for (int k = i; k < copyExpressions.length; k++) {
-              copyExpressions[k].replace(expressions[k]);
-            }
-
-            JavaResolveResult result = copy.resolveMethodGenerics();
-            if (result.getElement() != null && result.isValidResult()) {
-              permutations.add(copy);
-              if (permutations.size() > 1) return;
-            }
+            if (canShift(expressions, callExpression, permutations, i)) return;
           }
           ArrayUtil.rotateLeft(expressions, i, j);
         }
@@ -165,7 +144,25 @@ public class PermuteArgumentsFix implements IntentionAction {
     }
   }
 
-  private static void registerSwapFixes(final PsiExpression[] expressions, final PsiCall callExpression, final List<PsiCall> permutations,
+  private static boolean canShift(PsiExpression[] expressions, PsiCall callExpression, List<? super PsiCall> permutations, int i) {
+    PsiCall copy = LambdaUtil.copyTopLevelCall(callExpression);
+    if (copy == null) return false;
+    PsiExpressionList list = copy.getArgumentList();
+    if (list == null) return false;
+    PsiExpression[] copyExpressions = list.getExpressions();
+    for (int k = i; k < copyExpressions.length; k++) {
+      copyExpressions[k].replace(expressions[k]);
+    }
+
+    JavaResolveResult result = copy.resolveMethodGenerics();
+    if (result.getElement() != null && result.isValidResult()) {
+      permutations.add(copy);
+      if (permutations.size() > 1) return true;
+    }
+    return false;
+  }
+
+  private static void registerSwapFixes(final PsiExpression[] expressions, final PsiCall callExpression, final List<? super PsiCall> permutations,
                                         MethodCandidateInfo candidate, final int incompatibilitiesCount, final int minIncompatibleIndex,
                                         final int maxIncompatibleIndex) throws IncorrectOperationException {
     PsiMethod method = candidate.getElement();
@@ -176,8 +173,11 @@ public class PermuteArgumentsFix implements IntentionAction {
       for (int j = i+1; j <= maxIncompatibleIndex; j++) {
         ArrayUtil.swap(expressions, i, j);
         if (PsiUtil.isApplicable(method, substitutor, expressions)) {
-          PsiCall copy = (PsiCall)callExpression.copy();
-          PsiExpression[] copyExpressions = copy.getArgumentList().getExpressions();
+          PsiCall copy = LambdaUtil.copyTopLevelCall(callExpression);
+          if (copy == null) return;
+          PsiExpressionList argumentList = copy.getArgumentList();
+          if (argumentList == null) return;
+          PsiExpression[] copyExpressions = argumentList.getExpressions();
           copyExpressions[i].replace(expressions[i]);
           copyExpressions[j].replace(expressions[j]);
           JavaResolveResult result = copy.resolveMethodGenerics();

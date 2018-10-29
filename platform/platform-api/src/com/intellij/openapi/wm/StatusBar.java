@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +31,6 @@ import java.awt.*;
  * @author spleaner
  */
 public interface StatusBar extends StatusBarInfo, Disposable {
-
   @SuppressWarnings({"AbstractClassNeverImplemented"})
   abstract class Info implements StatusBarInfo {
     public static final Topic<StatusBarInfo> TOPIC = Topic.create("IdeStatusBar.Text", StatusBarInfo.class);
@@ -97,4 +96,21 @@ public interface StatusBar extends StatusBarInfo, Disposable {
 
   void install(IdeFrame frame);
 
+  class Anchors {
+    public static final String DEFAULT_ANCHOR = after(StandardWidgets.COLUMN_SELECTION_MODE_PANEL);
+
+    public static String before(String widgetId) {
+      return "before " + widgetId;
+    }
+    public static String after(String widgetId) {
+      return "after " + widgetId;
+    }
+  }
+
+  class StandardWidgets {
+    public static final String ENCODING_PANEL = "Encoding";
+    public static final String COLUMN_SELECTION_MODE_PANEL = "InsertOverwrite"; // Keep the old ID for backwards compatibility
+    public static final String READONLY_ATTRIBUTE_PANEL = "ReadOnlyAttribute";
+    public static final String POSITION_PANEL = "Position";
+  }
 }

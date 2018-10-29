@@ -20,7 +20,6 @@ import com.intellij.ide.TypePresentationService;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.util.Comparing;
-import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Iconable;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiElement;
@@ -37,15 +36,13 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * @author peter
  */
 public abstract class ElementPresentationManager {
-  private static final ConcurrentFactoryMap<Class,Method> ourNameValueMethods = new ConcurrentFactoryMap<Class, Method>() {
-    @Override
-    @Nullable
-    protected Method create(final Class key) {
+  private static final ConcurrentMap<Class,Method> ourNameValueMethods = ConcurrentFactoryMap.createMap(key-> {
       for (final Method method : ReflectionUtil.getClassPublicMethods(key)) {
       if (JavaMethod.getMethod(key, method).getAnnotation(NameValue.class) != null) {
         return method;
@@ -53,7 +50,7 @@ public abstract class ElementPresentationManager {
     }
     return null;
     }
-  };
+  );
 
   private final static Function<Object, String> DEFAULT_NAMER = element -> getElementName(element);
 
@@ -72,7 +69,7 @@ public abstract class ElementPresentationManager {
   }
 
   @NotNull
-  public <T> Object[] createVariants(Collection<T> elements, Function<T, String> namer) {
+  public <T> Object[] createVariants(Collection<? extends T> elements, Function<? super T, String> namer) {
     return createVariants(elements, namer, 0);
   }
 
@@ -83,12 +80,12 @@ public abstract class ElementPresentationManager {
   public abstract Object createVariant(final Object variant, final String name, final PsiElement psiElement);
 
   @NotNull
-  public abstract <T> Object[] createVariants(Collection<T> elements, Function<T, String> namer, int iconFlags);
+  public abstract <T> Object[] createVariants(Collection<? extends T> elements, Function<? super T, String> namer, int iconFlags);
 
 
-  private static final List<Function<Object, String>> ourNameProviders = new ArrayList<Function<Object, String>>();
-  private static final List<Function<Object, String>> ourDocumentationProviders = new ArrayList<Function<Object, String>>();
-  private static final List<Function<Object, Icon>> ourIconProviders = new ArrayList<Function<Object, Icon>>();
+  private static final List<Function<Object, String>> ourNameProviders = new ArrayList<>();
+  private static final List<Function<Object, String>> ourDocumentationProviders = new ArrayList<>();
+  private static final List<Function<Object, Icon>> ourIconProviders = new ArrayList<>();
 
   static {
     ourIconProviders.add(
@@ -99,12 +96,14 @@ public abstract class ElementPresentationManager {
    * @deprecated
    * @see com.intellij.ide.presentation.Presentation#provider()
    */
+  @Deprecated
   public static void registerNameProvider(Function<Object, String> function) { ourNameProviders.add(function); }
 
   /**
    * @deprecated
    * @see Documentation
    */
+  @Deprecated
   public static void registerDocumentationProvider(Function<Object, String> function) { ourDocumentationProviders.add(function); }
 
 

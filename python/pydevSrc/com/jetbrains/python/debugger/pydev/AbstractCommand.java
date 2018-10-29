@@ -28,9 +28,12 @@ public abstract class AbstractCommand<T> {
   public static final int ADD_EXCEPTION_BREAKPOINT = 122;
   public static final int REMOVE_EXCEPTION_BREAKPOINT = 123;
   public static final int LOAD_SOURCE = 124;
+  public static final int SET_NEXT_STATEMENT = 127;
   public static final int SMART_STEP_INTO = 128;
   public static final int EXIT = 129;
-  
+  public static final int GET_DESCRIPTION = 148;
+
+
   public static final int CALL_SIGNATURE_TRACE = 130;
 
   public static final int CMD_SET_PY_EXCEPTION = 131;
@@ -52,13 +55,16 @@ public abstract class AbstractCommand<T> {
   public static final int SHOW_RETURN_VALUES = 146;
   public static final int INPUT_REQUESTED = 147;
 
+  public static final int PROCESS_CREATED = 149;
+  public static final int SHOW_CYTHON_WARNING = 150;
+  public static final int LOAD_FULL_VALUE = 151;
+
   public static final int ERROR = 901;
 
   public static final int VERSION = 501;
   public static final String NEW_LINE_CHAR = "@_@NEW_LINE_CHAR@_@";
   public static final String TAB_CHAR = "@_@TAB_CHAR@_@";
 
-  
 
   @NotNull private final RemoteDebugger myDebugger;
   private final int myCommandCode;
@@ -88,6 +94,21 @@ public abstract class AbstractCommand<T> {
   }
 
   protected abstract void buildPayload(Payload payload);
+
+
+  @NotNull
+  public static String buildCondition(String expression) {
+    String condition;
+
+    if (expression != null) {
+      condition = expression.replaceAll("\n", NEW_LINE_CHAR);
+      condition = condition.replaceAll("\t", TAB_CHAR);
+    }
+    else {
+      condition = "None";
+    }
+    return condition;
+  }
 
   public boolean isResponseExpected() {
     return false;
@@ -168,7 +189,7 @@ public abstract class AbstractCommand<T> {
   }
 
 
-  protected void processResponse(final ProtocolFrame response) throws PyDebuggerException {
+  protected void processResponse(@NotNull final ProtocolFrame response) throws PyDebuggerException {
     if (response.getCommand() >= 900 && response.getCommand() < 1000) {
       throw new PyDebuggerException(response.getPayload());
     }
@@ -200,6 +221,10 @@ public abstract class AbstractCommand<T> {
 
   public static boolean isInputRequested(final int command) {
     return command == INPUT_REQUESTED;
+  }
+
+  public static boolean isShowWarningCommand(final int command) {
+    return command == SHOW_CYTHON_WARNING;
   }
 
   public static boolean isExitEvent(final int command) {

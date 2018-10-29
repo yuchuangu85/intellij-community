@@ -25,7 +25,6 @@ import com.intellij.openapi.roots.libraries.JarVersionDetectionUtil;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.CollectionComboBoxModel;
-import com.intellij.util.containers.HashSet;
 import com.intellij.util.containers.hash.HashMap;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NonNls;
@@ -36,10 +35,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public abstract class VersionsComponent {
   private JPanel myMainPanel;
@@ -50,7 +47,7 @@ public abstract class VersionsComponent {
 
   private final ButtonGroup myButtonGroup = new ButtonGroup();
 
-  private final Map<String, Pair<JRadioButton, JComboBox>> myButtons = new HashMap<String, Pair<JRadioButton, JComboBox>>();
+  private final Map<String, Pair<JRadioButton, JComboBox>> myButtons = new HashMap<>();
 
   private Artifact myCurrentVersion = null;
 
@@ -133,7 +130,7 @@ public abstract class VersionsComponent {
   }
 
   private List<Artifact> getSupportedVersions(@NotNull String ri) {
-    List<Artifact> versions = new ArrayList<Artifact>();
+    List<Artifact> versions = new ArrayList<>();
     for (Artifact version : getLibraries()) {
       if (ri.equals(version.getName())) {
         versions.add(version);
@@ -175,6 +172,7 @@ public abstract class VersionsComponent {
   private JRadioButton createRadioButton(final String ri) {
     final JRadioButton radioButton = new JRadioButton(ri);
     radioButton.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent actionEvent) {
         for (Pair<JRadioButton, JComboBox> pair : myButtons.values()) {
           if (pair.getFirst().equals(radioButton)) {
@@ -210,6 +208,7 @@ public abstract class VersionsComponent {
     comboBox.setModel(new CollectionComboBoxModel(versions, null));
 
     comboBox.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent e) {
         updateCurrentVersion(comboBox);
       }
@@ -230,6 +229,7 @@ public abstract class VersionsComponent {
 
   protected FacetLibrariesValidatorDescription getFacetLibrariesValidatorDescription(Artifact version) {
     return new FacetLibrariesValidatorDescription(version.getVersion()) {
+      @Override
       @NonNls
       public String getDefaultLibraryName() {
         if (myCurrentVersion != null) {
@@ -272,7 +272,7 @@ public abstract class VersionsComponent {
   }
 
   public Set<String> getRIs() {
-    Set<String> ris = new HashSet<String>();
+    Set<String> ris = new HashSet<>();
     for (Artifact version : getLibraries()) {
       String ri = version.getName();
       if (!StringUtil.isEmptyOrSpaces(ri)) {

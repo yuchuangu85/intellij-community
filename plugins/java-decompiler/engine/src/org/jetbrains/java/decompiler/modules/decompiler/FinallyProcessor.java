@@ -1,21 +1,10 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.java.decompiler.modules.decompiler;
 
-import org.jetbrains.java.decompiler.code.*;
+import org.jetbrains.java.decompiler.code.CodeConstants;
+import org.jetbrains.java.decompiler.code.Instruction;
+import org.jetbrains.java.decompiler.code.InstructionSequence;
+import org.jetbrains.java.decompiler.code.SimpleInstructionSequence;
 import org.jetbrains.java.decompiler.code.cfg.BasicBlock;
 import org.jetbrains.java.decompiler.code.cfg.ControlFlowGraph;
 import org.jetbrains.java.decompiler.code.cfg.ExceptionRangeCFG;
@@ -46,8 +35,8 @@ import java.util.*;
 import java.util.Map.Entry;
 
 public class FinallyProcessor {
-  private final Map<Integer, Integer> finallyBlockIDs = new HashMap<Integer, Integer>();
-  private final Map<Integer, Integer> catchallBlockIDs = new HashMap<Integer, Integer>();
+  private final Map<Integer, Integer> finallyBlockIDs = new HashMap<>();
+  private final Map<Integer, Integer> catchallBlockIDs = new HashMap<>();
 
   private final MethodDescriptor methodDescriptor;
   private final VarProcessor varProcessor;
@@ -64,11 +53,10 @@ public class FinallyProcessor {
   private boolean processStatementEx(StructMethod mt, RootStatement root, ControlFlowGraph graph) {
     int bytecode_version = mt.getClassStruct().getBytecodeVersion();
 
-    LinkedList<Statement> stack = new LinkedList<Statement>();
+    LinkedList<Statement> stack = new LinkedList<>();
     stack.add(root);
 
     while (!stack.isEmpty()) {
-
       Statement stat = stack.removeLast();
 
       Statement parent = stat.getParent();
@@ -83,14 +71,12 @@ public class FinallyProcessor {
           // do nothing
         }
         else if (finallyBlockIDs.containsKey(handler.id)) {
-
           fin.setFinally(true);
 
           Integer var = finallyBlockIDs.get(handler.id);
-          fin.setMonitor(var == null ? null : new VarExprent(var.intValue(), VarType.VARTYPE_INT, varProcessor));
+          fin.setMonitor(var == null ? null : new VarExprent(var, VarType.VARTYPE_INT, varProcessor));
         }
         else {
-
           Record inf = getFinallyInformation(mt, root, fin);
 
           if (inf == null) { // inconsistent finally
@@ -124,62 +110,6 @@ public class FinallyProcessor {
     return false;
   }
 
-
-  //	private boolean processStatement(StructMethod mt, RootStatement root, ControlFlowGraph graph, Statement stat) {
-  //
-  //		boolean res = false;
-  //
-  //		for(int i=stat.getStats().size()-1;i>=0;i--) {
-  //			if(processStatement(mt, root, graph, stat.getStats().get(i))) {
-  //				return true;
-  //			}
-  //		}
-  //
-  //
-  //		if(stat.type == Statement.TYPE_CATCHALL && !stat.isCopied()) {
-  //
-  //			CatchAllStatement fin = (CatchAllStatement)stat;
-  //			BasicBlock head = fin.getBasichead().getBlock();
-  //			BasicBlock handler = fin.getHandler().getBasichead().getBlock();
-  //
-  //			if(catchallBlockIDs.containsKey(handler.id)) {
-  //				; // do nothing
-  //			}else if(finallyBlockIDs.containsKey(handler.id)) {
-  //
-  //				fin.setFinally(true);
-  //
-  //				Integer var = finallyBlockIDs.get(handler.id);
-  //				fin.setMonitor(var==null?null:new VarExprent(var.intValue(), VarType.VARTYPE_INT, varprocessor));
-  //
-  //			} else {
-  //
-  //				Object[] inf = getFinallyInformation(mt, root, fin);
-  //
-  //				if(inf == null) { // inconsistent finally
-  //					catchallBlockIDs.put(handler.id, null);
-  //				} else {
-  //
-  //					if(DecompilerContext.getOption(IFernflowerPreferences.FINALLY_DEINLINE) && verifyFinallyEx(graph, fin, inf)) {
-  //						finallyBlockIDs.put(handler.id, null);
-  //					} else {
-  //
-  //						int varindex = DecompilerContext.getCountercontainer().getCounterAndIncrement(CounterContainer.VAR_COUNTER);
-  //						insertSemaphore(graph, getAllBasicBlocks(fin.getFirst()), head, handler, varindex, inf);
-  //
-  //						finallyBlockIDs.put(handler.id, varindex);
-  //					}
-  //
-  //					DeadCodeHelper.removeEmptyBlocks(graph);
-  //					DeadCodeHelper.mergeBasicBlocks(graph);
-  //				}
-  //
-  //				res = true;
-  //			}
-  //		}
-  //
-  //		return res;
-  //	}
-
   private static class Record {
     private final int firstCode;
     private final Map<BasicBlock, Boolean> mapLast;
@@ -191,7 +121,7 @@ public class FinallyProcessor {
   }
 
   private Record getFinallyInformation(StructMethod mt, RootStatement root, CatchAllStatement fstat) {
-    Map<BasicBlock, Boolean> mapLast = new HashMap<BasicBlock, Boolean>();
+    Map<BasicBlock, Boolean> mapLast = new HashMap<>();
 
     BasicBlockStatement firstBlockStatement = fstat.getHandler().getBasichead();
     BasicBlock firstBasicBlock = firstBlockStatement.getBlock();
@@ -220,13 +150,12 @@ public class FinallyProcessor {
     FlattenStatementsHelper flatthelper = new FlattenStatementsHelper();
     DirectGraph dgraph = flatthelper.buildDirectGraph(root);
 
-    LinkedList<DirectNode> stack = new LinkedList<DirectNode>();
+    LinkedList<DirectNode> stack = new LinkedList<>();
     stack.add(dgraph.first);
 
-    Set<DirectNode> setVisited = new HashSet<DirectNode>();
+    Set<DirectNode> setVisited = new HashSet<>();
 
     while (!stack.isEmpty()) {
-
       DirectNode node = stack.removeFirst();
 
       if (setVisited.contains(node)) {
@@ -373,8 +302,7 @@ public class FinallyProcessor {
                                       int var,
                                       Record information,
                                       int bytecode_version) {
-
-    Set<BasicBlock> setCopy = new HashSet<BasicBlock>(setTry);
+    Set<BasicBlock> setCopy = new HashSet<>(setTry);
 
     int finallytype = information.firstCode;
     Map<BasicBlock, Boolean> mapLast = information.mapLast;
@@ -392,21 +320,15 @@ public class FinallyProcessor {
 
     // disable semaphore at statement exit points
     for (BasicBlock block : setTry) {
-
       List<BasicBlock> lstSucc = block.getSuccs();
-      for (BasicBlock dest : lstSucc) {
 
+      for (BasicBlock dest : lstSucc) {
         // break out
-        if (!setCopy.contains(dest) && dest != graph.getLast()) {
+        if (dest != graph.getLast() && !setCopy.contains(dest)) {
           // disable semaphore
           SimpleInstructionSequence seq = new SimpleInstructionSequence();
-
-          seq.addInstruction(ConstantsUtil
-                               .getInstructionInstance(CodeConstants.opc_bipush, false, CodeConstants.GROUP_GENERAL, bytecode_version,
-                                                       new int[]{0}), -1);
-          seq.addInstruction(ConstantsUtil
-                               .getInstructionInstance(CodeConstants.opc_istore, false, CodeConstants.GROUP_GENERAL, bytecode_version,
-                                                       new int[]{var}), -1);
+          seq.addInstruction(Instruction.create(CodeConstants.opc_bipush, false, CodeConstants.GROUP_GENERAL, bytecode_version, new int[]{0}), -1);
+          seq.addInstruction(Instruction.create(CodeConstants.opc_istore, false, CodeConstants.GROUP_GENERAL, bytecode_version, new int[]{var}), -1);
 
           // build a separate block
           BasicBlock newblock = new BasicBlock(++graph.last_id);
@@ -433,14 +355,10 @@ public class FinallyProcessor {
       }
     }
 
-    // enable semaphor at the statement entrance
+    // enable semaphore at the statement entrance
     SimpleInstructionSequence seq = new SimpleInstructionSequence();
-    seq.addInstruction(
-      ConstantsUtil.getInstructionInstance(CodeConstants.opc_bipush, false, CodeConstants.GROUP_GENERAL, bytecode_version, new int[]{1}),
-      -1);
-    seq.addInstruction(
-      ConstantsUtil.getInstructionInstance(CodeConstants.opc_istore, false, CodeConstants.GROUP_GENERAL, bytecode_version, new int[]{var}),
-      -1);
+    seq.addInstruction(Instruction.create(CodeConstants.opc_bipush, false, CodeConstants.GROUP_GENERAL, bytecode_version, new int[]{1}), -1);
+    seq.addInstruction(Instruction.create(CodeConstants.opc_istore, false, CodeConstants.GROUP_GENERAL, bytecode_version, new int[]{var}), -1);
 
     BasicBlock newhead = new BasicBlock(++graph.last_id);
     newhead.setSeq(seq);
@@ -449,12 +367,8 @@ public class FinallyProcessor {
 
     // initialize semaphor with false
     seq = new SimpleInstructionSequence();
-    seq.addInstruction(
-      ConstantsUtil.getInstructionInstance(CodeConstants.opc_bipush, false, CodeConstants.GROUP_GENERAL, bytecode_version, new int[]{0}),
-      -1);
-    seq.addInstruction(
-      ConstantsUtil.getInstructionInstance(CodeConstants.opc_istore, false, CodeConstants.GROUP_GENERAL, bytecode_version, new int[]{var}),
-      -1);
+    seq.addInstruction(Instruction.create(CodeConstants.opc_bipush, false, CodeConstants.GROUP_GENERAL, bytecode_version, new int[]{0}), -1);
+    seq.addInstruction(Instruction.create(CodeConstants.opc_istore, false, CodeConstants.GROUP_GENERAL, bytecode_version, new int[]{var}), -1);
 
     BasicBlock newheadinit = new BasicBlock(++graph.last_id);
     newheadinit.setSeq(seq);
@@ -464,7 +378,7 @@ public class FinallyProcessor {
     setCopy.add(newhead);
     setCopy.add(newheadinit);
 
-    for (BasicBlock hd : new HashSet<BasicBlock>(newheadinit.getSuccExceptions())) {
+    for (BasicBlock hd : new HashSet<>(newheadinit.getSuccExceptions())) {
       ExceptionRangeCFG range = graph.getExceptionRange(hd, newheadinit);
 
       if (setCopy.containsAll(range.getProtectedRange())) {
@@ -474,10 +388,8 @@ public class FinallyProcessor {
     }
   }
 
-
   private static void insertBlockBefore(ControlFlowGraph graph, BasicBlock oldblock, BasicBlock newblock) {
-
-    List<BasicBlock> lstTemp = new ArrayList<BasicBlock>();
+    List<BasicBlock> lstTemp = new ArrayList<>();
     lstTemp.addAll(oldblock.getPreds());
     lstTemp.addAll(oldblock.getPredExceptions());
 
@@ -508,9 +420,8 @@ public class FinallyProcessor {
     }
   }
 
-  private static HashSet<BasicBlock> getAllBasicBlocks(Statement stat) {
-
-    List<Statement> lst = new LinkedList<Statement>();
+  private static Set<BasicBlock> getAllBasicBlocks(Statement stat) {
+    List<Statement> lst = new LinkedList<>();
     lst.add(stat);
 
     int index = 0;
@@ -527,7 +438,7 @@ public class FinallyProcessor {
     }
     while (index < lst.size());
 
-    HashSet<BasicBlock> res = new HashSet<BasicBlock>();
+    Set<BasicBlock> res = new HashSet<>();
 
     for (Statement st : lst) {
       res.add(((BasicBlockStatement)st).getBlock());
@@ -536,11 +447,9 @@ public class FinallyProcessor {
     return res;
   }
 
-
   private boolean verifyFinallyEx(ControlFlowGraph graph, CatchAllStatement fstat, Record information) {
-
-    HashSet<BasicBlock> tryBlocks = getAllBasicBlocks(fstat.getFirst());
-    HashSet<BasicBlock> catchBlocks = getAllBasicBlocks(fstat.getHandler());
+    Set<BasicBlock> tryBlocks = getAllBasicBlocks(fstat.getFirst());
+    Set<BasicBlock> catchBlocks = getAllBasicBlocks(fstat.getHandler());
 
     int finallytype = information.firstCode;
     Map<BasicBlock, Boolean> mapLast = information.mapLast;
@@ -569,7 +478,7 @@ public class FinallyProcessor {
     }
 
     // identify start blocks
-    HashSet<BasicBlock> startBlocks = new HashSet<BasicBlock>();
+    Set<BasicBlock> startBlocks = new HashSet<>();
     for (BasicBlock block : tryBlocks) {
       startBlocks.addAll(block.getSuccs());
     }
@@ -578,7 +487,7 @@ public class FinallyProcessor {
     startBlocks.remove(graph.getLast());
     startBlocks.removeAll(tryBlocks);
 
-    List<Area> lstAreas = new ArrayList<Area>();
+    List<Area> lstAreas = new ArrayList<>();
 
     for (BasicBlock start : startBlocks) {
 
@@ -632,12 +541,11 @@ public class FinallyProcessor {
 
   private Area compareSubgraphsEx(ControlFlowGraph graph,
                                   BasicBlock startSample,
-                                  HashSet<BasicBlock> catchBlocks,
+                                  Set<BasicBlock> catchBlocks,
                                   BasicBlock startCatch,
                                   int finallytype,
                                   Map<BasicBlock, Boolean> mapLast,
                                   boolean skippedFirst) {
-
     class BlockStackEntry {
       public BasicBlock blockCatch;
       public BasicBlock blockSample;
@@ -645,20 +553,20 @@ public class FinallyProcessor {
       // TODO: correct handling (merging) of multiple paths
       public List<int[]> lstStoreVars;
 
-      public BlockStackEntry(BasicBlock blockCatch, BasicBlock blockSample, List<int[]> lstStoreVars) {
+      BlockStackEntry(BasicBlock blockCatch, BasicBlock blockSample, List<int[]> lstStoreVars) {
         this.blockCatch = blockCatch;
         this.blockSample = blockSample;
-        this.lstStoreVars = new ArrayList<int[]>(lstStoreVars);
+        this.lstStoreVars = new ArrayList<>(lstStoreVars);
       }
     }
 
-    List<BlockStackEntry> stack = new LinkedList<BlockStackEntry>();
+    List<BlockStackEntry> stack = new LinkedList<>();
 
-    Set<BasicBlock> setSample = new HashSet<BasicBlock>();
+    Set<BasicBlock> setSample = new HashSet<>();
 
-    Map<String, BasicBlock[]> mapNext = new HashMap<String, BasicBlock[]>();
+    Map<String, BasicBlock[]> mapNext = new HashMap<>();
 
-    stack.add(new BlockStackEntry(startCatch, startSample, new ArrayList<int[]>()));
+    stack.add(new BlockStackEntry(startCatch, startSample, new ArrayList<>()));
 
     while (!stack.isEmpty()) {
 
@@ -691,7 +599,6 @@ public class FinallyProcessor {
         }
       }
 
-
       // exception successors
       if (isLastBlock && blockSample.getSeq().isEmpty()) {
         // do nothing, blockSample will be removed anyway
@@ -719,8 +626,8 @@ public class FinallyProcessor {
 
                   if (instrCatch.opcode == CodeConstants.opc_astore &&
                       instrSample.opcode == CodeConstants.opc_astore) {
-                    lst = new ArrayList<int[]>(lst);
-                    lst.add(new int[]{instrCatch.getOperand(0), instrSample.getOperand(0)});
+                    lst = new ArrayList<>(lst);
+                    lst.add(new int[]{instrCatch.operand(0), instrSample.operand(0)});
                   }
                 }
 
@@ -738,7 +645,7 @@ public class FinallyProcessor {
       }
 
       if (isLastBlock) {
-        Set<BasicBlock> setSuccs = new HashSet<BasicBlock>(blockSample.getSuccs());
+        Set<BasicBlock> setSuccs = new HashSet<>(blockSample.getSuccs());
         setSuccs.removeAll(setSample);
 
         for (BlockStackEntry stackent : stack) {
@@ -753,11 +660,10 @@ public class FinallyProcessor {
       }
     }
 
-    return new Area(startSample, setSample, getUniqueNext(graph, new HashSet<BasicBlock[]>(mapNext.values())));
+    return new Area(startSample, setSample, getUniqueNext(graph, new HashSet<>(mapNext.values())));
   }
 
   private static BasicBlock getUniqueNext(ControlFlowGraph graph, Set<BasicBlock[]> setNext) {
-
     // precondition: there is at most one true exit path in a finally statement
 
     BasicBlock next = null;
@@ -798,13 +704,11 @@ public class FinallyProcessor {
                 Instruction instrNext = seqNext.getInstr(i);
                 Instruction instrBlock = seqBlock.getInstr(i);
 
-                if (instrNext.opcode != instrBlock.opcode || instrNext.wide != instrBlock.wide
-                    || instrNext.operandsCount() != instrBlock.operandsCount()) {
+                if (!Instruction.equals(instrNext, instrBlock)) {
                   return null;
                 }
-
-                for (int j = 0; j < instrNext.getOperands().length; j++) {
-                  if (instrNext.getOperand(j) != instrBlock.getOperand(j)) {
+                for (int j = 0; j < instrNext.operandsCount(); j++) {
+                  if (instrNext.operand(j) != instrBlock.operand(j)) {
                     return null;
                   }
                 }
@@ -846,7 +750,6 @@ public class FinallyProcessor {
                                        int type,
                                        int finallytype,
                                        List<int[]> lstStoreVars) {
-
     InstructionSequence seqPattern = pattern.getSeq();
     InstructionSequence seqSample = sample.getSeq();
 
@@ -885,9 +788,8 @@ public class FinallyProcessor {
     }
 
     if (seqPattern.length() < seqSample.length()) { // split in two blocks
-
       SimpleInstructionSequence seq = new SimpleInstructionSequence();
-      LinkedList<Integer> oldOffsets = new LinkedList<Integer>();
+      LinkedList<Integer> oldOffsets = new LinkedList<>();
       for (int i = seqSample.length() - 1; i >= seqPattern.length(); i--) {
         seq.addInstruction(0, seqSample.getInstr(i), -1);
         oldOffsets.addFirst(sample.getOldOffset(i));
@@ -898,8 +800,7 @@ public class FinallyProcessor {
       newblock.setSeq(seq);
       newblock.getInstrOldOffsets().addAll(oldOffsets);
 
-      List<BasicBlock> lstTemp = new ArrayList<BasicBlock>();
-      lstTemp.addAll(sample.getSuccs());
+      List<BasicBlock> lstTemp = new ArrayList<>(sample.getSuccs());
 
       // move successors
       for (BasicBlock suc : lstTemp) {
@@ -931,19 +832,15 @@ public class FinallyProcessor {
   }
 
   public boolean equalInstructions(Instruction first, Instruction second, List<int[]> lstStoreVars) {
-    if (first.opcode != second.opcode || first.wide != second.wide
-        || first.operandsCount() != second.operandsCount()) {
+    if (!Instruction.equals(first, second)) {
       return false;
     }
 
-    if (first.group != CodeConstants.GROUP_JUMP && first.getOperands() != null) { // FIXME: switch comparison
-      for (int i = 0; i < first.getOperands().length; i++) {
-
-        int firstOp = first.getOperand(i);
-        int secondOp = second.getOperand(i);
-
+    if (first.group != CodeConstants.GROUP_JUMP) { // FIXME: switch comparison
+      for (int i = 0; i < first.operandsCount(); i++) {
+        int firstOp = first.operand(i);
+        int secondOp = second.operand(i);
         if (firstOp != secondOp) {
-
           // a-load/store instructions
           if (first.opcode == CodeConstants.opc_aload || first.opcode == CodeConstants.opc_astore) {
             for (int[] arr : lstStoreVars) {
@@ -962,7 +859,6 @@ public class FinallyProcessor {
   }
 
   private static void deleteArea(ControlFlowGraph graph, Area area) {
-
     BasicBlock start = area.start;
     BasicBlock next = area.next;
 
@@ -976,14 +872,14 @@ public class FinallyProcessor {
     }
 
     // collect common exception ranges of predecessors and successors
-    Set<BasicBlock> setCommonExceptionHandlers = new HashSet<BasicBlock>(next.getSuccExceptions());
+    Set<BasicBlock> setCommonExceptionHandlers = new HashSet<>(next.getSuccExceptions());
     for (BasicBlock pred : start.getPreds()) {
       setCommonExceptionHandlers.retainAll(pred.getSuccExceptions());
     }
 
     boolean is_outside_range = false;
 
-    Set<BasicBlock> setPredecessors = new HashSet<BasicBlock>(start.getPreds());
+    Set<BasicBlock> setPredecessors = new HashSet<>(start.getPreds());
 
     // replace start with next
     for (BasicBlock pred : setPredecessors) {
@@ -1005,7 +901,7 @@ public class FinallyProcessor {
           is_outside_range = true;
         }
 
-        Set<ExceptionRangeCFG> setRemovedExceptionRanges = new HashSet<ExceptionRangeCFG>();
+        Set<ExceptionRangeCFG> setRemovedExceptionRanges = new HashSet<>();
         for (BasicBlock handler : block.getSuccExceptions()) {
           setRemovedExceptionRanges.add(graph.getExceptionRange(handler, block));
         }
@@ -1020,7 +916,7 @@ public class FinallyProcessor {
         // shift extern edges on splitted blocks
         if (block.getSeq().isEmpty() && block.getSuccs().size() == 1) {
           BasicBlock succs = block.getSuccs().get(0);
-          for (BasicBlock pred : new ArrayList<BasicBlock>(block.getPreds())) {
+          for (BasicBlock pred : new ArrayList<>(block.getPreds())) {
             if (!setBlocks.contains(pred)) {
               pred.replaceSuccessor(block, succs);
             }
@@ -1036,18 +932,15 @@ public class FinallyProcessor {
     }
 
     if (is_outside_range) {
-
       // new empty block
       BasicBlock emptyblock = new BasicBlock(++graph.last_id);
 
       graph.getBlocks().addWithKey(emptyblock, emptyblock.id);
 
       // add to ranges if necessary
-      if (setCommonRemovedExceptionRanges != null) {
-        for (ExceptionRangeCFG range : setCommonRemovedExceptionRanges) {
-          emptyblock.addSuccessorException(range.getHandler());
-          range.getProtectedRange().add(emptyblock);
-        }
+      for (ExceptionRangeCFG range : setCommonRemovedExceptionRanges) {
+        emptyblock.addSuccessorException(range.getHandler());
+        range.getProtectedRange().add(emptyblock);
       }
 
       // insert between predecessors and next
@@ -1059,7 +952,6 @@ public class FinallyProcessor {
   }
 
   private static void removeExceptionInstructionsEx(BasicBlock block, int blocktype, int finallytype) {
-
     InstructionSequence seq = block.getSeq();
 
     if (finallytype == 3) { // empty finally handler

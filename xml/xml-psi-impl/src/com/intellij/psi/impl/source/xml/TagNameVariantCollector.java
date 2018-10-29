@@ -41,12 +41,12 @@ public class TagNameVariantCollector {
 
   public static List<XmlElementDescriptor> getTagDescriptors(final XmlTag element,
                                                              final Collection<String> namespaces,
-                                                             @Nullable List<String> nsInfo) {
+                                                             @Nullable List<? super String> nsInfo) {
 
     XmlElementDescriptor elementDescriptor = null;
     String elementNamespace = element.getNamespacePrefix().isEmpty() ? null : element.getNamespace();
 
-    final Map<String, XmlElementDescriptor> descriptorsMap = new HashMap<String, XmlElementDescriptor>();
+    final Map<String, XmlElementDescriptor> descriptorsMap = new HashMap<>();
     PsiElement context = element.getParent();
     PsiElement curElement = element.getParent();
 
@@ -70,9 +70,9 @@ public class TagNameVariantCollector {
       curElement = curElement.getContext();
     }
 
-    final Set<XmlNSDescriptor> visited = new HashSet<XmlNSDescriptor>();
+    final Set<XmlNSDescriptor> visited = new HashSet<>();
     final XmlExtension extension = XmlExtension.getExtension(element.getContainingFile());
-    final ArrayList<XmlElementDescriptor> variants = new ArrayList<XmlElementDescriptor>();
+    final ArrayList<XmlElementDescriptor> variants = new ArrayList<>();
     for (final String namespace: namespaces) {
       final int initialSize = variants.size();
       processVariantsInNamespace(namespace, element, variants, elementDescriptor, elementNamespace, descriptorsMap, visited,
@@ -102,11 +102,11 @@ public class TagNameVariantCollector {
 
   private static void processVariantsInNamespace(final String namespace,
                                                  final XmlTag element,
-                                                 final List<XmlElementDescriptor> variants,
+                                                 final List<? super XmlElementDescriptor> variants,
                                                  final XmlElementDescriptor elementDescriptor,
                                                  final String elementNamespace,
                                                  final Map<String, XmlElementDescriptor> descriptorsMap,
-                                                 final Set<XmlNSDescriptor> visited,
+                                                 final Set<? super XmlNSDescriptor> visited,
                                                  XmlTag parent,
                                                  final XmlExtension extension) {
     if(descriptorsMap.containsKey(namespace)){

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * Created by IntelliJ IDEA.
- * User: max
- * Date: Apr 19, 2002
- * Time: 2:26:19 PM
- * To change template for new class use
- * Code Style | Class Templates options (Tools | IDE Options).
- */
 package com.intellij.openapi.editor.impl;
 
 import com.intellij.openapi.Disposable;
@@ -63,8 +55,8 @@ public class MarkupModelImpl extends UserDataHolderBase implements MarkupModelEx
 
   @Override
   public void dispose() {
-    myHighlighterTree.dispose();
-    myHighlighterTreeForLines.dispose();
+    myHighlighterTree.dispose(myDocument);
+    myHighlighterTreeForLines.dispose(myDocument);
   }
 
   @Override
@@ -103,9 +95,9 @@ public class MarkupModelImpl extends UserDataHolderBase implements MarkupModelEx
       if (size == 0) return RangeHighlighter.EMPTY_ARRAY;
       List<RangeHighlighterEx> list = new ArrayList<>(size);
       CommonProcessors.CollectProcessor<RangeHighlighterEx> collectProcessor = new CommonProcessors.CollectProcessor<>(list);
-      myHighlighterTree.process(collectProcessor);
-      myHighlighterTreeForLines.process(collectProcessor);
-      myCachedHighlighters = list.toArray(new RangeHighlighter[list.size()]);
+      myHighlighterTree.processAll(collectProcessor);
+      myHighlighterTreeForLines.processAll(collectProcessor);
+      myCachedHighlighters = list.toArray(RangeHighlighter.EMPTY_ARRAY);
     }
     return myCachedHighlighters;
   }
@@ -127,7 +119,7 @@ public class MarkupModelImpl extends UserDataHolderBase implements MarkupModelEx
 
   @NotNull
   private RangeHighlighterEx addRangeHighlighter(@NotNull RangeHighlighterImpl highlighter,
-                                                 @Nullable Consumer<RangeHighlighterEx> changeAttributesAction) {
+                                                 @Nullable Consumer<? super RangeHighlighterEx> changeAttributesAction) {
     ApplicationManager.getApplication().assertIsDispatchThread();
     myCachedHighlighters = null;
     if (changeAttributesAction != null) {
@@ -157,7 +149,7 @@ public class MarkupModelImpl extends UserDataHolderBase implements MarkupModelEx
                                   boolean greedyToRight,
                                   int layer) {
     ApplicationManager.getApplication().assertIsDispatchThread();
-    treeFor(marker).addInterval(marker, start, end, greedyToLeft, greedyToRight, layer);
+    treeFor(marker).addInterval(marker, start, end, greedyToLeft, greedyToRight, false, layer);
   }
 
   private RangeHighlighterTree treeFor(RangeHighlighter marker) {
@@ -276,12 +268,11 @@ public class MarkupModelImpl extends UserDataHolderBase implements MarkupModelEx
     endOffset = Math.max(startOffset, endOffset);
     return IntervalTreeImpl
       .mergingOverlappingIterator(myHighlighterTree, new TextRangeInterval(startOffset, endOffset), myHighlighterTreeForLines,
-                                  roundToLineBoundaries(startOffset, endOffset), RangeHighlighterEx.BY_AFFECTED_START_OFFSET);
+                                  roundToLineBoundaries(getDocument(), startOffset, endOffset), RangeHighlighterEx.BY_AFFECTED_START_OFFSET);
   }
 
   @NotNull
-  private TextRangeInterval roundToLineBoundaries(int startOffset, int endOffset) {
-    Document document = getDocument();
+  public static TextRangeInterval roundToLineBoundaries(@NotNull Document document, int startOffset, int endOffset) {
     int textLength = document.getTextLength();
     int lineStartOffset = startOffset <= 0 ? 0 : startOffset > textLength ? textLength : document.getLineStartOffset(document.getLineNumber(startOffset));
     int lineEndOffset = endOffset <= 0 ? 0 : endOffset >= textLength ? textLength : document.getLineEndOffset(document.getLineNumber(endOffset));

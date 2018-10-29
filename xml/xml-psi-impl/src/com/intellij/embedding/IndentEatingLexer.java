@@ -107,7 +107,7 @@ public class IndentEatingLexer extends MasqueradingLexer.SmartDelegate {
 
   @NotNull
   private List<DeletedIndentInfo> findAllDeletions(@NotNull CharSequence buffer, int startOffset, int endOffset) {
-    List<DeletedIndentInfo> result = new ArrayList<DeletedIndentInfo>();
+    List<DeletedIndentInfo> result = new ArrayList<>();
 
     int offset = startOffset;
     while (offset < endOffset) {
@@ -154,7 +154,7 @@ public class IndentEatingLexer extends MasqueradingLexer.SmartDelegate {
     private final int length;
     private int shrunkPos;
 
-    public DeletedIndentInfo(int realPos, int length) {
+    DeletedIndentInfo(int realPos, int length) {
       this.realPos = realPos;
       this.length = length;
       shrunkPos = -1;

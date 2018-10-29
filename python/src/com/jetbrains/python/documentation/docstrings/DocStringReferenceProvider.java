@@ -26,16 +26,13 @@ import com.jetbrains.python.psi.PyImportElement;
 import com.jetbrains.python.psi.PyStringLiteralExpression;
 import com.jetbrains.python.psi.PyUtil;
 import com.jetbrains.python.psi.StructuredDocString;
-import com.jetbrains.python.psi.impl.PyStringLiteralExpressionImpl;
 import com.jetbrains.python.psi.types.PyType;
 import com.jetbrains.python.psi.types.PyTypeParser;
 import com.jetbrains.python.toolbox.Substring;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * @author yole
@@ -49,33 +46,41 @@ public class DocStringReferenceProvider extends PsiReferenceProvider {
       final List<TextRange> ranges = expr.getStringValueTextRanges();
 
       final String exprText = expr.getText();
-      final TextRange textRange = PyStringLiteralExpressionImpl.getNodeTextRange(exprText);
-      final String text = textRange.substring(exprText);
 
       if (!ranges.isEmpty()) {
-        final List<PsiReference> result = new ArrayList<PsiReference>();
-        final int offset = ranges.get(0).getStartOffset();
+        final TextRange firstNodeRange = ranges.get(0);
+        final int offset = firstNodeRange.getStartOffset();
+        final String text = firstNodeRange.substring(exprText);
+        final List<PsiReference> result = new ArrayList<>();
         // XXX: It does not work with multielement docstrings
         StructuredDocString docString = DocStringUtil.parse(text, element);
         if (docString instanceof TagBasedDocString) {
           final TagBasedDocString taggedDocString = (TagBasedDocString)docString;
+          final Set<TextRange> nameReferenceRanges = new HashSet<>();
           result.addAll(referencesFromNames(expr, offset, docString,
                                             taggedDocString.getTagArguments(TagBasedDocString.PARAM_TAGS),
+                                            nameReferenceRanges,
                                             ReferenceType.PARAMETER));
           result.addAll(referencesFromNames(expr, offset, docString,
                                             taggedDocString.getTagArguments(TagBasedDocString.PARAM_TYPE_TAGS),
+                                            nameReferenceRanges,
                                             ReferenceType.PARAMETER_TYPE));
           result.addAll(referencesFromNames(expr, offset, docString,
-                                            docString.getKeywordArgumentSubstrings(), ReferenceType.KEYWORD));
+                                            docString.getKeywordArgumentSubstrings(),
+                                            nameReferenceRanges,
+                                            ReferenceType.KEYWORD));
 
           result.addAll(referencesFromNames(expr, offset, docString,
                                             taggedDocString.getTagArguments("var"),
+                                            nameReferenceRanges,
                                             ReferenceType.VARIABLE));
           result.addAll(referencesFromNames(expr, offset, docString,
                                             taggedDocString.getTagArguments("cvar"),
+                                            nameReferenceRanges,
                                             ReferenceType.CLASS_VARIABLE));
           result.addAll(referencesFromNames(expr, offset, docString,
                                             taggedDocString.getTagArguments("ivar"),
+                                            nameReferenceRanges,
                                             ReferenceType.INSTANCE_VARIABLE));
           result.addAll(returnTypes(element, docString, offset));
         }
@@ -87,7 +92,7 @@ public class DocStringReferenceProvider extends PsiReferenceProvider {
                                              PyUtil.isTopLevel(element) ? ReferenceType.GLOBAL_VARIABLE : ReferenceType.INSTANCE_VARIABLE));
           result.addAll(referencesFromFields(expr, offset, sectioned.getReturnFields(), null));
         }
-        return result.toArray(new PsiReference[result.size()]);
+        return result.toArray(PsiReference.EMPTY_ARRAY);
       }
     }
     return PsiReference.EMPTY_ARRAY;
@@ -96,7 +101,7 @@ public class DocStringReferenceProvider extends PsiReferenceProvider {
   private static List<PsiReference> returnTypes(PsiElement element,
                                                 StructuredDocString docString,
                                                 int offset) {
-    List<PsiReference> result = new ArrayList<PsiReference>();
+    List<PsiReference> result = new ArrayList<>();
 
     final Substring rtype = docString.getReturnTypeSubstring();
     if (rtype != null) {
@@ -108,11 +113,12 @@ public class DocStringReferenceProvider extends PsiReferenceProvider {
                                                         int offset,
                                                         @NotNull StructuredDocString docString,
                                                         @NotNull List<Substring> paramNames,
+                                                        @NotNull Set<TextRange> nameReferenceRanges,
                                                         @NotNull ReferenceType refType) {
-    List<PsiReference> result = new ArrayList<PsiReference>();
+    List<PsiReference> result = new ArrayList<>();
     for (Substring name : paramNames) {
       final String s = name.toString();
-      if (PyNames.isIdentifier(s)) {
+      if (PyNames.isIdentifier(s) && nameReferenceRanges.add(name.getTextRange())) {
         final TextRange range = name.getTextRange().shiftRight(offset);
         result.add(new DocStringParameterReference(element, range, refType));
       }
@@ -131,7 +137,7 @@ public class DocStringReferenceProvider extends PsiReferenceProvider {
                                                          int offset,
                                                          @NotNull List<SectionBasedDocString.SectionField> fields,
                                                          @Nullable ReferenceType nameRefType) {
-    final List<PsiReference> result = new ArrayList<PsiReference>();
+    final List<PsiReference> result = new ArrayList<>();
     for (SectionBasedDocString.SectionField field : fields) {
       for (Substring nameSub: field.getNamesAsSubstrings()) {
         if (nameRefType != null && nameSub != null && !nameSub.isEmpty()) {
@@ -149,7 +155,7 @@ public class DocStringReferenceProvider extends PsiReferenceProvider {
 
   @NotNull
   private static List<PsiReference> parseTypeReferences(@NotNull PsiElement anchor, @NotNull Substring s, int offset) {
-    final List<PsiReference> result = new ArrayList<PsiReference>();
+    final List<PsiReference> result = new ArrayList<>();
     final PyTypeParser.ParseResult parseResult = PyTypeParser.parse(anchor, s.toString());
     final Map<TextRange, ? extends PyType> types = parseResult.getTypes();
     if (types.isEmpty()) {

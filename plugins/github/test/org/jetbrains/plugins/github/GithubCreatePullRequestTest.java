@@ -16,26 +16,42 @@
 package org.jetbrains.plugins.github;
 
 import com.intellij.notification.NotificationType;
+import com.intellij.util.containers.ContainerUtil;
+import org.jetbrains.plugins.github.util.GitRemoteUrlCoordinates;
+import org.jetbrains.plugins.github.util.GithubGitHelper;
+
+import java.util.Set;
 
 /**
  * @author Aleksey Pivovarov
  */
 public class GithubCreatePullRequestTest extends GithubCreatePullRequestTestBase {
-  public void testSimple() throws Exception {
-    registerDefaultCreatePullRequestDialogHandler("master", myLogin1);
+  public void testSimple() {
+    registerDefaultCreatePullRequestDialogHandler("master", myUsername);
+    myAuthenticationManager.setDefaultAccount(myProject, myAccount);
 
-    GithubCreatePullRequestAction.createPullRequest(myProject, myProjectRoot);
+    Set<GitRemoteUrlCoordinates> coordinatesSet = GithubGitHelper.getInstance().getPossibleRemoteUrlCoordinates(myProject);
+    assertSize(1, coordinatesSet);
+    GitRemoteUrlCoordinates coordinates = coordinatesSet.iterator().next();
+
+    GithubCreatePullRequestAction.createPullRequest(myProject, myRepository, coordinates.getRemote(), coordinates.getUrl(), myAccount);
 
     checkNotification(NotificationType.INFORMATION, "Successfully created pull request", null);
     checkRemoteConfigured();
     checkLastCommitPushed();
   }
 
-  public void testParent() throws Exception {
-    registerDefaultCreatePullRequestDialogHandler("file2", myLogin2);
-    addRemote(myLogin2);
+  public void testParent() {
+    registerDefaultCreatePullRequestDialogHandler("file2", myUsername2);
+    git("remote add somename " + GithubGitHelper.getInstance().getRemoteUrl(myAccount2.getServer(), myUsername2, PROJECT_NAME));
+    myAuthenticationManager.setDefaultAccount(myProject, myAccount);
+    myRepository.update();
 
-    GithubCreatePullRequestAction.createPullRequest(myProject, myProjectRoot);
+    Set<GitRemoteUrlCoordinates> coordinatesSet = GithubGitHelper.getInstance().getPossibleRemoteUrlCoordinates(myProject);
+    assertSize(2, coordinatesSet);
+    GitRemoteUrlCoordinates coordinates = ContainerUtil.find(coordinatesSet, c -> !c.getRemote().getName().equals("somename"));
+
+    GithubCreatePullRequestAction.createPullRequest(myProject, myRepository, coordinates.getRemote(), coordinates.getUrl(), myAccount);
 
     checkNotification(NotificationType.INFORMATION, "Successfully created pull request", null);
     checkRemoteConfigured();

@@ -15,7 +15,6 @@ import static org.junit.Assert.assertEquals;
 
 /**
  * @author Denis Zhdanov
- * @since 10/19/11 5:25 PM
  */
 public class GradleLibraryNamesMixerTest {
   
@@ -37,8 +36,8 @@ public class GradleLibraryNamesMixerTest {
   }
 
   private void doTest(TestDataEntry... entries) {
-    Map<LibraryData, String> expected = new IdentityHashMap<LibraryData, String>();
-    List<LibraryData> libraries = new ArrayList<LibraryData>();
+    Map<LibraryData, String> expected = new IdentityHashMap<>();
+    List<LibraryData> libraries = new ArrayList<>();
     // TODO den implement
 //    for (TestDataEntry entry : entries) {
 //      LibraryData library = new LibraryData(entry.initialName);

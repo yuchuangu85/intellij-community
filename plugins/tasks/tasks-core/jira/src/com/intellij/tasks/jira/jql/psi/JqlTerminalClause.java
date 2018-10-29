@@ -30,13 +30,13 @@ public interface JqlTerminalClause extends JqlClause {
     WAS_NOT_IN(true),
     CHANGED(false);
 
-    private boolean myListOperator;
+    private final boolean myListOperator;
 
     Type(boolean listOperator) {
       myListOperator = listOperator;
     }
 
-    private final static IdentityHashMap<IElementType, Type> MAP = new IdentityHashMap<IElementType, Type>();
+    private final static IdentityHashMap<IElementType, Type> MAP = new IdentityHashMap<>();
 
     static {
       MAP.put(JqlTokenTypes.EQ, EQ);

@@ -32,13 +32,6 @@ public class GroovyNestedSynchronizedStatementInspection extends BaseInspection 
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return THREADING_ISSUES;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Nested 'synchronized' statement";
   }
@@ -59,7 +52,7 @@ public class GroovyNestedSynchronizedStatementInspection extends BaseInspection 
   private static class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitSynchronizedStatement(GrSynchronizedStatement synchronizedStatement) {
+    public void visitSynchronizedStatement(@NotNull GrSynchronizedStatement synchronizedStatement) {
       super.visitSynchronizedStatement(synchronizedStatement);
       final GrStatement parent = PsiTreeUtil.getParentOfType(synchronizedStatement, GrSynchronizedStatement.class, GrClosableBlock.class);
       if ((parent instanceof GrSynchronizedStatement)) {

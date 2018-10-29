@@ -1,45 +1,29 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.configurationStore
 
 import com.intellij.idea.Bombed
 import com.intellij.openapi.components.MainConfigurationStateSplitter
 import com.intellij.openapi.components.StateStorage
-import com.intellij.openapi.components.impl.stores.StateStorageBase
 import com.intellij.testFramework.ProjectRule
 import com.intellij.testFramework.RuleChain
 import com.intellij.testFramework.TemporaryDirectory
+import com.intellij.testFramework.assertions.Assertions.assertThat
 import com.intellij.testFramework.runInEdtAndWait
 import com.intellij.util.loadElement
-import org.assertj.core.api.Assertions.assertThat
-import org.assertj.core.api.hasChildren
 import org.jdom.Element
 import org.junit.ClassRule
 import org.junit.Rule
 import org.junit.Test
 import java.util.*
 
-private fun StateStorage.ExternalizationSession.save() {
+private fun StateStorage.SaveSessionProducer.save() {
   runInEdtAndWait {
     createSaveSession()!!.save()
   }
 }
 
 private fun StateStorageBase<*>.setStateAndSave(componentName: String, state: String?) {
-  var externalizationSession = startExternalization()!!
+  val externalizationSession = createSaveSessionProducer()!!
   externalizationSession.setState(null, componentName, if (state == null) Element("state") else loadElement(state))
   externalizationSession.save()
 }
@@ -52,7 +36,7 @@ internal class TestStateSplitter : MainConfigurationStateSplitter() {
   override fun getSubStateFileName(element: Element) = element.getAttributeValue("name")
 }
 
-@Bombed(user = "vladimir.krivosheev", year = 2016, month = Calendar.DECEMBER, day = 10)
+@Bombed(user = "vladimir.krivosheev", year = 2018, month = Calendar.DECEMBER, day = 10)
 internal class DirectoryBasedStorageTest {
   companion object {
     @JvmField

@@ -30,7 +30,6 @@ import static org.jetbrains.jps.api.CmdlineRemoteProto.Message.ControllerMessage
 
 /**
  * @author Eugene Zhuravlev
- *         Date: 4/17/12
  */
 public class CmdlineProtoUtil {
 
@@ -163,6 +162,15 @@ public class CmdlineProtoUtil {
         break;
       case INFO:
         builder.setKind(BuilderMessage.CompileMessage.Kind.INFO);
+        break;
+      case JPS_INFO:
+        builder.setKind(BuilderMessage.CompileMessage.Kind.JPS_INFO);
+        break;
+      case INTERNAL_BUILDER_ERROR:
+        builder.setKind(BuilderMessage.CompileMessage.Kind.INTERNAL_BUILDER_ERROR);
+        break;
+      case OTHER:
+        builder.setKind(BuilderMessage.CompileMessage.Kind.OTHER);
         break;
       default:
         builder.setKind(BuilderMessage.CompileMessage.Kind.PROGRESS);

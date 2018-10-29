@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2013 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +20,10 @@ import com.intellij.ide.fileTemplates.FileTemplateManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
+import com.intellij.psi.codeStyle.CommonCodeStyleSettings;
 import com.intellij.psi.search.ProjectScope;
 import com.intellij.refactoring.move.moveFilesOrDirectories.MoveFilesOrDirectoriesProcessor;
 import com.intellij.testFramework.PlatformTestUtil;
-import com.intellij.util.Function;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.SystemProperties;
 import com.intellij.util.containers.ContainerUtil;
@@ -34,8 +34,8 @@ import com.jetbrains.python.psi.*;
 import com.jetbrains.python.psi.stubs.PyClassNameIndex;
 import com.jetbrains.python.psi.stubs.PyFunctionNameIndex;
 import com.jetbrains.python.psi.stubs.PyVariableNameIndex;
-import com.jetbrains.python.refactoring.move.PyMoveModuleMembersHelper;
-import com.jetbrains.python.refactoring.move.PyMoveModuleMembersProcessor;
+import com.jetbrains.python.refactoring.move.moduleMembers.PyMoveModuleMembersHelper;
+import com.jetbrains.python.refactoring.move.moduleMembers.PyMoveModuleMembersProcessor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -43,7 +43,7 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 
-import static com.jetbrains.python.refactoring.move.PyMoveModuleMembersHelper.isMovableModuleMember;
+import static com.jetbrains.python.refactoring.move.moduleMembers.PyMoveModuleMembersHelper.isMovableModuleMember;
 
 /**
  * @author vlan
@@ -53,6 +53,12 @@ public class PyMoveTest extends PyTestCase {
   protected void setUp() throws Exception {
     super.setUp();
     SystemProperties.setTestUserName("user1");
+  }
+
+  @Override
+  protected void tearDown() throws Exception {
+    SystemProperties.setTestUserName(null);
+    super.tearDown();
   }
 
   public void testFunction() {
@@ -70,7 +76,7 @@ public class PyMoveTest extends PyTestCase {
 
   // PY-11923
   public void testMovableTopLevelAssignmentDetection() {
-    runWithLanguageLevel(LanguageLevel.PYTHON30, () -> {
+    runWithLanguageLevel(LanguageLevel.PYTHON34, () -> {
       myFixture.configureByFile("/refactoring/move/" + getTestName(true) + ".py");
       assertFalse(isMovableModuleMember(findFirstNamedElement("X1")));
       assertFalse(isMovableModuleMember(findFirstNamedElement("X3")));
@@ -205,22 +211,22 @@ public class PyMoveTest extends PyTestCase {
 
   // PY-7378
   public void testMoveNamespacePackage1() {
-    runWithLanguageLevel(LanguageLevel.PYTHON33, () -> doMoveFileTest("nspkg/nssubpkg", ""));
+    runWithLanguageLevel(LanguageLevel.PYTHON34, () -> doMoveFileTest("nspkg/nssubpkg", ""));
   }
 
   // PY-7378
   public void testMoveNamespacePackage2() {
-    runWithLanguageLevel(LanguageLevel.PYTHON33, () -> doMoveFileTest("nspkg/nssubpkg/a.py", ""));
+    runWithLanguageLevel(LanguageLevel.PYTHON34, () -> doMoveFileTest("nspkg/nssubpkg/a.py", ""));
   }
 
   // PY-7378
   public void testMoveNamespacePackage3() {
-    runWithLanguageLevel(LanguageLevel.PYTHON33, () -> doMoveFileTest("nspkg/nssubpkg/a.py", "nspkg"));
+    runWithLanguageLevel(LanguageLevel.PYTHON34, () -> doMoveFileTest("nspkg/nssubpkg/a.py", "nspkg"));
   }
 
   // PY-14384
   public void testRelativeImportInsideNamespacePackage() {
-    runWithLanguageLevel(LanguageLevel.PYTHON33, () -> doMoveFileTest("nspkg/nssubpkg", ""));
+    runWithLanguageLevel(LanguageLevel.PYTHON34, () -> doMoveFileTest("nspkg/nssubpkg", ""));
   }
 
   // PY-14384
@@ -241,7 +247,7 @@ public class PyMoveTest extends PyTestCase {
 
   // PY-14595
   public void testNamespacePackageUsedInMovedFunction() {
-    runWithLanguageLevel(LanguageLevel.PYTHON33, () -> doMoveSymbolTest("func", "b.py"));
+    runWithLanguageLevel(LanguageLevel.PYTHON34, () -> doMoveSymbolTest("func", "b.py"));
   }
 
   // PY-14599
@@ -351,6 +357,73 @@ public class PyMoveTest extends PyTestCase {
     doMoveSymbolTest("use_foo", "c.py");
   }
 
+  // PY-21366
+  public void testFromImportAliases() {
+    doMoveSymbolTest("func", "b.py");
+  }
+
+  // PY-21292
+  public void testStaleFromImportsRemovedWhenSeveralMovedSymbolsUsedInSameModule() {
+    doMoveSymbolsTest("b.py", "A", "B");
+  }
+
+  // PY-21292
+  public void testStaleFromImportRemovedWhenNewImportCombinedWithExistingImport() {
+    doMoveSymbolTest("A", "b.py");
+  }
+
+  // PY-20427
+  public void testQualifiedReferenceInDestinationModule() {
+    doMoveSymbolTest("FOO", "b.py");
+  }
+
+  // PY-21220
+  public void testReferenceToClassWithNewInMovedSymbol() {
+    doMoveSymbolTest("fnToMove", "toFile.py");
+  }
+
+  // PY-22422
+  public void testReformatFromImports() {
+    getPythonCodeStyleSettings().OPTIMIZE_IMPORTS_JOIN_FROM_IMPORTS_WITH_SAME_SOURCE = true;
+    getPythonCodeStyleSettings().FROM_IMPORT_WRAPPING = CommonCodeStyleSettings.WRAP_ALWAYS;
+    getPythonCodeStyleSettings().FROM_IMPORT_PARENTHESES_FORCE_IF_MULTILINE = true;
+    getPythonCodeStyleSettings().FROM_IMPORT_NEW_LINE_AFTER_LEFT_PARENTHESIS = true;
+    getPythonCodeStyleSettings().FROM_IMPORT_NEW_LINE_BEFORE_RIGHT_PARENTHESIS = true;
+    getPythonCodeStyleSettings().FROM_IMPORT_TRAILING_COMMA_IF_MULTILINE = true;
+    doMoveSymbolTest("func", "b.py");
+  }
+
+  // PY-24365
+  public void testOptimizeImportsAfterMoveInvalidatesMembersToBeMoved() {
+    doMoveSymbolsTest("dst.py", "Class1", "Class2");
+  }
+
+  // PY-24365
+  public void testCleanupImportsAfterMove() {
+    doMoveSymbolsTest("other.py", "C1", "C2");
+  }
+
+  // PY-18216
+  public void testMoveSymbolDoesntReorderImportsInOriginFile() {
+    doMoveSymbolTest("func", "other.py");
+  }
+
+  // PY-18216
+  public void testMoveSymbolDoesntReorderImportsInUsageFile() {
+    doMoveSymbolTest("func", "other.py");
+  }
+
+  // PY-18216
+  public void testMoveFileDoesntReorderImports() {
+    doMoveFileTest("b.py", "pkg");
+  }
+
+  // PY-20100
+  public void testMoveDoesntMergeFromImportsAccordingToCodeStyle() {
+    getPythonCodeStyleSettings().OPTIMIZE_IMPORTS_ALWAYS_SPLIT_FROM_IMPORTS = true;
+    doMoveSymbolsTest("dst.py", "func");
+  }
+
   private void doMoveFileTest(String fileName, String toDirName) {
     Project project = myFixture.getProject();
     PsiManager manager = PsiManager.getInstance(project);
@@ -398,10 +471,7 @@ public class PyMoveTest extends PyTestCase {
 
     VirtualFile toVirtualFile = dir1.findFileByRelativePath(toFileName);
     String path = toVirtualFile != null ? toVirtualFile.getPath() : (dir1.getPath() + "/" + toFileName);
-    new PyMoveModuleMembersProcessor(myFixture.getProject(),
-                                     symbols,
-                                     path,
-                                     false).run();
+    new PyMoveModuleMembersProcessor(symbols, path).run();
 
     VirtualFile dir2 = getVirtualFileByName(PythonTestUtil.getTestDataPath() + rootAfter);
     try {
@@ -435,4 +505,3 @@ public class PyMoveTest extends PyTestCase {
     return null;
   }
 }
-

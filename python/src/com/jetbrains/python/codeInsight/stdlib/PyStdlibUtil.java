@@ -31,7 +31,7 @@ import java.util.Set;
  * @author vlan
  */
 public class PyStdlibUtil {
-  @Nullable private static Set<String> PACKAGES = loadStdlibPackagesList();
+  @Nullable private static final Set<String> PACKAGES = loadStdlibPackagesList();
 
   private PyStdlibUtil() {
   }
@@ -48,7 +48,7 @@ public class PyStdlibUtil {
     try {
       final BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(helperPath)));
       try {
-        final Set<String> result = new HashSet<String>();
+        final Set<String> result = new HashSet<>();
         String line;
         while ((line = reader.readLine()) != null) {
           result.add(line);

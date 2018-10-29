@@ -11,12 +11,12 @@ import java.util.Set;
  */
 public class RemoteAgentClassLoaderCache {
 
-  private final Map<Set<URL>, URLClassLoader> myUrls2ClassLoader = new HashMap<Set<URL>, URLClassLoader>();
+  private final Map<Set<URL>, URLClassLoader> myUrls2ClassLoader = new HashMap<>();
 
   public URLClassLoader getOrCreateClassLoader(Set<URL> libraryUrls) {
     URLClassLoader result = myUrls2ClassLoader.get(libraryUrls);
     if (result == null) {
-      result = new URLClassLoader(libraryUrls.toArray(new URL[libraryUrls.size()]), null);
+      result = new URLClassLoader(libraryUrls.toArray(new URL[0]), null);
       myUrls2ClassLoader.put(libraryUrls, result);
     }
     return result;

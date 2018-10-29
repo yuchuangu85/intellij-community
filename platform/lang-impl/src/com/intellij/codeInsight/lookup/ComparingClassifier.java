@@ -16,7 +16,6 @@
 package com.intellij.codeInsight.lookup;
 
 import com.intellij.openapi.util.Pair;
-import com.intellij.util.Function;
 import com.intellij.util.ProcessingContext;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
@@ -24,7 +23,10 @@ import com.intellij.util.containers.FlatteningIterator;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.TreeMap;
 
 /**
  * @author peter
@@ -44,23 +46,22 @@ public abstract class ComparingClassifier<T> extends Classifier<T> {
   @Override
   public Iterable<T> classify(@NotNull final Iterable<T> source, @NotNull final ProcessingContext context) {
     List<T> nulls = null;
-    TreeMap<Comparable, List<T>> map = new TreeMap<Comparable, List<T>>();
+    TreeMap<Comparable, List<T>> map = new TreeMap<>();
     for (T t : source) {
       final Comparable weight = getWeight(t, context);
       if (weight == null) {
-        if (nulls == null) nulls = new SmartList<T>();
+        if (nulls == null) nulls = new SmartList<>();
         nulls.add(t);
       } else {
         List<T> list = map.get(weight);
         if (list == null) {
-          map.put(weight, list = new SmartList<T>());
+          map.put(weight, list = new SmartList<>());
         }
         list.add(t);
       }
     }
 
-    final List<List<T>> values = new ArrayList<List<T>>();
-    values.addAll(myNegated ? map.descendingMap().values() : map.values());
+    final List<List<T>> values = new ArrayList<>(myNegated ? map.descendingMap().values() : map.values());
     ContainerUtil.addIfNotNull(values, nulls);
 
     return new Iterable<T>() {

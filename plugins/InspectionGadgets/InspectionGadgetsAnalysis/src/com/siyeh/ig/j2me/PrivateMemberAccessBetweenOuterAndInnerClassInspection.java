@@ -20,6 +20,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.util.FileTypeUtils;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.util.PsiUtil;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
@@ -31,6 +32,18 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class PrivateMemberAccessBetweenOuterAndInnerClassInspection extends BaseInspection {
+
+  @NotNull
+  @Override
+  public String getID() {
+    return "SyntheticAccessorCall";
+  }
+
+  @Nullable
+  @Override
+  public String getAlternativeID() {
+    return "PrivateMemberAccessBetweenOuterAndInnerClass";
+  }
 
   @Override
   @NotNull
@@ -164,7 +177,7 @@ public class PrivateMemberAccessBetweenOuterAndInnerClassInspection extends Base
       // disable for jsp files IDEADEV-12957
       return false;
     }
-    return true;
+    return !PsiUtil.isLanguageLevel11OrHigher(file);
   }
 
   @Override
@@ -180,11 +193,15 @@ public class PrivateMemberAccessBetweenOuterAndInnerClassInspection extends Base
       if (expression.getType() instanceof PsiArrayType) {
         return;
       }
-      final PsiClass containingClass = getContainingContextClass(expression);
+      final PsiClass containingClass = ClassUtils.getContainingClass(expression);
       if (containingClass == null) {
         return;
       }
-      final PsiMethod constructor = expression.resolveConstructor();
+      final JavaResolveResult resolveResult = expression.resolveMethodGenerics();
+      if (!resolveResult.isAccessible()) {
+        return;
+      }
+      final PsiMethod constructor = (PsiMethod)resolveResult.getElement();
       if (constructor == null) {
         final PsiJavaCodeReferenceElement classReference =
           expression.getClassOrAnonymousClassReference();
@@ -223,7 +240,11 @@ public class PrivateMemberAccessBetweenOuterAndInnerClassInspection extends Base
       if (referenceNameElement == null) {
         return;
       }
-      final PsiElement element = expression.resolve();
+      final JavaResolveResult resolveResult = expression.advancedResolve(false);
+      if (!resolveResult.isAccessible()) {
+        return;
+      }
+      final PsiElement element = resolveResult.getElement();
       if (!(element instanceof PsiMethod || element instanceof PsiField)) {
         return;
       }
@@ -235,29 +256,15 @@ public class PrivateMemberAccessBetweenOuterAndInnerClassInspection extends Base
       if (value != null) {
         return; // no synthetic accessor created, compile time constant will be inlined by javac
       }
-      final PsiElement containingClass = getContainingContextClass(expression);
+      final PsiElement containingClass = ClassUtils.getContainingClass(expression);
       if (containingClass == null) {
         return;
       }
       final PsiClass memberClass = ClassUtils.getContainingClass(member);
-      if (memberClass == null || memberClass.equals(containingClass) ||
-          (!PsiTreeUtil.isAncestor(containingClass, memberClass, true) && !PsiTreeUtil.isAncestor(memberClass, containingClass, true))) {
+      if (memberClass == null || memberClass.equals(containingClass)) {
         return;
       }
       registerError(referenceNameElement, memberClass, member);
-    }
-
-    @Nullable
-    private static PsiClass getContainingContextClass(PsiElement element) {
-      final PsiClass aClass = ClassUtils.getContainingClass(element);
-      if (aClass instanceof PsiAnonymousClass) {
-        final PsiAnonymousClass anonymousClass = (PsiAnonymousClass)aClass;
-        final PsiExpressionList arguments = anonymousClass.getArgumentList();
-        if (arguments != null && PsiTreeUtil.isAncestor(arguments, element, true)) {
-          return ClassUtils.getContainingClass(aClass);
-        }
-      }
-      return aClass;
     }
   }
 }

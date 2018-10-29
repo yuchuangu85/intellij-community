@@ -35,7 +35,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static com.intellij.vcsUtil.VcsUtil.getIfSingle;
+import static com.intellij.util.containers.UtilKt.getIfSingle;
 
 public class CommonCheckinFilesAction extends AbstractCommonCheckinAction {
   @Override
@@ -88,7 +88,7 @@ public class CommonCheckinFilesAction extends AbstractCommonCheckinAction {
 
   @Override
   protected boolean approximatelyHasRoots(@NotNull VcsContext dataContext) {
-    FileStatusManager manager = FileStatusManager.getInstance(dataContext.getProject());
+    ChangeListManager manager = ChangeListManager.getInstance(dataContext.getProject());
 
     return getRootsStream(dataContext)
       .map(FilePath::getVirtualFile)

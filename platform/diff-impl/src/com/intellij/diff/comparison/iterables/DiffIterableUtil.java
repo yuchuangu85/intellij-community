@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.diff.comparison.iterables;
 
 import com.intellij.diff.comparison.DiffTooBigException;
@@ -77,14 +63,10 @@ public class DiffIterableUtil {
    * Compare two lists, basing on equals() and hashCode() of it's elements
    */
   @NotNull
-  public static <T> FairDiffIterable diff(@NotNull List<T> objects1, @NotNull List<T> objects2, @NotNull ProgressIndicator indicator)
+  public static <T> FairDiffIterable diff(@NotNull List<? extends T> objects1, @NotNull List<? extends T> objects2, @NotNull ProgressIndicator indicator)
     throws DiffTooBigException {
-    indicator.checkCanceled();
-
     // TODO: compare lists instead of arrays in Diff
-    Object[] data1 = ContainerUtil.toArray((List)objects1, new Object[objects1.size()]);
-    Object[] data2 = ContainerUtil.toArray((List)objects2, new Object[objects2.size()]);
-    return diff(data1, data2, indicator);
+    return diff(objects1.toArray(), objects2.toArray(), indicator);
   }
 
   //
@@ -135,7 +117,7 @@ public class DiffIterableUtil {
   }
 
   @NotNull
-  public static DiffIterable trim(@NotNull DiffIterable iterable, int start1, int end1, int start2, int end2) {
+  public static DiffIterable subiterable(@NotNull DiffIterable iterable, int start1, int end1, int start2, int end2) {
     return new SubiterableDiffIterable(iterable, start1, end1, start2, end2);
   }
 
@@ -173,7 +155,6 @@ public class DiffIterableUtil {
         if (equals) {
           Range range = lastUnchanged;
           lastUnchanged = myUnchanged.hasNext() ? myUnchanged.next() : null;
-          //noinspection ConstantConditions
           return Pair.create(range, true);
         }
         else {
@@ -222,7 +203,7 @@ public class DiffIterableUtil {
     }
   }
 
-  private static void verify(@NotNull Iterable<Range> iterable) {
+  private static void verify(@NotNull Iterable<? extends Range> iterable) {
     for (Range range : iterable) {
       // verify range
       assert range.start1 <= range.end1;
@@ -257,17 +238,14 @@ public class DiffIterableUtil {
   // Helpers
   //
 
-  public static class ChangeBuilder {
+  public abstract static class ChangeBuilderBase {
     private final int myLength1;
     private final int myLength2;
-
-    @Nullable private Diff.Change myFirstChange;
-    @Nullable private Diff.Change myLastChange;
 
     private int myIndex1 = 0;
     private int myIndex2 = 0;
 
-    public ChangeBuilder(int length1, int length2) {
+    public ChangeBuilderBase(int length1, int length2) {
       myLength1 = length1;
       myLength2 = length2;
     }
@@ -280,17 +258,12 @@ public class DiffIterableUtil {
       return myIndex2;
     }
 
-    protected void addChange(int start1, int start2, int end1, int end2) {
-      Diff.Change change = new Diff.Change(start1, start2, end1 - start1, end2 - start2, null);
-      if (myLastChange != null) {
-        myLastChange.link = change;
-      }
-      else {
-        myFirstChange = change;
-      }
-      myLastChange = change;
-      myIndex1 = end1;
-      myIndex2 = end2;
+    public int getLength1() {
+      return myLength1;
+    }
+
+    public int getLength2() {
+      return myLength2;
     }
 
     public void markEqual(int index1, int index2) {
@@ -316,19 +289,44 @@ public class DiffIterableUtil {
       myIndex2 = end2;
     }
 
-    protected void finish(int length1, int length2) {
-      assert myIndex1 <= length1;
-      assert myIndex2 <= length2;
+    protected void doFinish() {
+      assert myIndex1 <= myLength1;
+      assert myIndex2 <= myLength2;
 
-      if (length1 != myIndex1 || length2 != myIndex2) {
-        addChange(myIndex1, myIndex2, length1, length2);
+      if (myLength1 != myIndex1 || myLength2 != myIndex2) {
+        addChange(myIndex1, myIndex2, myLength1, myLength2);
+        myIndex1 = myLength1;
+        myIndex2 = myLength2;
       }
+    }
+
+    protected abstract void addChange(int start1, int start2, int end1, int end2);
+  }
+
+  public static class ChangeBuilder extends ChangeBuilderBase {
+    @Nullable private Diff.Change myFirstChange;
+    @Nullable private Diff.Change myLastChange;
+
+    public ChangeBuilder(int length1, int length2) {
+      super(length1, length2);
+    }
+
+    @Override
+    protected void addChange(int start1, int start2, int end1, int end2) {
+      Diff.Change change = new Diff.Change(start1, start2, end1 - start1, end2 - start2, null);
+      if (myLastChange != null) {
+        myLastChange.link = change;
+      }
+      else {
+        myFirstChange = change;
+      }
+      myLastChange = change;
     }
 
     @NotNull
     public DiffIterable finish() {
-      finish(myLength1, myLength2);
-      return create(myFirstChange, myLength1, myLength2);
+      doFinish();
+      return create(myFirstChange, getLength1(), getLength2());
     }
   }
 
@@ -355,8 +353,8 @@ public class DiffIterableUtil {
 
   @SuppressWarnings("unused")
   @NotNull
-  public static <T> List<LineRangeData> extractDataRanges(@NotNull List<T> objects1,
-                                                          @NotNull List<T> objects2,
+  public static <T> List<LineRangeData> extractDataRanges(@NotNull List<? extends T> objects1,
+                                                          @NotNull List<? extends T> objects2,
                                                           @NotNull DiffIterable iterable) {
     List<LineRangeData> result = ContainerUtil.newArrayList();
 

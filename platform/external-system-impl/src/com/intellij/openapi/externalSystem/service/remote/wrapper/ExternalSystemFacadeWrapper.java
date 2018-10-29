@@ -14,14 +14,13 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * This class acts as a point where target remote gradle services are proxied.
+ * This class acts as a point where target remote external system services are proxied.
  * <p/>
  * Check service wrapper contracts for more details.
  * <p/>
  * Thread-safe.
  * 
  * @author Denis Zhdanov
- * @since 2/8/12 7:21 PM
  */
 public class ExternalSystemFacadeWrapper<S extends ExternalSystemExecutionSettings> implements RemoteExternalSystemFacade<S> {
 
@@ -43,13 +42,13 @@ public class ExternalSystemFacadeWrapper<S extends ExternalSystemExecutionSettin
   @NotNull
   @Override
   public RemoteExternalSystemProjectResolver<S> getResolver() throws RemoteException, IllegalStateException {
-    return new ExternalSystemProjectResolverWrapper<S>(myDelegate.getResolver(), myProgressManager);
+    return new ExternalSystemProjectResolverWrapper<>(myDelegate.getResolver(), myProgressManager);
   }
 
   @NotNull
   @Override
   public RemoteExternalSystemTaskManager<S> getTaskManager() throws RemoteException {
-    return new ExternalSystemTaskManagerWrapper<S>(myDelegate.getTaskManager(), myProgressManager);
+    return new ExternalSystemTaskManagerWrapper<>(myDelegate.getTaskManager(), myProgressManager);
   }
 
   @Override

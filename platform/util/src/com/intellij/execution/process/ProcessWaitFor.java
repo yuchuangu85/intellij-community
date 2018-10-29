@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package com.intellij.execution.process;
 import com.intellij.execution.TaskExecutor;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.ConcurrencyUtil;
 import com.intellij.util.Consumer;
 import org.jetbrains.annotations.NotNull;
 
@@ -28,8 +29,9 @@ public class ProcessWaitFor {
 
   private final Future<?> myWaitForThreadFuture;
   private final BlockingQueue<Consumer<Integer>> myTerminationCallback = new ArrayBlockingQueue<Consumer<Integer>>(1);
+  private volatile boolean myDetached;
 
-  /** @deprecated use {@link #ProcessWaitFor(Process, TaskExecutor, String)} instead (to be removed in IDEA 17) */
+  /** @deprecated use {@link #ProcessWaitFor(Process, TaskExecutor, String)} instead (to be removed in IDEA 2018) */
   @Deprecated
   public ProcessWaitFor(@NotNull final Process process, @NotNull TaskExecutor executor) {
     this(process, executor, "");
@@ -39,38 +41,42 @@ public class ProcessWaitFor {
     myWaitForThreadFuture = executor.executeTask(new Runnable() {
       @Override
       public void run() {
-        String oldThreadName = Thread.currentThread().getName();
-        if (!StringUtil.isEmptyOrSpaces(presentableName)) {
-          Thread.currentThread().setName("ProcessWaitFor: " + presentableName);
-        }
-        int exitCode = 0;
-        try {
-          while (true) {
+        String threadName = StringUtil.isEmptyOrSpaces(presentableName) ? Thread.currentThread().getName() : presentableName;
+        ConcurrencyUtil.runUnderThreadName(threadName, new Runnable() {
+          @Override
+          public void run() {
+            int exitCode = 0;
             try {
-              exitCode = process.waitFor();
-              break;
+              while (!myDetached) {
+                try {
+                  exitCode = process.waitFor();
+                  break;
+                }
+                catch (InterruptedException e) {
+                  if (!myDetached) {
+                    LOG.debug(e);
+                  }
+                }
+              }
             }
-            catch (InterruptedException e) {
-              LOG.debug(e);
+            finally {
+              if (!myDetached) {
+                try {
+                  myTerminationCallback.take().consume(exitCode);
+                }
+                catch (InterruptedException e) {
+                  LOG.info(e);
+                }
+              }
             }
           }
-        }
-        finally {
-          try {
-            myTerminationCallback.take().consume(exitCode);
-          }
-          catch (InterruptedException e) {
-            LOG.info(e);
-          }
-          finally {
-            Thread.currentThread().setName(oldThreadName);
-          }
-        }
+        });
       }
     });
   }
 
   public void detach() {
+    myDetached = true;
     myWaitForThreadFuture.cancel(true);
   }
 
@@ -82,10 +88,9 @@ public class ProcessWaitFor {
     try {
       myWaitForThreadFuture.get();
     }
+    catch (CancellationException ignored) { }
     catch (ExecutionException e) {
       LOG.error(e);
-    }
-    catch (CancellationException ignored) {
     }
   }
 
@@ -96,12 +101,9 @@ public class ProcessWaitFor {
     catch (ExecutionException e) {
       LOG.error(e);
     }
-    catch (CancellationException ignored) {
-    }
-    catch (TimeoutException ignored) {
-    }
+    catch (CancellationException ignored) { }
+    catch (TimeoutException ignored) { }
 
     return myWaitForThreadFuture.isDone();
   }
-
 }

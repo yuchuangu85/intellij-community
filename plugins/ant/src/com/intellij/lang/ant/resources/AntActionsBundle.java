@@ -36,12 +36,12 @@ public final class AntActionsBundle {
   private AntActionsBundle() {
   }
 
-  @SuppressWarnings({"HardCodedStringLiteral", "UnresolvedPropertyKey"})
+  @SuppressWarnings({"UnresolvedPropertyKey"})
   public static String actionText(@NonNls String actionId) {
     return message("action." + actionId + ".text");
   }
 
-  @SuppressWarnings({"HardCodedStringLiteral", "UnresolvedPropertyKey"})
+  @SuppressWarnings({"UnresolvedPropertyKey"})
   public static String actionDescription(@NonNls String actionId) {
     return message("action." + actionId + ".description");
   }
@@ -50,7 +50,7 @@ public final class AntActionsBundle {
     ResourceBundle bundle = com.intellij.reference.SoftReference.dereference(ourBundle);
     if (bundle == null) {
       bundle = ResourceBundle.getBundle(IDEA_ACTIONS_BUNDLE);
-      ourBundle = new SoftReference<ResourceBundle>(bundle);
+      ourBundle = new SoftReference<>(bundle);
     }
     return bundle;
   }

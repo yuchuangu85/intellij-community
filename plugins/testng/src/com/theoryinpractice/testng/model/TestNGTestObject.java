@@ -1,17 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
  */
 package com.theoryinpractice.testng.model;
 
@@ -20,6 +8,7 @@ import com.intellij.execution.CantRunException;
 import com.intellij.execution.configurations.RuntimeConfigurationException;
 import com.intellij.execution.testframework.SourceScope;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
@@ -41,15 +30,16 @@ import java.util.*;
 public abstract class TestNGTestObject {
 
   public static final String[] GROUPS_CONFIGURATION = {BeforeGroups.class.getName(), AfterGroups.class.getName()};
-  
-  private static final Logger LOG = Logger.getInstance("#" + TestNGTestObject.class.getName());
+
+  private static final Logger LOG = Logger.getInstance(TestNGTestObject.class);
   protected final TestNGConfiguration myConfig;
 
   public TestNGTestObject(TestNGConfiguration config) {
     myConfig = config;
   }
 
-  public static TestNGTestObject fromConfig(TestNGConfiguration config) {
+  @NotNull
+  public static TestNGTestObject fromConfig(@NotNull TestNGConfiguration config) {
     final String testObject = config.getPersistantData().TEST_OBJECT;
     if (testObject.equals(TestType.PACKAGE.getType())) {
       return new TestNGTestPackage(config);
@@ -76,8 +66,9 @@ public abstract class TestNGTestObject {
     if (testObject.equals(TestType.SOURCE.getType())) {
       return new TestNGSource(config);
     }
-    assert false : testObject;
-    return null;
+
+    LOG.info("Unknown test object" + testObject);
+    return new UnknownTestNGTestObject(config);
   }
 
   public abstract void fillTestObjects(final Map<PsiClass, Map<PsiMethod, List<String>>> classes) throws CantRunException;
@@ -93,7 +84,7 @@ public abstract class TestNGTestObject {
                                               final Map<PsiClass, Map<PsiMethod, List<String>>> results,
                                               GlobalSearchScope searchScope,
                                               @Nullable final PsiClass... classes) {
-    calculateDependencies(methods, results, new LinkedHashSet<PsiMember>(), searchScope, classes);
+    calculateDependencies(methods, results, new LinkedHashSet<>(), searchScope, classes);
   }
 
   private static void calculateDependencies(final PsiMethod[] methods,
@@ -102,7 +93,7 @@ public abstract class TestNGTestObject {
                                             final GlobalSearchScope searchScope,
                                             @Nullable final PsiClass... classes) {
     if (classes != null && classes.length > 0) {
-      final Set<PsiMember> membersToCheckNow = new LinkedHashSet<PsiMember>();
+      final Set<PsiMember> membersToCheckNow = new LinkedHashSet<>();
 
       final Set<String> groupDependencies = new LinkedHashSet<>(), declaredGroups = new LinkedHashSet<>();
       final HashMap<String, Collection<String>> valuesMap = new HashMap<>();
@@ -125,7 +116,7 @@ public abstract class TestNGTestObject {
 
       if (methods == null) {
         for (PsiClass c : classes) {
-          results.put(c, new LinkedHashMap<PsiMethod, List<String>>());
+          results.put(c, new LinkedHashMap<>());
         }
       } else {
         for (PsiMember psiMember : membersToCheckNow) {
@@ -145,7 +136,7 @@ public abstract class TestNGTestObject {
 
   private static void collectGroupsMembers(final String annotationFqn,
                                            final Set<String> groups,
-                                           final boolean skipUnrelated, 
+                                           final boolean skipUnrelated,
                                            final Map<PsiClass, Map<PsiMethod, List<String>>> results,
                                            final Set<PsiMember> alreadyMarkedToBeChecked,
                                            final GlobalSearchScope searchScope,
@@ -178,7 +169,7 @@ public abstract class TestNGTestObject {
                                               final PsiClass... classes) {
     final PsiClass[] psiClasses;
     if (methods != null && methods.length > 0) {
-      final Set<PsiClass> containingClasses = new LinkedHashSet<PsiClass>();
+      final Set<PsiClass> containingClasses = new LinkedHashSet<>();
       for (final PsiMethod method : methods) {
         containingClasses.add(ApplicationManager.getApplication().runReadAction(new Computable<PsiClass>() {
           @Override
@@ -187,12 +178,12 @@ public abstract class TestNGTestObject {
           }
         }));
       }
-      psiClasses = containingClasses.toArray(new PsiClass[containingClasses.size()]);
+      psiClasses = containingClasses.toArray(PsiClass.EMPTY_ARRAY);
     } else {
       psiClasses = classes;
     }
     for (final PsiClass containingClass : psiClasses) {
-      final Set<String> testMethodDependencies = new LinkedHashSet<String>();
+      final Set<String> testMethodDependencies = new LinkedHashSet<>();
       final HashMap<String, Collection<String>> valuesMap = new HashMap<>();
       valuesMap.put("dependsOnMethods", testMethodDependencies);
       TestNGUtil.collectAnnotationValues(valuesMap, methods, containingClass);
@@ -225,7 +216,7 @@ public abstract class TestNGTestObject {
                                         Map<PsiClass, Map<PsiMethod, List<String>>> results) {
     final PsiMethod[] psiMethods = containingClass.findMethodsByName(methodName, true);
     for (PsiMethod method : psiMethods) {
-      if (AnnotationUtil.isAnnotated(method, TestNGUtil.TEST_ANNOTATION_FQN, false) &&
+      if (AnnotationUtil.isAnnotated(method, TestNGUtil.TEST_ANNOTATION_FQN, 0) &&
           appendMember(method, alreadyMarkedToBeChecked, results)) {
         membersToCheckNow.add(method);
       }
@@ -239,14 +230,14 @@ public abstract class TestNGTestObject {
     final PsiClass psiClass = psiMember instanceof PsiClass ? ((PsiClass)psiMember) : psiMember.getContainingClass();
     Map<PsiMethod, List<String>> psiMethods = results.get(psiClass);
     if (psiMethods == null) {
-      psiMethods = new LinkedHashMap<PsiMethod, List<String>>();
+      psiMethods = new LinkedHashMap<>();
       results.put(psiClass, psiMethods);
       if (psiMember instanceof PsiClass) {
         result = underConsideration.add(psiMember);
       }
     }
     if (psiMember instanceof PsiMethod) {
-      final boolean add = psiMethods.put((PsiMethod)psiMember, Collections.<String>emptyList()) != null;
+      final boolean add = psiMethods.put((PsiMethod)psiMember, Collections.emptyList()) != null;
       if (add) {
         return underConsideration.add(psiMember);
       }
@@ -275,23 +266,39 @@ public abstract class TestNGTestObject {
                                         final PsiClass psiClass,
                                         final String methodName,
                                         final GlobalSearchScope searchScope) {
-    final PsiMethod[] methods = ApplicationManager.getApplication().runReadAction(
-      new Computable<PsiMethod[]>() {
-        public PsiMethod[] compute() {
-          return psiClass.findMethodsByName(methodName, true);
-        }
-      }
-    );
+    final PsiMethod[] methods = ReadAction.compute(() -> psiClass.findMethodsByName(methodName, true));
     calculateDependencies(methods, classes, searchScope, psiClass);
     Map<PsiMethod, List<String>> psiMethods = classes.get(psiClass);
     if (psiMethods == null) {
-      psiMethods = new LinkedHashMap<PsiMethod, List<String>>();
+      psiMethods = new LinkedHashMap<>();
       classes.put(psiClass, psiMethods);
     }
     for (PsiMethod method : methods) {
       if (!psiMethods.containsKey(method)) {
-        psiMethods.put(method, Collections.<String>emptyList());
+        psiMethods.put(method, Collections.emptyList());
       }
     }
+  }
+
+  private static class UnknownTestNGTestObject extends TestNGTestObject {
+    UnknownTestNGTestObject(TestNGConfiguration config) {
+      super(config);
+    }
+
+    @Override
+    public void fillTestObjects(Map<PsiClass, Map<PsiMethod, List<String>>> classes) {}
+
+    @Override
+    public String getGeneratedName() {
+      return getActionName();
+    }
+
+    @Override
+    public String getActionName() {
+      return "Unknown";
+    }
+
+    @Override
+    public void checkConfiguration() {}
   }
 }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.testframework.sm.runner.history;
 
 import com.intellij.execution.process.ProcessOutputTypes;
@@ -29,7 +15,7 @@ import org.xml.sax.helpers.DefaultHandler;
 
 public class ImportedTestContentHandler extends DefaultHandler {
   private final GeneralTestEventsProcessor myProcessor;
-  private final Stack<String> mySuites = new Stack<String>();
+  private final Stack<String> mySuites = new Stack<>();
   private String myCurrentTest;
   private String myDuration;
   private String myStatus;
@@ -45,7 +31,8 @@ public class ImportedTestContentHandler extends DefaultHandler {
     if (TestResultsXmlFormatter.ELEM_SUITE.equals(qName)) {
       final String suiteName = StringUtil.unescapeXml(attributes.getValue(TestResultsXmlFormatter.ATTR_NAME));
       myProcessor.onSuiteStarted(new TestSuiteStartedEvent(suiteName, 
-                                                           StringUtil.unescapeXml(attributes.getValue(TestResultsXmlFormatter.ATTR_LOCATION))));
+                                                           StringUtil.unescapeXml(attributes.getValue(TestResultsXmlFormatter.ATTR_LOCATION)),
+                                                           StringUtil.unescapeXml(attributes.getValue(TestResultsXmlFormatter.ATTR_METAINFO))));
       mySuites.push(suiteName);
     }
     else if (TestResultsXmlFormatter.ELEM_TEST.equals(qName)) {
@@ -55,7 +42,8 @@ public class ImportedTestContentHandler extends DefaultHandler {
       myStatus = attributes.getValue(TestResultsXmlFormatter.ATTR_STATUS);
       final String isConfig = attributes.getValue(TestResultsXmlFormatter.ATTR_CONFIG);
       final TestStartedEvent startedEvent = new TestStartedEvent(name, 
-                                                                 StringUtil.unescapeXml(attributes.getValue(TestResultsXmlFormatter.ATTR_LOCATION)));
+                                                                 StringUtil.unescapeXml(attributes.getValue(TestResultsXmlFormatter.ATTR_LOCATION)),
+                                                                 StringUtil.unescapeXml(attributes.getValue(TestResultsXmlFormatter.ATTR_METAINFO)));
       if (isConfig != null && Boolean.valueOf(isConfig)) {
         startedEvent.setConfig(true);
       }
@@ -72,12 +60,12 @@ public class ImportedTestContentHandler extends DefaultHandler {
   }
 
   @Override
-  public void characters(char[] ch, int start, int length) throws SAXException {
+  public void characters(char[] ch, int start, int length) {
     currentValue.append(ch, start, length);
   }
 
   @Override
-  public void endElement(String uri, String localName, String qName) throws SAXException {
+  public void endElement(String uri, String localName, String qName) {
     final String currentText = StringUtil.unescapeXml(currentValue.toString());
     final boolean isTestOutput = myCurrentTest == null || TestResultsXmlFormatter.STATUS_PASSED.equals(myStatus) || !myErrorOutput;
     if (isTestOutput) {

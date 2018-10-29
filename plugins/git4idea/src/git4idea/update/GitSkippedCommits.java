@@ -65,7 +65,7 @@ public class GitSkippedCommits extends PanelWithActionsAndCloseButton {
   /**
    * Get center component
    */
-  private JBScrollPane myCenterComponent;
+  private final JBScrollPane myCenterComponent;
 
   /**
    * The constructor
@@ -152,7 +152,7 @@ public class GitSkippedCommits extends PanelWithActionsAndCloseButton {
   }
 
   @Override
-  public Object getData(String dataId) {
+  public Object getData(@NotNull String dataId) {
     if (CommonDataKeys.PROJECT.is(dataId)) {
       return myProject;
     }
@@ -178,18 +178,15 @@ public class GitSkippedCommits extends PanelWithActionsAndCloseButton {
    * @param skippedCommits the skipped commits
    */
   public static void showSkipped(final Project project, final SortedMap<VirtualFile, List<GitRebaseUtils.CommitInfo>> skippedCommits) {
-    UIUtil.invokeLaterIfNeeded(new Runnable() {
-      @Override
-      public void run() {
-        ContentManager contentManager = ProjectLevelVcsManagerEx.getInstanceEx(project).getContentManager();
-        if (contentManager == null) {
-          return;
-        }
-        GitSkippedCommits skipped = new GitSkippedCommits(contentManager, project, skippedCommits);
-        Content content = ContentFactory.SERVICE.getInstance().createContent(skipped, "Skipped Commits", true);
-        ContentsUtil.addContent(contentManager, content, true);
-        ToolWindowManager.getInstance(project).getToolWindow(ToolWindowId.VCS).activate(null);
+    UIUtil.invokeLaterIfNeeded(() -> {
+      ContentManager contentManager = ProjectLevelVcsManagerEx.getInstanceEx(project).getContentManager();
+      if (contentManager == null) {
+        return;
       }
+      GitSkippedCommits skipped = new GitSkippedCommits(contentManager, project, skippedCommits);
+      Content content = ContentFactory.SERVICE.getInstance().createContent(skipped, "Skipped Commits", true);
+      ContentsUtil.addContent(contentManager, content, true);
+      ToolWindowManager.getInstance(project).getToolWindow(ToolWindowId.VCS).activate(null);
     });
   }
 
@@ -203,7 +200,7 @@ public class GitSkippedCommits extends PanelWithActionsAndCloseButton {
   private static class VcsRoot {
     final VirtualFile root;
 
-    public VcsRoot(VirtualFile root) {
+    VcsRoot(VirtualFile root) {
       this.root = root;
     }
 
@@ -220,7 +217,7 @@ public class GitSkippedCommits extends PanelWithActionsAndCloseButton {
     final VirtualFile root;
     final GitRebaseUtils.CommitInfo commitInfo;
 
-    public Commit(VirtualFile root, GitRebaseUtils.CommitInfo commitInfo) {
+    Commit(VirtualFile root, GitRebaseUtils.CommitInfo commitInfo) {
       this.root = root;
       this.commitInfo = commitInfo;
     }

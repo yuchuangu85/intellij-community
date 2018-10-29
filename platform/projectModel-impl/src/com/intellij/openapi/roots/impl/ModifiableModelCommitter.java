@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,10 +22,12 @@ import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.impl.ModuleManagerImpl;
 import com.intellij.openapi.roots.*;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.graph.CachingSemiGraph;
 import com.intellij.util.graph.DFSTBuilder;
 import com.intellij.util.graph.GraphGenerator;
+import com.intellij.util.graph.InboundSemiGraph;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -42,7 +44,7 @@ public class ModifiableModelCommitter {
 
     final List<RootModelImpl> modelsToCommit = getSortedChangedModels(rootModels, moduleModel);
 
-    final List<ModifiableRootModel> modelsToDispose = ContainerUtil.newArrayList(rootModels);
+    final List<ModifiableRootModel> modelsToDispose = new SmartList<>(rootModels);
     modelsToDispose.removeAll(modelsToCommit);
 
     ModuleManagerImpl.commitModelWithRunnable(moduleModel, () -> {
@@ -50,24 +52,33 @@ public class ModifiableModelCommitter {
         ModuleRootManagerImpl.doCommit(model);
       }
       for (ModifiableRootModel model : modelsToDispose) {
+        if (model instanceof RootModelImpl) {
+          ((RootModelImpl)model).checkModuleExtensionModification();
+        }
         model.dispose();
       }
     });
   }
 
+  @NotNull
   private static List<RootModelImpl> getSortedChangedModels(Collection<ModifiableRootModel> rootModels, ModifiableModuleModel moduleModel) {
-    List<RootModelImpl> result = ContainerUtil.newArrayListWithCapacity(rootModels.size());
-
+    List<RootModelImpl> result = null;
     for (ModifiableRootModel model : rootModels) {
       RootModelImpl rootModel = (RootModelImpl)model;
       if (rootModel.isChanged()) {
+        if (result == null) {
+          result = new SmartList<>();
+        }
         result.add(rootModel);
       }
     }
 
-    DFSTBuilder<RootModelImpl> builder = createDFSTBuilder(result, moduleModel);
-    Collections.sort(result, builder.comparator());
-
+    if (result == null) {
+      return Collections.emptyList();
+    }
+    if (result.size() > 1) {
+      result.sort(createDFSTBuilder(result, moduleModel).comparator());
+    }
     return result;
   }
 
@@ -89,18 +100,20 @@ public class ModifiableModelCommitter {
     }
 
     final Collection<RootModelImpl> allRootModels = nameToModel.values();
-    GraphGenerator.SemiGraph<RootModelImpl> graph = new GraphGenerator.SemiGraph<RootModelImpl>() {
+    InboundSemiGraph<RootModelImpl> graph = new InboundSemiGraph<RootModelImpl>() {
+      @NotNull
       @Override
       public Collection<RootModelImpl> getNodes() {
         return allRootModels;
       }
 
+      @NotNull
       @Override
       public Iterator<RootModelImpl> getIn(RootModelImpl rootModel) {
         OrderEnumerator entries = rootModel.orderEntries().withoutSdk().withoutLibraries().withoutModuleSourceEntries();
         List<String> namesList = entries.process(new RootPolicy<List<String>>() {
           @Override
-          public List<String> visitModuleOrderEntry(ModuleOrderEntry moduleOrderEntry, List<String> strings) {
+          public List<String> visitModuleOrderEntry(@NotNull ModuleOrderEntry moduleOrderEntry, List<String> strings) {
             Module module = moduleOrderEntry.getModule();
             if (module != null && !module.isDisposed()) {
               strings.add(module.getName());
@@ -113,10 +126,10 @@ public class ModifiableModelCommitter {
             }
             return strings;
           }
-        }, new ArrayList<String>());
+        }, new ArrayList<>());
 
         String[] names = ArrayUtil.toStringArray(namesList);
-        List<RootModelImpl> result = new ArrayList<RootModelImpl>();
+        List<RootModelImpl> result = new ArrayList<>();
         for (String name : names) {
           RootModelImpl depRootModel = nameToModel.get(name);
           if (depRootModel != null) { // it is ok not to find one
@@ -126,6 +139,6 @@ public class ModifiableModelCommitter {
         return result.iterator();
       }
     };
-    return new DFSTBuilder<RootModelImpl>(new GraphGenerator<RootModelImpl>(new CachingSemiGraph<RootModelImpl>(graph)));
+    return new DFSTBuilder<>(GraphGenerator.generate(CachingSemiGraph.cache(graph)));
   }
 }

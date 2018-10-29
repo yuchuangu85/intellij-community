@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,54 +15,52 @@
  */
 package com.intellij.openapi.vcs.impl;
 
-import com.intellij.ide.impl.ProjectUtil;
-import com.intellij.lifecycle.PeriodicalTasksCloser;
+import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.vcs.changes.DirtBuilder;
-import com.intellij.openapi.vcs.changes.VcsGuess;
 import com.intellij.openapi.vcs.impl.projectlevelman.NewMappings;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.project.ProjectKt;
+import com.intellij.util.PathUtilRt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
-import java.util.List;
 
 /**
  * @author yole
  */
 public abstract class DefaultVcsRootPolicy {
   public static DefaultVcsRootPolicy getInstance(Project project) {
-    return PeriodicalTasksCloser.getInstance().safeGetService(project, DefaultVcsRootPolicy.class);
+    return ServiceManager.getService(project, DefaultVcsRootPolicy.class);
   }
 
-  public abstract void addDefaultVcsRoots(final NewMappings mappingList, @NotNull String vcsName, List<VirtualFile> result);
+  @NotNull
+  public abstract Collection<VirtualFile> getDefaultVcsRoots(@NotNull NewMappings mappingList, @NotNull String vcsName);
 
-  public abstract boolean matchesDefaultMapping(final VirtualFile file, final Object matchContext);
+  public abstract boolean matchesDefaultMapping(@NotNull VirtualFile file, final Object matchContext);
 
   @Nullable
   public abstract Object getMatchContext(final VirtualFile file);
 
   @Nullable
-  public abstract VirtualFile getVcsRootFor(final VirtualFile file);
+  public abstract VirtualFile getVcsRootFor(@NotNull VirtualFile file);
 
   @NotNull
   public abstract Collection<VirtualFile> getDirtyRoots();
   
-  public String getProjectConfigurationMessage(final Project project) {
-    boolean isDirectoryBased = ProjectUtil.isDirectoryBased(project);
-    final String[] parts = new String[] {"Content roots of all modules", "all immediate descendants of project base directory",
-      Project.DIRECTORY_STORE_FOLDER + " directory contents"};
-    final StringBuilder sb = new StringBuilder(parts[0]);
+  public String getProjectConfigurationMessage(@NotNull Project project) {
+    boolean isDirectoryBased = ProjectKt.isDirectoryBased(project);
+    final StringBuilder sb = new StringBuilder("Content roots of all modules");
     if (isDirectoryBased) {
       sb.append(", ");
-    } else {
+    }
+    else {
       sb.append(", and ");
     }
-    sb.append(parts[1]);
+    sb.append("all immediate descendants of project base directory");
     if (isDirectoryBased) {
       sb.append(", and ");
-      sb.append(parts[2]);
+      sb.append(PathUtilRt.getFileName(ProjectKt.getStateStore(project).getDirectoryStorePath()) + " directory contents");
     }
     return sb.toString();
   }

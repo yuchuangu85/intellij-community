@@ -42,13 +42,6 @@ public class GroovyEmptyCatchBlockInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return ERROR_HANDLING;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Empty 'catch' block";
   }
@@ -71,7 +64,7 @@ public class GroovyEmptyCatchBlockInspection extends BaseInspection {
   private class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitCatchClause(GrCatchClause catchClause) {
+    public void visitCatchClause(@NotNull GrCatchClause catchClause) {
       super.visitCatchClause(catchClause);
       final GrOpenBlock body = catchClause.getBody();
       if (body == null || !isEmpty(body)) {

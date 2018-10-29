@@ -1,22 +1,7 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.components.impl.stores;
 
 import com.intellij.diagnostic.IdeErrorsDialog;
-import com.intellij.diagnostic.PluginException;
 import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
@@ -25,14 +10,15 @@ import com.intellij.openapi.application.ApplicationNamesInfo;
 import com.intellij.openapi.application.ex.ApplicationManagerEx;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.State;
-import com.intellij.openapi.components.StateStorage.SaveSession;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.PluginId;
+import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Pair;
+import com.intellij.openapi.project.ProjectManager;
+import com.intellij.openapi.project.ex.ProjectEx;
+import com.intellij.openapi.project.ex.ProjectManagerEx;
 import com.intellij.openapi.util.ShutDownTracker;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.SmartList;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -43,10 +29,14 @@ public final class StoreUtil {
   private StoreUtil() { }
 
   public static void save(@NotNull IComponentStore stateStore, @Nullable Project project) {
+    save(stateStore, project, false);
+  }
+
+  public static void save(@NotNull IComponentStore stateStore, @Nullable Project project, boolean isForce) {
     Thread currentThread = Thread.currentThread();
     ShutDownTracker.getInstance().registerStopperThread(currentThread);
     try {
-      stateStore.save(new SmartList<Pair<SaveSession, VirtualFile>>());
+      stateStore.save(new SmartList<>(), isForce);
     }
     catch (IComponentStore.SaveCancelledException e) {
       LOG.info(e);
@@ -93,13 +83,7 @@ public final class StoreUtil {
       return spec;
     }
 
-    PluginId pluginId = PluginManagerCore.getPluginByClassName(componentClass.getName());
-    if (pluginId == null) {
-      throw new RuntimeException("No @State annotation found in " + componentClass);
-    }
-    else {
-      throw new PluginException("No @State annotation found in " + componentClass, pluginId);
-    }
+    throw PluginManagerCore.createPluginException("No @State annotation found in " + componentClass, null, componentClass);
   }
 
   @Nullable
@@ -112,5 +96,42 @@ public final class StoreUtil {
     }
     while ((aClass = aClass.getSuperclass()) != null);
     return null;
+  }
+
+  /**
+   * @param isForceSavingAllSettings Whether to force save non-roamable component configuration.
+   */
+  public static void saveDocumentsAndProjectsAndApp(boolean isForceSavingAllSettings) {
+    FileDocumentManager.getInstance().saveAllDocuments();
+    saveProjectsAndApp(isForceSavingAllSettings);
+  }
+
+  /**
+   * @param isForceSavingAllSettings Whether to force save non-roamable component configuration.
+   */
+  public static void saveProjectsAndApp(boolean isForceSavingAllSettings) {
+    long start = System.currentTimeMillis();
+    ApplicationManager.getApplication().saveSettings(isForceSavingAllSettings);
+
+    ProjectManager projectManager = ProjectManager.getInstance();
+    if (projectManager instanceof ProjectManagerEx) {
+      ((ProjectManagerEx)projectManager).flushChangedProjectFileAlarm();
+    }
+
+    for (Project project : projectManager.getOpenProjects()) {
+      saveProject(project, isForceSavingAllSettings);
+    }
+
+    long duration = System.currentTimeMillis() - start;
+    LOG.info("saveProjectsAndApp took " + duration + " ms");
+  }
+
+  public static void saveProject(@NotNull Project project, boolean isForce) {
+    if (isForce && project instanceof ProjectEx) {
+      ((ProjectEx)project).save(true);
+    }
+    else {
+      project.save();
+    }
   }
 }

@@ -98,6 +98,14 @@ public interface BalloonBuilder {
   @NotNull
   BalloonBuilder setRequestFocus(boolean requestFocus);
 
+  @NotNull
+  default BalloonBuilder setPointerSize(Dimension size) { return this; }
+
+  @NotNull
+  default BalloonBuilder setCornerToPointerDistance(int distance) { return this; }
+
+  BalloonBuilder setHideOnCloseClick(boolean hideOnCloseClick);
+
   /**
    * Links target balloon life cycle to the given object. I.e. current balloon will be auto-hide and collected as soon
    * as given anchor is disposed.

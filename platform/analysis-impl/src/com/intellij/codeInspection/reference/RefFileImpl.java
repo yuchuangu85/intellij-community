@@ -28,7 +28,12 @@ import org.jetbrains.annotations.Nullable;
 
 public class RefFileImpl extends RefElementImpl implements RefFile {
   RefFileImpl(PsiFile elem, RefManager manager) {
+    this(elem, manager, true);
+  }
+
+  protected RefFileImpl(PsiFile elem, RefManager manager, boolean addParent) {
     super(elem, manager);
+    if (!addParent) return;
     final VirtualFile vFile = elem.getVirtualFile();
     if (vFile == null) return;
     final VirtualFile parentDirectory = vFile.getParent();
@@ -43,18 +48,18 @@ public class RefFileImpl extends RefElementImpl implements RefFile {
   }
 
   @Override
-  public PsiFile getElement() {
-    return (PsiFile)super.getElement();
+  public PsiFile getPsiElement() {
+    return (PsiFile)super.getPsiElement();
   }
 
   @Override
   public void accept(@NotNull final RefVisitor visitor) {
-    ApplicationManager.getApplication().runReadAction(() -> visitor.visitFile(RefFileImpl.this));
+    ApplicationManager.getApplication().runReadAction(() -> visitor.visitFile(this));
   }
 
   @Override
   public String getExternalName() {
-    final PsiFile psiFile = getElement();
+    final PsiFile psiFile = getPsiElement();
     final VirtualFile virtualFile = psiFile != null ? psiFile.getVirtualFile() : null;
     return virtualFile != null ? virtualFile.getUrl() : getName();
   }
@@ -64,7 +69,7 @@ public class RefFileImpl extends RefElementImpl implements RefFile {
   }
 
   @Nullable
-  public static RefElement fileFromExternalName(final RefManager manager, final String fqName) {
+  static RefElement fileFromExternalName(final RefManager manager, final String fqName) {
     final VirtualFile virtualFile = VirtualFileManager.getInstance().findFileByUrl(PathMacroManager.getInstance(manager.getProject()).expandPath(fqName));
     if (virtualFile != null) {
       final PsiFile psiFile = PsiManager.getInstance(manager.getProject()).findFile(virtualFile);

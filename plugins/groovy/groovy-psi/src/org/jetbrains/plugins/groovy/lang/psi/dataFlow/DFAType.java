@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.dataFlow;
 
 import com.intellij.openapi.util.Comparing;
@@ -72,18 +58,18 @@ public class DFAType {
 
   private final PsiType primary;
 
-  private final List<Mixin> mixins = new ArrayList<Mixin>();
+  private final List<Mixin> mixins = new ArrayList<>();
 
   private DFAType(@Nullable PsiType primary) {
     this.primary = primary;
   }
 
-  public void addMixin(@Nullable PsiType mixin, ConditionInstruction instruction) {
+  public void addMixin(@Nullable PsiType mixin, @Nullable ConditionInstruction instruction) {
     if (mixin == null) {
       return;
     }
 
-    mixins.add(new Mixin(mixin, instruction, false));
+    mixins.add(new Mixin(mixin, instruction, instruction != null && instruction.isNegated()));
   }
 
   @Override
@@ -113,9 +99,7 @@ public class DFAType {
   public DFAType negate(@NotNull Instruction instruction) {
     final DFAType type = new DFAType(primary);
 
-    for (Mixin mixin : mixins) {
-      type.mixins.add(mixin);
-    }
+    type.mixins.addAll(mixins);
 
     for (NegatingGotoInstruction negation: instruction.getNegatingGotoInstruction()) {
       final Set<ConditionInstruction> conditionsToNegate = negation.getCondition().getDependentConditions();
@@ -134,7 +118,7 @@ public class DFAType {
   public PsiType getResultType() {
     if (mixins.isEmpty()) return primary;
 
-    List<PsiType> types = new ArrayList<PsiType>();
+    List<PsiType> types = new ArrayList<>();
     if (primary != null) {
       types.add(primary);
     }
@@ -155,7 +139,7 @@ public class DFAType {
     return t1 == t2 || Comparing.equal(TypeConversionUtil.erasure(t1), TypeConversionUtil.erasure(t2));
   }
 
-  @Nullable
+  @NotNull
   public static DFAType create(DFAType t1, DFAType t2, PsiManager manager) {
     if (t1.equals(t2)) return t1;
 

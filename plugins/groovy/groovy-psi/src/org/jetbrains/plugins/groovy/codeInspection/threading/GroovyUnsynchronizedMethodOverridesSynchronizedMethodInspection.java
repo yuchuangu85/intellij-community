@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,13 +34,6 @@ public class GroovyUnsynchronizedMethodOverridesSynchronizedMethodInspection ext
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return THREADING_ISSUES;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Unsynchronized method overrides synchronized method";
   }
@@ -60,7 +53,7 @@ public class GroovyUnsynchronizedMethodOverridesSynchronizedMethodInspection ext
 
   private static class Visitor extends BaseInspectionVisitor {
     @Override
-    public void visitMethod(GrMethod method) {
+    public void visitMethod(@NotNull GrMethod method) {
       super.visitMethod(method);
       if (method.isConstructor()) {
         return;

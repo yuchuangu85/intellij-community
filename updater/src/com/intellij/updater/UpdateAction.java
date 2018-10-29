@@ -1,17 +1,19 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.updater;
 
 import java.io.*;
+import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
 public class UpdateAction extends BaseUpdateAction {
-  public UpdateAction(Patch patch, String path, String source, long checksum, boolean move) {
-    super(patch, path, source, checksum, move);
-  }
-
   public UpdateAction(Patch patch, String path, long checksum) {
     this(patch, path, path, checksum, false);
+  }
+
+  public UpdateAction(Patch patch, String path, String source, long checksum, boolean move) {
+    super(patch, path, source, checksum, move);
   }
 
   public UpdateAction(Patch patch, DataInputStream in) throws IOException {
@@ -20,40 +22,47 @@ public class UpdateAction extends BaseUpdateAction {
 
   @Override
   protected void doBuildPatchFile(File olderFile, File newerFile, ZipOutputStream patchOutput) throws IOException {
-    if (!myIsMove) {
-      patchOutput.putNextEntry(new ZipEntry(myPath));
-      writeExecutableFlag(patchOutput, newerFile);
-      writeDiff(olderFile, newerFile, patchOutput);
+    if (!isMove()) {
+      patchOutput.putNextEntry(new ZipEntry(getPath()));
+
+      FileType type = getFileType(newerFile);
+      if (type == FileType.SYMLINK) throw new IOException("Unexpected symlink: " + newerFile);
+      writeFileType(patchOutput, type);
+      try (BufferedInputStream olderFileIn = new BufferedInputStream(Utils.newFileInputStream(olderFile, myPatch.isNormalized()));
+           BufferedInputStream newerFileIn = new BufferedInputStream(new FileInputStream(newerFile))) {
+        writeDiff(olderFileIn, newerFileIn, patchOutput);
+      }
+
       patchOutput.closeEntry();
     }
   }
 
   @Override
   protected void doApply(ZipFile patchFile, File backupDir, File toFile) throws IOException {
-    File source = getSource(backupDir);
-    File updated;
-    if (!myIsMove) {
-      updated = Utils.createTempFile();
-      InputStream in = Utils.findEntryInputStream(patchFile, myPath);
-      boolean executable = readExecutableFlag(in);
+    Runner.logger().info("Update action. File: " + toFile.getAbsolutePath());
 
-      OutputStream out = new BufferedOutputStream(new FileOutputStream(updated));
-      try {
-        InputStream oldFileIn = Utils.newFileInputStream(source, myPatch.isNormalized());
-        try {
+    File source = mandatoryBackup() ? getSource(Objects.requireNonNull(backupDir)) : toFile;
+    if (!isMove()) {
+      try (InputStream in = Utils.findEntryInputStream(patchFile, getPath())) {
+        if (in == null) {
+          throw new IOException("Invalid entry " + getPath());
+        }
+
+        FileType type = readFileType(in);
+        File tempFile = Utils.getTempFile(toFile.getName());
+        try (OutputStream out = new BufferedOutputStream(new FileOutputStream(tempFile));
+             InputStream oldFileIn = Utils.newFileInputStream(source, myPatch.isNormalized())) {
           applyDiff(in, oldFileIn, out);
         }
-        finally {
-          oldFileIn.close();
+
+        if (type == FileType.EXECUTABLE_FILE) {
+          Utils.setExecutable(tempFile);
         }
+
+        source = tempFile;
       }
-      finally {
-        out.close();
-      }
-      Utils.setExecutable(updated, executable);
-    } else {
-      updated = source;
     }
-    replaceUpdated(updated, toFile);
+
+    replaceUpdated(source, toFile);
   }
 }

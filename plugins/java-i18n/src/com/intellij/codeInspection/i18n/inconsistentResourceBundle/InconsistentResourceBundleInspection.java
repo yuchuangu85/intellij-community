@@ -1,17 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
  */
 package com.intellij.codeInspection.i18n.inconsistentResourceBundle;
 
@@ -57,7 +45,7 @@ public class InconsistentResourceBundleInspection extends GlobalSimpleInspection
       };
     }
   };
-  private final Map<String, Boolean> mySettings = new LinkedHashMap<String, Boolean>();
+  private final Map<String, Boolean> mySettings = new LinkedHashMap<>();
 
   @Override
   @NotNull
@@ -132,7 +120,7 @@ public class InconsistentResourceBundleInspection extends GlobalSimpleInspection
   public void inspectionStarted(@NotNull InspectionManager manager,
                                 @NotNull GlobalInspectionContext globalContext,
                                 @NotNull ProblemDescriptionsProcessor problemDescriptionsProcessor) {
-    globalContext.putUserData(VISITED_BUNDLES_KEY, new THashSet<ResourceBundle>());
+    globalContext.putUserData(VISITED_BUNDLES_KEY, ContainerUtil.newConcurrentSet());
   }
 
   @Override
@@ -149,23 +137,17 @@ public class InconsistentResourceBundleInspection extends GlobalSimpleInspection
     if (!visitedBundles.add(resourceBundle)) return;
     List<PropertiesFile> files = resourceBundle.getPropertiesFiles();
     if (files.size() < 2) return;
-    BidirectionalMap<PropertiesFile, PropertiesFile> parents = new BidirectionalMap<PropertiesFile, PropertiesFile>();
+    BidirectionalMap<PropertiesFile, PropertiesFile> parents = new BidirectionalMap<>();
     for (PropertiesFile f : files) {
       PropertiesFile parent = PropertiesUtil.getParent(f, files);
       if (parent != null) {
         parents.put(f, parent);
       }
     }
-    final FactoryMap<PropertiesFile, Map<String,String>> propertiesFilesNamesMaps = new FactoryMap<PropertiesFile, Map<String, String>>() {
-      @Nullable
-      @Override
-      protected Map<String, String> create(PropertiesFile key) {
-        return key.getNamesMap();
-      }
-    };
-    Map<PropertiesFile, Set<String>> keysUpToParent = new THashMap<PropertiesFile, Set<String>>();
+    final Map<PropertiesFile, Map<String, String>> propertiesFilesNamesMaps = FactoryMap.create(key -> key.getNamesMap());
+    Map<PropertiesFile, Set<String>> keysUpToParent = new THashMap<>();
     for (PropertiesFile f : files) {
-      Set<String> keys = new THashSet<String>(propertiesFilesNamesMaps.get(f).keySet());
+      Set<String> keys = new THashSet<>(propertiesFilesNamesMaps.get(f).keySet());
       PropertiesFile parent = parents.get(f);
       while (parent != null) {
         keys.addAll(propertiesFilesNamesMaps.get(parent).keySet());
@@ -185,8 +167,9 @@ public class InconsistentResourceBundleInspection extends GlobalSimpleInspection
     return ContainerUtil.getOrElse(mySettings, providerName, true);
   }
 
+  @SafeVarargs
   @TestOnly
-  public void enableProviders(final Class<? extends InconsistentResourceBundleInspectionProvider>... providerClasses) {
+  public final void enableProviders(final Class<? extends InconsistentResourceBundleInspectionProvider>... providerClasses) {
     Set<Class<? extends InconsistentResourceBundleInspectionProvider>> providersToEnable = ContainerUtil.newHashSet(providerClasses);
     for (InconsistentResourceBundleInspectionProvider inspectionProvider : myInspectionProviders.getValue()) {
       if (providersToEnable.contains(inspectionProvider.getClass())) {

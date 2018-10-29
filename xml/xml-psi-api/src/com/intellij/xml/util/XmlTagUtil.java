@@ -25,23 +25,22 @@ import com.intellij.psi.xml.XmlTagValue;
 import com.intellij.psi.xml.XmlToken;
 import com.intellij.psi.xml.XmlTokenType;
 import com.intellij.util.ArrayUtil;
+import gnu.trove.TObjectIntHashMap;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * @author peter
  */
 @SuppressWarnings({"HardCodedStringLiteral"})
 public class XmlTagUtil extends XmlTagUtilBase {
-  private static final Map<String, Character> ourCharacterEntities;
+  private static final TObjectIntHashMap<String> ourCharacterEntities = new TObjectIntHashMap<>();
 
   static {
-    ourCharacterEntities = new HashMap<String, Character>();
     ourCharacterEntities.put("lt", '<');
     ourCharacterEntities.put("gt", '>');
     ourCharacterEntities.put("apos", '\'');
@@ -98,12 +97,13 @@ public class XmlTagUtil extends XmlTagUtilBase {
   }
 
   public static String[] getCharacterEntityNames() {
-    Set<String> strings = ourCharacterEntities.keySet();
-    return ArrayUtil.toStringArray(strings);
+    List<String> list = new ArrayList<>();
+    ourCharacterEntities.forEachKey(list::add);
+    return ArrayUtil.toStringArray(list);
   }
 
-  public static Character getCharacterByEntityName(String entityName) {
-    return ourCharacterEntities.get(entityName);
+  public static char getCharacterByEntityName(String entityName) {
+    return (char)ourCharacterEntities.get(entityName);
   }
 
   @Nullable
@@ -156,7 +156,7 @@ public class XmlTagUtil extends XmlTagUtilBase {
   @Nullable
   public static TextRange getStartTagRange(@NotNull XmlTag tag) {
     XmlToken tagName = getStartTagNameElement(tag);
-    return getTag(tagName, XmlTokenType.XML_START_TAG_START);
+    return getTagRange(tagName, XmlTokenType.XML_START_TAG_START);
   }
 
 
@@ -164,27 +164,29 @@ public class XmlTagUtil extends XmlTagUtilBase {
   public static TextRange getEndTagRange(@NotNull XmlTag tag) {
     XmlToken tagName = getEndTagNameElement(tag);
 
-    return getTag(tagName, XmlTokenType.XML_END_TAG_START);
+    return getTagRange(tagName, XmlTokenType.XML_END_TAG_START);
   }
 
-  private static TextRange getTag(XmlToken tagName, IElementType tagStart) {
-    if (tagName != null) {
-      PsiElement s = tagName.getPrevSibling();
+  @Nullable
+  private static TextRange getTagRange(@Nullable XmlToken tagName, IElementType tagStart) {
+    if (tagName == null) {
+      return null;
+    }
+    PsiElement s = tagName.getPrevSibling();
 
-      while (s != null && s.getNode().getElementType() != tagStart) {
-        s = s.getPrevSibling();
-      }
+    while (s != null && s.getNode().getElementType() != tagStart) {
+      s = s.getPrevSibling();
+    }
 
-      PsiElement f = tagName.getNextSibling();
+    PsiElement f = tagName.getNextSibling();
 
-      while (f != null &&
-             !(f.getNode().getElementType() == XmlTokenType.XML_TAG_END ||
-               f.getNode().getElementType() == XmlTokenType.XML_EMPTY_ELEMENT_END)) {
-        f = f.getNextSibling();
-      }
-      if (s != null && f != null) {
-        return new TextRange(s.getTextRange().getStartOffset(), f.getTextRange().getEndOffset());
-      }
+    while (f != null &&
+           !(f.getNode().getElementType() == XmlTokenType.XML_TAG_END ||
+             f.getNode().getElementType() == XmlTokenType.XML_EMPTY_ELEMENT_END)) {
+      f = f.getNextSibling();
+    }
+    if (s != null && f != null) {
+      return new TextRange(s.getTextRange().getStartOffset(), f.getTextRange().getEndOffset());
     }
     return null;
   }

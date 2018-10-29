@@ -167,6 +167,13 @@ public class ExecutionEnvironment extends UserDataHolderBase implements Disposab
     myExecutionId = executionId;
   }
 
+  /**
+   * By default a new unique executionId is assigned to each new {@link ExecutionEnvironment} ({@see assignNewExecutionId}).
+   * Can be set manually to create a batch of {@link ExecutionEnvironment} that are semantically a "single launch".
+   * {@link RunContentDescriptor}s will not reuse each other tabs if they have the same executionId.
+   *
+   * @return An id that will be propagated to resulting {@link RunContentDescriptor}.
+   */
   public long getExecutionId() {
     return myExecutionId;
   }
@@ -201,7 +208,7 @@ public class ExecutionEnvironment extends UserDataHolderBase implements Disposab
 
   private static class CachingDataContext implements DataContext {
     private static final DataKey[] keys = {PROJECT, PROJECT_FILE_DIRECTORY, EDITOR, VIRTUAL_FILE, MODULE, PSI_FILE};
-    private final Map<String, Object> values = new HashMap<String, Object>();
+    private final Map<String, Object> values = new HashMap<>();
 
     @NotNull
     static CachingDataContext cacheIfNeed(@NotNull DataContext context) {
@@ -217,8 +224,15 @@ public class ExecutionEnvironment extends UserDataHolderBase implements Disposab
     }
 
     @Override
-    public Object getData(@NonNls String dataId) {
+    public Object getData(@NotNull @NonNls String dataId) {
         return values.get(dataId);
     }
+  }
+
+  /**
+   * @return A valid executionId that was not previously assigned to any {@link ExecutionEnvironment}.
+   */
+  public static long getNextUnusedExecutionId() {
+    return myIdHolder.incrementAndGet();
   }
 }

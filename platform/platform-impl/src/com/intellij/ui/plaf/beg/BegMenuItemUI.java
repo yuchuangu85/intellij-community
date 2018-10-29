@@ -1,23 +1,13 @@
 
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.plaf.beg;
 
 import com.intellij.ide.ui.UISettings;
+import com.intellij.internal.statistic.collectors.fus.actions.persistence.MainMenuCollector;
+import com.intellij.openapi.actionSystem.ActionPlaces;
+import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.impl.ActionMenuItem;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.util.ui.UIUtil;
@@ -74,6 +64,7 @@ public class BegMenuItemUI extends BasicMenuItemUI {
     }
   }
 
+  @Override
   protected void installDefaults() {
     super.installDefaults();
     final String propertyPrefix = getPropertyPrefix();
@@ -83,6 +74,14 @@ public class BegMenuItemUI extends BasicMenuItemUI {
     }
   }
 
+  private static boolean isSelected(JMenuItem item) {
+    if (item == null) return false;
+    ButtonModel model = item.getModel();
+    if (model == null) return false;
+    return model.isArmed() || (item instanceof JMenu) && model.isSelected();
+  }
+
+  @Override
   public void paint(Graphics g, JComponent comp) {
     UISettings.setupAntialiasing(g);
     JMenuItem jmenuitem = (JMenuItem)comp;
@@ -115,7 +114,7 @@ public class BegMenuItemUI extends BasicMenuItemUI {
     if (comp.isOpaque() || (UIUtil.isUnderDarcula() || UIUtil.isUnderIntelliJLaF())){
       g.setColor(jmenuitem.getBackground());
       g.fillRect(0, 0, j1, k1);
-      if (buttonmodel.isArmed() || (comp instanceof JMenu) && buttonmodel.isSelected()){
+      if (isSelected(jmenuitem)) {
         if (UIUtil.isUnderAquaLookAndFeel()) {
           myAquaSelectedBackgroundPainter.paintBorder(comp, g, 0, 0, j1, k1);
         } else {
@@ -136,7 +135,7 @@ public class BegMenuItemUI extends BasicMenuItemUI {
       g.setColor(color2);
     }
     if (icon2 != null){
-      if (buttonmodel.isArmed() || (comp instanceof JMenu) && buttonmodel.isSelected()){
+      if (isSelected(jmenuitem)) {
         g.setColor(selectionForeground);
       }
       else{
@@ -167,7 +166,7 @@ public class BegMenuItemUI extends BasicMenuItemUI {
     }
     if (s1 != null && s1.length() > 0){
       if (buttonmodel.isEnabled()){
-        if (buttonmodel.isArmed() || (comp instanceof JMenu) && buttonmodel.isSelected()){
+        if (isSelected(jmenuitem)) {
           g.setColor(selectionForeground);
         }
         else{
@@ -192,11 +191,11 @@ public class BegMenuItemUI extends BasicMenuItemUI {
     if (keyStrokeText != null && !keyStrokeText.isEmpty()){
       g.setFont(acceleratorFont);
       if (buttonmodel.isEnabled()){
-        if (UIUtil.isUnderAquaBasedLookAndFeel() && (buttonmodel.isArmed() || (comp instanceof JMenu) && buttonmodel.isSelected())) {
+        if (UIUtil.isUnderAquaBasedLookAndFeel() && isSelected(jmenuitem)) {
           g.setColor(selectionForeground);
         }
         else {
-          if (buttonmodel.isArmed() || (comp instanceof JMenu) && buttonmodel.isSelected()) {
+          if (isSelected(jmenuitem)) {
             g.setColor(acceleratorSelectionForeground);
           }
           else {
@@ -218,7 +217,7 @@ public class BegMenuItemUI extends BasicMenuItemUI {
         }
     }
     if (arrowIcon != null){
-      if (buttonmodel.isArmed() || (comp instanceof JMenu) && buttonmodel.isSelected()){
+      if (isSelected(jmenuitem)) {
         g.setColor(selectionForeground);
       }
       if (useCheckAndArrow()){
@@ -266,15 +265,16 @@ public class BegMenuItemUI extends BasicMenuItemUI {
     return true;
   }
 
+  @Override
   public MenuElement[] getPath() {
     MenuSelectionManager menuselectionmanager = MenuSelectionManager.defaultManager();
-    MenuElement amenuelement[] = menuselectionmanager.getSelectedPath();
+    MenuElement[] amenuelement = menuselectionmanager.getSelectedPath();
     int i1 = amenuelement.length;
     if (i1 == 0){
       return new MenuElement[0];
     }
     java.awt.Container container = menuItem.getParent();
-    MenuElement amenuelement1[];
+    MenuElement[] amenuelement1;
     if (amenuelement[i1 - 1].getComponent() == container){
       amenuelement1 = new MenuElement[i1 + 1];
       System.arraycopy(amenuelement, 0, amenuelement1, 0, i1);
@@ -294,6 +294,7 @@ public class BegMenuItemUI extends BasicMenuItemUI {
     return amenuelement1;
   }
 
+  @Override
   public Dimension getMinimumSize(JComponent jcomponent) {
     return null;
   }
@@ -385,6 +386,7 @@ public class BegMenuItemUI extends BasicMenuItemUI {
     return icon;
   }
 
+  @Override
   public Dimension getPreferredSize(JComponent comp) {
     JMenuItem jmenuitem = (JMenuItem)comp;
     Icon icon1 = getIcon();
@@ -454,17 +456,19 @@ public class BegMenuItemUI extends BasicMenuItemUI {
   }
 
   private Icon getAllowedIcon() {
-    Icon icon = menuItem.isEnabled() ? menuItem.getIcon() : menuItem.getDisabledIcon();
+    Icon icon = !menuItem.isEnabled() ? menuItem.getDisabledIcon() : isSelected(menuItem) ? menuItem.getSelectedIcon() : menuItem.getIcon();
     if (icon != null && icon.getIconWidth() > myMaxGutterIconWidth){
       icon = null;
     }
     return icon;
   }
 
+  @Override
   public Dimension getMaximumSize(JComponent comp) {
     return null;
   }
 
+  @Override
   public void update(Graphics g, JComponent comp) {
     paint(g, comp);
   }
@@ -509,8 +513,13 @@ public class BegMenuItemUI extends BasicMenuItemUI {
     if(msm==null){
       msm=MenuSelectionManager.defaultManager();
     }
+    ActionMenuItem item = (ActionMenuItem)menuItem;
+    AnAction action = item.getAnAction();
+    if (action != null && ActionPlaces.MAIN_MENU.equals(item.getPlace()) && ApplicationManager.getApplication() != null) {
+      MainMenuCollector.getInstance().record(action);
+    }
     msm.clearSelectedPath();
-    ((ActionMenuItem)menuItem).fireActionPerformed(
+    item.fireActionPerformed(
       new ActionEvent(
         menuItem,
         ActionEvent.ACTION_PERFORMED,
@@ -521,11 +530,13 @@ public class BegMenuItemUI extends BasicMenuItemUI {
     );
   }
 
+  @Override
   protected MouseInputListener createMouseInputListener(JComponent c){
     return new MyMouseInputHandler();
   }
 
   private class MyMouseInputHandler extends MouseInputHandler{
+    @Override
     public void mouseReleased(MouseEvent e){
       MenuSelectionManager manager=MenuSelectionManager.defaultManager();
       Point p=e.getPoint();
@@ -537,21 +548,26 @@ public class BegMenuItemUI extends BasicMenuItemUI {
     }
   }
 
+  @Override
   protected MenuDragMouseListener createMenuDragMouseListener(JComponent c){
     return new MyMenuDragMouseHandler();
   }
 
   private class MyMenuDragMouseHandler implements MenuDragMouseListener {
+    @Override
     public void menuDragMouseEntered(MenuDragMouseEvent e){}
 
+    @Override
     public void menuDragMouseDragged(MenuDragMouseEvent e){
       MenuSelectionManager manager=e.getMenuSelectionManager();
-      MenuElement path[]=e.getPath();
+      MenuElement[] path = e.getPath();
       manager.setSelectedPath(path);
     }
 
+    @Override
     public void menuDragMouseExited(MenuDragMouseEvent e){}
 
+    @Override
     public void menuDragMouseReleased(MenuDragMouseEvent e){
       MenuSelectionManager manager=e.getMenuSelectionManager();
       Point p=e.getPoint();

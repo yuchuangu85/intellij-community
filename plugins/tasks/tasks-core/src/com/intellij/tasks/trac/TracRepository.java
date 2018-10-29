@@ -24,7 +24,7 @@ import com.intellij.tasks.impl.BaseRepository;
 import com.intellij.tasks.impl.BaseRepositoryImpl;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xmlb.annotations.Tag;
-import icons.TasksIcons;
+import icons.TasksCoreIcons;
 import org.apache.xmlrpc.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -81,13 +81,13 @@ public class TracRepository extends BaseRepositoryImpl {
 
     if (result == null) throw new Exception("Cannot connect to " + getUrl());
 
-    ArrayList<Task> tasks = new ArrayList<Task>(max);
+    ArrayList<Task> tasks = new ArrayList<>(max);
     int min = Math.min(max, result.size());
     for (int i = 0; i < min; i++) {
       Task task = getTask((Integer)result.get(i), client, transport);
       ContainerUtil.addIfNotNull(tasks, task);
     }
-    return tasks.toArray(new Task[tasks.size()]);
+    return tasks.toArray(Task.EMPTY_ARRAY);
   }
 
   private Vector<Object> runQuery(@Nullable String query, Transport transport, XmlRpcClient client, String search)
@@ -154,7 +154,7 @@ public class TracRepository extends BaseRepositoryImpl {
       @NotNull
       @Override
       public Icon getIcon() {
-        return TasksIcons.Trac;
+        return TasksCoreIcons.Trac;
       }
 
       @NotNull
@@ -253,7 +253,7 @@ public class TracRepository extends BaseRepositoryImpl {
   }
 
   private class Transport extends CommonsXmlRpcTransport {
-    public Transport() throws MalformedURLException {
+    Transport() throws MalformedURLException {
       super(new URL(getUrl()), getHttpClient());
     }
 
@@ -262,7 +262,6 @@ public class TracRepository extends BaseRepositoryImpl {
     }
   }
 
-  @SuppressWarnings({"EqualsWhichDoesntCheckParameterClass"})
   @Override
   public boolean equals(Object o) {
     return super.equals(o) && Comparing.equal(((TracRepository)o).getDefaultSearch(), getDefaultSearch());

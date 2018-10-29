@@ -5,7 +5,6 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.vcs.log.VcsLogBranchFilter;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.regex.Pattern;
@@ -32,24 +31,24 @@ public class VcsLogBranchFilterImpl implements VcsLogBranchFilter {
 
   @Deprecated
   public VcsLogBranchFilterImpl(@NotNull Collection<String> branches, @NotNull Collection<String> excludedBranches) {
-    myBranches = new ArrayList<String>(branches);
-    myPatterns = new ArrayList<Pattern>();
-    myExcludedBranches = new ArrayList<String>(excludedBranches);
-    myExcludedPatterns = new ArrayList<Pattern>();
+    myBranches = new ArrayList<>(branches);
+    myPatterns = new ArrayList<>();
+    myExcludedBranches = new ArrayList<>(excludedBranches);
+    myExcludedPatterns = new ArrayList<>();
   }
 
-  @Nullable
-  public static VcsLogBranchFilterImpl fromBranch(@NotNull final String branchName) {
-    return new VcsLogBranchFilterImpl(Collections.singletonList(branchName), Collections.<Pattern>emptyList(),
-                                      Collections.<String>emptyList(), Collections.<Pattern>emptyList());
+  @NotNull
+  public static VcsLogBranchFilterImpl fromBranch(@NotNull String branchName) {
+    return new VcsLogBranchFilterImpl(Collections.singletonList(branchName), Collections.emptyList(),
+                                      Collections.emptyList(), Collections.emptyList());
   }
 
   @NotNull
   public static VcsLogBranchFilterImpl fromTextPresentation(@NotNull Collection<String> strings, @NotNull Set<String> existingBranches) {
-    List<String> branchNames = new ArrayList<String>();
-    List<String> excludedBranches = new ArrayList<String>();
-    List<Pattern> patterns = new ArrayList<Pattern>();
-    List<Pattern> excludedPatterns = new ArrayList<Pattern>();
+    List<String> branchNames = new ArrayList<>();
+    List<String> excludedBranches = new ArrayList<>();
+    List<Pattern> patterns = new ArrayList<>();
+    List<Pattern> excludedPatterns = new ArrayList<>();
 
     for (String string : strings) {
       boolean isExcluded = string.startsWith("-");
@@ -92,7 +91,7 @@ public class VcsLogBranchFilterImpl implements VcsLogBranchFilter {
   @NotNull
   @Override
   public Collection<String> getTextPresentation() {
-    List<String> result = new ArrayList<String>();
+    List<String> result = new ArrayList<>();
 
     result.addAll(myBranches);
     result.addAll(ContainerUtil.map(myPatterns, pattern -> pattern.pattern()));

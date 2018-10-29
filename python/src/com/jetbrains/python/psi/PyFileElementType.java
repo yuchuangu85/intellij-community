@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ import java.util.List;
  * @author yole
  */
 public class PyFileElementType extends IStubFileElementType<PyFileStub> {
-  public static PyFileElementType INSTANCE = new PyFileElementType(PythonLanguage.getInstance());
+  public static final PyFileElementType INSTANCE = new PyFileElementType(PythonLanguage.getInstance());
 
   protected PyFileElementType(Language language) {
     super(language);
@@ -62,12 +62,12 @@ public class PyFileElementType extends IStubFileElementType<PyFileStub> {
   @Override
   public int getStubVersion() {
     // Don't forget to update versions of indexes that use the updated stub-based elements
-    return 58;
+    return 69;
   }
 
   @Nullable
   @Override
-  public ASTNode parseContents(ASTNode node) {
+  public ASTNode parseContents(@NotNull ASTNode node) {
     final LanguageLevel languageLevel = getLanguageLevel(node.getPsi());
     if (PydevConsoleRunner.isPythonConsole(node)) {
       return parseConsoleCode(node, PydevConsoleRunner.getPythonConsoleData(node));
@@ -106,7 +106,7 @@ public class PyFileElementType extends IStubFileElementType<PyFileStub> {
       final Project project = psi.getProject();
       final PsiBuilderFactory factory = PsiBuilderFactory.getInstance();
       final PsiBuilder builder = factory.createBuilder(project, node, lexer, getLanguage(), node.getChars());
-      final PyParser parser = new PyConsoleParser(consoleData);
+      final PyParser parser = new PyConsoleParser(consoleData, getLanguageLevel(psi));
 
       return parser.parse(this, builder).getFirstChildNode();
     }
@@ -204,9 +204,9 @@ public class PyFileElementType extends IStubFileElementType<PyFileStub> {
     List<String> names = null;
     if (hasNames) {
       int size = dataStream.readVarInt();
-      names = new ArrayList<String>(size);
+      names = new ArrayList<>(size);
       for (int i = 0; i < size; i++) {
-        names.add(dataStream.readName().getString());
+        names.add(dataStream.readNameString());
       }
     }
     return names;

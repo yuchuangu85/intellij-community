@@ -22,12 +22,12 @@ import static com.intellij.psi.codeStyle.arrangement.std.StdArrangementTokens.En
  */
 public class XmlArrangementVisitor extends XmlElementVisitor {
 
-  private final Stack<XmlElementArrangementEntry> myStack = new Stack<XmlElementArrangementEntry>();
+  private final Stack<XmlElementArrangementEntry> myStack = new Stack<>();
 
   private final XmlArrangementParseInfo myInfo;
-  private final Collection<TextRange> myRanges;
+  private final Collection<? extends TextRange> myRanges;
 
-  public XmlArrangementVisitor(@NotNull XmlArrangementParseInfo info, @NotNull Collection<TextRange> ranges) {
+  public XmlArrangementVisitor(@NotNull XmlArrangementParseInfo info, @NotNull Collection<? extends TextRange> ranges) {
     myInfo = info;
     myRanges = ranges;
   }

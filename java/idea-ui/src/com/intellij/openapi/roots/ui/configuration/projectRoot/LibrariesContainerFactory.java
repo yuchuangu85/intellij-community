@@ -166,7 +166,7 @@ public class LibrariesContainerFactory {
     @NotNull
     @Override
     public List<LibraryLevel> getAvailableLevels() {
-      final List<LibraryLevel> levels = new ArrayList<LibraryLevel>();
+      final List<LibraryLevel> levels = new ArrayList<>();
       for (LibraryLevel level : LibraryLevel.values()) {
         if (canCreateLibrary(level)) {
           levels.add(level);
@@ -227,7 +227,7 @@ public class LibrariesContainerFactory {
         return myRootModel.getModuleLibraryTable().getLibraries();
       }
       List<Library> libraries = OrderEntryUtil.getModuleLibraries(ModuleRootManager.getInstance(myModule));
-      return libraries.toArray(new Library[libraries.size()]);
+      return libraries.toArray(Library.EMPTY_ARRAY);
     }
 
     @Override
@@ -274,7 +274,7 @@ public class LibrariesContainerFactory {
   private static class StructureConfigurableLibrariesContainer extends LibrariesContainerBase {
     private final StructureConfigurableContext myContext;
 
-    public StructureConfigurableLibrariesContainer(final StructureConfigurableContext context) {
+    StructureConfigurableLibrariesContainer(final StructureConfigurableContext context) {
       myContext = context;
     }
 

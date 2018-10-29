@@ -23,9 +23,9 @@ import org.jetbrains.annotations.Nullable;
  */
 public class RemoteSdkCredentialsBuilder {
   private String myInterpreterPath = null;
-  private String myHelpersPath = null;
+  private final String myHelpersPath = null;
   private RemoteCredentials myRemoteCredentials = null;
-  private String myHelpersDefaultDirName = ".idea_helpers";
+  private final String myHelpersDefaultDirName = ".idea_helpers";
 
 
   public RemoteSdkCredentials build() {
@@ -60,13 +60,11 @@ public class RemoteSdkCredentialsBuilder {
   public static void copyCredentials(@NotNull RemoteCredentials data, @NotNull MutableRemoteCredentials copyTo) {
     copyTo.setHost(data.getHost());
     copyTo.setLiteralPort(data.getLiteralPort());//then port is copied
-    copyTo.setAnonymous(data.isAnonymous());
     copyTo.setUserName(data.getUserName());
     copyTo.setPassword(data.getPassword());
     copyTo.setPrivateKeyFile(data.getPrivateKeyFile());
-    copyTo.setKnownHostsFile(data.getKnownHostsFile());
     copyTo.setPassphrase(data.getPassphrase());
-    copyTo.setUseKeyPair(data.isUseKeyPair());
+    copyTo.setAuthType(data.getAuthType());
 
     copyTo.setStorePassword(data.isStorePassword());
     copyTo.setStorePassphrase(data.isStorePassphrase());

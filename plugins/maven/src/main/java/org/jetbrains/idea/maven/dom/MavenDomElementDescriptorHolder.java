@@ -45,16 +45,19 @@ public class MavenDomElementDescriptorHolder {
 
   private enum FileKind {
     PROJECT_FILE {
+      @Override
       public String getSchemaUrl() {
         return MavenSchemaProvider.MAVEN_PROJECT_SCHEMA_URL;
       }
     },
     PROFILES_FILE {
+      @Override
       public String getSchemaUrl() {
         return MavenSchemaProvider.MAVEN_PROFILES_SCHEMA_URL;
       }
     },
     SETTINGS_FILE {
+      @Override
       public String getSchemaUrl() {
         return MavenSchemaProvider.MAVEN_SETTINGS_SCHEMA_URL;
       }
@@ -65,7 +68,7 @@ public class MavenDomElementDescriptorHolder {
 
   private final Project myProject;
   private final Map<FileKind, CachedValue<XmlNSDescriptorImpl>> myDescriptorsMap =
-    new THashMap<FileKind, CachedValue<XmlNSDescriptorImpl>>();
+    new THashMap<>();
 
   public MavenDomElementDescriptorHolder(Project project) {
     myProject = project;

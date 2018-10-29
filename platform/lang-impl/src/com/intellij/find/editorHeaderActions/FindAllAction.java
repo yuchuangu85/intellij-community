@@ -29,17 +29,11 @@ import com.intellij.psi.PsiDocumentManager;
 import com.intellij.ui.LayeredIcon;
 import com.intellij.util.IconUtil;
 import com.intellij.util.ui.JBUI;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 
-/**
-* Created by IntelliJ IDEA.
-* User: zajac
-* Date: 05.03.11
-* Time: 10:53
-* To change this template use File | Settings | File Templates.
-*/
 public class FindAllAction extends AnAction implements ShortcutProvider, DumbAware {
   public FindAllAction() {
     getTemplatePresentation().setDescription("Export matches to Find tool window");
@@ -47,7 +41,7 @@ public class FindAllAction extends AnAction implements ShortcutProvider, DumbAwa
   }
 
   @Override
-  public void update(final AnActionEvent e) {
+  public void update(@NotNull final AnActionEvent e) {
     Project project = e.getProject();
     Editor editor = e.getData(CommonDataKeys.EDITOR_EVEN_IF_INACTIVE);
     EditorSearchSession search = e.getData(EditorSearchSession.SESSION_KEY);
@@ -60,7 +54,7 @@ public class FindAllAction extends AnAction implements ShortcutProvider, DumbAwa
   }
 
   @Override
-  public void actionPerformed(final AnActionEvent e) {
+  public void actionPerformed(@NotNull final AnActionEvent e) {
     Editor editor = e.getRequiredData(CommonDataKeys.EDITOR_EVEN_IF_INACTIVE);
     Project project = e.getRequiredData(CommonDataKeys.PROJECT);
     EditorSearchSession search = e.getRequiredData(EditorSearchSession.SESSION_KEY);

@@ -36,7 +36,7 @@ public class PyStdlibCanonicalPathProvider implements PyCanonicalPathProvider {
 
   public static QualifiedName restoreStdlibCanonicalPath(QualifiedName qName) {
     if (qName.getComponentCount() > 0) {
-      final List<String> components = qName.getComponents();
+      final List<String> components = new ArrayList<>(qName.getComponents());
       final String head = components.get(0);
       if (head.equals("_abcoll") || head.equals("_collections") || head.equals("_collections_abc")) {
         components.set(0, "collections");
@@ -63,7 +63,7 @@ public class PyStdlibCanonicalPathProvider implements PyCanonicalPathProvider {
         return QualifiedName.fromComponents(components);
       }
       else if (head.equals("ntpath") || head.equals("posixpath") || head.equals("path")) {
-        final List<String> result = new ArrayList<String>();
+        final List<String> result = new ArrayList<>();
         result.add("os");
         components.set(0, "path");
         result.addAll(components);
@@ -76,6 +76,9 @@ public class PyStdlibCanonicalPathProvider implements PyCanonicalPathProvider {
       else if (head.equals("_pickle")) {
         components.set(0, "pickle");
         return QualifiedName.fromComponents(components);
+      }
+      else if (qName.matchesPrefix(QualifiedName.fromComponents("mock", "mock"))) {
+        return qName.removeHead(1);
       }
     }
     return null;

@@ -61,7 +61,6 @@ public class IdeaDriver {
     myProject = project;
   }
 
-  @SuppressWarnings({ "ThrowableInstanceNeverThrown" })
   public void convert(SchemaType inputType, IdeaErrorHandler errorHandler, VirtualFile... inputFiles) {
     if (inputFiles.length == 0) {
       throw new IllegalArgumentException();
@@ -79,14 +78,14 @@ public class IdeaDriver {
       final SchemaType type = settings.getOutputType();
       final String outputType = type.toString().toLowerCase();
 
-      final ArrayList<String> inputParams = new ArrayList<String>();
+      final ArrayList<String> inputParams = new ArrayList<>();
 
       if (inputType != SchemaType.DTD) {
         final Charset charset = inputFile.getCharset();
         inputParams.add("encoding=" + charset.name());
       }
 
-      final ArrayList<String> outputParams = new ArrayList<String>();
+      final ArrayList<String> outputParams = new ArrayList<>();
       settings.addAdvancedSettings(inputParams, outputParams);
 
 //      System.out.println("INPUT: " + inputParams);

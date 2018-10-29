@@ -17,8 +17,6 @@
 package com.intellij.codeInsight.completion.actions;
 
 import com.intellij.codeInsight.CodeInsightActionHandler;
-import com.intellij.codeInsight.CodeInsightUtilBase;
-import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.completion.impl.CamelHumpMatcher;
 import com.intellij.codeInsight.highlighting.HighlightManager;
 import com.intellij.codeInsight.lookup.LookupManager;
@@ -35,7 +33,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiFile;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -46,7 +43,7 @@ import java.util.*;
  * @author mike
  */
 public class HippieWordCompletionHandler implements CodeInsightActionHandler {
-  private static final Key<CompletionState> KEY_STATE = new Key<CompletionState>("HIPPIE_COMPLETION_STATE");
+  private static final Key<CompletionState> KEY_STATE = new Key<>("HIPPIE_COMPLETION_STATE");
   private final boolean myForward;
 
   public HippieWordCompletionHandler(boolean forward) {
@@ -55,12 +52,10 @@ public class HippieWordCompletionHandler implements CodeInsightActionHandler {
 
   @Override
   public void invoke(@NotNull Project project, @NotNull final Editor editor, @NotNull PsiFile file) {
-    if (!FileModificationService.getInstance().prepareFileForWrite(file)) return;
-
     int caretOffset = editor.getCaretModel().getOffset();
     if (editor.isViewer() || editor.getDocument().getRangeGuard(caretOffset, caretOffset) != null) {
       editor.getDocument().fireReadOnlyModificationAttempt();
-      CodeInsightUtilBase.showReadOnlyViewWarning(editor);
+      EditorModificationUtil.checkModificationAllowed(editor);
       return;
     }
 
@@ -116,14 +111,11 @@ public class HippieWordCompletionHandler implements CodeInsightActionHandler {
   }
 
   private static void insertStringForEachCaret(final Editor editor, final String text, final int relativeOffset) {
-    editor.getCaretModel().runForEachCaret(new CaretAction() {
-      @Override
-      public void perform(Caret caret) {
-        int caretOffset = caret.getOffset();
-        int startOffset = Math.max(0, caretOffset - relativeOffset);
-        editor.getDocument().replaceString(startOffset, caretOffset, text);
-        caret.moveToOffset(startOffset + text.length());
-      }
+    editor.getCaretModel().runForEachCaret(caret -> {
+      int caretOffset = caret.getOffset();
+      int startOffset = Math.max(0, caretOffset - relativeOffset);
+      editor.getDocument().replaceString(startOffset, caretOffset, text);
+      caret.moveToOffset(startOffset + text.length());
     });
   }  
 
@@ -271,8 +263,8 @@ public class HippieWordCompletionHandler implements CodeInsightActionHandler {
                                                          PsiFile file,
                                                          boolean includeWordsFromOtherFiles) {
 
-    final ArrayList<CompletionVariant> words = new ArrayList<CompletionVariant>();
-    final List<CompletionVariant> afterWords = new ArrayList<CompletionVariant>();
+    final ArrayList<CompletionVariant> words = new ArrayList<>();
+    final List<CompletionVariant> afterWords = new ArrayList<>();
 
     if (includeWordsFromOtherFiles) {
       for(FileEditor fileEditor: FileEditorManager.getInstance(file.getProject()).getAllEditors()) {
@@ -287,8 +279,8 @@ public class HippieWordCompletionHandler implements CodeInsightActionHandler {
       addWordsForEditor((EditorEx)editor, matcher, words, afterWords, true);
     }
 
-    Set<String> allWords = new HashSet<String>();
-    List<CompletionVariant> result = new ArrayList<CompletionVariant>();
+    Set<String> allWords = new HashSet<>();
+    List<CompletionVariant> result = new ArrayList<>();
 
     Collections.reverse(words);
 
@@ -417,11 +409,6 @@ public class HippieWordCompletionHandler implements CodeInsightActionHandler {
       data.startOffset = offset;
     }
     return data;
-  }
-
-  @Override
-  public boolean startInWriteAction() {
-    return true;
   }
 
   private static CompletionState getCompletionState(Editor editor) {

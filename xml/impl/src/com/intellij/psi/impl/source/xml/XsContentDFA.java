@@ -15,18 +15,14 @@
  */
 package com.intellij.psi.impl.source.xml;
 
-import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.util.Computable;
-import com.intellij.openapi.util.Condition;
-import com.intellij.openapi.util.NullableComputable;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.xml.XmlFile;
 import com.intellij.psi.xml.XmlTag;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.xml.XmlElementDescriptor;
-import com.intellij.xml.actions.validate.ValidateXmlActionHandler;
 import com.intellij.xml.actions.validate.ErrorReporter;
+import com.intellij.xml.actions.validate.ValidateXmlActionHandler;
 import org.apache.xerces.impl.Constants;
 import org.apache.xerces.impl.xs.*;
 import org.apache.xerces.impl.xs.models.CMBuilder;
@@ -65,12 +61,7 @@ class XsContentDFA extends XmlContentDFA {
   public static XmlContentDFA createContentDFA(@NotNull XmlTag parentTag) {
     final PsiFile file = parentTag.getContainingFile().getOriginalFile();
     if (!(file instanceof XmlFile)) return null;
-    XSModel xsModel = ApplicationManager.getApplication().runReadAction(new NullableComputable<XSModel>() {
-      @Override
-      public XSModel compute() {
-        return getXSModel((XmlFile)file);
-      }
-    });
+    XSModel xsModel = ReadAction.compute(() -> getXSModel((XmlFile)file));
     if (xsModel == null) {
       return null;
     }
@@ -82,32 +73,28 @@ class XsContentDFA extends XmlContentDFA {
     return new XsContentDFA(decl, parentTag);
   }
 
-  public XsContentDFA(@NotNull XSElementDeclaration decl, final XmlTag parentTag) {
+  XsContentDFA(@NotNull XSElementDeclaration decl, final XmlTag parentTag) {
     XSComplexTypeDecl definition = (XSComplexTypeDecl)decl.getTypeDefinition();
     myContentModel = definition.getContentModel(new CMBuilder(new CMNodeFactory()));
     myHandler = new SubstitutionGroupHandler(new MyXSElementDeclHelper());
     myState = myContentModel.startContentModel();
-    myElementDescriptors = ApplicationManager.getApplication().runReadAction(new Computable<XmlElementDescriptor[]>() {
-
-      @Override
-      public XmlElementDescriptor[] compute() {
-        XmlElementDescriptor parentTagDescriptor = parentTag.getDescriptor();
-        assert parentTagDescriptor != null;
-        return parentTagDescriptor.getElementsDescriptors(parentTag);
-      }
+    myElementDescriptors = ReadAction.compute(() -> {
+      XmlElementDescriptor parentTagDescriptor = parentTag.getDescriptor();
+      assert parentTagDescriptor != null;
+      return parentTagDescriptor.getElementsDescriptors(parentTag);
     });
   }
 
   @Override
   public List<XmlElementDescriptor> getPossibleElements() {
     final List vector = myContentModel.whatCanGoHere(myState);
-    ArrayList<XmlElementDescriptor> list = new ArrayList<XmlElementDescriptor>();
+    ArrayList<XmlElementDescriptor> list = new ArrayList<>();
     for (Object o : vector) {
       if (o instanceof XSElementDecl) {
         final XSElementDecl elementDecl = (XSElementDecl)o;
         XmlElementDescriptor descriptor = ContainerUtil.find(myElementDescriptors,
                                                              elementDescriptor -> elementDecl.getName().equals(elementDescriptor.getName()));
-        ContainerUtil.addIfNotNull(descriptor, list);
+        ContainerUtil.addIfNotNull(list, descriptor);
       }
     }
     return list;
@@ -130,7 +117,7 @@ class XsContentDFA extends XmlContentDFA {
   @Nullable
   private static XSElementDeclaration getElementDeclaration(XmlTag tag, XSModel xsModel) {
 
-    List<XmlTag> ancestors = new ArrayList<XmlTag>();
+    List<XmlTag> ancestors = new ArrayList<>();
     for (XmlTag t = tag; t != null; t = t.getParentTag()) {
       ancestors.add(t);
     }
@@ -173,7 +160,9 @@ class XsContentDFA extends XmlContentDFA {
       @Override
       protected SAXParser createParser() throws SAXException, ParserConfigurationException {
         SAXParser parser = super.createParser();
-        parser.getXMLReader().setFeature(Constants.XERCES_FEATURE_PREFIX + Constants.CONTINUE_AFTER_FATAL_ERROR_FEATURE, true);
+        if (parser != null) {
+          parser.getXMLReader().setFeature(Constants.XERCES_FEATURE_PREFIX + Constants.CONTINUE_AFTER_FATAL_ERROR_FEATURE, true);
+        }
         return parser;
       }
     };

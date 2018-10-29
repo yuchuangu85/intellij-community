@@ -15,20 +15,21 @@
  */
 package com.intellij.formatting;
 
+import com.intellij.openapi.util.Segment;
 import com.intellij.openapi.util.TextRange;
-import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.util.UnfairTextRange;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.codeStyle.ChangedRangesInfo;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class FormatTextRanges implements FormattingRangesInfo {
   private final List<TextRange> myInsertedRanges;
-  private final List<FormatTextRange> myRanges = new ArrayList<>();
+  private final FormatRangesStorage myStorage = new FormatRangesStorage();
 
   public FormatTextRanges() {
     myInsertedRanges = null;
@@ -38,34 +39,25 @@ public class FormatTextRanges implements FormattingRangesInfo {
     myInsertedRanges = null;
     add(range, processHeadingWhitespace);
   }
-  
+
   public FormatTextRanges(@NotNull ChangedRangesInfo changedRangesInfo) {
-    changedRangesInfo.allChangedRanges.forEach((range) -> add(range, true));
+    List<TextRange> optimized = optimizedChangedRanges(changedRangesInfo.allChangedRanges);
+    optimized.forEach((range) -> add(range, true));
     myInsertedRanges = changedRangesInfo.insertedRanges;
   }
 
   public void add(TextRange range, boolean processHeadingWhitespace) {
-    myRanges.add(new FormatTextRange(range, processHeadingWhitespace));
+    myStorage.add(range, processHeadingWhitespace);
   }
 
   @Override
-  public boolean isWhitespaceReadOnly(TextRange range) {
-    for (FormatTextRange formatTextRange : myRanges) {
-      if (!formatTextRange.isWhitespaceReadOnly(range)) {
-        return false;
-      }
-    }
-    return true;
+  public boolean isWhitespaceReadOnly(final @NotNull TextRange range) {
+    return myStorage.isWhiteSpaceReadOnly(range);  
   }
-
+  
   @Override
-  public boolean isReadOnly(TextRange range) {
-    for (FormatTextRange formatTextRange : myRanges) {
-      if (!formatTextRange.isReadOnly(range)) {
-        return false;
-      }
-    }
-    return true;
+  public boolean isReadOnly(@NotNull TextRange range) {
+    return myStorage.isReadOnly(range);
   }
 
   @Override
@@ -80,12 +72,12 @@ public class FormatTextRanges implements FormattingRangesInfo {
   }
   
   public List<FormatTextRange> getRanges() {
-    return myRanges;
+    return myStorage.getRanges();
   }
 
   public FormatTextRanges ensureNonEmpty() {
     FormatTextRanges result = new FormatTextRanges();
-    for (FormatTextRange range : myRanges) {
+    for (FormatTextRange range : myStorage.getRanges()) {
       if (range.isProcessHeadingWhitespace()) {
         result.add(range.getNonEmptyTextRange(), true);
       }
@@ -96,21 +88,54 @@ public class FormatTextRanges implements FormattingRangesInfo {
     return result;
   }
 
-  @Override
-  public String toString() {
-    return "FormatTextRanges{" + StringUtil.join(myRanges, StringUtil.createToStringFunction(FormatTextRange.class), ",");
-  }
-
   public boolean isEmpty() {
-    return myRanges.isEmpty();
+    return myStorage.isEmpty();
   }
 
   public boolean isFullReformat(PsiFile file) {
-    return myRanges.size() == 1 && file.getTextRange().equals(myRanges.get(0).getTextRange());
+    List<FormatTextRange> ranges = myStorage.getRanges();
+    return ranges.size() == 1 && file.getTextRange().equals(ranges.get(0).getTextRange());
   }
 
   public List<TextRange> getTextRanges() {
-    return myRanges.stream().map(FormatTextRange::getTextRange).collect(Collectors.toList());
+    return myStorage
+      .getRanges()
+      .stream()
+      .map(FormatTextRange::getTextRange)
+      .collect(Collectors.toList());
+  }
+  
+  public List<TextRange> getExtendedFormattingRanges() {
+    return myStorage
+      .getRanges()
+      .stream()
+      .map((range) -> {
+        TextRange textRange = range.getTextRange();
+        return new UnfairTextRange(textRange.getStartOffset() - 500, textRange.getEndOffset() + 500);
+      })
+      .collect(Collectors.toList());
+  }
+
+  private static List<TextRange> optimizedChangedRanges(@NotNull List<TextRange> allChangedRanges) {
+    if (allChangedRanges.isEmpty()) return allChangedRanges;
+    List<TextRange> sorted = ContainerUtil.sorted(allChangedRanges, Segment.BY_START_OFFSET_THEN_END_OFFSET);
+
+    List<TextRange> result = ContainerUtil.newSmartList();
+
+    TextRange prev = sorted.get(0);
+    for (TextRange next : sorted) {
+      if (next.getStartOffset() <= prev.getEndOffset() + 5) {
+        int newEndOffset = Math.max(prev.getEndOffset(), next.getEndOffset());
+        prev = new TextRange(prev.getStartOffset(), newEndOffset);
+      }
+      else {
+        result.add(prev);
+        prev = next;
+      }
+    }
+    result.add(prev);
+
+    return result;
   }
   
 }

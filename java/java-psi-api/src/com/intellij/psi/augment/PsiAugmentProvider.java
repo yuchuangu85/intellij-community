@@ -1,23 +1,8 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.augment;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.ExtensionPointName;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.DumbService;
@@ -58,12 +43,9 @@ public abstract class PsiAugmentProvider {
   }
 
   /**
-   * Extends {@link PsiTypeElement#getType()} so type could be retrieved from external place
-   * e.g. from variable initializer in lombok case (http://projectlombok.org/features/val.html)
+   * Extends {@link PsiTypeElement#getType()} so that a type could be retrieved from external place
+   * (e.g. inferred from a variable initializer).
    *
-   * @param typeElement place where inference takes place,
-   *                    also nested PsiTypeElement-s (e.g. for List<String> PsiTypeElements corresponding to both List and String would be suggested)
-   * @return inferred type or null, if inference is not applicable
    * @since 14.1
    */
   @Nullable
@@ -77,7 +59,7 @@ public abstract class PsiAugmentProvider {
    * @since 2016.2
    */
   @NotNull
-  protected Set<String> transformModifiers(@NotNull PsiModifierList modifierList, @NotNull final Set<String> modifiers) {
+  protected Set<String> transformModifiers(@NotNull PsiModifierList modifierList, @NotNull Set<String> modifiers) {
     return modifiers;
   }
 
@@ -86,35 +68,29 @@ public abstract class PsiAugmentProvider {
   //<editor-fold desc="API and the inner kitchen.">
 
   @NotNull
-  public static <Psi extends PsiElement> List<Psi> collectAugments(@NotNull final PsiElement element, @NotNull final Class<Psi> type) {
-    final List<Psi> result = ContainerUtil.newSmartList();
+  public static <Psi extends PsiElement> List<Psi> collectAugments(@NotNull PsiElement element, @NotNull Class<? extends Psi> type) {
+    List<Psi> result = ContainerUtil.newSmartList();
 
-    forEach(element.getProject(), new Processor<PsiAugmentProvider>() {
-      @Override
-      public boolean process(PsiAugmentProvider provider) {
-        result.addAll(provider.getAugments(element, type));
-        return true;
-      }
+    forEach(element.getProject(), provider -> {
+      result.addAll(provider.getAugments(element, type));
+      return true;
     });
 
     return result;
   }
 
   @Nullable
-  public static PsiType getInferredType(@NotNull final PsiTypeElement typeElement) {
-    final Ref<PsiType> result = Ref.create();
+  public static PsiType getInferredType(@NotNull PsiTypeElement typeElement) {
+    Ref<PsiType> result = Ref.create();
 
-    forEach(typeElement.getProject(), new Processor<PsiAugmentProvider>() {
-      @Override
-      public boolean process(PsiAugmentProvider provider) {
-        PsiType type = provider.inferType(typeElement);
-        if (type != null) {
-          result.set(type);
-          return false;
-        }
-        else {
-          return true;
-        }
+    forEach(typeElement.getProject(), provider -> {
+      PsiType type = provider.inferType(typeElement);
+      if (type != null) {
+        result.set(type);
+        return false;
+      }
+      else {
+        return true;
       }
     });
 
@@ -122,25 +98,22 @@ public abstract class PsiAugmentProvider {
   }
 
   @NotNull
-  public static Set<String> transformModifierProperties(@NotNull final PsiModifierList modifierList,
+  public static Set<String> transformModifierProperties(@NotNull PsiModifierList modifierList,
                                                         @NotNull Project project,
-                                                        @NotNull final Set<String> modifiers) {
-    final Ref<Set<String>> result = Ref.create(modifiers);
+                                                        @NotNull Set<String> modifiers) {
+    Ref<Set<String>> result = Ref.create(modifiers);
 
-    forEach(project, new Processor<PsiAugmentProvider>() {
-      @Override
-      public boolean process(PsiAugmentProvider provider) {
-        result.set(provider.transformModifiers(modifierList, Collections.unmodifiableSet(result.get())));
-        return true;
-      }
+    forEach(project, provider -> {
+      result.set(provider.transformModifiers(modifierList, Collections.unmodifiableSet(result.get())));
+      return true;
     });
 
     return result.get();
   }
 
-  private static void forEach(Project project, Processor<PsiAugmentProvider> processor) {
+  private static void forEach(Project project, Processor<? super PsiAugmentProvider> processor) {
     boolean dumb = DumbService.isDumb(project);
-    for (PsiAugmentProvider provider : Extensions.getExtensions(EP_NAME)) {
+    for (PsiAugmentProvider provider : EP_NAME.getExtensionList()) {
       if (!dumb || DumbService.isDumbAware(provider)) {
         try {
           boolean goOn = processor.process(provider);

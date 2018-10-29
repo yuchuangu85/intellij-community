@@ -1,53 +1,94 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.updater;
 
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
 public abstract class PatchAction {
-  protected String myPath;
-  protected long myChecksum;
-  private boolean isCritical;
-  private boolean isOptional;
-  protected transient Patch myPatch;
+  public enum FileType {
+    REGULAR_FILE, EXECUTABLE_FILE, SYMLINK
+  }
+
+  private static final byte CRITICAL = 0x1;
+  private static final byte OPTIONAL = 0x2;
+
+  protected final transient Patch myPatch;
+  private final String myPath;
+  private final long myChecksum;
+  private byte myFlags;
 
   public PatchAction(Patch patch, String path, long checksum) {
-    myPatch = patch;
-    myChecksum = checksum;
-    myPath = path;
+    this(patch, path, checksum, (byte)0);
   }
 
   public PatchAction(Patch patch, DataInputStream in) throws IOException {
+    this(patch, in.readUTF(), in.readLong(), in.readByte());
+  }
+
+  private PatchAction(Patch patch, String path, long checksum, byte flags) {
     myPatch = patch;
-    myPath = in.readUTF();
-    myChecksum = in.readLong();
-    isCritical = in.readBoolean();
-    isOptional = in.readBoolean();
+    myPath = path;
+    myChecksum = checksum;
+    myFlags = flags;
   }
 
   public void write(DataOutputStream out) throws IOException {
     out.writeUTF(myPath);
     out.writeLong(myChecksum);
-    out.writeBoolean(isCritical);
-    out.writeBoolean(isOptional);
+    out.writeByte(myFlags);
   }
 
   public String getPath() {
     return myPath;
   }
 
-  protected static void writeExecutableFlag(OutputStream out, File file) throws IOException {
-    out.write(file.canExecute() ? 1 : 0);
+  protected File getFile(File baseDir) {
+    return new File(baseDir, myPath);
   }
 
-  protected static boolean readExecutableFlag(InputStream in) throws IOException {
-    return in.read() == 1;
+  public long getChecksum() {
+    return myChecksum;
+  }
+
+  public boolean isCritical() {
+    return (myFlags & CRITICAL) != 0;
+  }
+
+  public void setCritical(boolean critical) {
+    if (critical) myFlags |= CRITICAL; else myFlags &= ~CRITICAL;
+  }
+
+  public boolean isOptional() {
+    return (myFlags & OPTIONAL) != 0;
+  }
+
+  public void setOptional(boolean optional) {
+    if (optional) myFlags |= OPTIONAL; else myFlags &= ~OPTIONAL;
+  }
+
+  protected static FileType getFileType(File file) {
+    if (Utils.isLink(file)) return FileType.SYMLINK;
+    if (Utils.isExecutable(file)) return FileType.EXECUTABLE_FILE;
+    return FileType.REGULAR_FILE;
+  }
+
+  protected static void writeFileType(OutputStream out, FileType type) throws IOException {
+    out.write(type.ordinal());
+  }
+
+  protected static FileType readFileType(InputStream in) throws IOException {
+    int value = in.read();
+    FileType[] types = FileType.values();
+    if (value < 0 || value >= types.length) throw new IOException("Stream format error");
+    return types[value];
   }
 
   public boolean calculate(File olderDir, File newerDir) throws IOException {
@@ -69,9 +110,7 @@ public abstract class PatchAction {
     ValidationResult.Option option = options.get(myPath);
     if (option == ValidationResult.Option.KEEP || option == ValidationResult.Option.IGNORE) return false;
     if (option == ValidationResult.Option.KILL_PROCESS) {
-      for (NativeFileManager.Process process : NativeFileManager.getProcessesUsing(file)) {
-        process.terminate();
-      }
+      NativeFileManager.getProcessesUsing(file).forEach(p -> p.terminate());
     }
     return doShouldApply(toDir);
   }
@@ -82,97 +121,61 @@ public abstract class PatchAction {
 
   protected abstract ValidationResult validate(File toDir) throws IOException;
 
-  protected ValidationResult doValidateAccess(File toFile, ValidationResult.Action action) {
-    if (!toFile.exists()) return null;
-    if (toFile.isDirectory()) return null;
+  protected ValidationResult doValidateAccess(File toFile, ValidationResult.Action action, boolean checkWriteable) {
+    if (!toFile.exists() || toFile.isDirectory()) return null;
     ValidationResult result = validateProcessLock(toFile, action);
-    if (result != null) {
-      return result;
-    }
+    if (result != null) return result;
+    if (!checkWriteable) return null;
     if (toFile.canRead() && toFile.canWrite() && isWritable(toFile)) return null;
-    return new ValidationResult(ValidationResult.Kind.ERROR,
-                                myPath,
-                                action,
-                                ValidationResult.ACCESS_DENIED_MESSAGE,
-                                myPatch.isStrict() ? ValidationResult.Option.NONE : ValidationResult.Option.IGNORE);
+    ValidationResult.Option[] options = {myPatch.isStrict() ? ValidationResult.Option.NONE : ValidationResult.Option.IGNORE};
+    return new ValidationResult(ValidationResult.Kind.ERROR, myPath, action, ValidationResult.ACCESS_DENIED_MESSAGE, options);
   }
 
-  private boolean isWritable(File toFile) {
-    try {
-      FileOutputStream s = new FileOutputStream(toFile, true);
-      FileChannel ch = s.getChannel();
-      try {
-        FileLock lock = ch.tryLock();
-        if (lock == null) return false;
-        lock.release();
-      }
-      finally {
-        ch.close();
-        s.close();
-      }
-      return true;
+  private static boolean isWritable(File toFile) {
+    try (FileOutputStream s = new FileOutputStream(toFile, true); FileChannel ch = s.getChannel(); FileLock lock = ch.tryLock()) {
+      return lock != null;
     }
-    catch (OverlappingFileLockException e) {
-      Runner.printStackTrace(e);
-      return false;
-    }
-    catch (IOException e) {
-      Runner.printStackTrace(e);
+    catch (OverlappingFileLockException | IOException e) {
+      Runner.logger().warn(toFile, e);
       return false;
     }
   }
 
   private ValidationResult validateProcessLock(File toFile, ValidationResult.Action action) {
     List<NativeFileManager.Process> processes = NativeFileManager.getProcessesUsing(toFile);
-    if (processes.size() > 0) {
-      Iterator<NativeFileManager.Process> it = processes.iterator();
-      String message = "Locked by: " + it.next().name;
-      while (it.hasNext()) {
-        message += ", " + it.next().name;
-      }
-      return new ValidationResult(ValidationResult.Kind.ERROR,
-                                  myPath,
-                                  action,
-                                  message,
-                                  ValidationResult.Option.KILL_PROCESS);
-    }
-    return null;
+    if (processes.size() == 0) return null;
+    String message = "Locked by: " + processes.stream().map(p -> p.name).collect(Collectors.joining(", "));
+    return new ValidationResult(ValidationResult.Kind.ERROR, myPath, action, message, ValidationResult.Option.KILL_PROCESS);
   }
 
-  protected ValidationResult doValidateNotChanged(File toFile, ValidationResult.Kind kind, ValidationResult.Action action)
-    throws IOException {
+  protected ValidationResult doValidateNotChanged(File toFile, ValidationResult.Action action) throws IOException {
     if (toFile.exists()) {
       if (isModified(toFile)) {
         ValidationResult.Option[] options;
         if (myPatch.isStrict()) {
-          if (isCritical) {
-            options = new ValidationResult.Option[]{ ValidationResult.Option.REPLACE };
+          if (isCritical()) {
+            options = new ValidationResult.Option[]{ValidationResult.Option.REPLACE};
           }
           else {
-            options = new ValidationResult.Option[]{ ValidationResult.Option.NONE };
-          }
-        } else {
-          if (isCritical) {
-            options = new ValidationResult.Option[]{ ValidationResult.Option.REPLACE, ValidationResult.Option.IGNORE };
-          }
-          else {
-            options = new ValidationResult.Option[]{ ValidationResult.Option.IGNORE };
+            options = new ValidationResult.Option[]{ValidationResult.Option.NONE};
           }
         }
-        return new ValidationResult(kind,
-                                    myPath,
-                                    action,
-                                    ValidationResult.MODIFIED_MESSAGE,
-                                    options);
+        else {
+          if (isCritical()) {
+            options = new ValidationResult.Option[]{ValidationResult.Option.REPLACE, ValidationResult.Option.IGNORE};
+          }
+          else {
+            options = new ValidationResult.Option[]{ValidationResult.Option.IGNORE};
+          }
+        }
+        return new ValidationResult(ValidationResult.Kind.ERROR, myPath, action, ValidationResult.MODIFIED_MESSAGE, options);
       }
     }
-    else if (!isOptional) {
-      return new ValidationResult(kind,
-                                  myPath,
-                                  action,
-                                  ValidationResult.ABSENT_MESSAGE,
-                                  myPatch.isStrict() ? ValidationResult.Option.NONE : ValidationResult.Option.IGNORE);
+    else if (!isOptional()) {
+      ValidationResult.Option[] options = {myPatch.isStrict() ? ValidationResult.Option.NONE : ValidationResult.Option.IGNORE};
+      return new ValidationResult(ValidationResult.Kind.ERROR, myPath, action, ValidationResult.ABSENT_MESSAGE, options);
     }
+
     return null;
   }
 
@@ -180,43 +183,25 @@ public abstract class PatchAction {
     return myChecksum == Digester.INVALID || myChecksum != myPatch.digestFile(toFile, myPatch.isNormalized());
   }
 
-  public void apply(ZipFile patchFile, File backupDir, File toDir) throws IOException {
-    doApply(patchFile, backupDir, getFile(toDir));
+  public boolean mandatoryBackup() {
+    return false;
   }
-
-  protected abstract void doApply(ZipFile patchFile, File backupDir, File toFile) throws IOException;
 
   public void backup(File toDir, File backupDir) throws IOException {
     doBackup(getFile(toDir), getFile(backupDir));
   }
 
-  protected abstract void doBackup(File toFile, File backupFile) throws IOException;
+  public void apply(ZipFile patchFile, File backupDir, File toDir) throws IOException {
+    doApply(patchFile, backupDir, getFile(toDir));
+  }
 
   public void revert(File toDir, File backupDir) throws IOException {
     doRevert(getFile(toDir), getFile(backupDir));
   }
 
-  protected abstract void doRevert(File toFile, File backupFile) throws IOException;
-
-  protected File getFile(File baseDir) {
-    return new File(baseDir, myPath);
-  }
-
-  public boolean isCritical() {
-    return isCritical;
-  }
-
-  public void setCritical(boolean critical) {
-    isCritical = critical;
-  }
-
-  public boolean isOptional() {
-    return isOptional;
-  }
-
-  public void setOptional(boolean optional) {
-    isOptional = optional;
-  }
+  protected void doBackup(File toFile, File backupFile) throws IOException { }
+  protected void doApply(ZipFile patchFile, File backupDir, File toFile) throws IOException { }
+  protected void doRevert(File toFile, File backupFile) throws IOException { }
 
   @Override
   public String toString() {
@@ -230,20 +215,16 @@ public abstract class PatchAction {
 
     PatchAction that = (PatchAction)o;
 
-    if (isCritical != that.isCritical) return false;
-    if (isOptional != that.isOptional) return false;
     if (myChecksum != that.myChecksum) return false;
-    if (myPath != null ? !myPath.equals(that.myPath) : that.myPath != null) return false;
+    if (!Objects.equals(myPath, that.myPath)) return false;
 
     return true;
   }
 
   @Override
   public int hashCode() {
-    int result = myPath != null ? myPath.hashCode() : 0;
+    int result = Objects.hashCode(myPath);
     result = 31 * result + (int)(myChecksum ^ (myChecksum >>> 32));
-    result = 31 * result + (isCritical ? 1 : 0);
-    result = 31 * result + (isOptional ? 1 : 0);
     return result;
   }
 }

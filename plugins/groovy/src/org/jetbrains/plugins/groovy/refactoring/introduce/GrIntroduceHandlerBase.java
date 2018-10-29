@@ -1,26 +1,13 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.refactoring.introduce;
 
 import com.intellij.codeInsight.highlighting.HighlightManager;
-import com.intellij.diagnostic.LogMessageEx;
+import com.intellij.diagnostic.AttachmentFactory;
 import com.intellij.lang.LanguageRefactoringSupport;
 import com.intellij.lang.refactoring.RefactoringSupportProvider;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.command.CommandProcessor;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
@@ -32,7 +19,10 @@ import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.markup.RangeHighlighter;
 import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.*;
+import com.intellij.openapi.util.Pass;
+import com.intellij.openapi.util.Ref;
+import com.intellij.openapi.util.Segment;
+import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.wm.WindowManager;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
@@ -48,7 +38,6 @@ import com.intellij.refactoring.rename.inplace.InplaceRefactoring;
 import com.intellij.refactoring.util.CommonRefactoringUtil;
 import com.intellij.util.Function;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.Processor;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -76,9 +65,6 @@ import org.jetbrains.plugins.groovy.refactoring.NameValidator;
 
 import java.util.*;
 
-/**
- * Created by Max Medvedev on 10/29/13
- */
 public abstract class GrIntroduceHandlerBase<Settings extends GrIntroduceSettings, Scope extends PsiElement> implements RefactoringActionHandler {
   private static final Logger LOG = Logger.getInstance(GrIntroduceHandlerBase.class);
 
@@ -169,26 +155,26 @@ public abstract class GrIntroduceHandlerBase<Settings extends GrIntroduceSetting
   public abstract GrVariable runRefactoring(@NotNull GrIntroduceContext context, @NotNull Settings settings);
 
   protected abstract GrAbstractInplaceIntroducer<Settings> getIntroducer(@NotNull GrIntroduceContext context,
-                                                                         OccurrencesChooser.ReplaceChoice choice);
+                                                                         @NotNull OccurrencesChooser.ReplaceChoice choice);
 
   public static Map<OccurrencesChooser.ReplaceChoice, List<Object>> fillChoice(GrIntroduceContext context) {
     HashMap<OccurrencesChooser.ReplaceChoice, List<Object>> map = ContainerUtil.newLinkedHashMap();
 
     if (context.getExpression() != null) {
-      map.put(OccurrencesChooser.ReplaceChoice.NO, Collections.<Object>singletonList(context.getExpression()));
+      map.put(OccurrencesChooser.ReplaceChoice.NO, Collections.singletonList(context.getExpression()));
     }
     else if (context.getStringPart() != null) {
-      map.put(OccurrencesChooser.ReplaceChoice.NO, Collections.<Object>singletonList(context.getStringPart()));
+      map.put(OccurrencesChooser.ReplaceChoice.NO, Collections.singletonList(context.getStringPart()));
       return map;
     }
     else if (context.getVar() != null) {
-      map.put(OccurrencesChooser.ReplaceChoice.ALL, Collections.<Object>singletonList(context.getVar()));
+      map.put(OccurrencesChooser.ReplaceChoice.ALL, Collections.singletonList(context.getVar()));
       return map;
     }
 
     PsiElement[] occurrences = context.getOccurrences();
     if (occurrences.length > 1) {
-      map.put(OccurrencesChooser.ReplaceChoice.ALL, Arrays.<Object>asList(occurrences));
+      map.put(OccurrencesChooser.ReplaceChoice.ALL, Arrays.asList(occurrences));
     }
     return map;
   }
@@ -202,7 +188,7 @@ public abstract class GrIntroduceHandlerBase<Settings extends GrIntroduceSetting
 
   @NotNull
   public static List<GrExpression> collectExpressions(PsiElement elementAtCaret, boolean acceptVoidCalls) {
-    final List<GrExpression> expressions = new ArrayList<GrExpression>();
+    final List<GrExpression> expressions = new ArrayList<>();
 
     for (GrExpression expression = PsiTreeUtil.getParentOfType(elementAtCaret, GrExpression.class);
          expression != null;
@@ -211,9 +197,6 @@ public abstract class GrIntroduceHandlerBase<Settings extends GrIntroduceSetting
       if (expression instanceof GrParenthesizedExpression && !expressions.contains(((GrParenthesizedExpression)expression).getOperand())) {
         expressions.add(((GrParenthesizedExpression)expression).getOperand());
       }
-      if (expression.getParent() instanceof GrReferenceExpression
-          && expression instanceof GrReferenceExpression
-          && ((GrReferenceExpression)expression).resolve() instanceof PsiClass) continue;
       if (expressionIsIncorrect(expression, acceptVoidCalls)) continue;
 
       expressions.add(expression);
@@ -224,13 +207,14 @@ public abstract class GrIntroduceHandlerBase<Settings extends GrIntroduceSetting
   public static boolean expressionIsIncorrect(@Nullable GrExpression expression, boolean acceptVoidCalls) {
     if (expression instanceof GrParenthesizedExpression) return true;
     if (PsiUtil.isSuperReference(expression)) return true;
-    if (expression instanceof GrAssignmentExpression) return true;
     if (expression instanceof GrReferenceExpression && expression.getParent() instanceof GrCall) {
       final GroovyResolveResult resolveResult = ((GrReferenceExpression)expression).advancedResolve();
       final PsiElement resolved = resolveResult.getElement();
       return resolved instanceof PsiMethod && !resolveResult.isInvokedOnProperty() || resolved instanceof PsiClass;
     }
-
+    if (expression instanceof GrReferenceExpression && expression.getParent() instanceof GrReferenceExpression) {
+      return !PsiUtil.isThisReference(expression) && ((GrReferenceExpression)expression).resolve() instanceof PsiClass;
+    }
     if (expression instanceof GrClosableBlock && expression.getParent() instanceof GrStringInjection) return true;
     if (!acceptVoidCalls && expression instanceof GrMethodCall && PsiType.VOID.equals(expression.getType())) return true;
 
@@ -283,7 +267,7 @@ public abstract class GrIntroduceHandlerBase<Settings extends GrIntroduceSetting
       if (expressions.isEmpty()) {
         updateSelectionForVariable(editor, file, selectionModel, offset);
       }
-      else if (expressions.size() == 1) {
+      else if (expressions.size() == 1 || ApplicationManager.getApplication().isUnitTestMode()) {
         final TextRange textRange = expressions.get(0).getTextRange();
         selectionModel.setSelection(textRange.getStartOffset(), textRange.getEndOffset());
       }
@@ -410,12 +394,9 @@ public abstract class GrIntroduceHandlerBase<Settings extends GrIntroduceSetting
 
   @NotNull
   protected static GrStatement findAnchor(@NotNull final GrIntroduceContext context, final boolean replaceAll) {
-    return ApplicationManager.getApplication().runReadAction(new Computable<GrStatement>() {
-      @Override
-      public GrStatement compute() {
-        PsiElement[] occurrences = replaceAll ? context.getOccurrences() : new GrExpression[]{context.getExpression()};
-        return getAnchor(occurrences, context.getScope());
-      }
+    return ReadAction.compute(() -> {
+      PsiElement[] occurrences = replaceAll ? context.getOccurrences() : new GrExpression[]{context.getExpression()};
+      return getAnchor(occurrences, context.getScope());
     });
   }
 
@@ -453,7 +434,7 @@ public abstract class GrIntroduceHandlerBase<Settings extends GrIntroduceSetting
       }
       return true;
     });
-    return list.toArray(new PsiElement[list.size()]);
+    return list.toArray(PsiElement.EMPTY_ARRAY);
   }
 
   private boolean invokeImpl(final Project project, final GrIntroduceContext context, final Editor editor) {
@@ -625,7 +606,7 @@ public abstract class GrIntroduceHandlerBase<Settings extends GrIntroduceSetting
   private Settings showDialog(@NotNull GrIntroduceContext context) {
 
     // Add occurrences highlighting
-    ArrayList<RangeHighlighter> highlighters = new ArrayList<RangeHighlighter>();
+    ArrayList<RangeHighlighter> highlighters = new ArrayList<>();
     HighlightManager highlightManager = null;
     if (context.getEditor() != null) {
       highlightManager = HighlightManager.getInstance(context.getProject());
@@ -702,7 +683,7 @@ public abstract class GrIntroduceHandlerBase<Settings extends GrIntroduceSetting
 
   public static void assertStatement(@Nullable PsiElement anchor, @NotNull PsiElement scope) {
     if (!(anchor instanceof GrStatement)) {
-      LogMessageEx.error(LOG, "cannot find anchor for variable", scope.getText());
+      LOG.error("cannot find anchor for variable", new Throwable(), AttachmentFactory.createContext(scope.getText()));
     }
   }
 

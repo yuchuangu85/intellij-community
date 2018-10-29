@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 package com.intellij.openapi.vcs.changes.issueLinks;
 
 import com.intellij.openapi.util.Comparing;
+import com.intellij.ui.AppUIUtil;
 import com.intellij.ui.ColoredTreeCellRenderer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -56,9 +57,10 @@ public class TreeLinkMouseListener extends LinkMouseListenerBase {
     if (path != null) {
       int dx = getRendererRelativeX(e, tree, path);
       final TreeNode treeNode = (TreeNode)path.getLastPathComponent();
-      if (myLastHitNode == null || myLastHitNode.get() != treeNode) {
+      AppUIUtil.targetToDevice(myRenderer, tree);
+      if (myLastHitNode == null || myLastHitNode.get() != treeNode || e.getButton() != MouseEvent.NOBUTTON) {
         if (doCacheLastNode()) {
-          myLastHitNode = new WeakReference<TreeNode>(treeNode);
+          myLastHitNode = new WeakReference<>(treeNode);
         }
         myRenderer.getTreeCellRendererComponent(tree, treeNode, false, false, treeNode.isLeaf(), tree.getRowForPath(path), false);
       }

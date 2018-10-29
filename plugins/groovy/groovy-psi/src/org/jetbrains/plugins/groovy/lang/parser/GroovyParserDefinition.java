@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,13 +33,11 @@ import com.intellij.psi.tree.IStubFileElementType;
 import com.intellij.psi.tree.TokenSet;
 import com.intellij.util.ArrayUtil;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.plugins.groovy.GroovyLanguage;
 import org.jetbrains.plugins.groovy.lang.groovydoc.lexer.GroovyDocTokenTypes;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyLexer;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyTokenTypes;
 import org.jetbrains.plugins.groovy.lang.lexer.TokenSets;
 import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyFileImpl;
-import org.jetbrains.plugins.groovy.lang.psi.stubs.elements.GrStubFileElementType;
 
 import static org.jetbrains.plugins.groovy.lang.parser.GroovyElementTypes.*;
 
@@ -47,7 +45,7 @@ import static org.jetbrains.plugins.groovy.lang.parser.GroovyElementTypes.*;
  * @author ilyas
  */
 public class GroovyParserDefinition implements ParserDefinition {
-  public static final IStubFileElementType GROOVY_FILE = new GrStubFileElementType(GroovyLanguage.INSTANCE);
+  public static final IStubFileElementType GROOVY_FILE = GroovyElementTypes.GROOVY_FILE;
   private static final IElementType[] STRINGS = new IElementType[]{
     GSTRING, REGEX, GSTRING_INJECTION, GroovyTokenTypes.mREGEX_LITERAL, GroovyTokenTypes.mDOLLAR_SLASH_REGEX_LITERAL
   };
@@ -98,7 +96,7 @@ public class GroovyParserDefinition implements ParserDefinition {
   }
 
   @Override
-  public SpaceRequirements spaceExistanceTypeBetweenTokens(ASTNode left, ASTNode right) {
+  public SpaceRequirements spaceExistenceTypeBetweenTokens(ASTNode left, ASTNode right) {
     final IElementType lType = left.getElementType();
     final IElementType rType = right.getElementType();
 
@@ -108,7 +106,10 @@ public class GroovyParserDefinition implements ParserDefinition {
     else if (lType == MODIFIERS && rType == MODIFIERS) {
       return SpaceRequirements.MUST;
     }
-    if (lType == GroovyTokenTypes.mSEMI || lType == GroovyTokenTypes.mSL_COMMENT) {
+    if (lType == GroovyTokenTypes.mSEMI) {
+      return SpaceRequirements.MAY;
+    }
+    if (lType == GroovyTokenTypes.mSL_COMMENT) {
       return SpaceRequirements.MUST_LINE_BREAK;
     }
     if (lType == GroovyTokenTypes.mNLS || lType == GroovyDocTokenTypes.mGDOC_COMMENT_START) {

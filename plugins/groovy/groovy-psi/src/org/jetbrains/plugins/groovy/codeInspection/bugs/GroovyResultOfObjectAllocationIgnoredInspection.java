@@ -34,13 +34,6 @@ public class GroovyResultOfObjectAllocationIgnoredInspection extends BaseInspect
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return PROBABLE_BUGS;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Result of object allocation ignored";
   }
@@ -66,7 +59,7 @@ public class GroovyResultOfObjectAllocationIgnoredInspection extends BaseInspect
   private static class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitNewExpression(GrNewExpression newExpression) {
+    public void visitNewExpression(@NotNull GrNewExpression newExpression) {
       super.visitNewExpression(newExpression);
       final GrCodeReferenceElement refElement = newExpression.getReferenceElement();
       if (refElement == null) return;      //new expression is not correct so we shouldn't check it

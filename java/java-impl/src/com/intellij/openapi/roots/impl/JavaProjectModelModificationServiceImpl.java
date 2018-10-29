@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.pom.java.LanguageLevel;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.concurrency.Promise;
+import org.jetbrains.concurrency.Promises;
 
 import java.util.Collection;
 
@@ -39,36 +40,36 @@ public class JavaProjectModelModificationServiceImpl extends JavaProjectModelMod
   }
 
   @Override
-  public Promise<Void> addDependency(@NotNull Module from, @NotNull Module to, @NotNull DependencyScope scope) {
+  public Promise<Void> addDependency(@NotNull Module from, @NotNull Module to, @NotNull DependencyScope scope, boolean exported) {
     for (JavaProjectModelModifier modifier : getModelModifiers()) {
-      Promise<Void> promise = modifier.addModuleDependency(from, to, scope);
+      Promise<Void> promise = modifier.addModuleDependency(from, to, scope, exported);
       if (promise != null) {
         return promise;
       }
     }
-    return Promise.REJECTED;
+    return Promises.rejectedPromise();
   }
 
   @Override
-  public Promise<Void> addDependency(@NotNull Collection<Module> from, @NotNull ExternalLibraryDescriptor libraryDescriptor, @NotNull DependencyScope scope) {
+  public Promise<Void> addDependency(@NotNull Module from, @NotNull Library library, @NotNull DependencyScope scope, boolean exported) {
+    for (JavaProjectModelModifier modifier : getModelModifiers()) {
+      Promise<Void> promise = modifier.addLibraryDependency(from, library, scope, exported);
+      if (promise != null) {
+        return promise;
+      }
+    }
+    return Promises.rejectedPromise();
+  }
+
+  @Override
+  public Promise<Void> addDependency(@NotNull Collection<? extends Module> from, @NotNull ExternalLibraryDescriptor libraryDescriptor, @NotNull DependencyScope scope) {
     for (JavaProjectModelModifier modifier : getModelModifiers()) {
       Promise<Void> promise = modifier.addExternalLibraryDependency(from, libraryDescriptor, scope);
       if (promise != null) {
         return promise;
       }
     }
-    return Promise.REJECTED;
-  }
-
-  @Override
-  public Promise<Void> addDependency(@NotNull Module from, @NotNull Library library, @NotNull DependencyScope scope) {
-    for (JavaProjectModelModifier modifier : getModelModifiers()) {
-      Promise<Void> promise = modifier.addLibraryDependency(from, library, scope);
-      if (promise != null) {
-        return promise;
-      }
-    }
-    return Promise.REJECTED;
+    return Promises.rejectedPromise();
   }
 
   @Override
@@ -79,7 +80,7 @@ public class JavaProjectModelModificationServiceImpl extends JavaProjectModelMod
         return promise;
       }
     }
-    return Promise.REJECTED;
+    return Promises.rejectedPromise();
   }
 
   @NotNull

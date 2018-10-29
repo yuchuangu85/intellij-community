@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,13 +41,13 @@ public class ConvertAtomicToLongAdderIntention extends PsiElementBaseIntentionAc
     if (variable != null) {
       final PsiType longAdder =
         JavaPsiFacade.getElementFactory(project).createTypeFromText(LongAdderConversionRule.JAVA_UTIL_CONCURRENT_ATOMIC_LONG_ADDER, element);
-      TypeMigrationVariableTypeFixProvider.runTypeMigrationOnVariable(variable, longAdder, null, false);
+      TypeMigrationVariableTypeFixProvider.runTypeMigrationOnVariable(variable, longAdder, null, false, false);
     }
   }
 
   @Override
   public boolean isAvailable(@NotNull Project project, Editor editor, @NotNull PsiElement element) {
-    if (!PsiUtil.isLanguageLevel8OrHigher(element)) return false;
+    if (!element.isValid() || !PsiUtil.isLanguageLevel8OrHigher(element)) return false;
     final PsiVariable variable = getVariable(element);
     return variable != null;
   }
@@ -58,7 +58,9 @@ public class ConvertAtomicToLongAdderIntention extends PsiElementBaseIntentionAc
       return null;
     }
     final PsiVariable var = (PsiVariable)element.getParent();
-    final PsiClass aClass = PsiTypesUtil.getPsiClass(var.getType());
+    final PsiType type = var.getType();
+    if (!type.isValid()) return null;
+    final PsiClass aClass = PsiTypesUtil.getPsiClass(type);
     if (aClass == null ||
         !(AtomicLong.class.getName().equals(aClass.getQualifiedName()) ||
           AtomicInteger.class.getName().equals(aClass.getQualifiedName()))) {
@@ -90,6 +92,6 @@ public class ConvertAtomicToLongAdderIntention extends PsiElementBaseIntentionAc
   @NotNull
   @Override
   public String getFamilyName() {
-    return "Convert variable to \'" + LongAdderConversionRule.JAVA_UTIL_CONCURRENT_ATOMIC_LONG_ADDER + "\'";
+    return "Convert to LongAdder";
   }
 }

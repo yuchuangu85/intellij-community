@@ -30,7 +30,6 @@ import java.util.Map;
 
 /**
  * @author Eugene Zhuravlev
- *         Date: Mar 19, 2004
  */
 public class CompileModuleChunkTarget extends CompositeGenerator {
 
@@ -163,7 +162,7 @@ public class CompileModuleChunkTarget extends CompositeGenerator {
   }
 
   private static String getChunkDependenciesString(ModuleChunk moduleChunk) {
-    final StringBuffer moduleDependencies = new StringBuffer();
+    final StringBuilder moduleDependencies = new StringBuilder();
     final ModuleChunk[] dependencies = moduleChunk.getDependentChunks();
     for (int idx = 0; idx < dependencies.length; idx++) {
       final ModuleChunk dependency = dependencies[idx];
@@ -188,7 +187,7 @@ public class CompileModuleChunkTarget extends CompositeGenerator {
     final PatternSetRef resourcePatternsPatternSet = new PatternSetRef(BuildProperties.PROPERTY_COMPILER_RESOURCE_PATTERNS);
     final ProjectFileIndex fileIndex = ProjectRootManager.getInstance(project).getFileIndex();
     final CompositeGenerator composite = new CompositeGenerator();
-    final Map<String, Copy> outputDirToTaskMap = new HashMap<String, Copy>();
+    final Map<String, Copy> outputDirToTaskMap = new HashMap<>();
     for (final VirtualFile root : sourceRoots) {
       final String packagePrefix = fileIndex.getPackageNameByDirectory(root);
       final String targetDir =

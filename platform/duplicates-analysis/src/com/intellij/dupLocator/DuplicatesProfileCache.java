@@ -2,7 +2,6 @@ package com.intellij.dupLocator;
 
 import com.intellij.dupLocator.treeHash.FragmentsCollector;
 import com.intellij.lang.Language;
-import com.intellij.openapi.extensions.Extensions;
 import gnu.trove.TIntObjectHashMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -10,15 +9,8 @@ import org.jetbrains.annotations.Nullable;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Created by IntelliJ IDEA.
- * User: Eugene.Kudelevsky
- * Date: May 18, 2009
- * Time: 7:39:35 PM
- * To change this template use File | Settings | File Templates.
- */
 public class DuplicatesProfileCache {
-  private static final Map<DupInfo, TIntObjectHashMap<DuplicatesProfile>> ourProfileCache = new HashMap<DupInfo, TIntObjectHashMap<DuplicatesProfile>>();
+  private static final Map<DupInfo, TIntObjectHashMap<DuplicatesProfile>> ourProfileCache = new HashMap<>();
 
   private DuplicatesProfileCache() {
   }
@@ -31,14 +23,13 @@ public class DuplicatesProfileCache {
   public static DuplicatesProfile getProfile(@NotNull DupInfo dupInfo, int index) {
     TIntObjectHashMap<DuplicatesProfile> patternCache = ourProfileCache.get(dupInfo);
     if (patternCache == null) {
-      patternCache = new TIntObjectHashMap<DuplicatesProfile>();
+      patternCache = new TIntObjectHashMap<>();
       ourProfileCache.put(dupInfo, patternCache);
     }
     DuplicatesProfile result = patternCache.get(index);
     if (result == null) {
-      DuplicatesProfile[] profiles = Extensions.getExtensions(DuplicatesProfile.EP_NAME);
       DuplicatesProfile theProfile = null;
-      for (DuplicatesProfile profile : profiles) {
+      for (DuplicatesProfile profile : DuplicatesProfile.EP_NAME.getExtensionList()) {
         if (profile.isMyDuplicate(dupInfo, index)) {
           theProfile = profile;
           break;

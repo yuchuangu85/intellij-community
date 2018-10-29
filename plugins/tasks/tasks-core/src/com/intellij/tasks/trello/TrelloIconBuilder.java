@@ -18,7 +18,7 @@ package com.intellij.tasks.trello;
 
 import com.intellij.tasks.trello.model.TrelloLabel;
 import com.intellij.util.ui.UIUtil;
-import icons.TasksIcons;
+import icons.TasksCoreIcons;
 
 import javax.swing.*;
 import java.awt.*;
@@ -33,7 +33,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class TrelloIconBuilder {
-  private final Map<Set<TrelloLabel.LabelColor>, Image> CACHE = new HashMap<Set<TrelloLabel.LabelColor>, Image>();
+  private final Map<Set<TrelloLabel.LabelColor>, Image> CACHE = new HashMap<>();
   public static final double SQRT_2 = Math.sqrt(2.0);
 
   private final int size;
@@ -44,7 +44,7 @@ public class TrelloIconBuilder {
 
   public Icon buildIcon(Set<TrelloLabel.LabelColor> colorSet) {
     if (colorSet.isEmpty()) {
-      return TasksIcons.Trello;
+      return TasksCoreIcons.Trello;
     }
     Image image = CACHE.get(colorSet);
     if (image == null) {
@@ -55,7 +55,7 @@ public class TrelloIconBuilder {
       double diag = adjustedSize * SQRT_2;
       double stripeWidth = diag / nStripes;
       RoundRectangle2D baseRectangle = new RoundRectangle2D.Double(0, 0, adjustedSize, adjustedSize, 2, 2);
-      ArrayList<TrelloLabel.LabelColor> colorsList = new ArrayList<TrelloLabel.LabelColor>(colorSet);
+      ArrayList<TrelloLabel.LabelColor> colorsList = new ArrayList<>(colorSet);
       for (int i = 0; i < nStripes; i++) {
         Color color = colorsList.get(i).getColor();
         Area stripe = new Area(new Rectangle2D.Double(-diag / 2, (i * stripeWidth), diag, stripeWidth));

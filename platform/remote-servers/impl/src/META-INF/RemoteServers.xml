@@ -38,12 +38,8 @@
     <toolWindow id="Application Servers" anchor="bottom" icon="RemoteServersIcons.ServersToolWindow"
                 factoryClass="com.intellij.remoteServer.impl.runtime.ui.DefaultServersToolWindowFactory"
                 conditionClass="com.intellij.remoteServer.impl.runtime.ui.DefaultServersToolWindowFactory"/>
+    <applicationInitializedListener implementation="com.intellij.remoteServer.impl.configuration.deployment.DeployToServerConfigurationTypesRegistrar"/>
   </extensions>
-  <application-components>
-    <component>
-      <implementation-class>com.intellij.remoteServer.impl.configuration.deployment.DeployToServerConfigurationTypesRegistrar</implementation-class>
-    </component>
-  </application-components>
   <project-components>
     <component>
       <implementation-class>com.intellij.remoteServer.impl.runtime.ui.DefaultServersToolWindowManager</implementation-class>
@@ -51,7 +47,7 @@
   </project-components>
 
   <actions>
-    <group id="RemoteServersViewToolbar">
+    <group id="RemoteServersViewToolbar" text="Remote Servers">
       <action id="RemoteServers.ConnectServer" class="com.intellij.remoteServer.impl.runtime.ui.tree.actions.RemoteServerConnectAction"/>
       <action id="RemoteServers.DisconnectServer" class="com.intellij.remoteServer.impl.runtime.ui.tree.actions.RemoteServerDisconnectAction"/>
       <action id="RemoteServers.EditServerConfig" class="com.intellij.remoteServer.impl.runtime.ui.tree.actions.RemoteServerConfigAction"/>
@@ -62,7 +58,12 @@
       <action id="Servers.Undeploy" class="com.intellij.remoteServer.impl.runtime.ui.tree.actions.UndeployAction"/>
       <action id="Servers.DeployWithDebug" class="com.intellij.remoteServer.impl.runtime.ui.tree.actions.DeployWithDebugAction"/>
       <action id="RemoteServers.EditDeploymentConfig" class="com.intellij.remoteServer.impl.runtime.ui.tree.actions.DeploymentConfigAction"/>
+
+      <add-to-group group-id="Other.KeymapGroup"/>
     </group>
     <group id="RemoteServersViewPopup"/>
+    <group id="RemoteServersViewToolbar.Top">
+      <add-to-group group-id="Other.KeymapGroup"/>
+    </group>
   </actions>
 </idea-plugin>

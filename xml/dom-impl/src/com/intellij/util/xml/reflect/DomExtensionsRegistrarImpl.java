@@ -33,11 +33,11 @@ import java.util.Set;
  * @author peter
  */
 public class DomExtensionsRegistrarImpl implements DomExtensionsRegistrar {
-  private final List<DomExtensionImpl> myAttributes = new SmartList<DomExtensionImpl>();
-  private final List<DomExtensionImpl> myFixeds = new SmartList<DomExtensionImpl>();
-  private final List<DomExtensionImpl> myCollections = new SmartList<DomExtensionImpl>();
-  private final Set<Object> myDependencies = new THashSet<Object>();
-  private final List<DomExtensionImpl> myCustoms = new SmartList<DomExtensionImpl>();
+  private final List<DomExtensionImpl> myAttributes = new SmartList<>();
+  private final List<DomExtensionImpl> myFixeds = new SmartList<>();
+  private final List<DomExtensionImpl> myCollections = new SmartList<>();
+  private final Set<Object> myDependencies = new THashSet<>();
+  private final List<DomExtensionImpl> myCustoms = new SmartList<>();
 
   public List<DomExtensionImpl> getAttributes() {
     return myAttributes;
@@ -110,7 +110,7 @@ public class DomExtensionsRegistrarImpl implements DomExtensionsRegistrar {
     return extension;
   }
 
-  private static DomExtensionImpl addExtension(final List<DomExtensionImpl> list, @Nullable final XmlName name, final Type type) {
+  private static DomExtensionImpl addExtension(final List<? super DomExtensionImpl> list, @Nullable final XmlName name, final Type type) {
     final DomExtensionImpl extension = new DomExtensionImpl(type, name);
     list.add(extension);
     return extension;

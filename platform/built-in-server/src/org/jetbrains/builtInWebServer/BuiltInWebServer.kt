@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.builtInWebServer
 
 import com.google.common.cache.CacheBuilder
@@ -20,10 +6,11 @@ import com.google.common.net.InetAddresses
 import com.intellij.ide.impl.ProjectUtil
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.notification.NotificationType
+import com.intellij.notification.SingletonNotificationManager
 import com.intellij.openapi.application.ApplicationNamesInfo
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.diagnostic.catchAndLog
+import com.intellij.openapi.diagnostic.runAndLogException
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
@@ -36,8 +23,7 @@ import com.intellij.openapi.util.io.setOwnerPermissions
 import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.util.*
-import com.intellij.util.io.URLUtil
+import com.intellij.util.io.*
 import com.intellij.util.net.NetUtils
 import io.netty.channel.Channel
 import io.netty.channel.ChannelHandlerContext
@@ -47,8 +33,8 @@ import io.netty.handler.codec.http.cookie.ServerCookieDecoder
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder
 import org.jetbrains.ide.BuiltInServerManagerImpl
 import org.jetbrains.ide.HttpRequestHandler
-import org.jetbrains.io.*
-import org.jetbrains.notification.SingletonNotificationManager
+import org.jetbrains.io.orInSafeMode
+import org.jetbrains.io.send
 import java.awt.datatransfer.StringSelection
 import java.io.IOException
 import java.math.BigInteger
@@ -66,13 +52,17 @@ internal val LOG = Logger.getInstance(BuiltInWebServer::class.java)
 private const val IDE_TOKEN_FILE = "user.web.token"
 
 private val notificationManager by lazy {
-  SingletonNotificationManager(BuiltInServerManagerImpl.NOTIFICATION_GROUP.value, NotificationType.INFORMATION, null)
+  SingletonNotificationManager(BuiltInServerManagerImpl.NOTIFICATION_GROUP.value, NotificationType.INFORMATION,
+                                                         null)
 }
 
 class BuiltInWebServer : HttpRequestHandler() {
-  override fun isAccessible(request: HttpRequest) = request.isLocalOrigin(onlyAnyOrLoopback = false, hostsOnly = true)
+  override fun isAccessible(request: HttpRequest): Boolean {
+    return BuiltInServerOptions.getInstance().builtInServerAvailableExternally ||
+           request.isLocalOrigin(onlyAnyOrLoopback = false, hostsOnly = true)
+  }
 
-  override fun isSupported(request: FullHttpRequest) = super.isSupported(request) || request.method() == HttpMethod.POST
+  override fun isSupported(request: FullHttpRequest): Boolean = super.isSupported(request) || request.method() == HttpMethod.POST
 
   override fun process(urlDecoder: QueryStringDecoder, request: FullHttpRequest, context: ChannelHandlerContext): Boolean {
     var host = request.host
@@ -95,10 +85,16 @@ class BuiltInWebServer : HttpRequestHandler() {
       if (urlDecoder.path().length < 2) {
         return false
       }
+
       projectName = null
     }
     else {
-      projectName = host
+      if (host.endsWith(".localhost")) {
+        projectName = host.substring(0, host.lastIndexOf('.'))
+      }
+      else {
+        projectName = host
+      }
     }
     return doProcess(urlDecoder, request, context, projectName)
   }
@@ -106,8 +102,8 @@ class BuiltInWebServer : HttpRequestHandler() {
 
 internal fun isActivatable() = Registry.`is`("ide.built.in.web.server.activatable", false)
 
-internal const val TOKEN_PARAM_NAME = "_ijt"
-const val TOKEN_HEADER_NAME = "x-ijt"
+const val TOKEN_PARAM_NAME: String = "_ijt"
+const val TOKEN_HEADER_NAME: String = "x-ijt"
 
 private val STANDARD_COOKIE by lazy {
   val productName = ApplicationNamesInfo.getInstance().lowercaseProductName
@@ -228,7 +224,7 @@ private fun doProcess(urlDecoder: QueryStringDecoder, request: FullHttpRequest, 
   }
 
   for (pathHandler in WebServerPathHandler.EP_NAME.extensions) {
-    LOG.catchAndLog {
+    LOG.runAndLogException {
       if (pathHandler.process(path, project, request, context, projectName, decodedPath, isCustomHost)) {
         return true
       }
@@ -237,7 +233,7 @@ private fun doProcess(urlDecoder: QueryStringDecoder, request: FullHttpRequest, 
   return false
 }
 
-internal fun HttpRequest.isSignedRequest(): Boolean {
+fun HttpRequest.isSignedRequest(): Boolean {
   if (BuiltInServerOptions.getInstance().allowUnsignedRequests) {
     return true
   }
@@ -247,12 +243,11 @@ internal fun HttpRequest.isSignedRequest(): Boolean {
       ?: QueryStringDecoder(uri()).parameters().get(TOKEN_PARAM_NAME)?.firstOrNull()
       ?: referrer?.let { QueryStringDecoder(it).parameters().get(TOKEN_PARAM_NAME)?.firstOrNull() }
 
-  // we don't invalidate token — allow to make subsequent requests using it (it is required for our javadoc DocumentationComponent)
+  // we don't invalidate token - allow to make subsequent requests using it (it is required for our javadoc DocumentationComponent)
   return token != null && tokens.getIfPresent(token) != null
 }
 
-@JvmOverloads
-internal fun validateToken(request: HttpRequest, channel: Channel, isSignedRequest: Boolean = request.isSignedRequest()): HttpHeaders? {
+fun validateToken(request: HttpRequest, channel: Channel, isSignedRequest: Boolean): HttpHeaders? {
   if (BuiltInServerOptions.getInstance().allowUnsignedRequests) {
     return EmptyHttpHeaders.INSTANCE
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package com.siyeh.ig.fixes.performance;
 
+import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.IGQuickFixesTestCase;
 import com.siyeh.ig.performance.KeySetIterationMayUseEntrySetInspection;
 
@@ -25,8 +26,15 @@ public class KeySetIterationMayUseEntrySetFixTest extends IGQuickFixesTestCase {
     super.setUp();
     myFixture.enableInspections(new KeySetIterationMayUseEntrySetInspection());
     myRelativePath = "performance/key_set_with_entry_set";
+    myDefaultHint = InspectionGadgetsBundle.message("key.set.iteration.may.use.entry.set.quickfix");
   }
 
-  public void testSimple() { doTest("Replace with 'entrySet()' iteration"); }
+  public void testSimple() { doTest(); }
+  public void testParentheses() { doTest(); }
+  public void testParenthesesAroundGetKey() { doTest(); }
+  public void testCastNeeded1() { doTest(); }
+  public void testCastNeeded2() { doTest(); }
+  public void testReference() { doTest(); }
+  public void testEntryIterationBug() { doTest(); }
 
 }

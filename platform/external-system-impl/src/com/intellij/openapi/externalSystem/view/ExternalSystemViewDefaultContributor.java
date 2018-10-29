@@ -22,6 +22,7 @@ import com.intellij.openapi.externalSystem.model.Key;
 import com.intellij.openapi.externalSystem.model.ProjectKeys;
 import com.intellij.openapi.externalSystem.model.ProjectSystemId;
 import com.intellij.openapi.externalSystem.model.project.*;
+import com.intellij.openapi.externalSystem.model.task.TaskData;
 import com.intellij.openapi.externalSystem.service.project.IdeModelsProviderImpl;
 import com.intellij.openapi.externalSystem.settings.AbstractExternalSystemSettings;
 import com.intellij.openapi.externalSystem.settings.ExternalProjectSettings;
@@ -50,7 +51,6 @@ import static com.intellij.openapi.externalSystem.model.ProjectKeys.PROJECT;
 
 /**
  * @author Vladislav.Soroka
- * @since 10/10/2014
  */
 public class ExternalSystemViewDefaultContributor extends ExternalSystemViewContributor {
 
@@ -77,7 +77,7 @@ public class ExternalSystemViewDefaultContributor extends ExternalSystemViewCont
   @NotNull
   public List<ExternalSystemNode<?>> createNodes(final ExternalProjectsView externalProjectsView,
                                                  final MultiMap<Key<?>, DataNode<?>> dataNodes) {
-    final List<ExternalSystemNode<?>> result = new SmartList<ExternalSystemNode<?>>();
+    final List<ExternalSystemNode<?>> result = new SmartList<>();
 
     addModuleNodes(externalProjectsView, dataNodes, result);
     // add tasks
@@ -97,14 +97,20 @@ public class ExternalSystemViewDefaultContributor extends ExternalSystemViewCont
     return result;
   }
 
+  @Nullable
+  @Override
+  public String getDisplayName(@NotNull DataNode node) {
+    return getNodeDisplayName(node);
+  }
+
   private static void addDependenciesNode(@NotNull ExternalProjectsView externalProjectsView,
                                           @NotNull MultiMap<Key<?>, DataNode<?>> dataNodes,
-                                          @NotNull List<ExternalSystemNode<?>> result) {
+                                          @NotNull List<? super ExternalSystemNode<?>> result) {
     final Collection<DataNode<?>> moduleDeps = dataNodes.get(ProjectKeys.MODULE_DEPENDENCY);
     final Collection<DataNode<?>> libDeps = dataNodes.get(ProjectKeys.LIBRARY_DEPENDENCY);
 
     if (!moduleDeps.isEmpty() || !libDeps.isEmpty()) {
-      final ExternalSystemNode depNode = new MyDependenciesNode(externalProjectsView);
+      final ExternalSystemNode<?> depNode = new MyDependenciesNode(externalProjectsView);
 
       for (DataNode<?> dataNode : moduleDeps) {
         if (!(dataNode.getData() instanceof ModuleDependencyData)) continue;
@@ -148,7 +154,7 @@ public class ExternalSystemViewDefaultContributor extends ExternalSystemViewCont
 
   private static void addModuleNodes(@NotNull ExternalProjectsView externalProjectsView,
                                      @NotNull MultiMap<Key<?>, DataNode<?>> dataNodes,
-                                     @NotNull List<ExternalSystemNode<?>> result) {
+                                     @NotNull List<? super ExternalSystemNode<?>> result) {
     final Collection<DataNode<?>> moduleDataNodes = dataNodes.get(ProjectKeys.MODULE);
     if (!moduleDataNodes.isEmpty()) {
       final AbstractExternalSystemSettings systemSettings =
@@ -171,13 +177,13 @@ public class ExternalSystemViewDefaultContributor extends ExternalSystemViewCont
 
   @Order(ExternalSystemNode.BUILTIN_DEPENDENCIES_DATA_NODE_ORDER)
   private static class MyDependenciesNode extends ExternalSystemNode {
-    public MyDependenciesNode(ExternalProjectsView externalProjectsView) {
+    MyDependenciesNode(ExternalProjectsView externalProjectsView) {
       //noinspection unchecked
       super(externalProjectsView, null, null);
     }
 
     @Override
-    protected void update(PresentationData presentation) {
+    protected void update(@NotNull PresentationData presentation) {
       super.update(presentation);
       presentation.setIcon(AllIcons.Nodes.PpLibFolder);
     }
@@ -190,7 +196,7 @@ public class ExternalSystemViewDefaultContributor extends ExternalSystemViewCont
 
   private static abstract class DependencyDataExternalSystemNode<T extends DependencyData> extends ExternalSystemNode<T> {
 
-    public DependencyDataExternalSystemNode(@NotNull ExternalProjectsView externalProjectsView,
+    DependencyDataExternalSystemNode(@NotNull ExternalProjectsView externalProjectsView,
                                             @Nullable ExternalSystemNode parent,
                                             @Nullable DataNode<T> dataNode) {
       super(externalProjectsView, parent, dataNode);
@@ -268,12 +274,12 @@ public class ExternalSystemViewDefaultContributor extends ExternalSystemViewCont
 
   private static class ModuleDependencyDataExternalSystemNode extends DependencyDataExternalSystemNode<ModuleDependencyData> {
 
-    public ModuleDependencyDataExternalSystemNode(ExternalProjectsView externalProjectsView, DataNode<ModuleDependencyData> dataNode) {
+    ModuleDependencyDataExternalSystemNode(ExternalProjectsView externalProjectsView, DataNode<ModuleDependencyData> dataNode) {
       super(externalProjectsView, null, dataNode);
     }
 
     @Override
-    protected void update(PresentationData presentation) {
+    protected void update(@NotNull PresentationData presentation) {
       super.update(presentation);
       presentation.setIcon(getUiAware().getProjectIcon());
 
@@ -282,27 +288,16 @@ public class ExternalSystemViewDefaultContributor extends ExternalSystemViewCont
         setNameAndTooltip(getName(), null, data.getScope().getDisplayName());
       }
     }
-
-    @Override
-    public String getName() {
-      final ModuleDependencyData data = getData();
-      return data != null ? data.getExternalName() : "";
-    }
-
-    @Override
-    public boolean isAlwaysLeaf() {
-      return false;
-    }
   }
 
   private static class LibraryDependencyDataExternalSystemNode extends DependencyDataExternalSystemNode<LibraryDependencyData> {
 
-    public LibraryDependencyDataExternalSystemNode(ExternalProjectsView externalProjectsView, DataNode<LibraryDependencyData> dataNode) {
+    LibraryDependencyDataExternalSystemNode(ExternalProjectsView externalProjectsView, DataNode<LibraryDependencyData> dataNode) {
       super(externalProjectsView, null, dataNode);
     }
 
     @Override
-    protected void update(PresentationData presentation) {
+    protected void update(@NotNull PresentationData presentation) {
       super.update(presentation);
       presentation.setIcon(AllIcons.Nodes.PpLib);
 
@@ -311,18 +306,20 @@ public class ExternalSystemViewDefaultContributor extends ExternalSystemViewCont
         setNameAndTooltip(getName(), null, data.getScope().getDisplayName());
       }
     }
+  }
 
-    @Override
-    public String getName() {
-      final LibraryDependencyData data = getData();
-      if (data == null) return "";
-      String externalName = data.getExternalName();
+  @NotNull
+  private static String getNodeDisplayName(@NotNull DataNode node) {
+    Object data = node.getData();
+    if (data instanceof LibraryDependencyData) {
+      LibraryDependencyData libraryDependencyData = (LibraryDependencyData)data;
+      String externalName = libraryDependencyData.getExternalName();
       if (StringUtil.isEmpty(externalName)) {
-        Set<String> paths = data.getTarget().getPaths(LibraryPathType.BINARY);
+        Set<String> paths = libraryDependencyData.getTarget().getPaths(LibraryPathType.BINARY);
         if (paths.size() == 1) {
           String relativePathToRoot = null;
           String path = ExternalSystemApiUtil.toCanonicalPath(paths.iterator().next());
-          DataNode<ProjectData> projectDataDataNode = ExternalSystemApiUtil.findParent(myDataNode, PROJECT);
+          DataNode<ProjectData> projectDataDataNode = ExternalSystemApiUtil.findParent(node, PROJECT);
           if (projectDataDataNode != null) {
             relativePathToRoot = FileUtil.getRelativePath(projectDataDataNode.getData().getLinkedExternalProjectPath(), path, '/');
             relativePathToRoot = relativePathToRoot != null && StringUtil.startsWith(relativePathToRoot, "../../")
@@ -337,10 +334,12 @@ public class ExternalSystemViewDefaultContributor extends ExternalSystemViewCont
       }
       return externalName;
     }
-
-    @Override
-    public boolean isAlwaysLeaf() {
-      return false;
+    if (data instanceof Named) {
+      return ((Named)data).getExternalName();
     }
+    if (data instanceof TaskData) {
+      return ((TaskData)data).getName();
+    }
+    return StringUtil.notNullize(node.toString());
   }
 }

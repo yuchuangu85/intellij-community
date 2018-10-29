@@ -50,11 +50,6 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.util.*;
 
-/*
-* Created by IntelliJ IDEA.
-* User: sweinreuter
-* Date: 09.06.2010
-*/
 public class RelaxSymbolIndex extends ScalarIndexExtension<String> {
   @NonNls
   public static final ID<String, Void> NAME = ID.create("RelaxSymbolIndex");
@@ -65,7 +60,7 @@ public class RelaxSymbolIndex extends ScalarIndexExtension<String> {
 
   public static NavigationItem[] getSymbolsByName(final String name, Project project, boolean includeNonProjectItems) {
     final GlobalSearchScope scope = includeNonProjectItems ? GlobalSearchScope.allScope(project) : GlobalSearchScope.projectScope(project);
-    final Collection<NavigationItem> result = new ArrayList<NavigationItem>();
+    final Collection<NavigationItem> result = new ArrayList<>();
     PsiManager psiManager = PsiManager.getInstance(project);
 
     for(VirtualFile file:FileBasedIndex.getInstance().getContainingFiles(NAME, name, scope)) {
@@ -89,7 +84,7 @@ public class RelaxSymbolIndex extends ScalarIndexExtension<String> {
         }
       }
     }
-    return result.toArray(new NavigationItem[result.size()]);
+    return result.toArray(NavigationItem.EMPTY_NAVIGATION_ITEM_ARRAY);
   }
 
   @NotNull
@@ -105,7 +100,7 @@ public class RelaxSymbolIndex extends ScalarIndexExtension<String> {
       @Override
       @NotNull
       public Map<String, Void> map(@NotNull FileContent inputData) {
-        final HashMap<String, Void> map = new HashMap<String, Void>();
+        final HashMap<String, Void> map = new HashMap<>();
         if (inputData.getFileType() == XmlFileType.INSTANCE) {
           CharSequence inputDataContentAsText = inputData.getContentAsText();
           if (CharArrayUtil.indexOf(inputDataContentAsText, ApplicationLoader.RNG_NAMESPACE, 0) == -1) return Collections.emptyMap();
@@ -258,7 +253,7 @@ public class RelaxSymbolIndex extends ScalarIndexExtension<String> {
       return myItem.canNavigateToSource();
     }
 
-    public static void add(final NavigationItem item, Collection<NavigationItem> symbolNavItems) {
+    public static void add(final NavigationItem item, Collection<? super NavigationItem> symbolNavItems) {
       final ItemPresentation presentation;
       if (item instanceof PsiMetaOwner) {
         final PsiMetaData data = ((PsiMetaOwner)item).getMetaData();

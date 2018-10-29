@@ -22,6 +22,7 @@ import com.intellij.codeInspection.InspectionManager;
 import com.intellij.codeInspection.reference.RefClass;
 import com.intellij.codeInspection.reference.RefEntity;
 import com.intellij.psi.PsiClass;
+import com.intellij.psi.PsiElement;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseGlobalInspection;
 import org.jetbrains.annotations.NotNull;
@@ -50,7 +51,7 @@ public class CyclicClassInitializationInspection extends BaseGlobalInspection {
       return null;
     }
     final RefClass refClass = (RefClass)refEntity;
-    final PsiClass aClass = refClass.getElement();
+    final PsiClass aClass = refClass.getUastElement().getJavaPsi();
     if (aClass.getContainingClass() != null) {
       return null;
     }
@@ -58,7 +59,7 @@ public class CyclicClassInitializationInspection extends BaseGlobalInspection {
       InitializationDependencyUtils.calculateTransitiveInitializationDependentsForClass(refClass);
     final Set<RefClass> dependents =
       InitializationDependencyUtils.calculateTransitiveInitializationDependenciesForClass(refClass);
-    final Set<RefClass> mutualDependents = new HashSet<RefClass>(dependencies);
+    final Set<RefClass> mutualDependents = new HashSet<>(dependencies);
     mutualDependents.retainAll(dependents);
 
     final int numMutualDependents = mutualDependents.size();

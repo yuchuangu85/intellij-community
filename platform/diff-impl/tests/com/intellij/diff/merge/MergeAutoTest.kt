@@ -16,37 +16,51 @@
 package com.intellij.diff.merge
 
 import com.intellij.diff.DiffTestCase
+import com.intellij.diff.tools.util.base.IgnorePolicy
 import com.intellij.diff.util.Side
 import com.intellij.diff.util.ThreeSide
 
 class MergeAutoTest : MergeTestBase() {
   companion object {
+    private val RUNS = 10
     private val MODIFICATION_CYCLE_COUNT = 5
     private val MODIFICATION_CYCLE_SIZE = 3
+    private val MAX_TEXT_LENGTH = 300
   }
 
-  fun testUndo() {
-    doUndoTest(System.currentTimeMillis(), 10, 300)
+  fun `test undo - default policy`() {
+    doUndoTest(System.currentTimeMillis(), RUNS, MAX_TEXT_LENGTH, IgnorePolicy.DEFAULT)
   }
 
-  private fun doUndoTest(seed: Long, runs: Int, maxLength: Int) {
+  fun `test undo - trim whitespaces`() {
+    doUndoTest(System.currentTimeMillis(), RUNS, MAX_TEXT_LENGTH, IgnorePolicy.TRIM_WHITESPACES)
+  }
+
+  fun `test undo - ignore whitespaces`() {
+    doUndoTest(System.currentTimeMillis(), RUNS, MAX_TEXT_LENGTH, IgnorePolicy.IGNORE_WHITESPACES)
+  }
+
+  private fun doUndoTest(seed: Long, runs: Int, maxLength: Int, policy: IgnorePolicy) {
     doTest(seed, runs, maxLength) { text1, text2, text3, debugData ->
-      testN(text1, text2, text3) {
-        if (changes.size == 0) {
+      debugData.put("IgnorePolicy", policy)
+
+      test(text1, text2, text3, -1, policy) {
+        if (changes.isEmpty()) {
           assertEquals(text1, text2)
           assertEquals(text1, text3)
           assertEquals(text2, text3)
-          return@testN
+          return@test
         }
 
         for (m in 1..MODIFICATION_CYCLE_COUNT) {
           checkUndo(MODIFICATION_CYCLE_SIZE) {
             for (n in 1..MODIFICATION_CYCLE_SIZE) {
-              val operation = RNG.nextInt(3)
+              val operation = RNG.nextInt(4)
               when (operation) {
                 0 -> doApply()
                 1 -> doIgnore()
-                2 -> doReplace()
+                2 -> doTryResolve()
+                3 -> doModifyText()
                 else -> fail()
               }
               checkChangesRangeOrdering(changes)
@@ -77,11 +91,18 @@ class MergeAutoTest : MergeTestBase() {
     command(change) { viewer.ignoreChange(change, side, modifier) }
   }
 
-  private fun TestBuilder.doReplace(): Unit {
+  private fun TestBuilder.doTryResolve(): Unit {
+    val index = RNG.nextInt(changes.size)
+    val change = changes[index]
+
+    command(change) { viewer.resolveChangeAutomatically(change, ThreeSide.BASE) }
+  }
+
+  private fun TestBuilder.doModifyText(): Unit {
     val length = document.textLength
 
-    var index1: Int = 0;
-    var index2: Int = 0;
+    var index1: Int = 0
+    var index2: Int = 0
     if (length != 0) {
       index1 = RNG.nextInt(length)
       index2 = index1 + RNG.nextInt(length - index1)

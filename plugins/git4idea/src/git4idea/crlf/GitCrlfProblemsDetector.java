@@ -55,7 +55,6 @@ public class GitCrlfProblemsDetector {
   private static final Logger LOG = Logger.getInstance(GitCrlfProblemsDetector.class);
   private static final String CRLF = "\r\n";
 
-  @NotNull private final Project myProject;
   @NotNull private final Git myGit;
   @NotNull private final GitRepositoryManager myRepositoryManager;
 
@@ -68,7 +67,6 @@ public class GitCrlfProblemsDetector {
 
   private GitCrlfProblemsDetector(@NotNull Project project, @NotNull Git git,
                                   @NotNull Collection<VirtualFile> files) {
-    myProject = project;
     myRepositoryManager = GitUtil.getRepositoryManager(project);
     myGit = git;
 
@@ -87,7 +85,7 @@ public class GitCrlfProblemsDetector {
   }
 
   private Map<VirtualFile, Collection<VirtualFile>> findFilesWithoutAttrs(Map<VirtualFile, Collection<VirtualFile>> filesByRoots) {
-    Map<VirtualFile, Collection<VirtualFile>> filesWithoutAttrsByRoot = new HashMap<VirtualFile, Collection<VirtualFile>>();
+    Map<VirtualFile, Collection<VirtualFile>> filesWithoutAttrsByRoot = new HashMap<>();
     for (Map.Entry<VirtualFile, Collection<VirtualFile>> entry : filesByRoots.entrySet()) {
       VirtualFile root = entry.getKey();
       Collection<VirtualFile> files = entry.getValue();
@@ -114,7 +112,7 @@ public class GitCrlfProblemsDetector {
     }
     GitCheckAttrParser parser = GitCheckAttrParser.parse(result.getOutput());
     Map<String, Collection<GitAttribute>> attributes = parser.getAttributes();
-    Collection<VirtualFile> filesWithoutAttrs = new ArrayList<VirtualFile>();
+    Collection<VirtualFile> filesWithoutAttrs = new ArrayList<>();
     for (VirtualFile file : files) {
       ProgressIndicatorProvider.checkCanceled();
       String relativePath = FileUtil.getRelativePath(root.getPath(), file.getPath(), '/');
@@ -127,9 +125,9 @@ public class GitCrlfProblemsDetector {
   }
 
   @NotNull
-  private Map<VirtualFile, Collection<VirtualFile>> findFilesWithCrlf(@NotNull Map<VirtualFile, List<VirtualFile>> allFilesByRoots,
-                                                                      @NotNull Collection<VirtualFile> rootsWithIncorrectAutoCrlf) {
-    Map<VirtualFile, Collection<VirtualFile>> filesWithCrlfByRoots = new HashMap<VirtualFile, Collection<VirtualFile>>();
+  private static Map<VirtualFile, Collection<VirtualFile>> findFilesWithCrlf(@NotNull Map<VirtualFile, List<VirtualFile>> allFilesByRoots,
+                                                                             @NotNull Collection<VirtualFile> rootsWithIncorrectAutoCrlf) {
+    Map<VirtualFile, Collection<VirtualFile>> filesWithCrlfByRoots = new HashMap<>();
     for (Map.Entry<VirtualFile, List<VirtualFile>> entry : allFilesByRoots.entrySet()) {
       VirtualFile root = entry.getKey();
       List<VirtualFile> files = entry.getValue();
@@ -144,8 +142,8 @@ public class GitCrlfProblemsDetector {
   }
 
   @NotNull
-  private Collection<VirtualFile> findFilesWithCrlf(@NotNull Collection<VirtualFile> files) {
-    Collection<VirtualFile> filesWithCrlf = new ArrayList<VirtualFile>();
+  private static Collection<VirtualFile> findFilesWithCrlf(@NotNull Collection<VirtualFile> files) {
+    Collection<VirtualFile> filesWithCrlf = new ArrayList<>();
     for (VirtualFile file : files) {
       ProgressIndicatorProvider.checkCanceled();
       String separator = LoadTextUtil.detectLineSeparator(file, true);
@@ -158,7 +156,7 @@ public class GitCrlfProblemsDetector {
 
   @NotNull
   private Collection<VirtualFile> getRootsWithIncorrectAutoCrlf(@NotNull Map<VirtualFile, List<VirtualFile>> filesByRoots) {
-    Collection<VirtualFile> rootsWithIncorrectAutoCrlf = new ArrayList<VirtualFile>();
+    Collection<VirtualFile> rootsWithIncorrectAutoCrlf = new ArrayList<>();
     for (Map.Entry<VirtualFile, List<VirtualFile>> entry : filesByRoots.entrySet()) {
       VirtualFile root = entry.getKey();
       boolean autocrlf = isAutoCrlfSetRight(root);

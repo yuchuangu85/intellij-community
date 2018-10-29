@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,14 @@
  */
 package com.intellij.ide.customize;
 
+import com.intellij.ide.cloudConfig.CloudConfigProvider;
 import com.intellij.ide.startup.StartupActionScriptManager;
 import com.intellij.openapi.application.ApplicationNamesInfo;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.JBCardLayout;
 import com.intellij.ui.components.JBLabel;
-import com.intellij.util.PlatformUtils;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
@@ -38,12 +39,12 @@ public class CustomizeIDEWizardDialog extends DialogWrapper implements ActionLis
   private static final String BUTTONS = "BUTTONS";
   private static final String NO_BUTTONS = "NO_BUTTONS";
 
-  private final JButton mySkipButton = new JButton("Skip All and Set Defaults");
+  private final JButton mySkipButton = new JButton("Skip Remaining and Set Defaults");
   private final JButton myBackButton = new JButton("Back");
   private final JButton myNextButton = new JButton("Next");
 
   private final JBCardLayout myCardLayout = new JBCardLayout();
-  private final List<AbstractCustomizeWizardStep> mySteps = new ArrayList<AbstractCustomizeWizardStep>();
+  private final List<AbstractCustomizeWizardStep> mySteps = new ArrayList<>();
   private int myIndex = 0;
   private final JBLabel myNavigationLabel = new JBLabel();
   private final JBLabel myHeaderLabel = new JBLabel();
@@ -58,6 +59,12 @@ public class CustomizeIDEWizardDialog extends DialogWrapper implements ActionLis
     getPeer().setAppIcons();
 
     stepsProvider.initSteps(this, mySteps);
+
+    CloudConfigProvider configProvider = CloudConfigProvider.getProvider();
+    if (configProvider != null) {
+      myIndex = configProvider.initSteps(mySteps);
+    }
+
     if (mySteps.isEmpty()) {
       throw new IllegalArgumentException(stepsProvider + " provided no steps");
     }
@@ -106,10 +113,8 @@ public class CustomizeIDEWizardDialog extends DialogWrapper implements ActionLis
     gbc.fill = GridBagConstraints.BOTH;
     gbc.gridx = 0;
     gbc.gridy = 0;
-    if (!PlatformUtils.isCLion()) {
-      buttonPanel.add(mySkipButton, gbc);
-      gbc.gridx++;
-    }
+    buttonPanel.add(mySkipButton, gbc);
+    gbc.gridx++;
     buttonPanel.add(myBackButton, gbc);
     gbc.gridx++;
     gbc.weightx = 1;
@@ -175,13 +180,21 @@ public class CustomizeIDEWizardDialog extends DialogWrapper implements ActionLis
     super.doOKAction();
   }
 
+  @Nullable
+  @Override
+  protected String getLoggedDialogId() {
+    return null;
+  }
+
   private void initCurrentStep(boolean forward) {
     final AbstractCustomizeWizardStep myCurrentStep = mySteps.get(myIndex);
     myCurrentStep.beforeShown(forward);
     myCardLayout.swipe(myContentPanel, myCurrentStep.getTitle(), JBCardLayout.SwipeDirection.AUTO, () -> {
       Component component = myCurrentStep.getDefaultFocusedComponent();
       if (component != null) {
-        component.requestFocus();
+        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+          IdeFocusManager.getGlobalInstance().requestFocus(component, true);
+        });
       }
     });
 
@@ -189,7 +202,6 @@ public class CustomizeIDEWizardDialog extends DialogWrapper implements ActionLis
     if (myIndex > 0) {
       myBackButton.setText("Back to " + mySteps.get(myIndex - 1).getTitle());
     }
-    mySkipButton.setText("Skip " + (myIndex > 0 ? "Remaining" : "All") + " and Set Defaults");
 
     myNextButton.setText(myIndex < mySteps.size() - 1
                          ? "Next: " + mySteps.get(myIndex + 1).getTitle()

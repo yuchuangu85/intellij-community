@@ -17,7 +17,7 @@ package com.intellij.codeInspection;
 
 import com.intellij.codeInsight.intention.HighPriorityAction;
 import com.intellij.lang.properties.PropertiesBundle;
-import com.intellij.lang.properties.PropertySuppressableInspectionBase;
+import com.intellij.lang.properties.PropertiesInspectionBase;
 import com.intellij.lang.properties.psi.codeStyle.PropertiesCodeStyleSettings;
 import com.intellij.lang.properties.psi.impl.PropertiesFileImpl;
 import com.intellij.lang.properties.psi.impl.PropertyImpl;
@@ -30,7 +30,7 @@ import org.jetbrains.annotations.NotNull;
 /**
  * @author Dmitry Batkovich
  */
-public class WrongPropertyKeyValueDelimiterInspection extends PropertySuppressableInspectionBase implements CleanupLocalInspectionTool {
+public class WrongPropertyKeyValueDelimiterInspection extends PropertiesInspectionBase implements CleanupLocalInspectionTool {
 
   @NotNull
   @Override
@@ -54,7 +54,7 @@ public class WrongPropertyKeyValueDelimiterInspection extends PropertySuppressab
   }
 
   private static final class ReplaceKeyValueDelimiterQuickFix extends LocalQuickFixOnPsiElement implements HighPriorityAction {
-    public ReplaceKeyValueDelimiterQuickFix(@NotNull PsiElement element) {
+    ReplaceKeyValueDelimiterQuickFix(@NotNull PsiElement element) {
       super(element);
     }
 

@@ -20,19 +20,22 @@ import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Pair;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.EditorNotificationPanel;
 import com.intellij.ui.EditorNotifications;
 import com.intellij.ui.LightColors;
-import com.jetbrains.jsonSchema.JsonSchemaMappingsConfigurable;
+import com.intellij.util.containers.ContainerUtil;
+import com.jetbrains.jsonSchema.extension.JsonSchemaFileProvider;
+import com.jetbrains.jsonSchema.extension.SchemaType;
 import com.jetbrains.jsonSchema.ide.JsonSchemaService;
+import com.jetbrains.jsonSchema.settings.mappings.JsonSchemaMappingsConfigurable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.awt.*;
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * @author Irina.Chernushina on 2/19/2016.
@@ -60,19 +63,15 @@ public class JsonSchemaConflictNotificationProvider extends EditorNotifications.
   @Nullable
   @Override
   public EditorNotificationPanel createNotificationPanel(@NotNull VirtualFile file, @NotNull FileEditor fileEditor) {
-    final List<Pair<Boolean, String>> descriptors = myJsonSchemaService.getMatchingSchemaDescriptors(file);
-    if (descriptors == null || descriptors.size() <= 1) return null;
+    if (!myJsonSchemaService.isApplicableToFile(file)) return null;
+    final Collection<VirtualFile> schemaFiles = ContainerUtil.newArrayList();
+    if (!hasConflicts(schemaFiles, file)) return null;
 
-    final Worker worker = new Worker();
-    final String message = worker.createMessage(descriptors);
+    final String message = createMessage(schemaFiles, myJsonSchemaService,
+                                         "; ", "<html>There are several JSON Schemas mapped to this file: ", "</html>");
     if (message == null) return null;
 
-    final EditorNotificationPanel panel = new EditorNotificationPanel() {
-      @Override
-      public Color getBackground() {
-        return LightColors.RED;
-      }
-    };
+    final EditorNotificationPanel panel = new EditorNotificationPanel(LightColors.RED);
     panel.setText(message);
     panel.createActionLabel("Edit JSON Schema Mappings", () -> {
       ShowSettingsUtil.getInstance().editConfigurable(myProject, new JsonSchemaMappingsConfigurable(myProject));
@@ -81,27 +80,41 @@ public class JsonSchemaConflictNotificationProvider extends EditorNotifications.
     return panel;
   }
 
-  private static class Worker {
-    public String createMessage(@NotNull final List<Pair<Boolean, String>> descriptors) {
-      int numOfSystemSchemas = 0;
-      for (Pair<Boolean, String> pair : descriptors) {
-        if (!Boolean.TRUE.equals(pair.getFirst())) {
-          ++ numOfSystemSchemas;
-        }
+  private boolean hasConflicts(@NotNull Collection<VirtualFile> files, @NotNull VirtualFile file) {
+    List<JsonSchemaFileProvider> providers = ((JsonSchemaServiceImpl)myJsonSchemaService).getProvidersForFile(file);
+    for (JsonSchemaFileProvider provider : providers) {
+      if (provider.getSchemaType() != SchemaType.userSchema) continue;
+      VirtualFile schemaFile = provider.getSchemaFile();
+      if (schemaFile != null) {
+        files.add(schemaFile);
       }
-      if (numOfSystemSchemas == 1) {
-        return null;
-      }
-      boolean withTypes = numOfSystemSchemas > 0;
-      final List<String> names = new ArrayList<>();
-      for (Pair<Boolean, String> pair : descriptors) {
-        if (withTypes) {
-          names.add((Boolean.TRUE.equals(pair.getFirst()) ? "user" : "system") + " schema '" + pair.getSecond() + "'");
-        } else {
-          names.add(pair.getSecond());
-        }
-      }
-      return "<html>There are several JSON Schemas mapped to this file: " + StringUtil.join(names, "; ") + "</html>";
     }
+    return files.size() > 1;
+  }
+
+  public static String createMessage(@NotNull final Collection<? extends VirtualFile> schemaFiles,
+                                     @NotNull JsonSchemaService jsonSchemaService,
+                                     @NotNull String separator,
+                                     @NotNull String prefix,
+                                     @NotNull String suffix) {
+    final List<Pair<Boolean, String>> pairList = schemaFiles.stream()
+      .map(file -> jsonSchemaService.getSchemaProvider(file))
+      .filter(Objects::nonNull)
+      .map(provider -> Pair.create(SchemaType.userSchema.equals(provider.getSchemaType()), provider.getName()))
+      .collect(Collectors.toList());
+
+    final long numOfSystemSchemas = pairList.stream().filter(pair -> !pair.getFirst()).count();
+    // do not report anything if there is only one system schema and one user schema (user overrides schema that we provide)
+    if (pairList.size() == 2 && numOfSystemSchemas == 1) return null;
+
+    final boolean withTypes = numOfSystemSchemas > 0;
+    return pairList.stream().map(pair -> {
+      if (withTypes) {
+        return String.format("%s schema '%s'", Boolean.TRUE.equals(pair.getFirst()) ? "user" : "system", pair.getSecond());
+      }
+      else {
+        return pair.getSecond();
+      }
+    }).collect(Collectors.joining(separator, prefix, suffix));
   }
 }

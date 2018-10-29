@@ -53,14 +53,14 @@ public class SchemeImporterEP <S extends Scheme> extends AbstractExtensionPointB
   }
 
   /**
-   * Finds extensions supporting the given <code>schemeClass</code>
+   * Finds extensions supporting the given {@code schemeClass}
    * @param schemeClass The class of the scheme to search extensions for.
    * @return A collection of importers capable of importing schemes of the given class. An empty collection is returned if there are
    *         no matching importers.
    */
   @NotNull
   public static <S extends Scheme> Collection<SchemeImporterEP<S>> getExtensions(Class<S> schemeClass) {
-    List<SchemeImporterEP<S>> importers = new ArrayList<SchemeImporterEP<S>>();
+    List<SchemeImporterEP<S>> importers = new ArrayList<>();
     for (SchemeImporterEP<?> importerEP : EP_NAME.getExtensions()) {
       if (schemeClass.getName().equals(importerEP.schemeClass)) {
         //noinspection unchecked

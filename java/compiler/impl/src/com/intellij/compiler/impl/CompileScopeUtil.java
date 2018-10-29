@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +20,13 @@ import com.intellij.openapi.module.Module;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.jps.api.CmdlineProtoUtil;
 import org.jetbrains.jps.api.CmdlineRemoteProto.Message.ControllerMessage.ParametersMessage.TargetTypeBuildScope;
+import org.jetbrains.jps.builders.BuildTargetType;
 import org.jetbrains.jps.builders.java.JavaModuleBuildTargetType;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * @author nik
@@ -35,12 +38,28 @@ public class CompileScopeUtil {
     scope.putUserData(BASE_SCOPE_FOR_EXTERNAL_BUILD, scopes);
   }
 
-  public static void addScopesForModules(Collection<Module> modules, List<TargetTypeBuildScope> scopes, boolean forceBuild) {
-    if (!modules.isEmpty()) {
+  public static void setResourcesScopeForExternalBuild(@NotNull CompileScope scope, @NotNull List<String> moduleNames) {
+    List<TargetTypeBuildScope> resourceScopes = new ArrayList<>();
+    for (UpdateResourcesBuildContributor provider : UpdateResourcesBuildContributor.EP_NAME.getExtensions()) {
+      for (BuildTargetType<?> type : provider.getResourceTargetTypes()) {
+        resourceScopes.add(CmdlineProtoUtil.createTargetsScope(type.getTypeId(), moduleNames, false));
+      }
+    }
+    setBaseScopeForExternalBuild(scope, resourceScopes);
+  }
+
+  public static void addScopesForModules(Collection<? extends Module> modules,
+                                         Collection<String> unloadedModules,
+                                         List<? super TargetTypeBuildScope> scopes,
+                                         boolean forceBuild) {
+    if (!modules.isEmpty() || !unloadedModules.isEmpty()) {
       for (JavaModuleBuildTargetType type : JavaModuleBuildTargetType.ALL_TYPES) {
         TargetTypeBuildScope.Builder builder = TargetTypeBuildScope.newBuilder().setTypeId(type.getTypeId()).setForceBuild(forceBuild);
         for (Module module : modules) {
           builder.addTargetId(module.getName());
+        }
+        for (String unloadedModule : unloadedModules) {
+          builder.addTargetId(unloadedModule);
         }
         scopes.add(builder.build());
       }
@@ -55,10 +74,10 @@ public class CompileScopeUtil {
     if (scopes2.isEmpty()) return scopes1;
     if (scopes1.isEmpty()) return scopes2;
 
-    Map<String, TargetTypeBuildScope> scopeById = new HashMap<String, TargetTypeBuildScope>();
+    Map<String, TargetTypeBuildScope> scopeById = new HashMap<>();
     mergeScopes(scopeById, scopes1);
     mergeScopes(scopeById, scopes2);
-    return new ArrayList<TargetTypeBuildScope>(scopeById.values());
+    return new ArrayList<>(scopeById.values());
   }
 
   private static void mergeScopes(Map<String, TargetTypeBuildScope> scopeById, List<TargetTypeBuildScope> scopes) {
@@ -95,7 +114,7 @@ public class CompileScopeUtil {
   }
 
   public static boolean allProjectModulesAffected(CompileContextImpl compileContext) {
-    final Set<Module> allModules = new HashSet<Module>(Arrays.asList(compileContext.getProjectCompileScope().getAffectedModules()));
+    final Set<Module> allModules = new HashSet<>(Arrays.asList(compileContext.getProjectCompileScope().getAffectedModules()));
     allModules.removeAll(Arrays.asList(compileContext.getCompileScope().getAffectedModules()));
     return allModules.isEmpty();
   }
@@ -106,11 +125,7 @@ public class CompileScopeUtil {
     }
     final CompileScope scope = context.getCompileScope();
     if (shouldFetchFiles(scope)) {
-      final List<String> paths = new ArrayList<String>();
-      for (VirtualFile file : scope.getFiles(null, true)) {
-        paths.add(file.getPath());
-      }
-      return paths;
+      return Arrays.stream(scope.getFiles(null, true)).map(VirtualFile::getPath).collect(Collectors.toList());
     }
     return Collections.emptyList();
   }

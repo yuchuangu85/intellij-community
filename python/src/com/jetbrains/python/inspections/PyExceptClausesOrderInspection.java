@@ -19,7 +19,7 @@ import com.intellij.codeInspection.LocalInspectionToolSession;
 import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementVisitor;
-import com.intellij.util.containers.HashSet;
+import java.util.HashSet;
 import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.inspections.quickfix.PyMoveExceptQuickFix;
 import com.jetbrains.python.psi.*;
@@ -47,7 +47,7 @@ public class PyExceptClausesOrderInspection extends PyInspection {
 
   private static class Visitor extends PyInspectionVisitor {
 
-    public Visitor(final ProblemsHolder holder, LocalInspectionToolSession session) {
+    Visitor(final ProblemsHolder holder, LocalInspectionToolSession session) {
       super(holder, session);
     }
 
@@ -55,7 +55,7 @@ public class PyExceptClausesOrderInspection extends PyInspection {
     public void visitPyTryExceptStatement(PyTryExceptStatement node) {
       PyExceptPart[] exceptParts = node.getExceptParts();
       if (exceptParts.length > 1) {
-        Set<PyClass> exceptClasses = new HashSet<PyClass>();
+        Set<PyClass> exceptClasses = new HashSet<>();
         for (PyExceptPart exceptPart : exceptParts) {
           PyExpression exceptClass = exceptPart.getExceptClass();
           if (exceptClass instanceof PyReferenceExpression) {

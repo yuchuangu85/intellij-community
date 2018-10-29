@@ -12,7 +12,6 @@
 // limitations under the License.
 package org.zmlx.hg4idea;
 
-import com.google.common.base.Objects;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsException;
@@ -22,6 +21,8 @@ import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.zmlx.hg4idea.util.HgUtil;
+
+import java.util.Objects;
 
 public class HgContentRevision implements ByteBackedContentRevision {
 
@@ -46,18 +47,20 @@ public class HgContentRevision implements ByteBackedContentRevision {
 
   @Nullable
   @Override
-  public String getContent() throws VcsException {
+  public String getContent() {
     if (myRevisionNumber.isWorkingVersion()) return VcsUtil.getFileContent(myHgFile.getFile().getPath());
     final HgFile fileToCat = HgUtil.getFileNameInTargetRevision(myProject, myRevisionNumber, myHgFile);
     return CharsetToolkit.bytesToString(HgUtil.loadContent(myProject, myRevisionNumber, fileToCat), getFile().getCharset());
   }
 
+  @Override
   public byte[] getContentAsBytes() {
     if (myRevisionNumber.isWorkingVersion()) return VcsUtil.getFileByteContent(myHgFile.getFile());
     final HgFile fileToCat = HgUtil.getFileNameInTargetRevision(myProject, myRevisionNumber, myHgFile);
     return HgUtil.loadContent(myProject, myRevisionNumber, fileToCat);
   }
 
+  @Override
   @NotNull
   public FilePath getFile() {
     if (filePath == null) {
@@ -66,6 +69,7 @@ public class HgContentRevision implements ByteBackedContentRevision {
     return filePath;
   }
 
+  @Override
   @NotNull
   public HgRevisionNumber getRevisionNumber() {
     return myRevisionNumber;
@@ -94,6 +98,6 @@ public class HgContentRevision implements ByteBackedContentRevision {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(myHgFile, myRevisionNumber);
+    return Objects.hash(myHgFile, myRevisionNumber);
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,11 +20,14 @@ import com.intellij.psi.stubs.IStubElementType;
 import com.intellij.psi.stubs.NamedStub;
 import com.intellij.psi.stubs.StubBase;
 import com.intellij.psi.stubs.StubElement;
+import com.intellij.reference.SoftReference;
 import com.intellij.util.io.StringRef;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElementFactory;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrAnonymousClassDefinition;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrTypeDefinition;
+import org.jetbrains.plugins.groovy.lang.psi.api.types.GrCodeReferenceElement;
 
 /**
  * @author ilyas
@@ -42,6 +45,8 @@ public class GrTypeDefinitionStub extends StubBase<GrTypeDefinition> implements 
   private final StringRef myQualifiedName;
   private final String[] myAnnotations;
   private final byte myFlags;
+
+  private volatile SoftReference<GrCodeReferenceElement> myStubBaseReference;
 
   public GrTypeDefinitionStub(StubElement parent,
                                   final String name,
@@ -61,6 +66,19 @@ public class GrTypeDefinitionStub extends StubBase<GrTypeDefinition> implements 
   @Nullable
   public String getBaseClassName() {
     return myBaseClassName;
+  }
+
+  @Nullable
+  public GrCodeReferenceElement getBaseClassReference() {
+    String baseClassName = getBaseClassName();
+    if (baseClassName == null) return null;
+
+    GrCodeReferenceElement reference = SoftReference.dereference(myStubBaseReference);
+    if (reference == null) {
+      reference = GroovyPsiElementFactory.getInstance(getProject()).createReferenceElementFromText(baseClassName, getPsi());
+      myStubBaseReference = new SoftReference<>(reference);
+    }
+    return reference;
   }
 
   @Override

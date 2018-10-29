@@ -17,6 +17,8 @@ package com.intellij.codeInspection.reference;
 
 import com.intellij.openapi.util.Key;
 import com.intellij.psi.PsiField;
+import org.jetbrains.uast.UElement;
+import org.jetbrains.uast.UField;
 
 /**
  * A node in the reference graph corresponding to a Java field.
@@ -26,6 +28,8 @@ import com.intellij.psi.PsiField;
  */
 public interface RefField extends RefJavaElement {
    Key<Boolean> ENUM_CONSTANT = Key.create("ENUM_CONSTANT");
+   Key<Boolean> IMPLICITLY_WRITTEN = Key.create("IMPLICITLY_WRITTEN");
+   Key<Boolean> IMPLICITLY_READ = Key.create("IMPLICITLY_READ");
   /**
    * Checks if the field is used for reading.
    *
@@ -54,6 +58,12 @@ public interface RefField extends RefJavaElement {
    */
   RefClass getOwnerClass();
 
+  @Deprecated
   @Override
   PsiField getElement();
+
+  @Override
+  default UField getUastElement() {
+    throw new UnsupportedOperationException();
+  }
 }

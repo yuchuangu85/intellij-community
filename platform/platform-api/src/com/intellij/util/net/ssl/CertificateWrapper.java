@@ -1,6 +1,6 @@
 package com.intellij.util.net.ssl;
 
-import com.intellij.util.containers.HashMap;
+import java.util.HashMap;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -150,7 +150,7 @@ public class CertificateWrapper {
 
   // E.g. CN=*.github.com,O=GitHub\, Inc.,L=San Francisco,ST=California,C=US
   private static Map<String, String> extractFields(X500Principal principal) {
-    Map<String, String> fields = new HashMap<String, String>();
+    Map<String, String> fields = new HashMap<>();
     for (String field : principal.getName().split("(?<!\\\\),")) {
       String[] parts = field.trim().split("=", 2);
       if (parts.length != 2) {

@@ -1,23 +1,12 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
  */
 package com.intellij.xdebugger.impl.frame;
 
 import com.intellij.ide.DataManager;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataProvider;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Pair;
@@ -30,10 +19,12 @@ import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.XSourcePosition;
 import com.intellij.xdebugger.frame.XStackFrame;
 import com.intellij.xdebugger.impl.XDebugSessionImpl;
+import com.intellij.xdebugger.impl.ui.DebuggerUIUtil;
 import com.intellij.xdebugger.impl.ui.tree.XDebuggerTree;
 import com.intellij.xdebugger.impl.ui.tree.nodes.XValueContainerNode;
 import com.intellij.xdebugger.impl.ui.tree.nodes.XValueNodeImpl;
 import gnu.trove.THashMap;
+import gnu.trove.TObjectLongHashMap;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -48,8 +39,6 @@ import java.util.TreeSet;
  * @author nik
  */
 public class XVariablesView extends XVariablesViewBase implements DataProvider {
-  public static final Key<InlineVariablesInfo> DEBUG_VARIABLES = Key.create("debug.variables");
-  public static final Key<ObjectLongHashMap<VirtualFile>> DEBUG_VARIABLES_TIMESTAMPS = Key.create("debug.variables.timestamps");
   private final JPanel myComponent;
 
   public XVariablesView(@NotNull XDebugSessionImpl session) {
@@ -65,26 +54,26 @@ public class XVariablesView extends XVariablesViewBase implements DataProvider {
   }
 
   @Override
-  public void processSessionEvent(@NotNull final SessionEvent event) {
-    XDebugSession session = getSession(getPanel());
-    XStackFrame stackFrame = session == null ? null : session.getCurrentStackFrame();
-    XDebuggerTree tree = getTree();
+  public void processSessionEvent(@NotNull SessionEvent event, @NotNull XDebugSession session) {
+    if (ApplicationManager.getApplication().isDispatchThread()) { // mark nodes obsolete asap
+      getTree().markNodesObsolete();
+    }
 
-    if (event == SessionEvent.BEFORE_RESUME || event == SessionEvent.SETTINGS_CHANGED) {
-      saveCurrentTreeState(stackFrame);
-      if (event == SessionEvent.BEFORE_RESUME) {
-        return;
+    if (event == SessionEvent.BEFORE_RESUME) {
+      return;
+    }
+
+    XStackFrame stackFrame = session.getCurrentStackFrame();
+    DebuggerUIUtil.invokeLater(() -> {
+      getTree().markNodesObsolete();
+      if (stackFrame != null) {
+        cancelClear();
+        buildTreeAndRestoreState(stackFrame);
       }
-    }
-
-    tree.markNodesObsolete();
-    if (stackFrame != null) {
-      cancelClear();
-      buildTreeAndRestoreState(stackFrame);
-    }
-    else {
-      requestClear();
-    }
+      else {
+        requestClear();
+      }
+    });
   }
 
   @Override
@@ -94,9 +83,9 @@ public class XVariablesView extends XVariablesViewBase implements DataProvider {
   }
 
   private static void clearInlineData(XDebuggerTree tree) {
-    tree.getProject().putUserData(DEBUG_VARIABLES, null);
-    tree.getProject().putUserData(DEBUG_VARIABLES_TIMESTAMPS, null);
+    InlineVariablesInfo.set(getSession(tree), null);
     tree.updateEditor();
+    clearInlays(tree);
   }
 
   protected void addEmptyMessage(XValueContainerNode root) {
@@ -125,7 +114,7 @@ public class XVariablesView extends XVariablesViewBase implements DataProvider {
 
   @Nullable
   @Override
-  public Object getData(@NonNls String dataId) {
+  public Object getData(@NotNull @NonNls String dataId) {
     if (CommonDataKeys.VIRTUAL_FILE.is(dataId)) {
       return getCurrentFile(getTree());
     }
@@ -133,35 +122,45 @@ public class XVariablesView extends XVariablesViewBase implements DataProvider {
   }
 
   public static class InlineVariablesInfo {
-    private final Map<Pair<VirtualFile, Integer>, Set<Entry>> myData
-      = new THashMap<>();
+    private final Map<Pair<VirtualFile, Integer>, Set<Entry>> myData = new THashMap<>();
+    private final TObjectLongHashMap<VirtualFile> myTimestamps = new ObjectLongHashMap<>();
+    private static final Key<InlineVariablesInfo> DEBUG_VARIABLES = Key.create("debug.variables");
 
-    @Nullable
-    public List<XValueNodeImpl> get(@NotNull VirtualFile file, int line) {
-      synchronized (myData) {
-        Set<Entry> entries = myData.get(Pair.create(file, line));
-        if (entries == null) return null;
-        return ContainerUtil.map(entries, entry -> entry.myNode);
+    public static InlineVariablesInfo get(@Nullable XDebugSession session) {
+      if (session != null) {
+        return DEBUG_VARIABLES.get(((XDebugSessionImpl)session).getSessionData());
+      }
+      return null;
+    }
+
+    public static void set(@Nullable XDebugSession session, InlineVariablesInfo info) {
+      if (session != null) {
+        DEBUG_VARIABLES.set(((XDebugSessionImpl)session).getSessionData(), info);
       }
     }
 
-    public void put(@NotNull VirtualFile file, @NotNull XSourcePosition position, @NotNull XValueNodeImpl node) {
-      synchronized (myData) {
-        Pair<VirtualFile, Integer> key = Pair.create(file, position.getLine());
-        Set<Entry> entries = myData.get(key);
-        if (entries == null) {
-          entries = new TreeSet<>();
-          myData.put(key, entries);
-        }
-        entries.add(new Entry(position.getOffset(), node));
+    @Nullable
+    public synchronized List<XValueNodeImpl> get(@NotNull VirtualFile file, int line, long currentTimestamp) {
+      long timestamp = myTimestamps.get(file);
+      if (timestamp == -1 || timestamp < currentTimestamp) {
+        return null;
       }
+      Set<Entry> entries = myData.get(Pair.create(file, line));
+      if (entries == null) return null;
+      return ContainerUtil.map(entries, entry -> entry.myNode);
+    }
+
+    public synchronized void put(@NotNull VirtualFile file, @NotNull XSourcePosition position, @NotNull XValueNodeImpl node, long timestamp) {
+      myTimestamps.put(file, timestamp);
+      Pair<VirtualFile, Integer> key = Pair.create(file, position.getLine());
+      myData.computeIfAbsent(key, k -> new TreeSet<>()).add(new Entry(position.getOffset(), node));
     }
 
     private static class Entry implements Comparable<Entry> {
       private final long myOffset;
       private final XValueNodeImpl myNode;
 
-      public Entry(long offset, @NotNull XValueNodeImpl node) {
+      Entry(long offset, @NotNull XValueNodeImpl node) {
         myOffset = offset;
         myNode = node;
       }

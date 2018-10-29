@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,9 @@
  * limitations under the License.
  */
 
-/*
- * Created by IntelliJ IDEA.
- * User: yole
- * Date: 23.11.2006
- * Time: 19:06:26
- */
 package com.intellij.openapi.vcs.changes.shelf;
 
-import com.google.common.base.Objects;
-import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.diff.impl.patch.ApplyPatchException;
 import com.intellij.openapi.diff.impl.patch.PatchSyntaxException;
@@ -33,7 +26,6 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
-import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.FileStatus;
@@ -50,6 +42,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 
 public class ShelvedChange {
   private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.vcs.changes.shelf.ShelvedChange");
@@ -129,7 +122,6 @@ public class ShelvedChange {
 
       File file = getAbsolutePath(baseDir, myBeforePath);
       FilePath beforePath = VcsUtil.getFilePath(file, false);
-      beforePath.refresh();
       ContentRevision beforeRevision = null;
       if (myFileStatus != FileStatus.ADDED) {
         beforeRevision = new CurrentContentRevision(beforePath) {
@@ -190,7 +182,7 @@ public class ShelvedChange {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(myPatchPath, myBeforePath, myAfterPath, myFileStatus);
+    return Objects.hash(myPatchPath, myBeforePath, myAfterPath, myFileStatus);
   }
 
   private class PatchedContentRevision implements ContentRevision {
@@ -198,7 +190,7 @@ public class ShelvedChange {
     private final FilePath myBeforeFilePath;
     private final FilePath myAfterFilePath;
 
-    public PatchedContentRevision(Project project, final FilePath beforeFilePath, final FilePath afterFilePath) {
+    PatchedContentRevision(Project project, final FilePath beforeFilePath, final FilePath afterFilePath) {
       myProject = project;
       myBeforeFilePath = beforeFilePath;
       myAfterFilePath = afterFilePath;
@@ -227,26 +219,22 @@ public class ShelvedChange {
 
     private String loadContent(final TextFilePatch patch) throws ApplyPatchException {
       if (patch.isNewFile()) {
-        return patch.getNewFileText();
+        return patch.getSingleHunkPatchText();
       }
       if (patch.isDeletedFile()) {
         return null;
       }
-      final GenericPatchApplier applier = new GenericPatchApplier(getBaseContent(), patch.getHunks());
-      if (applier.execute()) {
-        return applier.getAfter();
+      GenericPatchApplier.AppliedPatch appliedPatch = GenericPatchApplier.apply(getBaseContent(), patch.getHunks());
+      if (appliedPatch != null) {
+        return appliedPatch.patchedText;
       }
       throw new ApplyPatchException("Apply patch conflict");
     }
 
     private String getBaseContent() {
-      myBeforeFilePath.refresh();
-      return ApplicationManager.getApplication().runReadAction(new Computable<String>() {
-        @Override
-        public String compute() {
-          final Document doc = FileDocumentManager.getInstance().getDocument(myBeforeFilePath.getVirtualFile());
-          return doc.getText();
-        }
+      return ReadAction.compute(() -> {
+        final Document doc = FileDocumentManager.getInstance().getDocument(myBeforeFilePath.getVirtualFile());
+        return doc.getText();
       });
     }
 

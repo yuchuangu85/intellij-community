@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.docking.impl;
 
 import com.intellij.ide.IdeEventQueue;
@@ -45,6 +31,7 @@ import com.intellij.ui.components.panels.NonOpaquePanel;
 import com.intellij.ui.components.panels.VerticalBox;
 import com.intellij.ui.docking.*;
 import com.intellij.ui.tabs.impl.JBTabsImpl;
+import com.intellij.util.IconUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.update.UiNotifyConnector;
@@ -69,11 +56,11 @@ public class DockManagerImpl extends DockManager implements PersistentStateCompo
 
   private final Project myProject;
 
-  private final Map<String, DockContainerFactory> myFactories = new HashMap<String, DockContainerFactory>();
+  private final Map<String, DockContainerFactory> myFactories = new HashMap<>();
 
-  private final Set<DockContainer> myContainers = new HashSet<DockContainer>();
+  private final Set<DockContainer> myContainers = new HashSet<>();
 
-  private final MutualMap<DockContainer, DockWindow> myWindows = new MutualMap<DockContainer, DockWindow>();
+  private final MutualMap<DockContainer, DockWindow> myWindows = new MutualMap<>();
 
   private MyDragSession myCurrentDragSession;
 
@@ -239,14 +226,14 @@ public class DockManagerImpl extends DockManager implements PersistentStateCompo
         ratio = requiredSize / height;
       }
 
-      BufferedImage buffer = UIUtil.createImage((int)width, (int)height, BufferedImage.TYPE_INT_ARGB);
+      BufferedImage buffer = UIUtil.createImage(myWindow, (int)width, (int)height, BufferedImage.TYPE_INT_ARGB);
       buffer.createGraphics().drawImage(previewImage, 0, 0, (int)width, (int)height, null);
 
       myDefaultDragImage = buffer.getScaledInstance((int)(width * ratio), (int)(height * ratio), Image.SCALE_SMOOTH);
       myDragImage = myDefaultDragImage;
 
       myWindow.getContentPane().setLayout(new BorderLayout());
-      myImageContainer = new JLabel(new ImageIcon(myDragImage));
+      myImageContainer = new JLabel(IconUtil.createImageIcon(myDragImage));
       myImageContainer.setBorder(new LineBorder(Color.lightGray));
       myWindow.getContentPane().add(myImageContainer, BorderLayout.CENTER);
 
@@ -263,9 +250,10 @@ public class DockManagerImpl extends DockManager implements PersistentStateCompo
       Point showPoint = me.getPoint();
       SwingUtilities.convertPointToScreen(showPoint, me.getComponent());
 
-      showPoint.x -= myDragImage.getWidth(null) / 2;
-      showPoint.y += 10;
-      myWindow.setBounds(new Rectangle(showPoint, new Dimension(myDragImage.getWidth(null), myDragImage.getHeight(null))));
+      Dimension size = myImageContainer.getSize();
+      showPoint.x -= size.width / 2;
+      showPoint.y -= size.height / 2;
+      myWindow.setBounds(new Rectangle(showPoint, size));
     }
 
     @NotNull
@@ -311,7 +299,7 @@ public class DockManagerImpl extends DockManager implements PersistentStateCompo
 
         if (img != myDragImage) {
           myDragImage = img;
-          myImageContainer.setIcon(new ImageIcon(myDragImage));
+          myImageContainer.setIcon(IconUtil.createImageIcon(myDragImage));
           myWindow.pack();
         }
 
@@ -426,7 +414,7 @@ public class DockManagerImpl extends DockManager implements PersistentStateCompo
     private final DockContainer myContainer;
 
     private final VerticalBox myNorthPanel = new VerticalBox();
-    private final Map<String, IdeRootPaneNorthExtension> myNorthExtensions = new LinkedHashMap<String, IdeRootPaneNorthExtension>();
+    private final Map<String, IdeRootPaneNorthExtension> myNorthExtensions = new LinkedHashMap<>();
 
     private final NonOpaquePanel myUiContainer;
     private final NonOpaquePanel myDockContentUiContainer;
@@ -476,12 +464,7 @@ public class DockManagerImpl extends DockManager implements PersistentStateCompo
         }
       }, this);
 
-      UISettings.getInstance().addUISettingsListener(new UISettingsListener() {
-        @Override
-        public void uiSettingsChanged(UISettings source) {
-          updateNorthPanel();
-        }
-      }, this);
+      project.getMessageBus().connect(this).subscribe(UISettingsListener.TOPIC, uiSettings -> updateNorthPanel());
 
       updateNorthPanel();
     }
@@ -494,13 +477,13 @@ public class DockManagerImpl extends DockManager implements PersistentStateCompo
 
     private void updateNorthPanel() {
       if (ApplicationManager.getApplication().isUnitTestMode()) return;
-      myNorthPanel.setVisible(UISettings.getInstance().SHOW_NAVIGATION_BAR
+      myNorthPanel.setVisible(UISettings.getInstance().getShowNavigationBar()
                               && !(myContainer instanceof DockContainer.Dialog)
-                              && !UISettings.getInstance().PRESENTATION_MODE);
+                              && !UISettings.getInstance().getPresentationMode());
 
       IdeRootPaneNorthExtension[] extensions =
         Extensions.getArea(myProject).getExtensionPoint(IdeRootPaneNorthExtension.EP_NAME).getExtensions();
-      HashSet<String> processedKeys = new HashSet<String>();
+      HashSet<String> processedKeys = new HashSet<>();
       for (IdeRootPaneNorthExtension each : extensions) {
         processedKeys.add(each.getKey());
         if (myNorthExtensions.containsKey(each.getKey())) continue;
@@ -547,7 +530,7 @@ public class DockManagerImpl extends DockManager implements PersistentStateCompo
     }
 
     @Override
-    public boolean dispatch(AWTEvent e) {
+    public boolean dispatch(@NotNull AWTEvent e) {
       if (e instanceof KeyEvent) {
         if (myCurrentDragSession != null) {
           stopCurrentDragSession();
@@ -609,7 +592,7 @@ public class DockManagerImpl extends DockManager implements PersistentStateCompo
   }
 
   @Override
-  public void loadState(Element state) {
+  public void loadState(@NotNull Element state) {
     myLoadedState = state;
   }
 

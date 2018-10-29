@@ -24,6 +24,8 @@ import com.intellij.icons.AllIcons
 import com.intellij.openapi.vfs.VirtualFileManager
 import java.util.*
 import javax.swing.Icon
+import kotlin.collections.ArrayList
+import kotlin.collections.HashSet
 
 
 interface RecentTestsPopupEntry {
@@ -37,9 +39,9 @@ interface RecentTestsPopupEntry {
 }
 
 abstract class TestEntryVisitor {
-  open fun visitTest(test: SingleTestEntry) = Unit
-  open fun visitSuite(suite: SuiteEntry) = Unit
-  open fun visitRunConfiguration(configuration: RunConfigurationEntry) = Unit
+  open fun visitTest(test: SingleTestEntry): Unit = Unit
+  open fun visitSuite(suite: SuiteEntry): Unit = Unit
+  open fun visitRunConfiguration(configuration: RunConfigurationEntry): Unit = Unit
 }
 
 private fun String.toClassName(allowedDots: Int): String {
@@ -53,13 +55,14 @@ private fun String.toClassName(allowedDots: Int): String {
 
 class SingleTestEntry(val url: String,
                       override val runDate: Date,
+                      val runConfiguration: RunnerAndConfigurationSettings,
                       magnitude: TestStateInfo.Magnitude) : RecentTestsPopupEntry 
 {
 
-  override val presentation = url.toClassName(1)
-  override val icon = TestIconMapper.getIcon(magnitude)
+  override val presentation: String = url.toClassName(1)
+  override val icon: Icon? = TestIconMapper.getIcon(magnitude)
   
-  override val failed = magnitude == ERROR_INDEX || magnitude == FAILED_INDEX
+  override val failed: Boolean = magnitude == ERROR_INDEX || magnitude == FAILED_INDEX
   
   var suite: SuiteEntry? = null
   
@@ -70,14 +73,16 @@ class SingleTestEntry(val url: String,
 }
 
 
-class SuiteEntry(val suiteUrl: String, override val runDate: Date) : RecentTestsPopupEntry {
+class SuiteEntry(val suiteUrl: String, 
+                 override val runDate: Date,
+                 var runConfiguration: RunnerAndConfigurationSettings) : RecentTestsPopupEntry {
 
-  val tests = hashSetOf<SingleTestEntry>()
-  val suiteName = VirtualFileManager.extractPath(suiteUrl)
+  val tests: HashSet<SingleTestEntry> = hashSetOf<SingleTestEntry>()
+  val suiteName: String = VirtualFileManager.extractPath(suiteUrl)
   
-  var runConfiguration: RunConfigurationEntry? = null
+  var runConfigurationEntry: RunConfigurationEntry? = null
 
-  override val presentation = suiteUrl.toClassName(0)
+  override val presentation: String = suiteUrl.toClassName(0)
   override val icon: Icon? = AllIcons.RunConfigurations.Junit
   
   override val failed: Boolean
@@ -97,14 +102,10 @@ class SuiteEntry(val suiteUrl: String, override val runDate: Date) : RecentTests
 }
 
 
-class RunConfigurationEntry(val runSettings: RunnerAndConfigurationSettings, initial: SuiteEntry) : RecentTestsPopupEntry {
+class RunConfigurationEntry(val runSettings: RunnerAndConfigurationSettings) : RecentTestsPopupEntry {
 
-  val suites = arrayListOf<SuiteEntry>()
-
-  init {
-    addSuite(initial)
-  }
-
+  val suites: ArrayList<SuiteEntry> = arrayListOf<SuiteEntry>()
+  
   override val runDate: Date
     get() {
       return suites.minBy { it.runDate }!!.runDate
@@ -118,7 +119,7 @@ class RunConfigurationEntry(val runSettings: RunnerAndConfigurationSettings, ini
 
   fun addSuite(suite: SuiteEntry) {
     suites.add(suite)
-    suite.runConfiguration = this
+    suite.runConfigurationEntry = this
   }
 
   override val presentation: String = runSettings.name

@@ -24,6 +24,7 @@ import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.util.net.IOExceptionDialog;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
@@ -35,7 +36,7 @@ import java.util.*;
  */
 public class InstallPluginAction extends AnAction implements DumbAware {
   private static final InstalledPluginsState ourState = InstalledPluginsState.getInstance();
-  private static final Set<IdeaPluginDescriptor> ourInstallingNodes = new HashSet<IdeaPluginDescriptor>();
+  private static final Set<IdeaPluginDescriptor> ourInstallingNodes = new HashSet<>();
 
   private final PluginManagerMain myHost;
   private final PluginManagerMain myInstalled;
@@ -47,7 +48,7 @@ public class InstallPluginAction extends AnAction implements DumbAware {
   }
 
   @Override
-  public void update(AnActionEvent e) {
+  public void update(@NotNull AnActionEvent e) {
     Presentation presentation = e.getPresentation();
     IdeaPluginDescriptor[] selection = getPluginTable().getSelectedObjects();
     boolean enabled = (selection != null);
@@ -78,7 +79,7 @@ public class InstallPluginAction extends AnAction implements DumbAware {
   }
 
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public void actionPerformed(@NotNull AnActionEvent e) {
     install(null);
   }
 
@@ -93,19 +94,20 @@ public class InstallPluginAction extends AnAction implements DumbAware {
   public void install(@Nullable final Runnable onSuccess, @Nullable final Runnable cleanup, boolean confirmed) {
     IdeaPluginDescriptor[] selection = getPluginTable().getSelectedObjects();
 
+    if (!PluginManagerMain.checkThirdPartyPluginsAllowed(Arrays.asList(selection))) {
+      return;
+    }
+
     if (confirmed || userConfirm(selection)) {
-      final List<PluginNode> list = new ArrayList<PluginNode>();
+      final List<PluginNode> list = new ArrayList<>();
       for (IdeaPluginDescriptor descr : selection) {
         PluginNode pluginNode = null;
         if (descr instanceof PluginNode) {
           pluginNode = (PluginNode)descr;
         }
         else if (descr instanceof IdeaPluginDescriptorImpl) {
-          PluginId pluginId = descr.getPluginId();
-          pluginNode = new PluginNode(pluginId);
-          pluginNode.setName(descr.getName());
+          pluginNode = new PluginNode(descr.getPluginId(), descr.getName(), "-1");
           pluginNode.setDepends(Arrays.asList(descr.getDependentPluginIds()), descr.getOptionalDependentPluginIds());
-          pluginNode.setSize("-1");
           pluginNode.setRepositoryName(PluginInstaller.UNKNOWN_HOST_MARKER);
         }
 
@@ -156,7 +158,7 @@ public class InstallPluginAction extends AnAction implements DumbAware {
           }
         };
         final List<IdeaPluginDescriptor> plugins = myHost.getPluginsModel().getAllPlugins();
-        PluginManagerMain.downloadPlugins(list, PluginManagerMain.mapToPluginIds(plugins), onInstallRunnable, cleanupRunnable);
+        PluginManagerMain.downloadPlugins(list, plugins, onInstallRunnable, pluginEnabler, cleanupRunnable);
       }
       catch (final IOException e1) {
         ourInstallingNodes.removeAll(list);

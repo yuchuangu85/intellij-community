@@ -100,12 +100,12 @@ public class DomIncludesTest extends LightCodeInsightFixtureTestCase {
     final PsiFile fileD = createFile("d.xml", textD);
     final String textE = "<xxx><boy/><child/><boy/><child/><boy/><child/><boy/><child/><boy/><child/><boy/><child/></xxx>";
     final PsiFile fileE = createFile("e.xml", textE);
-    final int threadCount = 100;
+    final int threadCount = 20;
     final int iterationCount = Timings.adjustAccordingToMySpeed(100, true);
     System.out.println("iterationCount = " + iterationCount);
 
     final CountDownLatch finished = new CountDownLatch(threadCount);
-    final AtomicReference<Exception> ex = new AtomicReference<Exception>();
+    final AtomicReference<Exception> ex = new AtomicReference<>();
 
     for (int j = 0; j < threadCount; j++) {
       ApplicationManager.getApplication().executeOnPooledThread(() -> {

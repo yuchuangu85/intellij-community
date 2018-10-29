@@ -1,22 +1,9 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
  */
 package com.intellij.lang.properties.references;
 
 import com.intellij.lang.properties.IProperty;
-import com.intellij.lang.properties.PropertiesFileProcessor;
 import com.intellij.lang.properties.PropertiesReferenceManager;
 import com.intellij.lang.properties.psi.PropertiesFile;
 import com.intellij.openapi.roots.ProjectRootManager;
@@ -40,7 +27,8 @@ public class PropertiesPsiCompletionUtil {
   }
 
   static Set<Object> getPropertiesKeys(final PropertyReferenceBase propertyReference) {
-    final Set<Object> variants = new THashSet<Object>(new TObjectHashingStrategy<Object>() {
+    final Set<Object> variants = new THashSet<>(new TObjectHashingStrategy<Object>() {
+      @Override
       public int computeHashCode(final Object object) {
         if (object instanceof IProperty) {
           final String key = ((IProperty)object).getKey();
@@ -51,6 +39,7 @@ public class PropertiesPsiCompletionUtil {
         }
       }
 
+      @Override
       public boolean equals(final Object o1, final Object o2) {
         return o1 instanceof IProperty && o2 instanceof IProperty &&
                Comparing.equal(((IProperty)o1).getKey(), ((IProperty)o2).getKey(), true);
@@ -59,13 +48,10 @@ public class PropertiesPsiCompletionUtil {
     List<PropertiesFile> propertiesFileList = propertyReference.getPropertiesFiles();
     if (propertiesFileList == null) {
       PropertiesReferenceManager
-        .getInstance(propertyReference.getElement().getProject()).processAllPropertiesFiles(new PropertiesFileProcessor() {
-        @Override
-        public boolean process(String baseName, PropertiesFile propertiesFile) {
+        .getInstance(propertyReference.getElement().getProject()).processAllPropertiesFiles((baseName, propertiesFile) -> {
           addVariantsFromFile(propertyReference, propertiesFile, variants);
           return true;
-        }
-      });
+        });
     }
     else {
       for (PropertiesFile propFile : propertiesFileList) {

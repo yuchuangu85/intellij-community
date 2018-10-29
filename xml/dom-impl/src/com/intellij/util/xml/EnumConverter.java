@@ -28,18 +28,14 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * @author peter
  */
 public class EnumConverter<T extends Enum> extends ResolvingConverter<T>{
-  private static final ConcurrentFactoryMap<Class,EnumConverter> ourCache = new ConcurrentFactoryMap<Class, EnumConverter>() {
-    @Override
-    @NotNull
-    protected EnumConverter create(final Class key) {
-      return new EnumConverter(key);
-    }
-  };
+  private static final ConcurrentMap<Class, EnumConverter> ourCache =
+    ConcurrentFactoryMap.createMap(key -> new EnumConverter(key));
   private final Class<T> myType;
 
   private EnumConverter(final Class<T> aClass) {
@@ -75,7 +71,7 @@ public class EnumConverter<T extends Enum> extends ResolvingConverter<T>{
     final XmlElement element = context.getXmlElement();
     if (element instanceof XmlTag) {
       final XmlTag simpleContent = XmlUtil.getSchemaSimpleContent((XmlTag)element);
-      if (simpleContent != null && XmlUtil.collectEnumerationValues(simpleContent, new HashSet<String>())) {
+      if (simpleContent != null && XmlUtil.collectEnumerationValues(simpleContent, new HashSet<>())) {
         return Collections.emptyList();
       }
     }

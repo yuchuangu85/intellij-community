@@ -54,7 +54,7 @@ public abstract class AbstractDomChildrenDescriptor implements XmlElementDescrip
     final DomElement domElement = myManager.getDomElement(context);
     if (domElement == null) return EMPTY_ARRAY;
 
-    List<XmlElementDescriptor> xmlElementDescriptors = new ArrayList<XmlElementDescriptor>();
+    List<XmlElementDescriptor> xmlElementDescriptors = new ArrayList<>();
 
     for (DomCollectionChildDescription childrenDescription : domElement.getGenericInfo().getCollectionChildrenDescriptions()) {
       xmlElementDescriptors.add(new DomElementXmlDescriptor(childrenDescription, myManager));
@@ -97,7 +97,7 @@ public abstract class AbstractDomChildrenDescriptor implements XmlElementDescrip
       xmlElementDescriptors.add(new AnyXmlElementDescriptor(this, getNSDescriptor()));
     }
 
-    return xmlElementDescriptors.toArray(new XmlElementDescriptor[xmlElementDescriptors.size()]);
+    return xmlElementDescriptors.toArray(XmlElementDescriptor.EMPTY_ARRAY);
   }
 
   @Override
@@ -157,7 +157,7 @@ public abstract class AbstractDomChildrenDescriptor implements XmlElementDescrip
     if (domElement == null) return XmlAttributeDescriptor.EMPTY;
 
     final List<? extends DomAttributeChildDescription> descriptions = domElement.getGenericInfo().getAttributeChildrenDescriptions();
-    List<XmlAttributeDescriptor> descriptors = new ArrayList<XmlAttributeDescriptor>();
+    List<XmlAttributeDescriptor> descriptors = new ArrayList<>();
 
     for (DomAttributeChildDescription description : descriptions) {
       descriptors.add(new DomAttributeXmlDescriptor(description, myManager.getProject()));
@@ -172,7 +172,7 @@ public abstract class AbstractDomChildrenDescriptor implements XmlElementDescrip
         }
       }
     }
-    return descriptors.toArray(new XmlAttributeDescriptor[descriptors.size()]);
+    return descriptors.toArray(XmlAttributeDescriptor.EMPTY);
   }
 
   @Override
@@ -239,9 +239,10 @@ public abstract class AbstractDomChildrenDescriptor implements XmlElementDescrip
         throw new UnsupportedOperationException("Method init not implemented in " + getClass());
       }
 
+      @NotNull
       @Override
-      public Object[] getDependences() {
-        throw new UnsupportedOperationException("Method getDependences not implemented in " + getClass());
+      public Object[] getDependencies() {
+        throw new UnsupportedOperationException("Method getDependencies not implemented in " + getClass());
       }
     };
   }
@@ -261,9 +262,10 @@ public abstract class AbstractDomChildrenDescriptor implements XmlElementDescrip
     throw new UnsupportedOperationException("Method init not implemented in " + getClass());
   }
 
+  @NotNull
   @Override
-  public Object[] getDependences() {
-    throw new UnsupportedOperationException("Method getDependences not implemented in " + getClass());
+  public Object[] getDependencies() {
+    throw new UnsupportedOperationException("Method getDependencies not implemented in " + getClass());
   }
 
   @Override

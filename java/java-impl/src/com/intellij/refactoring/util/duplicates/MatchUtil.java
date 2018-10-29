@@ -92,13 +92,13 @@ public class MatchUtil {
     final List<ParameterInfoImpl> newParameters = patchParams(match.myChangedParams, psiMethod);
     final ChangeSignatureProcessor csp = new ChangeSignatureProcessor(psiMethod.getProject(), psiMethod, false, null, psiMethod.getName(),
                                                                       expressionType != null ? expressionType : psiMethod.getReturnType(),
-                                                                      newParameters.toArray(new ParameterInfoImpl[newParameters.size()]));
+                                                                      newParameters.toArray(new ParameterInfoImpl[0]));
 
     csp.run();
   }
 
   public static List<ParameterInfoImpl> patchParams(Map<PsiVariable, PsiType> changedParams, final PsiMethod psiMethod) {
-    final ArrayList<ParameterInfoImpl> newParameters = new ArrayList<ParameterInfoImpl>();
+    final ArrayList<ParameterInfoImpl> newParameters = new ArrayList<>();
     final PsiParameter[] oldParameters = psiMethod.getParameterList().getParameters();
     for (int i = 0; i < oldParameters.length; i++) {
       final PsiParameter oldParameter = oldParameters[i];

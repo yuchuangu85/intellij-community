@@ -17,7 +17,6 @@ package org.jetbrains.plugins.groovy.codeInspection.threading;
 
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.codeInspection.BaseInspection;
 import org.jetbrains.plugins.groovy.codeInspection.BaseInspectionVisitor;
@@ -25,15 +24,7 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrSynchronizedStatem
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrReferenceExpression;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrMethod;
 
-public class GroovyPublicFieldAccessedInSynchronizedContextInspection
-    extends BaseInspection {
-
-  @Override
-  @Nls
-  @NotNull
-  public String getGroupDisplayName() {
-    return THREADING_ISSUES;
-  }
+public class GroovyPublicFieldAccessedInSynchronizedContextInspection extends BaseInspection {
 
   @Override
   @NotNull
@@ -57,8 +48,7 @@ public class GroovyPublicFieldAccessedInSynchronizedContextInspection
       extends BaseInspectionVisitor {
 
     @Override
-    public void visitReferenceExpression(
-        @NotNull GrReferenceExpression expression) {
+    public void visitReferenceExpression(@NotNull GrReferenceExpression expression) {
       final PsiElement element = expression.resolve();
       if (!(element instanceof PsiField)) {
         return;

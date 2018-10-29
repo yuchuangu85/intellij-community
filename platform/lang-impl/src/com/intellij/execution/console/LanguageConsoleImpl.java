@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.console;
 
 import com.intellij.execution.impl.ConsoleViewImpl;
@@ -27,11 +13,13 @@ import com.intellij.openapi.actionSystem.DataProvider;
 import com.intellij.openapi.actionSystem.EmptyAction;
 import com.intellij.openapi.actionSystem.IdeActions;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
+import com.intellij.openapi.application.TransactionGuard;
 import com.intellij.openapi.command.undo.UndoUtil;
 import com.intellij.openapi.editor.*;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
-import com.intellij.openapi.editor.event.DocumentAdapter;
 import com.intellij.openapi.editor.event.DocumentEvent;
+import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.ex.FocusChangeListener;
 import com.intellij.openapi.editor.ex.util.EditorUtil;
@@ -45,12 +33,11 @@ import com.intellij.openapi.fileEditor.impl.FileEditorManagerImpl;
 import com.intellij.openapi.fileTypes.SyntaxHighlighter;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
-import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.TextRange;
-import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
 import com.intellij.psi.search.GlobalSearchScope;
@@ -70,7 +57,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import javax.swing.border.Border;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -89,9 +75,9 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
 
   private final JPanel myPanel = new JPanel(new MyLayout());
   private final JScrollBar myScrollBar = new JBScrollBar(Adjustable.HORIZONTAL);
-  private final DocumentAdapter myDocumentAdapter = new DocumentAdapter() {
+  private final DocumentListener myDocumentAdapter = new DocumentListener() {
     @Override
-    public void documentChanged(DocumentEvent event) {
+    public void documentChanged(@NotNull DocumentEvent event) {
       myPanel.revalidate();
     }
   };
@@ -105,15 +91,15 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
   private final MessageBusConnection myBusConnection;
   private final FocusChangeListener myFocusListener = new FocusChangeListener() {
     @Override
-    public void focusGained(Editor editor) {
+    public void focusGained(@NotNull Editor editor) {
       myCurrentEditor = (EditorEx)editor;
       if (GeneralSettings.getInstance().isSaveOnFrameDeactivation()) {
-        FileDocumentManager.getInstance().saveAllDocuments(); // PY-12487
+        TransactionGuard.submitTransaction(LanguageConsoleImpl.this, () -> FileDocumentManager.getInstance().saveAllDocuments()); // PY-12487
       }
     }
 
     @Override
-    public void focusLost(Editor editor) {
+    public void focusLost(@NotNull Editor editor) {
     }
   };
 
@@ -134,13 +120,13 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
     myConsoleEditor.getDocument().addDocumentListener(myDocumentAdapter);
     myConsoleEditor.getScrollPane().getHorizontalScrollBar().setEnabled(false);
     myConsoleEditor.addFocusListener(myFocusListener);
+    myConsoleEditor.getSettings().setVirtualSpace(false);
     myCurrentEditor = myConsoleEditor;
     Document historyDocument = ((EditorFactoryImpl)editorFactory).createDocument(true);
     UndoUtil.disableUndoFor(historyDocument);
-    myHistoryViewer = (EditorEx)editorFactory.createViewer(historyDocument, getProject());
+    myHistoryViewer = (EditorEx)editorFactory.createViewer(historyDocument, getProject(), EditorKind.CONSOLE);
     myHistoryViewer.getDocument().addDocumentListener(myDocumentAdapter);
 
-    myScrollBar.setOpaque(false);
     myScrollBar.setModel(new MyModel(myScrollBar, myHistoryViewer, myConsoleEditor));
     myScrollBar.putClientProperty(Alignment.class, Alignment.BOTTOM);
 
@@ -149,6 +135,7 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
     ApplicationManager.getApplication().invokeLater(() -> installEditorFactoryListener(), getProject().getDisposed());
   }
 
+  @NotNull
   @Override
   protected final EditorEx doCreateConsoleEditor() {
     return myHistoryViewer;
@@ -158,8 +145,9 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
   protected final void disposeEditor() {
   }
 
+  @NotNull
   @Override
-  protected final JComponent createCenterComponent() {
+  protected JComponent createCenterComponent() {
     initComponents();
     return myPanel;
   }
@@ -181,6 +169,7 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
     setPromptInner(myPrompt);
   }
 
+  @Override
   public void setConsoleEditorEnabled(boolean consoleEditorEnabled) {
     if (isConsoleEditorEnabled() == consoleEditorEnabled) {
       return;
@@ -196,18 +185,7 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
 
   private void setHistoryScrollBarVisible(boolean visible) {
     JScrollBar prev = myHistoryViewer.getScrollPane().getHorizontalScrollBar();
-    if (Registry.is("ide.scroll.new.layout")) {
-      prev.setEnabled(visible);
-      return;
-    }
-    JScrollBar next;
-    if (visible) {
-      next = ((EmptyScrollBar)prev).original;
-    }
-    else {
-      next = new EmptyScrollBar(prev);
-    }
-    myHistoryViewer.getScrollPane().setHorizontalScrollBar(next);
+    prev.setEnabled(visible);
   }
 
   private void setupComponents() {
@@ -228,7 +206,7 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
       @Override
       public void keyTyped(KeyEvent event) {
         if (isConsoleEditorEnabled() && UIUtil.isReallyTypedEvent(event)) {
-          myConsoleEditor.getContentComponent().requestFocus();
+          IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(myConsoleEditor.getContentComponent(), true));
           myConsoleEditor.processKeyTyped(event);
         }
       }
@@ -237,24 +215,29 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
     EmptyAction.registerActionShortcuts(myHistoryViewer.getComponent(), myConsoleEditor.getComponent());
   }
 
+  @Override
   public final boolean isConsoleEditorEnabled() {
     return myConsoleEditor.getComponent().isVisible();
   }
 
+  @Override
   @Nullable
   public String getPrompt() {
     return myPrompt;
   }
 
+  @Override
   @Nullable
   public ConsoleViewContentType getPromptAttributes() {
     return myPromptAttributes;
   }
 
+  @Override
   public void setPromptAttributes(@NotNull ConsoleViewContentType textAttributes) {
     myPromptAttributes = textAttributes;
   }
 
+  @Override
   public void setPrompt(@Nullable String prompt) {
     // always add space to the prompt otherwise it may look ugly
     myPrompt = prompt != null && !prompt.endsWith(" ") ? prompt + " " : prompt;
@@ -262,55 +245,61 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
   }
 
   private void setPromptInner(@Nullable final String prompt) {
-    UIUtil.invokeAndWaitIfNeeded(new Runnable() {
-      @Override
-      public void run() {
-        if (!myConsoleEditor.isDisposed()) {
-          myConsoleEditor.setPrefixTextAndAttributes(prompt, myPromptAttributes.getAttributes());
-        }
+    UIUtil.invokeAndWaitIfNeeded((Runnable)() -> {
+      if (!myConsoleEditor.isDisposed()) {
+        myConsoleEditor.setPrefixTextAndAttributes(prompt, myPromptAttributes.getAttributes());
       }
     });
   }
 
+  @Override
   public void setEditable(boolean editable) {
     myConsoleEditor.setRendererMode(!editable);
     setPromptInner(editable ? myPrompt : "");
   }
 
+  @Override
   public boolean isEditable() {
     return !myConsoleEditor.isRendererMode();
   }
 
+  @Override
   @NotNull
   public final PsiFile getFile() {
     return myHelper.getFileSafe();
   }
 
+  @Override
   @NotNull
   public final VirtualFile getVirtualFile() {
     return myHelper.virtualFile;
   }
 
+  @Override
   @NotNull
   public final EditorEx getHistoryViewer() {
     return myHistoryViewer;
   }
 
+  @Override
   @NotNull
   public final Document getEditorDocument() {
     return myEditorDocument;
   }
 
+  @Override
   @NotNull
   public final EditorEx getConsoleEditor() {
     return myConsoleEditor;
   }
 
+  @Override
   @NotNull
   public String getTitle() {
     return myHelper.title;
   }
 
+  @Override
   public void setTitle(@NotNull String title) {
     myHelper.setTitle(title);
   }
@@ -452,23 +441,12 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
 
   @Nullable
   @Override
-  public Object getData(@NonNls String dataId) {
-    Object data = super.getData(dataId);
-    if (data != null) {
-      return data;
-    }
-    else if (OpenFileDescriptor.NAVIGATE_IN_EDITOR.is(dataId)) {
-      return myConsoleEditor;
-    }
-    else if (getProject().isInitialized()) {
-      Caret caret = myConsoleEditor.getCaretModel().getCurrentCaret();
-      return FileEditorManagerEx.getInstanceEx(getProject()).getData(dataId, myConsoleEditor, caret);
-    }
-    return null;
+  public Object getData(@NotNull @NonNls String dataId) {
+    return super.getData(dataId);
   }
 
   private void installEditorFactoryListener() {
-    FileEditorManagerAdapter fileEditorListener = new FileEditorManagerAdapter() {
+    FileEditorManagerListener fileEditorListener = new FileEditorManagerListener() {
       @Override
       public void fileOpened(@NotNull FileEditorManager source, @NotNull VirtualFile file) {
         if (myConsoleEditor == null || !Comparing.equal(file, getVirtualFile())) {
@@ -509,21 +487,25 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
     }
   }
 
+  @Override
   @NotNull
   public EditorEx getCurrentEditor() {
     return ObjectUtils.notNull(myCurrentEditor, myConsoleEditor);
   }
 
+  @Override
   @NotNull
   public Language getLanguage() {
     return getFile().getLanguage();
   }
 
+  @Override
   public void setLanguage(@NotNull Language language) {
     myHelper.setLanguage(language);
     myHelper.getFileSafe();
   }
 
+  @Override
   public void setInputText(@NotNull final String query) {
     DocumentUtil.writeInRunUndoTransparentAction(() -> myConsoleEditor.getDocument().setText(StringUtil.convertLineSeparators(query)));
   }
@@ -555,19 +537,17 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
 
     @NotNull
     public PsiFile getFile() {
-      return ApplicationManager.getApplication().runReadAction(new Computable<PsiFile>() {
-        @Override
-        public PsiFile compute() {
-          return PsiUtilCore.getPsiFile(project, virtualFile);
-        }
-      });
+      return ReadAction.compute(() -> PsiUtilCore.getPsiFile(project, virtualFile));
     }
 
     @NotNull
     public Document getDocument() {
       Document document = FileDocumentManager.getInstance().getDocument(virtualFile);
       if (document == null) {
-        throw new AssertionError("no document for: " + virtualFile);
+        Language language = (virtualFile instanceof LightVirtualFile) ? ((LightVirtualFile)virtualFile).getLanguage() : null;
+        throw new AssertionError(String.format("no document for: %s (fileType: %s, language: %s, length: %s, valid: %s)",
+                                               virtualFile,
+                                               virtualFile.getFileType(), language, virtualFile.getLength(), virtualFile.isValid()));
       }
       return document;
     }
@@ -591,11 +571,25 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
       EditorSettings editorSettings = editor.getSettings();
       editorSettings.setAdditionalLinesCount(1);
       editorSettings.setAdditionalColumnsCount(1);
+
+      DataManager.registerDataProvider(editor.getComponent(), (dataId) -> getEditorData(editor, dataId));
     }
 
     @NotNull
     PsiFile getFileSafe() {
       return file == null || !file.isValid() ? file = getFile() : file;
+    }
+
+    @Nullable
+    protected Object getEditorData(@NotNull EditorEx editor, String dataId) {
+      if (OpenFileDescriptor.NAVIGATE_IN_EDITOR.is(dataId)) {
+        return editor;
+      }
+      else if (project.isInitialized()) {
+        Caret caret = editor.getCaretModel().getCurrentCaret();
+        return FileEditorManagerEx.getInstanceEx(project).getData(dataId, editor, caret);
+      }
+      return null;
     }
   }
 
@@ -689,40 +683,6 @@ public class LanguageConsoleImpl extends ConsoleViewImpl implements LanguageCons
         position.translate(0, oldHistoryHeight - newHistoryHeight);
         viewport.setViewPosition(position);
       }
-    }
-  }
-
-  private static class EmptyScrollBar extends JBScrollBar {
-
-    final JScrollBar original;
-
-    public EmptyScrollBar(JScrollBar original) {
-      this.original = original;
-      setModel(original.getModel());
-    }
-
-    @Override
-    public Dimension getPreferredSize() {
-      return JBUI.emptySize();
-    }
-
-    @Override
-    public Dimension getMinimumSize() {
-      return JBUI.emptySize();
-    }
-
-    @Override
-    public Dimension getMaximumSize() {
-      return JBUI.emptySize();
-    }
-
-    @Override
-    public Border getBorder() {
-      return null;
-    }
-
-    @Override
-    public void paint(Graphics g) {
     }
   }
 

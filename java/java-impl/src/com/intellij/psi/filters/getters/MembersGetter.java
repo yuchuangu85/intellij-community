@@ -45,9 +45,9 @@ import java.util.*;
  */
 public abstract class MembersGetter {
   public static final Key<Boolean> EXPECTED_TYPE_MEMBER = Key.create("EXPECTED_TYPE_MEMBER");
-  private final Set<PsiMember> myImportedStatically = new HashSet<PsiMember>();
-  private final List<PsiClass> myPlaceClasses = new ArrayList<PsiClass>();
-  private final List<PsiMethod> myPlaceMethods = new ArrayList<PsiMethod>();
+  private final Set<PsiMember> myImportedStatically = new HashSet<>();
+  private final List<PsiClass> myPlaceClasses = new ArrayList<>();
+  private final List<PsiMethod> myPlaceMethods = new ArrayList<>();
   protected final PsiElement myPlace;
 
   protected MembersGetter(StaticMemberProcessor processor, @NotNull final PsiElement place) {
@@ -83,7 +83,7 @@ public abstract class MembersGetter {
     return true;
   }
 
-  public void processMembers(final Consumer<LookupElement> results, @Nullable final PsiClass where,
+  public void processMembers(final Consumer<? super LookupElement> results, @Nullable final PsiClass where,
                              final boolean acceptMethods, final boolean searchInheritors) {
     if (where == null || isPrimitiveClass(where)) return;
 
@@ -102,7 +102,7 @@ public abstract class MembersGetter {
       }
       psiClass = CompletionUtil.getOriginalOrSelf(psiClass);
       if (mayProcessMembers(psiClass)) {
-        final FilterScopeProcessor<PsiElement> declProcessor = new FilterScopeProcessor<PsiElement>(TrueFilter.INSTANCE);
+        final FilterScopeProcessor<PsiElement> declProcessor = new FilterScopeProcessor<>(TrueFilter.INSTANCE);
         psiClass.processDeclarations(declProcessor, ResolveState.initial(), null, myPlace);
         doProcessMembers(acceptMethods, results, psiType == baseType, declProcessor.getResults());
 
@@ -126,7 +126,7 @@ public abstract class MembersGetter {
   }
 
   private void doProcessMembers(boolean acceptMethods,
-                                Consumer<LookupElement> results,
+                                Consumer<? super LookupElement> results,
                                 boolean isExpectedTypeMember, Collection<? extends PsiElement> declarations) {
     for (final PsiElement result : declarations) {
       if (result instanceof PsiMember && !(result instanceof PsiClass)) {

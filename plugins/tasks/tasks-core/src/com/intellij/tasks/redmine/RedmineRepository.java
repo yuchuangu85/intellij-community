@@ -11,7 +11,6 @@ import com.intellij.tasks.impl.httpclient.NewBaseRepositoryImpl;
 import com.intellij.tasks.redmine.model.RedmineIssue;
 import com.intellij.tasks.redmine.model.RedmineProject;
 import com.intellij.util.ArrayUtil;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xmlb.annotations.Tag;
 import com.intellij.util.xmlb.annotations.Transient;
@@ -45,24 +44,26 @@ public class RedmineRepository extends NewBaseRepositoryImpl {
   private static final Pattern ID_PATTERN = Pattern.compile("\\d+");
   private static final Logger LOG = Logger.getInstance(RedmineRepository.class);
   
-  public static final RedmineProject UNSPECIFIED_PROJECT = new RedmineProject() {
-    @NotNull
-    @Override
-    public String getName() {
-      return "-- from all projects --";
-    }
+  public static final RedmineProject UNSPECIFIED_PROJECT = createUnspecifiedProject();
 
-    @Nullable
-    @Override
-    public String getIdentifier() {
-      return getName();
-    }
+  @NotNull
+  private static RedmineProject createUnspecifiedProject() {
+    final RedmineProject unspecified = new RedmineProject() {
+      @NotNull
+      @Override
+      public String getName() {
+        return "-- from all projects --";
+      }
 
-    @Override
-    public int getId() {
-      return -1;
-    }
-  };
+      @Nullable
+      @Override
+      public String getIdentifier() {
+        return getName();
+      }
+    };
+    unspecified.setId(-1);
+    return unspecified;
+  }
 
   private String myAPIKey = "";
   private RedmineProject myCurrentProject;
@@ -150,7 +151,7 @@ public class RedmineRepository extends NewBaseRepositoryImpl {
   @Override
   public Task[] getIssues(@Nullable String query, int offset, int limit, boolean withClosed) throws Exception {
     List<RedmineIssue> issues = fetchIssues(query, offset, limit, withClosed);
-    List<Task> result = ContainerUtil.map(issues, issue -> new RedmineTask(RedmineRepository.this, issue));
+    List<Task> result = ContainerUtil.map(issues, issue -> new RedmineTask(this, issue));
     if (query != null && ID_PATTERN.matcher(query).matches()) {
       LOG.debug("Query '" + query + "' looks like an issue ID. Requesting it explicitly from the server " + this);
       final Task found = findTask(query);
@@ -169,8 +170,8 @@ public class RedmineRepository extends NewBaseRepositoryImpl {
     //}
     HttpClient client = getHttpClient();
     HttpGet method = new HttpGet(getIssuesUrl(offset, limit, withClosed));
-    IssuesWrapper wrapper = client.execute(method, new GsonSingleObjectDeserializer<IssuesWrapper>(GSON, IssuesWrapper.class));
-    return wrapper == null ? Collections.<RedmineIssue>emptyList() : wrapper.getIssues();
+    IssuesWrapper wrapper = client.execute(method, new GsonSingleObjectDeserializer<>(GSON, IssuesWrapper.class));
+    return wrapper == null ? Collections.emptyList() : wrapper.getIssues();
   }
 
   private URI getIssuesUrl(int offset, int limit, boolean withClosed) throws URISyntaxException {
@@ -192,13 +193,13 @@ public class RedmineRepository extends NewBaseRepositoryImpl {
   public List<RedmineProject> fetchProjects() throws Exception {
     HttpClient client = getHttpClient();
     // Download projects with pagination (IDEA-125056, IDEA-125157)
-    List<RedmineProject> allProjects = new ArrayList<RedmineProject>();
+    List<RedmineProject> allProjects = new ArrayList<>();
     int offset = 0;
     ProjectsWrapper wrapper;
     do {
 
       HttpGet method = new HttpGet(getProjectsUrl(offset, 50));
-      wrapper = client.execute(method, new GsonSingleObjectDeserializer<ProjectsWrapper>(GSON, ProjectsWrapper.class));
+      wrapper = client.execute(method, new GsonSingleObjectDeserializer<>(GSON, ProjectsWrapper.class));
       offset += wrapper.getProjects().size();
       allProjects.addAll(wrapper.getProjects());
     }
@@ -221,7 +222,7 @@ public class RedmineRepository extends NewBaseRepositoryImpl {
   public Task findTask(@NotNull String id) throws Exception {
     ensureProjectsDiscovered();
     HttpGet method = new HttpGet(createUriBuilderWithApiKey("issues", id + ".json").build());
-    IssueWrapper wrapper = getHttpClient().execute(method, new GsonSingleObjectDeserializer<IssueWrapper>(GSON, IssueWrapper.class, true));
+    IssueWrapper wrapper = getHttpClient().execute(method, new GsonSingleObjectDeserializer<>(GSON, IssueWrapper.class, true));
     if (wrapper == null) {
       return null;
     }

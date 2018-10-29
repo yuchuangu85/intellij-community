@@ -67,7 +67,7 @@ public class ReplaceConstructorWithFactoryProcessor extends BaseRefactoringProce
     myTargetClass = targetClass;
     myFactoryName = factoryName;
     myManager = PsiManager.getInstance(project);
-    myFactory = JavaPsiFacade.getInstance(myManager.getProject()).getElementFactory();
+    myFactory = JavaPsiFacade.getElementFactory(myManager.getProject());
 
     myIsInner = isInner(myOriginalClass);
   }
@@ -80,6 +80,7 @@ public class ReplaceConstructorWithFactoryProcessor extends BaseRefactoringProce
     return result;
   }
 
+  @Override
   @NotNull
   protected UsageViewDescriptor createUsageViewDescriptor(@NotNull UsageInfo[] usages) {
     if (myConstructor != null) {
@@ -92,12 +93,13 @@ public class ReplaceConstructorWithFactoryProcessor extends BaseRefactoringProce
 
   private List<PsiElement> myNonNewConstructorUsages;
 
+  @Override
   @NotNull
   protected UsageInfo[] findUsages() {
     GlobalSearchScope projectScope = GlobalSearchScope.projectScope(myProject);
 
-    ArrayList<UsageInfo> usages = new ArrayList<UsageInfo>();
-    myNonNewConstructorUsages = new ArrayList<PsiElement>();
+    ArrayList<UsageInfo> usages = new ArrayList<>();
+    myNonNewConstructorUsages = new ArrayList<>();
 
     for (PsiReference reference : ReferencesSearch.search(myConstructor == null ? myOriginalClass : myConstructor, projectScope, false)) {
       PsiElement element = reference.getElement();
@@ -128,13 +130,14 @@ public class ReplaceConstructorWithFactoryProcessor extends BaseRefactoringProce
     //  });
     //}
 
-    return usages.toArray(new UsageInfo[usages.size()]);
+    return usages.toArray(UsageInfo.EMPTY_ARRAY);
   }
 
+  @Override
   protected boolean preprocessUsages(@NotNull Ref<UsageInfo[]> refUsages) {
     UsageInfo[] usages = refUsages.get();
 
-    MultiMap<PsiElement, String> conflicts = new MultiMap<PsiElement, String>();
+    MultiMap<PsiElement, String> conflicts = new MultiMap<>();
     final PsiResolveHelper helper = JavaPsiFacade.getInstance(myProject).getResolveHelper();
     final PsiClass constructorContainingClass = getConstructorContainingClass();
     if (!helper.isAccessible(constructorContainingClass, myTargetClass, null)) {
@@ -144,7 +147,7 @@ public class ReplaceConstructorWithFactoryProcessor extends BaseRefactoringProce
       conflicts.putValue(constructorContainingClass, message);
     }
 
-    HashSet<PsiElement> reportedContainers = new HashSet<PsiElement>();
+    HashSet<PsiElement> reportedContainers = new HashSet<>();
     final String targetClassDescription = RefactoringUIUtil.getDescription(myTargetClass, true);
     for (UsageInfo usage : usages) {
       final PsiElement container = ConflictsUtil.getContainer(usage.getElement());
@@ -192,6 +195,7 @@ public class ReplaceConstructorWithFactoryProcessor extends BaseRefactoringProce
     }
   }
 
+  @Override
   protected void performRefactoring(@NotNull UsageInfo[] usages) {
 
     try {
@@ -264,7 +268,7 @@ public class ReplaceConstructorWithFactoryProcessor extends BaseRefactoringProce
       factoryMethod.getThrowsList().replace(myConstructor.getThrowsList());
     }
 
-    Collection<String> names = new HashSet<String>();
+    Collection<String> names = new HashSet<>();
     for (PsiTypeParameter typeParameter : PsiUtil.typeParametersIterable(myConstructor != null ? myConstructor : containingClass)) {
       if (!names.contains(typeParameter.getName())) { //Otherwise type parameter is hidden in the constructor
         names.add(typeParameter.getName());
@@ -309,6 +313,8 @@ public class ReplaceConstructorWithFactoryProcessor extends BaseRefactoringProce
   }
 
 
+  @Override
+  @NotNull
   protected String getCommandName() {
     if (myConstructor != null) {
       return RefactoringBundle.message("replace.constructor.0.with.a.factory.method",

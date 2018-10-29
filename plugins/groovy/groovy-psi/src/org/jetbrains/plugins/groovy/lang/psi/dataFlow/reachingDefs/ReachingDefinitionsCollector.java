@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import com.intellij.psi.util.PsiTreeUtil;
 import gnu.trove.TIntHashSet;
 import gnu.trove.TIntObjectHashMap;
 import gnu.trove.TIntObjectProcedure;
-import gnu.trove.TIntProcedure;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.lang.psi.GrControlFlowOwner;
@@ -32,7 +31,6 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariable;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.blocks.GrClosableBlock;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrReferenceExpression;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrMember;
-import org.jetbrains.plugins.groovy.lang.psi.controlFlow.ControlFlowBuilderUtil;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.Instruction;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.ReadWriteVariableInstruction;
 import org.jetbrains.plugins.groovy.lang.psi.dataFlow.DFAEngine;
@@ -42,6 +40,8 @@ import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.GroovyScriptClass;
 import org.jetbrains.plugins.groovy.lang.resolve.ResolveUtil;
 
 import java.util.*;
+
+import static org.jetbrains.plugins.groovy.lang.psi.controlFlow.OrderUtil.reversedPostOrder;
 
 /**
  * @author ven
@@ -59,12 +59,12 @@ public class ReachingDefinitionsCollector {
     final DefinitionMap dfaResult = inferDfaResult(flow);
 
     final LinkedHashSet<Integer> fragmentInstructions = getFragmentInstructions(first, last, flow);
-    final int[] postorder = ControlFlowBuilderUtil.postorder(flow);
+    final int[] postorder = reversedPostOrder(flow);
     LinkedHashSet<Integer> reachableFromFragmentReads = getReachable(fragmentInstructions, flow, dfaResult, postorder);
     LinkedHashSet<Integer> fragmentReads = filterReads(fragmentInstructions, flow);
 
-    final Map<String, VariableInfo> imap = new LinkedHashMap<String, VariableInfo>();
-    final Map<String, VariableInfo> omap = new LinkedHashMap<String, VariableInfo>();
+    final Map<String, VariableInfo> imap = new LinkedHashMap<>();
+    final Map<String, VariableInfo> omap = new LinkedHashMap<>();
 
     final PsiManager manager = first.getManager();
 
@@ -117,7 +117,7 @@ public class ReachingDefinitionsCollector {
   private static DefinitionMap inferDfaResult(Instruction[] flow) {
     final ReachingDefinitionsDfaInstance dfaInstance = new ReachingDefinitionsDfaInstance(flow);
     final ReachingDefinitionsSemilattice lattice = new ReachingDefinitionsSemilattice();
-    final DFAEngine<DefinitionMap> engine = new DFAEngine<DefinitionMap>(flow, dfaInstance, lattice);
+    final DFAEngine<DefinitionMap> engine = new DFAEngine<>(flow, dfaInstance, lattice);
     return postprocess(engine.performForceDFA(), flow, dfaInstance);
   }
 
@@ -128,7 +128,7 @@ public class ReachingDefinitionsCollector {
                                        GrControlFlowOwner flowOwner) {
     flowOwner.accept(new GroovyRecursiveElementVisitor() {
       @Override
-      public void visitClosure(GrClosableBlock closure) {
+      public void visitClosure(@NotNull GrClosableBlock closure) {
         addUsagesInClosure(imap, omap, closure, first, last);
         super.visitClosure(closure);
       }
@@ -140,7 +140,7 @@ public class ReachingDefinitionsCollector {
                                       final GrStatement last) {
         closure.accept(new GroovyRecursiveElementVisitor() {
           @Override
-          public void visitReferenceExpression(GrReferenceExpression refExpr) {
+          public void visitReferenceExpression(@NotNull GrReferenceExpression refExpr) {
             if (refExpr.isQualified()) {
               return;
             }
@@ -186,7 +186,7 @@ public class ReachingDefinitionsCollector {
   }
 
   private static LinkedHashSet<Integer> filterReads(final LinkedHashSet<Integer> instructions, final Instruction[] flow) {
-    final LinkedHashSet<Integer> result = new LinkedHashSet<Integer>();
+    final LinkedHashSet<Integer> result = new LinkedHashSet<>();
     for (final Integer i : instructions) {
       final Instruction instruction = flow[i];
       if (isReadInsn(instruction)) {
@@ -231,7 +231,7 @@ public class ReachingDefinitionsCollector {
   }
 
   private static VariableInfo[] filterNonlocals(Map<String, VariableInfo> infos, GrStatement place) {
-    List<VariableInfo> result = new ArrayList<VariableInfo>();
+    List<VariableInfo> result = new ArrayList<>();
     for (Iterator<VariableInfo> iterator = infos.values().iterator(); iterator.hasNext(); ) {
       VariableInfo info = iterator.next();
       String name = info.getName();
@@ -255,11 +255,11 @@ public class ReachingDefinitionsCollector {
         result.add(info);
       }
     }
-    return result.toArray(new VariableInfo[result.size()]);
+    return result.toArray(new VariableInfo[0]);
   }
 
   private static LinkedHashSet<Integer> getFragmentInstructions(GrStatement first, GrStatement last, Instruction[] flow) {
-    LinkedHashSet<Integer> result = new LinkedHashSet<Integer>();
+    LinkedHashSet<Integer> result = new LinkedHashSet<>();
     for (Instruction instruction : flow) {
       if (isInFragment(instruction, first, last)) {
         result.add(instruction.num());
@@ -295,7 +295,7 @@ public class ReachingDefinitionsCollector {
                                                      final Instruction[] flow,
                                                      final DefinitionMap dfaResult,
                                                      final int[] postorder) {
-    final LinkedHashSet<Integer> result = new LinkedHashSet<Integer>();
+    final LinkedHashSet<Integer> result = new LinkedHashSet<>();
     for (final Instruction insn : flow) {
       if (isReadInsn(insn)) {
         final int ref = insn.num();
@@ -316,7 +316,7 @@ public class ReachingDefinitionsCollector {
   }
 
   private static boolean checkPathIsOutsideOfFragment(int def, int ref, Instruction[] flow, LinkedHashSet<Integer> fragmentInsns) {
-    Boolean path = findPath(flow[def], ref, fragmentInsns, false, new HashMap<Instruction, Boolean>());
+    Boolean path = findPath(flow[def], ref, fragmentInsns, false, new HashMap<>());
     assert path != null : "def=" + def + ", ref=" + ref;
     return path.booleanValue();
   }
@@ -379,12 +379,9 @@ public class ReachingDefinitionsCollector {
         @Override
         public boolean execute(int i, TIntHashSet defs) {
           buffer.append(i).append(" -> ");
-          defs.forEach(new TIntProcedure() {
-            @Override
-            public boolean execute(int i) {
-              buffer.append(i).append(" ");
-              return true;
-            }
+          defs.forEach(i1 -> {
+            buffer.append(i1).append(" ");
+            return true;
           });
           return true;
         }
@@ -440,7 +437,7 @@ public class ReachingDefinitionsCollector {
   }
 
   @NotNull
-  private static DefinitionMap postprocess(@NotNull final ArrayList<DefinitionMap> dfaResult,
+  private static DefinitionMap postprocess(@NotNull final List<DefinitionMap> dfaResult,
                                            @NotNull Instruction[] flow,
                                            @NotNull ReachingDefinitionsDfaInstance dfaInstance) {
     DefinitionMap result = new DefinitionMap();

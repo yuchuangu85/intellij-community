@@ -26,12 +26,10 @@ import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
-import com.intellij.psi.codeStyle.CodeStyleSettings;
-import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
+import com.intellij.psi.codeStyle.JavaCodeStyleSettings;
 import com.intellij.psi.impl.source.codeStyle.ImportHelper;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.xml.*;
-import com.intellij.util.containers.HashSet;
 import com.intellij.xml.XmlAttributeDescriptor;
 import com.intellij.xml.XmlElementDescriptor;
 import org.jetbrains.annotations.NotNull;
@@ -45,10 +43,6 @@ import org.jetbrains.plugins.javaFX.fxml.descriptors.JavaFxStaticSetterAttribute
 
 import java.util.*;
 
-/**
- * User: anna
- * Date: 2/22/13
- */
 public class JavaFxImportsOptimizer implements ImportOptimizer {
   @Override
   public boolean supports(PsiFile file) {
@@ -64,24 +58,26 @@ public class JavaFxImportsOptimizer implements ImportOptimizer {
     if (vFile == null || !ProjectRootManager.getInstance(project).getFileIndex().isInSourceContent(vFile)) {
       return EmptyRunnable.INSTANCE;
     }
-    final List<Pair<String, Boolean>> names = new ArrayList<Pair<String, Boolean>>();
+    final List<Pair<String, Boolean>> names = new ArrayList<>();
     final Set<String> demandedForNested = new HashSet<>();
     collectNamesToImport(names, demandedForNested, (XmlFile)file);
     Collections.sort(names, (o1, o2) -> StringUtil.compare(o1.first, o2.first, true));
-    final CodeStyleSettings settings = CodeStyleSettingsManager.getSettings(project);
+    final JavaCodeStyleSettings settings = JavaCodeStyleSettings.getInstance(file);
     final List<Pair<String, Boolean>> sortedNames = ImportHelper.sortItemsAccordingToSettings(names, settings);
-    final HashSet<String> onDemand = new HashSet<String>();
-    ImportHelper.collectOnDemandImports(sortedNames, onDemand, settings);
-    onDemand.addAll(demandedForNested);
-    final Set<String> imported = new HashSet<String>();
-    final List<String> imports = new ArrayList<String>();
+    final Map<String, Boolean> onDemand = new HashMap<>();
+    ImportHelper.collectOnDemandImports(sortedNames, settings, onDemand);
+    for (String s : demandedForNested) {
+      onDemand.put(s, false);
+    }
+    final Set<String> imported = new HashSet<>();
+    final List<String> imports = new ArrayList<>();
     for (Pair<String, Boolean> pair : sortedNames) {
       final String qName = pair.first;
       final String packageName = StringUtil.getPackageName(qName);
       if (imported.contains(packageName) || imported.contains(qName)) {
         continue;
       }
-      if (onDemand.contains(packageName)) {
+      if (onDemand.containsKey(packageName)) {
         imported.add(packageName);
         imports.add("<?import " + packageName + ".*?>");
       } else {

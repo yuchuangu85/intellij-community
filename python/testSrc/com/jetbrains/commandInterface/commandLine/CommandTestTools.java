@@ -55,17 +55,17 @@ final class CommandTestTools {
     EasyMock.expect(command.getName()).andReturn("command").anyTimes();
     EasyMock.expect(command.getHelp(true)).andReturn(new Help("some_text")).anyTimes();
     EasyMock.expect(command.getHelp(false)).andReturn(new Help("some_text")).anyTimes();
-    final List<Option> options = new ArrayList<Option>();
+    final List<Option> options = new ArrayList<>();
 
 
     final Pair<List<String>, Boolean> argument = Pair.create(Collections.singletonList("available_argument"), true);
     options.add(new Option(Pair.create(1, new Argument(new Help("option argument"), argument)), new Help(""),
-                                       Collections.<String>emptyList(),
+                                       Collections.emptyList(),
                                        Collections.singletonList("--available-option")));
 
 
     options.add(new Option(null, new Help(""),
-                           Collections.<String>emptyList(),
+                           Collections.emptyList(),
                            Collections.singletonList("--option-no-argument")));
 
     EasyMock.expect(command.getOptions()).andReturn(options).anyTimes();

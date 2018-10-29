@@ -29,13 +29,6 @@ public class GroovyEmptySyncBlockInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return THREADING_ISSUES;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Empty 'synchronized' block";
   }
@@ -56,7 +49,7 @@ public class GroovyEmptySyncBlockInspection extends BaseInspection {
   private static class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitSynchronizedStatement(GrSynchronizedStatement synchronizedStatement) {
+    public void visitSynchronizedStatement(@NotNull GrSynchronizedStatement synchronizedStatement) {
       super.visitSynchronizedStatement(synchronizedStatement);
       final GrOpenBlock body = synchronizedStatement.getBody();
       if (body == null || !isEmpty(body)) {

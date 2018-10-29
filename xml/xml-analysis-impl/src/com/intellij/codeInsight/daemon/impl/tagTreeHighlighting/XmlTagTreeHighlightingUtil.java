@@ -24,10 +24,11 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.xml.XmlFile;
 import com.intellij.psi.xml.XmlTag;
-import com.intellij.util.containers.HashSet;
+import com.intellij.xml.util.HtmlUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.awt.*;
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -38,7 +39,7 @@ public class XmlTagTreeHighlightingUtil {
   }
 
   static boolean containsTagsWithSameName(PsiElement[] elements) {
-    final Set<String> names = new HashSet<String>();
+    final Set<String> names = new HashSet<>();
 
     for (PsiElement element : elements) {
       if (element instanceof XmlTag) {
@@ -57,7 +58,7 @@ public class XmlTagTreeHighlightingUtil {
       return false;
     }
 
-    if (!hasXmlViewProvider(file)) {
+    if (!hasXmlViewProvider(file) && !HtmlUtil.supportsXmlTypedHandlers(file)) {
       return false;
     }
 

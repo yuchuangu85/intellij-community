@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testFramework.vcs;
 
 import com.intellij.openapi.project.Project;
@@ -20,7 +6,10 @@ import com.intellij.openapi.util.Getter;
 import com.intellij.openapi.vcs.AbstractVcs;
 import com.intellij.openapi.vcs.ProjectLevelVcsManager;
 import com.intellij.openapi.vcs.VcsDirectoryMapping;
-import com.intellij.openapi.vcs.changes.*;
+import com.intellij.openapi.vcs.changes.Change;
+import com.intellij.openapi.vcs.changes.ChangeListManager;
+import com.intellij.openapi.vcs.changes.LocalChangeList;
+import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
 import com.intellij.openapi.vcs.changes.committed.MockAbstractVcs;
 import com.intellij.openapi.vcs.changes.committed.MockDelayingChangeProvider;
 import com.intellij.openapi.vcs.impl.ProjectLevelVcsManagerImpl;
@@ -54,7 +43,7 @@ public class DuringChangeListManagerUpdateTestScheme {
     projectLevelVcsManager.registerVcs(vcs);
     //projectLevelVcsManager.setDirectoryMapping(mockVcsRoot.getAbsolutePath(), vcs.getName());
     final ArrayList<VcsDirectoryMapping> list =
-      new ArrayList<VcsDirectoryMapping>(projectLevelVcsManager.getDirectoryMappings());
+      new ArrayList<>(projectLevelVcsManager.getDirectoryMappings());
     list.add(new VcsDirectoryMapping(vRoot.getPath(), vcs.getName()));
     projectLevelVcsManager.setDirectoryMappings(list);
 
@@ -80,6 +69,7 @@ public class DuringChangeListManagerUpdateTestScheme {
     if (test.getException() != null) {
       test.getException().printStackTrace();
     }
+    //noinspection ThrowableNotThrown
     assert test.get() : (test.getException() == null ? null : test.getException().getMessage());
   }
 
@@ -94,6 +84,7 @@ public class DuringChangeListManagerUpdateTestScheme {
       myRunnable = runnable;
     }
 
+    @Override
     public void run() {
       try {
         myRunnable.run();
@@ -115,6 +106,7 @@ public class DuringChangeListManagerUpdateTestScheme {
       return myException;
     }
 
+    @Override
     public Boolean get() {
       return myDone;
     }
@@ -125,7 +117,7 @@ public class DuringChangeListManagerUpdateTestScheme {
   }
 
   public static void checkFilesAreInList(final String listName, final ChangeListManager manager, final VirtualFile... files) {
-    assert manager.findChangeList(listName) != null;
+    assert manager.findChangeList(listName) != null : manager.getChangeLists();
     final LocalChangeList list = manager.findChangeList(listName);
     final Collection<Change> changes = list.getChanges();
     assert changes.size() == files.length : "size: " + changes.size() + " " + debugRealListContent(list);

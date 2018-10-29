@@ -16,9 +16,9 @@
 package com.intellij;
 
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.util.containers.ConcurrentWeakFactoryMap;
+import com.intellij.util.Function;
+import com.intellij.util.containers.ConcurrentFactoryMap;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.FactoryMap;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
@@ -30,7 +30,7 @@ import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 
 /**
- * Base class for particular scoped bundles (e.g. <code>'vcs'</code> bundles, <code>'aop'</code> bundles etc).
+ * Base class for particular scoped bundles (e.g. {@code 'vcs'} bundles, {@code 'aop'} bundles etc).
  * <p/>
  * Usage pattern:
  * <pre>
@@ -44,7 +44,6 @@ import java.util.ResourceBundle;
  * </pre>
  *
  * @author Denis Zhdanov
- * @since 8/1/11 2:37 PM
  */
 public abstract class AbstractBundle {
   private static final Logger LOG = Logger.getInstance("#com.intellij.AbstractBundle");
@@ -68,14 +67,11 @@ public abstract class AbstractBundle {
     return bundle;
   }
 
-  @SuppressWarnings("MismatchedQueryAndUpdateOfCollection")
-  private static final FactoryMap<ClassLoader, Map<String, ResourceBundle>> ourCache =
-    new ConcurrentWeakFactoryMap<ClassLoader, Map<String, ResourceBundle>>() {
+  private static final Map<ClassLoader, Map<String, ResourceBundle>> ourCache =
+    ConcurrentFactoryMap.createWeakMap(new Function<ClassLoader, Map<String, ResourceBundle>>() {
       @Override
-      protected Map<String, ResourceBundle> create(ClassLoader key) {
-        return ContainerUtil.createConcurrentSoftValueMap();
-      }
-    };
+      public Map<String, ResourceBundle> fun(ClassLoader k) {return ContainerUtil.createConcurrentSoftValueMap();}
+    });
 
   public static ResourceBundle getResourceBundle(@NotNull String pathToBundle, @NotNull ClassLoader loader) {
     Map<String, ResourceBundle> map = ourCache.get(loader);

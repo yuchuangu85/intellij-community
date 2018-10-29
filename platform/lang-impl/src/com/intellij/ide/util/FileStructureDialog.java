@@ -97,6 +97,7 @@ public class FileStructureDialog extends DialogWrapper {
     if (applySortAndFilter) {
       myTreeActionsOwner = new TreeStructureActionsOwner(myBaseTreeModel);
       myTreeModel = new TreeModelWrapper(structureViewModel, myTreeActionsOwner);
+      myTreeActionsOwner.setActionIncluded(Sorter.ALPHA_SORTER, true);
     }
     else {
       myTreeActionsOwner = null;
@@ -167,8 +168,8 @@ public class FileStructureDialog extends DialogWrapper {
     myCommanderPanel = new MyCommanderPanel(myProject);
     myTreeStructure = new MyStructureTreeStructure();
 
-    List<FileStructureFilter> fileStructureFilters = new ArrayList<FileStructureFilter>();
-    List<FileStructureNodeProvider> fileStructureNodeProviders = new ArrayList<FileStructureNodeProvider>();
+    List<FileStructureFilter> fileStructureFilters = new ArrayList<>();
+    List<FileStructureNodeProvider> fileStructureNodeProviders = new ArrayList<>();
     if (myTreeActionsOwner != null) {
       for(Filter filter: myBaseTreeModel.getFilters()) {
         if (filter instanceof FileStructureFilter) {
@@ -211,7 +212,7 @@ public class FileStructureDialog extends DialogWrapper {
 
       @Override
       protected List<AbstractTreeNode> getAllAcceptableNodes(final Object[] childElements, VirtualFile file) {
-        ArrayList<AbstractTreeNode> result = new ArrayList<AbstractTreeNode>();
+        ArrayList<AbstractTreeNode> result = new ArrayList<>();
         for (Object childElement : childElements) {
           result.add((AbstractTreeNode)childElement);
         }
@@ -223,7 +224,7 @@ public class FileStructureDialog extends DialogWrapper {
 
     new AnAction() {
       @Override
-      public void actionPerformed(AnActionEvent e) {
+      public void actionPerformed(@NotNull AnActionEvent e) {
         final boolean succeeded = myCommanderPanel.navigateSelectedElement();
         if (succeeded) {
           unregisterCustomShortcutSet(myCommanderPanel);
@@ -335,7 +336,7 @@ public class FileStructureDialog extends DialogWrapper {
       text += " (" + KeymapUtil.getShortcutText(shortcuts [0]) + ")";
       new AnAction() {
         @Override
-        public void actionPerformed(final AnActionEvent e) {
+        public void actionPerformed(@NotNull final AnActionEvent e) {
           chkFilter.doClick();
         }
       }.registerCustomShortcutSet(new CustomShortcutSet(shortcuts), myCommanderPanel);
@@ -361,7 +362,7 @@ public class FileStructureDialog extends DialogWrapper {
       return false;
     }
 
-    public MyCommanderPanel(Project _project) {
+    MyCommanderPanel(Project _project) {
       super(_project, false, true);
       myList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
       myListSpeedSearch.addChangeListener(new PropertyChangeListener() {
@@ -394,10 +395,10 @@ public class FileStructureDialog extends DialogWrapper {
 
     @Override
     public boolean navigateSelectedElement() {
-      final Ref<Boolean> succeeded = new Ref<Boolean>();
+      final Ref<Boolean> succeeded = new Ref<>();
       final CommandProcessor commandProcessor = CommandProcessor.getInstance();
       commandProcessor.executeCommand(myProject, () -> {
-        succeeded.set(MyCommanderPanel.super.navigateSelectedElement());
+        succeeded.set(super.navigateSelectedElement());
         IdeDocumentHistory.getInstance(myProject).includeCurrentCommandAsNavigation();
       }, "Navigate", null);
       if (succeeded.get()) {
@@ -407,7 +408,7 @@ public class FileStructureDialog extends DialogWrapper {
     }
 
     @Override
-    public Object getData(String dataId) {
+    public Object getData(@NotNull String dataId) {
       Object selectedElement = myCommanderPanel.getSelectedValue();
 
       if (selectedElement instanceof TreeElement) selectedElement = ((StructureViewTreeElement)selectedElement).getValue();
@@ -438,12 +439,13 @@ public class FileStructureDialog extends DialogWrapper {
   }
 
   private class MyStructureTreeStructure extends SmartTreeStructure {
-    public MyStructureTreeStructure() {
+    MyStructureTreeStructure() {
       super(FileStructureDialog.this.myProject, myTreeModel);
     }
 
+    @NotNull
     @Override
-    public Object[] getChildElements(Object element) {
+    public Object[] getChildElements(@NotNull Object element) {
       Object[] childElements = super.getChildElements(element);
 
       if (!myShouldNarrowDown) {
@@ -455,7 +457,7 @@ public class FileStructureDialog extends DialogWrapper {
         return childElements;
       }
 
-      ArrayList<Object> filteredElements = new ArrayList<Object>(childElements.length);
+      ArrayList<Object> filteredElements = new ArrayList<>(childElements.length);
       SpeedSearchComparator speedSearchComparator = createSpeedSearchComparator();
 
       for (Object child : childElements) {

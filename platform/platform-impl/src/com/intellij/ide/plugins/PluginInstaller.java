@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.plugins;
 
 import com.intellij.ide.IdeBundle;
@@ -20,35 +6,38 @@ import com.intellij.ide.startup.StartupActionScriptManager;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.application.ex.ApplicationInfoEx;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.updateSettings.impl.PluginDownloader;
 import com.intellij.openapi.updateSettings.impl.UpdateSettings;
+import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.GuiUtils;
 import com.intellij.util.ArrayUtil;
-import com.intellij.util.Function;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.io.ZipUtil;
+import com.intellij.util.ui.UIUtil;
 import gnu.trove.THashSet;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /**
  * @author stathik
- * @since Nov 29, 2003
  */
 public class PluginInstaller {
+  private static final Logger LOG = Logger.getInstance(PluginInstaller.class);
   public static final String UNKNOWN_HOST_MARKER = "__unknown_repository__";
 
   private static final Object ourLock = new Object();
@@ -56,11 +45,12 @@ public class PluginInstaller {
   private PluginInstaller() { }
 
   public static boolean prepareToInstall(List<PluginNode> pluginsToInstall,
-                                         List<PluginId> allPlugins,
+                                         List<? extends IdeaPluginDescriptor> allPlugins,
+                                         PluginManagerMain.PluginEnabler pluginEnabler,
                                          @NotNull ProgressIndicator indicator) {
     updateUrls(pluginsToInstall, indicator);
-    Set<PluginNode> dependant = new THashSet<PluginNode>();
-    boolean install = prepareToInstall(pluginsToInstall, allPlugins, dependant, indicator);
+    Set<PluginNode> dependant = new THashSet<>();
+    boolean install = prepareToInstall(pluginsToInstall, allPlugins, dependant, pluginEnabler, indicator);
     for (PluginNode node : dependant) {
       if (!pluginsToInstall.contains(node)) {
         pluginsToInstall.add(node);
@@ -69,7 +59,7 @@ public class PluginInstaller {
     return install;
   }
 
-  private static void updateUrls(List<PluginNode> pluginsToInstall, @NotNull ProgressIndicator indicator) {
+  private static void updateUrls(List<? extends PluginNode> pluginsToInstall, @NotNull ProgressIndicator indicator) {
     boolean unknownNodes = false;
     for (PluginNode node : pluginsToInstall) {
       if (node.getRepositoryName() == UNKNOWN_HOST_MARKER) {
@@ -107,11 +97,12 @@ public class PluginInstaller {
     }
   }
 
-  private static boolean prepareToInstall(List<PluginNode> pluginsToInstall,
-                                          List<PluginId> allPlugins,
+  private static boolean prepareToInstall(List<? extends PluginNode> pluginsToInstall,
+                                          List<? extends IdeaPluginDescriptor> allPlugins,
                                           Set<PluginNode> installedDependant,
+                                          PluginManagerMain.PluginEnabler pluginEnabler,
                                           @NotNull ProgressIndicator indicator) {
-    List<PluginId> pluginIds = new SmartList<PluginId>();
+    List<PluginId> pluginIds = new SmartList<>();
     for (PluginNode pluginNode : pluginsToInstall) {
       pluginIds.add(pluginNode.getPluginId());
     }
@@ -120,7 +111,7 @@ public class PluginInstaller {
     for (PluginNode pluginNode : pluginsToInstall) {
       indicator.setText(pluginNode.getName());
       try {
-        result |= prepareToInstall(pluginNode, pluginIds, allPlugins, installedDependant, indicator);
+        result |= prepareToInstall(pluginNode, pluginIds, allPlugins, installedDependant, pluginEnabler, indicator);
       }
       catch (IOException e) {
         String title = IdeBundle.message("title.plugin.error");
@@ -133,9 +124,10 @@ public class PluginInstaller {
   }
 
   private static boolean prepareToInstall(PluginNode pluginNode,
-                                          List<PluginId> pluginIds,
-                                          List<PluginId> allPlugins,
+                                          List<? extends PluginId> pluginIds,
+                                          List<? extends IdeaPluginDescriptor> allPlugins,
                                           Set<PluginNode> installedDependant,
+                                          PluginManagerMain.PluginEnabler pluginEnabler,
                                           @NotNull ProgressIndicator indicator) throws IOException {
     installedDependant.add(pluginNode);
 
@@ -143,8 +135,8 @@ public class PluginInstaller {
     if (pluginNode.getDepends() != null && pluginNode.getDepends().size() > 0) {
       // prepare plugins list for install
       final PluginId[] optionalDependentPluginIds = pluginNode.getOptionalDependentPluginIds();
-      final List<PluginNode> depends = new ArrayList<PluginNode>();
-      final List<PluginNode> optionalDeps = new ArrayList<PluginNode>();
+      final List<PluginNode> depends = new ArrayList<>();
+      final List<PluginNode> optionalDeps = new ArrayList<>();
       for (int i = 0; i < pluginNode.getDepends().size(); i++) {
         PluginId depPluginId = pluginNode.getDepends().get(i);
         if (PluginManager.isPluginInstalled(depPluginId) || PluginManagerCore.isModuleDependency(depPluginId) ||
@@ -154,11 +146,15 @@ public class PluginInstaller {
           continue;
         }
 
-        PluginNode depPlugin = new PluginNode(depPluginId);
-        depPlugin.setSize("-1");
-        depPlugin.setName(depPluginId.getIdString()); //prevent from exceptions
+        IdeaPluginDescriptor depPluginDescriptor = findPluginInRepo(depPluginId, allPlugins);
+        PluginNode depPlugin;
+        if (depPluginDescriptor instanceof PluginNode) {
+          depPlugin = (PluginNode) depPluginDescriptor;
+        } else {
+          depPlugin = new PluginNode(depPluginId, depPluginId.getIdString(), "-1");
+        }
 
-        if (isPluginInRepo(depPluginId, allPlugins)) {
+        if (depPluginDescriptor != null) {
           if (ArrayUtil.indexOf(optionalDependentPluginIds, depPluginId) != -1) {
             optionalDeps.add(depPlugin);
           }
@@ -181,7 +177,7 @@ public class PluginInstaller {
         catch (Exception e) {
           return false;
         }
-        if (!proceed[0] || !prepareToInstall(depends, allPlugins, installedDependant, indicator)) {
+        if (!proceed[0] || !prepareToInstall(depends, allPlugins, installedDependant, pluginEnabler, indicator)) {
           return false;
         }
       }
@@ -199,9 +195,29 @@ public class PluginInstaller {
         catch (Exception e) {
           return false;
         }
-        if (proceed[0] && !prepareToInstall(optionalDeps, allPlugins, installedDependant, indicator)) {
+        if (proceed[0] && !prepareToInstall(optionalDeps, allPlugins, installedDependant, pluginEnabler, indicator)) {
           return false;
         }
+      }
+    }
+
+    Ref<IdeaPluginDescriptor> toDisable = Ref.create(null);
+    Optional<PluginReplacement> replacement = StreamEx.of(PluginReplacement.EP_NAME.getExtensions())
+      .findFirst(r -> r.getNewPluginId().equals(pluginNode.getPluginId().getIdString()));
+    if (replacement.isPresent()) {
+      PluginReplacement pluginReplacement = replacement.get();
+      IdeaPluginDescriptor oldPlugin = PluginManager.getPlugin(pluginReplacement.getOldPluginDescriptor().getPluginId());
+      if (oldPlugin == null) {
+        LOG.warn("Plugin with id '" + pluginReplacement.getOldPluginDescriptor().getPluginId() + "' not found");
+      }
+      else if (!pluginEnabler.isDisabled(oldPlugin.getPluginId())) {
+        ApplicationManager.getApplication().invokeAndWait(() -> {
+          String title = IdeBundle.message("plugin.manager.obsolete.plugins.detected.title");
+          String message = pluginReplacement.getReplacementMessage(oldPlugin, pluginNode);
+          if (Messages.showYesNoDialog(message, title, Messages.getWarningIcon()) == Messages.YES) {
+            toDisable.set(oldPlugin);
+          }
+        });
       }
     }
 
@@ -212,6 +228,9 @@ public class PluginInstaller {
         downloader.install();
       }
       pluginNode.setStatus(PluginNode.STATUS_DOWNLOADED);
+      if (!toDisable.isNull()) {
+        pluginEnabler.disablePlugins(Collections.singleton(toDisable.get()));
+      }
     }
     else {
       return false;
@@ -220,52 +239,95 @@ public class PluginInstaller {
     return true;
   }
 
-  private static boolean isPluginInRepo(PluginId depPluginId, List<PluginId> allPlugins) {
-    return allPlugins.contains(depPluginId);
+  @Nullable
+  private static IdeaPluginDescriptor findPluginInRepo(PluginId depPluginId, List<? extends IdeaPluginDescriptor> allPlugins) {
+    return allPlugins.stream().parallel().filter(p -> p.getPluginId().equals(depPluginId)).findAny().orElse(null);
   }
 
   public static void prepareToUninstall(PluginId pluginId) throws IOException {
     synchronized (ourLock) {
       if (PluginManager.isPluginInstalled(pluginId)) {
-        // add command to delete the 'action script' file
         IdeaPluginDescriptor pluginDescriptor = PluginManager.getPlugin(pluginId);
-        if (pluginDescriptor != null) {
-          StartupActionScriptManager.ActionCommand deleteOld = new StartupActionScriptManager.DeleteCommand(pluginDescriptor.getPath());
-          StartupActionScriptManager.addActionCommand(deleteOld);
+        if (pluginDescriptor == null) {
+          PluginManagerMain.LOG.error("Plugin not found: " + pluginId);
+        }
+        else if (pluginDescriptor.isBundled()) {
+          PluginManagerMain.LOG.error("Plugin is bundled: " + pluginId);
         }
         else {
-          PluginManagerMain.LOG.error("Plugin not found: " + pluginId);
+          StartupActionScriptManager.addActionCommand(new StartupActionScriptManager.DeleteCommand(pluginDescriptor.getPath()));
+
+          fireState(pluginDescriptor, false);
         }
       }
     }
   }
 
-  public static void install(final File fromFile, final String pluginName, boolean deleteFromFile) throws IOException {
-    //noinspection HardCodedStringLiteral
-    if (fromFile.getName().endsWith(".jar")) {
-      // add command to copy file to the IDEA/plugins path
-      StartupActionScriptManager.ActionCommand copyPlugin =
-        new StartupActionScriptManager.CopyCommand(fromFile, new File(PathManager.getPluginsPath() + File.separator + fromFile.getName()));
-      StartupActionScriptManager.addActionCommand(copyPlugin);
+  public static void install(@NotNull File sourceFile,
+                             boolean deleteSourceFile,
+                             @Nullable File existingPlugin,
+                             @NotNull IdeaPluginDescriptor descriptor) throws IOException {
+    List<StartupActionScriptManager.ActionCommand> commands = new ArrayList<>();
+
+    if (existingPlugin != null) {
+      commands.add(new StartupActionScriptManager.DeleteCommand(existingPlugin));
+    }
+
+    String pluginsPath = PathManager.getPluginsPath();
+    if (sourceFile.getName().endsWith(".jar")) {
+      commands.add(new StartupActionScriptManager.CopyCommand(sourceFile, new File(pluginsPath, sourceFile.getName())));
     }
     else {
-      // add command to unzip file to the IDEA/plugins path
-      String unzipPath;
-      if (ZipUtil.isZipContainsFolder(fromFile)) {
-        unzipPath = PathManager.getPluginsPath();
-      }
-      else {
-        unzipPath = PathManager.getPluginsPath() + File.separator + pluginName;
-      }
-
-      StartupActionScriptManager.ActionCommand unzip = new StartupActionScriptManager.UnzipCommand(fromFile, new File(unzipPath));
-      StartupActionScriptManager.addActionCommand(unzip);
+      commands.add(new StartupActionScriptManager.DeleteCommand(new File(pluginsPath, rootEntryName(sourceFile))));  // drops stale directory
+      commands.add(new StartupActionScriptManager.UnzipCommand(sourceFile, new File(pluginsPath)));
     }
 
-    // add command to remove temp plugin file
-    if (deleteFromFile) {
-      StartupActionScriptManager.ActionCommand deleteTemp = new StartupActionScriptManager.DeleteCommand(fromFile);
-      StartupActionScriptManager.addActionCommand(deleteTemp);
+    if (deleteSourceFile) {
+      commands.add(new StartupActionScriptManager.DeleteCommand(sourceFile));
     }
+
+    StartupActionScriptManager.addActionCommands(commands);
+
+    fireState(descriptor, true);
+  }
+
+  private static String rootEntryName(File zip) throws IOException {
+    try (ZipFile zipFile = new ZipFile(zip)) {
+      Enumeration<? extends ZipEntry> entries = zipFile.entries();
+      while (entries.hasMoreElements()) {
+        ZipEntry zipEntry = entries.nextElement();
+        // we do not necessarily get a separate entry for the subdirectory when the file
+        // in the ZIP archive is placed in a subdirectory, so we need to check if the slash
+        // is found anywhere in the path
+        String name = zipEntry.getName();
+        int i = name.indexOf('/');
+        if (i > 0) return name.substring(0, i);
+      }
+    }
+
+    throw new IOException("Corrupted archive (no file entries): " + zip);
+  }
+
+  private static final List<PluginStateListener> myStateListeners = ContainerUtil.createLockFreeCopyOnWriteList();
+
+  public static void addStateListener(@NotNull PluginStateListener listener) {
+    myStateListeners.add(listener);
+  }
+
+  public static void removeStateListener(@NotNull PluginStateListener listener) {
+    myStateListeners.remove(listener);
+  }
+
+  private static void fireState(@NotNull IdeaPluginDescriptor descriptor, boolean install) {
+    UIUtil.invokeLaterIfNeeded(() -> {
+      for (PluginStateListener listener : myStateListeners) {
+        if (install) {
+          listener.install(descriptor);
+        }
+        else {
+          listener.uninstall(descriptor);
+        }
+      }
+    });
   }
 }

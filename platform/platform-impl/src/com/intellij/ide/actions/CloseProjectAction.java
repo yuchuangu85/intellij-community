@@ -15,6 +15,7 @@
  */
 package com.intellij.ide.actions;
 
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.impl.ProjectUtil;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -25,10 +26,16 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.impl.welcomeScreen.WelcomeFrame;
 import com.intellij.projectImport.ProjectAttachProcessor;
+import com.intellij.ui.IdeUICustomization;
+import org.jetbrains.annotations.NotNull;
 
 public class CloseProjectAction extends AnAction implements DumbAware {
+  public CloseProjectAction() {
+    getTemplatePresentation().setText(IdeUICustomization.getInstance().getCloseProjectActionText());
+  }
+
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public void actionPerformed(@NotNull AnActionEvent e) {
     Project project = e.getProject();
     assert project != null;
 
@@ -37,15 +44,15 @@ public class CloseProjectAction extends AnAction implements DumbAware {
   }
 
   @Override
-  public void update(AnActionEvent event){
+  public void update(@NotNull AnActionEvent event){
     Presentation presentation = event.getPresentation();
     Project project = event.getData(CommonDataKeys.PROJECT);
     presentation.setEnabled(project != null);
     if (ProjectAttachProcessor.canAttachToProject() && project != null && ModuleManager.getInstance(project).getModules().length > 1) {
-      presentation.setText("Close Pro_jects in Current Window");
+      presentation.setText(IdeBundle.message("action.close.projects.in.current.window"));
     }
     else {
-      presentation.setText("Close Pro_ject");
+      presentation.setText(IdeUICustomization.getInstance().getCloseProjectActionText());
     }
   }
 }

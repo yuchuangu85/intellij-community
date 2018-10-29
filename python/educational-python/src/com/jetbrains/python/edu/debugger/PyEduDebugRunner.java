@@ -9,7 +9,6 @@ import com.intellij.execution.runners.ExecutionEnvironment;
 import com.intellij.execution.ui.ExecutionConsole;
 import com.intellij.execution.ui.RunnerLayoutUi;
 import com.intellij.execution.ui.actions.CloseAction;
-import com.intellij.ide.actions.ContextHelpAction;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
@@ -111,11 +110,7 @@ public class PyEduDebugRunner extends PyDebugRunner {
     if (tab != null) {
       RunnerLayoutUi ui = tab.getUi();
       ContentManager contentManager = ui.getContentManager();
-      Content content = findContent(contentManager, XDebuggerBundle.message("debugger.session.tab.watches.title"));
-      if (content != null) {
-        contentManager.removeContent(content, true);
-      }
-      content = findContent(contentManager, XDebuggerBundle.message("debugger.session.tab.console.content.name"));
+      Content content = findContent(contentManager, XDebuggerBundle.message("debugger.session.tab.console.content.name"));
       if (content != null) {
         ExecutionConsole console = session.getDebugProcess().createConsole();
         PythonDebugLanguageConsoleView view = (PythonDebugLanguageConsoleView)console;
@@ -123,17 +118,18 @@ public class PyEduDebugRunner extends PyDebugRunner {
         ToggleAction action = new ToggleAction(presentation.getText(), presentation.getDescription(), presentation.getIcon()) {
 
           @Override
-          public boolean isSelected(AnActionEvent e) {
+          public boolean isSelected(@NotNull AnActionEvent e) {
             return !view.isPrimaryConsoleEnabled();
           }
 
           @Override
-          public void setSelected(AnActionEvent e, boolean state) {
+          public void setSelected(@NotNull AnActionEvent e, boolean state) {
             view.enableConsole(!state);
           }
         };
-        content.setActions(new DefaultActionGroup(action), ActionPlaces.DEBUGGER_TOOLBAR,
-                              view.getPreferredFocusableComponent());
+        content.setActions(new DefaultActionGroup(action), ActionPlaces.DEBUGGER_TOOLBAR, view.getPreferredFocusableComponent());
+        //TODO: return proper helpID
+        content.setHelpId(executor.getHelpId());
       }
       patchLeftToolbar(session, ui);
     }
@@ -151,8 +147,6 @@ public class PyEduDebugRunner extends PyDebugRunner {
 
     Executor executor = PyEduDebugExecutor.getInstance();
     newLeftToolbar.add(new CloseAction(executor, session.getRunContentDescriptor(), session.getProject()));
-    //TODO: return proper helpID
-    newLeftToolbar.add(new ContextHelpAction(executor.getHelpId()));
 
     ui.getOptions().setLeftToolbar(newLeftToolbar, ActionPlaces.DEBUGGER_TOOLBAR);
   }

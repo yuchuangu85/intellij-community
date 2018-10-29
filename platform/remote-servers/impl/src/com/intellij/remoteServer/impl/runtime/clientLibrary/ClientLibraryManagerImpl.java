@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.remoteServer.impl.runtime.clientLibrary;
 
 import com.intellij.execution.configurations.RuntimeConfigurationError;
@@ -31,10 +17,10 @@ import com.intellij.remoteServer.runtime.clientLibrary.ClientLibraryDescription;
 import com.intellij.remoteServer.runtime.clientLibrary.ClientLibraryManager;
 import com.intellij.util.EventDispatcher;
 import com.intellij.util.download.*;
-import com.intellij.util.xmlb.annotations.AbstractCollection;
 import com.intellij.util.xmlb.annotations.Attribute;
 import com.intellij.util.xmlb.annotations.Property;
 import com.intellij.util.xmlb.annotations.Tag;
+import com.intellij.util.xmlb.annotations.XCollection;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -50,9 +36,9 @@ import java.util.*;
 @State(name = "RemoteServerClientLibraries", storages = @Storage("remote-server-client-libraries.xml"))
 public class ClientLibraryManagerImpl extends ClientLibraryManager implements PersistentStateComponent<ClientLibraryManagerImpl.State> {
   private static final Logger LOG = Logger.getInstance(ClientLibraryManagerImpl.class);
-  private Map<String, List<File>> myFiles = new LinkedHashMap<String, List<File>>();
+  private Map<String, List<File>> myFiles = new LinkedHashMap<>();
 
-  private EventDispatcher<CloudClientLibraryManagerListener> myEventDispatcher
+  private final EventDispatcher<CloudClientLibraryManagerListener> myEventDispatcher
     = EventDispatcher.create(CloudClientLibraryManagerListener.class);
 
 
@@ -61,6 +47,7 @@ public class ClientLibraryManagerImpl extends ClientLibraryManager implements Pe
     myEventDispatcher.addListener(listener, disposable);
   }
 
+  @Override
   public State getState() {
     State result = new State();
     for (Map.Entry<String, List<File>> entry : myFiles.entrySet()) {
@@ -75,10 +62,10 @@ public class ClientLibraryManagerImpl extends ClientLibraryManager implements Pe
   }
 
   @Override
-  public void loadState(State state) {
-    myFiles = new HashMap<String, List<File>>();
+  public void loadState(@NotNull State state) {
+    myFiles = new HashMap<>();
     for (DownloadedLibraryState libraryState : state.myLibraries) {
-      List<File> files = new ArrayList<File>();
+      List<File> files = new ArrayList<>();
       for (String path : libraryState.myPaths) {
         files.add(new File(path));
       }
@@ -97,7 +84,7 @@ public class ClientLibraryManagerImpl extends ClientLibraryManager implements Pe
     if (files == null) {
       return Collections.emptyList();
     }
-    List<File> existentFiles = new ArrayList<File>();
+    List<File> existentFiles = new ArrayList<>();
     for (File file : files) {
       if (file.exists()) {
         existentFiles.add(file);
@@ -122,7 +109,7 @@ public class ClientLibraryManagerImpl extends ClientLibraryManager implements Pe
   @Override
   public List<File> getLibraries(@NotNull ClientLibraryDescription description) {
     File[] files = getStoreDirectory(description).listFiles();
-    return files == null ? Collections.<File>emptyList() : Arrays.asList(files);
+    return files == null ? Collections.emptyList() : Arrays.asList(files);
   }
 
   @Override
@@ -168,7 +155,7 @@ public class ClientLibraryManagerImpl extends ClientLibraryManager implements Pe
 
     List<File> files = myFiles.get(libraryDescription.getId());
     if (files == null) {
-      files = new ArrayList<File>();
+      files = new ArrayList<>();
       myFiles.put(libraryDescription.getId(), files);
     }
     for (Pair<File, DownloadableFileDescription> pair : downloaded) {
@@ -186,13 +173,13 @@ public class ClientLibraryManagerImpl extends ClientLibraryManager implements Pe
     public String myId;
 
     @Property(surroundWithTag = false)
-    @AbstractCollection(surroundWithTag = false, elementTag = "file", elementValueAttribute = "path")
-    public List<String> myPaths = new ArrayList<String>();
+    @XCollection(elementName = "file", valueAttributeName = "path")
+    public List<String> myPaths = new ArrayList<>();
   }
 
   public static class State {
     @Property(surroundWithTag = false)
-    @AbstractCollection(surroundWithTag = false)
-    public List<DownloadedLibraryState> myLibraries = new ArrayList<DownloadedLibraryState>();
+    @XCollection
+    public List<DownloadedLibraryState> myLibraries = new ArrayList<>();
   }
 }

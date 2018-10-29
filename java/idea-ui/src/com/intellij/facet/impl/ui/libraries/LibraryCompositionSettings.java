@@ -52,7 +52,7 @@ public class LibraryCompositionSettings implements Disposable {
   private Library mySelectedLibrary;
   private boolean myDownloadLibraries;
   private LibraryDownloadSettings myDownloadSettings;
-  private Map<Library, ExistingLibraryEditor> myExistingLibraryEditors =
+  private final Map<Library, ExistingLibraryEditor> myExistingLibraryEditors =
     ContainerUtil.newIdentityTroveMap();
   private FrameworkLibraryProvider myLibraryProvider;
 
@@ -90,7 +90,7 @@ public class LibraryCompositionSettings implements Disposable {
   }
 
   public List<? extends FrameworkLibraryVersion> getCompatibleVersions() {
-    final List<FrameworkLibraryVersion> result = new ArrayList<FrameworkLibraryVersion>();
+    final List<FrameworkLibraryVersion> result = new ArrayList<>();
     for (FrameworkLibraryVersion version : myAllVersions) {
       if (myVersionFilter.isAccepted(version)) {
         result.add(version);

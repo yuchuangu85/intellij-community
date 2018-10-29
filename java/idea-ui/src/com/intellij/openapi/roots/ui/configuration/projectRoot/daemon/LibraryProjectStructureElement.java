@@ -78,7 +78,7 @@ public class LibraryProjectStructureElement extends ProjectStructureElement {
   }
 
   private void reportInvalidRoots(ProjectStructureProblemsHolder problemsHolder, LibraryEx library,
-                                  final OrderRootType type, String rootName, final ProjectStructureProblemType problemType) {
+                                  @NotNull OrderRootType type, String rootName, final ProjectStructureProblemType problemType) {
     final List<String> invalidUrls = library.getInvalidRootUrls(type);
     if (!invalidUrls.isEmpty()) {
       final String description = createInvalidRootsDescription(invalidUrls, rootName, library.getName());
@@ -180,7 +180,7 @@ public class LibraryProjectStructureElement extends ProjectStructureElement {
     private final OrderRootType myType;
     private final List<String> myInvalidUrls;
 
-    public RemoveInvalidRootsQuickFix(Library library, OrderRootType type, List<String> invalidUrls) {
+    RemoveInvalidRootsQuickFix(Library library, OrderRootType type, List<String> invalidUrls) {
       super("Remove invalid " + StringUtil.pluralize("root", invalidUrls.size()));
       myLibrary = library;
       myType = type;
@@ -238,7 +238,7 @@ public class LibraryProjectStructureElement extends ProjectStructureElement {
     public void performFix() {
       BaseLibrariesConfigurable configurable = BaseLibrariesConfigurable.getInstance(myContext.getProject(), LibraryTablesRegistrar.PROJECT_LEVEL);
       Library[] libraries = configurable.getModelProvider().getModifiableModel().getLibraries();
-      List<LibraryProjectStructureElement> toRemove = new ArrayList<LibraryProjectStructureElement>();
+      List<LibraryProjectStructureElement> toRemove = new ArrayList<>();
       for (Library library : libraries) {
         LibraryProjectStructureElement libraryElement = new LibraryProjectStructureElement(myContext, library);
         if (myContext.getDaemonAnalyzer().getUsages(libraryElement).isEmpty()) {

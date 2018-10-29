@@ -38,7 +38,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.LinkedHashSet;
 
 public class PullAsAbstractUpFix extends LocalQuickFixAndIntentionActionOnPsiElement {
-  private static final Logger LOG = Logger.getInstance("#" + PullAsAbstractUpFix.class.getName());
+  private static final Logger LOG = Logger.getInstance(PullAsAbstractUpFix.class);
   private final String myName;
 
   public PullAsAbstractUpFix(PsiMethod psiMethod, final String name) {
@@ -63,7 +63,7 @@ public class PullAsAbstractUpFix extends LocalQuickFixAndIntentionActionOnPsiEle
                              @NotNull PsiFile file,
                              @NotNull PsiElement startElement,
                              @NotNull PsiElement endElement) {
-    return startElement instanceof PsiMethod && startElement.isValid() && ((PsiMethod)startElement).getContainingClass() != null;
+    return startElement instanceof PsiMethod && ((PsiMethod)startElement).getContainingClass() != null;
   }
 
   @Override
@@ -87,7 +87,7 @@ public class PullAsAbstractUpFix extends LocalQuickFixAndIntentionActionOnPsiEle
       }
     }
     else {
-      final LinkedHashSet<PsiClass> classesToPullUp = new LinkedHashSet<PsiClass>();
+      final LinkedHashSet<PsiClass> classesToPullUp = new LinkedHashSet<>();
       collectClassesToPullUp(manager, classesToPullUp, containingClass.getExtendsListTypes());
       collectClassesToPullUp(manager, classesToPullUp, containingClass.getImplementsListTypes());
 
@@ -99,7 +99,7 @@ public class PullAsAbstractUpFix extends LocalQuickFixAndIntentionActionOnPsiEle
         pullUp(method, containingClass, classesToPullUp.iterator().next());
       }
       else if (editor != null) {
-        NavigationUtil.getPsiElementPopup(classesToPullUp.toArray(new PsiClass[classesToPullUp.size()]), PsiClassListCellRenderer.INSTANCE,
+        NavigationUtil.getPsiElementPopup(classesToPullUp.toArray(PsiClass.EMPTY_ARRAY), new PsiClassListCellRenderer(),
                                           "Choose super class",
                                           new PsiElementProcessor<PsiClass>() {
                                             @Override
@@ -113,7 +113,7 @@ public class PullAsAbstractUpFix extends LocalQuickFixAndIntentionActionOnPsiEle
   }
 
 
-  private static void collectClassesToPullUp(PsiManager manager, LinkedHashSet<PsiClass> classesToPullUp, PsiClassType[] extendsListTypes) {
+  private static void collectClassesToPullUp(PsiManager manager, LinkedHashSet<? super PsiClass> classesToPullUp, PsiClassType[] extendsListTypes) {
     for (PsiClassType extendsListType : extendsListTypes) {
       PsiClass resolve = extendsListType.resolve();
       if (resolve != null && manager.isInProject(resolve)) {
@@ -151,7 +151,7 @@ public class PullAsAbstractUpFix extends LocalQuickFixAndIntentionActionOnPsiEle
         name = "Pull method \'" + methodWithOverrides.getName() + "\' up and make it abstract";
       }
     } else {
-      final LinkedHashSet<PsiClass> classesToPullUp = new LinkedHashSet<PsiClass>();
+      final LinkedHashSet<PsiClass> classesToPullUp = new LinkedHashSet<>();
       collectClassesToPullUp(manager, classesToPullUp, containingClass.getExtendsListTypes());
       collectClassesToPullUp(manager, classesToPullUp, containingClass.getImplementsListTypes());
       if (classesToPullUp.isEmpty()) {

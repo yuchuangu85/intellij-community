@@ -22,7 +22,6 @@ import com.intellij.ide.util.ClassFilter;
 import com.intellij.ide.util.TreeClassChooser;
 import com.intellij.ide.util.TreeClassChooserFactory;
 import com.intellij.openapi.application.ReadAction;
-import com.intellij.openapi.application.Result;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.ex.MessagesEx;
@@ -32,7 +31,6 @@ import com.intellij.psi.PsiDirectory;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiMethodUtil;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public abstract class ClassBrowser extends BrowseModuleValueActionListener {
@@ -43,6 +41,7 @@ public abstract class ClassBrowser extends BrowseModuleValueActionListener {
     myTitle = title;
   }
 
+  @Override
   @Nullable
   protected String showDialog() {
     final ClassFilter.ClassFilterWithScope classFilter;
@@ -94,12 +93,7 @@ public abstract class ClassBrowser extends BrowseModuleValueActionListener {
 
       @Nullable
       private PsiMethod findMainMethod(final PsiClass aClass) {
-        return new ReadAction<PsiMethod>() {
-          @Override
-          protected void run(@NotNull Result<PsiMethod> result) throws Throwable {
-            result.setResult(PsiMethodUtil.findMainMethod(aClass));
-          }
-        }.execute().getResultObject();
+        return ReadAction.compute(() -> PsiMethodUtil.findMainMethod(aClass));
       }
     };
     return new MainClassBrowser(project, moduleSelector, ExecutionBundle.message("choose.main.class.dialog.title")) {
@@ -128,7 +122,7 @@ public abstract class ClassBrowser extends BrowseModuleValueActionListener {
     };
   }
 
-  private abstract static class MainClassBrowser extends ClassBrowser {
+  public abstract static class MainClassBrowser extends ClassBrowser {
     protected final Project myProject;
     private final ConfigurationModuleSelector myModuleSelector;
 
@@ -140,10 +134,12 @@ public abstract class ClassBrowser extends BrowseModuleValueActionListener {
       myModuleSelector = moduleSelector;
     }
 
+    @Override
     protected PsiClass findClass(final String className) {
       return myModuleSelector.findClass(className);
     }
 
+    @Override
     protected ClassFilter.ClassFilterWithScope getFilter() throws NoFilterException {
       final Module module = myModuleSelector.getModule();
       final GlobalSearchScope scope;
@@ -155,10 +151,12 @@ public abstract class ClassBrowser extends BrowseModuleValueActionListener {
       }
       final ClassFilter filter = createFilter(module);
       return new ClassFilter.ClassFilterWithScope() {
+        @Override
         public GlobalSearchScope getScope() {
           return scope;
         }
 
+        @Override
         public boolean isAccepted(final PsiClass aClass) {
           return filter == null || filter.isAccepted(aClass);
         }

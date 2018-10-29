@@ -30,7 +30,6 @@ import javax.swing.*;
 
 /**
  * @author Denis Zhdanov
- * @since 6/26/13 1:38 PM
  */
 public class ExternalModuleSettingsStep<S extends ExternalProjectSettings> extends ModuleWizardStep {
 
@@ -89,6 +88,7 @@ public class ExternalModuleSettingsStep<S extends ExternalProjectSettings> exten
     if (contentPath != null) {
       myControl.getInitialSettings().setExternalProjectPath(contentPath);
     }
+    myControl.reset(true, myContext);
   }
 
   @Override

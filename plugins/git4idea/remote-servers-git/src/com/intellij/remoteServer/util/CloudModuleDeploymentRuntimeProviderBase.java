@@ -36,11 +36,11 @@ import java.util.List;
  */
 public abstract class CloudModuleDeploymentRuntimeProviderBase implements CloudDeploymentRuntimeProvider {
 
-  private static final Logger LOG = Logger.getInstance("#" + CloudModuleDeploymentRuntimeProviderBase.class.getName());
+  private static final Logger LOG = Logger.getInstance(CloudModuleDeploymentRuntimeProviderBase.class);
 
   @Override
   public Collection<DeploymentSource> getDeploymentSources(Project project) {
-    List<DeploymentSource> result = new ArrayList<DeploymentSource>();
+    List<DeploymentSource> result = new ArrayList<>();
     ModulePointerManager pointerManager = ModulePointerManager.getInstance(project);
     for (Module module : ModuleManager.getInstance(project).getModules()) {
       result.add(new ModuleDeploymentSourceImpl(pointerManager.create(module)));

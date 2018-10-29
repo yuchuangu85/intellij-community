@@ -32,7 +32,7 @@ import java.util.List;
 public abstract class DocStringUpdater<T extends DocStringLineParser> {
   protected final T myOriginalDocString;
   private final StringBuilder myBuilder;
-  private final List<Modification> myUpdates = new ArrayList<Modification>();
+  private final List<Modification> myUpdates = new ArrayList<>();
   protected final String myMinContentIndent;
 
   public DocStringUpdater(@NotNull T docString, @NotNull String minContentIndent) {
@@ -154,7 +154,7 @@ public abstract class DocStringUpdater<T extends DocStringLineParser> {
     @NotNull final TextRange range;
     @NotNull final String text;
 
-    public Modification(@NotNull TextRange range, @NotNull String newText) {
+    Modification(@NotNull TextRange range, @NotNull String newText) {
       this.range = range;
       this.text = newText;
     }

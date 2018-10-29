@@ -1,68 +1,49 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.settingsRepository.git
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.runAndLogException
 import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.progress.ProgressIndicator
-import com.intellij.openapi.util.NotNullLazyValue
 import com.intellij.openapi.util.ShutDownTracker
 import com.intellij.openapi.util.text.StringUtil
-import com.intellij.util.*
+import com.intellij.util.SmartList
+import com.intellij.util.io.*
 import org.eclipse.jgit.api.AddCommand
 import org.eclipse.jgit.api.errors.NoHeadException
 import org.eclipse.jgit.api.errors.UnmergedPathsException
 import org.eclipse.jgit.errors.TransportException
 import org.eclipse.jgit.ignore.IgnoreNode
-import org.eclipse.jgit.lib.ConfigConstants
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.lib.RepositoryState
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.transport.*
-import org.jetbrains.jgit.dirCache.AddLoadedFile
-import org.jetbrains.jgit.dirCache.DeleteDirectory
-import org.jetbrains.jgit.dirCache.deletePath
-import org.jetbrains.jgit.dirCache.edit
-import org.jetbrains.keychain.CredentialsStore
 import org.jetbrains.settingsRepository.*
 import org.jetbrains.settingsRepository.RepositoryManager.Updater
 import java.io.IOException
-import java.nio.file.Files
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Path
 import kotlin.concurrent.write
 
-class GitRepositoryManager(private val credentialsStore: NotNullLazyValue<CredentialsStore>, dir: Path) : BaseRepositoryManager(dir) {
-  val repository: Repository
+class GitRepositoryManager(private val credentialsStore: Lazy<IcsCredentialsStore>, dir: Path) : BaseRepositoryManager(dir), GitRepositoryClient {
+  override val repository: Repository
     get() {
       var r = _repository
       if (r == null) {
-        r = FileRepositoryBuilder().setWorkTree(dir.toFile()).build()
+        r = buildRepository(workTree = dir)
         _repository = r
         if (ApplicationManager.getApplication()?.isUnitTestMode != true) {
           ShutDownTracker.getInstance().registerShutdownTask { _repository?.close() }
         }
       }
-      return r!!
+      return r
     }
 
   // we must recreate repository if dir changed because repository stores old state and cannot be reinitialized (so, old instance cannot be reused and we must instantiate new one)
-  var _repository: Repository? = null
+  private var _repository: Repository? = null
 
-  val credentialsProvider: CredentialsProvider by lazy {
+  override val credentialsProvider: CredentialsProvider by lazy {
     JGitCredentialsProvider(credentialsStore, repository)
   }
 
@@ -92,9 +73,7 @@ class GitRepositoryManager(private val credentialsStore: NotNullLazyValue<Creden
     }
   }
 
-  override fun getUpstream(): String? {
-    return repository.config.getString(ConfigConstants.CONFIG_REMOTE_SECTION, Constants.DEFAULT_REMOTE_NAME, ConfigConstants.CONFIG_KEY_URL).nullize()
-  }
+  override fun getUpstream(): String? = repository.upstream
 
   override fun setUpstream(url: String?, branch: String?) {
     repository.setUpstream(url, branch ?: Constants.MASTER)
@@ -103,14 +82,14 @@ class GitRepositoryManager(private val credentialsStore: NotNullLazyValue<Creden
   override fun isRepositoryExists(): Boolean {
     val repo = _repository
     if (repo == null) {
-      return dir.exists() && FileRepositoryBuilder().setWorkTree(dir.toFile()).setup().objectDirectory.exists()
+      return dir.exists() && FileRepositoryBuilder().setWorkTree(dir.toFile()).setUseSystemConfig(false).setup().objectDirectory.exists()
     }
     else {
       return repo.objectDatabase.exists()
     }
   }
 
-  override fun hasUpstream() = getUpstream() != null
+  override fun hasUpstream(): Boolean = getUpstream() != null
 
   override fun addToIndex(file: Path, path: String, content: ByteArray, size: Int) {
     repository.edit(AddLoadedFile(path, content, size, file.lastModified().toMillis()))
@@ -156,10 +135,7 @@ class GitRepositoryManager(private val credentialsStore: NotNullLazyValue<Creden
     }
   }
 
-  override fun getAheadCommitsCount() = repository.getAheadCommitsCount()
-
-  override fun commit(paths: List<String>) {
-  }
+  override fun getAheadCommitsCount(): Int = repository.getAheadCommitsCount()
 
   override fun push(indicator: ProgressIndicator?) {
     LOG.debug("Push")
@@ -196,6 +172,9 @@ class GitRepositoryManager(private val credentialsStore: NotNullLazyValue<Creden
               throw AuthenticationException(e)
             }
           }
+          else if (e.status == TransportException.Status.BAD_GATEWAY) {
+            continue
+          }
           else {
             wrapIfNeedAndReThrow(e)
           }
@@ -216,26 +195,24 @@ class GitRepositoryManager(private val credentialsStore: NotNullLazyValue<Creden
       // KT-8632
       override fun merge(): UpdateResult? = lock.write {
         val committed = commit(pullTask.indicator)
-        if (refToMerge == null && !committed && getAheadCommitsCount() == 0) {
-          definitelySkipPush = true
+        if (refToMerge == null) {
+          definitelySkipPush = !committed && getAheadCommitsCount() == 0
           return null
         }
-        else {
-          return pullTask.pull(prefetchedRefToMerge = refToMerge)
-        }
+        return pullTask.pull(prefetchedRefToMerge = refToMerge)
       }
     }
   }
 
-  override fun pull(indicator: ProgressIndicator?) = Pull(this, indicator).pull()
+  override fun pull(indicator: ProgressIndicator?): UpdateResult? = Pull(this, indicator).pull()
 
-  override fun resetToTheirs(indicator: ProgressIndicator) = Reset(this, indicator).reset(true)
+  override fun resetToTheirs(indicator: ProgressIndicator): UpdateResult = Reset(this, indicator).reset(true)
 
-  override fun resetToMy(indicator: ProgressIndicator, localRepositoryInitializer: (() -> Unit)?) = Reset(this, indicator).reset(false, localRepositoryInitializer)
+  override fun resetToMy(indicator: ProgressIndicator, localRepositoryInitializer: (() -> Unit)?): UpdateResult = Reset(this, indicator).reset(false, localRepositoryInitializer)
 
-  override fun canCommit() = repository.repositoryState.canCommit()
+  override fun canCommit(): Boolean = repository.repositoryState.canCommit()
 
-  fun renameDirectory(pairs: Map<String, String?>): Boolean {
+  fun renameDirectory(pairs: Map<String, String?>, commitMessage: String): Boolean {
     var addCommand: AddCommand? = null
     val toDelete = SmartList<DeleteDirectory>()
     for ((oldPath, newPath) in pairs) {
@@ -248,30 +225,30 @@ class GitRepositoryManager(private val credentialsStore: NotNullLazyValue<Creden
       old.directoryStreamIfExists {
         val new = if (newPath == null) dir else dir.resolve(newPath)
         for (file in it) {
-          try {
+          LOG.runAndLogException {
             if (file.isHidden()) {
               file.delete()
             }
             else {
-              Files.move(file, new.resolve(file.fileName))
+              try {
+                file.move(new.resolve(file.fileName))
+              }
+              catch (ignored: FileAlreadyExistsException) {
+                return@runAndLogException
+              }
+
               if (addCommand == null) {
                 addCommand = AddCommand(repository)
               }
               addCommand!!.addFilepattern(if (newPath == null) file.fileName.toString() else "$newPath/${file.fileName}")
             }
           }
-          catch (e: Throwable) {
-            LOG.error(e)
-          }
         }
         toDelete.add(DeleteDirectory(oldPath))
       }
 
-      try {
+      LOG.runAndLogException {
         old.delete()
-      }
-      catch (e: Throwable) {
-        LOG.error(e)
       }
     }
 
@@ -280,11 +257,9 @@ class GitRepositoryManager(private val credentialsStore: NotNullLazyValue<Creden
     }
 
     repository.edit(toDelete)
-    if (addCommand != null) {
-      addCommand!!.call()
-    }
+    addCommand?.call()
 
-    repository.commit(with(IdeaCommitMessageFormatter()) { StringBuilder().appendCommitOwnerInfo(true) }.append("Get rid of \$ROOT_CONFIG$ and \$APP_CONFIG").toString())
+    repository.commit(with(IdeaCommitMessageFormatter()) { StringBuilder().appendCommitOwnerInfo(true) }.append(commitMessage).toString())
     return true
   }
 
@@ -294,7 +269,7 @@ class GitRepositoryManager(private val credentialsStore: NotNullLazyValue<Creden
       val file = dir.resolve(Constants.DOT_GIT_IGNORE)
       if (file.exists()) {
         node = IgnoreNode()
-        file.inputStream().use { node!!.parse(it) }
+        file.inputStream().use { node.parse(it) }
         ignoreRules = node
       }
     }
@@ -324,7 +299,7 @@ class GitRepositoryService : RepositoryService {
 
     // existing bare repository
     try {
-      FileRepositoryBuilder().setGitDir(file.toFile()).setMustExist(true).build()
+      buildRepository(gitDir = file, mustExists = true)
     }
     catch (e: IOException) {
       return false

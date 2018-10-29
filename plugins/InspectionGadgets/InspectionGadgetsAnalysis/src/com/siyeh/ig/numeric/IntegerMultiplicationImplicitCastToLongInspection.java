@@ -34,10 +34,9 @@ import java.util.Set;
 public class IntegerMultiplicationImplicitCastToLongInspection extends BaseInspection {
 
   /**
-   * @noinspection StaticCollection
    */
   @NonNls
-  private static final Set<String> s_typesToCheck = new HashSet<String>(4);
+  private static final Set<String> s_typesToCheck = new HashSet<>(4);
 
   static {
     s_typesToCheck.add("int");

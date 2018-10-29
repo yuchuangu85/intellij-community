@@ -12,7 +12,6 @@
 // limitations under the License.
 package org.zmlx.hg4idea;
 
-import com.google.common.base.Objects;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.RepositoryLocation;
 import com.intellij.openapi.vcs.VcsException;
@@ -24,6 +23,7 @@ import org.zmlx.hg4idea.util.HgUtil;
 import java.io.IOException;
 import java.util.Date;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class HgFileRevision implements VcsFileRevision {
@@ -56,11 +56,13 @@ public class HgFileRevision implements VcsFileRevision {
     myFilesMoved = filesMoved;
   }
 
+  @Override
   @NotNull
   public HgRevisionNumber getRevisionNumber() {
     return myRevisionNumber;
   }
 
+  @Override
   public String getBranchName() {
     return myBranchName;
   }
@@ -71,15 +73,18 @@ public class HgFileRevision implements VcsFileRevision {
     return null;
   }
 
+  @Override
   public Date getRevisionDate() {
     return myRevisionDate;
   }
 
+  @Override
   @Nullable
   public String getAuthor() {
     return myAuthor;
   }
 
+  @Override
   @Nullable
   public String getCommitMessage() {
     return myCommitMessage;
@@ -105,12 +110,14 @@ public class HgFileRevision implements VcsFileRevision {
     return myFilesMoved;
   }
 
+  @Override
   @NotNull
-  public byte[] loadContent() throws IOException, VcsException {
+  public byte[] loadContent() {
     final HgFile fileToCat = HgUtil.getFileNameInTargetRevision(myProject, myRevisionNumber, myFile);
     return HgUtil.loadContent(myProject, myRevisionNumber, fileToCat);
   }
 
+  @Override
   public byte[] getContent() throws IOException, VcsException {
     return loadContent();
   }
@@ -138,6 +145,6 @@ public class HgFileRevision implements VcsFileRevision {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(myFile, myRevisionNumber);
+    return Objects.hash(myFile, myRevisionNumber);
   }
 }

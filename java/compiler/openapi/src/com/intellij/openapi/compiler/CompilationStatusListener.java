@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,14 @@
  */
 package com.intellij.openapi.compiler;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.util.EventListener;
 
 /**
  * A listener for compiler events.
  *
- * @see CompilerManager#addCompilationStatusListener(CompilationStatusListener)
+ * @see CompilerTopics#COMPILATION_STATUS
  */
 public interface CompilationStatusListener extends EventListener {
   /**
@@ -31,12 +33,12 @@ public interface CompilationStatusListener extends EventListener {
    * @param warnings warning count
    * @param compileContext context for the finished compilation
    */
-  default void compilationFinished(boolean aborted, int errors, int warnings, final CompileContext compileContext){
+  default void compilationFinished(boolean aborted, int errors, int warnings, @NotNull CompileContext compileContext){
   }
 
-  default void automakeCompilationFinished(int errors, int warnings, final CompileContext compileContext) {
+  default void automakeCompilationFinished(int errors, int warnings, @NotNull CompileContext compileContext) {
   }
 
-  default void fileGenerated(String outputRoot, String relativePath) {
+  default void fileGenerated(@NotNull String outputRoot, @NotNull String relativePath) {
   }
 }

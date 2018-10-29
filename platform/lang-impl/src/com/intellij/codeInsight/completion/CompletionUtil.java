@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.completion;
 
@@ -20,22 +6,21 @@ import com.intellij.codeInsight.TailType;
 import com.intellij.codeInsight.lookup.Lookup;
 import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.LookupValueWithPsiElement;
-import com.intellij.diagnostic.LogEventException;
 import com.intellij.diagnostic.ThreadDumper;
 import com.intellij.featureStatistics.FeatureUsageTracker;
 import com.intellij.lang.Language;
 import com.intellij.openapi.diagnostic.Attachment;
+import com.intellij.openapi.diagnostic.RuntimeExceptionWithAttachments;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.project.Project;
 import com.intellij.patterns.ElementPattern;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.filters.TrueFilter;
-import com.intellij.util.ExceptionUtil;
 import com.intellij.util.UnmodifiableIterator;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NonNls;
@@ -78,7 +63,7 @@ public class CompletionUtil {
 
   @Nullable
   private static CompletionData getCompletionDataByFileType(FileType fileType) {
-    for(CompletionDataEP ep: Extensions.getExtensions(CompletionDataEP.EP_NAME)) {
+    for(CompletionDataEP ep: CompletionDataEP.EP_NAME.getExtensionList()) {
       if (ep.fileType.equals(fileType.getName())) {
         return ep.getHandler();
       }
@@ -86,8 +71,12 @@ public class CompletionUtil {
     return null;
   }
 
-  public static boolean shouldShowFeature(final CompletionParameters parameters, @NonNls final String id) {
-    if (FeatureUsageTracker.getInstance().isToBeAdvertisedInLookup(id, parameters.getPosition().getProject())) {
+  public static boolean shouldShowFeature(CompletionParameters parameters, @NonNls final String id) {
+    return shouldShowFeature(parameters.getPosition().getProject(), id);
+  }
+
+  public static boolean shouldShowFeature(Project project, @NonNls String id) {
+    if (FeatureUsageTracker.getInstance().isToBeAdvertisedInLookup(id, project)) {
       FeatureUsageTracker.getInstance().triggerFeatureShown(id);
       return true;
     }
@@ -116,7 +105,24 @@ public class CompletionUtil {
     if(insertedElement == null) return "";
     final String text = insertedElement.getText();
 
-    final int offsetInElement = offset - insertedElement.getTextRange().getStartOffset();
+    int startOffset = insertedElement.getTextRange().getStartOffset();
+    return findInText(offset, startOffset, idPart, idStart, text);
+  }
+
+  public static String findIdentifierPrefix(String wholeText, int offset, ElementPattern<Character> idPart,
+                                             ElementPattern<Character> idStart) {
+    return findInText(offset, 0, idPart, idStart, wholeText);
+  }
+
+  public static String findIdentifierPrefix(@NotNull Document document, int offset, ElementPattern<Character> idPart,
+                                            ElementPattern<Character> idStart) {
+    final String text = document.getText();
+    return findInText(offset, 0, idPart, idStart, text);
+  }
+
+  @NotNull
+  private static String findInText(int offset, int startOffset, ElementPattern<Character> idPart, ElementPattern<Character> idStart, String text) {
+    final int offsetInElement = offset - startOffset;
     int start = offsetInElement - 1;
     while (start >=0 ) {
       if (!idPart.accepts(text.charAt(start))) break;
@@ -135,7 +141,7 @@ public class CompletionUtil {
   }
 
 
-  static InsertionContext emulateInsertion(InsertionContext oldContext, int newStart, final LookupElement item) {
+  public static InsertionContext emulateInsertion(InsertionContext oldContext, int newStart, final LookupElement item) {
     final InsertionContext newContext = newContext(oldContext, item);
     emulateInsertion(item, newStart, newContext);
     return newContext;
@@ -203,8 +209,8 @@ public class CompletionUtil {
   }
 
   /**
-   * Filters _names for strings that match given matcher and sorts them. 
-   * "Start matching" items go first, then others. 
+   * Filters _names for strings that match given matcher and sorts them.
+   * "Start matching" items go first, then others.
    * Within both groups names are sorted lexicographically in a case-insensitive way.
    */
   public static LinkedHashSet<String> sortMatching(final PrefixMatcher matcher, Collection<String> _names) {
@@ -213,7 +219,7 @@ public class CompletionUtil {
       return ContainerUtil.newLinkedHashSet(_names);
     }
 
-    List<String> sorted = new ArrayList<String>();
+    List<String> sorted = new ArrayList<>();
     for (String name : _names) {
       if (matcher.prefixMatches(name)) {
         sorted.add(name);
@@ -224,7 +230,7 @@ public class CompletionUtil {
     Collections.sort(sorted, String.CASE_INSENSITIVE_ORDER);
     ProgressManager.checkCanceled();
 
-    LinkedHashSet<String> result = new LinkedHashSet<String>();
+    LinkedHashSet<String> result = new LinkedHashSet<>();
     for (String name : sorted) {
       if (matcher.isStartMatch(name)) {
         result.add(name);
@@ -264,10 +270,13 @@ public class CompletionUtil {
             }
           }
 
-          private LogEventException handleCME(ConcurrentModificationException e) {
-            final Attachment dump = new Attachment("threadDump.txt", ThreadDumper.dumpThreadsToString());
-            return new LogEventException("Error while traversing lookup strings of " + element + " of " + element.getClass(),
-                                        ExceptionUtil.getThrowableText(e), dump);
+          private RuntimeException handleCME(ConcurrentModificationException cme) {
+            RuntimeExceptionWithAttachments ewa = new RuntimeExceptionWithAttachments(
+              "Error while traversing lookup strings of " + element + " of " + element.getClass(),
+              (String)null,
+              new Attachment("threadDump.txt", ThreadDumper.dumpThreadsToString()));
+            ewa.initCause(cme);
+            return ewa;
           }
         };
       }

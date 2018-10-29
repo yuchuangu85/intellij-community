@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.execution.configurations.coverage;
 
@@ -28,12 +14,12 @@ import com.intellij.icons.AllIcons;
 import com.intellij.ide.util.ClassFilter;
 import com.intellij.ide.util.PackageChooserDialog;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.SettingsEditor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.PackageChooser;
 import com.intellij.openapi.ui.VerticalFlowLayout;
+import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiPackage;
 import com.intellij.ui.IdeBorderFactory;
@@ -63,7 +49,7 @@ import java.util.List;
  * @author ven
  */
 public class CoverageConfigurable extends SettingsEditor<RunConfigurationBase> {
-  private static final Logger LOG = Logger.getInstance("#" + CoverageConfigurable.class.getName());
+  private static final Logger LOG = Logger.getInstance(CoverageConfigurable.class);
 
   private final JreVersionDetector myVersionDetector = new JreVersionDetector();
   Project myProject;
@@ -79,15 +65,17 @@ public class CoverageConfigurable extends SettingsEditor<RunConfigurationBase> {
   private final RunConfigurationBase myConfig;
 
   private static class MyClassFilterEditor extends ClassFilterEditor {
-    public MyClassFilterEditor(Project project) {
+    MyClassFilterEditor(Project project) {
       super(project, new ClassFilter() {
+        @Override
         public boolean isAccepted(PsiClass aClass) {
           if (aClass.getContainingClass() != null) return false;
           return true;
         }
-      });
+      }, null, true);
     }
 
+    @Override
     protected void addPatternFilter() {
       PackageChooser chooser =
         new PackageChooserDialog(CodeInsightBundle.message("coverage.pattern.filter.editor.choose.package.title"), myProject);
@@ -102,11 +90,14 @@ public class CoverageConfigurable extends SettingsEditor<RunConfigurationBase> {
           int row = myTableModel.getRowCount() - 1;
           myTable.getSelectionModel().setSelectionInterval(row, row);
           myTable.scrollRectToVisible(myTable.getCellRect(row, 0, true));
-          myTable.requestFocus();
+          IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+            IdeFocusManager.getGlobalInstance().requestFocus(myTable, true);
+          });
         }
       }
     }
 
+    @Override
     protected String getAddPatternButtonText() {
       return CodeInsightBundle.message("coverage.button.add.package");
     }
@@ -122,7 +113,8 @@ public class CoverageConfigurable extends SettingsEditor<RunConfigurationBase> {
     myProject = config.getProject();
   }
 
-  protected void resetEditorFrom(final RunConfigurationBase runConfiguration) {
+  @Override
+  protected void resetEditorFrom(@NotNull final RunConfigurationBase runConfiguration) {
     final boolean isJre50;
     if (runConfiguration instanceof CommonJavaRunConfigurationParameters && myVersionDetector.isJre50Configured((CommonJavaRunConfigurationParameters)runConfiguration)) {
       isJre50 = true;
@@ -171,7 +163,8 @@ public class CoverageConfigurable extends SettingsEditor<RunConfigurationBase> {
     return CoverageEnabledConfiguration.getOrCreate(myConfig).canHavePerTestCoverage();
   }
 
-  protected void applyEditorTo(final RunConfigurationBase runConfiguration) throws ConfigurationException {
+  @Override
+  protected void applyEditorTo(@NotNull final RunConfigurationBase runConfiguration) throws ConfigurationException {
     final JavaCoverageEnabledConfiguration configuration = (JavaCoverageEnabledConfiguration)CoverageEnabledConfiguration.getOrCreate(runConfiguration);
     configuration.setCoveragePatterns(myClassFilterEditor.getFilters());
     configuration.setCoverageRunner(getSelectedRunner());
@@ -180,6 +173,7 @@ public class CoverageConfigurable extends SettingsEditor<RunConfigurationBase> {
     configuration.setTrackTestFolders(myTrackTestSourcesCb.isSelected());
   }
 
+  @Override
   @NotNull
   protected JComponent createEditor() {
     JPanel result = new JPanel(new GridBagLayout());
@@ -190,7 +184,7 @@ public class CoverageConfigurable extends SettingsEditor<RunConfigurationBase> {
     final JavaCoverageEnabledConfiguration javaCoverageEnabledConfiguration = JavaCoverageEnabledConfiguration.getFrom(myConfig);
     LOG.assertTrue(javaCoverageEnabledConfiguration != null);
     final JavaCoverageEngine provider = javaCoverageEnabledConfiguration.getCoverageProvider();
-    for (CoverageRunner runner : Extensions.getExtensions(CoverageRunner.EP_NAME)) {
+    for (CoverageRunner runner : CoverageRunner.EP_NAME.getExtensionList()) {
       if (runner.acceptsCoverageEngine(provider)) {
         runnersModel.addElement(new CoverageRunnerItem(runner));
       }
@@ -204,6 +198,7 @@ public class CoverageConfigurable extends SettingsEditor<RunConfigurationBase> {
       }
     });
     myCoverageRunnerCb.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(final ActionEvent e) {
         final CoverageRunner runner = getSelectedRunner();
         enableTracingPanel(runner != null && runner.isCoverageByTestApplicable());
@@ -226,6 +221,7 @@ public class CoverageConfigurable extends SettingsEditor<RunConfigurationBase> {
     group.add(myTracingRb);
 
     ActionListener samplingListener = new ActionListener() {
+      @Override
       public void actionPerformed(final ActionEvent e) {
         final CoverageRunner runner = getSelectedRunner();
         myTrackPerTestCoverageCb.setEnabled(canHavePerTestCoverage() && myTracingRb.isSelected() && runner != null && runner.isCoverageByTestApplicable());
@@ -286,7 +282,7 @@ public class CoverageConfigurable extends SettingsEditor<RunConfigurationBase> {
 
   private static class CoverageRunnerItem {
     private CoverageRunner myRunner;
-    private @NotNull String myRunnerId;
+    private @NotNull final String myRunnerId;
 
     private CoverageRunnerItem(@NotNull CoverageRunner runner) {
       myRunner = runner;

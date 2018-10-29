@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiModifierListOwner;
 import com.intellij.psi.impl.PsiImplUtil;
 import org.jetbrains.annotations.Nls;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.GroovyBundle;
 import org.jetbrains.plugins.groovy.codeInspection.BaseInspection;
@@ -44,22 +43,8 @@ public class GrDeprecatedAPIUsageInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return CONFUSING_CODE_CONSTRUCTS;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return GroovyInspectionBundle.message("gr.deprecated.api.usage");
-  }
-
-  @Override
-  @NonNls
-  @NotNull
-  public String getShortName() {
-    return "GrDeprecatedAPIUsage";
   }
 
   @NotNull
@@ -67,13 +52,13 @@ public class GrDeprecatedAPIUsageInspection extends BaseInspection {
   protected BaseInspectionVisitor buildVisitor() {
     return new BaseInspectionVisitor() {
       @Override
-      public void visitReferenceExpression(GrReferenceExpression ref) {
+      public void visitReferenceExpression(@NotNull GrReferenceExpression ref) {
         super.visitReferenceExpression(ref);
         checkRef(ref);
       }
 
       @Override
-      public void visitCodeReferenceElement(GrCodeReferenceElement ref) {
+      public void visitCodeReferenceElement(@NotNull GrCodeReferenceElement ref) {
         super.visitCodeReferenceElement(ref);
         checkRef(ref);
       }

@@ -17,7 +17,6 @@ package org.jetbrains.plugins.groovy.codeInspection.assignment;
 
 import com.intellij.codeInspection.ui.MultipleCheckboxOptionsPanel;
 import com.intellij.psi.PsiElement;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.codeInspection.BaseInspection;
@@ -44,20 +43,6 @@ public class GroovyResultOfAssignmentUsedInspection extends BaseInspection {
   }
 
   @Override
-  @Nls
-  @NotNull
-  public String getGroupDisplayName() {
-    return ASSIGNMENT_ISSUES;
-  }
-
-  @Override
-  @Nls
-  @NotNull
-  public String getDisplayName() {
-    return "Result of assignment used";
-  }
-
-  @Override
   @Nullable
   protected String buildErrorString(Object... args) {
     return "Result of assignment expression used #loc";
@@ -72,7 +57,7 @@ public class GroovyResultOfAssignmentUsedInspection extends BaseInspection {
   private class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitAssignmentExpression(GrAssignmentExpression grAssignmentExpression) {
+    public void visitAssignmentExpression(@NotNull GrAssignmentExpression grAssignmentExpression) {
       super.visitAssignmentExpression(grAssignmentExpression);
       if (isConfusingAssignmentUsage(grAssignmentExpression)) {
         registerError(grAssignmentExpression);

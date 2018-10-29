@@ -2,14 +2,14 @@ package com.intellij.platform.templates;
 
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * @author Dmitry Avdeev
- *         Date: 11/13/12
  */
 public class ManageProjectTemplatesAction extends AnAction {
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public void actionPerformed(@NotNull AnActionEvent e) {
     new ManageProjectTemplatesDialog().show();
   }
 }

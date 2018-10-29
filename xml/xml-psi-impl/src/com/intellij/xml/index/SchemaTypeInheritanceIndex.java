@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,6 @@ import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.util.PairConvertor;
-import com.intellij.util.containers.EncoderDecoder;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.util.containers.hash.HashMap;
 import com.intellij.util.indexing.DataIndexer;
@@ -42,12 +40,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
 
 /**
  * Created with IntelliJ IDEA.
  * User: Irina.Chernushina
- * Date: 7/4/12
- * Time: 6:29 PM
  *
  * map: tag name->file url
  */
@@ -59,16 +56,14 @@ public class SchemaTypeInheritanceIndex extends XmlIndex<Set<SchemaTypeInfo>> {
                                                                   final String ns,
                                                                   final String name) {
     GlobalSearchScope filter = createFilter(project);
-    final List<Set<SchemaTypeInfo>>
-      list = FileBasedIndex.getInstance().getValues(NAME, NsPlusTag.INSTANCE.encode(Pair.create(ns, name)), filter);
-    return list;
+    return FileBasedIndex.getInstance().getValues(NAME, NsPlusTag.INSTANCE.encode(Pair.create(ns, name)), filter);
   }
 
-  public static PairConvertor<String, String, List<Set<SchemaTypeInfo>>> getWorker(final Project project, final VirtualFile currentFile) {
+  public static BiFunction<String, String, List<Set<SchemaTypeInfo>>> getWorker(final Project project, final VirtualFile currentFile) {
     return new MyWorker(currentFile, project);
   }
 
-  private static class MyWorker implements PairConvertor<String, String, List<Set<SchemaTypeInfo>>> {
+  private static class MyWorker implements BiFunction<String, String, List<Set<SchemaTypeInfo>>> {
     private final Project myProject;
     private final VirtualFile myCurrentFile;
     private final GlobalSearchScope myFilter;
@@ -84,13 +79,13 @@ public class SchemaTypeInheritanceIndex extends XmlIndex<Set<SchemaTypeInfo>> {
     }
 
     @Override
-    public List<Set<SchemaTypeInfo>> convert(String ns, String name) {
+    public List<Set<SchemaTypeInfo>> apply(String ns, String name) {
       List<Set<SchemaTypeInfo>> type = getDirectChildrenOfType(myProject, ns, name);
       if (myShouldParseCurrent) {
         if (myMap == null) {
           try {
             myMap = XsdComplexTypeInfoBuilder.parse(CharArrayUtil.readerFromCharSequence(VfsUtilCore.loadText(myCurrentFile)));
-            type.add(new HashSet<SchemaTypeInfo>(myMap.get(new SchemaTypeInfo(name, true, ns))));
+            type.add(new HashSet<>(myMap.get(new SchemaTypeInfo(name, true, ns))));
           }
           catch (IOException e) {
             LOG.info(e);
@@ -102,13 +97,8 @@ public class SchemaTypeInheritanceIndex extends XmlIndex<Set<SchemaTypeInfo>> {
   }
 
   @Override
-  public boolean dependsOnFileContent() {
-    return true;
-  }
-
-  @Override
   public int getVersion() {
-    return 1;
+    return 2;
   }
 
   @NotNull
@@ -124,11 +114,11 @@ public class SchemaTypeInheritanceIndex extends XmlIndex<Set<SchemaTypeInfo>> {
       @NotNull
       @Override
       public Map<String, Set<SchemaTypeInfo>> map(@NotNull FileContent inputData) {
-        final Map<String, Set<SchemaTypeInfo>> map = new HashMap<String, Set<SchemaTypeInfo>>();
+        final Map<String, Set<SchemaTypeInfo>> map = new HashMap<>();
         final MultiMap<SchemaTypeInfo,SchemaTypeInfo> multiMap =
           XsdComplexTypeInfoBuilder.parse(CharArrayUtil.readerFromCharSequence(inputData.getContentAsText()));
         for (SchemaTypeInfo key : multiMap.keySet()) {
-          map.put(NsPlusTag.INSTANCE.encode(Pair.create(key.getNamespaceUri(), key.getTagName())), new HashSet<SchemaTypeInfo>(multiMap.get(key)));
+          map.put(NsPlusTag.INSTANCE.encode(Pair.create(key.getNamespaceUri(), key.getTagName())), new HashSet<>(multiMap.get(key)));
         }
         return map;
       }
@@ -151,7 +141,7 @@ public class SchemaTypeInheritanceIndex extends XmlIndex<Set<SchemaTypeInfo>> {
 
       @Override
       public Set<SchemaTypeInfo> read(@NotNull DataInput in) throws IOException {
-        final Set<SchemaTypeInfo> set = new HashSet<SchemaTypeInfo>();
+        final Set<SchemaTypeInfo> set = new HashSet<>();
         final int size = DataInputOutputUtil.readINT(in);
         for (int i = 0; i < size; i++) {
           final String nsUri = IOUtil.readUTF(in);
@@ -164,16 +154,14 @@ public class SchemaTypeInheritanceIndex extends XmlIndex<Set<SchemaTypeInfo>> {
     };
   }
 
-  private static class NsPlusTag implements EncoderDecoder<Pair<String, String>, String> {
+  private static class NsPlusTag {
     private final static NsPlusTag INSTANCE = new NsPlusTag();
     private final static char ourSeparator = ':';
 
-    @Override
     public String encode(Pair<String, String> pair) {
       return pair.getFirst() + ourSeparator + pair.getSecond();
     }
 
-    @Override
     public Pair<String, String> decode(String s) {
       final int i = s.indexOf(ourSeparator);
       return i <= 0 ? Pair.create("", s) : Pair.create(s.substring(0, i), s.substring(i + 1));

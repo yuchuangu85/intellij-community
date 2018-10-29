@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,14 +25,12 @@ import com.intellij.util.xml.ElementPresentationManager;
 import com.intellij.util.xml.tree.AbstractDomElementNode;
 import com.intellij.util.xml.tree.BaseDomElementNode;
 import com.intellij.util.xml.tree.DomModelTreeView;
+import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * User: Sergey.Vasiliev
- */
 public class DomElementsToggleAction extends ToggleAction {
   private final DomModelTreeView myTreeView;
   private final Class myClass;
@@ -52,13 +50,14 @@ public class DomElementsToggleAction extends ToggleAction {
 
     myText = TypePresentationService.getService().getTypePresentableName(myClass);
 
-    if(getHiders() == null) DomUtil.getFile(myTreeView.getRootElement()).putUserData(AbstractDomElementNode.TREE_NODES_HIDERS_KEY, new HashMap<Class, Boolean>());
+    if(getHiders() == null) DomUtil.getFile(myTreeView.getRootElement()).putUserData(AbstractDomElementNode.TREE_NODES_HIDERS_KEY,
+                                                                                     new HashMap<>());
 
-    if(getHiders().get(myClass) == null) getHiders().put(myClass, true);
+    getHiders().putIfAbsent(myClass, true);
   }
 
   @Override
-  public void update(final AnActionEvent e) {
+  public void update(@NotNull final AnActionEvent e) {
     super.update(e);
 
     e.getPresentation().setIcon(myIcon);
@@ -68,7 +67,7 @@ public class DomElementsToggleAction extends ToggleAction {
   }
 
   @Override
-  public boolean isSelected(AnActionEvent e) {
+  public boolean isSelected(@NotNull AnActionEvent e) {
     return getHiders().get(myClass);
   }
 
@@ -77,7 +76,7 @@ public class DomElementsToggleAction extends ToggleAction {
   }
 
   @Override
-  public void setSelected(AnActionEvent e, boolean state) {
+  public void setSelected(@NotNull AnActionEvent e, boolean state) {
     getHiders().put(myClass, state);
     myTreeView.getBuilder().updateFromRoot();
   }

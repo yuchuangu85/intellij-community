@@ -17,45 +17,31 @@
 package com.theoryinpractice.testng.configuration;
 
 import com.beust.jcommander.JCommander;
-import com.intellij.execution.*;
+import com.intellij.execution.ExecutionException;
+import com.intellij.execution.Executor;
+import com.intellij.execution.JavaTestFrameworkRunnableState;
 import com.intellij.execution.configurations.JavaParameters;
 import com.intellij.execution.configurations.ParametersList;
-import com.intellij.execution.process.*;
+import com.intellij.execution.process.KillableColoredProcessHandler;
+import com.intellij.execution.process.OSProcessHandler;
+import com.intellij.execution.process.ProcessTerminatedListener;
 import com.intellij.execution.runners.ExecutionEnvironment;
-import com.intellij.execution.runners.ProgramRunner;
-import com.intellij.execution.testframework.Printable;
-import com.intellij.execution.testframework.Printer;
-import com.intellij.execution.testframework.TestFrameworkRunningModel;
 import com.intellij.execution.testframework.TestSearchScope;
-import com.intellij.execution.ui.ConsoleViewContentType;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtilCore;
-import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Disposer;
-import com.intellij.openapi.util.Getter;
-import com.intellij.openapi.util.Key;
-import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiMethod;
-import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.rt.execution.testFrameworks.ForkedDebuggerHelper;
 import com.intellij.util.PathUtil;
 import com.intellij.util.net.NetUtils;
-import com.theoryinpractice.testng.model.*;
-import com.theoryinpractice.testng.ui.TestNGConsoleView;
-import com.theoryinpractice.testng.ui.TestNGResults;
-import com.theoryinpractice.testng.ui.actions.RerunFailedTestsAction;
+import com.theoryinpractice.testng.model.TestData;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.testng.CommandLineArgs;
 import org.testng.IDEATestNGListener;
 import org.testng.RemoteTestNGStarter;
-import org.testng.remote.RemoteArgs;
-import org.testng.remote.RemoteTestNG;
-import org.testng.remote.strprotocol.SerializedMessageSender;
 
 import java.io.File;
 import java.io.IOException;
@@ -65,7 +51,6 @@ public class TestNGRunnableState extends JavaTestFrameworkRunnableState<TestNGCo
   private static final Logger LOG = Logger.getInstance("TestNG Runner");
   private static final String TESTNG_TEST_FRAMEWORK_NAME = "TestNG";
   private final TestNGConfiguration config;
-  protected final IDEARemoteTestRunnerClient client;
   private int port;
 
   public TestNGRunnableState(ExecutionEnvironment environment, TestNGConfiguration config) {
@@ -73,8 +58,6 @@ public class TestNGRunnableState extends JavaTestFrameworkRunnableState<TestNGCo
     this.config = config;
     //TODO need to narrow this down a bit
     //setModulesToCompile(ModuleManager.getInstance(config.getProject()).getModules());
-    client = new IDEARemoteTestRunnerClient();
-    setRemoteConnectionCreator(config.getRemoteConnectionCreator());
   }
 
   @NotNull
@@ -91,78 +74,6 @@ public class TestNGRunnableState extends JavaTestFrameworkRunnableState<TestNGCo
   protected OSProcessHandler createHandler(Executor executor) throws ExecutionException {
     appendForkInfo(executor);
     return startProcess();
-  }
-
-  @NotNull
-  @Override
-  public ExecutionResult execute(@NotNull final Executor executor, @NotNull final ProgramRunner runner) throws ExecutionException {
-    final ExecutionResult executionResult = startSMRunner(executor);
-    if (executionResult != null) {
-      return executionResult;
-    }
-    OSProcessHandler processHandler = startProcess();
-    final TreeRootNode unboundOutputRoot = new TreeRootNode();
-    final TestNGConsoleView console = new TestNGConsoleView(getConfiguration(), getEnvironment(), unboundOutputRoot, executor);
-    console.initUI();
-    unboundOutputRoot.setPrinter(console.getPrinter());
-    Disposer.register(console, unboundOutputRoot);
-    JavaRunConfigurationExtensionManager.getInstance().attachExtensionsToProcess(getConfiguration(), processHandler, getEnvironment().getRunnerSettings());
-    processHandler.addProcessListener(new ProcessAdapter() {
-      private boolean myStarted = false;
-
-      @Override
-      public void processTerminated(final ProcessEvent event) {
-        unboundOutputRoot.flush();
-
-      }
-
-      @Override
-      public void startNotified(final ProcessEvent event) {
-        TestNGRemoteListener listener = new TestNGRemoteListener(console, unboundOutputRoot);
-        if (getConfiguration().isSaveOutputToFile()) {
-          unboundOutputRoot.setOutputFilePath(getConfiguration().getOutputFilePath());
-        }
-        client.prepareListening(listener, getConfiguration().getProject(), port);
-        myStarted = true;
-      }
-
-      @Override
-      public void processWillTerminate(ProcessEvent event, boolean willBeDestroyed) {
-        final TestNGResults resultsView = console.getResultsView();
-        if (resultsView != null) {
-          resultsView.finish(myStarted);
-        }
-      }
-
-      private int myInsertIndex = 0;
-      @Override
-      public void onTextAvailable(final ProcessEvent event, final Key outputType) {
-        final TestProxy currentTest = console.getCurrentTest();
-        final String text = event.getText();
-        final ConsoleViewContentType consoleViewType = ConsoleViewContentType.getConsoleViewType(outputType);
-        final Printable printable = new Printable() {
-          @Override
-          public void printOn(final Printer printer) {
-            printer.print(text, consoleViewType);
-          }
-        };
-        if (currentTest != null) {
-          currentTest.addLast(printable);
-        }
-        else {
-          unboundOutputRoot.insert(printable, myInsertIndex);
-        }
-        myInsertIndex++;
-      }
-    });
-    console.attachToProcess(processHandler);
-
-    RerunFailedTestsAction rerunFailedTestsAction = new RerunFailedTestsAction(console, console.getProperties());
-    rerunFailedTestsAction.setModelProvider(() -> console.getResultsView());
-
-    final DefaultExecutionResult result = new DefaultExecutionResult(console, processHandler);
-    result.setRestartActions(rerunFailedTestsAction);
-    return result;
   }
 
   @NotNull
@@ -195,8 +106,6 @@ public class TestNGRunnableState extends JavaTestFrameworkRunnableState<TestNGCo
     }
 
     final TestData data = getConfiguration().getPersistantData();
-
-    javaParameters.getProgramParametersList().add(supportSerializationProtocol(getConfiguration()) ? RemoteArgs.PORT : CommandLineArgs.PORT, String.valueOf(port));
 
     if (data.getOutputDirectory() != null && !data.getOutputDirectory().isEmpty()) {
       javaParameters.getProgramParametersList().add(CommandLineArgs.OUTPUT_DIRECTORY, data.getOutputDirectory());
@@ -233,8 +142,9 @@ public class TestNGRunnableState extends JavaTestFrameworkRunnableState<TestNGCo
     return "none";
   }
 
+  @Override
   public SearchingForTestsTask createSearchingForTestsTask() {
-    return new SearchingForTestsTask(myServerSocket, config, myTempFile, client) {
+    return new SearchingForTestsTask(myServerSocket, config, myTempFile) {
       @Override
       protected void onFound() {
         super.onFound();
@@ -245,14 +155,14 @@ public class TestNGRunnableState extends JavaTestFrameworkRunnableState<TestNGCo
 
   protected void writeClassesPerModule(Map<PsiClass, Map<PsiMethod, List<String>>> classes) {
     if (forkPerModule()) {
-      final Map<Module, List<String>> perModule = new TreeMap<Module, List<String>>((o1, o2) -> StringUtil.compare(o1.getName(), o2.getName(), true));
+      final Map<Module, List<String>> perModule = new TreeMap<>((o1, o2) -> StringUtil.compare(o1.getName(), o2.getName(), true));
 
       for (final PsiClass psiClass : classes.keySet()) {
         final Module module = ModuleUtilCore.findModuleForPsiElement(psiClass);
         if (module != null) {
           List<String> list = perModule.get(module);
           if (list == null) {
-            list = new ArrayList<String>();
+            list = new ArrayList<>();
             perModule.put(module, list);
           }
           list.add(psiClass.getQualifiedName());
@@ -268,41 +178,18 @@ public class TestNGRunnableState extends JavaTestFrameworkRunnableState<TestNGCo
     }
   }
 
-  public static boolean supportSerializationProtocol(TestNGConfiguration config) {
-    final Project project = config.getProject();
-    final GlobalSearchScope scopeToDetermineTestngIn;
-    if (config.getPersistantData().getScope() == TestSearchScope.WHOLE_PROJECT) {
-      scopeToDetermineTestngIn = GlobalSearchScope.allScope(project);
-    }
-    else {
-      final Module module = config.getConfigurationModule().getModule();
-      scopeToDetermineTestngIn = module != null ? GlobalSearchScope.moduleWithDependenciesAndLibrariesScope(module) 
-                                                : GlobalSearchScope.allScope(project);
-    }
-
-    final JavaPsiFacade facade = JavaPsiFacade.getInstance(project);
-    final PsiClass aClass = facade.findClass(SerializedMessageSender.class.getName(), scopeToDetermineTestngIn);
-    if (aClass == null) return false;
-
-    final PsiClass[] starters = facade.findClasses(RemoteTestNG.class.getName(), scopeToDetermineTestngIn);
-    for (PsiClass starter : starters) {
-      if (starter.findFieldByName("m_serPort", false) == null) {
-        LOG.info("Multiple TestNG versions found");
-        return false;
-      }
-    }
-    return Registry.is("testng.serialized.protocol.enabled") && !TestNGVersionChecker.isVersionIncompatible(project, scopeToDetermineTestngIn);
-  }
-
+  @Override
   @NotNull
   protected String getFrameworkId() {
     return "testng";
   }
 
+  @Override
   protected void passTempFile(ParametersList parametersList, String tempFilePath) {
     parametersList.add("-temp", tempFilePath);
   }
 
+  @Override
   @NotNull
   public TestNGConfiguration getConfiguration() {
     return config;
@@ -313,6 +200,7 @@ public class TestNGRunnableState extends JavaTestFrameworkRunnableState<TestNGCo
     return getConfiguration().getPersistantData().getScope();
   }
 
+  @Override
   protected void passForkMode(String forkMode, File tempFile, JavaParameters parameters) throws ExecutionException {
     final ParametersList parametersList = parameters.getProgramParametersList();
     final List<String> params = parametersList.getParameters();

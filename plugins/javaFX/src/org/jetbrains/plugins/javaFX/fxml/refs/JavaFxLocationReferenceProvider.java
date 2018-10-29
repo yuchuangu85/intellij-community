@@ -32,9 +32,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-/**
- * User: anna
- */
 class JavaFxLocationReferenceProvider extends PsiReferenceProvider {
   private boolean mySupportCommaInValue = false;
   private final Set<FileType> myAcceptedFileTypes;
@@ -56,7 +53,7 @@ class JavaFxLocationReferenceProvider extends PsiReferenceProvider {
     final String value = ((XmlAttributeValue)element).getValue();
     if (mySupportCommaInValue && value.contains(",")) {
       int startIdx = 0;
-      List<PsiReference> refs = new ArrayList<PsiReference>();
+      List<PsiReference> refs = new ArrayList<>();
       while (true) {
         int endIdx = value.indexOf(',', startIdx);
         final String item = endIdx >= 0 ? value.substring(startIdx, endIdx) : value.substring(startIdx);

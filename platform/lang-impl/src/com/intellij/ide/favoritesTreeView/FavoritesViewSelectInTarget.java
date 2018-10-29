@@ -24,7 +24,8 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowId;
 import com.intellij.openapi.wm.ToolWindowManager;
-import com.intellij.psi.*;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFileSystemItem;
 import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
@@ -68,20 +69,19 @@ public class FavoritesViewSelectInTarget extends SelectInTargetPsiWrapper {
     final ToolWindow favoritesToolWindow = windowManager.getToolWindow(ToolWindowId.FAVORITES_VIEW);
 
     if (favoritesToolWindow != null) {
-      final FavoritesTreeViewPanel panel = UIUtil.findComponentOfType(favoritesToolWindow.getComponent(), FavoritesTreeViewPanel.class);
-
-      if (panel != null) {
-        final Runnable runnable = () -> {
+      final Runnable runnable = () -> {
+        final FavoritesTreeViewPanel panel = UIUtil.findComponentOfType(favoritesToolWindow.getComponent(), FavoritesTreeViewPanel.class);
+        if (panel != null) {
           panel.selectElement(toSelect, virtualFile, requestFocus);
           result.setDone();
-        };
+        }
+      };
 
-        if (requestFocus) {
-          favoritesToolWindow.activate(runnable, false);
-        }
-        else {
-          favoritesToolWindow.show(runnable);
-        }
+      if (requestFocus) {
+        favoritesToolWindow.activate(runnable, false);
+      }
+      else {
+        favoritesToolWindow.show(runnable);
       }
     }
 
@@ -107,8 +107,4 @@ public class FavoritesViewSelectInTarget extends SelectInTargetPsiWrapper {
     return StandardTargetWeights.FAVORITES_WEIGHT;
   }
 
-  @Override
-  protected boolean canWorkWithCustomObjects() {
-    return false;
-  }
 }

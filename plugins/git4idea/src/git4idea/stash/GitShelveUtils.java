@@ -16,12 +16,12 @@
 package git4idea.stash;
 
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.command.impl.UndoManagerImpl;
 import com.intellij.openapi.command.undo.DocumentReference;
 import com.intellij.openapi.command.undo.DocumentReferenceManager;
 import com.intellij.openapi.command.undo.UndoManager;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.progress.util.BackgroundTaskUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.Change;
@@ -32,7 +32,6 @@ import com.intellij.openapi.vcs.changes.shelf.ShelvedChangeList;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.Processor;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.CalledInAwt;
 import org.jetbrains.annotations.NotNull;
@@ -67,12 +66,7 @@ public class GitShelveUtils {
     // we pass null as target change list for Patch Applier to do NOTHING with change lists
     shelveManager.unshelveChangeList(shelvedChangeList, changes, shelvedChangeList.getBinaryFiles(), null, false, true,
                                      true, leftConflictTitle, rightConflictTitle);
-    ApplicationManager.getApplication().invokeAndWait(new Runnable() {
-      @Override
-      public void run() {
-        markUnshelvedFilesNonUndoable(project, changes);
-      }
-    }, ModalityState.defaultModalityState());
+    ApplicationManager.getApplication().invokeAndWait(() -> markUnshelvedFilesNonUndoable(project, changes));
   }
 
   @CalledInAwt
@@ -80,23 +74,20 @@ public class GitShelveUtils {
                                                     @NotNull List<ShelvedChange> changes) {
     final UndoManagerImpl undoManager = (UndoManagerImpl)UndoManager.getInstance(project);
     if (undoManager != null && !changes.isEmpty()) {
-      ContainerUtil.process(changes, new Processor<ShelvedChange>() {
-        @Override
-        public boolean process(ShelvedChange change) {
-          final VirtualFile vfUnderProject = VfsUtil.findFileByIoFile(new File(project.getBasePath(), change.getAfterPath()), false);
-          if (vfUnderProject != null) {
-            final DocumentReference documentReference = DocumentReferenceManager.getInstance().create(vfUnderProject);
-            undoManager.nonundoableActionPerformed(documentReference, false);
-            undoManager.invalidateActionsFor(documentReference);
-          }
-          return true;
+      ContainerUtil.process(changes, change -> {
+        final VirtualFile vfUnderProject = VfsUtil.findFileByIoFile(new File(project.getBasePath(), change.getAfterPath()), false);
+        if (vfUnderProject != null) {
+          final DocumentReference documentReference = DocumentReferenceManager.getInstance().create(vfUnderProject);
+          undoManager.nonundoableActionPerformed(documentReference, false);
+          undoManager.invalidateActionsFor(documentReference);
         }
+        return true;
       });
     }
   }
 
   private static void refreshFilesBeforeUnshelve(final Project project, ShelvedChangeList shelvedChangeList, String projectPath) {
-    HashSet<File> filesToRefresh = new HashSet<File>();
+    HashSet<File> filesToRefresh = new HashSet<>();
     for (ShelvedChange c : shelvedChangeList.getChanges(project)) {
       if (c.getBeforePath() != null) {
         filesToRefresh.add(new File(projectPath + c.getBeforePath()));
@@ -131,14 +122,13 @@ public class GitShelveUtils {
   @Nullable
   public static ShelvedChangeList shelveChanges(final Project project, final ShelveChangesManager shelveManager, Collection<Change> changes,
                                                 final String description,
-                                                final List<VcsException> exceptions, boolean rollback, boolean markToBeDeleted) {
+                                                final List<? super VcsException> exceptions, boolean rollback, boolean markToBeDeleted) {
     try {
       ShelvedChangeList shelve = shelveManager.shelveChanges(changes, description, rollback, markToBeDeleted);
-      project.getMessageBus().syncPublisher(ShelveChangesManager.SHELF_TOPIC).stateChanged(new ChangeEvent(GitStashUtils.class));
+      BackgroundTaskUtil.syncPublisher(project, ShelveChangesManager.SHELF_TOPIC).stateChanged(new ChangeEvent(GitShelveUtils.class));
       return shelve;
     }
     catch (IOException e) {
-      //noinspection ThrowableInstanceNeverThrown
       exceptions.add(new VcsException("Shelving changes failed: " + description, e));
       return null;
     }

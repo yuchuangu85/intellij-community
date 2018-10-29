@@ -42,7 +42,7 @@ import java.util.Set;
  * @author peter
  */
 public class JavaMethodResolveHelper {
-  private final Set<MethodSignature> myDuplicates = new THashSet<MethodSignature>();
+  private final Set<MethodSignature> myDuplicates = new THashSet<>();
 
   private final MethodCandidatesProcessor myProcessor;
   @Nullable private final PsiType[] myArgumentTypes;
@@ -63,7 +63,7 @@ public class JavaMethodResolveHelper {
       }
 
       @Override
-      protected boolean isAccepted(final PsiMethod candidate) {
+      protected boolean isAccepted(@NotNull final PsiMethod candidate) {
         return !candidate.isConstructor();
       }
     };
@@ -111,7 +111,6 @@ public class JavaMethodResolveHelper {
 
     if (!info.isApplicable()) {
       boolean hasNulls = false;
-      //noinspection ConstantConditions
       final PsiParameter[] parameters = info.getElement().getParameterList().getParameters();
       if (myArgumentTypes.length == parameters.length) {
         for (int i = 0; i < myArgumentTypes.length; i++) {
@@ -138,11 +137,7 @@ public class JavaMethodResolveHelper {
   }
 
   public Collection<JavaMethodCandidateInfo> getMethods() {
-    return ContainerUtil.mapNotNull(getCandidates(), new Function<JavaResolveResult, JavaMethodCandidateInfo>() {
-      @Override
-      public JavaMethodCandidateInfo fun(final JavaResolveResult javaResolveResult) {
-        return new JavaMethodCandidateInfo((PsiMethod)javaResolveResult.getElement(), javaResolveResult.getSubstitutor());
-      }
-    });
+    return ContainerUtil.mapNotNull(getCandidates(),
+                                    (Function<JavaResolveResult, JavaMethodCandidateInfo>)javaResolveResult -> new JavaMethodCandidateInfo((PsiMethod)javaResolveResult.getElement(), javaResolveResult.getSubstitutor()));
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import com.intellij.ui.components.JBList;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.ContainerUtilRt;
+import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -57,7 +58,6 @@ import java.util.List;
  * </pre>
  * 
  * @author Denis Zhdanov
- * @since 4/30/13 12:50 PM
  */
 public abstract class AbstractExternalSystemConfigurable<
   ProjectSettings extends ExternalProjectSettings,
@@ -128,8 +128,7 @@ public abstract class AbstractExternalSystemConfigurable<
     addTitle(ExternalSystemBundle.message("settings.title.project.settings"));
     List<ProjectSettings> settings = ContainerUtilRt.newArrayList(s.getLinkedProjectsSettings());
     myProjectsList.setVisibleRowCount(Math.max(3, Math.min(5, settings.size())));
-    ContainerUtil.sort(settings,
-                       (s1, s2) -> getProjectName(s1.getExternalProjectPath()).compareTo(getProjectName(s2.getExternalProjectPath())));
+    ContainerUtil.sort(settings, Comparator.comparing(s2 -> getProjectName(s2.getExternalProjectPath())));
 
     myProjectSettingsControls.clear();
     for (ProjectSettings setting : settings) {
@@ -144,7 +143,6 @@ public abstract class AbstractExternalSystemConfigurable<
     }
 
     myProjectsList.addListSelectionListener(new ListSelectionListener() {
-      @SuppressWarnings("unchecked")
       @Override
       public void valueChanged(ListSelectionEvent e) {
         if (e.getValueIsAdjusting()) {
@@ -174,7 +172,7 @@ public abstract class AbstractExternalSystemConfigurable<
   
   private void addTitle(@NotNull String title) {
     JPanel panel = new JPanel(new GridBagLayout());
-    panel.setBorder(IdeBorderFactory.createTitledBorder(title, false, new Insets(ExternalSystemUiUtil.INSETS, 0, 0, 0)));
+    panel.setBorder(IdeBorderFactory.createTitledBorder(title, false, JBUI.emptyInsets()));
     myComponent.add(panel, ExternalSystemUiUtil.getFillLineConstraints(0));
   }
 
@@ -187,7 +185,6 @@ public abstract class AbstractExternalSystemConfigurable<
   @NotNull
   protected abstract ExternalSystemSettingsControl<ProjectSettings> createProjectSettingsControl(@NotNull ProjectSettings settings);
   
-  @SuppressWarnings("MethodMayBeStatic")
   @NotNull
   protected String getProjectName(@NotNull String path) {
     File file = new File(path);
@@ -207,7 +204,7 @@ public abstract class AbstractExternalSystemConfigurable<
    * 
    * @param settings  target system settings
    * @return          a control for managing given system-level settings;
-   *                  <code>null</code> if current external system doesn't have system-level settings (only project-level settings)
+   *                  {@code null} if current external system doesn't have system-level settings (only project-level settings)
    */
   @Nullable
   protected abstract ExternalSystemSettingsControl<SystemSettings> createSystemSettingsControl(@NotNull SystemSettings settings);
@@ -269,6 +266,9 @@ public abstract class AbstractExternalSystemConfigurable<
   public void disposeUIResources() {
     for (ExternalSystemSettingsControl<ProjectSettings> control : myProjectSettingsControls) {
       control.disposeUIResources();
+    }
+    if (mySystemSettingsControl != null) {
+      mySystemSettingsControl.disposeUIResources();
     }
     myProjectSettingsControls.clear();
     myComponent = null;

@@ -32,9 +32,6 @@ import com.intellij.util.xml.tree.DomFileElementNode;
 import com.intellij.util.xml.tree.DomModelTreeView;
 import org.jetbrains.annotations.NotNull;
 
-/**
- * User: Sergey.Vasiliev
- */
 public class DeleteDomElement extends BaseDomTreeAction {
 
   public DeleteDomElement() {
@@ -60,12 +57,9 @@ public class DeleteDomElement extends BaseDomTreeAction {
       final int ret = Messages.showOkCancelDialog(getPresentationText(selectedNode, "Remove") + "?", "Remove",
                                                   Messages.getQuestionIcon());
       if (ret == Messages.OK) {
-      new WriteCommandAction(domElement.getManager().getProject(), DomUtil.getFile(domElement)) {
-        @Override
-        protected void run(@NotNull final Result result) throws Throwable {
+        WriteCommandAction.writeCommandAction(domElement.getManager().getProject(), DomUtil.getFile(domElement)).run(() -> {
           domElement.undefine();
-        }
-      }.execute();
+        });
       }
     }
   }

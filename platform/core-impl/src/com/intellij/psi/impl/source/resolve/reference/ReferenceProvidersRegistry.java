@@ -23,13 +23,6 @@ import com.intellij.psi.*;
 import com.intellij.util.ProcessingContext;
 import org.jetbrains.annotations.NotNull;
 
-/**
- * Created by IntelliJ IDEA.
- * User: ik
- * Date: 27.03.2003
- * Time: 17:13:45
- * To change this template use Options | File Templates.
- */
 public abstract class ReferenceProvidersRegistry {
   public static final PsiReferenceProvider NULL_REFERENCE_PROVIDER = new PsiReferenceProvider() {
       @NotNull
@@ -45,15 +38,6 @@ public abstract class ReferenceProvidersRegistry {
 
   @NotNull
   public abstract PsiReferenceRegistrar getRegistrar(@NotNull Language language);
-
-  /**
-   * @see #getReferencesFromProviders(PsiElement)
-   */
-  @Deprecated
-  @NotNull
-  public static PsiReference[] getReferencesFromProviders(@NotNull PsiElement context, @NotNull Class clazz) {
-    return getReferencesFromProviders(context, PsiReferenceService.Hints.NO_HINTS);
-  }
 
   @NotNull
   public static PsiReference[] getReferencesFromProviders(@NotNull PsiElement context) {

@@ -29,13 +29,6 @@ public class GroovyEmptyFinallyBlockInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return ERROR_HANDLING;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Empty 'finally' block";
   }
@@ -56,7 +49,7 @@ public class GroovyEmptyFinallyBlockInspection extends BaseInspection {
   private static class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitFinallyClause(GrFinallyClause finallyClause) {
+    public void visitFinallyClause(@NotNull GrFinallyClause finallyClause) {
       super.visitFinallyClause(finallyClause);
       final GrOpenBlock body = finallyClause.getBody();
       if (body == null || !isEmpty(body)) {

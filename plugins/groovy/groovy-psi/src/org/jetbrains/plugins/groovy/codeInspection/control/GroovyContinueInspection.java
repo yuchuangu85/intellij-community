@@ -27,13 +27,6 @@ public class GroovyContinueInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return CONTROL_FLOW;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Continue statement";
   }
@@ -54,7 +47,7 @@ public class GroovyContinueInspection extends BaseInspection {
   private static class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitContinueStatement(GrContinueStatement continueStatement) {
+    public void visitContinueStatement(@NotNull GrContinueStatement continueStatement) {
       super.visitContinueStatement(continueStatement);
       registerError(continueStatement);
     }

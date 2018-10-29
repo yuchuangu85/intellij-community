@@ -26,7 +26,7 @@ public class ImportSchemeChooserDialog extends DialogWrapper {
   private JCheckBox myUseCurrentScheme;
   private String mySelectedName;
   private final static String UNNAMED_SCHEME_ITEM = "<" + ApplicationBundle.message("code.style.scheme.import.unnamed") + ">";
-  private final List<String> myNames = new ArrayList<String>();
+  private final List<String> myNames = new ArrayList<>();
 
   public ImportSchemeChooserDialog(@NotNull Project project,
                                    String[] schemeNames,
@@ -104,7 +104,7 @@ public class ImportSchemeChooserDialog extends DialogWrapper {
 
   public static Pair<String,CodeStyleScheme> selectOrCreateTargetScheme(@NotNull Project project,
                                                                         @NotNull CodeStyleScheme currentScheme,
-                                                                        @NotNull SchemeFactory<CodeStyleScheme> schemeFactory,
+                                                                        @NotNull SchemeFactory<? extends CodeStyleScheme> schemeFactory,
                                                                         String... schemeNames) {
     final ImportSchemeChooserDialog schemeChooserDialog =
       new ImportSchemeChooserDialog(project, schemeNames, !currentScheme.isDefault() ? currentScheme.getName() : null);

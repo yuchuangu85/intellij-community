@@ -36,19 +36,40 @@ public class GutterIconTooltipHelper {
   private GutterIconTooltipHelper() {
   }
 
+  /**
+   * @see com.intellij.codeInsight.daemon.impl.GutterTooltipHelper
+   * @deprecated
+   */
+  @Deprecated
+  @SuppressWarnings("JavadocReference")
   public static String composeText(@NotNull PsiElement[] elements, @NotNull String start, @NotNull String pattern) {
     return composeText(Arrays.asList(elements), start, pattern);
   }
 
+  /**
+   * @see com.intellij.codeInsight.daemon.impl.GutterTooltipHelper
+   * @deprecated
+   */
+  @Deprecated
+  @SuppressWarnings("JavadocReference")
   public static String composeText(@NotNull Iterable<? extends PsiElement> elements, @NotNull String start, @NotNull String pattern) {
     return composeText(elements, start, pattern, "");
   }
 
-  public static String composeText(@NotNull Iterable<? extends PsiElement> elements, @NotNull String start, @NotNull String pattern, @NotNull String postfix) {
+  /**
+   * @see com.intellij.codeInsight.daemon.impl.GutterTooltipHelper
+   * @deprecated
+   */
+  @Deprecated
+  @SuppressWarnings("JavadocReference")
+  static String composeText(@NotNull Iterable<? extends PsiElement> elements,
+                            @NotNull String start,
+                            @NotNull String pattern,
+                            @NotNull String postfix) {
     @NonNls StringBuilder result = new StringBuilder();
     result.append("<html><body>");
     result.append(start);
-    Set<String> names = new LinkedHashSet<String>();
+    Set<String> names = new LinkedHashSet<>();
     for (PsiElement element : elements) {
       String descr = "";
       if (element instanceof PsiClass) {

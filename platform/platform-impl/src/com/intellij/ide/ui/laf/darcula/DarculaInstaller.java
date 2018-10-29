@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,19 +15,13 @@
  */
 package com.intellij.ide.ui.laf.darcula;
 
-import com.intellij.ide.ui.UISettings;
-import com.intellij.openapi.actionSystem.impl.ActionToolbarImpl;
-import com.intellij.openapi.editor.colors.EditorColorsManager;
-import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.util.IconLoader;
-import com.intellij.ui.ColorUtil;
 import com.intellij.ui.JBColor;
 
 /**
  * @author Konstantin Bulenkov
  */
 public class DarculaInstaller {
-
   public static void uninstall() {
     performImpl(false);
   }
@@ -36,23 +30,8 @@ public class DarculaInstaller {
     performImpl(true);
   }
 
-  private static void performImpl(boolean b) {
-    JBColor.setDark(b);
-    IconLoader.setUseDarkIcons(b);
-    EditorColorsManager colorsManager = EditorColorsManager.getInstance();
-    EditorColorsScheme current = colorsManager.getGlobalScheme();
-    if (b != ColorUtil.isDark(current.getDefaultBackground())) {
-      String targetScheme = b ? DarculaLaf.NAME : EditorColorsScheme.DEFAULT_SCHEME_NAME;
-      EditorColorsScheme scheme = colorsManager.getScheme(targetScheme);
-      if (scheme != null) {
-        colorsManager.setGlobalScheme(scheme);
-      }
-    }
-    update();
-  }
-
-  protected static void update() {
-    UISettings.getInstance().fireUISettingsChanged();
-    ActionToolbarImpl.updateAllToolbarsImmediately();
+  private static void performImpl(final boolean dark) {
+    JBColor.setDark(dark);
+    IconLoader.setUseDarkIcons(dark);
   }
 }

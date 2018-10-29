@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 package com.intellij.codeInspection;
 
-import com.intellij.codeInsight.FileModificationService;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
@@ -50,7 +49,6 @@ public class AddAssertStatementFix implements LocalQuickFix {
   public void applyFix(@NotNull Project project, @NotNull ProblemDescriptor descriptor) {
     PsiExpression expressionToAssert = myExpressionToAssert.getElement();
     if (expressionToAssert == null) return;
-    if (!FileModificationService.getInstance().preparePsiElementForWrite(descriptor.getPsiElement())) return;
     PsiElement element = descriptor.getPsiElement();
     PsiElement anchorElement = RefactoringUtil.getParentStatement(element, false);
     LOG.assertTrue(anchorElement != null);
@@ -58,13 +56,13 @@ public class AddAssertStatementFix implements LocalQuickFix {
     if (tempParent instanceof PsiForStatement && !PsiTreeUtil.isAncestor(((PsiForStatement)tempParent).getBody(), anchorElement, false)) {
       anchorElement = tempParent;
     }
-    PsiElement prev = PsiTreeUtil.skipSiblingsBackward(anchorElement, PsiWhiteSpace.class);
+    PsiElement prev = PsiTreeUtil.skipWhitespacesBackward(anchorElement);
     if (prev instanceof PsiComment && JavaSuppressionUtil.getSuppressedInspectionIdsIn(prev) != null) {
       anchorElement = prev;
     }
 
     try {
-      final PsiElementFactory factory = JavaPsiFacade.getInstance(element.getProject()).getElementFactory();
+      final PsiElementFactory factory = JavaPsiFacade.getElementFactory(element.getProject());
       @NonNls String text = "assert c;";
       PsiAssertStatement assertStatement = (PsiAssertStatement)factory.createStatementFromText(text, null);
       final PsiExpression assertCondition = assertStatement.getAssertCondition();

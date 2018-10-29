@@ -44,6 +44,7 @@ public class BaseTestProxyNodeDescriptor<T extends AbstractTestProxy> extends No
     return myTestProxy.getName();
   }
 
+  @Override
   public boolean expandOnDoubleClick() {
     return !getElement().isLeaf();
   }
@@ -56,10 +57,5 @@ public class BaseTestProxyNodeDescriptor<T extends AbstractTestProxy> extends No
   @Override
   public T getElement() {
     return myTestProxy;
-  }
-
-  @Override
-  public String toString() {
-    return myName;
   }
 }

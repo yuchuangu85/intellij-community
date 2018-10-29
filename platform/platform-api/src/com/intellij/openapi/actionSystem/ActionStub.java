@@ -80,14 +80,14 @@ public class ActionStub extends AnAction{
   }
 
   @Override
-  public void actionPerformed(AnActionEvent e){
+  public void actionPerformed(@NotNull AnActionEvent e){
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Copies template presentation and shortcuts set to <code>targetAction</code>.
+   * Copies template presentation and shortcuts set to {@code targetAction}.
    *
-   * @param targetAction cannot be <code>null</code>
+   * @param targetAction cannot be {@code null}
    */
   public final void initAction(@NotNull AnAction targetAction) {
     Presentation sourcePresentation = getTemplatePresentation();

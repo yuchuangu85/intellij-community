@@ -1,3 +1,4 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.debugger;
 
 import com.jetbrains.python.console.pydev.AbstractPyCodeCompletion;
@@ -52,7 +53,7 @@ public class PydevXmlUtils {
   }
 
   public static List<PydevCompletionVariant> decodeCompletions(Object fromServer, String actTok) {
-    final List<PydevCompletionVariant> ret = new ArrayList<PydevCompletionVariant>();
+    final List<PydevCompletionVariant> ret = new ArrayList<>();
 
     List completionList = objectToList(fromServer);
 
@@ -106,12 +107,13 @@ public class PydevXmlUtils {
    * Processes CMD_GET_COMPLETIONS return
    */
   static class XMLToCompletionsInfo extends DefaultHandler {
-    private List<Object[]> completions;
+    private final List<Object[]> completions;
 
-    public XMLToCompletionsInfo() {
-      completions = new ArrayList<Object[]>();
+    XMLToCompletionsInfo() {
+      completions = new ArrayList<>();
     }
 
+    @Override
     public void startElement(String uri, String localName, String qName,
                              Attributes attributes) throws SAXException {
       // <comp p0="%s" p1="%s" p2="%s" p3="%s"/>

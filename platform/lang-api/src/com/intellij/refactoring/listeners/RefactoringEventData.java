@@ -16,19 +16,14 @@
 package com.intellij.refactoring.listeners;
 
 import com.intellij.openapi.util.Key;
-import com.intellij.openapi.util.UserDataHolder;
 import com.intellij.openapi.util.UserDataHolderBase;
 import com.intellij.psi.PsiElement;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.util.Function;
-import com.intellij.util.containers.HashMap;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 
 public class RefactoringEventData extends UserDataHolderBase {
   public static final Key<Collection<? extends String>> CONFLICTS_KEY = Key.create("conflicts");
@@ -42,7 +37,7 @@ public class RefactoringEventData extends UserDataHolderBase {
   }
 
   public <T> void addMembers(T[] members, Function<T, PsiElement> converter) {
-    List<PsiElement> elements = new ArrayList<PsiElement>();
+    List<PsiElement> elements = new ArrayList<>();
     for (T info : members) {
       elements.add(converter.fun(info));
     }
@@ -50,7 +45,7 @@ public class RefactoringEventData extends UserDataHolderBase {
   }
   
   public void addElements(Collection<PsiElement> elements) {
-    putUserData(PSI_ELEMENT_ARRAY_KEY, elements.toArray(new PsiElement[elements.size()]));
+    putUserData(PSI_ELEMENT_ARRAY_KEY, elements.toArray(PsiElement.EMPTY_ARRAY));
   }
   
   public void addElements(PsiElement[] elements) {

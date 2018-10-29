@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2015 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2018 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.InspectionGadgetsFix;
 import com.siyeh.ig.PsiReplacementUtil;
 import com.siyeh.ig.psiutils.ClassUtils;
+import com.siyeh.ig.psiutils.CommentTracker;
 import com.siyeh.ig.psiutils.ExpectedTypeUtils;
 import com.siyeh.ig.psiutils.MethodCallUtils;
 import org.jetbrains.annotations.NonNls;
@@ -39,16 +40,14 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 public class AutoUnboxingInspection extends BaseInspection {
 
   /**
-   * @noinspection StaticCollection
    */
-  @NonNls static final Map<String, String> s_unboxingMethods = new HashMap<String, String>(8);
+  @NonNls static final Map<String, String> s_unboxingMethods = new HashMap<>(8);
 
   static {
     s_unboxingMethods.put("byte", "byteValue");
@@ -122,13 +121,8 @@ public class AutoUnboxingInspection extends BaseInspection {
 
     @Override
     @NotNull
-    public String getName() {
-      return InspectionGadgetsBundle.message("auto.unboxing.make.unboxing.explicit.quickfix");
-    }
-    @Override
-    @NotNull
     public String getFamilyName() {
-      return getName();
+      return InspectionGadgetsBundle.message("auto.unboxing.make.unboxing.explicit.quickfix");
     }
 
     @Override
@@ -142,25 +136,28 @@ public class AutoUnboxingInspection extends BaseInspection {
       if (unboxedType == null) {
         return;
       }
-      final String newExpressionText = buildNewExpressionText(expression, unboxedType);
+      CommentTracker commentTracker = new CommentTracker();
+      final String newExpressionText = buildNewExpressionText(expression, unboxedType, commentTracker);
       final JavaPsiFacade psiFacade = JavaPsiFacade.getInstance(project);
       final PsiElementFactory factory = psiFacade.getElementFactory();
       final PsiElement parent = expression.getParent();
       final String expressionText = expression.getText();
       if (parent instanceof PsiTypeCastExpression) {
         final PsiTypeCastExpression typeCastExpression = (PsiTypeCastExpression)parent;
-        PsiReplacementUtil.replaceExpression(typeCastExpression, newExpressionText);
+        PsiReplacementUtil.replaceExpression(typeCastExpression, newExpressionText, commentTracker);
       }
       else if (parent instanceof PsiPrefixExpression && !unboxedType.equalsToText("boolean")) {
         final PsiPrefixExpression prefixExpression = (PsiPrefixExpression)parent;
         final IElementType tokenType = prefixExpression.getOperationTokenType();
         if (JavaTokenType.PLUSPLUS.equals(tokenType)) {
-          PsiReplacementUtil.replaceExpression(prefixExpression, expressionText + '=' + newExpressionText + "+1");
+          commentTracker.markUnchanged(expression);
+          PsiReplacementUtil.replaceExpression(prefixExpression, expressionText + '=' + newExpressionText + "+1", commentTracker);
         }
         else if (JavaTokenType.MINUSMINUS.equals(tokenType)) {
-          PsiReplacementUtil.replaceExpression(prefixExpression, expressionText + '=' + newExpressionText + "-1");
+          commentTracker.markUnchanged(expression);
+          PsiReplacementUtil.replaceExpression(prefixExpression, expressionText + '=' + newExpressionText + "-1", commentTracker);
         } else {
-          PsiReplacementUtil.replaceExpression(prefixExpression, prefixExpression.getOperationSign().getText() + newExpressionText);
+          PsiReplacementUtil.replaceExpression(prefixExpression, prefixExpression.getOperationSign().getText() + newExpressionText, commentTracker);
         }
       }
       else if (parent instanceof PsiPostfixExpression) {
@@ -169,10 +166,12 @@ public class AutoUnboxingInspection extends BaseInspection {
         final PsiElement grandParent = postfixExpression.getParent();
         if (grandParent instanceof PsiExpressionStatement) {
           if (JavaTokenType.PLUSPLUS.equals(tokenType)) {
-            PsiReplacementUtil.replaceExpression(postfixExpression, expressionText + '=' + newExpressionText + "+1");
+            commentTracker.markUnchanged(expression);
+            PsiReplacementUtil.replaceExpression(postfixExpression, expressionText + '=' + newExpressionText + "+1", commentTracker);
           }
           else if (JavaTokenType.MINUSMINUS.equals(tokenType)) {
-            PsiReplacementUtil.replaceExpression(postfixExpression, expressionText + '=' + newExpressionText + "-1");
+            commentTracker.markUnchanged(expression);
+            PsiReplacementUtil.replaceExpression(postfixExpression, expressionText + '=' + newExpressionText + "-1", commentTracker);
           }
         }
         else {
@@ -203,24 +202,27 @@ public class AutoUnboxingInspection extends BaseInspection {
           if (rExpression == null) {
             return;
           }
-          final String text = lExpression.getText() + '=' + newExpressionText + sign + rExpression.getText();
+          final String text = commentTracker.text(lExpression) + '=' + newExpressionText + sign + commentTracker.text(rExpression);
           final PsiExpression newExpression = factory.createExpressionFromText(text, assignmentExpression);
-          assignmentExpression.replace(newExpression);
+          commentTracker.replaceAndRestoreComments(assignmentExpression, newExpression);
         }
         else {
-          PsiReplacementUtil.replaceExpression(expression, newExpressionText);
+          PsiReplacementUtil.replaceExpression(expression, newExpressionText, commentTracker);
         }
       }
       else {
-        PsiReplacementUtil.replaceExpression(expression, newExpressionText);
+        PsiReplacementUtil.replaceExpression(expression, newExpressionText, commentTracker);
       }
     }
 
-    private static String buildNewExpressionText(PsiExpression expression, PsiPrimitiveType unboxedType) {
+    private static String buildNewExpressionText(PsiExpression expression,
+                                                 PsiPrimitiveType unboxedType,
+                                                 CommentTracker commentTracker) {
       final String unboxedTypeText = unboxedType.getCanonicalText();
       final String expressionText = expression.getText();
       final String boxMethodName = s_unboxingMethods.get(unboxedTypeText);
       if (expression instanceof PsiTypeCastExpression) {
+        commentTracker.markUnchanged(expression);
         return '(' + expressionText + ")." + boxMethodName + "()";
       }
       final String constantText = computeConstantBooleanText(expression);
@@ -232,10 +234,11 @@ public class AutoUnboxingInspection extends BaseInspection {
         if (isValueOfCall(methodCallExpression)) {
           final PsiExpressionList argumentList = methodCallExpression.getArgumentList();
           final PsiExpression[] arguments = argumentList.getExpressions();
-          final PsiExpression argument = arguments[0];
+          final PsiExpression argument = commentTracker.markUnchanged(arguments[0]);
           return argument.getText();
         }
       }
+      commentTracker.markUnchanged(expression);
       final PsiType type = expression.getType();
       if (type != null && type.equalsToText(CommonClassNames.JAVA_LANG_OBJECT)) {
         return "((" + unboxedType.getBoxedTypeName() + ')' + expressionText + ")." + boxMethodName + "()";
@@ -369,8 +372,7 @@ public class AutoUnboxingInspection extends BaseInspection {
     public void visitMethodCallExpression(PsiMethodCallExpression expression) {
       super.visitMethodCallExpression(expression);
       final PsiMethod method = expression.resolveMethod();
-      if (method != null &&
-          AnnotationUtil.isAnnotated(method, Collections.singletonList( "java.lang.invoke.MethodHandle.PolymorphicSignature"))) {
+      if (method != null && AnnotationUtil.isAnnotated(method, CommonClassNames.JAVA_LANG_INVOKE_MH_POLYMORPHIC, 0)) {
         return;
       }
       checkExpression(expression);

@@ -27,19 +27,19 @@ import java.util.List;
  * @author vlan
  */
 public class PyExecutionException extends ExecutionException {
-  @NotNull private String myCommand;
-  @NotNull private List<String> myArgs;
+  @NotNull private final String myCommand;
+  @NotNull private final List<String> myArgs;
   @NotNull private final String myStdout;
   @NotNull private final String myStderr;
   private final int myExitCode;
   @NotNull private final List<? extends PyExecutionFix> myFixes;
 
   public PyExecutionException(@NotNull String message, @NotNull String command, @NotNull List<String> args) {
-    this(message, command, args, "", "", 0, Collections.<PyExecutionFix>emptyList());
+    this(message, command, args, "", "", 0, Collections.emptyList());
   }
 
   public PyExecutionException(@NotNull String message, @NotNull String command, @NotNull List<String> args, @NotNull ProcessOutput output) {
-    this(message, command, args, output.getStdout(), output.getStderr(), output.getExitCode(), Collections.<PyExecutionFix>emptyList());
+    this(message, command, args, output.getStdout(), output.getStderr(), output.getExitCode(), Collections.emptyList());
   }
 
   public PyExecutionException(@NotNull String message, @NotNull String command, @NotNull List<String> args,
@@ -61,10 +61,13 @@ public class PyExecutionException extends ExecutionException {
     final String command = getCommand() + " " + StringUtil.join(getArgs(), " ");
     b.append(command);
     b.append("\n\n");
+    b.append("The exit code: ").append(myExitCode).append("\n");
     b.append("The error output of the command:\n\n");
     b.append(myStdout);
     b.append("\n");
     b.append(myStderr);
+    b.append("\n");
+    b.append(getMessage());
     return b.toString();
   }
 

@@ -27,7 +27,7 @@ import com.intellij.openapi.vcs.changes.ContentRevision;
 import com.intellij.openapi.vcs.changes.CurrentContentRevision;
 import com.intellij.openapi.vcs.changes.actions.diff.ShowDiffAction;
 import com.intellij.openapi.vcs.changes.actions.diff.ShowDiffContext;
-import com.intellij.openapi.vcs.changes.ui.ChangesBrowser;
+import com.intellij.openapi.vcs.changes.ui.SimpleChangesBrowser;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.hash.HashMap;
 import org.jetbrains.annotations.CalledInAwt;
@@ -46,7 +46,7 @@ public class VcsDiffUtil {
 
   @CalledInAwt
   public static void showDiffFor(@NotNull Project project,
-                                 @NotNull final Collection<Change> changes,
+                                 @NotNull final Collection<? extends Change> changes,
                                  @NotNull final String revNumTitle1,
                                  @NotNull final String revNumTitle2,
                                  @NotNull final FilePath filePath) {
@@ -58,7 +58,7 @@ public class VcsDiffUtil {
         DiffManager.getInstance().showDiff(project, new MessageDiffRequest("No Changes Found"));
       }
       else {
-        final HashMap<Key, Object> revTitlesMap = new HashMap<Key, Object>(2);
+        final HashMap<Key, Object> revTitlesMap = new HashMap<>(2);
         revTitlesMap.put(VCS_DIFF_LEFT_CONTENT_TITLE, revNumTitle1);
         revTitlesMap.put(VCS_DIFF_RIGHT_CONTENT_TITLE, revNumTitle2);
         ShowDiffContext showDiffContext = new ShowDiffContext() {
@@ -86,16 +86,16 @@ public class VcsDiffUtil {
   }
 
   @CalledInAwt
-  public static void showChangesDialog(@NotNull Project project, @NotNull String title, @NotNull List<Change> changes) {
+  public static void showChangesDialog(@NotNull Project project, @NotNull String title, @NotNull List<? extends Change> changes) {
     DialogBuilder dialogBuilder = new DialogBuilder(project);
 
     dialogBuilder.setTitle(title);
     dialogBuilder.setActionDescriptors(new DialogBuilder.CloseDialogAction());
-    final ChangesBrowser changesBrowser =
-      new ChangesBrowser(project, null, changes, null, false, true, null, ChangesBrowser.MyUseCase.COMMITTED_CHANGES, null);
+    final SimpleChangesBrowser changesBrowser = new SimpleChangesBrowser(project, false, true);
     changesBrowser.setChangesToDisplay(changes);
     dialogBuilder.setCenterPanel(changesBrowser);
     dialogBuilder.setPreferredFocusComponent(changesBrowser.getPreferredFocusedComponent());
+    dialogBuilder.setDimensionServiceKey("VcsDiffUtil.ChangesDialog");
     dialogBuilder.showNotModal();
   }
 

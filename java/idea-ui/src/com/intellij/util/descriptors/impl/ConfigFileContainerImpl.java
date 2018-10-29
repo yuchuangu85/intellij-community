@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ import java.util.*;
 public class ConfigFileContainerImpl extends SimpleModificationTracker implements ConfigFileContainer {
   private final Project myProject;
   private final EventDispatcher<ConfigFileListener> myDispatcher = EventDispatcher.create(ConfigFileListener.class);
-  private final MultiValuesMap<ConfigFileMetaData, ConfigFile> myConfigFiles = new MultiValuesMap<ConfigFileMetaData, ConfigFile>();
+  private final MultiValuesMap<ConfigFileMetaData, ConfigFile> myConfigFiles = new MultiValuesMap<>();
   private ConfigFile[] myCachedConfigFiles;
   private final ConfigFileMetaDataProvider myMetaDataProvider;
   private final ConfigFileInfoSetImpl myConfiguration;
@@ -47,7 +47,7 @@ public class ConfigFileContainerImpl extends SimpleModificationTracker implement
     myConfiguration = configuration;
     myMetaDataProvider = descriptorMetaDataProvider;
     myProject = project;
-    VirtualFileManager.getInstance().addVirtualFileListener(new VirtualFileAdapter() {
+    VirtualFileManager.getInstance().addVirtualFileListener(new VirtualFileListener() {
       @Override
       public void propertyChanged(@NotNull final VirtualFilePropertyEvent event) {
         if (event.getPropertyName().equals(VirtualFile.PROP_NAME)) {
@@ -83,7 +83,7 @@ public class ConfigFileContainerImpl extends SimpleModificationTracker implement
   public ConfigFile[] getConfigFiles() {
     if (myCachedConfigFiles == null) {
       final Collection<ConfigFile> descriptors = myConfigFiles.values();
-      myCachedConfigFiles = descriptors.toArray(new ConfigFile[descriptors.size()]);
+      myCachedConfigFiles = descriptors.toArray(ConfigFile.EMPTY_ARRAY);
     }
     return myCachedConfigFiles;
   }
@@ -98,7 +98,7 @@ public class ConfigFileContainerImpl extends SimpleModificationTracker implement
     myDispatcher.addListener(listener, parentDisposable);
   }
 
-  public void fireDescriptorChanged(final ConfigFile descriptor) {
+  void fireDescriptorChanged(@NotNull ConfigFile descriptor) {
     incModificationCount();
     myDispatcher.getMulticaster().configFileChanged(descriptor);
   }
@@ -128,12 +128,12 @@ public class ConfigFileContainerImpl extends SimpleModificationTracker implement
   }
 
   public void updateDescriptors(@NotNull MultiValuesMap<ConfigFileMetaData, ConfigFileInfo> descriptorsMap) {
-    Set<ConfigFile> toDelete = myConfigFiles.isEmpty() ? Collections.<ConfigFile>emptySet() : new HashSet<ConfigFile>(myConfigFiles.values());
+    Set<ConfigFile> toDelete = myConfigFiles.isEmpty() ? Collections.emptySet() : new HashSet<>(myConfigFiles.values());
     Set<ConfigFile> added = null;
 
     for (Map.Entry<ConfigFileMetaData, Collection<ConfigFileInfo>> entry : descriptorsMap.entrySet()) {
       ConfigFileMetaData metaData = entry.getKey();
-      Set<ConfigFileInfo> newDescriptors = new HashSet<ConfigFileInfo>(entry.getValue());
+      Set<ConfigFileInfo> newDescriptors = new HashSet<>(entry.getValue());
       final Collection<ConfigFile> oldDescriptors = myConfigFiles.get(metaData);
       if (oldDescriptors != null) {
         for (ConfigFile descriptor : oldDescriptors) {
@@ -147,7 +147,7 @@ public class ConfigFileContainerImpl extends SimpleModificationTracker implement
         Disposer.register(this, configFile);
         myConfigFiles.put(metaData, configFile);
         if (added == null) {
-          added = new THashSet<ConfigFile>();
+          added = new THashSet<>();
         }
         added.add(configFile);
       }

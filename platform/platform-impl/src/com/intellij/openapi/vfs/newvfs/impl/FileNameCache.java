@@ -18,23 +18,23 @@ package com.intellij.openapi.vfs.newvfs.impl;
 import com.intellij.openapi.vfs.newvfs.persistent.FSRecords;
 import com.intellij.util.IntSLRUCache;
 import com.intellij.util.containers.IntObjectLinkedMap;
-import com.intellij.util.io.PersistentStringEnumerator;
 import com.intellij.util.text.ByteArrayCharSequence;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author peter
  */
 public class FileNameCache {
-  private static final PersistentStringEnumerator ourNames = FSRecords.getNames();
+  
   @SuppressWarnings("unchecked") private static final IntSLRUCache<IntObjectLinkedMap.MapEntry<CharSequence>>[] ourNameCache = new IntSLRUCache[16];
   static {
     final int protectedSize = 40000 / ourNameCache.length;
     final int probationalSize = 20000 / ourNameCache.length;
     for(int i = 0; i < ourNameCache.length; ++i) {
-      ourNameCache[i] = new IntSLRUCache<IntObjectLinkedMap.MapEntry<CharSequence>>(protectedSize, probationalSize);
+      ourNameCache[i] = new IntSLRUCache<>(protectedSize, probationalSize);
     }
   }
 
@@ -47,12 +47,11 @@ public class FileNameCache {
   @NotNull
   private static IntObjectLinkedMap.MapEntry<CharSequence> cacheData(String name, int id, int stripe) {
     if (name == null) {
-      ourNames.markCorrupted();
-      throw new RuntimeException("VFS name enumerator corrupted");
+      FSRecords.handleError(new RuntimeException("VFS name enumerator corrupted"));
     }
 
-    CharSequence rawName = ByteArrayCharSequence.convertToBytesIfAsciiString(name);
-    IntObjectLinkedMap.MapEntry<CharSequence> entry = new IntObjectLinkedMap.MapEntry<CharSequence>(id, rawName);
+    CharSequence rawName = ByteArrayCharSequence.convertToBytesIfPossible(name);
+    IntObjectLinkedMap.MapEntry<CharSequence> entry = new IntObjectLinkedMap.MapEntry<>(id, rawName);
     IntSLRUCache<IntObjectLinkedMap.MapEntry<CharSequence>> cache = ourNameCache[stripe];
     //noinspection SynchronizationOnLocalVariableOrMethodParameter
     synchronized (cache) {
@@ -79,8 +78,14 @@ public class FileNameCache {
   private static final AtomicInteger ourQueries = new AtomicInteger();
   private static final AtomicInteger ourMisses = new AtomicInteger();
 
+
+  @FunctionalInterface
+  public interface NameComputer {
+    String compute(int id) throws IOException;
+  }
+  
   @NotNull
-  public static CharSequence getVFileName(int nameId) {
+  public static CharSequence getVFileName(int nameId, @NotNull NameComputer computeName) throws IOException {
     assert nameId > 0;
 
     if (ourTrackStats) {
@@ -111,9 +116,18 @@ public class FileNameCache {
       entry = cache.getCachedEntry(nameId);
     }
     if (entry == null) {
-      entry = cacheData(FSRecords.getNameByNameId(nameId), nameId, stripe);
+      entry = cacheData(computeName.compute(nameId), nameId, stripe);
     }
     ourArrayCache[l1] = entry;
     return entry.value;
+  }
+  @NotNull
+  public static CharSequence getVFileName(int nameId) {
+    try {
+      return getVFileName(nameId, FSRecords::getNameByNameId);
+    }
+    catch (IOException e) {
+      throw new RuntimeException(e); // actually will be caught in getNameByNameId
+    }
   }
 }

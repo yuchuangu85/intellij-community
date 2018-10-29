@@ -17,7 +17,6 @@ package com.intellij.openapi.roots.ui.configuration.projectRoot.daemon;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ReadAction;
-import com.intellij.openapi.application.Result;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.roots.ui.configuration.projectRoot.StructureConfigurableContext;
 import com.intellij.openapi.util.Disposer;
@@ -37,12 +36,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class ProjectStructureDaemonAnalyzer implements Disposable {
   private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.roots.ui.configuration.projectRoot.validation.ProjectStructureDaemonAnalyzer");
-  private final Map<ProjectStructureElement, ProjectStructureProblemsHolderImpl> myProblemHolders = new HashMap<ProjectStructureElement, ProjectStructureProblemsHolderImpl>();
-  private final MultiValuesMap<ProjectStructureElement, ProjectStructureElementUsage> mySourceElement2Usages = new MultiValuesMap<ProjectStructureElement, ProjectStructureElementUsage>();
-  private final MultiValuesMap<ProjectStructureElement, ProjectStructureElementUsage> myContainingElement2Usages = new MultiValuesMap<ProjectStructureElement, ProjectStructureElementUsage>();
-  private final Set<ProjectStructureElement> myElementWithNotCalculatedUsages = new HashSet<ProjectStructureElement>();
-  private final Set<ProjectStructureElement> myElementsToShowWarningIfUnused = new HashSet<ProjectStructureElement>();
-  private final Map<ProjectStructureElement, ProjectStructureProblemDescription> myWarningsAboutUnused = new HashMap<ProjectStructureElement, ProjectStructureProblemDescription>();
+  private final Map<ProjectStructureElement, ProjectStructureProblemsHolderImpl> myProblemHolders = new HashMap<>();
+  private final MultiValuesMap<ProjectStructureElement, ProjectStructureElementUsage> mySourceElement2Usages = new MultiValuesMap<>();
+  private final MultiValuesMap<ProjectStructureElement, ProjectStructureElementUsage> myContainingElement2Usages = new MultiValuesMap<>();
+  private final Set<ProjectStructureElement> myElementWithNotCalculatedUsages = new HashSet<>();
+  private final Set<ProjectStructureElement> myElementsToShowWarningIfUnused = new HashSet<>();
+  private final Map<ProjectStructureElement, ProjectStructureProblemDescription> myWarningsAboutUnused = new HashMap<>();
   private final MergingUpdateQueue myAnalyzerQueue;
   private final MergingUpdateQueue myResultsUpdateQueue;
   private final EventDispatcher<ProjectStructureDaemonAnalyzerListener> myDispatcher = EventDispatcher.create(ProjectStructureDaemonAnalyzerListener.class);
@@ -70,32 +69,26 @@ public class ProjectStructureDaemonAnalyzer implements Disposable {
 
   private void doCheck(final ProjectStructureElement element) {
     final ProjectStructureProblemsHolderImpl problemsHolder = new ProjectStructureProblemsHolderImpl();
-    new ReadAction() {
-      @Override
-      protected void run(@NotNull final Result result) {
-        if (myStopped.get()) return;
+    ReadAction.run(() -> {
+      if (myStopped.get()) return;
 
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("checking " + element);
-        }
-        ProjectStructureValidator.check(element, problemsHolder);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("checking " + element);
       }
-    }.execute();
+      ProjectStructureValidator.check(element, problemsHolder);
+    });
     myResultsUpdateQueue.queue(new ProblemsComputedUpdate(element, problemsHolder));
   }
 
   private void doCollectUsages(final ProjectStructureElement element) {
-    final List<ProjectStructureElementUsage> usages = new ReadAction<List<ProjectStructureElementUsage>>() {
-      @Override
-      protected void run(@NotNull final Result<List<ProjectStructureElementUsage>> result) {
-        if (myStopped.get()) return;
+    final List<ProjectStructureElementUsage> usages = ReadAction.compute(() -> {
+      if (myStopped.get()) return null;
 
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("collecting usages in " + element);
-        }
-        result.setResult(getUsagesInElement(element));
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("collecting usages in " + element);
       }
-    }.execute().getResultObject();
+      return getUsagesInElement(element);
+    });
     if (usages != null) {
       myResultsUpdateQueue.queue(new UsagesCollectedUpdate(element, usages));
     }
@@ -105,7 +98,7 @@ public class ProjectStructureDaemonAnalyzer implements Disposable {
     return ProjectStructureValidator.getUsagesInElement(element);
   }
 
-  private void updateUsages(ProjectStructureElement element, List<ProjectStructureElementUsage> usages) {
+  private void updateUsages(ProjectStructureElement element, List<? extends ProjectStructureElementUsage> usages) {
     removeUsagesInElement(element);
     for (ProjectStructureElementUsage usage : usages) {
       addUsage(usage);
@@ -215,7 +208,7 @@ public class ProjectStructureDaemonAnalyzer implements Disposable {
   }
 
   public void queueUpdateForAllElementsWithErrors() {
-    List<ProjectStructureElement> toUpdate = new ArrayList<ProjectStructureElement>();
+    List<ProjectStructureElement> toUpdate = new ArrayList<>();
     for (Map.Entry<ProjectStructureElement, ProjectStructureProblemsHolderImpl> entry : myProblemHolders.entrySet()) {
       if (entry.getValue().containsProblems()) {
         toUpdate.add(entry.getKey());
@@ -241,12 +234,12 @@ public class ProjectStructureDaemonAnalyzer implements Disposable {
   }
 
   public Collection<ProjectStructureElementUsage> getUsages(ProjectStructureElement selected) {
-    ProjectStructureElement[] elements = myElementWithNotCalculatedUsages.toArray(new ProjectStructureElement[myElementWithNotCalculatedUsages.size()]);
+    ProjectStructureElement[] elements = myElementWithNotCalculatedUsages.toArray(new ProjectStructureElement[0]);
     for (ProjectStructureElement element : elements) {
       updateUsages(element, getUsagesInElement(element));
     }
     final Collection<ProjectStructureElementUsage> usages = mySourceElement2Usages.get(selected);
-    return usages != null ? usages : Collections.<ProjectStructureElementUsage>emptyList();
+    return usages != null ? usages : Collections.emptyList();
   }
 
   public void addListener(ProjectStructureDaemonAnalyzerListener listener) {
@@ -281,7 +274,7 @@ public class ProjectStructureDaemonAnalyzer implements Disposable {
     private final boolean myCollectUsages;
     private final Object[] myEqualityObjects;
 
-    public AnalyzeElementUpdate(ProjectStructureElement element, boolean check, boolean collectUsages) {
+    AnalyzeElementUpdate(ProjectStructureElement element, boolean check, boolean collectUsages) {
       super(element);
       myElement = element;
       myCheck = check;
@@ -315,10 +308,10 @@ public class ProjectStructureDaemonAnalyzer implements Disposable {
 
   private class UsagesCollectedUpdate extends Update {
     private final ProjectStructureElement myElement;
-    private final List<ProjectStructureElementUsage> myUsages;
+    private final List<? extends ProjectStructureElementUsage> myUsages;
     private final Object[] myEqualityObjects;
 
-    public UsagesCollectedUpdate(ProjectStructureElement element, List<ProjectStructureElementUsage> usages) {
+    UsagesCollectedUpdate(ProjectStructureElement element, List<? extends ProjectStructureElementUsage> usages) {
       super(element);
       myElement = element;
       myUsages = usages;
@@ -347,7 +340,7 @@ public class ProjectStructureDaemonAnalyzer implements Disposable {
     private final ProjectStructureProblemsHolderImpl myProblemsHolder;
     private final Object[] myEqualityObjects;
 
-    public ProblemsComputedUpdate(ProjectStructureElement element, ProjectStructureProblemsHolderImpl problemsHolder) {
+    ProblemsComputedUpdate(ProjectStructureElement element, ProjectStructureProblemsHolderImpl problemsHolder) {
       super(element);
       myElement = element;
       myProblemsHolder = problemsHolder;

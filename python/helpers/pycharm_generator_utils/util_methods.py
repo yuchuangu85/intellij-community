@@ -76,6 +76,42 @@ class __generator(object):
 """
     return txt
 
+def create_async_generator():
+    # Fake <type 'asyncgenerator'>
+    txt = """
+class __asyncgenerator(object):
+    '''A mock class representing the async generator function type.'''
+    def __init__(self):
+        '''Create an async generator object.'''
+        self.__name__ = ''
+        self.__qualname__ = ''
+        self.ag_await = None
+        self.ag_frame = None
+        self.ag_running = False
+        self.ag_code = None
+
+    def __aiter__(self):
+        '''Defined to support iteration over container.'''
+        pass
+
+    def __anext__(self):
+        '''Returns an awaitable, that performs one asynchronous generator iteration when awaited.'''
+        pass
+
+    def aclose(self):
+        '''Returns an awaitable, that throws a GeneratorExit exception into generator.'''
+        pass
+
+    def asend(self, value):
+        '''Returns an awaitable, that pushes the value object in generator.'''
+        pass
+
+    def athrow(self, type, value=None, traceback=None):
+        '''Returns an awaitable, that throws an exception into generator.'''
+        pass
+"""
+    return txt
+
 def create_function():
     txt = """
 class __function(object):
@@ -152,9 +188,6 @@ class __coroutine(object):
         self.cr_code = None
 
     def __await__(self):
-        return []
-
-    def __iter__(self):
         return []
 
     def close(self):
@@ -671,3 +704,28 @@ def build_output_name(dirname, qualified_name):
         os.makedirs(dirname)
 
     return fname
+
+
+def is_valid_implicit_namespace_package_name(s):
+    """
+    Checks whether provided string could represent implicit namespace package name.
+    :param s: string to check
+    :return: True if provided string could represent implicit namespace package name and False otherwise
+    """
+    return isidentifier(s) and not keyword.iskeyword(s)
+
+
+def isidentifier(s):
+    """
+    Checks whether provided string complies Python identifier syntax requirements.
+    :param s: string to check
+    :return: True if provided string comply Python identifier syntax requirements and False otherwise
+    """
+    if version[0] >= 3:
+        return s.isidentifier()
+    else:
+        # quick test on provided string to comply major Python identifier syntax requirements
+        return (s and
+                not s[:1].isdigit() and
+                "-" not in s and
+                " " not in s)

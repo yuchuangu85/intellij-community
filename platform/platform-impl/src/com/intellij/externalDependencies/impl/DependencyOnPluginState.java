@@ -24,14 +24,13 @@ import com.intellij.util.xmlb.annotations.Tag;
  */
 @Tag("plugin")
 class DependencyOnPluginState {
-  public DependencyOnPluginState() {
+  DependencyOnPluginState() {
   }
 
-  public DependencyOnPluginState(DependencyOnPlugin dependency) {
+  DependencyOnPluginState(DependencyOnPlugin dependency) {
     myId = dependency.getPluginId();
     myMinVersion = dependency.getMinVersion();
     myMaxVersion = dependency.getMaxVersion();
-    myChannel = dependency.getChannel();
   }
 
   @Attribute("id")
@@ -40,6 +39,4 @@ class DependencyOnPluginState {
   public String myMinVersion;
   @Attribute("max-version")
   public String myMaxVersion;
-  @Attribute("channel")
-  public String myChannel;
 }

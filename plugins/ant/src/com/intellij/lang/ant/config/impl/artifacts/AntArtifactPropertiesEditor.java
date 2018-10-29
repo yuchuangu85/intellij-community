@@ -36,6 +36,7 @@ import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.ColumnInfo;
 import com.intellij.util.ui.ListTableModel;
 import com.intellij.util.ui.UIUtil;
+import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
@@ -51,28 +52,34 @@ public class AntArtifactPropertiesEditor extends ArtifactPropertiesEditor {
   private static final ListProperty<BuildFileProperty> ANT_PROPERTIES = ListProperty.create("ant-properties");
   private static final ColumnInfo<BuildFileProperty, String> NAME_COLUMN =
     new ColumnInfo<BuildFileProperty, String>(AntBundle.message("edit.ant.properties.name.column.name")) {
+      @Override
       public String valueOf(BuildFileProperty buildFileProperty) {
         return buildFileProperty.getPropertyName();
       }
 
+      @Override
       public boolean isCellEditable(BuildFileProperty buildFileProperty) {
         return USER_PROPERTY_CONDITION.value(buildFileProperty);
       }
 
+      @Override
       public void setValue(BuildFileProperty buildFileProperty, String name) {
         buildFileProperty.setPropertyName(name);
       }
     };
   private static final ColumnInfo<BuildFileProperty, String> VALUE_COLUMN =
     new ColumnInfo<BuildFileProperty, String>(AntBundle.message("edit.ant.properties.value.column.name")) {
+      @Override
       public boolean isCellEditable(BuildFileProperty buildFileProperty) {
         return USER_PROPERTY_CONDITION.value(buildFileProperty);
       }
 
+      @Override
       public String valueOf(BuildFileProperty buildFileProperty) {
         return buildFileProperty.getPropertyValue();
       }
 
+      @Override
       public void setValue(BuildFileProperty buildFileProperty, String value) {
         buildFileProperty.setPropertyValue(value);
       }
@@ -86,11 +93,11 @@ public class AntArtifactPropertiesEditor extends ArtifactPropertiesEditor {
   private JPanel myMainPanel;
   private JCheckBox myRunTargetCheckBox;
   private FixedSizeButton mySelectTargetButton;
-  private JBTable myPropertiesTable;
+  private final JBTable myPropertiesTable;
   private JPanel myPropertiesPanel;
   private AntBuildTarget myTarget;
   private final boolean myPostProcessing;
-  private UIPropertyBinding.TableListBinding<BuildFileProperty> myBinding;
+  private final UIPropertyBinding.TableListBinding<BuildFileProperty> myBinding;
   protected SinglePropertyContainer<ListProperty> myContainer;
 
   public AntArtifactPropertiesEditor(AntArtifactProperties properties, ArtifactEditorContext context, boolean postProcessing) {
@@ -98,11 +105,13 @@ public class AntArtifactPropertiesEditor extends ArtifactPropertiesEditor {
     myContext = context;
     myPostProcessing = postProcessing;
     mySelectTargetButton.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent e) {
         selectTarget();
       }
     });
     myRunTargetCheckBox.addActionListener(new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent e) {
         mySelectTargetButton.setEnabled(myRunTargetCheckBox.isSelected());
         if (myRunTargetCheckBox.isSelected() && myTarget == null) {
@@ -125,7 +134,7 @@ public class AntArtifactPropertiesEditor extends ArtifactPropertiesEditor {
               return;
             }
             BuildFileProperty item = new BuildFileProperty();
-            ArrayList<BuildFileProperty> items = new ArrayList<BuildFileProperty>(model.getItems());
+            ArrayList<BuildFileProperty> items = new ArrayList<>(model.getItems());
             items.add(item);
             model.setItems(items);
             int newIndex = model.indexOf(item);
@@ -149,7 +158,7 @@ public class AntArtifactPropertiesEditor extends ArtifactPropertiesEditor {
         }
       }).setRemoveActionUpdater(new AnActionButtonUpdater() {
         @Override
-        public boolean isEnabled(AnActionEvent e) {
+        public boolean isEnabled(@NotNull AnActionEvent e) {
           final ListSelectionModel selectionModel = myPropertiesTable.getSelectionModel();
           ListTableModel<BuildFileProperty> model = (ListTableModel<BuildFileProperty>)myPropertiesTable.getModel();
           boolean enable = false;
@@ -197,10 +206,12 @@ public class AntArtifactPropertiesEditor extends ArtifactPropertiesEditor {
     UIUtil.setEnabled(myPropertiesPanel, enabled, true);
   }
 
+  @Override
   public String getTabName() {
     return myPostProcessing ? POST_PROCESSING_TAB : PRE_PROCESSING_TAB;
   }
 
+  @Override
   public void apply() {
     myProperties.setEnabled(myRunTargetCheckBox.isSelected());
     if (myTarget != null) {
@@ -218,16 +229,18 @@ public class AntArtifactPropertiesEditor extends ArtifactPropertiesEditor {
   }
 
   private List<BuildFileProperty> getUserProperties() {
-    final SinglePropertyContainer<ListProperty> container = new SinglePropertyContainer<ListProperty>(ANT_PROPERTIES, null);
+    final SinglePropertyContainer<ListProperty> container = new SinglePropertyContainer<>(ANT_PROPERTIES, null);
     myBinding.apply(container);
     final List<BuildFileProperty> allProperties = (List<BuildFileProperty>)container.getValueOf(ANT_PROPERTIES);
     return ContainerUtil.filter(allProperties, USER_PROPERTY_CONDITION);
   }
 
+  @Override
   public JComponent createComponent() {
     return myMainPanel;
   }
 
+  @Override
   public boolean isModified() {
     if (myProperties.isEnabled() != myRunTargetCheckBox.isSelected()) return true;
     if (myTarget == null) {
@@ -241,18 +254,20 @@ public class AntArtifactPropertiesEditor extends ArtifactPropertiesEditor {
     return !getUserProperties().equals(myProperties.getUserProperties());
   }
 
+  @Override
   public void reset() {
     myRunTargetCheckBox.setSelected(myProperties.isEnabled());
     myTarget = myProperties.findTarget(AntConfiguration.getInstance(myContext.getProject()));
-    final List<BuildFileProperty> properties = new ArrayList<BuildFileProperty>();
+    final List<BuildFileProperty> properties = new ArrayList<>();
     for (BuildFileProperty property : myProperties.getAllProperties(myContext.getArtifact())) {
       properties.add(new BuildFileProperty(property.getPropertyName(), property.getPropertyValue()));
     }
-    myContainer = new SinglePropertyContainer<ListProperty>(ANT_PROPERTIES, properties);
+    myContainer = new SinglePropertyContainer<>(ANT_PROPERTIES, properties);
     myBinding.loadValues(myContainer);
     updatePanel();
   }
 
+  @Override
   public void disposeUIResources() {
     AntConfiguration.getInstance(myContext.getProject()).removeAntConfigurationListener(myAntConfigurationListener);
   }

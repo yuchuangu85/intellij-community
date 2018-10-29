@@ -18,10 +18,7 @@ package com.intellij.vcsUtil;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
-import com.intellij.openapi.application.Application;
-import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.ModalityState;
-import com.intellij.openapi.components.ServiceManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileTypes.FileTypeManager;
@@ -29,21 +26,20 @@ import com.intellij.openapi.fileTypes.FileTypes;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
-import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.*;
 import com.intellij.openapi.vcs.actions.VcsContextFactory;
 import com.intellij.openapi.vcs.changes.Change;
+import com.intellij.openapi.vcs.changes.ChangeListManager;
 import com.intellij.openapi.vcs.changes.ContentRevision;
 import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
-import com.intellij.openapi.vcs.roots.VcsRootDetector;
+import com.intellij.openapi.vcs.history.ShortVcsRevisionNumber;
+import com.intellij.openapi.vcs.history.VcsRevisionNumber;
 import com.intellij.openapi.vfs.*;
-import com.intellij.openapi.vfs.newvfs.RefreshQueue;
 import com.intellij.openapi.wm.StatusBar;
-import com.intellij.util.ObjectUtils;
-import com.intellij.util.containers.ContainerUtilRt;
+import com.intellij.util.Function;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -51,15 +47,19 @@ import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
-import java.util.stream.Stream;
 
-@SuppressWarnings({"UtilityClassWithoutPrivateConstructor"})
+import static com.intellij.util.ObjectUtils.notNull;
+import static java.util.stream.Collectors.groupingBy;
+
+@SuppressWarnings("UtilityClassWithoutPrivateConstructor")
 public class VcsUtil {
-  protected static final char[] ourCharsToBeChopped = new char[]{'/', '\\'};
+  protected static final char[] ourCharsToBeChopped = {'/', '\\'};
   private static final Logger LOG = Logger.getInstance("#com.intellij.vcsUtil.VcsUtil");
 
-  public final static String MAX_VCS_LOADED_SIZE_KB = "idea.max.vcs.loaded.size.kb";
+  public static final String MAX_VCS_LOADED_SIZE_KB = "idea.max.vcs.loaded.size.kb";
   private static final int ourMaxLoadedFileSize = computeLoadedFileSize();
+
+  @NotNull private static final VcsRoot FICTIVE_ROOT = new VcsRoot(null, null);
 
   public static int getMaxVcsLoadedFileSize() {
     return ourMaxLoadedFileSize;
@@ -67,29 +67,41 @@ public class VcsUtil {
 
   private static int computeLoadedFileSize() {
     int result = (int)PersistentFSConstants.FILE_LENGTH_TO_CACHE_THRESHOLD;
-    final String userLimitKb = System.getProperty(MAX_VCS_LOADED_SIZE_KB);
+    String userLimitKb = System.getProperty(MAX_VCS_LOADED_SIZE_KB);
     try {
-      return userLimitKb != null ? Math.min(Integer.parseInt(userLimitKb) * 1024, result) : result;
+      return userLimitKb != null ? Integer.parseInt(userLimitKb) * 1024 : result;
     }
     catch (NumberFormatException ignored) {
       return result;
     }
   }
 
+  /**
+   * @deprecated use the {@link VcsDirtyScopeManager} directly.
+   */
+  @Deprecated
   public static void markFileAsDirty(final Project project, final VirtualFile file) {
     VcsDirtyScopeManager.getInstance(project).fileDirty(file);
   }
 
+  /**
+   * @deprecated use the {@link VcsDirtyScopeManager} directly.
+   */
+  @Deprecated
   public static void markFileAsDirty(final Project project, final FilePath path) {
-      VcsDirtyScopeManager.getInstance(project).fileDirty(path);
+    VcsDirtyScopeManager.getInstance(project).fileDirty(path);
   }
 
   public static void markFileAsDirty(final Project project, final String path) {
     final FilePath filePath = VcsContextFactory.SERVICE.getInstance().createFilePathOn(new File(path));
-    markFileAsDirty( project, filePath );
+    VcsDirtyScopeManager.getInstance(project).fileDirty(filePath);
   }
 
-  public static void refreshFiles(Project project, HashSet<FilePath> paths) {
+  /**
+   * @deprecated use the {@link VcsDirtyScopeManager} directly.
+   */
+  @Deprecated
+  public static void refreshFiles(Project project, HashSet<? extends FilePath> paths) {
     for (FilePath path : paths) {
       VirtualFile vFile = path.getVirtualFile();
       if (vFile != null) {
@@ -124,9 +136,6 @@ public class VcsUtil {
     return getVcsFor(project, file) == host;
   }
 
-  //  NB: do not reduce this method to the method above since PLVcsMgr uses
-  //      different methods for computing its predicate (since FilePath can
-  //      refer to the deleted files).
   public static boolean isFileForVcs(FilePath path, Project project, AbstractVcs host) {
     return getVcsFor(project, path) == host;
   }
@@ -136,146 +145,63 @@ public class VcsUtil {
   }
 
   @Nullable
-  public static AbstractVcs getVcsFor(@NotNull final Project project, final FilePath file) {
-    final AbstractVcs[] vcss = new AbstractVcs[1];
-    ApplicationManager.getApplication().runReadAction(new Runnable() {
-      @Override
-      public void run() {
-        //  IDEADEV-17916, when e.g. ContentRevision.getContent is called in
-        //  a future task after the component has been disposed.
-        if (!project.isDisposed()) {
-          ProjectLevelVcsManager mgr = ProjectLevelVcsManager.getInstance(project);
-          vcss[0] = (mgr != null) ? mgr.getVcsFor(file) : null;
-        }
-      }
-    });
-    return vcss[0];
+  public static AbstractVcs getVcsFor(@NotNull Project project, FilePath filePath) {
+    return computeValue(project, manager -> manager.getVcsFor(filePath));
   }
 
   @Nullable
-  public static AbstractVcs getVcsFor(final Project project, @NotNull final VirtualFile file) {
-    final AbstractVcs[] vcss = new AbstractVcs[1];
-
-    ApplicationManager.getApplication().runReadAction(new Runnable() {
-      @Override
-      public void run() {
-        //  IDEADEV-17916, when e.g. ContentRevision.getContent is called in
-        //  a future task after the component has been disposed.
-        if( !project.isDisposed() )
-        {
-          ProjectLevelVcsManager mgr = ProjectLevelVcsManager.getInstance( project );
-          vcss[ 0 ] = (mgr != null) ? mgr.getVcsFor(file) : null;
-        }
-      }
-    });
-    return vcss[0];
+  public static AbstractVcs getVcsFor(@NotNull Project project, @NotNull VirtualFile file) {
+    return computeValue(project, manager -> manager.getVcsFor(file));
   }
 
   @Nullable
-  public static VirtualFile getVcsRootFor(final Project project, final FilePath file) {
-    final VirtualFile[] roots = new VirtualFile[1];
-
-    ApplicationManager.getApplication().runReadAction(new Runnable() {
-      @Override
-      public void run() {
-        //  IDEADEV-17916, when e.g. ContentRevision.getContent is called in
-        //  a future task after the component has been disposed.
-        if( !project.isDisposed() )
-        {
-          ProjectLevelVcsManager mgr = ProjectLevelVcsManager.getInstance( project );
-          roots[ 0 ] = (mgr != null) ? mgr.getVcsRootFor( file ) : null;
-        }
-      }
-    });
-    return roots[0];
+  public static AbstractVcs findVcsByKey(@NotNull Project project, @NotNull VcsKey key) {
+    return ProjectLevelVcsManager.getInstance(project).findVcsByName(key.getName());
   }
 
   @Nullable
-  public static VirtualFile getVcsRootFor(final Project project, final VirtualFile file) {
-    final VirtualFile[] roots = new VirtualFile[1];
+  public static AbstractVcs findVcs(@NotNull AnActionEvent e) {
+    Project project = e.getProject();
+    if (project == null) return null;
 
-    ApplicationManager.getApplication().runReadAction(new Runnable() {
-      @Override
-      public void run() {
-        //  IDEADEV-17916, when e.g. ContentRevision.getContent is called in
-        //  a future task after the component has been disposed.
-        if( !project.isDisposed() )
-        {
-          ProjectLevelVcsManager mgr = ProjectLevelVcsManager.getInstance( project );
-          roots[ 0 ] = (mgr != null) ? mgr.getVcsRootFor( file ) : null;
-        }
-      }
-    });
-    return roots[0];
-  }
+    VcsKey key = e.getData(VcsDataKeys.VCS);
+    if (key == null) return null;
 
-  public static void refreshFiles(final FilePath[] roots, final Runnable runnable) {
-    ApplicationManager.getApplication().assertIsDispatchThread();
-    refreshFiles(collectFilesToRefresh(roots), runnable);
-  }
-
-  public static void refreshFiles(final File[] roots, final Runnable runnable) {
-    ApplicationManager.getApplication().assertIsDispatchThread();
-    refreshFiles(collectFilesToRefresh(roots), runnable);
-  }
-
-  private static File[] collectFilesToRefresh(final FilePath[] roots) {
-    final File[] result = new File[roots.length];
-    for (int i = 0; i < roots.length; i++) {
-      result[i] = roots[i].getIOFile();
-    }
-    return result;
-  }
-
-  private static void refreshFiles(final List<VirtualFile> filesToRefresh, final Runnable runnable) {
-    RefreshQueue.getInstance().refresh(true, true, runnable, filesToRefresh);
-  }
-
-  private static List<VirtualFile> collectFilesToRefresh(final File[] roots) {
-    final ArrayList<VirtualFile> result = new ArrayList<VirtualFile>();
-    for (File root : roots) {
-      VirtualFile vFile = findFileFor(root);
-      if (vFile != null) {
-        result.add(vFile);
-      } else {
-        LOG.info("Failed to find VirtualFile for one of refresh roots: " + root.getAbsolutePath());
-      }
-    }
-    return result;
+    return findVcsByKey(project, key);
   }
 
   @Nullable
-  private static VirtualFile findFileFor(final File root) {
-    File current = root;
-    while (current != null) {
-      final VirtualFile vFile = LocalFileSystem.getInstance().findFileByIoFile(root);
-      if (vFile != null) return vFile;
-      current = current.getParentFile();
-    }
-
-    return null;
+  public static VirtualFile getVcsRootFor(@NotNull Project project, FilePath filePath) {
+    return computeValue(project, manager -> manager.getVcsRootFor(filePath));
   }
 
   @Nullable
-  public static VirtualFile getVirtualFile(final String path) {
-    return ApplicationManager.getApplication().runReadAction(new Computable<VirtualFile>() {
-      @Override
-      @Nullable
-      public VirtualFile compute() {
-        return LocalFileSystem.getInstance().findFileByPath(path.replace(File.separatorChar, '/'));
+  public static VirtualFile getVcsRootFor(@NotNull Project project, @Nullable VirtualFile file) {
+    return computeValue(project, manager -> manager.getVcsRootFor(file));
+  }
+
+  @Nullable
+  private static <T> T computeValue(@NotNull Project project, @NotNull Function<? super ProjectLevelVcsManager, ? extends T> provider) {
+    return ReadAction.compute(() -> {
+      //  IDEADEV-17916, when e.g. ContentRevision.getContent is called in
+      //  a future task after the component has been disposed.
+      T result = null;
+      if (!project.isDisposed()) {
+        ProjectLevelVcsManager manager = ProjectLevelVcsManager.getInstance(project);
+        result = manager != null ? provider.fun(manager) : null;
       }
+      return result;
     });
   }
 
   @Nullable
-  public static VirtualFile getVirtualFile(final File file) {
-    return ApplicationManager.getApplication().runReadAction(new Computable<VirtualFile>() {
-      @Override
-      @Nullable
-      public VirtualFile compute() {
-        return LocalFileSystem.getInstance().findFileByIoFile(file);
-      }
-    });
+  public static VirtualFile getVirtualFile(@NotNull String path) {
+    return ReadAction.compute(() -> LocalFileSystem.getInstance().findFileByPath(path.replace(File.separatorChar, '/')));
+  }
+
+  @Nullable
+  public static VirtualFile getVirtualFile(@NotNull File file) {
+    return ReadAction.compute(() -> LocalFileSystem.getInstance().findFileByIoFile(file));
   }
 
   @Nullable
@@ -289,14 +215,11 @@ public class VcsUtil {
     return result;
   }
 
-  public static String getFileContent(final String path) {
-    return ApplicationManager.getApplication().runReadAction(new Computable<String>() {
-      @Override
-      public String compute() {
-        VirtualFile vFile = getVirtualFile(path);
-        assert vFile != null;
-        return FileDocumentManager.getInstance().getDocument(vFile).getText();
-      }
+  public static String getFileContent(@NotNull String path) {
+    return ReadAction.compute(() -> {
+      VirtualFile vFile = getVirtualFile(path);
+      assert vFile != null;
+      return FileDocumentManager.getInstance().getDocument(vFile).getText();
     });
   }
 
@@ -335,8 +258,12 @@ public class VcsUtil {
     return VcsContextFactory.SERVICE.getInstance().createFilePathOn(file, isDirectory);
   }
 
+  /**
+   * @deprecated use {@link #getFilePath(String, boolean)}
+   */
+  @Deprecated
   public static FilePath getFilePathForDeletedFile(@NotNull String path, boolean isDirectory) {
-    return VcsContextFactory.SERVICE.getInstance().createFilePathOnDeleted(new File(path), isDirectory);
+    return VcsContextFactory.SERVICE.getInstance().createFilePathOn(new File(path), isDirectory);
   }
 
   @NotNull
@@ -350,18 +277,13 @@ public class VcsUtil {
   }
 
   /**
-   * Shows message in the status bar.
-   *
-   * @param project Current project component
-   * @param message information message
+   * @deprecated use {@link StatusBar.Info#set(String, Project)} directly.
    */
-  public static void showStatusMessage(final Project project, final String message) {
-    SwingUtilities.invokeLater(new Runnable() {
-      @Override
-      public void run() {
-        if (project.isOpen()) {
-          StatusBar.Info.set(message, project);
-        }
+  @Deprecated
+  public static void showStatusMessage(@NotNull Project project, @Nullable String message) {
+    SwingUtilities.invokeLater(() -> {
+      if (project.isOpen()) {
+        StatusBar.Info.set(message, project);
       }
     });
   }
@@ -370,7 +292,7 @@ public class VcsUtil {
    * @param change "Change" description.
    * @return Return true if the "Change" object is created for "Rename" operation:
    *         in this case name of files for "before" and "after" revisions must not
-   *         coniside.
+   *         coincide.
    */
   public static boolean isRenameChange(Change change) {
     boolean isRenamed = false;
@@ -390,7 +312,7 @@ public class VcsUtil {
    *         "before" revision is obviously NULL, while "after" revision is not.
    */
   public static boolean isChangeForNew(Change change) {
-    return (change.getBeforeRevision() == null) && (change.getAfterRevision() != null);
+    return change.getBeforeRevision() == null && change.getAfterRevision() != null;
   }
 
   /**
@@ -399,29 +321,18 @@ public class VcsUtil {
    *         "before" revision is NOT NULL, while "after" revision is NULL.
    */
   public static boolean isChangeForDeleted(Change change) {
-    return (change.getBeforeRevision() != null) && (change.getAfterRevision() == null);
+    return change.getBeforeRevision() != null && change.getAfterRevision() == null;
   }
 
   public static boolean isChangeForFolder(Change change) {
     ContentRevision revB = change.getBeforeRevision();
     ContentRevision revA = change.getAfterRevision();
-    return (revA != null && revA.getFile().isDirectory()) || (revB != null && revB.getFile().isDirectory());
+    return revA != null && revA.getFile().isDirectory() || revB != null && revB.getFile().isDirectory();
   }
 
   /**
    * Sort file paths so that paths under the same root are placed from the
-   * innermost to the outermost (closest to the root).
-   *
-   * @param files An array of file paths to be sorted. Sorting is done over the parameter.
-   * @return Sorted array of the file paths.
-   */
-  public static FilePath[] sortPathsFromInnermost(FilePath[] files) {
-    return sortPaths(files, -1);
-  }
-
-  /**
-   * Sort file paths so that paths under the same root are placed from the
-   * outermost to the innermost (farest from the root).
+   * outermost to the innermost (farthest from the root).
    *
    * @param files An array of file paths to be sorted. Sorting is done over the parameter.
    * @return Sorted array of the file paths.
@@ -431,43 +342,39 @@ public class VcsUtil {
   }
 
   private static FilePath[] sortPaths(FilePath[] files, final int sign) {
-    Arrays.sort(files, new Comparator<FilePath>() {
-      @Override
-      public int compare(@NotNull FilePath o1, @NotNull FilePath o2) {
-        return sign * o1.getPath().compareTo(o2.getPath());
-      }
-    });
+    Arrays.sort(files, (file1, file2) -> sign * file1.getPath().compareTo(file2.getPath()));
     return files;
   }
 
   /**
    * @param e ActionEvent object
-   * @return <code>VirtualFile</code> available in the current context.
-   *         Returns not <code>null</code> if and only if exectly one file is available.
+   * @return {@code VirtualFile} available in the current context.
+   *         Returns not {@code null} if and only if exactly one file is available.
    */
   @Nullable
-  public static VirtualFile getOneVirtualFile(AnActionEvent e) {
+  public static VirtualFile getOneVirtualFile(@NotNull AnActionEvent e) {
     VirtualFile[] files = getVirtualFiles(e);
-    return (files.length != 1) ? null : files[0];
+    return files.length != 1 ? null : files[0];
   }
 
   /**
    * @param e ActionEvent object
-   * @return <code>VirtualFile</code>s available in the current context.
+   * @return {@code VirtualFile}s available in the current context.
    *         Returns empty array if there are no available files.
    */
-  public static VirtualFile[] getVirtualFiles(AnActionEvent e) {
+  @NotNull
+  public static VirtualFile[] getVirtualFiles(@NotNull AnActionEvent e) {
     VirtualFile[] files = e.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY);
-    return (files == null) ? VirtualFile.EMPTY_ARRAY : files;
+    return files == null ? VirtualFile.EMPTY_ARRAY : files;
   }
 
   /**
    * Collects all files which are located in the passed directory.
    *
-   * @throws IllegalArgumentException if <code>dir</code> isn't a directory.
+   * @throws IllegalArgumentException if {@code dir} isn't a directory.
    */
   public static void collectFiles(final VirtualFile dir,
-                                  final List<VirtualFile> files,
+                                  final List<? super VirtualFile> files,
                                   final boolean recursive,
                                   final boolean addDirectories) {
     if (!dir.isDirectory()) {
@@ -496,16 +403,13 @@ public class VcsUtil {
 
   public static boolean runVcsProcessWithProgress(final VcsRunnable runnable, String progressTitle, boolean canBeCanceled, Project project)
     throws VcsException {
-    final Ref<VcsException> ex = new Ref<VcsException>();
-    boolean result = ProgressManager.getInstance().runProcessWithProgressSynchronously(new Runnable() {
-      @Override
-      public void run() {
-        try {
-          runnable.run();
-        }
-        catch (VcsException e) {
-          ex.set(e);
-        }
+    final Ref<VcsException> ex = new Ref<>();
+    boolean result = ProgressManager.getInstance().runProcessWithProgressSynchronously(() -> {
+      try {
+        runnable.run();
+      }
+      catch (VcsException e) {
+        ex.set(e);
       }
     }, progressTitle, canBeCanceled, project);
     if (!ex.isNull()) {
@@ -514,24 +418,10 @@ public class VcsUtil {
     return result;
   }
 
-  public static VirtualFile waitForTheFile(final String path) {
-    final VirtualFile[] file = new VirtualFile[1];
-    final Application app = ApplicationManager.getApplication();
-    Runnable action = new Runnable() {
-      @Override
-      public void run() {
-        app.runWriteAction(new Runnable() {
-          @Override
-          public void run() {
-            file[0] = LocalFileSystem.getInstance().refreshAndFindFileByPath(path);
-          }
-        });
-      }
-    };
-
-    app.invokeAndWait(action, ModalityState.defaultModalityState());
-
-    return file[0];
+  @Deprecated
+  @Nullable
+  public static VirtualFile waitForTheFile(@NotNull String path) {
+    return LocalFileSystem.getInstance().refreshAndFindFileByPath(path);
   }
 
   public static String getCanonicalLocalPath(String localPath) {
@@ -562,8 +452,8 @@ public class VcsUtil {
    * @param source Source string
    * @param chars  Symbols to be trimmed
    * @return string without all specified chars at the end. For example,
-   *         <code>chopTrailingChars("c:\\my_directory\\//\\",new char[]{'\\'}) is <code>"c:\\my_directory\\//"</code>,
-   *         <code>chopTrailingChars("c:\\my_directory\\//\\",new char[]{'\\','/'}) is <code>"c:\my_directory"</code>.
+   *         <code>chopTrailingChars("c:\\my_directory\\//\\",new char[]{'\\'}) is {@code "c:\\my_directory\\//"},
+   *         <code>chopTrailingChars("c:\\my_directory\\//\\",new char[]{'\\','/'}) is {@code "c:\my_directory"}.
    *         Actually this method can be used to normalize file names to chop trailing separator chars.
    */
   public static String chopTrailingChars(String source, char[] chars) {
@@ -583,6 +473,12 @@ public class VcsUtil {
     return sb.toString();
   }
 
+  public static String getShortRevisionString(@NotNull VcsRevisionNumber revision) {
+    return revision instanceof ShortVcsRevisionNumber
+           ? ((ShortVcsRevisionNumber)revision).toShortString()
+           : revision.asString();
+  }
+
   public static VirtualFile[] paths2VFiles(String[] paths) {
     VirtualFile[] files = new VirtualFile[paths.length];
     for (int i = 0; i < paths.length; i++) {
@@ -593,10 +489,6 @@ public class VcsUtil {
   }
 
   private static final String ANNO_ASPECT = "show.vcs.annotation.aspect.";
-  //public static boolean isAspectAvailableByDefault(LineAnnotationAspect aspect) {
-  //  if (aspect.getId() == null) return aspect.isShowByDefault();
-  //  return PropertiesComponent.getInstance().getBoolean(ANNO_ASPECT + aspect.getId(), aspect.isShowByDefault());
-  //}
 
   public static boolean isAspectAvailableByDefault(String id) {
     return isAspectAvailableByDefault(id, true);
@@ -628,31 +520,19 @@ public class VcsUtil {
   }
 
   @NotNull
-  public static Collection<VcsDirectoryMapping> findRoots(@NotNull VirtualFile rootDir, @NotNull Project project)
-    throws IllegalArgumentException {
-    if (!rootDir.isDirectory()) {
-      throw new IllegalArgumentException(
-        "Can't find VCS at the target file system path. Reason: expected to find a directory there but it's not. The path: "
-        + rootDir.getParent()
-      );
-    }
-    Collection<VcsRoot> roots = ServiceManager.getService(project, VcsRootDetector.class).detect(rootDir);
-    Collection<VcsDirectoryMapping> result = ContainerUtilRt.newArrayList();
-    for (VcsRoot vcsRoot : roots) {
-      VirtualFile vFile = vcsRoot.getPath();
-      AbstractVcs rootVcs = vcsRoot.getVcs();
-      if (rootVcs != null && vFile != null) {
-        result.add(new VcsDirectoryMapping(vFile.getPath(), rootVcs.getName()));
-      }
-    }
-    return result;
+  public static <T> Map<VcsRoot, List<T>> groupByRoots(@NotNull Project project,
+                                                       @NotNull Collection<? extends T> items,
+                                                       @NotNull Function<? super T, ? extends FilePath> filePathMapper) {
+    ProjectLevelVcsManager manager = ProjectLevelVcsManager.getInstance(project);
+
+    return items.stream().collect(groupingBy(item -> notNull(manager.getVcsRootObjectFor(filePathMapper.fun(item)), FICTIVE_ROOT)));
   }
 
   @NotNull
-  public static List<VcsDirectoryMapping> addMapping(@NotNull List<VcsDirectoryMapping> existingMappings,
+  public static List<VcsDirectoryMapping> addMapping(@NotNull List<? extends VcsDirectoryMapping> existingMappings,
                                                      @NotNull String path,
                                                      @NotNull String vcs) {
-    List<VcsDirectoryMapping> mappings = new ArrayList<VcsDirectoryMapping>(existingMappings);
+    List<VcsDirectoryMapping> mappings = new ArrayList<>(existingMappings);
     for (Iterator<VcsDirectoryMapping> iterator = mappings.iterator(); iterator.hasNext(); ) {
       VcsDirectoryMapping mapping = iterator.next();
       if (mapping.isDefaultMapping() && StringUtil.isEmptyOrSpaces(mapping.getVcs())) {
@@ -673,35 +553,15 @@ public class VcsUtil {
     return mappings;
   }
 
-  @Nullable
-  public static <T> T getIfSingle(@Nullable Stream<T> items) {
-    return items == null ? null : items.limit(2).map(Optional::ofNullable)
-      .reduce(Optional.empty(), (a, b) -> a.isPresent() ^ b.isPresent() ? b : Optional.empty())
-      .orElse(null);
-  }
-
-  public static <T> boolean isEmpty(@Nullable Stream<T> items) {
-    return items == null || !items.findAny().isPresent();
-  }
-
   @NotNull
-  public static <T> Stream<T> notNullize(@Nullable Stream<T> items) {
-    return ObjectUtils.notNull(items, Stream.empty());
-  }
+  public static FilePath getLastCommitPath(@NotNull Project project, @NotNull FilePath path) {
+    if (project.isDefault()) return path;
 
-  @NotNull
-  public static <T> Stream<T> toStream(@Nullable T... items) {
-    return items == null ? Stream.empty() : Stream.of(items);
-  }
+    Change change = ChangeListManager.getInstance(project).getChange(path);
+    if (change == null || change.getType() != Change.Type.MOVED || change.getBeforeRevision() == null) {
+      return path;
+    }
 
-  /**
-   * There probably could be some performance issues if there is lots of streams to concat. See
-   * http://mail.openjdk.java.net/pipermail/lambda-dev/2013-July/010659.html for some details.
-   * <p>
-   * Also see {@link Stream#concat(Stream, Stream)} documentation for other possible issues of concatenating large number of streams.
-   */
-  @NotNull
-  public static <T> Stream<T> concat(@NotNull Stream<T>... streams) {
-    return toStream(streams).reduce(Stream.empty(), Stream::concat);
+    return change.getBeforeRevision().getFile();
   }
 }

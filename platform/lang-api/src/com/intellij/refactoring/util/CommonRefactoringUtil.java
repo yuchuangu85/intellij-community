@@ -105,23 +105,23 @@ public class CommonRefactoringUtil {
   }
 
   public static boolean checkReadOnlyStatus(@NotNull Project project, @NotNull PsiElement... elements) {
-    return checkReadOnlyStatus(project, Collections.<PsiElement>emptySet(), Arrays.asList(elements), RefactoringBundle.message("refactoring.cannot.be.performed"), true);
+    return checkReadOnlyStatus(project, Collections.emptySet(), Arrays.asList(elements), RefactoringBundle.message("refactoring.cannot.be.performed"), true);
   }
 
   public static boolean checkReadOnlyStatus(@NotNull Project project, @NotNull Collection<? extends PsiElement> elements, boolean notifyOnFail) {
-    return checkReadOnlyStatus(project, Collections.<PsiElement>emptySet(), elements, RefactoringBundle.message("refactoring.cannot.be.performed"), notifyOnFail);
+    return checkReadOnlyStatus(project, Collections.emptySet(), elements, RefactoringBundle.message("refactoring.cannot.be.performed"), notifyOnFail);
   }
 
   public static boolean checkReadOnlyStatus(@NotNull PsiElement element, @NotNull Project project, @NotNull String messagePrefix) {
-    return element.isWritable() || checkReadOnlyStatus(project, Collections.<PsiElement>emptySet(), Collections.singleton(element), messagePrefix, true);
+    return element.isWritable() || checkReadOnlyStatus(project, Collections.emptySet(), Collections.singleton(element), messagePrefix, true);
   }
 
   public static boolean checkReadOnlyStatusRecursively(@NotNull Project project, @NotNull Collection<? extends PsiElement> elements) {
-    return checkReadOnlyStatus(project, elements, Collections.<PsiElement>emptySet(), RefactoringBundle.message("refactoring.cannot.be.performed"), false);
+    return checkReadOnlyStatus(project, elements, Collections.emptySet(), RefactoringBundle.message("refactoring.cannot.be.performed"), false);
   }
 
   public static boolean checkReadOnlyStatusRecursively(@NotNull Project project, @NotNull Collection<? extends PsiElement> elements, boolean notifyOnFail) {
-    return checkReadOnlyStatus(project, elements, Collections.<PsiElement>emptySet(), RefactoringBundle.message("refactoring.cannot.be.performed"), notifyOnFail);
+    return checkReadOnlyStatus(project, elements, Collections.emptySet(), RefactoringBundle.message("refactoring.cannot.be.performed"), notifyOnFail);
   }
 
   public static boolean checkReadOnlyStatus(@NotNull Project project,
@@ -136,8 +136,8 @@ public class CommonRefactoringUtil {
                                              @NotNull Collection<? extends PsiElement> flat,
                                              @NotNull String messagePrefix,
                                              boolean notifyOnFail) {
-    Collection<VirtualFile> readonly = new THashSet<VirtualFile>();  // not writable, but could be checked out
-    Collection<VirtualFile> failed = new THashSet<VirtualFile>();  // those located in read-only filesystem
+    Collection<VirtualFile> readonly = new THashSet<>();  // not writable, but could be checked out
+    Collection<VirtualFile> failed = new THashSet<>();  // those located in read-only filesystem
 
     boolean seenNonWritablePsiFilesWithoutVirtualFile =
       checkReadOnlyStatus(flat, false, readonly, failed) || checkReadOnlyStatus(recursive, true, readonly, failed);
@@ -170,8 +170,8 @@ public class CommonRefactoringUtil {
 
   private static boolean checkReadOnlyStatus(Collection<? extends PsiElement> elements,
                                              boolean recursively,
-                                             Collection<VirtualFile> readonly,
-                                             Collection<VirtualFile> failed) {
+                                             Collection<? super VirtualFile> readonly,
+                                             Collection<? super VirtualFile> failed) {
     boolean seenNonWritablePsiFilesWithoutVirtualFile = false;
 
     for (PsiElement element : elements) {
@@ -230,7 +230,7 @@ public class CommonRefactoringUtil {
     return seenNonWritablePsiFilesWithoutVirtualFile;
   }
 
-  public static void collectReadOnlyFiles(@NotNull VirtualFile vFile, @NotNull final Collection<VirtualFile> list) {
+  public static void collectReadOnlyFiles(@NotNull VirtualFile vFile, @NotNull final Collection<? super VirtualFile> list) {
     final FileTypeManager fileTypeManager = FileTypeManager.getInstance();
 
     VfsUtilCore.visitChildrenRecursively(vFile, new VirtualFileVisitor(VirtualFileVisitor.NO_FOLLOW_SYMLINKS) {

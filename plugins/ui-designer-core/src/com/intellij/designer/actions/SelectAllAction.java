@@ -20,6 +20,7 @@ import com.intellij.designer.model.RadComponent;
 import com.intellij.designer.model.RadComponentVisitor;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,10 +37,14 @@ public class SelectAllAction extends AnAction {
   }
 
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public void actionPerformed(@NotNull AnActionEvent e) {
+    perform();
+  }
+
+  public void perform() {
     RadComponent rootComponent = myArea.getRootComponent();
     if (rootComponent != null) {
-      final List<RadComponent> components = new ArrayList<RadComponent>();
+      final List<RadComponent> components = new ArrayList<>();
       rootComponent.accept(new RadComponentVisitor() {
         @Override
         public void endVisit(RadComponent component) {

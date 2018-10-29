@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 package com.intellij.xml.util;
 
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.util.JDOMUtil;
 import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.CharsetToolkit;
@@ -26,7 +25,7 @@ import com.intellij.util.xmlb.XmlSerializer;
 import com.intellij.util.xmlb.annotations.Attribute;
 import com.intellij.util.xmlb.annotations.Tag;
 import gnu.trove.THashSet;
-import org.jdom.Document;
+import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -34,6 +33,8 @@ import java.io.InputStream;
 import java.util.Collections;
 import java.util.Locale;
 import java.util.Set;
+
+import static com.intellij.util.JdomKt.loadElement;
 
 /**
  * @author Dennis.Ushakov
@@ -49,27 +50,28 @@ public class HTMLControls {
     return ourControls;
   }
 
-  @SuppressWarnings("IOResourceOpenedButNotSafelyClosed")
   private static Control[] loadControls() {
-    Document document;
+    Element element;
     try {
       // use temporary bytes stream because otherwise inputStreamSkippingBOM will fail
       // on ZipFileInputStream used in jar files
-      final InputStream stream = HTMLControls.class.getResourceAsStream("HtmlControls.xml");
-      final byte[] bytes = FileUtilRt.loadBytes(stream);
-      stream.close();
-      final UnsyncByteArrayInputStream bytesStream = new UnsyncByteArrayInputStream(bytes);
-      document = JDOMUtil.loadDocument(CharsetToolkit.inputStreamSkippingBOM(bytesStream));
-      bytesStream.close();
-    } catch (Exception e) {
+      final byte[] bytes;
+      try (final InputStream stream = HTMLControls.class.getResourceAsStream("HtmlControls.xml")) {
+        bytes = FileUtilRt.loadBytes(stream);
+      }
+      try (final UnsyncByteArrayInputStream bytesStream = new UnsyncByteArrayInputStream(bytes)) {
+        element = loadElement(CharsetToolkit.inputStreamSkippingBOM(bytesStream));
+      }
+    }
+    catch (Exception e) {
       LOG.error(e);
       return new Control[0];
     }
-    if (!document.getRootElement().getName().equals("htmlControls")) {
+    if (!element.getName().equals("htmlControls")) {
       LOG.error("HTMLControls storage is broken");
       return new Control[0];
     }
-    return XmlSerializer.deserialize(document, Control[].class);
+    return XmlSerializer.deserialize(element, Control[].class);
   }
 
   public enum TagState { REQUIRED, OPTIONAL, FORBIDDEN }
@@ -106,7 +108,7 @@ public class HTMLControls {
     @Nullable
     @Override
     public Set<String> fromString(@NotNull String value) {
-      final THashSet<String> result = new THashSet<String>();
+      final THashSet<String> result = new THashSet<>();
       for (String closingTag : StringUtil.split(value, ",")) {
         result.add(closingTag.trim().toLowerCase(Locale.US));
       }

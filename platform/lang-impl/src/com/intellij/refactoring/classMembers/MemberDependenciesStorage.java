@@ -19,7 +19,7 @@ package com.intellij.refactoring.classMembers;
 import com.intellij.lang.LanguageDependentMembersRefactoringSupport;
 import com.intellij.psi.NavigatablePsiElement;
 import com.intellij.psi.PsiElement;
-import com.intellij.util.containers.HashMap;
+import java.util.HashMap;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
@@ -34,7 +34,7 @@ public class MemberDependenciesStorage<T extends NavigatablePsiElement, C extend
   public MemberDependenciesStorage(C aClass, C superClass) {
     myClass = aClass;
     mySuperClass = superClass;
-    myDependencyGraph = new HashMap<T, Set<T>>();
+    myDependencyGraph = new HashMap<>();
   }
 
   public void setSuperClass(C superClass) {

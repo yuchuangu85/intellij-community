@@ -51,15 +51,20 @@ public interface MyInterface<T> {}
     myFixture.addFileToProject 'a.groovy', """\
 import pckg.MyInterface as Roo
 
-class MyClass implements Roo<String> {}
-enum MyEnum implements Roo<Integer> {}
-trait MyTrait implements Roo<Long> {}
+class MyClass implements Roo<
+String> {}
+enum MyEnum implements Roo<? extends Integer> {}
+trait MyTrait implements Roo<Long
+> {}
 new Roo<Double>() {}
 """
     def inheritors = DirectClassInheritorsSearch.search(iface).findAll()
     assert inheritors.size() == 4
     inheritors.each {
-      def type = (it as GrTypeDefinition).getImplementsListTypes(false).first()
+      def type = (it as GrTypeDefinition).getSuperTypes(false).find {
+        it.resolve() == iface
+      }
+      assert type != null
       def resolveResult = type.resolveGenerics()
       assert resolveResult.element == iface
       assert resolveResult.substitutor.substitute(iface.typeParameters.first())
@@ -69,11 +74,11 @@ new Roo<Double>() {}
   void 'test aliased import fqn'() {
     myFixture.addClass '''\
 package foo;
-interface Foo{}
+public interface Foo{}
 '''
     def iface = myFixture.addClass('''\
 package bar;
-interface Bar{}
+public interface Bar{}
 ''')
     myFixture.addFileToProject 'a.groovy', '''\
 package test
@@ -92,11 +97,11 @@ new bar.Bar(){}
   void 'test aliased import redefined in same package'() {
     def iface = myFixture.addClass('''\
 package foo;
-interface Foo {}
+public interface Foo {}
 ''')
     myFixture.addClass '''\
 package test;
-class Bar {}
+public class Bar {}
 '''
     myFixture.addFileToProject 'test/a.groovy', '''\
 package test
@@ -113,7 +118,7 @@ new Bar() {} // inherits foo.Foo
   void 'test aliased import redefined in same file'() {
     def iface = myFixture.addClass('''\
 package foo;
-interface Foo {}
+public interface Foo {}
 ''')
     myFixture.addFileToProject 'test/a.groovy', '''\
 package test

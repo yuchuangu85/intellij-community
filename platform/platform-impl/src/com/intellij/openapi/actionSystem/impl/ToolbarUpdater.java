@@ -97,7 +97,7 @@ public abstract class ToolbarUpdater implements Activatable {
     final Runnable updateRunnable = new MyUpdateRunnable(this, transparentOnly, forced);
     final Application app = ApplicationManager.getApplication();
 
-    if (now || app.isUnitTestMode()) {
+    if (now || (app.isUnitTestMode() && app.isDispatchThread())) {
       updateRunnable.run();
     }
     else {
@@ -166,12 +166,12 @@ public abstract class ToolbarUpdater implements Activatable {
     @NotNull private final WeakReference<ToolbarUpdater> myUpdaterRef;
     private final int myHash;
 
-    public MyUpdateRunnable(@NotNull ToolbarUpdater updater, boolean transparentOnly, boolean forced) {
+    MyUpdateRunnable(@NotNull ToolbarUpdater updater, boolean transparentOnly, boolean forced) {
       myTransparentOnly = transparentOnly;
       myForced = forced;
       myHash = updater.hashCode();
 
-      myUpdaterRef = new WeakReference<ToolbarUpdater>(updater);
+      myUpdaterRef = new WeakReference<>(updater);
     }
 
     @Override

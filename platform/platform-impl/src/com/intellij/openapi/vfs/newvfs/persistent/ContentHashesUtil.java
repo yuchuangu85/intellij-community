@@ -30,29 +30,29 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 
-/**
- * Created by Maxim.Mossienko on 4/4/2014.
- */
 public class ContentHashesUtil {
   public static final ThreadLocalCachedValue<MessageDigest> HASHER_CACHE = new ThreadLocalCachedValue<MessageDigest>() {
+    @NotNull
     @Override
     public MessageDigest create() {
       return createHashDigest();
     }
 
     @Override
-    protected void init(MessageDigest value) {
+    protected void init(@NotNull MessageDigest value) {
       value.reset();
     }
   };
 
-  public static MessageDigest createHashDigest() {
+  @NotNull
+  static MessageDigest createHashDigest() {
     try {
       return MessageDigest.getInstance("SHA1");
-    } catch (NoSuchAlgorithmException ex) {
-      assert false:"Every Java implementation should have SHA1 support"; // http://docs.oracle.com/javase/7/docs/api/java/security/MessageDigest.html
     }
-    return null;
+    catch (NoSuchAlgorithmException ex) {
+      assert false:"Every Java implementation should have SHA1 support"; // http://docs.oracle.com/javase/7/docs/api/java/security/MessageDigest.html
+      return null;
+    }
   }
 
   private static final int SIGNATURE_LENGTH = 20;
@@ -72,7 +72,7 @@ public class ContentHashesUtil {
       return super.getLargestId() / SIGNATURE_LENGTH;
     }
 
-    private final ThreadLocal<Boolean> myProcessingKeyAtIndex = new ThreadLocal<Boolean>();
+    private final ThreadLocal<Boolean> myProcessingKeyAtIndex = new ThreadLocal<>();
 
     @Override
     protected boolean isKeyAtIndex(byte[] value, int idx) throws IOException {

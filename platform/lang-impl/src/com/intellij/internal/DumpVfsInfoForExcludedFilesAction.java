@@ -25,8 +25,8 @@ import com.intellij.openapi.roots.impl.DirectoryIndexExcludePolicy;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.newvfs.NewVirtualFile;
-import com.intellij.openapi.vfs.newvfs.persistent.FSRecords;
 import com.intellij.openapi.vfs.newvfs.persistent.PersistentFS;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
@@ -40,11 +40,11 @@ public class DumpVfsInfoForExcludedFilesAction extends DumbAwareAction {
   }
 
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public void actionPerformed(@NotNull AnActionEvent e) {
     Project project = e.getProject();
     if (project == null) return;
 
-    Set<String> excludeRoots = new HashSet<String>();
+    Set<String> excludeRoots = new HashSet<>();
     for (Module module : ModuleManager.getInstance(project).getModules()) {
       Collections.addAll(excludeRoots, ModuleRootManager.getInstance(module).getExcludeRootUrls());
     }
@@ -74,7 +74,7 @@ public class DumpVfsInfoForExcludedFilesAction extends DumbAwareAction {
       return;
     }
 
-    List<VirtualFile> dirs = new ArrayList<VirtualFile>();
+    List<VirtualFile> dirs = new ArrayList<>();
     int inDb = 0, contentInDb = 0, nullChildren = 0;
     PersistentFS persistentFS = PersistentFS.getInstance();
     if (persistentFS.wereChildrenAccessed(dir)) {
@@ -88,7 +88,7 @@ public class DumpVfsInfoForExcludedFilesAction extends DumbAwareAction {
         if (child.isDirectory()) {
           dirs.add(child);
         }
-        else if (FSRecords.getContentId(child.getId()) != 0) {
+        else if (PersistentFS.getInstance().getCurrentContentId(child) != 0) {
           contentInDb++;
         }
       }

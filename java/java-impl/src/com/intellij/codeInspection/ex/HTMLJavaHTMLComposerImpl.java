@@ -14,10 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * User: anna
- * Date: 21-Dec-2007
- */
 package com.intellij.codeInspection.ex;
 
 import com.intellij.codeInspection.HTMLComposer;
@@ -25,10 +21,13 @@ import com.intellij.codeInspection.HTMLJavaHTMLComposer;
 import com.intellij.codeInspection.InspectionsBundle;
 import com.intellij.codeInspection.reference.*;
 import com.intellij.psi.*;
+import com.intellij.util.ObjectUtils;
 import com.intellij.xml.util.XmlStringUtil;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.uast.UDeclaration;
+import org.jetbrains.uast.UField;
+import org.jetbrains.uast.UMethod;
 
 public class HTMLJavaHTMLComposerImpl extends HTMLJavaHTMLComposer {
   private final HTMLComposerImpl myComposer;
@@ -164,7 +163,7 @@ public class HTMLJavaHTMLComposerImpl extends HTMLJavaHTMLComposer {
 
       @Override
       public void visitField(@NotNull RefField field) {
-        PsiField psiField = field.getElement();
+        PsiField psiField = (PsiField)field.getUastElement().getJavaPsi();
         if (psiField != null) {
           if (field.isStatic()) {
             buf.append(InspectionsBundle.message("inspection.export.results.static"));
@@ -183,7 +182,7 @@ public class HTMLJavaHTMLComposerImpl extends HTMLJavaHTMLComposer {
 
       @Override
       public void visitMethod(@NotNull RefMethod method) {
-        final PsiModifierListOwner element = method.getElement();
+        final PsiModifierListOwner element = (PsiModifierListOwner)method.getUastElement().getJavaPsi();
         if (element instanceof PsiClass) {
           return;
         }
@@ -219,7 +218,7 @@ public class HTMLJavaHTMLComposerImpl extends HTMLJavaHTMLComposer {
 
       @Override
       public void visitFile(@NotNull RefFile file) {
-        final PsiFile psiFile = file.getElement();
+        final PsiFile psiFile = file.getPsiElement();
         buf.append(HTMLComposerImpl.B_OPENING);
         buf.append(psiFile.getName());
         buf.append(HTMLComposerImpl.B_CLOSING);
@@ -262,9 +261,9 @@ public class HTMLJavaHTMLComposerImpl extends HTMLJavaHTMLComposer {
       return XmlStringUtil.escapeString(refEntity.getName());
     }
     else if (refEntity instanceof RefMethod) {
-      PsiMethod psiMethod = (PsiMethod)((RefMethod)refEntity).getElement();
-      if (psiMethod != null) {
-        return psiMethod.getName();
+      UMethod uMethod = (UMethod)((RefMethod)refEntity).getUastElement();
+      if (uMethod != null) {
+        return uMethod.getName();
       }
       else {
         return refEntity.getName();
@@ -285,13 +284,13 @@ public class HTMLJavaHTMLComposerImpl extends HTMLJavaHTMLComposer {
 
     if (refElement instanceof RefField) {
       RefField field = (RefField)refElement;
-      PsiField psiField = field.getElement();
+      UField psiField = field.getUastElement();
       buf.append(XmlStringUtil.escapeString(psiField.getType().getPresentableText()));
       buf.append(HTMLComposerImpl.NBSP);
     }
     else if (refElement instanceof RefMethod) {
       RefMethod method = (RefMethod)refElement;
-      PsiMethod psiMethod = (PsiMethod)method.getElement();
+      UMethod psiMethod = (UMethod)method.getUastElement();
       PsiType returnType = psiMethod.getReturnType();
 
       if (returnType != null) {
@@ -302,12 +301,7 @@ public class HTMLJavaHTMLComposerImpl extends HTMLJavaHTMLComposer {
 
     buf.append(HTMLComposerImpl.A_HREF_OPENING);
 
-    if (myComposer.myExporter == null) {
-      buf.append(((RefElementImpl)refElement).getURL());
-    }
-    else {
-      buf.append(myComposer.myExporter.getURL(refElement));
-    }
+    buf.append(((RefElementImpl)refElement).getURL());
 
     buf.append("\"");
 
@@ -326,7 +320,7 @@ public class HTMLJavaHTMLComposerImpl extends HTMLJavaHTMLComposer {
       buf.append(XmlStringUtil.escapeString(refElement.getName()));
     }
     else if (refElement instanceof RefMethod) {
-      PsiMethod psiMethod = (PsiMethod)((RefMethod)refElement).getElement();
+      UMethod psiMethod = (UMethod)((RefMethod)refElement).getUastElement();
       buf.append(psiMethod.getName());
     }
     else {
@@ -336,7 +330,7 @@ public class HTMLJavaHTMLComposerImpl extends HTMLJavaHTMLComposer {
     buf.append(HTMLComposerImpl.A_CLOSING);
 
     if (refElement instanceof RefMethod) {
-      PsiMethod psiMethod = (PsiMethod)((RefMethod)refElement).getElement();
+      UMethod psiMethod = (UMethod)((RefMethod)refElement).getUastElement();
       appendMethodParameters(buf, psiMethod, false);
     }
 

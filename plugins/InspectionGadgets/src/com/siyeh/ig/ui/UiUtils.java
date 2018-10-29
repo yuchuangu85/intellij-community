@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2014 Bas Leijdekkers
+ * Copyright 2010-2016 Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import com.intellij.ide.util.TreeClassChooserFactory;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.InheritanceUtil;
@@ -60,7 +61,8 @@ public class UiUtils {
             editTableCell(table, lastRowIndex, 0);
           });
         }
-      }).setRemoveAction(new RemoveAction(table))
+      })
+      .setRemoveAction(button -> TableUtil.removeSelectedItems(table))
       .disableUpDownActions().createPanel();
     panel.setPreferredSize(JBUI.size(150, 100));
     return panel;
@@ -108,7 +110,7 @@ public class UiUtils {
           }
           editTableCell(table, rowIndex, table.getColumnCount() > 1 && project != null ? 1 : 0);
         }
-      }).setRemoveAction(new RemoveAction(table))
+      }).setRemoveAction(button -> TableUtil.removeSelectedItems(table))
       .disableUpDownActions().createPanel();
     panel.setPreferredSize(JBUI.size(150, 100));
     return panel;
@@ -119,17 +121,21 @@ public class UiUtils {
     selectionModel.setSelectionInterval(row, row);
     EventQueue.invokeLater(() -> {
       final ListWrappingTableModel tableModel = table.getModel();
-      table.requestFocus();
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+        IdeFocusManager.getGlobalInstance().requestFocus(table, true);
+      });
       final Rectangle rectangle = table.getCellRect(row, column, true);
       table.scrollRectToVisible(rectangle);
       table.editCellAt(row, column);
       final TableCellEditor editor = table.getCellEditor();
       final Component component = editor.getTableCellEditorComponent(table, tableModel.getValueAt(row, column), true, row, column);
-      component.requestFocus();
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+        IdeFocusManager.getGlobalInstance().requestFocus(component, true);
+      });
     });
   }
 
-  public static JPanel createTreeClassChooserList(final Collection<String> collection,
+  public static JPanel createTreeClassChooserList(final Collection<? super String> collection,
                                                   String borderTitle,
                                                   final String chooserTitle,
                                                   String... ancestorClasses) {
@@ -184,49 +190,6 @@ public class UiUtils {
                                                                false, JBUI.insetsTop(10)));
     optionsPanel.add(panel);
     return optionsPanel;
-  }
-
-  private static class RemoveAction implements AnActionButtonRunnable {
-
-    private final ListTable table;
-
-    public RemoveAction(ListTable table) {
-      this.table = table;
-    }
-
-    @Override
-    public void run(AnActionButton button) {
-      EventQueue.invokeLater(() -> {
-        final TableCellEditor editor = table.getCellEditor();
-        if (editor != null) {
-          editor.stopCellEditing();
-        }
-        final ListSelectionModel selectionModel = table.getSelectionModel();
-        final int minIndex = selectionModel.getMinSelectionIndex();
-        final int maxIndex = selectionModel.getMaxSelectionIndex();
-        if (minIndex == -1 || maxIndex == -1) {
-          return;
-        }
-        final ListWrappingTableModel tableModel = table.getModel();
-        for (int i = minIndex; i <= maxIndex; i++) {
-          if (selectionModel.isSelectedIndex(i)) {
-            tableModel.removeRow(i);
-          }
-        }
-        final int count = tableModel.getRowCount();
-        if (count <= minIndex) {
-          selectionModel.setSelectionInterval(count - 1, count - 1);
-        }
-        else if (minIndex <= 0) {
-          if (count > 0) {
-            selectionModel.setSelectionInterval(0, 0);
-          }
-        }
-        else {
-          selectionModel.setSelectionInterval(minIndex - 1, minIndex - 1);
-        }
-      });
-    }
   }
 
   private static class SubclassFilter implements ClassFilter {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ public class ConvertToGeeseBracesIntention extends Intention {
 
   private static final PsiElementPredicate MY_PREDICATE = new PsiElementPredicate() {
     @Override
-    public boolean satisfiedBy(PsiElement element) {
+    public boolean satisfiedBy(@NotNull PsiElement element) {
       if (element.getLanguage() != GroovyLanguage.INSTANCE) return false;
       if (!CodeStyleSettingsManager.getInstance(element.getProject()).getCurrentSettings()
         .getCustomSettings(GroovyCodeStyleSettings.class).USE_FLYING_GEESE_BRACES) {
@@ -84,7 +84,7 @@ public class ConvertToGeeseBracesIntention extends Intention {
   }
 
   @Override
-  protected void processIntention(@NotNull PsiElement element, Project project, Editor editor) throws IncorrectOperationException {
+  protected void processIntention(@NotNull PsiElement element, @NotNull Project project, Editor editor) throws IncorrectOperationException {
     if (PsiImplUtil.isWhiteSpaceOrNls(element)) {
       element = PsiTreeUtil.prevLeaf(element);
     }

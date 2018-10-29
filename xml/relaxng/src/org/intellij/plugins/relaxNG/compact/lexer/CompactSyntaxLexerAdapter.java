@@ -61,7 +61,7 @@ public class CompactSyntaxLexerAdapter extends LexerBase {
   private static final Token START = new Token();
 
   private CompactSyntaxTokenManager myLexer;
-  private final LinkedList<Token> myTokenQueue = new LinkedList<Token>();
+  private final LinkedList<Token> myTokenQueue = new LinkedList<>();
   private Token myCurrentToken;
   private int myCurrentOffset;
   private int myCurrentEnd;
@@ -181,7 +181,6 @@ public class CompactSyntaxLexerAdapter extends LexerBase {
   }
 
   @Override
-  @SuppressWarnings("IOResourceOpenedButNotSafelyClosed")
   public void start(@NotNull CharSequence buffer, int startOffset, int endOffset, int initialState) {
     myBuffer = buffer;
 
@@ -189,7 +188,6 @@ public class CompactSyntaxLexerAdapter extends LexerBase {
     init(startOffset, endOffset, reader, initialState);
   }
 
-  @SuppressWarnings("IOResourceOpenedButNotSafelyClosed")
   private void init(int startOffset, int endOffset, Reader reader, int initialState) {
     myEndOffset = endOffset;
     myLengthMap = new TIntIntHashMap();
@@ -251,7 +249,7 @@ public class CompactSyntaxLexerAdapter extends LexerBase {
     private final int myEndOffset;
     private int myCurPos;
 
-    public CharSequenceReader(final CharSequence text, int startOffset, int endOffset) {
+    CharSequenceReader(final CharSequence text, int startOffset, int endOffset) {
       myText = text;
       myEndOffset = endOffset;
       myCurPos = startOffset;

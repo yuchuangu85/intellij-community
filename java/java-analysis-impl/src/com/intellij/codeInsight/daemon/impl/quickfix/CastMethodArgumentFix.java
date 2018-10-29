@@ -31,7 +31,7 @@ public class CastMethodArgumentFix extends MethodArgumentFix implements HighPrio
   @Override
   @NotNull
   public String getText() {
-    if (myArgList.getExpressions().length == 1) {
+    if (myArgList.getExpressionCount() == 1) {
       return QuickFixBundle.message("cast.single.parameter.text", JavaHighlightUtil.formatType(myToType));
     }
 
@@ -61,10 +61,17 @@ public class CastMethodArgumentFix extends MethodArgumentFix implements HighPrio
         if (parameterType == null) return false;
       }
       if (exprType instanceof PsiPrimitiveType && parameterType instanceof PsiClassType) {
+        if (PsiType.NULL.equals(exprType)) {
+          return true;
+        }
         parameterType = PsiPrimitiveType.getUnboxedType(parameterType);
         if (parameterType == null) return false;
       }
-      return parameterType.isConvertibleFrom(exprType);
+      if (parameterType.isConvertibleFrom(exprType)) {
+        return true;
+      }
+
+      return parameterType instanceof PsiEllipsisType && areTypesConvertible(exprType, ((PsiEllipsisType)parameterType).getComponentType(), context);
     }
   }
 

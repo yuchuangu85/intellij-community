@@ -6,11 +6,9 @@ import com.intellij.facet.frameworks.beans.Artifacts;
 import com.intellij.facet.ui.libraries.LibraryInfo;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.HashSet;
+import java.util.HashSet;
 import com.intellij.util.net.HttpConfigurable;
 import com.intellij.util.xmlb.XmlSerializationException;
 import com.intellij.util.xmlb.XmlSerializer;
@@ -73,18 +71,18 @@ public class LibrariesDownloadAssistant {
 
   @NotNull
   public static Artifact[] getVersions(@NotNull URL... urls) {
-    Set<Artifact> versions = new HashSet<Artifact>();
+    Set<Artifact> versions = new HashSet<>();
     for (URL url : urls) {
       final Artifacts allArtifacts = deserialize(url);
       if (allArtifacts != null) {
         final Artifact[] vers = allArtifacts.getArtifacts();
         if (vers != null) {
-          versions.addAll(Arrays.asList(vers));
+          ContainerUtil.addAll(versions, Arrays.asList(vers));
         }
       }
     }
 
-    return versions.toArray(new Artifact[versions.size()]);
+    return versions.toArray(Artifact.EMPTY_ARRAY);
   }
 
   @Nullable
@@ -126,7 +124,7 @@ public class LibrariesDownloadAssistant {
 
     final List<LibraryInfo> infos = convert(version.getUrlPrefix(), version.getItems());
 
-    return infos.toArray(new LibraryInfo[infos.size()]);
+    return infos.toArray(LibraryInfo.EMPTY_ARRAY);
   }
 
   @NotNull

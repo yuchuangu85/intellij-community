@@ -53,8 +53,7 @@ public class JDBCResourceInspection extends ResourceInspection {
       "getGeneratedKeys"
     };
 
-  @SuppressWarnings({"StaticCollection"})
-  private static final Set<String> creationMethodNameSet = new HashSet<String>(9);
+  private static final Set<String> creationMethodNameSet = new HashSet<>(9);
 
   static {
     ContainerUtil.addAll(creationMethodNameSet, creationMethodName);
@@ -72,6 +71,7 @@ public class JDBCResourceInspection extends ResourceInspection {
     return InspectionGadgetsBundle.message("jdbc.resource.opened.not.closed.display.name");
   }
 
+  @Override
   protected boolean isResourceCreation(PsiExpression expression) {
     if (!(expression instanceof PsiMethodCallExpression)) {
       return false;

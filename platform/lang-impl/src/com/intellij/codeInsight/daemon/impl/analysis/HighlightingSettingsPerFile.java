@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.daemon.impl.analysis;
 
@@ -20,7 +6,7 @@ import com.intellij.lang.Language;
 import com.intellij.openapi.components.*;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectCoreUtil;
+import com.intellij.openapi.project.ProjectUtil;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -31,6 +17,7 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.SingleRootFileViewProvider;
 import com.intellij.psi.search.ProjectScope;
 import com.intellij.psi.util.PsiUtilBase;
+import com.intellij.util.messages.MessageBus;
 import org.jdom.Element;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -42,12 +29,17 @@ public class HighlightingSettingsPerFile extends HighlightingLevelManager implem
   @NonNls private static final String SETTING_TAG = "setting";
   @NonNls private static final String ROOT_ATT_PREFIX = "root";
   @NonNls private static final String FILE_ATT = "file";
+  private final MessageBus myBus;
+
+  public HighlightingSettingsPerFile(MessageBus bus) {
+    myBus = bus;
+  }
 
   public static HighlightingSettingsPerFile getInstance(Project project){
     return (HighlightingSettingsPerFile)ServiceManager.getService(project, HighlightingLevelManager.class);
   }
 
-  private final Map<VirtualFile, FileHighlightingSetting[]> myHighlightSettings = new HashMap<VirtualFile, FileHighlightingSetting[]>();
+  private final Map<VirtualFile, FileHighlightingSetting[]> myHighlightSettings = new HashMap<>();
 
   private static int getRootIndex(PsiFile file) {
     FileViewProvider provider = file.getViewProvider();
@@ -55,7 +47,7 @@ public class HighlightingSettingsPerFile extends HighlightingLevelManager implem
     if (languages.size() == 1) {
       return 0;
     }
-    List<Language> array = new ArrayList<Language>(languages);
+    List<Language> array = new ArrayList<>(languages);
     Collections.sort(array, PsiUtilBase.LANGUAGE_COMPARATOR);
     for (int i = 0; i < array.size(); i++) {
       Language language = array.get(i);
@@ -121,10 +113,12 @@ public class HighlightingSettingsPerFile extends HighlightingLevelManager implem
     else {
       myHighlightSettings.put(virtualFile, defaults);
     }
+
+    myBus.syncPublisher(FileHighlightingSettingListener.SETTING_CHANGE).settingChanged(root, setting);
   }
 
   @Override
-  public void loadState(Element element) {
+  public void loadState(@NotNull Element element) {
     List children = element.getChildren(SETTING_TAG);
     for (final Object aChildren : children) {
       final Element child = (Element)aChildren;
@@ -132,13 +126,13 @@ public class HighlightingSettingsPerFile extends HighlightingLevelManager implem
       if (url == null) continue;
       final VirtualFile fileByUrl = VirtualFileManager.getInstance().findFileByUrl(url);
       if (fileByUrl != null) {
-        final List<FileHighlightingSetting> settings = new ArrayList<FileHighlightingSetting>();
+        final List<FileHighlightingSetting> settings = new ArrayList<>();
         int index = 0;
         while (child.getAttributeValue(ROOT_ATT_PREFIX + index) != null) {
           final String attributeValue = child.getAttributeValue(ROOT_ATT_PREFIX + index++);
           settings.add(Enum.valueOf(FileHighlightingSetting.class, attributeValue));
         }
-        myHighlightSettings.put(fileByUrl, settings.toArray(new FileHighlightingSetting[settings.size()]));
+        myHighlightSettings.put(fileByUrl, settings.toArray(new FileHighlightingSetting[0]));
       }
     }
   }
@@ -178,7 +172,9 @@ public class HighlightingSettingsPerFile extends HighlightingLevelManager implem
     final VirtualFile virtualFile = psiRoot.getContainingFile().getVirtualFile();
     if (virtualFile == null || !virtualFile.isValid()) return false;
 
-    if (ProjectCoreUtil.isProjectOrWorkspaceFile(virtualFile)) return false;
+    if (ProjectUtil.isProjectOrWorkspaceFile(virtualFile)) {
+      return false;
+    }
 
     final ProjectFileIndex fileIndex = ProjectRootManager.getInstance(project).getFileIndex();
     if (ProjectScope.getLibrariesScope(project).contains(virtualFile) && !fileIndex.isInContent(virtualFile)) return false;

@@ -16,6 +16,7 @@
 package com.intellij.psi.stubsHierarchy.impl;
 
 import com.intellij.psi.impl.java.stubs.hierarchy.IndexTree;
+import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -84,7 +85,7 @@ public class StubResolver {
 
   @NotNull
   private Set<Symbol> findIdent(Symbol startScope, UnitInfo info, @ShortName int name, boolean processPackages) throws IncompleteHierarchyException {
-    Set<Symbol> result = new HashSet<Symbol>();
+    Set<Symbol> result = new HashSet<>();
     findType(startScope, name, result);
     findGlobalType(info, name, result);
 
@@ -213,14 +214,6 @@ public class StubResolver {
   }
 
   private static int getIndex(int key, Symbol.ClassSymbol[] a) {
-    int lo = 0;
-    int hi = a.length - 1;
-    while (lo <= hi) {
-      int mid = lo + (hi - lo) / 2;
-      if      (key < a[mid].myShortName) hi = mid - 1;
-      else if (key > a[mid].myShortName) lo = mid + 1;
-      else return mid;
-    }
-    return -1;
+    return ObjectUtils.binarySearch(0, a.length, mid-> Integer.compare(a[mid].myShortName, key));
   }
 }

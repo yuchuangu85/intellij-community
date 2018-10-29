@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.editor.impl;
 
 import com.intellij.ide.DataManager;
@@ -24,7 +10,7 @@ import com.intellij.openapi.command.CommandProcessor;
 import com.intellij.openapi.editor.*;
 import com.intellij.openapi.editor.ex.EditorSettingsExternalizable;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
-import com.intellij.openapi.fileEditor.FileDocumentManagerAdapter;
+import com.intellij.openapi.fileEditor.FileDocumentManagerListener;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectUtil;
 import com.intellij.openapi.util.Key;
@@ -43,17 +29,17 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-public final class TrailingSpacesStripper extends FileDocumentManagerAdapter {
+public final class TrailingSpacesStripper implements FileDocumentManagerListener {
   public static final Key<String> OVERRIDE_STRIP_TRAILING_SPACES_KEY = Key.create("OVERRIDE_TRIM_TRAILING_SPACES_KEY");
   public static final Key<Boolean> OVERRIDE_ENSURE_NEWLINE_KEY = Key.create("OVERRIDE_ENSURE_NEWLINE_KEY");
 
   private static final Key<Boolean> DISABLE_FOR_FILE_KEY = Key.create("DISABLE_TRAILING_SPACE_STRIPPER_FOR_FILE_KEY");
 
-  private final Set<Document> myDocumentsToStripLater = new THashSet<Document>();
+  private final Set<Document> myDocumentsToStripLater = new THashSet<>();
 
   @Override
   public void beforeAllDocumentsSaving() {
-    Set<Document> documentsToStrip = new THashSet<Document>(myDocumentsToStripLater);
+    Set<Document> documentsToStrip = new THashSet<>(myDocumentsToStripLater);
     myDocumentsToStripLater.clear();
     for (Document document : documentsToStrip) {
       strip(document);
@@ -83,7 +69,7 @@ public final class TrailingSpacesStripper extends FileDocumentManagerAdapter {
 
     if (doStrip) {
       final boolean inChangedLinesOnly = !stripTrailingSpaces.equals(EditorSettingsExternalizable.STRIP_TRAILING_SPACES_WHOLE);
-      boolean success = stripIfNotCurrentLine(document, inChangedLinesOnly);
+      boolean success = strip(document, inChangedLinesOnly, settings.isKeepTrailingSpacesOnCaretLine());
       if (!success) {
         myDocumentsToStripLater.add(document);
       }
@@ -99,13 +85,24 @@ public final class TrailingSpacesStripper extends FileDocumentManagerAdapter {
           @Override
           public void run() {
             CommandProcessor.getInstance().runUndoTransparentAction(() -> {
-              if (CharArrayUtil.containsOnlyWhiteSpaces(content.subSequence(start, end)) && doStrip) {
+              if (CharArrayUtil.containsOnlyWhiteSpaces(content.subSequence(start, end)) && doStrip &&
+                  !(settings.isKeepTrailingSpacesOnCaretLine() && hasCaretIn(start, end))) {
                 document.deleteString(start, end);
               }
               else {
                 document.insertString(end, "\n");
               }
             });
+          }
+
+          private boolean hasCaretIn(int start, int end) {
+            Editor activeEditor = getActiveEditor(document);
+            final List<Caret> carets = activeEditor == null ? Collections.emptyList() : activeEditor.getCaretModel().getAllCarets();
+            for (Caret caret : carets) {
+              int offset = caret.getOffset();
+              if (offset >= start && offset <= end) return true;
+            }
+            return false;
           }
         });
       }
@@ -161,7 +158,7 @@ public final class TrailingSpacesStripper extends FileDocumentManagerAdapter {
     return activeEditor;
   }
 
-  public static boolean stripIfNotCurrentLine(@NotNull Document document, boolean inChangedLinesOnly) {
+  public static boolean strip(@NotNull Document document, boolean inChangedLinesOnly, boolean skipCaretLines) {
     if (document instanceof DocumentWindow) {
       document = ((DocumentWindow)document).getDelegate();
     }
@@ -170,11 +167,8 @@ public final class TrailingSpacesStripper extends FileDocumentManagerAdapter {
     }
     Editor activeEditor = getActiveEditor(document);
 
-    // when virtual space enabled, we can strip whitespace anywhere
-    boolean isVirtualSpaceEnabled = activeEditor == null || activeEditor.getSettings().isVirtualSpace();
-
-    final List<Caret> carets = activeEditor == null ? Collections.<Caret>emptyList() : activeEditor.getCaretModel().getAllCarets();
-    final List<VisualPosition> visualCarets = new ArrayList<VisualPosition>(carets.size());
+    final List<Caret> carets = activeEditor == null ? Collections.emptyList() : activeEditor.getCaretModel().getAllCarets();
+    final List<VisualPosition> visualCarets = new ArrayList<>(carets.size());
     int[] caretOffsets = new int[carets.size()];
     for (int i = 0; i < carets.size(); i++) {
       Caret caret = carets.get(i);
@@ -184,7 +178,7 @@ public final class TrailingSpacesStripper extends FileDocumentManagerAdapter {
 
     boolean markAsNeedsStrippingLater =
       ((DocumentImpl)document).stripTrailingSpaces(getProject(document, activeEditor),
-                                                   inChangedLinesOnly, isVirtualSpaceEnabled, caretOffsets);
+                                                   inChangedLinesOnly, skipCaretLines, caretOffsets);
 
     if (activeEditor != null && !ShutDownTracker.isShutdownHookRunning()) {
       activeEditor.getCaretModel().runBatchCaretOperation(() -> {

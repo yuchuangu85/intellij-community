@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.ui;
 
 import com.intellij.openapi.actionSystem.ActionToolbar;
@@ -22,12 +8,14 @@ import com.intellij.ui.switcher.QuickActionProvider;
 import com.intellij.util.containers.JBIterable;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NonNls;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ContainerAdapter;
 import java.awt.event.ContainerEvent;
+import java.util.Collections;
 import java.util.List;
 
 public class SimpleToolWindowPanel extends JPanel implements QuickActionProvider, DataProvider {
@@ -35,7 +23,7 @@ public class SimpleToolWindowPanel extends JPanel implements QuickActionProvider
   private JComponent myToolbar;
   private JComponent myContent;
 
-  private boolean myBorderless;
+  private final boolean myBorderless;
   protected boolean myVertical;
   private boolean myProvideQuickActions;
 
@@ -65,7 +53,7 @@ public class SimpleToolWindowPanel extends JPanel implements QuickActionProvider
       @Override
       public void componentRemoved(ContainerEvent e) {
         Component child = e.getChild();
-        
+
         if (child instanceof Container) {
           ((Container)child).removeContainerListener(this);
         }
@@ -95,8 +83,9 @@ public class SimpleToolWindowPanel extends JPanel implements QuickActionProvider
     repaint();
   }
 
+  @Override
   @Nullable
-  public Object getData(@NonNls String dataId) {
+  public Object getData(@NotNull @NonNls String dataId) {
     return QuickActionProvider.KEY.is(dataId) && myProvideQuickActions ? this : null;
   }
 
@@ -105,22 +94,24 @@ public class SimpleToolWindowPanel extends JPanel implements QuickActionProvider
     return this;
   }
 
+  @Override
+  @NotNull
   public List<AnAction> getActions(boolean originalProvider) {
     JBIterable<ActionToolbar> toolbars = UIUtil.uiTraverser(myToolbar).traverse().filter(ActionToolbar.class);
-    if (toolbars.size() == 0)
-      return null;
-    return toolbars.flatten(toolbar -> toolbar.getActions(originalProvider)).toList();
+    if (toolbars.size() == 0) return Collections.emptyList();
+    return toolbars.flatten(toolbar -> toolbar.getActions()).toList();
   }
 
+  @Override
   public JComponent getComponent() {
     return this;
   }
 
-  public boolean isCycleRoot() {
-    return false;
-  }
-
   public void setContent(JComponent c) {
+    if (myContent != null) {
+      remove(myContent);
+    }
+
     myContent = c;
     add(c, BorderLayout.CENTER);
 
@@ -140,10 +131,10 @@ public class SimpleToolWindowPanel extends JPanel implements QuickActionProvider
       g.setColor(UIUtil.getBorderColor());
       if (myVertical) {
         final int y = (int)myToolbar.getBounds().getMaxY();
-        g.drawLine(0, y, getWidth(), y);
+        UIUtil.drawLine(g, 0, y, getWidth(), y);
       } else {
         int x = (int)myToolbar.getBounds().getMaxX();
-        g.drawLine(x, 0, x, getHeight());
+        UIUtil.drawLine(g, x, 0, x, getHeight());
       }
     }
   }

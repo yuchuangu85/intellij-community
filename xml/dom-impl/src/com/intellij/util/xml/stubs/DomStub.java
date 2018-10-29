@@ -34,7 +34,6 @@ import java.util.List;
 
 /**
  * @author Dmitry Avdeev
- *         Date: 8/2/12
  */
 public abstract class DomStub extends ObjectStubBase<DomStub> {
 
@@ -71,7 +70,7 @@ public abstract class DomStub extends ObjectStubBase<DomStub> {
     }
 
     final String s = nsKey == null ? "" : nsKey;
-    final List<DomStub> result = new SmartList<DomStub>();
+    final List<DomStub> result = new SmartList<>();
     //noinspection ForLoopReplaceableByForEach
     for (int i = 0, size = stubs.size(); i < size; i++) {
       final DomStub stub = stubs.get(i);

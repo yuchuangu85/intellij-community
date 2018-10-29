@@ -28,10 +28,6 @@ import javax.swing.event.DocumentEvent;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * User: anna
- * Date: 13-Feb-2006
- */
 public abstract class SearchableOptionsRegistrar{
   public static SearchableOptionsRegistrar getInstance(){
     return ServiceManager.getService(SearchableOptionsRegistrar.class);
@@ -40,7 +36,7 @@ public abstract class SearchableOptionsRegistrar{
   @NotNull
   public abstract ConfigurableHit getConfigurables(final ConfigurableGroup[] groups,
                                                      final DocumentEvent.EventType type,
-                                                     final Set<Configurable> configurables,
+                                                     final Set<? extends Configurable> configurables,
                                                      final String option,
                                                      final Project project);
 

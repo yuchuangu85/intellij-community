@@ -36,7 +36,10 @@ public abstract class OpenInEditorWithMouseAction extends AnAction implements Du
   @NotNull private List<? extends Editor> myEditors = Collections.emptyList();
 
   public OpenInEditorWithMouseAction() {
-    setShortcutSet(ActionManager.getInstance().getAction(IdeActions.ACTION_GOTO_DECLARATION).getShortcutSet());
+    AnAction navigateAction = ActionManager.getInstance().getAction(IdeActions.ACTION_GOTO_DECLARATION); // null in MPS
+    setShortcutSet(navigateAction != null ?
+                   navigateAction.getShortcutSet() :
+                   new CustomShortcutSet(new MouseShortcut(MouseEvent.BUTTON1, InputEvent.CTRL_DOWN_MASK, 1)));
   }
 
   public void install(@NotNull List<? extends Editor> editors) {
@@ -95,6 +98,7 @@ public abstract class OpenInEditorWithMouseAction extends AnAction implements Du
 
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
+
     MouseEvent inputEvent = (MouseEvent)e.getInputEvent();
     OpenInEditorAction openInEditorAction = e.getRequiredData(OpenInEditorAction.KEY);
     Project project = e.getRequiredData(CommonDataKeys.PROJECT);

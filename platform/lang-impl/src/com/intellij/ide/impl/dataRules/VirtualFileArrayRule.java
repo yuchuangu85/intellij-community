@@ -20,6 +20,7 @@ import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataProvider;
 import com.intellij.openapi.actionSystem.LangDataKeys;
 import com.intellij.openapi.actionSystem.PlatformDataKeys;
+import com.intellij.openapi.fileChooser.FileSystemTree;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ModuleRootManager;
@@ -56,27 +57,34 @@ public class VirtualFileArrayRule implements GetDataRule {
   }
 
   @Override
-  public Object getData(final DataProvider dataProvider) {
+  public Object getData(@NotNull final DataProvider dataProvider) {
     // Try to detect multiselection.
 
     Set<VirtualFile> result = null;
 
-    Project project = PlatformDataKeys.PROJECT_CONTEXT.getData(dataProvider);
-    if (project != null && !project.isDisposed()) {
-      result = addFiles(result, ProjectRootManager.getInstance(project).getContentRoots());
+    FileSystemTree fileSystemTree = FileSystemTree.DATA_KEY.getData(dataProvider);
+    if (fileSystemTree != null) {
+      result = addFiles(result, fileSystemTree.getSelectedFiles());
     }
+    else {
+      Project project = PlatformDataKeys.PROJECT_CONTEXT.getData(dataProvider);
+      if (project != null && !project.isDisposed()) {
+        result = addFiles(result, ProjectRootManager.getInstance(project).getContentRoots());
+      }
 
-    Module[] selectedModules = LangDataKeys.MODULE_CONTEXT_ARRAY.getData(dataProvider);
-    if (selectedModules != null && selectedModules.length > 0) {
-      for (Module selectedModule : selectedModules) {
+      Module[] selectedModules = LangDataKeys.MODULE_CONTEXT_ARRAY.getData(dataProvider);
+      if (selectedModules != null && selectedModules.length > 0) {
+        for (Module selectedModule : selectedModules) {
+          result = addFiles(result, ModuleRootManager.getInstance(selectedModule).getContentRoots());
+        }
+      }
+
+      Module selectedModule = LangDataKeys.MODULE_CONTEXT.getData(dataProvider);
+      if (selectedModule != null && !selectedModule.isDisposed()) {
         result = addFiles(result, ModuleRootManager.getInstance(selectedModule).getContentRoots());
       }
     }
 
-    Module selectedModule = LangDataKeys.MODULE_CONTEXT.getData(dataProvider);
-    if (selectedModule != null && !selectedModule.isDisposed()) {
-      result = addFiles(result, ModuleRootManager.getInstance(selectedModule).getContentRoots());
-    }
 
     PsiElement[] psiElements = LangDataKeys.PSI_ELEMENT_ARRAY.getData(dataProvider);
     if (psiElements != null) {

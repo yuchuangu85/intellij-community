@@ -49,9 +49,9 @@ public class PyTargetElementEvaluator implements TargetElementEvaluator {
     }
     final PsiElement element = ref.getElement();
     PsiElement result = ref.resolve();
-    Set<PsiElement> visited = new HashSet<PsiElement>();
+    Set<PsiElement> visited = new HashSet<>();
     visited.add(result);
-    while (result instanceof PyReferenceOwner && (result instanceof PyReferenceExpression || result instanceof PyTargetExpression)) {
+    while (result instanceof PyReferenceExpression || result instanceof PyTargetExpression) {
       PsiElement nextResult = ((PyReferenceOwner)result).getReference(PyResolveContext.noImplicits()).resolve();
       if (nextResult != null && !visited.contains(nextResult) &&
           PsiTreeUtil.getParentOfType(element, ScopeOwner.class) == PsiTreeUtil.getParentOfType(result, ScopeOwner.class) &&

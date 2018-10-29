@@ -35,7 +35,7 @@ import java.util.List;
  *
  * @author Ilya.Kazakevich
  */
-@SuppressWarnings({"DeserializableClassInSecureContext", "SerializableClassInSecureContext"}) // Who will serialize panel?
+@SuppressWarnings({"SerializableClassInSecureContext"}) // Who will serialize panel?
 final class PanelWithActions extends JPanel {
   private PanelWithActions() {
 
@@ -64,7 +64,7 @@ final class PanelWithActions extends JPanel {
     // use actions from console itself
 
 
-    final List<AnAction> actionList = new ArrayList<AnAction>(Arrays.asList(customActions));
+    final List<AnAction> actionList = new ArrayList<>(Arrays.asList(customActions));
     final DefaultActionGroup toolbarActions = new DefaultActionGroup();
     actionList.add(new MyCloseAction(closeListeners));
     toolbarActions.addAll(actionList);
@@ -92,7 +92,7 @@ final class PanelWithActions extends JPanel {
    */
   private static final class MyCloseAction extends CloseAction {
     @NotNull
-    private final Collection<Runnable> myCloseListeners = new ArrayList<Runnable>();
+    private final Collection<Runnable> myCloseListeners = new ArrayList<>();
 
     /**
      * @param closeListeners engines to be called when user clicks "close"
@@ -102,13 +102,13 @@ final class PanelWithActions extends JPanel {
     }
 
     @Override
-    public void update(final AnActionEvent e) {
+    public void update(@NotNull final AnActionEvent e) {
       super.update(e);
       e.getPresentation().setText(PyBundle.message("windowWithActions.closeWindow"));
     }
 
     @Override
-    public void actionPerformed(final AnActionEvent e) {
+    public void actionPerformed(@NotNull final AnActionEvent e) {
       super.actionPerformed(e);
       for (final Runnable closeListener : myCloseListeners) {
         closeListener.run();

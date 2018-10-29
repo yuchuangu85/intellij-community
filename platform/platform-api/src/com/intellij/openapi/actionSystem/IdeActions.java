@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.actionSystem;
 
 import org.jetbrains.annotations.NonNls;
@@ -24,6 +10,7 @@ public interface IdeActions {
   @NonNls String ACTION_EDITOR_CUT = "EditorCut";
   @NonNls String ACTION_EDITOR_COPY = "EditorCopy";
   @NonNls String ACTION_EDITOR_PASTE = "EditorPaste";
+  @NonNls String ACTION_EDITOR_PASTE_SIMPLE = "EditorPasteSimple";
   @NonNls String ACTION_EDITOR_DELETE = "EditorDelete";
   @NonNls String ACTION_EDITOR_DELETE_TO_WORD_START = "EditorDeleteToWordStart";
   @NonNls String ACTION_EDITOR_DELETE_TO_WORD_END = "EditorDeleteToWordEnd";
@@ -55,6 +42,8 @@ public interface IdeActions {
   @NonNls String ACTION_EDITOR_MOVE_CARET_RIGHT = "EditorRight";
   @NonNls String ACTION_EDITOR_MOVE_CARET_PAGE_UP = "EditorPageUp";
   @NonNls String ACTION_EDITOR_MOVE_CARET_PAGE_DOWN = "EditorPageDown";
+  @NonNls String ACTION_EDITOR_MOVE_CARET_PAGE_UP_WITH_SELECTION = "EditorPageUpWithSelection";
+  @NonNls String ACTION_EDITOR_MOVE_CARET_PAGE_DOWN_WITH_SELECTION = "EditorPageDownWithSelection";
   @NonNls String ACTION_EDITOR_NEXT_WORD = "EditorNextWord";
   @NonNls String ACTION_EDITOR_PREVIOUS_WORD = "EditorPreviousWord";
   @NonNls String ACTION_EDITOR_NEXT_WORD_WITH_SELECTION = "EditorNextWordWithSelection";
@@ -74,11 +63,14 @@ public interface IdeActions {
   @NonNls String ACTION_EDITOR_TOGGLE_OVERWRITE_MODE= "EditorToggleInsertState";
   @NonNls String ACTION_EDITOR_TOGGLE_CASE= "EditorToggleCase";
 
+  @NonNls String ACTION_EDITOR_SHOW_PARAMETER_INFO = "ParameterInfo";
+  @NonNls String ACTION_EDITOR_NEXT_PARAMETER = "NextParameter";
+  @NonNls String ACTION_EDITOR_PREV_PARAMETER = "PrevParameter";
   @NonNls String ACTION_EDITOR_NEXT_TEMPLATE_VARIABLE = "NextTemplateVariable";
   @NonNls String ACTION_EDITOR_PREVIOUS_TEMPLATE_VARIABLE = "PreviousTemplateVariable";
 
   @NonNls String ACTION_EDITOR_REFORMAT = "ReformatCode";
-
+  @NonNls String ACTION_EDITOR_AUTO_INDENT_LINES = "AutoIndentLines";
 
   @NonNls String ACTION_COMMENT_LINE = "CommentByLineComment";
   @NonNls String ACTION_COMMENT_BLOCK = "CommentByBlockComment";
@@ -87,13 +79,13 @@ public interface IdeActions {
   @NonNls String ACTION_CUT = "$Cut";
   @NonNls String ACTION_DELETE = "$Delete";
   @NonNls String ACTION_PASTE = "$Paste";
+  @NonNls String ACTION_SELECT_ALL = "$SelectAll";
   @NonNls String ACTION_CONTEXT_HELP = "ContextHelp";
   @NonNls String ACTION_EDIT_SOURCE = "EditSource";
   @NonNls String ACTION_VIEW_SOURCE = "ViewSource";
   @NonNls String ACTION_SHOW_INTENTION_ACTIONS = "ShowIntentionActions";
   @NonNls String ACTION_CODE_COMPLETION = "CodeCompletion";
   @NonNls String ACTION_SMART_TYPE_COMPLETION = "SmartTypeCompletion";
-  @Deprecated @NonNls String ACTION_CLASS_NAME_COMPLETION = "ClassNameCompletion";
   @NonNls String ACTION_HIPPIE_COMPLETION = "HippieCompletion";
   @NonNls String ACTION_HIPPIE_BACKWARD_COMPLETION = "HippieBackwardCompletion";
   @NonNls String ACTION_CHOOSE_LOOKUP_ITEM = "EditorChooseLookupItem";
@@ -228,8 +220,6 @@ public interface IdeActions {
   @NonNls String GROUP_OTHER_MENU = "OtherMenu";
   @NonNls String GROUP_EDITOR = "EditorActions";
 
-  @Deprecated @NonNls String GROUP_DEBUGGER = "DebuggerActions";
-  
   @NonNls String ACTION_TOGGLE_LINE_BREAKPOINT = "ToggleLineBreakpoint";
 
   @NonNls String ACTION_REFRESH = "Refresh";
@@ -310,6 +300,7 @@ public interface IdeActions {
   String MOVE_ELEMENT_RIGHT = "MoveElementRight";
   
   String ACTION_MOVE_LINE_UP_ACTION = "MoveLineUp";
+  String ACTION_MOVE_LINE_DOWN_ACTION = "MoveLineDown";
 
   String ACTION_COMPARE_CLIPBOARD_WITH_SELECTION = "CompareClipboardWithSelection";
 
@@ -324,9 +315,21 @@ public interface IdeActions {
 
   String ACTION_RECENT_FILES = "RecentFiles";
   String ACTION_SEARCH_EVERYWHERE = "SearchEverywhere";
-  
+  String ACTION_RUN_ANYTHING = "RunAnything";
+
   String ACTION_MARK_ALL_NOTIFICATIONS_AS_READ = "MarkNotificationsAsRead";
   String ACTION_SWITCHER = "Switcher";
 
   @NonNls String INSPECTION_TOOL_WINDOW_TREE_POPUP = "InspectionToolWindow.TreePopup";
+
+  @NonNls String EXTRACT_METHOD_TOOL_WINDOW_TREE_POPUP = "ExtractMethodToolWindow.TreePopup";
+
+  @NonNls String ACTION_METHOD_OVERLOAD_SWITCH_UP = "MethodOverloadSwitchUp";
+  @NonNls String ACTION_METHOD_OVERLOAD_SWITCH_DOWN = "MethodOverloadSwitchDown";
+
+  @NonNls String ACTION_UPDATE_RUNNING_APPLICATION = "UpdateRunningApplication";
+
+  @NonNls String ACTION_BRACE_OR_QUOTE_OUT = "BraceOrQuoteOut";
+
+  @NonNls String GROUP_TOUCHBAR = "TouchBar";
 }

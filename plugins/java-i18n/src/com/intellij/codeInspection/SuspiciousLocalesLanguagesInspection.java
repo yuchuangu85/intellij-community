@@ -23,7 +23,6 @@ import com.intellij.lang.properties.psi.PropertiesFile;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.InputValidator;
 import com.intellij.openapi.ui.Messages;
-import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.InvalidDataException;
 import com.intellij.openapi.util.WriteExternalException;
 import com.intellij.openapi.util.text.StringUtil;
@@ -33,9 +32,7 @@ import com.intellij.ui.AnActionButton;
 import com.intellij.ui.AnActionButtonRunnable;
 import com.intellij.ui.ToolbarDecorator;
 import com.intellij.ui.components.JBList;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.HashSet;
 import org.jdom.Element;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
@@ -56,7 +53,7 @@ public class SuspiciousLocalesLanguagesInspection extends BaseLocalInspectionToo
     @NotNull
     @Override
     protected Set<String> compute() {
-      final Set<String> result = new HashSet<String>();
+      final Set<String> result = new HashSet<>();
       for (Locale locale : Locale.getAvailableLocales()) {
         result.add(locale.getLanguage());
       }
@@ -64,7 +61,7 @@ public class SuspiciousLocalesLanguagesInspection extends BaseLocalInspectionToo
     }
   };
 
-  private final List<String> myAdditionalLanguages = new ArrayList<String>();
+  private final List<String> myAdditionalLanguages = new ArrayList<>();
 
   @Nls
   @NotNull
@@ -140,17 +137,15 @@ public class SuspiciousLocalesLanguagesInspection extends BaseLocalInspectionToo
       myResourceBundle = bundle;
     }
 
-    @Nls
-    @NotNull
-    @Override
-    public String getName() {
-      return getFamilyName();
-    }
-
     @NotNull
     @Override
     public String getFamilyName() {
       return PropertiesBundle.message("dissociate.resource.bundle.quick.fix.name");
+    }
+
+    @Override
+    public boolean startInWriteAction() {
+      return false;
     }
 
     @Override
@@ -162,7 +157,7 @@ public class SuspiciousLocalesLanguagesInspection extends BaseLocalInspectionToo
   private class MyOptions {
     private final JBList myAdditionalLocalesList;
 
-    public MyOptions() {
+    MyOptions() {
       myAdditionalLocalesList = new JBList(new MyListModel());
       myAdditionalLocalesList.setCellRenderer(new DefaultListCellRenderer());
     }

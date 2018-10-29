@@ -1,28 +1,14 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.messages;
 
 import com.intellij.icons.AllIcons;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
-import com.intellij.openapi.util.SystemInfo;
-import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.Gray;
 import com.intellij.ui.JBColor;
+import com.intellij.ui.mac.TouchbarDataKeys;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.ui.UIUtil;
 import org.jdesktop.swingx.graphics.GraphicsUtilities;
@@ -30,37 +16,39 @@ import org.jdesktop.swingx.graphics.ShadowRenderer;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
+import javax.swing.border.Border;
 import javax.swing.event.HyperlinkEvent;
 import javax.swing.event.HyperlinkListener;
 import java.awt.*;
 import java.awt.event.*;
-import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.URL;
 
+import static com.intellij.openapi.wm.IdeFocusManager.getGlobalInstance;
+
 /**
  * Created by Denis Fokin
  */
-public class SheetController {
+public class SheetController implements Disposable {
+
+  private static final KeyStroke VK_ESC_KEYSTROKE = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
+
   private static final Logger LOG = Logger.getInstance(SheetController.class);
   private static final int SHEET_MINIMUM_HEIGHT = 143;
-  private static final String fontName = "Lucida Grande";
-  private static final Font regularFont = new Font(fontName, Font.PLAIN, 10);
-  private static final Font boldFont = new Font(fontName, Font.BOLD, 12).deriveFont(Font.BOLD);
   private final DialogWrapper.DoNotAskOption myDoNotAskOption;
   private boolean myDoNotAskResult;
 
   private BufferedImage myShadowImage;
-  
+
   private final JButton[] buttons;
-  private JButton myDefaultButton;
+  private final JButton myDefaultButton;
   private JComponent myFocusedComponent;
 
-  private JCheckBox doNotAskCheckBox = new JCheckBox();
+  private final JCheckBox doNotAskCheckBox = new JCheckBox();
 
-  public static int SHADOW_BORDER = 5;
+  public static final int SHADOW_BORDER = 5;
 
   private static final int RIGHT_OFFSET = 10 - SHADOW_BORDER;
 
@@ -122,8 +110,10 @@ public class SheetController {
       buttons[i].setOpaque(false);
       handleMnemonics(i, buttonTitle);
 
+      final TouchbarDataKeys.DlgButtonDesc bdesc = TouchbarDataKeys.putDialogButtonDescriptor(buttons[i], buttons.length - i).setMainGroup(true);
       if (buttonTitle.equals(defaultButtonTitle)) {
         defaultButtonIndex = i;
+        bdesc.setDefault(true);
       }
 
       if (buttonTitle.equals(focusedButtonTitle) && !focusedButtonTitle.equals("Cancel")) {
@@ -184,13 +174,30 @@ public class SheetController {
   }
 
   void requestFocus() {
-    IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+    getGlobalInstance().doWhenFocusSettlesDown(() -> {
       if (myFocusedComponent != null) {
-        myFocusedComponent.requestFocus();
+        getGlobalInstance().doWhenFocusSettlesDown(() -> getGlobalInstance().requestFocus(myFocusedComponent, true));
       } else {
         LOG.debug("My focused component is null for the next message: " + messageTextPane.getText());
       }
     });
+  }
+
+  void setDefaultResult () {
+     myResult = myDefaultButton.getName();
+  }
+
+  void setFocusedResult () {
+    if (myFocusedComponent instanceof JButton) {
+      JButton focusedButton = (JButton)myFocusedComponent;
+      myResult = focusedButton.getName();
+    }
+  }
+
+  void setResultAndStartClose(String result) {
+    if (result != null)
+      myResult = result;
+    mySheetMessage.startAnimation(false);
   }
 
   JPanel getPanel(final JDialog w) {
@@ -200,15 +207,13 @@ public class SheetController {
     ActionListener actionListener = new ActionListener() {
       @Override
       public void actionPerformed(@NotNull ActionEvent e) {
-        if (e.getSource() instanceof JButton) {
-          myResult = ((JButton)e.getSource()).getName();
-        }
-        mySheetMessage.startAnimation(false);
+        final String res = e.getSource() instanceof JButton ? ((JButton)e.getSource()).getName() : null;
+        setResultAndStartClose(res);
       }
     };
 
     mySheetPanel.registerKeyboardAction(actionListener,
-                                        KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
+                                        VK_ESC_KEYSTROKE,
                                         JComponent.WHEN_IN_FOCUSED_WINDOW);
 
     for (JButton button: buttons) {
@@ -230,7 +235,7 @@ public class SheetController {
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, getSheetAlpha()));
 
         g.setColor(new JBColor(Gray._230, UIUtil.getPanelBackground()));
-        Rectangle2D dialog  = new Rectangle2D.Double(SHADOW_BORDER, 0, SHEET_WIDTH, SHEET_HEIGHT);
+        Rectangle dialog  = new Rectangle(SHADOW_BORDER, 0, SHEET_WIDTH, SHEET_HEIGHT);
 
         paintShadow(g);
         // draw the sheet background
@@ -240,6 +245,12 @@ public class SheetController {
           //todo make bottom corners
           g.fill(dialog);
         }
+
+        Border border = UIManager.getBorder("Window.border");
+        if (border != null) {
+          border.paintBorder(this, g, dialog.x, dialog.y, dialog.width, dialog.height);
+        }
+
         paintShadowFromParent(g);
       }
 
@@ -262,7 +273,7 @@ public class SheetController {
 
 
     headerLabel.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
-    headerLabel.setFont(boldFont);
+    headerLabel.setFont(UIUtil.getLabelFont().deriveFont(Font.BOLD));
     headerLabel.setEditable(false);
 
     headerLabel.setContentType("text/html");
@@ -278,7 +289,8 @@ public class SheetController {
     headerLabel.repaint();
 
     messageTextPane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
-    messageTextPane.setFont(regularFont);
+    Font font = UIUtil.getLabelFont(UIUtil.FontSize.SMALL);
+    messageTextPane.setFont(font);
     messageTextPane.setEditable(false);
 
     messageTextPane.setContentType("text/html");
@@ -296,10 +308,7 @@ public class SheetController {
                 LOG.warn("URL is null; HyperlinkEvent: " + he.toString());
               }
             }
-            catch (IOException e) {
-              LOG.error(e);
-            }
-            catch (URISyntaxException e) {
+            catch (IOException | URISyntaxException e) {
               LOG.error(e);
             }
           }
@@ -307,7 +316,7 @@ public class SheetController {
       }
     });
 
-    FontMetrics fontMetrics = sheetPanel.getFontMetrics(regularFont);
+    FontMetrics fontMetrics = sheetPanel.getFontMetrics(font);
 
     int widestWordWidth = 250;
 
@@ -437,6 +446,7 @@ public class SheetController {
 
   private void layoutDoNotAskCheckbox(JPanel sheetPanel) {
     doNotAskCheckBox.setText(myDoNotAskOption.getDoNotShowMessage());
+    doNotAskCheckBox.setVisible(myDoNotAskOption.canBeHidden());
     doNotAskCheckBox.setSelected(!myDoNotAskOption.isToBeShown());
     doNotAskCheckBox.setOpaque(false);
     doNotAskCheckBox.addItemListener(new ItemListener() {
@@ -467,18 +477,20 @@ public class SheetController {
     myOffScreenFrame.add(mySheetPanel);
     myOffScreenFrame.getRootPane().setDefaultButton(myDefaultButton);
 
-    final BufferedImage image = (SystemInfo.isJavaVersionAtLeast("1.7")) ?
-                                UIUtil.createImage(SHEET_NC_WIDTH, SHEET_NC_HEIGHT, BufferedImage.TYPE_INT_ARGB) :
-                                GraphicsUtilities.createCompatibleTranslucentImage(SHEET_NC_WIDTH, SHEET_NC_HEIGHT);
+    BufferedImage image = UIUtil.createImage(SHEET_NC_WIDTH, SHEET_NC_HEIGHT, BufferedImage.TYPE_INT_ARGB);
 
     Graphics g = image.createGraphics();
     mySheetPanel.paint(g);
 
     g.dispose();
 
+    myOffScreenFrame.remove(mySheetPanel);
+
     myOffScreenFrame.dispose();
     return image;
   }
+
+  JPanel getSheetPanel() { return mySheetPanel; }
 
   public boolean getDoNotAskResult () {
     return myDoNotAskResult;
@@ -488,8 +500,9 @@ public class SheetController {
     return myResult;
   }
 
+  @Override
   public void dispose() {
-    mySheetPanel.unregisterKeyboardAction(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0));
+    mySheetPanel.unregisterKeyboardAction(VK_ESC_KEYSTROKE);
     mySheetMessage = null;
   }
 }

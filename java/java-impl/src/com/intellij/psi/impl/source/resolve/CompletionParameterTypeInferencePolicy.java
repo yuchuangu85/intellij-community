@@ -41,7 +41,7 @@ public class CompletionParameterTypeInferencePolicy extends ProcessCandidatePara
   @Override
   public Pair<PsiType, ConstraintType> getInferredTypeWithNoConstraint(PsiManager psiManager, PsiType superType) {
     if (!(superType instanceof PsiWildcardType)) {
-      return new Pair<PsiType, ConstraintType>(PsiWildcardType.createExtends(psiManager, superType), ConstraintType.EQUALS);
+      return new Pair<>(PsiWildcardType.createExtends(psiManager, superType), ConstraintType.EQUALS);
     }
     else {
       return Pair.create(superType, ConstraintType.SUBTYPE);
@@ -49,8 +49,13 @@ public class CompletionParameterTypeInferencePolicy extends ProcessCandidatePara
   }
 
   @Override
+  public boolean inferRuntimeExceptionForThrownBoundWithNoConstraints() {
+    return false;
+  }
+
+  @Override
   public PsiType adjustInferredType(PsiManager manager, PsiType guess, ConstraintType constraintType) {
-    if (guess != null && !(guess instanceof PsiWildcardType)) {
+    if (guess != null && !(guess instanceof PsiWildcardType) && guess != PsiType.NULL) {
       if (constraintType == ConstraintType.SUPERTYPE) return PsiWildcardType.createExtends(manager, guess);
       else if (constraintType == ConstraintType.SUBTYPE) return PsiWildcardType.createSuper(manager, guess);
     }
@@ -59,6 +64,11 @@ public class CompletionParameterTypeInferencePolicy extends ProcessCandidatePara
 
   @Override
   public boolean isVarargsIgnored() {
+    return true;
+  }
+
+  @Override
+  public boolean inferLowerBoundForFreshVariables() {
     return true;
   }
 }

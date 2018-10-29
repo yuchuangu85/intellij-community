@@ -63,6 +63,7 @@ public abstract class ExtractSuperBaseProcessor extends TurnRefsToSuperProcessor
     myJavaDocPolicy = javaDocPolicy;
   }
 
+  @Override
   @NotNull
   protected UsageViewDescriptor createUsageViewDescriptor(@NotNull UsageInfo[] usages) {
     return new ExtractSuperClassViewDescriptor(myTargetDirectory, myClass, myMemberInfos);
@@ -102,11 +103,12 @@ public abstract class ExtractSuperBaseProcessor extends TurnRefsToSuperProcessor
     return false;
   }
 
+  @Override
   @NotNull
   protected UsageInfo[] findUsages() {
     PsiReference[] refs = ReferencesSearch.search(myClass, GlobalSearchScope.projectScope(myProject), false).toArray(
       PsiReference.EMPTY_ARRAY);
-    final ArrayList<UsageInfo> result = new ArrayList<UsageInfo>();
+    final ArrayList<UsageInfo> result = new ArrayList<>();
     detectTurnToSuperRefs(refs, result);
     final PsiPackage originalPackage = JavaDirectoryService.getInstance().getPackage(myClass.getContainingFile().getContainingDirectory());
     if (Comparing.equal(JavaDirectoryService.getInstance().getPackage(myTargetDirectory), originalPackage)) {
@@ -118,10 +120,11 @@ public abstract class ExtractSuperBaseProcessor extends TurnRefsToSuperProcessor
         result.add(new BindToOldUsageInfo(element, ref, myClass));
       }
     }
-    UsageInfo[] usageInfos = result.toArray(new UsageInfo[result.size()]);
+    UsageInfo[] usageInfos = result.toArray(UsageInfo.EMPTY_ARRAY);
     return UsageViewUtil.removeDuplicatedUsages(usageInfos);
   }
 
+  @Override
   protected void performRefactoring(@NotNull UsageInfo[] usages) {
     try {
       final String superClassName = myClass.getName();
@@ -163,6 +166,7 @@ public abstract class ExtractSuperBaseProcessor extends TurnRefsToSuperProcessor
 
   protected abstract PsiClass extractSuper(String superClassName) throws IncorrectOperationException;
 
+  @Override
   protected void refreshElements(@NotNull PsiElement[] elements) {
     myClass = (PsiClass)elements[0];
     myTargetDirectory = (PsiDirectory)elements[1];
@@ -172,6 +176,8 @@ public abstract class ExtractSuperBaseProcessor extends TurnRefsToSuperProcessor
     }
   }
 
+  @Override
+  @NotNull
   protected String getCommandName() {
     return RefactoringBundle.message("extract.subclass.command");
   }

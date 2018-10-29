@@ -1,23 +1,8 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.codeInspection.control.finalVar;
 
 import com.intellij.codeInspection.LocalQuickFix;
 import com.intellij.codeInspection.ProblemHighlightType;
-import com.intellij.openapi.util.Condition;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.containers.ContainerUtil;
@@ -43,8 +28,8 @@ import org.jetbrains.plugins.groovy.lang.psi.controlFlow.Instruction;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.ReadWriteVariableInstruction;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.impl.ControlFlowBuilder;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.impl.GrFieldControlFlowPolicy;
-import org.jetbrains.plugins.groovy.lang.psi.impl.PsiImplUtil;
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
+import org.jetbrains.plugins.groovy.transformations.immutable.GrImmutableUtils;
 
 import java.util.*;
 
@@ -57,7 +42,7 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
   protected BaseInspectionVisitor buildVisitor() {
     return new BaseInspectionVisitor() {
       @Override
-      public void visitMethod(GrMethod method) {
+      public void visitMethod(@NotNull GrMethod method) {
         super.visitMethod(method);
 
         final GrOpenBlock block = method.getBlock();
@@ -71,7 +56,7 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
       }
 
       @Override
-      public void visitFile(GroovyFileBase file) {
+      public void visitFile(@NotNull GroovyFileBase file) {
         super.visitFile(file);
 
         if (file instanceof GroovyFile && file.isScript()) {
@@ -80,7 +65,7 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
       }
 
       @Override
-      public void visitField(GrField field) {
+      public void visitField(@NotNull GrField field) {
         super.visitField(field);
 
         final GrExpression initializer = field.getInitializerGroovy();
@@ -98,7 +83,7 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
       }
 
       @Override
-      public void visitReferenceExpression(GrReferenceExpression ref) {
+      public void visitReferenceExpression(@NotNull GrReferenceExpression ref) {
         super.visitReferenceExpression(ref);
 
         final PsiElement resolved = ref.resolve();
@@ -129,7 +114,7 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
       }
 
       @Override
-      public void visitClassInitializer(GrClassInitializer initializer) {
+      public void visitClassInitializer(@NotNull GrClassInitializer initializer) {
         super.visitClassInitializer(initializer);
 
         processLocalVars(initializer.getBlock());
@@ -198,7 +183,7 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
 
       private void highlightInvalidWriteAccess(@NotNull Instruction[] flow,
                                                @NotNull Map<String, GrVariable> variables,
-                                               @NotNull Set<GrVariable> initializedVariables) {
+                                               @NotNull Set<? super GrVariable> initializedVariables) {
         final List<ReadWriteVariableInstruction> result =
           InvalidWriteAccessSearcher.findInvalidWriteAccess(flow, variables, initializedVariables);
 
@@ -238,8 +223,8 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
   }
 
   private static void appendFieldInitializedInDeclaration(boolean isStatic,
-                                                          @NotNull List<GrField> fields,
-                                                          @NotNull Set<GrVariable> initializedFields) {
+                                                          @NotNull List<? extends GrField> fields,
+                                                          @NotNull Set<? super GrVariable> initializedFields) {
     for (GrField field : fields) {
       if (field.hasModifierProperty(PsiModifier.STATIC) == isStatic && field.getInitializerGroovy() != null) {
         initializedFields.add(field);
@@ -250,8 +235,8 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
   private static void appendFieldsInitializedInClassInitializer(@NotNull GrClassInitializer[] initializers,
                                                                 @Nullable GrClassInitializer initializerToStop,
                                                                 boolean isStatic,
-                                                                @NotNull List<GrField> fields,
-                                                                @NotNull Set<GrVariable> initializedFields) {
+                                                                @NotNull List<? extends GrField> fields,
+                                                                @NotNull Set<? super GrVariable> initializedFields) {
     for (GrClassInitializer curInit : initializers) {
       if (curInit.isStatic() != isStatic) continue;
       if (curInit == initializerToStop) break;
@@ -270,8 +255,8 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
   }
 
   private static void appendInitializationFromChainedConstructors(@NotNull GrMethod constructor,
-                                                                  @NotNull List<GrField> fields,
-                                                                  @NotNull Set<GrVariable> initializedFields) {
+                                                                  @NotNull List<? extends GrField> fields,
+                                                                  @NotNull Set<? super GrVariable> initializedFields) {
     final List<GrMethod> chained = getChainedConstructors(constructor);
     chained.remove(0);
 
@@ -292,7 +277,7 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
   }
 
   @NotNull
-  private static Map<String, GrVariable> buildVarMap(@NotNull List<GrField> fields, boolean isStatic) {
+  private static Map<String, GrVariable> buildVarMap(@NotNull List<? extends GrField> fields, boolean isStatic) {
     Map<String, GrVariable> result = ContainerUtil.newHashMap();
     for (GrField field : fields) {
       if (field.hasModifierProperty(PsiModifier.STATIC) == isStatic) {
@@ -372,10 +357,7 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
     PsiClass aClass = field.getContainingClass();
     if (aClass == null) return false;
 
-    PsiModifierList modifierList = aClass.getModifierList();
-    if (modifierList == null) return false;
-
-    return PsiImplUtil.hasImmutableAnnotation(modifierList);
+    return GrImmutableUtils.hasImmutableAnnotation(aClass);
   }
 
   @NotNull
@@ -411,7 +393,7 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
     final MultiMap<PsiElement, GrVariable> scopes = MultiMap.create();
     scope.accept(new GroovyRecursiveElementVisitor() {
       @Override
-      public void visitVariable(GrVariable variable) {
+      public void visitVariable(@NotNull GrVariable variable) {
         super.visitVariable(variable);
         if (!(variable instanceof PsiField) && variable.hasModifierProperty(PsiModifier.FINAL)) {
           final PsiElement varScope = findScope(variable);

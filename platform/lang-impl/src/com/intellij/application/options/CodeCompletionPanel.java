@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.application.options;
 
@@ -27,15 +13,21 @@ import com.intellij.openapi.actionSystem.IdeActions;
 import com.intellij.openapi.application.ApplicationBundle;
 import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.util.text.StringUtilRt;
+import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBCheckBox;
+import com.intellij.ui.components.JBLabel;
+import com.intellij.ui.components.JBRadioButton;
+import com.intellij.util.ui.JBUI;
 import org.intellij.lang.annotations.MagicConstant;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
+import javax.swing.event.ChangeListener;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.util.List;
 
 public class CodeCompletionPanel {
   JPanel myPanel;
@@ -43,6 +35,7 @@ public class CodeCompletionPanel {
   private JCheckBox myCbAutopopupJavaDoc;
   private JTextField myAutopopupJavaDocField;
 
+  private  JLabel myAutoInsertLabel;
   private JCheckBox myCbOnCodeCompletion;
   private JCheckBox myCbOnSmartTypeCompletion;
 
@@ -50,27 +43,33 @@ public class CodeCompletionPanel {
   private JTextField myParameterInfoDelayField;
   private JCheckBox myCbShowFullParameterSignatures;
 
-  private JComboBox myCaseSensitiveCombo;
   private JCheckBox myCbSorting;
   private JBCheckBox myCbSelectByChars;
-  private static final String CASE_SENSITIVE_ALL = ApplicationBundle.message("combobox.autocomplete.case.sensitive.all");
-  private static final String CASE_SENSITIVE_NONE = ApplicationBundle.message("combobox.autocomplete.case.sensitive.none");
-  private static final String CASE_SENSITIVE_FIRST_LETTER = ApplicationBundle.message("combobox.autocomplete.case.sensitive.first.letter");
-  private static final String[] CASE_VARIANTS = {CASE_SENSITIVE_ALL, CASE_SENSITIVE_NONE, CASE_SENSITIVE_FIRST_LETTER};
+  private JCheckBox myCbCompleteFunctionWithParameters;
+  private JBCheckBox myCbMatchCase;
+  private JBRadioButton myFirstLetterOnly;
+  private JBRadioButton myAllLetters;
+  private JBLabel myBasicShortcut;
+  private JBLabel mySmartShortcut;
+  private JPanel myCbOnCodeCompletionPanel;
+  private JPanel myCbOnSmartTypeCompletionPanel;
 
-  public CodeCompletionPanel() {
-    //noinspection unchecked
-    myCaseSensitiveCombo.setModel(new DefaultComboBoxModel(CASE_VARIANTS));
+  private JPanel myAddonPanel;
+
+  public CodeCompletionPanel(List<? extends JComponent> addons) {
+    ChangeListener updateCaseCheckboxes = __ -> {
+      myFirstLetterOnly.setEnabled(myCbMatchCase.isSelected());
+      myAllLetters.setEnabled(myCbMatchCase.isSelected());
+    };
+    myCbMatchCase.addChangeListener(updateCaseCheckboxes);
+    updateCaseCheckboxes.stateChanged(null);
 
     ActionManager actionManager = ActionManager.getInstance();
-    String basicShortcut = KeymapUtil.getFirstKeyboardShortcutText(actionManager.getAction(IdeActions.ACTION_CODE_COMPLETION));
-    String smartShortcut = KeymapUtil.getFirstKeyboardShortcutText(actionManager.getAction(IdeActions.ACTION_SMART_TYPE_COMPLETION));
-    if (StringUtil.isNotEmpty(basicShortcut)) {
-      myCbOnCodeCompletion.setText(myCbOnCodeCompletion.getText() + " ( " + basicShortcut + " )");
-    }
-    if (StringUtil.isNotEmpty(smartShortcut)) {
-      myCbOnSmartTypeCompletion.setText(myCbOnSmartTypeCompletion.getText() + " ( " + smartShortcut + " )");
-    }
+    myBasicShortcut.setText(KeymapUtil.getFirstKeyboardShortcutText(actionManager.getAction(IdeActions.ACTION_CODE_COMPLETION)));
+    mySmartShortcut.setText(KeymapUtil.getFirstKeyboardShortcutText(actionManager.getAction(IdeActions.ACTION_SMART_TYPE_COMPLETION)));
+
+    myBasicShortcut.setForeground(JBColor.GRAY);
+    mySmartShortcut.setForeground(JBColor.GRAY);
 
     myCbAutocompletion.addActionListener(
      new ActionListener() {
@@ -100,7 +99,20 @@ public class CodeCompletionPanel {
      }
    );
 
-    hideOption(myCbOnSmartTypeCompletion, OptionId.COMPLETION_SMART_TYPE);
+    hideOption(myCbOnSmartTypeCompletionPanel, OptionId.COMPLETION_SMART_TYPE);
+    hideOption(myCbOnCodeCompletionPanel, OptionId.AUTOCOMPLETE_ON_BASIC_CODE_COMPLETION);
+    if(!myCbOnSmartTypeCompletionPanel.isVisible() && !myCbOnCodeCompletionPanel.isVisible())
+      myAutoInsertLabel.setVisible(false);
+
+    for (JComponent c : addons) {
+      myAddonPanel
+          .add(c, new GridBagConstraints(0, GridBagConstraints.RELATIVE, 1, 1, 0, 0, GridBagConstraints.NORTHWEST,
+              GridBagConstraints.NONE, JBUI.insetsBottom(15), 0, 0));
+    }
+
+    if (addons.isEmpty()) {
+      myAddonPanel.setVisible(false);
+    }
 
     reset();
   }
@@ -112,21 +124,21 @@ public class CodeCompletionPanel {
   public void reset() {
     CodeInsightSettings codeInsightSettings = CodeInsightSettings.getInstance();
 
-    final String value;
     switch(codeInsightSettings.COMPLETION_CASE_SENSITIVE){
       case CodeInsightSettings.ALL:
-        value = CASE_SENSITIVE_ALL;
-      break;
+        myCbMatchCase.setSelected(true);
+        myAllLetters.setSelected(true);
+        break;
 
       case CodeInsightSettings.NONE:
-        value = CASE_SENSITIVE_NONE;
-      break;
+        myCbMatchCase.setSelected(false);
+        break;
 
       default:
-        value = CASE_SENSITIVE_FIRST_LETTER;
-      break;
+        myCbMatchCase.setSelected(true);
+        myFirstLetterOnly.setSelected(true);
+        break;
     }
-    myCaseSensitiveCombo.setSelectedItem(value);
 
     myCbSelectByChars.setSelected(codeInsightSettings.SELECT_AUTOPOPUP_SUGGESTIONS_BY_CHARS);
 
@@ -143,11 +155,13 @@ public class CodeCompletionPanel {
     myParameterInfoDelayField.setEnabled(codeInsightSettings.AUTO_POPUP_PARAMETER_INFO);
     myParameterInfoDelayField.setText(String.valueOf(codeInsightSettings.PARAMETER_INFO_DELAY));
     myCbShowFullParameterSignatures.setSelected(codeInsightSettings.SHOW_FULL_SIGNATURES_IN_PARAMETER_INFO);
+    myCbCompleteFunctionWithParameters.setSelected(codeInsightSettings.SHOW_PARAMETER_NAME_HINTS_ON_COMPLETION);
 
     myCbAutocompletion.setSelected(codeInsightSettings.AUTO_POPUP_COMPLETION_LOOKUP);
-    myCbSorting.setSelected(UISettings.getInstance().SORT_LOOKUP_ELEMENTS_LEXICOGRAPHICALLY);
-    
-    myCbAutocompletion.setText("Autopopup code completion" + (PowerSaveMode.isEnabled() ? " (not available in Power Save mode)" : ""));
+    myCbSorting.setSelected(UISettings.getInstance().getSortLookupElementsLexicographically());
+
+    myCbAutocompletion.setText(ApplicationBundle.message("editbox.auto.complete") +
+                               (PowerSaveMode.isEnabled() ? " (not available in Power Save mode)" : ""));
   }
 
   public void apply() {
@@ -165,10 +179,12 @@ public class CodeCompletionPanel {
     codeInsightSettings.AUTO_POPUP_COMPLETION_LOOKUP = myCbAutocompletion.isSelected();
     codeInsightSettings.AUTO_POPUP_JAVADOC_INFO = myCbAutopopupJavaDoc.isSelected();
 
-    codeInsightSettings.PARAMETER_INFO_DELAY = getIntegerValue(myParameterInfoDelayField.getText(), 0);
-    codeInsightSettings.JAVADOC_INFO_DELAY = getIntegerValue(myAutopopupJavaDocField.getText(), 0);
-    
-    UISettings.getInstance().SORT_LOOKUP_ELEMENTS_LEXICOGRAPHICALLY = myCbSorting.isSelected();
+    codeInsightSettings.PARAMETER_INFO_DELAY = getIntegerValue(myParameterInfoDelayField.getText());
+    codeInsightSettings.JAVADOC_INFO_DELAY = getIntegerValue(myAutopopupJavaDocField.getText());
+
+    codeInsightSettings.SHOW_PARAMETER_NAME_HINTS_ON_COMPLETION = myCbCompleteFunctionWithParameters.isSelected();
+
+    UISettings.getInstance().setSortLookupElementsLexicographically(myCbSorting.isSelected());
 
     final Project project = CommonDataKeys.PROJECT.getData(DataManager.getInstance().getDataContext(myPanel));
     if (project != null){
@@ -189,11 +205,11 @@ public class CodeCompletionPanel {
     isModified |= isModified(myCbShowFullParameterSignatures, codeInsightSettings.SHOW_FULL_SIGNATURES_IN_PARAMETER_INFO);
     isModified |= isModified(myCbParameterInfoPopup, codeInsightSettings.AUTO_POPUP_PARAMETER_INFO);
     isModified |= isModified(myCbAutocompletion, codeInsightSettings.AUTO_POPUP_COMPLETION_LOOKUP);
-
+    isModified |= isModified(myCbCompleteFunctionWithParameters, codeInsightSettings.SHOW_PARAMETER_NAME_HINTS_ON_COMPLETION);
     isModified |= isModified(myCbAutopopupJavaDoc, codeInsightSettings.AUTO_POPUP_JAVADOC_INFO);
-    isModified |= isModified(myParameterInfoDelayField, codeInsightSettings.PARAMETER_INFO_DELAY, 0);
-    isModified |= isModified(myAutopopupJavaDocField, codeInsightSettings.JAVADOC_INFO_DELAY, 0);
-    isModified |= isModified(myCbSorting, UISettings.getInstance().SORT_LOOKUP_ELEMENTS_LEXICOGRAPHICALLY);
+    isModified |= isModified(myParameterInfoDelayField, codeInsightSettings.PARAMETER_INFO_DELAY);
+    isModified |= isModified(myAutopopupJavaDocField, codeInsightSettings.JAVADOC_INFO_DELAY);
+    isModified |= isModified(myCbSorting, UISettings.getInstance().getSortLookupElementsLexicographically());
 
     return isModified;
   }
@@ -202,27 +218,20 @@ public class CodeCompletionPanel {
     return checkBox.isSelected() != value;
   }
 
-  private static boolean isModified(JTextField textField, int value, int defaultValue) {
-    return getIntegerValue(textField.getText(), defaultValue) != value;
+  private static boolean isModified(JTextField textField, int value) {
+    return getIntegerValue(textField.getText()) != value;
   }
 
-  private static int getIntegerValue(String s, int defaultValue) {
-    int value = StringUtilRt.parseInt(s, defaultValue);
-    return value < 0 ? defaultValue : value;
+  private static int getIntegerValue(String s) {
+    int value = StringUtilRt.parseInt(s, 0);
+    return value < 0 ? 0 : value;
   }
 
   @MagicConstant(intValues = {CodeInsightSettings.ALL, CodeInsightSettings.NONE, CodeInsightSettings.FIRST_LETTER})
   private int getCaseSensitiveValue() {
-    Object value = myCaseSensitiveCombo.getSelectedItem();
-    if (CASE_SENSITIVE_ALL.equals(value)){
-      return CodeInsightSettings.ALL;
-    }
-    else if (CASE_SENSITIVE_NONE.equals(value)){
-      return CodeInsightSettings.NONE;
-    }
-    else {
-      return CodeInsightSettings.FIRST_LETTER;
-    }
+    if (!myCbMatchCase.isSelected()) return CodeInsightSettings.NONE;
+
+    return myAllLetters.isSelected() ? CodeInsightSettings.ALL : CodeInsightSettings.FIRST_LETTER;
   }
 
 }

@@ -21,14 +21,17 @@ import com.intellij.util.containers.MultiMap;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
-import java.util.*;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * @author nik
  */
 public class DetectedRootData {
   private final File myDirectory;
-  private MultiMap<DetectedProjectRoot, ProjectStructureDetector> myRoots = MultiMap.createLinked();
+  private final MultiMap<DetectedProjectRoot, ProjectStructureDetector> myRoots = MultiMap.createLinked();
 
   private boolean myIncluded = true;
   private DetectedProjectRoot mySelectedRoot;
@@ -49,7 +52,7 @@ public class DetectedRootData {
       final DetectedProjectRoot combined = oldRoot.combineWith(root);
       if (combined != null) {
         myRoots.remove(oldRoot);
-        final Set<ProjectStructureDetector> values = new HashSet<ProjectStructureDetector>(entry.getValue());
+        final Set<ProjectStructureDetector> values = new HashSet<>(entry.getValue());
         values.add(detector);
         myRoots.put(combined, values);
         if (mySelectedRoot == oldRoot) {
@@ -64,7 +67,7 @@ public class DetectedRootData {
 
   public DetectedProjectRoot[] getAllRoots() {
     final Set<DetectedProjectRoot> roots = myRoots.keySet();
-    return roots.toArray(new DetectedProjectRoot[roots.size()]);
+    return roots.toArray(new DetectedProjectRoot[0]);
   }
 
   public boolean isEmpty() {

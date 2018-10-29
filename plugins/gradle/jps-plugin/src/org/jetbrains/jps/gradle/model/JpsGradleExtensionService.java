@@ -19,16 +19,23 @@ import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.builders.storage.BuildDataPaths;
+import org.jetbrains.jps.gradle.model.artifacts.JpsGradleArtifactExtension;
 import org.jetbrains.jps.gradle.model.impl.GradleProjectConfiguration;
+import org.jetbrains.jps.gradle.model.impl.artifacts.JpsGradleArtifactExtensionImpl;
+import org.jetbrains.jps.model.artifact.JpsArtifact;
 import org.jetbrains.jps.model.module.JpsDependencyElement;
 import org.jetbrains.jps.model.module.JpsModule;
 import org.jetbrains.jps.service.JpsServiceManager;
 
 /**
  * @author Vladislav.Soroka
- * @since 7/10/2014
  */
 public abstract class JpsGradleExtensionService {
+  @Nullable
+  public static JpsGradleArtifactExtension getArtifactExtension(@NotNull JpsArtifact artifact) {
+    return artifact.getContainer().getChild(JpsGradleArtifactExtensionImpl.ROLE);
+  }
+
   public static JpsGradleExtensionService getInstance() {
     return JpsServiceManager.getInstance().getService(JpsGradleExtensionService.class);
   }

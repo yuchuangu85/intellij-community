@@ -174,7 +174,7 @@ public abstract class CoverageEngine {
                                                         @Nullable final Module module,
                                                         @NotNull final CoverageSuitesBundle suite) {
     final VirtualFile virtualFile = srcFile.getVirtualFile();
-    return virtualFile == null ? Collections.<File>emptySet() : Collections.singleton(VfsUtilCore.virtualToIoFile(virtualFile));
+    return virtualFile == null ? Collections.emptySet() : Collections.singleton(VfsUtilCore.virtualToIoFile(virtualFile));
   }
 
   /**
@@ -199,15 +199,8 @@ public abstract class CoverageEngine {
                                  @NotNull final PsiFile sourceFile) {
     final VirtualFile virtualFile = LocalFileSystem.getInstance().findFileByIoFile(outputFile);
     if (virtualFile != null) {
-      return getQualifiedName(virtualFile, sourceFile);
+      return null;
     }
-    return null;
-  }
-
-  @Deprecated
-  @Nullable
-  public String getQualifiedName(@NotNull final VirtualFile outputFile,
-                                 @NotNull final PsiFile sourceFile) {
     return null;
   }
 
@@ -237,16 +230,8 @@ public abstract class CoverageEngine {
                                                 @NotNull final CoverageSuitesBundle suite) {
     final VirtualFile virtualFile = LocalFileSystem.getInstance().findFileByIoFile(outputFile);
     if (virtualFile != null) {
-      return includeUntouchedFileInCoverage(qualifiedName, virtualFile, sourceFile, suite);
+      return false;
     }
-    return false;
-  }
-  
-  @Deprecated
-  public boolean includeUntouchedFileInCoverage(@NotNull final String qualifiedName,
-                                                @NotNull final VirtualFile outputFile,
-                                                @NotNull final PsiFile sourceFile,
-                                                @NotNull final CoverageSuitesBundle suite) {
     return false;
   }
 
@@ -261,15 +246,8 @@ public abstract class CoverageEngine {
                                                        @NotNull final CoverageSuitesBundle suite) {
     final VirtualFile virtualFile = LocalFileSystem.getInstance().findFileByIoFile(classFile);
     if (virtualFile != null) {
-      return collectSrcLinesForUntouchedFile(virtualFile, suite);
+      return null;
     }
-    return null;
-  }
-  
-  @Deprecated
-  @Nullable
-  public List<Integer> collectSrcLinesForUntouchedFile(@NotNull final VirtualFile classFile,
-                                                       @NotNull final CoverageSuitesBundle suite) {
     return null;
   }
 
@@ -296,6 +274,9 @@ public abstract class CoverageEngine {
 
   public abstract List<PsiElement> findTestsByNames(@NotNull final String[] testNames, @NotNull final Project project);
 
+  /**
+   * To support per test coverage. Return file name which contain traces for given test 
+   */
   @Nullable
   public abstract String getTestMethodName(@NotNull final PsiElement element, @NotNull final AbstractTestProxy testProxy);
 
@@ -329,7 +310,8 @@ public abstract class CoverageEngine {
     return false;
   }
 
-  public Object[] postProcessExecutableLines(Object[] lines, Editor editor) {
+  @NotNull
+  public Object[] postProcessExecutableLines(@NotNull Object[] lines, Editor editor) {
     return lines;
   }
 
@@ -346,6 +328,14 @@ public abstract class CoverageEngine {
   }
 
   public boolean shouldHighlightFullLines() {
+    return false;
+  }
+
+  /**
+   * 
+   * @return true if highlighting should skip the line as it represents no actual source code
+   */
+  public boolean isGeneratedCode(Project project, String qualifiedName, Object lineData) {
     return false;
   }
 

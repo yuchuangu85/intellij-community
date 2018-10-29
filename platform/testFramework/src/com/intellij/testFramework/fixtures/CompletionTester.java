@@ -30,10 +30,6 @@ import java.util.Scanner;
 
 import static org.junit.Assert.assertTrue;
 
-/**
- * User: Andrey.Vokin
- * Date: 2/13/13
- */
 public class CompletionTester {
   enum CheckType {EQUALS, INCLUDES, EXCLUDES}
 
@@ -69,7 +65,7 @@ public class CompletionTester {
     final CheckType checkType = CheckType.valueOf(in.next());
 
     in.useDelimiter("\n");
-    final List<String> variants = new ArrayList<String>();
+    final List<String> variants = new ArrayList<>();
     while (in.hasNext()) {
       final String variant = in.next().trim();
       if (variant.length() > 0) {

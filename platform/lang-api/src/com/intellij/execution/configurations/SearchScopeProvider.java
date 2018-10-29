@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package com.intellij.execution.configurations;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -25,22 +26,23 @@ import org.jetbrains.annotations.Nullable;
  * @author Vojtech Krasa
  */
 public class SearchScopeProvider {
+
   @NotNull
   public static GlobalSearchScope createSearchScope(@NotNull Project project, @Nullable RunProfile runProfile) {
-    Module[] modules = null;
     if (runProfile instanceof SearchScopeProvidingRunProfile) {
-      modules = ((SearchScopeProvidingRunProfile)runProfile).getModules();
+      GlobalSearchScope scope = ((SearchScopeProvidingRunProfile)runProfile).getSearchScope();
+      if (scope != null) return scope;
     }
-    if (modules == null || modules.length == 0) {
-      return GlobalSearchScope.allScope(project);
+    return GlobalSearchScope.allScope(project);
+  }
+
+  @Nullable
+  public static GlobalSearchScope createSearchScope(@NotNull Module[] modules) {
+    if (modules.length == 0) {
+      return null;
     }
-    else {
-      GlobalSearchScope scope = GlobalSearchScope.moduleRuntimeScope(modules[0], true);
-      for (int idx = 1; idx < modules.length; idx++) {
-        Module module = modules[idx];
-        scope = scope.uniteWith(GlobalSearchScope.moduleRuntimeScope(module, true));
-      }
-      return scope;
-    }
+    GlobalSearchScope[] scopes =
+      ContainerUtil.map2Array(modules, GlobalSearchScope.class, module -> GlobalSearchScope.moduleRuntimeScope(module, true));
+    return GlobalSearchScope.union(scopes);
   }
 }

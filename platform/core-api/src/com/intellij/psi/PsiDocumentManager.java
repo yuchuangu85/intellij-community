@@ -15,6 +15,7 @@
  */
 package com.intellij.psi;
 
+import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Computable;
@@ -61,7 +62,7 @@ public abstract class PsiDocumentManager {
    * Returns the cached PSI file for the specified document.
    *
    * @param document the document for which the PSI file is requested.
-   * @return the PSI file instance, or <code>null</code> if there is currently no cached PSI tree for the file.
+   * @return the PSI file instance, or {@code null} if there is currently no cached PSI tree for the file.
    */
   @Nullable
   public abstract PsiFile getCachedPsiFile(@NotNull Document document);
@@ -70,7 +71,7 @@ public abstract class PsiDocumentManager {
    * Returns the document for the specified PSI file.
    *
    * @param file the file for which the document is requested.
-   * @return the document instance, or <code>null</code> if the file is binary or has no associated document.
+   * @return the document instance, or {@code null} if the file is binary or has no associated document.
    */
   @Nullable
   public abstract Document getDocument(@NotNull PsiFile file);
@@ -79,7 +80,7 @@ public abstract class PsiDocumentManager {
    * Returns the cached document for the specified PSI file.
    *
    * @param file the file for which the document is requested.
-   * @return the document instance, or <code>null</code> if there is currently no cached document for the file.
+   * @return the document instance, or {@code null} if there is currently no cached document for the file.
    */
   @Nullable
   public abstract Document getCachedDocument(@NotNull PsiFile file);
@@ -87,7 +88,9 @@ public abstract class PsiDocumentManager {
   /**
    * Commits (updates the PSI tree for) all modified but not committed documents.
    * Before a modified document is committed, accessing its PSI may return elements
-   * corresponding to original (unmodified) state of the document.
+   * corresponding to original (unmodified) state of the document.<p/>
+   *
+   * Should be called in UI thread in a write-safe context (see {@link com.intellij.openapi.application.TransactionGuard})
    */
   public abstract void commitAllDocuments();
 
@@ -99,7 +102,9 @@ public abstract class PsiDocumentManager {
   /**
    * Updates the PSI tree for the specified document.
    * Before a modified document is committed, accessing its PSI may return elements
-   * corresponding to original (unmodified) state of the document.
+   * corresponding to original (unmodified) state of the document.<p/>
+   *
+   * Should be called in UI thread in a write-safe context (see {@link com.intellij.openapi.application.TransactionGuard}).
    *
    * @param document the document to commit.
    */
@@ -249,9 +254,16 @@ public abstract class PsiDocumentManager {
   public abstract boolean performWhenAllCommitted(@NotNull Runnable action);
 
   /**
-   * Schedule the runnable to be executed on Swing thread when all the documents are committed at some later moment.
+   * Same as {@link #performLaterWhenAllCommitted(Runnable, ModalityState)} using {@link ModalityState#defaultModalityState()}
+   */
+  public abstract void performLaterWhenAllCommitted(@NotNull Runnable runnable);
+
+  /**
+   * Schedule the runnable to be executed on Swing thread when all the documents are committed at some later moment in a given modality state.
    * The runnable is guaranteed to be invoked when no write action is running, and not immediately.
    * If the project is disposed before such moment, the runnable is not run.
    */
-  public abstract void performLaterWhenAllCommitted(@NotNull Runnable runnable);
+  public abstract void performLaterWhenAllCommitted(@NotNull Runnable runnable, ModalityState modalityState);
+
+
 }

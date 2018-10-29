@@ -31,11 +31,9 @@ import java.util.NoSuchElementException;
 
 /**
  * @author Eugene Zhuravlev
- *         Date: Apr 6, 2010
  */
-@SuppressWarnings({"AbstractClassNeverImplemented"})
 public abstract class AntDomElement implements DomElement {
-  public static enum Role {
+  public enum Role {
     TASK, DATA_TYPE
   }
   public static final Key<Role> ROLE = Key.create("element_role");
@@ -96,11 +94,13 @@ public abstract class AntDomElement implements DomElement {
     final Iterator<DomElement> it = children.iterator();
     return new Iterator<AntDomElement>() {
       private DomElement myUnprocessedElement;
+      @Override
       public boolean hasNext() {
         findNextAntElement();
         return myUnprocessedElement != null;
       }
 
+      @Override
       public AntDomElement next() {
         findNextAntElement();
         if (myUnprocessedElement == null) {
@@ -123,7 +123,8 @@ public abstract class AntDomElement implements DomElement {
         }
         while (!(myUnprocessedElement instanceof AntDomElement));
       }
-      
+
+      @Override
       public void remove() {
         throw new UnsupportedOperationException("remove");
       }
@@ -137,7 +138,7 @@ public abstract class AntDomElement implements DomElement {
   public final boolean isDataType() {
     return Role.DATA_TYPE.equals(getChildDescription().getUserData(ROLE));
   }
-  
+
   public String toString() {
     final XmlTag tag = getXmlTag();
     if (tag == null) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2012 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2017 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,15 +30,16 @@ public class UninitializedReadCollector {
   private int counter = 0;
 
   public UninitializedReadCollector() {
-    uninitializedReads = new HashSet<PsiExpression>();
+    uninitializedReads = new HashSet<>();
   }
 
+  @NotNull
   public PsiExpression[] getUninitializedReads() {
-    return uninitializedReads.toArray(new PsiExpression[uninitializedReads.size()]);
+    return uninitializedReads.toArray(PsiExpression.EMPTY_ARRAY);
   }
 
   public boolean blockAssignsVariable(@Nullable PsiCodeBlock block, @NotNull PsiVariable variable) {
-    return blockAssignsVariable(block, variable, counter, new HashSet<MethodSignature>());
+    return blockAssignsVariable(block, variable, counter, new HashSet<>());
   }
 
   private boolean blockAssignsVariable(@Nullable PsiCodeBlock block, @NotNull PsiVariable variable,
@@ -354,14 +355,9 @@ public class UninitializedReadCollector {
       return expressionAssignsVariable(arrayExpression, variable, stamp, checkedMethods) ||
              expressionAssignsVariable(indexExpression, variable, stamp, checkedMethods);
     }
-    else if (expression instanceof PsiPrefixExpression) {
-      final PsiPrefixExpression prefixExpression = (PsiPrefixExpression)expression;
-      final PsiExpression operand = prefixExpression.getOperand();
-      return expressionAssignsVariable(operand, variable, stamp, checkedMethods);
-    }
-    else if (expression instanceof PsiPostfixExpression) {
-      final PsiPostfixExpression postfixExpression = (PsiPostfixExpression)expression;
-      final PsiExpression operand = postfixExpression.getOperand();
+    else if (expression instanceof PsiUnaryExpression) {
+      final PsiUnaryExpression unaryExpression = (PsiUnaryExpression)expression;
+      final PsiExpression operand = unaryExpression.getOperand();
       return expressionAssignsVariable(operand, variable, stamp, checkedMethods);
     }
     else if (expression instanceof PsiPolyadicExpression) {
@@ -406,7 +402,7 @@ public class UninitializedReadCollector {
 
   private boolean assignmentExpressionAssignsVariable(@NotNull PsiAssignmentExpression assignment, @NotNull PsiVariable variable,
     int stamp, @NotNull Set<MethodSignature> checkedMethods) {
-    final PsiExpression lhs = assignment.getLExpression();
+    final PsiExpression lhs = ParenthesesUtils.stripParentheses(assignment.getLExpression());
     if (expressionAssignsVariable(lhs, variable, stamp, checkedMethods)) {
       return true;
     }
@@ -430,7 +426,7 @@ public class UninitializedReadCollector {
       return true;
     }
     if (variable.equals(referenceExpression.resolve())) {
-      final PsiElement parent = referenceExpression.getParent();
+      final PsiElement parent = ParenthesesUtils.getParentSkipParentheses(referenceExpression);
       if (parent instanceof PsiAssignmentExpression) {
         final PsiAssignmentExpression assignmentExpression = (PsiAssignmentExpression)parent;
         final PsiExpression rhs = assignmentExpression.getRExpression();
@@ -438,7 +434,7 @@ public class UninitializedReadCollector {
           checkReferenceExpression(referenceExpression, variable, qualifierExpression);
         }
       }
-      else {
+      else if (!(parent instanceof PsiExpression) || !ComparisonUtils.isNullComparison((PsiExpression)parent)) {
         checkReferenceExpression(referenceExpression, variable, qualifierExpression);
       }
     }

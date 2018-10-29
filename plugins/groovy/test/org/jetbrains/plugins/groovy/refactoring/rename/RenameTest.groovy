@@ -1,20 +1,7 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.refactoring.rename
 
+import com.intellij.idea.Bombed
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.*
@@ -36,19 +23,23 @@ import org.jetbrains.plugins.groovy.util.TestUtils
 /**
  * @author ven
  */
-public class RenameTest extends LightGroovyTestCase {
+class RenameTest extends LightGroovyTestCase {
   @Override
   protected String getBasePath() {
     TestUtils.testDataPath + 'groovy/refactoring/rename/'
   }
 
-  public void testClosureIt() throws Throwable { doTest(); }
-  public void testTo_getter() throws Throwable { doTest(); }
-  public void testTo_prop() throws Throwable { doTest(); }
-  public void testTo_setter() throws Throwable { doTest(); }
-  public void testScriptMethod() throws Throwable { doTest(); }
+  void testClosureIt() throws Throwable { doTest() }
 
-  public void testParameterIsNotAUsageOfGroovyParameter() throws Exception {
+  void testTo_getter() throws Throwable { doTest() }
+
+  void testTo_prop() throws Throwable { doTest() }
+
+  void testTo_setter() throws Throwable { doTest() }
+
+  void testScriptMethod() throws Throwable { doTest() }
+
+  void testParameterIsNotAUsageOfGroovyParameter() throws Exception {
     myFixture.configureByText(GroovyFileType.GROOVY_FILE_TYPE, """
 def foo(f) {
   // Parameter
@@ -71,7 +62,7 @@ def foo(newName) {
     assertEquals txt, txtFile.text
   }
 
-  public void testPreserveUnknownImports() throws Exception {
+  void testPreserveUnknownImports() throws Exception {
     def someClass = myFixture.addClass("public class SomeClass {}")
 
     myFixture.configureByText(GroovyFileType.GROOVY_FILE_TYPE, """
@@ -87,7 +78,7 @@ Zoo zoo
 """
   }
 
-  public void testRenameGetter() throws Exception {
+  void testRenameGetter() throws Exception {
     myFixture.addFileToProject("Foo.groovy", "class Foo { def getFoo(){return 2}}")
     final PsiClass clazz = myFixture.findClass("Foo")
     def methods = clazz.findMethodsByName("getFoo", false)
@@ -96,7 +87,7 @@ Zoo zoo
     myFixture.checkResult "print new Foo().get()"
   }
 
-  public void testRenameSetter() throws Exception {
+  void testRenameSetter() throws Exception {
     myFixture.addFileToProject("Foo.groovy","class Foo { def setFoo(def foo){}}")
     def clazz = myFixture.findClass("Foo")
     def methods = clazz.findMethodsByName("setFoo", false)
@@ -105,7 +96,7 @@ Zoo zoo
     myFixture.checkResult "print new Foo().set(2)"
   }
 
-  public void testProperty() {
+  void testProperty() {
     myFixture.configureByText("a.groovy", """
 class Foo {
   def p<caret>rop
@@ -135,7 +126,7 @@ class Foo {
 }"""
   }
 
-  public void testPropertyWithLocalCollision() {
+  void testPropertyWithLocalCollision() {
     myFixture.configureByText("a.groovy", """
 class Foo {
   def p<caret>rop
@@ -171,7 +162,7 @@ class Foo {
 }"""
   }
 
-  public void testPropertyWithFieldCollision() {
+  void testPropertyWithFieldCollision() {
     myFixture.configureByText("a.groovy", """\
 class A {
   String na<caret>me;
@@ -209,7 +200,7 @@ class A {
 }"""
   }
 
-  public void testRenameFieldWithNonstandardName() {
+  void testRenameFieldWithNonstandardName() {
     def file = myFixture.configureByText("a.groovy", """
 class SomeBean {
   String xXx<caret> = "field"
@@ -259,46 +250,50 @@ print new Foo(1)
 '''
   }
 
-  public void doTest() {
-    final String testFile = getTestName(true).replace('$', '/') + ".test";
-    final List<String> list = TestUtils.readInput(TestUtils.absoluteTestDataPath + "groovy/refactoring/rename/" + testFile);
+  void doTest() {
+    final String testFile = getTestName(true).replace('$', '/') + ".test"
+    final List<String> list = TestUtils.readInput(TestUtils.absoluteTestDataPath + "groovy/refactoring/rename/" + testFile)
 
-    myFixture.configureByText(GroovyFileType.GROOVY_FILE_TYPE, list.get(0));
+    myFixture.configureByText(GroovyFileType.GROOVY_FILE_TYPE, list.get(0))
 
-    PsiReference ref = myFixture.file.findReferenceAt(myFixture.editor.caretModel.offset);
-    final PsiElement resolved = ref == null ? null : ref.resolve();
+    PsiReference ref = myFixture.file.findReferenceAt(myFixture.editor.caretModel.offset)
+    final PsiElement resolved = ref == null ? null : ref.resolve()
     if (resolved instanceof PsiMethod && !(resolved instanceof GrAccessorMethod)) {
-      PsiMethod method = (PsiMethod)resolved;
-      String name = method.name;
-      String newName = createNewNameForMethod(name);
-      myFixture.renameElementAtCaret(newName);
+      PsiMethod method = (PsiMethod)resolved
+      String name = method.name
+      String newName = createNewNameForMethod(name)
+      myFixture.renameElementAtCaret(newName)
     } else if (resolved instanceof GrAccessorMethod) {
-      GrField field = ((GrAccessorMethod)resolved).property;
-      RenameProcessor processor = new RenameProcessor(myFixture.project, field, "newName", true, true);
-      processor.addElement(resolved, createNewNameForMethod(((GrAccessorMethod)resolved).name));
-      processor.run();
+      GrField field = ((GrAccessorMethod)resolved).property
+      RenameProcessor processor = new RenameProcessor(myFixture.project, field, "newName", true, true)
+      processor.addElement(resolved, createNewNameForMethod(((GrAccessorMethod)resolved).name))
+      processor.run()
     } else {
-      myFixture.renameElementAtCaret("newName");
+      myFixture.renameElementAtCaret("newName")
     }
-    PostprocessReformattingAspect.getInstance(project).doPostponedFormatting();
-    myFixture.checkResult(list.get(1));
+    PostprocessReformattingAspect.getInstance(project).doPostponedFormatting()
+    myFixture.checkResult(list.get(1))
   }
 
   private static String createNewNameForMethod(final String name) {
-    String newName = "newName";
+    String newName = "newName"
     if (name.startsWith("get")) {
-      newName = "get" + StringUtil.capitalize(newName);
+      newName = "get" + StringUtil.capitalize(newName)
     }
     else if (name.startsWith("is")) {
-      newName = "is" + StringUtil.capitalize(newName);
+      newName = "is" + StringUtil.capitalize(newName)
     }
     else if (name.startsWith("set")) {
-      newName = "set" + StringUtil.capitalize(newName);
+      newName = "set" + StringUtil.capitalize(newName)
     }
-    return newName;
+    return newName
   }
 
-  public void testRecursivePathRename() {
+  @Bombed(
+    year = 2018, month = 10, day = 1, user = "Daniil Ovchinnikov",
+    description = "The fix requires major changes in property resolution and platform renamer"
+  )
+  void testRecursivePathRename() {
     def file = myFixture.configureByText("SomeBean.groovy", """
 class SomeBean {
 
@@ -323,7 +318,7 @@ class SomeBean {
 """, file.text
   }
 
-  public void testDontAutoRenameDynamicallyTypeUsage() throws Exception {
+  void testDontAutoRenameDynamicallyTypeUsage() throws Exception {
     myFixture.configureByText "a.groovy", """
 class Goo {
   def pp<caret>roject() {}
@@ -341,7 +336,7 @@ def foo(p) {
     assert usages[1].isNonCodeUsage
   }
 
-  public void testRenameAliasImportedProperty() {
+  void testRenameAliasImportedProperty() {
     myFixture.addFileToProject("Foo.groovy", """class Foo {
 static def bar
 }""")
@@ -363,7 +358,7 @@ setFoo(2)
 foo = 4"""
   }
 
-  public void testRenameAliasImportedClass() {
+  void testRenameAliasImportedClass() {
     myFixture.addFileToProject("Foo.groovy", """class Foo {
 static def bar
 }""")
@@ -379,7 +374,7 @@ Bar bar = new Bar()
 """
   }
 
-  public void testRenameAliasImportedMethod() {
+  void testRenameAliasImportedMethod() {
     myFixture.addFileToProject("Foo.groovy", """class Foo {
 static def bar(){}
 }""")
@@ -395,7 +390,7 @@ foo()
 """
   }
 
-  public void testRenameAliasImportedField() {
+  void testRenameAliasImportedField() {
     myFixture.addFileToProject("Foo.groovy", """class Foo {
 public static bar
 }""")
@@ -413,23 +408,23 @@ print foo
 foo = 4"""
   }
 
-  public void testInplaceRename() {
-   doInplaceRenameTest();
+  void testInplaceRename() {
+   doInplaceRenameTest()
   }
 
-  public void testInplaceRenameWithGetter() {
-   doInplaceRenameTest();
+  void testInplaceRenameWithGetter() {
+   doInplaceRenameTest()
   }
 
-  public void testInplaceRenameWithStaticField() {
-   doInplaceRenameTest();
+  void testInplaceRenameWithStaticField() {
+   doInplaceRenameTest()
   }
 
   void testInplaceRenameOfClosureImplicitParameter(){
     doInplaceRenameTest()
   }
 
-  public void testRenameClassWithLiteralUsages() throws Exception {
+  void testRenameClassWithLiteralUsages() throws Exception {
     def file = myFixture.addFileToProject("aaa.groovy", """
       class Foo {
         Foo(int a) {}
@@ -449,13 +444,13 @@ foo = 4"""
 """
   }
 
-  public void testExtensionOnClassRename() {
+  void testExtensionOnClassRename() {
     myFixture.configureByText "Foo.gy", "class Foo {}"
     myFixture.renameElement myFixture.findClass("Foo"), "Bar"
     assert "gy", myFixture.file.virtualFile.extension
   }
 
-  public void testRenameJavaUsageFail() {
+  void testRenameJavaUsageFail() {
     myFixture.addFileToProject "Bar.java", """
 class Bar {
   void bar() {
@@ -470,12 +465,12 @@ class Foo {
       myFixture.renameElement myFixture.findClass("Foo").methods[0], "'newName'"
     } catch (ConflictsInTestsException e) {
       assertEquals "<b><code>'newName'</code></b> is not a correct identifier to use in <b><code>new Foo().foo</code></b>", e.message
-      return;
+      return
     }
     assertTrue false
   }
 
-  public void testRenameJavaPrivateField() {
+  void testRenameJavaPrivateField() {
     myFixture.addFileToProject "Foo.java", """
 public class Foo {
   private int field;
@@ -505,7 +500,7 @@ class Test {
       }
   }
 }""")
-    new PropertyRenameHandler().invoke(project, [myFixture.findClass('Book').fields[0]] as PsiElement[], null);
+    new PropertyRenameHandler().invoke(project, [myFixture.findClass('Book').fields[0]] as PsiElement[], null)
     myFixture.checkResult """
 class Book {
     String s
@@ -525,9 +520,9 @@ class Test {
 
   private def doInplaceRenameTest() {
     String prefix = "/${getTestName(false)}"
-    myFixture.configureByFile prefix + ".groovy";
+    myFixture.configureByFile prefix + ".groovy"
     WriteCommandAction.runWriteCommandAction project, {
-      CodeInsightTestUtil.doInlineRename(new GrVariableInplaceRenameHandler(), "foo", myFixture);
+      CodeInsightTestUtil.doInlineRename(new GrVariableInplaceRenameHandler(), "foo", myFixture)
     }
     myFixture.checkResultByFile prefix + "_after.groovy"
   }
@@ -556,7 +551,7 @@ new X().foo()
 
     def method = (file.classes[0] as GrTypeDefinition).codeMethods[0]
 
-    myFixture.renameElement(method, 'f oo');
+    myFixture.renameElement(method, 'f oo')
 
     myFixture.checkResult('''\
 class X {
@@ -586,7 +581,7 @@ class Java {
 }''')
 
     try {
-      myFixture.renameElement(method, 'f oo');
+      myFixture.renameElement(method, 'f oo')
       assert false
     }
     catch (ConflictsInTestsException ignored) {
@@ -727,7 +722,7 @@ class X implements T {
 
 trait T2 extends T {
     def bar() {
-        print T__foo //actually this ref is unresolved since super fields are not visible in extending traits
+        print T__foo
     }
 }
 ''')
@@ -749,10 +744,28 @@ class X implements T {
 
 trait T2 extends T {
     def bar() {
-        print T__foo //actually this ref is unresolved since super fields are not visible in extending traits
+        print T__baz
     }
 }
 ''')
+    }
+  }
+
+  void 'test rename reflected method with overloads'() {
+    fixture.with {
+      configureByText '_.groovy', '''\
+class A {
+  def fo<caret>o(a, b, c = 1) {}
+  def foo(d = 2) {}
+}
+'''
+      renameElementAtCaretUsingHandler 'foo1'
+      checkResult '''\
+class A {
+  def foo1(a, b, c = 1) {}
+  def foo1(d = 2) {}
+}
+'''
     }
   }
 }

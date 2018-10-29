@@ -103,10 +103,15 @@ public class GitDiffFromHistoryHandler extends BaseDiffFromHistoryHandler<GitFil
     throws VcsException {
     GitRepository repository = getRepository(path);
     String hash1 = rev1.getHash();
-    String hash2 = rev2 != null ? rev2.getHash() : null;
 
-    return ContainerUtil
-      .newArrayList(GitChangeUtils.getDiff(repository.getProject(), repository.getRoot(), hash1, hash2, Collections.singletonList(path)));
+    if (rev2 == null) {
+      return ContainerUtil.newArrayList(GitChangeUtils.getDiffWithWorkingDir(myProject, repository.getRoot(), hash1,
+                                                                             Collections.singleton(path), false));
+    }
+
+    String hash2 = rev2.getHash();
+    return ContainerUtil.newArrayList(GitChangeUtils.getDiff(myProject, repository.getRoot(), hash1, hash2,
+                                                             Collections.singletonList(path)));
   }
 
   @NotNull
@@ -135,16 +140,13 @@ public class GitDiffFromHistoryHandler extends BaseDiffFromHistoryHandler<GitFil
                                       @NotNull final GitFileRevision rev, @NotNull final Collection<String> parents) {
     VcsHistorySession session = event.getData(VcsDataKeys.HISTORY_SESSION);
     List<VcsFileRevision> revisions = session != null ? session.getRevisionList() : null;
-    checkIfFileWasTouchedAndFindParentsInBackground(filePath, rev, parents, revisions, new Consumer<MergeCommitPreCheckInfo>() {
-      @Override
-      public void consume(MergeCommitPreCheckInfo info) {
-        if (!info.wasFileTouched()) {
-          String message = String.format("There were no changes in %s in this merge commit, besides those which were made in both branches",
-                                         filePath.getName());
-          VcsBalloonProblemNotifier.showOverVersionControlView(GitDiffFromHistoryHandler.this.myProject, message, MessageType.INFO);
-        }
-        showPopup(event, rev, filePath, info.getParents());
+    checkIfFileWasTouchedAndFindParentsInBackground(filePath, rev, parents, revisions, info -> {
+      if (!info.wasFileTouched()) {
+        String message = String.format("There were no changes in %s in this merge commit, besides those which were made in both branches",
+                                       filePath.getName());
+        VcsBalloonProblemNotifier.showOverVersionControlView(GitDiffFromHistoryHandler.this.myProject, message, MessageType.INFO);
       }
+      showPopup(event, rev, filePath, info.getParents());
     });
   }
 
@@ -174,7 +176,8 @@ public class GitDiffFromHistoryHandler extends BaseDiffFromHistoryHandler<GitFil
     new Task.Backgroundable(myProject, "Loading changes...", true) {
       private MergeCommitPreCheckInfo myInfo;
 
-      @Override public void run(@NotNull ProgressIndicator indicator) {
+      @Override
+      public void run(@NotNull ProgressIndicator indicator) {
         try {
           GitRepository repository = getRepository(filePath);
           boolean fileTouched = wasFileTouched(repository, rev);
@@ -205,7 +208,7 @@ public class GitDiffFromHistoryHandler extends BaseDiffFromHistoryHandler<GitFil
     // the file could be renamed in one of the branches, i.e. the name in one of the parent revisions may be different from the name
     // in currentRevision. It can be different even in both parents, but it would a rename-rename conflict, and we don't handle such anyway.
 
-    Collection<GitFileRevision> parents = new ArrayList<GitFileRevision>(parentHashes.size());
+    Collection<GitFileRevision> parents = new ArrayList<>(parentHashes.size());
     for (String parentHash : parentHashes) {
       parents.add(createParentRevision(repository, currentRevision, parentHash, revisions));
     }
@@ -271,8 +274,10 @@ public class GitDiffFromHistoryHandler extends BaseDiffFromHistoryHandler<GitFil
   }
 
   @NotNull
-  private ActionGroup createActionGroup(@NotNull GitFileRevision rev, @NotNull FilePath filePath, @NotNull Collection<GitFileRevision> parents) {
-    Collection<AnAction> actions = new ArrayList<AnAction>(2);
+  private ActionGroup createActionGroup(@NotNull GitFileRevision rev,
+                                        @NotNull FilePath filePath,
+                                        @NotNull Collection<GitFileRevision> parents) {
+    Collection<AnAction> actions = new ArrayList<>(2);
     for (GitFileRevision parent : parents) {
       actions.add(createParentAction(rev, filePath, parent));
     }
@@ -333,7 +338,7 @@ public class GitDiffFromHistoryHandler extends BaseDiffFromHistoryHandler<GitFil
     @NotNull private final GitFileRevision myRevision;
     @NotNull private final GitFileRevision myParentRevision;
 
-    public ShowDiffWithParentAction(@NotNull FilePath filePath, @NotNull GitFileRevision rev, @NotNull GitFileRevision parent) {
+    ShowDiffWithParentAction(@NotNull FilePath filePath, @NotNull GitFileRevision rev, @NotNull GitFileRevision parent) {
       super(getRevisionDescription(parent), parent.getCommitMessage(), null);
       myFilePath = filePath;
       myRevision = rev;
@@ -341,9 +346,8 @@ public class GitDiffFromHistoryHandler extends BaseDiffFromHistoryHandler<GitFil
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       doShowDiff(myFilePath, myParentRevision, myRevision);
     }
-
   }
 }

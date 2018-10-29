@@ -1,39 +1,25 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.concurrency;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.util.Disposer;
-import com.intellij.openapi.util.Getter;
-import com.intellij.util.Consumer;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 public abstract class AsyncValueLoader<T> {
-  private final AtomicReference<Promise<T>> ref = new AtomicReference<Promise<T>>();
+  private final AtomicReference<Promise<T>> ref = new AtomicReference<>();
 
   private volatile long modificationCount;
   private volatile long loadedModificationCount;
 
   private final Consumer<T> doneHandler = new Consumer<T>() {
     @Override
-    public void consume(T o) {
+    public void accept(T o) {
       loadedModificationCount = modificationCount;
     }
   };
@@ -43,9 +29,14 @@ public abstract class AsyncValueLoader<T> {
     return get(true);
   }
 
-  public final T getResult() {
-    //noinspection unchecked
-    return ((Getter<T>)get(true)).get();
+  public final T getResultIfFullFilled() {
+    Promise<T> result = ref.get();
+    try {
+      return (result != null && result.isSucceeded()) ? result.blockingGet(0) : null;
+    }
+    catch (TimeoutException | ExecutionException e) {
+      return null;
+    }
   }
 
   public final void reset() {
@@ -56,14 +47,23 @@ public abstract class AsyncValueLoader<T> {
   }
 
   private void rejectAndDispose(@NotNull AsyncPromise<T> asyncResult) {
-    try {
-      asyncResult.setError("rejected");
+    if (asyncResult.setError("rejected")) {
+      return;
     }
-    finally {
-      T result = asyncResult.get();
-      if (result != null) {
-        disposeResult(result);
-      }
+
+    T result;
+    try {
+      result = asyncResult.blockingGet(0);
+    }
+    catch (TimeoutException e) {
+      throw new RuntimeException(e);
+    }
+    catch (ExecutionException e) {
+      throw new RuntimeException(e.getCause());
+    }
+
+    if (result != null) {
+      disposeResult(result);
     }
   }
 
@@ -73,17 +73,11 @@ public abstract class AsyncValueLoader<T> {
     }
   }
 
-  public final boolean has() {
-    Promise<T> result = ref.get();
-    //noinspection unchecked
-    return result != null && result.getState() == Promise.State.FULFILLED && ((Getter<T>)result).get() != null;
-  }
-
   @NotNull
   public final Promise<T> get(boolean checkFreshness) {
     Promise<T> promise = ref.get();
     if (promise == null) {
-      if (!ref.compareAndSet(null, promise = new AsyncPromise<T>())) {
+      if (!ref.compareAndSet(null, promise = new AsyncPromise<>())) {
         return ref.get();
       }
     }
@@ -93,13 +87,12 @@ public abstract class AsyncValueLoader<T> {
         // if current promise is not processed, so, we don't need to check cache state
         return promise;
       }
-      else if (state == Promise.State.FULFILLED) {
-        //noinspection unchecked
-        if (!checkFreshness || isUpToDate(((Getter<T>)promise).get())) {
+      else if (state == Promise.State.SUCCEEDED) {
+        if (!checkFreshness || isUpToDate()) {
           return promise;
         }
 
-        if (!ref.compareAndSet(promise, promise = new AsyncPromise<T>())) {
+        if (!ref.compareAndSet(promise, promise = new AsyncPromise<>())) {
           Promise<T> valueFromAnotherThread = ref.get();
           while (valueFromAnotherThread == null) {
             if (ref.compareAndSet(null, promise)) {
@@ -141,18 +134,13 @@ public abstract class AsyncValueLoader<T> {
       throw e instanceof RuntimeException ? ((RuntimeException)e) : new RuntimeException(e);
     }
 
-    effectivePromise.done(doneHandler);
+    effectivePromise.onSuccess(doneHandler);
     if (isCancelOnReject()) {
-      effectivePromise.rejected(new Consumer<Throwable>() {
-        @Override
-        public void consume(Throwable throwable) {
-          ref.compareAndSet(effectivePromise, null);
-        }
-      });
+      effectivePromise.onError(throwable -> ref.compareAndSet(effectivePromise, null));
     }
 
     if (effectivePromise != promise) {
-      effectivePromise.notify(promise);
+      effectivePromise.processed(promise);
     }
     return effectivePromise;
   }
@@ -160,13 +148,13 @@ public abstract class AsyncValueLoader<T> {
   @NotNull
   protected abstract Promise<T> load(@NotNull AsyncPromise<T> result) throws IOException;
 
-  protected boolean isUpToDate(@Nullable T result) {
+  private boolean isUpToDate() {
     return loadedModificationCount == modificationCount;
   }
 
   public final void set(@NotNull T result) {
     Promise<T> oldValue = ref.getAndSet(Promise.resolve(result));
-    if (oldValue != null && oldValue instanceof AsyncPromise) {
+    if (oldValue instanceof AsyncPromise) {
       rejectAndDispose((AsyncPromise<T>)oldValue);
     }
   }

@@ -28,7 +28,7 @@ import com.intellij.diff.tools.util.DiffDataKeys;
 import com.intellij.diff.tools.util.SyncScrollSupport;
 import com.intellij.diff.tools.util.SyncScrollSupport.ThreesideSyncScrollSupport;
 import com.intellij.diff.tools.util.base.InitialScrollPositionSupport;
-import com.intellij.diff.tools.util.base.TextDiffSettingsHolder;
+import com.intellij.diff.tools.util.base.TextDiffSettingsHolder.TextDiffSettings;
 import com.intellij.diff.tools.util.base.TextDiffViewerUtil;
 import com.intellij.diff.util.*;
 import com.intellij.openapi.actionSystem.AnAction;
@@ -38,7 +38,6 @@ import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.VisibleAreaEvent;
 import com.intellij.openapi.editor.event.VisibleAreaListener;
 import com.intellij.openapi.editor.ex.EditorEx;
-import com.intellij.openapi.editor.ex.EditorMarkupModel;
 import com.intellij.openapi.util.Pair;
 import com.intellij.pom.Navigatable;
 import com.intellij.util.containers.ContainerUtil;
@@ -73,6 +72,10 @@ public abstract class ThreesideTextDiffViewer extends ThreesideDiffViewer<TextEd
     myEditableEditors = TextDiffViewerUtil.getEditableEditors(getEditors());
 
     TextDiffViewerUtil.checkDifferentDocuments(myRequest);
+
+    for (ThreeSide side : ThreeSide.values()) {
+      DiffUtil.installLineConvertor(getEditor(side), getContent(side));
+    }
   }
 
   @Override
@@ -100,7 +103,6 @@ public abstract class ThreesideTextDiffViewer extends ThreesideDiffViewer<TextEd
     }
 
     ThreeSide.LEFT.select(holders).getEditor().setVerticalScrollbarOrientation(EditorEx.VERTICAL_SCROLLBAR_LEFT);
-    ((EditorMarkupModel)ThreeSide.BASE.select(holders).getEditor().getMarkupModel()).setErrorStripeVisible(false);
 
     for (TextEditorHolder holder : holders) {
       DiffUtil.disableBlitting(holder.getEditor());
@@ -166,7 +168,7 @@ public abstract class ThreesideTextDiffViewer extends ThreesideDiffViewer<TextEd
   //
 
   @NotNull
-  public TextDiffSettingsHolder.TextDiffSettings getTextSettings() {
+  public TextDiffSettings getTextSettings() {
     return TextDiffViewerUtil.getTextSettings(myContext);
   }
 
@@ -321,7 +323,7 @@ public abstract class ThreesideTextDiffViewer extends ThreesideDiffViewer<TextEd
 
   @Nullable
   @Override
-  public Object getData(@NonNls String dataId) {
+  public Object getData(@NotNull @NonNls String dataId) {
     if (DiffDataKeys.CURRENT_EDITOR.is(dataId)) {
       return getCurrentEditor();
     }
@@ -331,12 +333,12 @@ public abstract class ThreesideTextDiffViewer extends ThreesideDiffViewer<TextEd
   private class MyVisibleAreaListener implements VisibleAreaListener {
     @NotNull Side mySide;
 
-    public MyVisibleAreaListener(@NotNull Side side) {
+    MyVisibleAreaListener(@NotNull Side side) {
       mySide = side;
     }
 
     @Override
-    public void visibleAreaChanged(VisibleAreaEvent e) {
+    public void visibleAreaChanged(@NotNull VisibleAreaEvent e) {
       if (mySyncScrollSupport != null) mySyncScrollSupport.visibleAreaChanged(e);
       myContentPanel.repaint();
     }

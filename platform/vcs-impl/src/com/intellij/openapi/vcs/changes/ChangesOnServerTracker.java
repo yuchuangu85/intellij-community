@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,21 @@
  */
 package com.intellij.openapi.vcs.changes;
 
-import com.intellij.lifecycle.AtomicSectionsAware;
-import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.vcs.AbstractVcs;
 import com.intellij.openapi.vcs.VcsListener;
-import com.intellij.util.PlusMinus;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Collection;
 
-public interface ChangesOnServerTracker extends PlusMinus<Pair<String, AbstractVcs>>, VcsListener {
+public interface ChangesOnServerTracker extends VcsListener {
   // todo add vcs parameter???
   void invalidate(final Collection<String> paths);
+
   boolean isUpToDate(final Change change);
+
   boolean updateStep();
+
+  void changeUpdated(@NotNull String path, @NotNull AbstractVcs vcs);
+
+  void changeRemoved(@NotNull String path, @NotNull AbstractVcs vcs);
 }

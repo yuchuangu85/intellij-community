@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.facet.impl.ui;
 
 import com.intellij.facet.ui.FacetEditor;
@@ -27,8 +13,8 @@ import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.ItemListener;
 import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,11 +23,11 @@ import java.util.List;
  */
 public class MultipleFacetEditorHelperImpl implements MultipleFacetEditorHelper {
   private static final Logger LOG = Logger.getInstance("#com.intellij.facet.ui.MultipleFacetSettingsEditor");
-  private final List<AbstractBinding> myBindings = new ArrayList<AbstractBinding>();
+  private final List<AbstractBinding> myBindings = new ArrayList<>();
 
   @Override
   public void bind(@NotNull ThreeStateCheckBox common, @NotNull FacetEditor[] editors, @NotNull NotNullFunction<FacetEditor, JCheckBox> fun) {
-    List<JCheckBox> checkBoxesList = new ArrayList<JCheckBox>();
+    List<JCheckBox> checkBoxesList = new ArrayList<>();
     for (FacetEditor editor : editors) {
       checkBoxesList.add(fun.fun(editor));
     }
@@ -52,7 +38,7 @@ public class MultipleFacetEditorHelperImpl implements MultipleFacetEditorHelper 
 
   @Override
   public void bind(@NotNull JTextField common, @NotNull FacetEditor[] editors, @NotNull NotNullFunction<FacetEditor, JTextField> fun) {
-    List<JTextField> componentsList = new ArrayList<JTextField>();
+    List<JTextField> componentsList = new ArrayList<>();
     for (FacetEditor editor : editors) {
       componentsList.add(fun.fun(editor));
     }
@@ -63,7 +49,7 @@ public class MultipleFacetEditorHelperImpl implements MultipleFacetEditorHelper 
 
   @Override
   public void bind(@NotNull JComboBox common, @NotNull FacetEditor[] editors, @NotNull NotNullFunction<FacetEditor, JComboBox> fun) {
-    List<JComboBox> componentsList = new ArrayList<JComboBox>();
+    List<JComboBox> componentsList = new ArrayList<>();
     for (FacetEditor editor : editors) {
       componentsList.add(fun.fun(editor));
     }
@@ -86,16 +72,16 @@ public class MultipleFacetEditorHelperImpl implements MultipleFacetEditorHelper 
 
   private static class CheckBoxBinding extends AbstractBinding implements ActionListener {
     private final ThreeStateCheckBox myCommon;
-    private final List<JCheckBox> myCheckBoxesList;
+    private final List<? extends JCheckBox> myCheckBoxesList;
     private final List<Boolean> myInitialValues;
 
-    public CheckBoxBinding(final ThreeStateCheckBox common, final List<JCheckBox> checkBoxesList) {
+    CheckBoxBinding(final ThreeStateCheckBox common, final List<? extends JCheckBox> checkBoxesList) {
       LOG.assertTrue(!checkBoxesList.isEmpty());
       myCommon = common;
       myCheckBoxesList = checkBoxesList;
 
       Boolean initialValue = checkBoxesList.get(0).isSelected();
-      myInitialValues = new ArrayList<Boolean>();
+      myInitialValues = new ArrayList<>();
       for (JCheckBox checkBox : checkBoxesList) {
         boolean value = checkBox.isSelected();
         myInitialValues.add(value);
@@ -149,7 +135,7 @@ public class MultipleFacetEditorHelperImpl implements MultipleFacetEditorHelper 
       myCommon = common;
       myTextFields = textFields;
       String initialValue = myTextFields.get(0).getText();
-      myInitialValues = new ArrayList<String>();
+      myInitialValues = new ArrayList<>();
       for (JTextField field : myTextFields) {
         String value = field.getText();
         myInitialValues.add(value);
@@ -161,7 +147,7 @@ public class MultipleFacetEditorHelperImpl implements MultipleFacetEditorHelper 
 
       myListener = new DocumentAdapter() {
         @Override
-        protected void textChanged(final DocumentEvent e) {
+        protected void textChanged(@NotNull final DocumentEvent e) {
           TextFieldBinding.this.textChanged();
         }
       };
@@ -183,10 +169,10 @@ public class MultipleFacetEditorHelperImpl implements MultipleFacetEditorHelper 
 
   private static class CombobBoxBinding extends AbstractBinding implements ItemListener {
     private final JComboBox myCommon;
-    private final List<JComboBox> myComponentsList;
+    private final List<? extends JComboBox> myComponentsList;
     private final List<Object> myInitialValues;
 
-    public CombobBoxBinding(final JComboBox common, final List<JComboBox> componentsList) {
+    CombobBoxBinding(final JComboBox common, final List<? extends JComboBox> componentsList) {
       LOG.assertTrue(!componentsList.isEmpty());
       myCommon = common;
       myComponentsList = componentsList;
@@ -194,7 +180,7 @@ public class MultipleFacetEditorHelperImpl implements MultipleFacetEditorHelper 
       JComboBox first = componentsList.get(0);
       Object initialValue = first.getSelectedItem();
 
-      myInitialValues = new ArrayList<Object>();
+      myInitialValues = new ArrayList<>();
       for (JComboBox component : componentsList) {
         Object item = component.getSelectedItem();
         myInitialValues.add(item);

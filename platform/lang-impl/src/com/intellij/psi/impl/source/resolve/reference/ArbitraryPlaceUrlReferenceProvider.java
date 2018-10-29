@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class ArbitraryPlaceUrlReferenceProvider extends PsiReferenceProvider {
   private static final UserDataCache<CachedValue<PsiReference[]>, PsiElement, Object> ourRefsCache = new UserDataCache<CachedValue<PsiReference[]>, PsiElement, Object>("psielement.url.refs") {
-      private final AtomicReference<GlobalPathReferenceProvider> myReferenceProvider = new AtomicReference<GlobalPathReferenceProvider>();
+      private final AtomicReference<GlobalPathReferenceProvider> myReferenceProvider = new AtomicReference<>();
 
       @Override
       protected CachedValue<PsiReference[]> compute(final PsiElement element, Object p) {
@@ -49,15 +49,15 @@ public class ArbitraryPlaceUrlReferenceProvider extends PsiReferenceProvider {
           GlobalPathReferenceProvider provider = myReferenceProvider.get();
           CharSequence commentText = StringUtil.newBombedCharSequence(element.getText(), 500);
           for (IssueNavigationConfiguration.LinkMatch link : navigationConfiguration.findIssueLinks(commentText)) {
-            if (refs == null) refs = new SmartList<PsiReference>();
+            if (refs == null) refs = new SmartList<>();
             if (provider == null) {
               provider = (GlobalPathReferenceProvider)PathReferenceManager.getInstance().getGlobalWebPathReferenceProvider();
               myReferenceProvider.lazySet(provider);
             }
             provider.createUrlReference(element, link.getTargetUrl(), link.getRange(), refs);
           }
-          PsiReference[] references = refs != null ? refs.toArray(new PsiReference[refs.size()]) : PsiReference.EMPTY_ARRAY;
-          return new CachedValueProvider.Result<PsiReference[]>(references, element, navigationConfiguration);
+          PsiReference[] references = refs != null ? refs.toArray(PsiReference.EMPTY_ARRAY) : PsiReference.EMPTY_ARRAY;
+          return new CachedValueProvider.Result<>(references, element, navigationConfiguration);
         }, false);
       }
     };

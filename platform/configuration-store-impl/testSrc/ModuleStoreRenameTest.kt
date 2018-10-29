@@ -6,17 +6,20 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.runWriteAction
 import com.intellij.openapi.components.StoragePathMacros
 import com.intellij.openapi.components.stateStore
-import com.intellij.openapi.module.ModifiableModuleModel
 import com.intellij.openapi.module.Module
-import com.intellij.openapi.module.ModuleManager
-import com.intellij.openapi.project.ModuleAdapter
+import com.intellij.openapi.project.ModuleListener
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.modifyModules
+import com.intellij.openapi.project.rootManager
+import com.intellij.openapi.roots.ModuleRootModificationUtil
+import com.intellij.openapi.roots.impl.ModuleRootManagerComponent
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.testFramework.*
+import com.intellij.testFramework.assertions.Assertions.assertThat
 import com.intellij.util.Function
 import com.intellij.util.SmartList
-import com.intellij.util.systemIndependentPath
-import org.assertj.core.api.Assertions.assertThat
+import com.intellij.util.io.readText
+import com.intellij.util.io.systemIndependentPath
 import org.junit.ClassRule
 import org.junit.Rule
 import org.junit.Test
@@ -26,31 +29,39 @@ import java.nio.file.Paths
 import java.util.*
 import kotlin.properties.Delegates
 
+private val Module.storage: FileBasedStorage
+  get() = (stateStore.storageManager as StateStorageManagerImpl).getCachedFileStorages(listOf(StoragePathMacros.MODULE_FILE)).first()
+
 internal class ModuleStoreRenameTest {
   companion object {
     @JvmField
-    @ClassRule val projectRule = ProjectRule()
-
-    private val Module.storage: FileBasedStorage
-      get() = (stateStore.stateStorageManager as StateStorageManagerImpl).getCachedFileStorages(listOf(StoragePathMacros.MODULE_FILE)).first()
+    @ClassRule
+    val projectRule = ProjectRule()
   }
 
   var module: Module by Delegates.notNull()
+  var dependentModule: Module by Delegates.notNull()
 
   // we test fireModuleRenamedByVfsEvent
   private val oldModuleNames = SmartList<String>()
 
   private val tempDirManager = TemporaryDirectory()
 
-  private val ruleChain = RuleChain(
+  @Rule
+  @JvmField
+  val ruleChain = RuleChain(
     tempDirManager,
     object : ExternalResource() {
       override fun before() {
         runInEdtAndWait {
-          module = projectRule.createModule(tempDirManager.newPath(refreshVfs = true).resolve("m.iml"))
+          val moduleFileParent = tempDirManager.newPath(refreshVfs = true)
+          module = projectRule.createModule(moduleFileParent.resolve("m.iml"))
+
+          dependentModule = projectRule.createModule(moduleFileParent.resolve("dependent-module.iml"))
+          ModuleRootModificationUtil.addDependency(dependentModule, module)
         }
 
-        module.messageBus.connect().subscribe(ProjectTopics.MODULES, object : ModuleAdapter() {
+        module.messageBus.connect().subscribe(ProjectTopics.MODULES, object : ModuleListener {
           override fun modulesRenamed(project: Project, modules: MutableList<Module>, oldNameProvider: Function<Module, String>) {
             assertThat(modules).containsOnly(module)
             oldModuleNames.add(oldNameProvider.`fun`(module))
@@ -60,7 +71,7 @@ internal class ModuleStoreRenameTest {
 
       // should be invoked after project tearDown
       override fun after() {
-        (ApplicationManager.getApplication().stateStore.stateStorageManager as StateStorageManagerImpl).getVirtualFileTracker()!!.remove {
+        (ApplicationManager.getApplication().stateStore.storageManager as StateStorageManagerImpl).getVirtualFileTracker()!!.remove {
           if (it.storageManager.componentManager == module) {
             throw AssertionError("Storage manager is not disposed, module $module, storage $it")
           }
@@ -68,44 +79,38 @@ internal class ModuleStoreRenameTest {
         }
       }
     },
-    DisposeModulesRule(projectRule)
+    DisposeModulesRule(projectRule),
+    EdtRule()
   )
-
-  @Rule fun getChain() = ruleChain
-
-  fun changeModule(task: ModifiableModuleModel.() -> Unit) {
-    runInEdtAndWait {
-      val model = ModuleManager.getInstance(projectRule.project).modifiableModel
-      runWriteAction {
-        model.task()
-        model.commit()
-      }
-    }
-  }
 
   // project structure
   @Test fun `rename module using model`() {
-    runInEdtAndWait { module.saveStore() }
+    saveModules()
+
     val storage = module.storage
     val oldFile = storage.file
-    assertThat(oldFile).isRegularFile()
+    assertThat(oldFile).isRegularFile
 
     val oldName = module.name
     val newName = "foo"
-    changeModule { renameModule(module, newName) }
+    runInEdtAndWait { projectRule.project.modifyModules { renameModule(module, newName) } }
     assertRename(newName, oldFile)
     assertThat(oldModuleNames).containsOnly(oldName)
   }
 
   // project view
   @Test fun `rename module using rename virtual file`() {
-    runInEdtAndWait { module.saveStore() }
+    testRenameModule()
+  }
+
+  private fun testRenameModule() {
+    saveModules()
     val storage = module.storage
     val oldFile = storage.file
-    assertThat(oldFile).isRegularFile()
+    assertThat(oldFile).isRegularFile
 
     val oldName = module.name
-    val newName = "foo"
+    val newName = "foo.dot"
     runInEdtAndWait { runWriteAction { LocalFileSystem.getInstance().refreshAndFindFileByPath(oldFile.systemIndependentPath)!!.rename(null, "$newName${ModuleFileType.DOT_DEFAULT_EXTENSION}") } }
     assertRename(newName, oldFile)
     assertThat(oldModuleNames).containsOnly(oldName)
@@ -119,14 +124,19 @@ internal class ModuleStoreRenameTest {
     assertThat(oldFile)
       .doesNotExist()
       .isNotEqualTo(newFile)
-    assertThat(newFile).isRegularFile()
+    assertThat(newFile).isRegularFile
 
     // ensure that macro value updated
-    assertThat(module.stateStore.stateStorageManager.expandMacros(StoragePathMacros.MODULE_FILE)).isEqualTo(newFile.systemIndependentPath)
+    assertThat(module.stateStore.storageManager.expandMacros(StoragePathMacros.MODULE_FILE)).isEqualTo(newFile.systemIndependentPath)
+
+    runInEdtAndWait {
+      dependentModule.saveStore()
+    }
+    assertThat(dependentModule.storage.file.readText()).contains("""<orderEntry type="module" module-name="$newName" />""")
   }
 
   @Test fun `rename module parent virtual dir`() {
-    runInEdtAndWait { module.saveStore() }
+    saveModules()
     val storage = module.storage
     val oldFile = storage.file
     val parentVirtualDir = storage.virtualFile!!.parent
@@ -134,12 +144,39 @@ internal class ModuleStoreRenameTest {
 
     val newFile = Paths.get(parentVirtualDir.path, "${module.name}${ModuleFileType.DOT_DEFAULT_EXTENSION}")
     try {
-      assertThat(newFile).isRegularFile()
+      assertThat(newFile).isRegularFile
       assertRename(module.name, oldFile)
       assertThat(oldModuleNames).isEmpty()
+
+      testRenameModule()
     }
     finally {
       runInEdtAndWait { runWriteAction { parentVirtualDir.delete(this) } }
+    }
+  }
+
+  @Test
+  @RunsInEdt
+  fun `rename module source root`() {
+    saveModules()
+    val storage = module.storage
+    val parentVirtualDir = storage.virtualFile!!.parent
+    val src = VfsTestUtil.createDir(parentVirtualDir, "foo")
+    runWriteAction { PsiTestUtil.addSourceContentToRoots(module, src, false) }
+    module.saveStore()
+
+    val rootManager = module.rootManager as ModuleRootManagerComponent
+    val stateModificationCount = rootManager.stateModificationCount
+
+    runWriteAction { src.rename(null, "bar.dot") }
+
+    assertThat(stateModificationCount).isLessThan(rootManager.stateModificationCount)
+  }
+
+  private fun saveModules() {
+    runInEdtAndWait {
+      module.saveStore()
+      dependentModule.saveStore()
     }
   }
 }

@@ -33,7 +33,7 @@ public abstract class BaseExpandToLevelAction extends EditorAction {
   protected BaseExpandToLevelAction(final int level, final boolean expandAll) {
     super(new BaseFoldingHandler() {
       @Override
-      protected void doExecute(final Editor editor, @Nullable Caret caret, DataContext dataContext) {
+      protected void doExecute(@NotNull final Editor editor, @Nullable Caret caret, DataContext dataContext) {
         assert editor.getProject() != null;
         CodeFoldingManager foldingManager = CodeFoldingManager.getInstance(editor.getProject());
         foldingManager.updateFoldRegions(editor);
@@ -60,7 +60,7 @@ public abstract class BaseExpandToLevelAction extends EditorAction {
 
         editor.getFoldingModel().runBatchFoldingOperation(() -> {
           Iterator<FoldRegion> regionTreeIterator = FoldingUtil.createFoldTreeIterator(editor);
-          Deque<FoldRegion> currentStack = new LinkedList<FoldRegion>();
+          Deque<FoldRegion> currentStack = new LinkedList<>();
           while (regionTreeIterator.hasNext()) {
             FoldRegion region = regionTreeIterator.next();
             while (!currentStack.isEmpty() && !isChild(currentStack.peek(), region)) {

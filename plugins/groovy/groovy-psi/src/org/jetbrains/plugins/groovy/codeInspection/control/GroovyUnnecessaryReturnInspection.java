@@ -37,13 +37,6 @@ public class GroovyUnnecessaryReturnInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return CONTROL_FLOW;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Unnecessary 'return' statement";
   }
@@ -75,12 +68,12 @@ public class GroovyUnnecessaryReturnInspection extends BaseInspection {
   private static class UnnecessaryReturnFix extends GroovyFix {
     @Override
     @NotNull
-    public String getName() {
+    public String getFamilyName() {
       return "Remove unnecessary return";
     }
 
     @Override
-    public void doFix(Project project, ProblemDescriptor descriptor) throws IncorrectOperationException {
+    public void doFix(@NotNull Project project, @NotNull ProblemDescriptor descriptor) throws IncorrectOperationException {
       final PsiElement returnKeywordElement = descriptor.getPsiElement();
       final GrReturnStatement returnStatement = (GrReturnStatement) returnKeywordElement.getParent();
       assert returnStatement != null;
@@ -91,7 +84,7 @@ public class GroovyUnnecessaryReturnInspection extends BaseInspection {
   private static class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitReturnStatement(GrReturnStatement returnStatement) {
+    public void visitReturnStatement(@NotNull GrReturnStatement returnStatement) {
       super.visitReturnStatement(returnStatement);
 
       final GrExpression returnValue = returnStatement.getReturnValue();

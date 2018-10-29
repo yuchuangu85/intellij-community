@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,9 @@ package com.intellij.refactoring.extractMethodObject;
 import com.intellij.codeInsight.CodeInsightUtil;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.projectRoots.JavaSdkVersion;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
@@ -29,6 +31,7 @@ import com.intellij.psi.util.PsiUtil;
 import com.intellij.refactoring.extractMethod.AbstractExtractDialog;
 import com.intellij.refactoring.extractMethod.InputVariables;
 import com.intellij.refactoring.extractMethod.PrepareFailedException;
+import com.intellij.refactoring.extractMethodObject.reflect.CompositeReflectionAccessor;
 import com.intellij.refactoring.util.RefactoringUtil;
 import com.intellij.refactoring.util.VariableData;
 import com.intellij.usageView.UsageInfo;
@@ -41,17 +44,19 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 
 public class ExtractLightMethodObjectHandler {
-  private static final Logger LOG = Logger.getInstance("#" + ExtractLightMethodObjectHandler.class.getName());
+  private static final Logger LOG = Logger.getInstance(ExtractLightMethodObjectHandler.class);
 
   public static class ExtractedData {
     private final String myGeneratedCallText;
     private final PsiClass myGeneratedInnerClass;
     private final PsiElement myAnchor;
+    private final boolean myUseMagicAccessor;
 
-    public ExtractedData(String generatedCallText, PsiClass generatedInnerClass, PsiElement anchor) {
+    public ExtractedData(String generatedCallText, PsiClass generatedInnerClass, PsiElement anchor, boolean useMagicAccessor) {
       myGeneratedCallText = generatedCallText;
       myGeneratedInnerClass = generatedInnerClass;
       myAnchor = anchor;
+      myUseMagicAccessor = useMagicAccessor;
     }
 
     public PsiElement getAnchor() {
@@ -65,13 +70,18 @@ public class ExtractLightMethodObjectHandler {
     public PsiClass getGeneratedInnerClass() {
       return myGeneratedInnerClass;
     }
+
+    public boolean useMagicAccessor() {
+      return myUseMagicAccessor;
+    }
   }
 
   @Nullable
   public static ExtractedData extractLightMethodObject(final Project project,
-                                                       final PsiFile file,
+                                                       @Nullable PsiElement originalContext,
                                                        @NotNull final PsiCodeFragment fragment,
-                                                       final String methodName) throws PrepareFailedException {
+                                                       final String methodName,
+                                                       @Nullable JavaSdkVersion javaVersion) throws PrepareFailedException {
     final PsiElementFactory elementFactory = JavaPsiFacade.getElementFactory(project);
     PsiElement[] elements = completeToStatementArray(fragment, elementFactory);
     if (elements == null) {
@@ -81,13 +91,14 @@ public class ExtractLightMethodObjectHandler {
       return null;
     }
 
-    final PsiFile copy = PsiFileFactory.getInstance(project)
-      .createFileFromText(file.getName(), file.getFileType(), file.getText(), file.getModificationStamp(), false);
-
-    PsiElement originalContext = fragment.getContext();
     if (originalContext == null) {
       return null;
     }
+
+    PsiFile file = originalContext.getContainingFile();
+
+    final PsiFile copy = PsiFileFactory.getInstance(project)
+      .createFileFromText(file.getName(), file.getFileType(), file.getText(), file.getModificationStamp(), false);
 
     if (originalContext instanceof PsiKeyword && PsiModifier.PRIVATE.equals(originalContext.getText())) {
       final PsiNameIdentifierOwner identifierOwner = PsiTreeUtil.getParentOfType(originalContext, PsiNameIdentifierOwner.class);
@@ -104,13 +115,23 @@ public class ExtractLightMethodObjectHandler {
     if (originalAnchor == null) {
       final PsiElement elementAt = copy.findElementAt(range.getStartOffset());
       if (elementAt != null && elementAt.getClass() == originalContext.getClass()) {
-        originalAnchor = PsiTreeUtil.skipSiblingsForward(elementAt, PsiWhiteSpace.class);
+        originalAnchor = PsiTreeUtil.skipWhitespacesForward(elementAt);
       }
     }
 
-    final PsiClass containingClass = PsiTreeUtil.getParentOfType(originalAnchor, PsiClass.class);
+    final PsiClass containingClass = PsiTreeUtil.getParentOfType(originalAnchor, PsiClass.class, false);
     if (containingClass == null) {
       return null;
+    }
+
+    // expand lambda to code block if needed
+    PsiElement containingMethod = PsiTreeUtil.getParentOfType(originalAnchor, PsiMember.class, PsiLambdaExpression.class);
+    if (containingMethod instanceof PsiLambdaExpression) {
+      PsiLambdaExpression lambdaExpression = (PsiLambdaExpression)containingMethod;
+      if (lambdaExpression.getBody() instanceof PsiExpression) {
+        PsiCodeBlock newBody = RefactoringUtil.expandExpressionLambdaToCodeBlock(lambdaExpression);
+        originalAnchor = newBody.getStatements()[0];
+      }
     }
 
     PsiElement anchor = RefactoringUtil.getParentStatement(originalAnchor, false);
@@ -120,13 +141,24 @@ public class ExtractLightMethodObjectHandler {
       }
     }
 
-    final PsiElement container;
+    PsiElement container;
     if (anchor == null) {
       container = ((PsiClassInitializer)containingClass.add(elementFactory.createClassInitializer())).getBody();
       anchor = container.getLastChild();
     }
     else {
       container = anchor.getParent();
+    }
+
+    // add code blocks for ifs and loops if needed
+    if (anchor instanceof PsiStatement && RefactoringUtil.isLoopOrIf(container)) {
+      PsiBlockStatement codeBlockStatement =
+        (PsiBlockStatement)JavaPsiFacade.getElementFactory(project).createStatementFromText("{}", container);
+      codeBlockStatement.getCodeBlock().add(anchor);
+      PsiCodeBlock codeBlock = ((PsiBlockStatement)anchor.replace(codeBlockStatement)).getCodeBlock();
+      anchor = codeBlock.getStatements()[0];
+      originalAnchor = anchor;
+      container = codeBlock;
     }
 
     final PsiElement firstElementCopy = container.addRangeBefore(elements[0], elements[elements.length - 1], anchor);
@@ -177,25 +209,30 @@ public class ExtractLightMethodObjectHandler {
     PsiStatement outStatement = elementFactory.createStatementFromText("System.out.println(" + outputVariables + ");", anchor);
     outStatement = (PsiStatement)container.addAfter(outStatement, elementsCopy[elementsCopy.length - 1]);
 
-    copy.accept(new JavaRecursiveElementWalkingVisitor() {
-      private void makePublic(PsiMember method) {
-        if (method.hasModifierProperty(PsiModifier.PRIVATE)) {
-          VisibilityUtil.setVisibility(method.getModifierList(), PsiModifier.PUBLIC);
+    boolean useMagicAccessor = Registry.is("debugger.compiling.evaluator.magic.accessor") &&
+                               javaVersion != null && !javaVersion.isAtLeast(JavaSdkVersion.JDK_1_9);
+    if (useMagicAccessor) {
+      LOG.info("Magic accessor available");
+      copy.accept(new JavaRecursiveElementWalkingVisitor() {
+        private void makePublic(PsiMember method) {
+          if (method.hasModifierProperty(PsiModifier.PRIVATE)) {
+            VisibilityUtil.setVisibility(method.getModifierList(), PsiModifier.PUBLIC);
+          }
         }
-      }
 
-      @Override
-      public void visitMethod(PsiMethod method) {
-        super.visitMethod(method);
-        makePublic(method);
-      }
+        @Override
+        public void visitMethod(PsiMethod method) {
+          super.visitMethod(method);
+          makePublic(method);
+        }
 
-      @Override
-      public void visitField(PsiField field) {
-        super.visitField(field);
-        makePublic(field);
-      }
-    });
+        @Override
+        public void visitField(PsiField field) {
+          super.visitField(field);
+          makePublic(field);
+        }
+      });
+    }
 
     final ExtractMethodObjectProcessor extractMethodObjectProcessor = new ExtractMethodObjectProcessor(project, null, elementsCopy, "") {
       @Override
@@ -234,13 +271,26 @@ public class ExtractLightMethodObjectHandler {
     }
 
     final int startOffset = startOffsetInContainer + container.getTextRange().getStartOffset();
+
+    final PsiClass inner = extractMethodObjectProcessor.getInnerClass();
+    final PsiMethod[] methods = inner.findMethodsByName("invoke", false);
+
+    boolean useReflection = javaVersion == null || javaVersion.isAtLeast(JavaSdkVersion.JDK_1_9) ||
+                            Registry.is("debugger.compiling.evaluator.reflection.access.with.java8");
+    if (useReflection && methods.length == 1) {
+      final PsiMethod method = methods[0];
+      LOG.info("Use reflection to evaluate inaccessible members");
+      CompositeReflectionAccessor.createAccessorToEverything(inner, elementFactory)
+                                 .accessThroughReflection(method);
+    }
+
     final String generatedCall = copy.getText().substring(startOffset, outStatement.getTextOffset());
     return new ExtractedData(generatedCall,
                              (PsiClass)CodeStyleManager.getInstance(project).reformat(extractMethodObjectProcessor.getInnerClass()),
-                             originalAnchor);
+                             originalAnchor, useMagicAccessor);
   }
 
-  @Nullable 
+  @Nullable
   private static PsiElement[] completeToStatementArray(PsiCodeFragment fragment, PsiElementFactory elementFactory) {
     PsiExpression expression = CodeInsightUtil.findExpressionInRange(fragment, 0, fragment.getTextLength());
     if (expression != null) {
@@ -250,8 +300,8 @@ public class ExtractLightMethodObjectHandler {
         if (initializers.length > 0) {
           final PsiType type = initializers[0].getType();
           if (type != null) {
-            completeExpressionText = "new " + type.getCanonicalText() + "[]" + expression.getText(); 
-          } 
+            completeExpressionText = "new " + type.getCanonicalText() + "[]" + expression.getText();
+          }
         }
       } else {
         completeExpressionText = expression.getText();
@@ -277,7 +327,7 @@ public class ExtractLightMethodObjectHandler {
     private final ExtractMethodObjectProcessor myProcessor;
     private final String myMethodName;
 
-    public LightExtractMethodObjectDialog(ExtractMethodObjectProcessor processor, String methodName) {
+    LightExtractMethodObjectDialog(ExtractMethodObjectProcessor processor, String methodName) {
       myProcessor = processor;
       myMethodName = methodName;
     }
@@ -290,18 +340,18 @@ public class ExtractLightMethodObjectHandler {
     @Override
     public VariableData[] getChosenParameters() {
       final InputVariables inputVariables = myProcessor.getExtractProcessor().getInputVariables();
-      return inputVariables.getInputVariables().toArray(new VariableData[inputVariables.getInputVariables().size()]);
+      return inputVariables.getInputVariables().toArray(new VariableData[0]);
     }
 
     @NotNull
     @Override
     public String getVisibility() {
-      return PsiModifier.PUBLIC;
+      return PsiModifier.PACKAGE_LOCAL;
     }
 
     @Override
     public boolean isMakeStatic() {
-      return false;
+      return myProcessor.getExtractProcessor().isCanBeStatic() && !myProcessor.getExtractProcessor().getInputVariables().hasInstanceFields();
     }
 
     @Override

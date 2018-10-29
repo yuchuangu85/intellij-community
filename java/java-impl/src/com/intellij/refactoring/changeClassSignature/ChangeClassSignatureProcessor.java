@@ -53,16 +53,20 @@ public class ChangeClassSignatureProcessor extends BaseRefactoringProcessor {
     myNewSignature = newSignature;
   }
 
+  @Override
   protected void refreshElements(@NotNull PsiElement[] elements) {
     LOG.assertTrue(elements.length == 1);
     LOG.assertTrue(elements[0] instanceof PsiClass);
     myClass = (PsiClass)elements[0];
   }
 
+  @Override
+  @NotNull
   protected String getCommandName() {
     return ChangeClassSignatureDialog.REFACTORING_NAME;
   }
 
+  @Override
   @NotNull
   protected UsageViewDescriptor createUsageViewDescriptor(@NotNull UsageInfo[] usages) {
     return new ChangeClassSigntaureViewDescriptor(myClass);
@@ -70,10 +74,10 @@ public class ChangeClassSignatureProcessor extends BaseRefactoringProcessor {
 
   @Override
   protected boolean preprocessUsages(@NotNull Ref<UsageInfo[]> refUsages) {
-    final MultiMap<PsiElement, String> conflicts = new MultiMap<PsiElement, String>();
+    final MultiMap<PsiElement, String> conflicts = new MultiMap<>();
 
     final PsiTypeParameter[] parameters = myClass.getTypeParameters();
-    final Map<String, TypeParameterInfo> infos = new HashMap<String, TypeParameterInfo>();
+    final Map<String, TypeParameterInfo> infos = new HashMap<>();
     for (TypeParameterInfo info : myNewSignature) {
       final String newName = info.getName(parameters);
       TypeParameterInfo existing = infos.get(newName);
@@ -85,10 +89,11 @@ public class ChangeClassSignatureProcessor extends BaseRefactoringProcessor {
     return showConflicts(conflicts, refUsages.get());
   }
 
+  @Override
   @NotNull
   protected UsageInfo[] findUsages() {
     GlobalSearchScope projectScope = GlobalSearchScope.projectScope(myProject);
-    List<UsageInfo> result = new ArrayList<UsageInfo>();
+    List<UsageInfo> result = new ArrayList<>();
 
     boolean hadTypeParameters = myClass.hasTypeParameters();
     for (final PsiReference reference : ReferencesSearch.search(myClass, projectScope, false)) {
@@ -110,9 +115,10 @@ public class ChangeClassSignatureProcessor extends BaseRefactoringProcessor {
         }
       }
     }
-    return result.toArray(new UsageInfo[result.size()]);
+    return result.toArray(UsageInfo.EMPTY_ARRAY);
   }
 
+  @Override
   protected void performRefactoring(@NotNull UsageInfo[] usages) {
     LocalHistoryAction a = LocalHistory.getInstance().startAction(getCommandName());
     try {
@@ -156,7 +162,7 @@ public class ChangeClassSignatureProcessor extends BaseRefactoringProcessor {
       LOG.assertTrue(usage.getElement() instanceof PsiJavaCodeReferenceElement);
       processUsage(usage, typeParameters, toRemoveParms);
     }
-    final Map<PsiTypeElement, PsiClass> supersMap = new HashMap<PsiTypeElement, PsiClass>();
+    final Map<PsiTypeElement, PsiClass> supersMap = new HashMap<>();
     myClass.accept(new JavaRecursiveElementWalkingVisitor() {
       @Override
       public void visitTypeElement(PsiTypeElement typeElement) {
@@ -180,7 +186,7 @@ public class ChangeClassSignatureProcessor extends BaseRefactoringProcessor {
 
   private void changeClassSignature(final PsiTypeParameter[] originalTypeParameters, boolean[] toRemoveParms)
     throws IncorrectOperationException {
-    List<PsiTypeParameter> newTypeParameters = new ArrayList<PsiTypeParameter>();
+    List<PsiTypeParameter> newTypeParameters = new ArrayList<>();
     for (final TypeParameterInfo info : myNewSignature) {
       newTypeParameters.add(info.getTypeParameter(originalTypeParameters, myProject));
     }
@@ -201,7 +207,7 @@ public class ChangeClassSignatureProcessor extends BaseRefactoringProcessor {
   }
 
   private void processUsage(UsageInfo usage, PsiTypeParameter[] original, boolean[] toRemove) throws IncorrectOperationException {
-    PsiElementFactory factory = JavaPsiFacade.getInstance(myClass.getProject()).getElementFactory();
+    PsiElementFactory factory = JavaPsiFacade.getElementFactory(myClass.getProject());
     PsiJavaCodeReferenceElement referenceElement = (PsiJavaCodeReferenceElement)usage.getElement();
     assert referenceElement != null : usage;
     PsiSubstitutor usageSubstitutor = determineUsageSubstitutor(referenceElement);
@@ -210,7 +216,7 @@ public class ChangeClassSignatureProcessor extends BaseRefactoringProcessor {
     assert referenceParameterList != null : referenceElement;
     PsiTypeElement[] oldValues = referenceParameterList.getTypeParameterElements();
     if (oldValues.length != original.length) return;
-    List<PsiTypeElement> newValues = new ArrayList<PsiTypeElement>();
+    List<PsiTypeElement> newValues = new ArrayList<>();
     for (final TypeParameterInfo info : myNewSignature) {
       if (info instanceof TypeParameterInfo.Existing) {
         newValues.add(oldValues[((TypeParameterInfo.Existing)info).getParameterIndex()]);
@@ -241,6 +247,7 @@ public class ChangeClassSignatureProcessor extends BaseRefactoringProcessor {
   private static class ReferenceParameterList implements ChangeSignatureUtil.ChildrenGenerator<PsiReferenceParameterList, PsiTypeElement> {
     private static final ReferenceParameterList INSTANCE = new ReferenceParameterList();
 
+    @Override
     public List<PsiTypeElement> getChildren(PsiReferenceParameterList list) {
       return Arrays.asList(list.getTypeParameterElements());
     }
@@ -249,6 +256,7 @@ public class ChangeClassSignatureProcessor extends BaseRefactoringProcessor {
   private static class TypeParameterList implements ChangeSignatureUtil.ChildrenGenerator<PsiTypeParameterList, PsiTypeParameter> {
     private static final TypeParameterList INSTANCE = new TypeParameterList();
 
+    @Override
     public List<PsiTypeParameter> getChildren(PsiTypeParameterList psiTypeParameterList) {
       return Arrays.asList(psiTypeParameterList.getTypeParameters());
     }

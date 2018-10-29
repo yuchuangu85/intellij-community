@@ -42,12 +42,6 @@ public class GroovyConditionalCanBeElvisInspection extends BaseInspection {
   }
 
   @Override
-  @NotNull
-  public String getGroupDisplayName() {
-    return CONTROL_FLOW;
-  }
-
-  @Override
   public String buildErrorString(Object... args) {
     return "Conditional expression can be elvis #loc";
   }
@@ -57,12 +51,12 @@ public class GroovyConditionalCanBeElvisInspection extends BaseInspection {
     return new GroovyFix() {
       @Override
       @NotNull
-      public String getName() {
+      public String getFamilyName() {
         return "Convert Conditional to Elvis";
       }
 
       @Override
-      public void doFix(Project project, ProblemDescriptor descriptor) throws IncorrectOperationException {
+      public void doFix(@NotNull Project project, @NotNull ProblemDescriptor descriptor) throws IncorrectOperationException {
         final GrConditionalExpression expr = (GrConditionalExpression)descriptor.getPsiElement();
 
         final GrExpression condition = expr.getCondition();
@@ -138,7 +132,7 @@ public class GroovyConditionalCanBeElvisInspection extends BaseInspection {
 
     return resolved instanceof PsiMethod &&
            "isEmpty".equals(((PsiMethod)resolved).getName()) &&
-           ((PsiMethod)resolved).getParameterList().getParametersCount() == 0;
+           ((PsiMethod)resolved).getParameterList().isEmpty();
   }
 
   /**
@@ -172,7 +166,7 @@ public class GroovyConditionalCanBeElvisInspection extends BaseInspection {
 
     return resolved instanceof PsiMethod &&
            "isEmpty".equals(((PsiMethod)resolved).getName()) &&
-           ((PsiMethod)resolved).getParameterList().getParametersCount() == 0;
+           ((PsiMethod)resolved).getParameterList().isEmpty();
   }
 
   private static boolean checkForNull(GrExpression condition, GrExpression then) {
@@ -201,7 +195,7 @@ public class GroovyConditionalCanBeElvisInspection extends BaseInspection {
 
   private static class Visitor extends BaseInspectionVisitor {
     @Override
-    public void visitConditionalExpression(GrConditionalExpression expression) {
+    public void visitConditionalExpression(@NotNull GrConditionalExpression expression) {
       super.visitConditionalExpression(expression);
       if (checkPsiElement(expression)) {
         registerError(expression);

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.java.decompiler.modules.decompiler.sforms;
 
 import org.jetbrains.java.decompiler.modules.decompiler.exps.Exprent;
@@ -27,24 +13,24 @@ import java.util.List;
 
 public class DirectGraph {
 
-  public final VBStyleCollection<DirectNode, String> nodes = new VBStyleCollection<DirectNode, String>();
+  public final VBStyleCollection<DirectNode, String> nodes = new VBStyleCollection<>();
 
   public DirectNode first;
 
   // exit, [source, destination]
-  public final HashMap<String, List<FinallyPathWrapper>> mapShortRangeFinallyPaths = new HashMap<String, List<FinallyPathWrapper>>();
+  public final HashMap<String, List<FinallyPathWrapper>> mapShortRangeFinallyPaths = new HashMap<>();
 
   // exit, [source, destination]
-  public final HashMap<String, List<FinallyPathWrapper>> mapLongRangeFinallyPaths = new HashMap<String, List<FinallyPathWrapper>>();
+  public final HashMap<String, List<FinallyPathWrapper>> mapLongRangeFinallyPaths = new HashMap<>();
 
   // negative if branches (recorded for handling of && and ||)
-  public final HashMap<String, String> mapNegIfBranch = new HashMap<String, String>();
+  public final HashMap<String, String> mapNegIfBranch = new HashMap<>();
 
   // nodes, that are exception exits of a finally block with monitor variable
-  public final HashMap<String, String> mapFinallyMonitorExceptionPathExits = new HashMap<String, String>();
+  public final HashMap<String, String> mapFinallyMonitorExceptionPathExits = new HashMap<>();
 
   public void sortReversePostOrder() {
-    LinkedList<DirectNode> res = new LinkedList<DirectNode>();
+    LinkedList<DirectNode> res = new LinkedList<>();
     addToReversePostOrderListIterative(first, res);
 
     nodes.clear();
@@ -55,10 +41,10 @@ public class DirectGraph {
 
   private static void addToReversePostOrderListIterative(DirectNode root, List<DirectNode> lst) {
 
-    LinkedList<DirectNode> stackNode = new LinkedList<DirectNode>();
-    LinkedList<Integer> stackIndex = new LinkedList<Integer>();
+    LinkedList<DirectNode> stackNode = new LinkedList<>();
+    LinkedList<Integer> stackIndex = new LinkedList<>();
 
-    HashSet<DirectNode> setVisited = new HashSet<DirectNode>();
+    HashSet<DirectNode> setVisited = new HashSet<>();
 
     stackNode.add(root);
     stackIndex.add(0);
@@ -94,10 +80,10 @@ public class DirectGraph {
 
   public boolean iterateExprents(ExprentIterator iter) {
 
-    LinkedList<DirectNode> stack = new LinkedList<DirectNode>();
+    LinkedList<DirectNode> stack = new LinkedList<>();
     stack.add(first);
 
-    HashSet<DirectNode> setVisited = new HashSet<DirectNode>();
+    HashSet<DirectNode> setVisited = new HashSet<>();
 
     while (!stack.isEmpty()) {
 

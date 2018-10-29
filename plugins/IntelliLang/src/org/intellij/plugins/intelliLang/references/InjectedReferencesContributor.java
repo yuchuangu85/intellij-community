@@ -15,13 +15,13 @@
  */
 package org.intellij.plugins.intelliLang.references;
 
+import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.patterns.PlatformPatterns;
 import com.intellij.psi.*;
-import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
 import com.intellij.psi.impl.source.tree.injected.InjectedReferenceVisitor;
 import com.intellij.psi.injection.ReferenceInjector;
 import com.intellij.util.ProcessingContext;
@@ -41,11 +41,14 @@ import java.util.List;
 
 /**
  * @author Dmitry Avdeev
- *         Date: 01.08.13
  */
 public class InjectedReferencesContributor extends PsiReferenceContributor {
-
   private static final Key<PsiReference[]> INJECTED_REFERENCES = Key.create("injected references");
+  private final ReferenceInjector[] myExtensions;
+
+  InjectedReferencesContributor() {
+    myExtensions = ReferenceInjector.EXTENSION_POINT_NAME.getExtensions();
+  }
 
   public static boolean isInjected(@Nullable PsiReference reference) {
     return reference != null && reference.getElement().getUserData(INJECTED_REFERENCES) != null;
@@ -63,12 +66,11 @@ public class InjectedReferencesContributor extends PsiReferenceContributor {
       @NotNull
       @Override
       public PsiReference[] getReferencesByElement(@NotNull final PsiElement element, @NotNull final ProcessingContext context) {
-        ReferenceInjector[] extensions = ReferenceInjector.EXTENSION_POINT_NAME.getExtensions();
-        final List<PsiReference> references = new SmartList<PsiReference>();
+        final List<PsiReference> references = new SmartList<>();
         Project project = element.getProject();
         Configuration configuration = Configuration.getProjectInstance(project);
-        final Ref<Boolean> injected = new Ref<Boolean>(Boolean.FALSE);
-        for (ReferenceInjector injector : extensions) {
+        final Ref<Boolean> injected = new Ref<>(Boolean.FALSE);
+        for (ReferenceInjector injector : myExtensions) {
           Collection<BaseInjection> injections = configuration.getInjectionsByLanguageId(injector.getId());
           for (BaseInjection injection : injections) {
             if (injection.acceptForReference(element)) {
@@ -95,21 +97,23 @@ public class InjectedReferencesContributor extends PsiReferenceContributor {
             }
           }
           else {
-            InjectedLanguageUtil.enumerate(element, element.getContainingFile(), false, new InjectedReferenceVisitor() {
-              @Override
-              public void visitInjectedReference(@NotNull ReferenceInjector injector, @NotNull List<PsiLanguageInjectionHost.Shred> places) {
-                  injected.set(Boolean.TRUE);
-                  element.putUserData(LanguageInjectionSupport.INJECTOR_SUPPORT, registry.getLanguageInjectionSupport());
-                  for (PsiLanguageInjectionHost.Shred place : places) {
-                    if (place.getHost() == element) {
-                      references.addAll(Arrays.asList(injector.getReferences(element, context, place.getRangeInsideHost())));
-                    }
-                  }
-              }
-            });
+            PsiFile containingFile = element.getContainingFile();
+            InjectedLanguageManager
+              .getInstance(containingFile.getProject()).enumerateEx(element, containingFile, false, new InjectedReferenceVisitor() {
+                      @Override
+                      public void visitInjectedReference(@NotNull ReferenceInjector injector, @NotNull List<? extends PsiLanguageInjectionHost.Shred> places) {
+                          injected.set(Boolean.TRUE);
+                          element.putUserData(LanguageInjectionSupport.INJECTOR_SUPPORT, registry.getLanguageInjectionSupport());
+                          for (PsiLanguageInjectionHost.Shred place : places) {
+                            if (place.getHost() == element) {
+                              references.addAll(Arrays.asList(injector.getReferences(element, context, place.getRangeInsideHost())));
+                            }
+                          }
+                      }
+                    });
           }
         }
-        PsiReference[] array = references.toArray(new PsiReference[references.size()]);
+        PsiReference[] array = references.toArray(PsiReference.EMPTY_ARRAY);
         element.putUserData(INJECTED_REFERENCES, injected.get() ? array : null);
         return array;
       }

@@ -1,17 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
  */
 package com.intellij.codeInspection.i18n;
 
@@ -24,18 +12,17 @@ import com.intellij.lang.properties.psi.PropertyCreationHandler;
 import com.intellij.lang.properties.references.I18nUtil;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.*;
-import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.psi.scope.util.PsiScopesUtil;
-import com.intellij.psi.util.*;
-import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.containers.HashMap;
+import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.util.TypeConversionUtil;
+import com.intellij.util.ArrayUtil;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.uast.*;
 
 import java.text.MessageFormat;
 import java.util.*;
@@ -44,13 +31,8 @@ import java.util.*;
  * @author max
  */
 public class JavaI18nUtil extends I18nUtil {
-  public static final PropertyCreationHandler DEFAULT_PROPERTY_CREATION_HANDLER = new PropertyCreationHandler() {
-    @Override
-    public void createProperty(final Project project, final Collection<PropertiesFile> propertiesFiles, final String key, final String value,
-                               final PsiExpression[] parameters) throws IncorrectOperationException {
-      I18nUtil.createProperty(project, propertiesFiles, key, value);
-    }
-  };
+  public static final PropertyCreationHandler DEFAULT_PROPERTY_CREATION_HANDLER =
+    (project, propertiesFiles, key, value, parameters) -> createProperty(project, propertiesFiles, key, value, true);
 
   private JavaI18nUtil() {
   }
@@ -63,29 +45,49 @@ public class JavaI18nUtil extends I18nUtil {
       return new TextRange(editor.getSelectionModel().getSelectionStart(), editor.getSelectionModel().getSelectionEnd());
     }
     PsiElement psiElement = psiFile.findElementAt(editor.getCaretModel().getOffset());
-    if (psiElement==null || psiElement instanceof PsiWhiteSpace) return null;
+    if (psiElement == null || psiElement instanceof PsiWhiteSpace) return null;
     return psiElement.getTextRange();
   }
 
-  public static boolean mustBePropertyKey(@NotNull PsiExpression expression,
-                                          @NotNull Map<String, Object> annotationAttributeValues) {
-    final PsiElement parent = expression.getParent();
+  public static boolean mustBePropertyKey(@NotNull PsiExpression expression, @Nullable Ref<? super PsiAnnotationMemberValue> resourceBundleRef) {
+    PsiElement parent = expression.getParent();
     if (parent instanceof PsiVariable) {
       final PsiAnnotation annotation = AnnotationUtil.findAnnotation((PsiVariable)parent, AnnotationUtil.PROPERTY_KEY);
       if (annotation != null) {
-        return processAnnotationAttributes(annotationAttributeValues, annotation);
+        processAnnotationAttributes(resourceBundleRef, annotation);
+        return true;
       }
     }
-    return isPassedToAnnotatedParam(expression, AnnotationUtil.PROPERTY_KEY, annotationAttributeValues, null);
+    return isPassedToAnnotatedParam(expression, AnnotationUtil.PROPERTY_KEY, resourceBundleRef, null);
+  }
+
+  public static boolean mustBePropertyKey(@NotNull ULiteralExpression expression, @Nullable Ref<? super UExpression> resourceBundleRef) {
+    final UElement parent = expression.getUastParent();
+    if (parent instanceof UVariable) {
+      UAnnotation annotation = ((UVariable)parent).findAnnotation(AnnotationUtil.PROPERTY_KEY);
+      if (annotation != null) {
+        processAnnotationAttributes(resourceBundleRef, annotation);
+        return true;
+      }
+    }
+
+    UCallExpression callExpression = UastUtils.getUCallExpression(expression);
+    if (callExpression == null) return false;
+    PsiMethod psiMethod = callExpression.resolve();
+    if (psiMethod == null) return false;
+    PsiParameter parameter = UastUtils.getParameterForArgument(callExpression, expression);
+    if (parameter == null) return false;
+    int paramIndex = ArrayUtil.indexOf(psiMethod.getParameterList().getParameters(), parameter);
+    if (paramIndex == -1) return false;
+    return isMethodParameterAnnotatedWith(psiMethod, paramIndex, null, AnnotationUtil.PROPERTY_KEY, null, null);
   }
 
   static boolean isPassedToAnnotatedParam(@NotNull PsiExpression expression,
                                           final String annFqn,
-                                          @Nullable Map<String, Object> annotationAttributeValues,
-                                          @Nullable final Set<PsiModifierListOwner> nonNlsTargets) {
+                                          @Nullable Ref<? super PsiAnnotationMemberValue> resourceBundleRef,
+                                          @Nullable final Set<? super PsiModifierListOwner> nonNlsTargets) {
     expression = getTopLevelExpression(expression);
     final PsiElement parent = expression.getParent();
-
     if (!(parent instanceof PsiExpressionList)) return false;
     int idx = -1;
     final PsiExpression[] args = ((PsiExpressionList)parent).getExpressions();
@@ -106,9 +108,7 @@ public class JavaI18nUtil extends I18nUtil {
 
     if (grParent instanceof PsiCall) {
       PsiMethod method = ((PsiCall)grParent).resolveMethod();
-      if (method != null && isMethodParameterAnnotatedWith(method, idx, null, annFqn, annotationAttributeValues, nonNlsTargets)) {
-        return true;
-      }
+      return method != null && isMethodParameterAnnotatedWith(method, idx, null, annFqn, resourceBundleRef, nonNlsTargets);
     }
 
     return false;
@@ -119,7 +119,9 @@ public class JavaI18nUtil extends I18nUtil {
     while (expression.getParent() instanceof PsiExpression) {
       final PsiExpression parent = (PsiExpression)expression.getParent();
       if (parent instanceof PsiConditionalExpression &&
-          ((PsiConditionalExpression)parent).getCondition() == expression) break;
+          ((PsiConditionalExpression)parent).getCondition() == expression) {
+        break;
+      }
       expression = parent;
       if (expression instanceof PsiAssignmentExpression) break;
     }
@@ -128,15 +130,15 @@ public class JavaI18nUtil extends I18nUtil {
 
   static boolean isMethodParameterAnnotatedWith(final PsiMethod method,
                                                 final int idx,
-                                                @Nullable Collection<PsiMethod> processed,
+                                                @Nullable Collection<? super PsiMethod> processed,
                                                 final String annFqn,
-                                                @Nullable Map<String, Object> annotationAttributeValues,
-                                                @Nullable final Set<PsiModifierListOwner> nonNlsTargets) {
+                                                @Nullable Ref<? super PsiAnnotationMemberValue> resourceBundleRef,
+                                                @Nullable final Set<? super PsiModifierListOwner> nonNlsTargets) {
     if (processed != null) {
       if (processed.contains(method)) return false;
     }
     else {
-      processed = new THashSet<PsiMethod>();
+      processed = new THashSet<>();
     }
     processed.add(method);
 
@@ -146,7 +148,7 @@ public class JavaI18nUtil extends I18nUtil {
       if (params.length == 0) {
         return false;
       }
-      PsiParameter lastParam = params [params.length-1];
+      PsiParameter lastParam = params[params.length - 1];
       if (lastParam.isVarArgs()) {
         param = lastParam;
       }
@@ -159,7 +161,8 @@ public class JavaI18nUtil extends I18nUtil {
     }
     final PsiAnnotation annotation = AnnotationUtil.findAnnotation(param, annFqn);
     if (annotation != null) {
-      return processAnnotationAttributes(annotationAttributeValues, annotation);
+      processAnnotationAttributes(resourceBundleRef, annotation);
+      return true;
     }
     if (nonNlsTargets != null) {
       nonNlsTargets.add(param);
@@ -167,34 +170,45 @@ public class JavaI18nUtil extends I18nUtil {
 
     final PsiMethod[] superMethods = method.findSuperMethods();
     for (PsiMethod superMethod : superMethods) {
-      if (isMethodParameterAnnotatedWith(superMethod, idx, processed, annFqn, annotationAttributeValues, null)) return true;
+      if (isMethodParameterAnnotatedWith(superMethod, idx, processed, annFqn, resourceBundleRef, null)) return true;
     }
 
     return false;
   }
 
-  private static boolean processAnnotationAttributes(@Nullable Map<String, Object> annotationAttributeValues, @NotNull PsiAnnotation annotation) {
-    if (annotationAttributeValues != null) {
+  private static void processAnnotationAttributes(@Nullable Ref<? super PsiAnnotationMemberValue> resourceBundleRef,
+                                                  @NotNull PsiAnnotation annotation) {
+    if (resourceBundleRef != null) {
       final PsiAnnotationParameterList parameterList = annotation.getParameterList();
       final PsiNameValuePair[] attributes = parameterList.getAttributes();
       for (PsiNameValuePair attribute : attributes) {
         final String name = attribute.getName();
-        if (annotationAttributeValues.containsKey(name)) {
-          annotationAttributeValues.put(name, attribute.getValue());
+        if (AnnotationUtil.PROPERTY_KEY_RESOURCE_BUNDLE_PARAMETER.equals(name)) {
+          resourceBundleRef.set(attribute.getValue());
         }
       }
     }
-    return true;
+  }
+
+  private static void processAnnotationAttributes(@Nullable Ref<? super UExpression> resourceBundleRef,
+                                                  @NotNull UAnnotation annotation) {
+    if (resourceBundleRef != null) {
+      for (UNamedExpression attribute : annotation.getAttributeValues()) {
+        final String name = attribute.getName();
+        if (AnnotationUtil.PROPERTY_KEY_RESOURCE_BUNDLE_PARAMETER.equals(name)) {
+          resourceBundleRef.set(attribute.getExpression());
+        }
+      }
+    }
   }
 
   static boolean isValidPropertyReference(@NotNull Project project,
                                           @NotNull PsiExpression expression,
                                           @NotNull String key,
-                                          @NotNull Ref<String> outResourceBundle) {
-    final HashMap<String, Object> annotationAttributeValues = new HashMap<String, Object>();
-    annotationAttributeValues.put(AnnotationUtil.PROPERTY_KEY_RESOURCE_BUNDLE_PARAMETER, null);
-    if (mustBePropertyKey(expression, annotationAttributeValues)) {
-      final Object resourceBundleName = annotationAttributeValues.get(AnnotationUtil.PROPERTY_KEY_RESOURCE_BUNDLE_PARAMETER);
+                                          @NotNull Ref<? super String> outResourceBundle) {
+    Ref<PsiAnnotationMemberValue> resourceBundleRef = Ref.create();
+    if (mustBePropertyKey(expression, resourceBundleRef)) {
+      final Object resourceBundleName = resourceBundleRef.get();
       if (!(resourceBundleName instanceof PsiExpression)) {
         return false;
       }
@@ -234,21 +248,16 @@ public class JavaI18nUtil extends I18nUtil {
   @Nullable
   private static ResourceBundle resolveResourceBundleByKey(@NotNull final String key, @NotNull final Project project) {
     final Ref<ResourceBundle> bundleRef = Ref.create();
-    final boolean r = PropertiesReferenceManager.getInstance(project).processAllPropertiesFiles(new PropertiesFileProcessor() {
-      @Override
-      public boolean process(String baseName, PropertiesFile propertiesFile) {
-        if (propertiesFile.findPropertyByKey(key) != null) {
-          if (bundleRef.get() == null) {
-            bundleRef.set(propertiesFile.getResourceBundle());
-          }
-          else {
-            if (!bundleRef.get().equals(propertiesFile.getResourceBundle())) {
-              return false;
-            }
-          }
+    final boolean r = PropertiesReferenceManager.getInstance(project).processAllPropertiesFiles((baseName, propertiesFile) -> {
+      if (propertiesFile.findPropertyByKey(key) != null) {
+        if (bundleRef.get() == null) {
+          bundleRef.set(propertiesFile.getResourceBundle());
         }
-        return true;
+        else {
+          return bundleRef.get().equals(propertiesFile.getResourceBundle());
+        }
       }
+      return true;
     });
     return r ? bundleRef.get() : null;
   }
@@ -269,11 +278,12 @@ public class JavaI18nUtil extends I18nUtil {
 
   public static Set<String> suggestExpressionOfType(final PsiClassType type, final PsiLiteralExpression context) {
     PsiVariable[] variables = MacroUtil.getVariablesVisibleAt(context, "");
-    Set<String> result = new LinkedHashSet<String>();
+    Set<String> result = new LinkedHashSet<>();
     for (PsiVariable var : variables) {
       PsiType varType = var.getType();
-      if (type == null || type.isAssignableFrom(varType)) {
-        result.add(var.getNameIdentifier().getText());
+      PsiIdentifier identifier = var.getNameIdentifier();
+      if ((type == null || type.isAssignableFrom(varType)) && identifier != null) {
+        result.add(identifier.getText());
       }
     }
 
@@ -287,30 +297,19 @@ public class JavaI18nUtil extends I18nUtil {
     return result;
   }
 
-  private static void addAvailableMethodsOfType(final PsiClassType type, final PsiLiteralExpression context, final Collection<String> result) {
-    PsiScopesUtil.treeWalkUp(new PsiScopeProcessor() {
-      @Override
-      public boolean execute(@NotNull PsiElement element, @NotNull ResolveState state) {
-        if (element instanceof PsiMethod) {
-          PsiMethod method = (PsiMethod)element;
-          PsiType returnType = method.getReturnType();
-          if (returnType != null && TypeConversionUtil.isAssignable(type, returnType)
-              && method.getParameterList().getParametersCount() == 0) {
-            result.add(method.getName() + "()");
-          }
+  private static void addAvailableMethodsOfType(final PsiClassType type,
+                                                final PsiLiteralExpression context,
+                                                final Collection<? super String> result) {
+    PsiScopesUtil.treeWalkUp((element, state) -> {
+      if (element instanceof PsiMethod) {
+        PsiMethod method = (PsiMethod)element;
+        PsiType returnType = method.getReturnType();
+        if (returnType != null && TypeConversionUtil.isAssignable(type, returnType)
+            && method.getParameterList().isEmpty()) {
+          result.add(method.getName() + "()");
         }
-        return true;
       }
-
-      @Override
-      public <T> T getHint(@NotNull Key<T> hintKey) {
-        return null;
-      }
-
-      @Override
-      public void handleEvent(@NotNull Event event, Object associated) {
-
-      }
+      return true;
     }, context, null);
   }
 
@@ -325,7 +324,8 @@ public class JavaI18nUtil extends I18nUtil {
   public static int getPropertyValuePlaceholdersCount(@NotNull final String propertyValue) {
     try {
       return new MessageFormat(propertyValue).getFormatsByArgumentIndex().length;
-    } catch (final IllegalArgumentException e) {
+    }
+    catch (final IllegalArgumentException e) {
       return 0;
     }
   }
@@ -335,18 +335,14 @@ public class JavaI18nUtil extends I18nUtil {
    *
    * <i>Class {0} info: Class {0} extends class {1} and implements interface {2}</i> in one translation of property
    * <i>Class {0} info: Class {0} extends class {1} </i> in other translation of property
-   *
+   * <p>
    * number of parameters is 3.
    *
    * @param expression i18n literal
    * @return number of parameters
    */
-  public static int getPropertyValueParamsMaxCount(@NotNull final PsiExpression expression) {
-    return getPropertyValueParamsMaxCount(expression, null);
-  }
-
-  private static int getPropertyValueParamsMaxCount(@NotNull final PsiExpression expression, @Nullable final String resourceBundleName) {
-    final SortedSet<Integer> paramsCount = getPropertyValueParamsCount(expression, resourceBundleName);
+  public static int getPropertyValueParamsMaxCount(@NotNull final UExpression expression) {
+    final SortedSet<Integer> paramsCount = getPropertyValueParamsCount(expression, null);
     if (paramsCount.isEmpty()) {
       return -1;
     }
@@ -354,25 +350,36 @@ public class JavaI18nUtil extends I18nUtil {
   }
 
   @NotNull
-  static SortedSet<Integer> getPropertyValueParamsCount(@NotNull final PsiExpression expression, @Nullable final String resourceBundleName) {
-    final PsiLiteralExpression literalExpression;
-    if (expression instanceof PsiLiteralExpression) {
-      literalExpression = (PsiLiteralExpression)expression;
-    } else if (expression instanceof PsiReferenceExpression) {
-      final PsiElement resolved = ((PsiReferenceExpression)expression).resolve();
+  static SortedSet<Integer> getPropertyValueParamsCount(@NotNull final PsiExpression expression,
+                                                        @Nullable final String resourceBundleName) {
+    UExpression uExpression = UastContextKt.toUElement(expression, UExpression.class);
+    if (uExpression == null) return new TreeSet<>();
+    return getPropertyValueParamsCount(uExpression, resourceBundleName);
+  }
+
+  @NotNull
+  private static SortedSet<Integer> getPropertyValueParamsCount(@NotNull final UExpression expression,
+                                                                @Nullable final String resourceBundleName) {
+    final ULiteralExpression literalExpression;
+    if (expression instanceof ULiteralExpression) {
+      literalExpression = (ULiteralExpression)expression;
+    }
+    else if (expression instanceof UReferenceExpression) {
+      final PsiElement resolved = ((UReferenceExpression)expression).resolve();
       final PsiField field = resolved == null ? null : (PsiField)resolved;
       literalExpression =
         field != null && field.hasModifierProperty(PsiModifier.FINAL) && field.getInitializer() instanceof PsiLiteralExpression
-        ? (PsiLiteralExpression)field.getInitializer()
+        ? UastContextKt.toUElement(field.getInitializer(), ULiteralExpression.class)
         : null;
-    } else {
+    }
+    else {
       literalExpression = null;
     }
-    final TreeSet<Integer> paramsCount = new TreeSet<Integer>();
+    final TreeSet<Integer> paramsCount = new TreeSet<>();
     if (literalExpression == null) {
       return paramsCount;
     }
-    for (PsiReference reference : literalExpression.getReferences()) {
+    for (PsiReference reference : UastLiteralUtils.getInjectedReferences(literalExpression)) {
       if (reference instanceof PsiPolyVariantReference) {
         for (ResolveResult result : ((PsiPolyVariantReference)reference).multiResolve(false)) {
           if (result.isValidResult() && result.getElement() instanceof IProperty) {

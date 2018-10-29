@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,13 +19,10 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.vcs.merge.MergeData
 import com.intellij.openapi.vcs.merge.MergeProvider2
 import com.intellij.openapi.vcs.merge.MergeSession
-import com.intellij.openapi.vfs.CharsetToolkit
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.ArrayUtil
 import com.intellij.util.ui.ColumnInfo
 import org.eclipse.jgit.lib.Repository
-import org.jetbrains.jgit.dirCache.deletePath
-import org.jetbrains.jgit.dirCache.writePath
 import org.jetbrains.settingsRepository.RepositoryVirtualFile
 import java.nio.CharBuffer
 import java.util.*
@@ -49,11 +46,11 @@ class JGitMergeProvider<T>(private val repository: Repository, private val confl
   override fun conflictResolvedForFile(file: VirtualFile) {
     // we can postpone dir cache update (on merge dialog close) to reduce number of flush, but it can leads to data loss (if app crashed during merge - nothing will be saved)
     // update dir cache
-    val bytes = (file as RepositoryVirtualFile).content
+    val bytes = (file as RepositoryVirtualFile).byteContent
     // not null if user accepts some revision (virtual file will be directly modified), otherwise document will be modified
     if (bytes == null) {
       val chars = FileDocumentManager.getInstance().getCachedDocument(file)!!.immutableCharSequence
-      val byteBuffer = CharsetToolkit.UTF8_CHARSET.encode(CharBuffer.wrap(chars))
+      val byteBuffer = Charsets.UTF_8.encode(CharBuffer.wrap(chars))
       addFile(byteBuffer.array(), file, byteBuffer.remaining())
     }
     else {
@@ -65,7 +62,7 @@ class JGitMergeProvider<T>(private val repository: Repository, private val confl
     repository.writePath(file.path, bytes, size)
   }
 
-  override fun isBinary(file: VirtualFile) = file.fileType.isBinary
+  override fun isBinary(file: VirtualFile): Boolean = file.fileType.isBinary
 
   override fun loadRevisions(file: VirtualFile): MergeData {
     val path = file.path

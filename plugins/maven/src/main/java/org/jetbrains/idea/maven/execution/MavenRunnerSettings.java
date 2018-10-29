@@ -20,7 +20,7 @@ package org.jetbrains.idea.maven.execution;
 
 import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkUtil;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.HashMap;
+import java.util.HashMap;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -35,16 +35,25 @@ public class MavenRunnerSettings implements Cloneable {
   @NonNls public static final String USE_PROJECT_JDK = ExternalSystemJdkUtil.USE_PROJECT_JDK;
   @NonNls public static final String USE_JAVA_HOME = ExternalSystemJdkUtil.USE_JAVA_HOME;
 
+  private boolean delegateBuildToMaven = false;
   private boolean runMavenInBackground = true;
   @NotNull private String jreName = USE_PROJECT_JDK;
   @NotNull private String vmOptions = "";
   private boolean skipTests = false;
-  private Map<String, String> mavenProperties = new LinkedHashMap<String, String>();
+  private Map<String, String> mavenProperties = new LinkedHashMap<>();
 
-  private Map<String, String> environmentProperties = new HashMap<String, String>();
+  private Map<String, String> environmentProperties = new HashMap<>();
   private boolean passParentEnv = true;
 
   private List<Listener> myListeners = ContainerUtil.createLockFreeCopyOnWriteList();
+
+  public boolean isDelegateBuildToMaven() {
+    return delegateBuildToMaven;
+  }
+
+  public void setDelegateBuildToMaven(boolean delegateBuildToMaven) {
+    this.delegateBuildToMaven = delegateBuildToMaven;
+  }
 
   public boolean isRunMavenInBackground() {
     return runMavenInBackground;
@@ -138,6 +147,7 @@ public class MavenRunnerSettings implements Cloneable {
 
     final MavenRunnerSettings that = (MavenRunnerSettings)o;
 
+    if (delegateBuildToMaven != that.delegateBuildToMaven) return false;
     if (runMavenInBackground != that.runMavenInBackground) return false;
     if (skipTests != that.skipTests) return false;
     if (!jreName.equals(that.jreName)) return false;
@@ -151,7 +161,8 @@ public class MavenRunnerSettings implements Cloneable {
 
   public int hashCode() {
     int result;
-    result = (runMavenInBackground ? 1 : 0);
+    result = (delegateBuildToMaven ? 1 : 0);
+    result = 31 * result + (runMavenInBackground ? 1 : 0);
     result = 31 * result + jreName.hashCode();
     result = 31 * result + vmOptions.hashCode();
     result = 31 * result + (skipTests ? 1 : 0);
@@ -166,7 +177,7 @@ public class MavenRunnerSettings implements Cloneable {
       final MavenRunnerSettings clone = (MavenRunnerSettings)super.clone();
       clone.mavenProperties = cloneMap(mavenProperties);
       clone.myListeners = ContainerUtil.createLockFreeCopyOnWriteList();
-      clone.environmentProperties = new HashMap<String, String>(environmentProperties);
+      clone.environmentProperties = new HashMap<>(environmentProperties);
       return clone;
     }
     catch (CloneNotSupportedException e) {
@@ -175,7 +186,7 @@ public class MavenRunnerSettings implements Cloneable {
   }
 
   private static <K, V> Map<K, V> cloneMap(final Map<K, V> source) {
-    final Map<K, V> clone = new LinkedHashMap<K, V>();
+    final Map<K, V> clone = new LinkedHashMap<>();
     for (Map.Entry<K, V> entry : source.entrySet()) {
       clone.put(entry.getKey(), entry.getValue());
     }

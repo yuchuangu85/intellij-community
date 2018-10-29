@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package com.intellij.psi.impl.source;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.source.tree.CompositePsiElement;
 import com.intellij.psi.impl.source.tree.JavaElementType;
+import com.intellij.psi.util.CachedValueProvider;
+import com.intellij.psi.util.CachedValuesManager;
 import org.jetbrains.annotations.NotNull;
 
 public class PsiJavaModuleReferenceElementImpl extends CompositePsiElement implements PsiJavaModuleReferenceElement {
@@ -38,9 +40,18 @@ public class PsiJavaModuleReferenceElementImpl extends CompositePsiElement imple
   }
 
   @Override
+  public PsiPolyVariantReference getReference() {
+    return CachedValuesManager.getCachedValue(this, () -> {
+      PsiJavaModuleReferenceElementImpl refElement = this;
+      PsiJavaModuleReference ref = refElement.getParent() instanceof PsiJavaModule ? null : new PsiJavaModuleReference(refElement);
+      return CachedValueProvider.Result.create(ref, refElement);
+    });
+  }
+
+  @Override
   public void accept(@NotNull PsiElementVisitor visitor) {
     if (visitor instanceof JavaElementVisitor) {
-      ((JavaElementVisitor)visitor).visitModuleReference(this);
+      ((JavaElementVisitor)visitor).visitModuleReferenceElement(this);
     }
     else {
       visitor.visitElement(this);

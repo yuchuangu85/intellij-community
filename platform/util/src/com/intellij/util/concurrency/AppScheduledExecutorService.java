@@ -37,8 +37,8 @@ public class AppScheduledExecutorService extends SchedulingWrapper {
   private static final Logger LOG = Logger.getInstance("#org.jetbrains.ide.PooledThreadExecutor");
   static final String POOLED_THREAD_PREFIX = "ApplicationImpl pooled thread ";
   @NotNull private final String myName;
-  private final LowMemoryWatcherManager myLowMemoryWatcherManager = new LowMemoryWatcherManager();
-  private Consumer<Thread> newThreadListener;
+  private final LowMemoryWatcherManager myLowMemoryWatcherManager;
+  private Consumer<? super Thread> newThreadListener;
   private final AtomicInteger counter = new AtomicInteger();
 
   private static class Holder {
@@ -61,16 +61,17 @@ public class AppScheduledExecutorService extends SchedulingWrapper {
 
         thread.setPriority(Thread.NORM_PRIORITY - 1);
 
-        Consumer<Thread> listener = newThreadListener;
+        Consumer<? super Thread> listener = newThreadListener;
         if (listener != null) {
           listener.consume(thread);
         }
         return thread;
       }
     });
+    myLowMemoryWatcherManager = new LowMemoryWatcherManager(this);
   }
 
-  public void setNewThreadListener(@NotNull Consumer<Thread> threadListener) {
+  public void setNewThreadListener(@NotNull Consumer<? super Thread> threadListener) {
     if (newThreadListener != null) throw new IllegalStateException("Listener was already set: "+newThreadListener);
     newThreadListener = threadListener;
   }
@@ -113,6 +114,11 @@ public class AppScheduledExecutorService extends SchedulingWrapper {
   @TestOnly
   public String statistics() {
     return myName + " threads created counter = " + counter;
+  }
+
+  @TestOnly
+  public String dumpQueue() {
+    return delayQueue.toString();
   }
 
   public int getBackendPoolExecutorSize() {
@@ -201,5 +207,9 @@ public class AppScheduledExecutorService extends SchedulingWrapper {
     public void setThreadFactory(ThreadFactory threadFactory) {
       error();
     }
+  }
+  @NotNull
+  public Thread getPeriodicTasksThread() {
+    return delayQueue.getThread();
   }
 }

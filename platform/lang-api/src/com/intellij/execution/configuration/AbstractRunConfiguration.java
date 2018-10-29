@@ -1,9 +1,11 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.configuration;
 
 import com.intellij.execution.configurations.ConfigurationFactory;
 import com.intellij.execution.configurations.ModuleBasedConfiguration;
 import com.intellij.execution.configurations.RunConfigurationModule;
 import com.intellij.openapi.project.Project;
+import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.LinkedHashMap;
@@ -12,15 +14,15 @@ import java.util.Map;
 /**
  * @author traff
  */
-public abstract class AbstractRunConfiguration extends ModuleBasedConfiguration<RunConfigurationModule> {
-  private final Map<String, String> myEnvs = new LinkedHashMap<String, String>();
+public abstract class AbstractRunConfiguration extends ModuleBasedConfiguration<RunConfigurationModule, Element> {
+  private final Map<String, String> myEnvs = new LinkedHashMap<>();
   private boolean myPassParentEnvs = true;
 
   public AbstractRunConfiguration(String name, RunConfigurationModule configurationModule, ConfigurationFactory factory) {
     super(name, configurationModule, factory);
   }
 
-  public AbstractRunConfiguration(Project project, ConfigurationFactory factory) {
+  public AbstractRunConfiguration(@NotNull Project project, @NotNull ConfigurationFactory factory) {
     super(new RunConfigurationModule(project), factory);
   }
 

@@ -28,13 +28,6 @@ public class GroovyOctalIntegerInspection extends BaseInspection {
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return CONFUSING_CODE_CONSTRUCTS;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Octal integer";
   }
@@ -50,7 +43,7 @@ public class GroovyOctalIntegerInspection extends BaseInspection {
   public BaseInspectionVisitor buildVisitor() {
     return new BaseInspectionVisitor() {
       @Override
-      public void visitLiteralExpression(GrLiteral literal) {
+      public void visitLiteralExpression(@NotNull GrLiteral literal) {
         super.visitLiteralExpression(literal);
         @NonNls final String text = literal.getText();
         if (!text.startsWith("0")) return;

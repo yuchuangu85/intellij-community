@@ -38,6 +38,7 @@ public final class DeclarationChecker extends ElementProcessor<XmlTag> implement
 
   private final static UserDataCache<CachedValue<DeclarationChecker>, XmlFile, Void> CACHE =
           new UserDataCache<CachedValue<DeclarationChecker>, XmlFile, Void>("CACHE") {
+            @Override
             protected CachedValue<DeclarationChecker> compute(final XmlFile file, final Void p) {
               return CachedValuesManager.getManager(file.getProject()).createCachedValue(() -> {
                 final DeclarationChecker holder = new DeclarationChecker(file);
@@ -47,8 +48,8 @@ public final class DeclarationChecker extends ElementProcessor<XmlTag> implement
             }
           };
 
-  private final Map<XmlTag, XmlTag> myDuplications = new HashMap<XmlTag, XmlTag>();
-  private final Map<XmlTag, XmlTag> myShadows = new HashMap<XmlTag, XmlTag>();
+  private final Map<XmlTag, XmlTag> myDuplications = new HashMap<>();
+  private final Map<XmlTag, XmlTag> myShadows = new HashMap<>();
 
   private State myProcessingState;
 
@@ -64,10 +65,12 @@ public final class DeclarationChecker extends ElementProcessor<XmlTag> implement
     return true;
   }
 
+  @Override
   protected boolean followImport() {
     return false;
   }
 
+  @Override
   protected void processTemplate(XmlTag t) {
     final String n = t.getAttributeValue("name");
     if (n != null) {
@@ -85,6 +88,7 @@ public final class DeclarationChecker extends ElementProcessor<XmlTag> implement
     }
   }
 
+  @Override
   protected void processVarOrParam(XmlTag t) {
     final String n = t.getAttributeValue("name");
     if (n != null) {
@@ -94,6 +98,7 @@ public final class DeclarationChecker extends ElementProcessor<XmlTag> implement
     processChildren(t);
   }
 
+  @Override
   protected boolean shouldContinue() {
     return true;
   }
@@ -137,9 +142,9 @@ public final class DeclarationChecker extends ElementProcessor<XmlTag> implement
   }
 
   final class State {
-    private final Map<String, XmlTag> myTemplateDeclarations = new THashMap<String, XmlTag>();
-    private final Map<String, XmlTag> myTopLevelVariables = new THashMap<String, XmlTag>();
-    private final Map<String, XmlTag> myLocalVariables = new THashMap<String, XmlTag>();
+    private final Map<String, XmlTag> myTemplateDeclarations = new THashMap<>();
+    private final Map<String, XmlTag> myTopLevelVariables = new THashMap<>();
+    private final Map<String, XmlTag> myLocalVariables = new THashMap<>();
 
     private Map<String, XmlTag> myVariableDeclarations = myTopLevelVariables;
 

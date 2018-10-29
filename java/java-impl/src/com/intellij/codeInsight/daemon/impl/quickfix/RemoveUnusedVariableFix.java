@@ -74,8 +74,8 @@ public class RemoveUnusedVariableFix implements IntentionAction {
   }
 
   private void removeVariableAndReferencingStatements(Editor editor) {
-    final List<PsiElement> references = new ArrayList<PsiElement>();
-    final List<PsiElement> sideEffects = new ArrayList<PsiElement>();
+    final List<PsiElement> references = new ArrayList<>();
+    final List<PsiElement> sideEffects = new ArrayList<>();
     final boolean[] canCopeWithSideEffects = {true};
     try {
       PsiElement context = myVariable instanceof PsiField ? ((PsiField)myVariable).getContainingClass() : PsiUtil.getVariableCodeBlock(myVariable, null);
@@ -108,12 +108,12 @@ public class RemoveUnusedVariableFix implements IntentionAction {
     });
   }
 
-  public static RemoveUnusedVariableUtil.RemoveMode showSideEffectsWarning(List<PsiElement> sideEffects,
-                                           PsiVariable variable,
-                                           Editor editor,
-                                           boolean canCopeWithSideEffects,
-                                           @NonNls String beforeText,
-                                           @NonNls String afterText) {
+  public static RemoveUnusedVariableUtil.RemoveMode showSideEffectsWarning(List<? extends PsiElement> sideEffects,
+                                                                           PsiVariable variable,
+                                                                           Editor editor,
+                                                                           boolean canCopeWithSideEffects,
+                                                                           @NonNls String beforeText,
+                                                                           @NonNls String afterText) {
     if (sideEffects.isEmpty()) return RemoveUnusedVariableUtil.RemoveMode.DELETE_ALL;
     if (ApplicationManager.getApplication().isUnitTestMode()) {
       return canCopeWithSideEffects
@@ -133,10 +133,10 @@ public class RemoveUnusedVariableFix implements IntentionAction {
     return RemoveUnusedVariableUtil.RemoveMode.values()[code];
   }
 
-  private static RemoveUnusedVariableUtil.RemoveMode showSideEffectsWarning(List<PsiElement> sideEffects,
-                                            PsiVariable variable,
-                                            Editor editor,
-                                            boolean canCopeWithSideEffects) {
+  private static RemoveUnusedVariableUtil.RemoveMode showSideEffectsWarning(List<? extends PsiElement> sideEffects,
+                                                                            PsiVariable variable,
+                                                                            Editor editor,
+                                                                            boolean canCopeWithSideEffects) {
     String text;
     if (sideEffects.isEmpty()) {
       text = "";

@@ -1,31 +1,17 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.impl;
 
 import com.intellij.ide.DataManager;
 import com.intellij.ide.IdeEventQueue;
+import com.intellij.ide.ProhibitAWTEvents;
 import com.intellij.ide.impl.dataRules.*;
 import com.intellij.openapi.actionSystem.*;
+import com.intellij.openapi.application.AccessToken;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.keymap.impl.IdeKeyEventDispatcher;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.AsyncResult;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.UserDataHolder;
 import com.intellij.openapi.util.registry.Registry;
@@ -35,11 +21,14 @@ import com.intellij.openapi.wm.ex.WindowManagerEx;
 import com.intellij.openapi.wm.impl.FloatingDecorator;
 import com.intellij.reference.SoftReference;
 import com.intellij.util.KeyedLazyInstanceEP;
-import com.intellij.util.containers.WeakValueHashMap;
+import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.SwingHelper;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.concurrency.AsyncPromise;
+import org.jetbrains.concurrency.Promise;
 
 import javax.swing.*;
 import java.awt.*;
@@ -54,7 +43,7 @@ import java.util.concurrent.ConcurrentMap;
 
 public class DataManagerImpl extends DataManager {
   private static final Logger LOG = Logger.getInstance("#com.intellij.ide.impl.DataManagerImpl");
-  private final ConcurrentMap<String, GetDataRule> myDataConstantToRuleMap = new ConcurrentHashMap<String, GetDataRule>();
+  private final ConcurrentMap<String, GetDataRule> myDataConstantToRuleMap = new ConcurrentHashMap<>();
   private WindowManagerEx myWindowManager;
 
   public DataManagerImpl() {
@@ -63,17 +52,19 @@ public class DataManagerImpl extends DataManager {
 
   @Nullable
   private Object getData(@NotNull String dataId, final Component focusedComponent) {
-    for (Component c = focusedComponent; c != null; c = c.getParent()) {
-      final DataProvider dataProvider = getDataProviderEx(c);
-      if (dataProvider == null) continue;
-      Object data = getDataFromProvider(dataProvider, dataId, null);
-      if (data != null) return data;
+    try (AccessToken ignored = ProhibitAWTEvents.start("getData")) {
+      for (Component c = focusedComponent; c != null; c = c.getParent()) {
+        final DataProvider dataProvider = getDataProviderEx(c);
+        if (dataProvider == null) continue;
+        Object data = getDataFromProvider(dataProvider, dataId, null);
+        if (data != null) return data;
+      }
     }
     return null;
   }
 
   @Nullable
-  private Object getDataFromProvider(@NotNull final DataProvider provider, @NotNull String dataId, @Nullable Set<String> alreadyComputedIds) {
+  public Object getDataFromProvider(@NotNull final DataProvider provider, @NotNull String dataId, @Nullable Set<String> alreadyComputedIds) {
     if (alreadyComputedIds != null && alreadyComputedIds.contains(dataId)) {
       return null;
     }
@@ -83,14 +74,9 @@ public class DataManagerImpl extends DataManager {
 
       GetDataRule dataRule = getDataRule(dataId);
       if (dataRule != null) {
-        final Set<String> ids = alreadyComputedIds == null ? new THashSet<String>() : alreadyComputedIds;
+        final Set<String> ids = alreadyComputedIds == null ? new THashSet<>() : alreadyComputedIds;
         ids.add(dataId);
-        data = dataRule.getData(new DataProvider() {
-          @Override
-          public Object getData(String dataId) {
-            return getDataFromProvider(provider, dataId, ids);
-          }
-        });
+        data = dataRule.getData(id -> getDataFromProvider(provider, id, ids));
 
         if (data != null) return validated(data, dataId, provider);
       }
@@ -114,7 +100,7 @@ public class DataManagerImpl extends DataManager {
     else if (component instanceof JComponent) {
       dataProvider = getDataProvider((JComponent)component);
     }
-    
+
     return dataProvider;
   }
 
@@ -127,18 +113,7 @@ public class DataManagerImpl extends DataManager {
 
     final GetDataRule plainRule = getRuleFromMap(AnActionEvent.uninjectedId(dataId));
     if (plainRule != null) {
-      return new GetDataRule() {
-        @Override
-        public Object getData(final DataProvider dataProvider) {
-          return plainRule.getData(new DataProvider() {
-            @Override
-            @Nullable
-            public Object getData(@NonNls String dataId) {
-              return dataProvider.getData(AnActionEvent.injectedId(dataId));
-            }
-          });
-        }
-      };
+      return dataProvider -> plainRule.getData(id -> dataProvider.getData(AnActionEvent.injectedId(id)));
     }
 
     return null;
@@ -148,8 +123,7 @@ public class DataManagerImpl extends DataManager {
   private GetDataRule getRuleFromMap(@NotNull String dataId) {
     GetDataRule rule = myDataConstantToRuleMap.get(dataId);
     if (rule == null && !myDataConstantToRuleMap.containsKey(dataId)) {
-      final KeyedLazyInstanceEP<GetDataRule>[] eps = Extensions.getExtensions(GetDataRule.EP_NAME);
-      for(KeyedLazyInstanceEP<GetDataRule> ruleEP: eps) {
+      for (KeyedLazyInstanceEP<GetDataRule> ruleEP : GetDataRule.EP_NAME.getExtensionList()) {
         if (ruleEP.key.equals(dataId)) {
           rule = ruleEP.getInstance();
         }
@@ -174,11 +148,14 @@ public class DataManagerImpl extends DataManager {
     return data;
   }
 
+  @NotNull
   @Override
   public DataContext getDataContext(Component component) {
+    //noinspection deprecation
     return new MyDataContext(component);
   }
 
+  @NotNull
   @Override
   public DataContext getDataContext(@NotNull Component component, int x, int y) {
     if (x < 0 || x >= component.getWidth() || y < 0 || y >= component.getHeight()) {
@@ -204,16 +181,20 @@ public class DataManagerImpl extends DataManager {
   @Override
   @NotNull
   public DataContext getDataContext() {
-    return getDataContext(getFocusedComponent());
+    Component component = null;
+    if (Registry.is("actionSystem.getContextByRecentMouseEvent")) {
+      component = SwingHelper.getComponentFromRecentMouseEvent();
+    }
+    return getDataContext(component != null ? component : getFocusedComponent());
   }
 
+  @NotNull
   @Override
-  public AsyncResult<DataContext> getDataContextFromFocus() {
-    final AsyncResult<DataContext> context = new AsyncResult<DataContext>();
-
-    IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> context.setDone(getDataContext()));
-
-    return context;
+  public Promise<DataContext> getDataContextFromFocusAsync() {
+    AsyncPromise<DataContext> result = new AsyncPromise<>();
+    IdeFocusManager.getGlobalInstance()
+                   .doWhenFocusSettlesDown(() -> result.setResult(getDataContext()), ModalityState.defaultModalityState());
+    return result;
   }
 
   public DataContext getDataContextTest(Component component) {
@@ -240,13 +221,6 @@ public class DataManagerImpl extends DataManager {
       if (activeWindow == null) {
         activeWindow = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusedWindow();
         if (activeWindow == null) return null;
-      }
-    }
-
-    if (Registry.is("actionSystem.noContextComponentWhileFocusTransfer")) {
-      IdeFocusManager fm = IdeFocusManager.findInstanceByComponent(activeWindow);
-      if (fm.isFocusBeingTransferred()) {
-        return null;
       }
     }
 
@@ -319,8 +293,8 @@ public class DataManagerImpl extends DataManager {
   private static class NullResult {
     public static final NullResult INSTANCE = new NullResult();
   }
-  
-  private static final Set<String> ourSafeKeys = new HashSet<String>(Arrays.asList(
+
+  private static final Set<String> ourSafeKeys = new HashSet<>(Arrays.asList(
     CommonDataKeys.PROJECT.getName(),
     CommonDataKeys.EDITOR.getName(),
     PlatformDataKeys.IS_MODAL_CONTEXT.getName(),
@@ -328,6 +302,11 @@ public class DataManagerImpl extends DataManager {
     PlatformDataKeys.MODALITY_STATE.getName()
   ));
 
+  /**
+   * todo make private in 2020
+   * @deprecated use {@link DataManager#getDataContext(Component)} instead
+   */
+  @Deprecated
   public static class MyDataContext implements DataContext, UserDataHolder {
     private int myEventCount;
     // To prevent memory leak we have to wrap passed component into
@@ -335,11 +314,11 @@ public class DataManagerImpl extends DataManager {
     // that have DataContext as a field.
     private final Reference<Component> myRef;
     private Map<Key, Object> myUserData;
-    private final Map<String, Object> myCachedData = new WeakValueHashMap<String, Object>();
+    private final Map<String, Object> myCachedData = ContainerUtil.createWeakValueMap();
 
     public MyDataContext(final Component component) {
       myEventCount = -1;
-      myRef = component == null ? null : new WeakReference<Component>(component);
+      myRef = component == null ? null : new WeakReference<>(component);
     }
 
     public void setEventCount(int eventCount, Object caller) {
@@ -349,8 +328,7 @@ public class DataManagerImpl extends DataManager {
     }
 
     @Override
-    public Object getData(String dataId) {
-      if (dataId == null) return null;
+    public Object getData(@NotNull String dataId) {
       int currentEventCount = IdeEventQueue.getInstance().getEventCount();
       if (myEventCount != -1 && myEventCount != currentEventCount) {
         LOG.error("cannot share data context between Swing events; initial event count = " + myEventCount + "; current event count = " +
@@ -386,13 +364,14 @@ public class DataManagerImpl extends DataManager {
       if (PlatformDataKeys.MODALITY_STATE.is(dataId)) {
         return component != null ? ModalityState.stateForComponent(component) : ModalityState.NON_MODAL;
       }
-      if (CommonDataKeys.EDITOR.is(dataId)) {
+      if (CommonDataKeys.EDITOR.is(dataId) || CommonDataKeys.HOST_EDITOR.is(dataId)) {
         Editor editor = (Editor)((DataManagerImpl)DataManager.getInstance()).getData(dataId, component);
         return validateEditor(editor);
       }
       return ((DataManagerImpl)DataManager.getInstance()).getData(dataId, component);
     }
 
+    @Override
     @NonNls
     public String toString() {
       return "component=" + SoftReference.dereference(myRef);
@@ -413,7 +392,7 @@ public class DataManagerImpl extends DataManager {
     private Map<Key, Object> getOrCreateMap() {
       Map<Key, Object> userData = myUserData;
       if (userData == null) {
-        myUserData = userData = new WeakValueHashMap<Key, Object>();
+        myUserData = userData = ContainerUtil.createWeakValueMap();
       }
       return userData;
     }

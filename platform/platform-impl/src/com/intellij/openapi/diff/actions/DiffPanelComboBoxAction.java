@@ -1,3 +1,4 @@
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.diff.actions;
 
 import com.intellij.openapi.actionSystem.*;
@@ -7,16 +8,16 @@ import com.intellij.openapi.diff.ex.DiffPanelEx;
 import com.intellij.openapi.diff.impl.DiffPanelImpl;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.DumbAwareAction;
-import com.intellij.util.containers.HashMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.HashMap;
 import java.util.Map;
 
 public abstract class DiffPanelComboBoxAction<T> extends ComboBoxAction implements DumbAware {
-  @NotNull private final Map<T, AnAction> myActions = new HashMap<T, AnAction>();
+  @NotNull private final Map<T, AnAction> myActions = new HashMap<>();
   @NotNull private final T[] myActionOrder;
 
   protected DiffPanelComboBoxAction(@NotNull T[] actionOrder) {
@@ -38,8 +39,9 @@ public abstract class DiffPanelComboBoxAction<T> extends ComboBoxAction implemen
     myActions.put(key, action);
   }
 
+  @NotNull
   @Override
-  public JComponent createCustomComponent(final Presentation presentation) {
+  public JComponent createCustomComponent(@NotNull final Presentation presentation) {
     JPanel panel = new JPanel(new BorderLayout());
     final JLabel label = new JLabel(getActionName());
     label.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 4));
@@ -59,7 +61,7 @@ public abstract class DiffPanelComboBoxAction<T> extends ComboBoxAction implemen
   }
 
   @Override
-  public void update(AnActionEvent e) {
+  public void update(@NotNull AnActionEvent e) {
     super.update(e);
     Presentation presentation = e.getPresentation();
     DiffPanelEx diffPanel = getDiffPanel(e.getDataContext());
@@ -82,7 +84,8 @@ public abstract class DiffPanelComboBoxAction<T> extends ComboBoxAction implemen
       super(text);
     }
 
-    public void actionPerformed(AnActionEvent e) {
+    @Override
+    public void actionPerformed(@NotNull AnActionEvent e) {
       final DiffPanelEx diffPanel = getDiffPanel(e.getDataContext());
       if (diffPanel != null) {
         perform(diffPanel);

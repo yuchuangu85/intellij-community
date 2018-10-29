@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.engine.evaluation.expression;
 
 import com.intellij.debugger.engine.DebugProcessImpl;
@@ -28,15 +14,15 @@ import java.util.List;
 
 /**
  * @author Eugene Zhuravlev
- *         Date: Feb 8, 2010
  */
 public class BoxingEvaluator implements Evaluator{
   private final Evaluator myOperand;
 
   public BoxingEvaluator(Evaluator operand) {
-    myOperand = new DisableGC(operand);
+    myOperand = DisableGC.create(operand);
   }
 
+  @Override
   public Object evaluate(EvaluationContextImpl context) throws EvaluateException {
     final Object result = myOperand.evaluate(context);
     if (result == null || result instanceof ObjectReference) {
@@ -59,14 +45,16 @@ public class BoxingEvaluator implements Evaluator{
     final ClassType wrapperClass = (ClassType)process.findClass(context, wrapperTypeName, null);
     final String methodSignature = "(" + JVMNameUtil.getPrimitiveSignature(value.type().name()) + ")L" + wrapperTypeName.replace('.', '/') + ";";
 
-    List<Method> methods = wrapperClass.methodsByName("valueOf", methodSignature);
-    if (methods.size() == 0) { // older JDK version
-      methods = wrapperClass.methodsByName(JVMNameUtil.CONSTRUCTOR_NAME, methodSignature);
+    Method method = wrapperClass.concreteMethodByName("valueOf", methodSignature);
+    if (method == null) { // older JDK version
+      method = wrapperClass.concreteMethodByName(JVMNameUtil.CONSTRUCTOR_NAME, methodSignature);
     }
-    if (methods.size() == 0) {
+    if (method == null) {
       throw new EvaluateException("Cannot construct wrapper object for value of type " + value.type() + ": Unable to find either valueOf() or constructor method");
     }
 
-    return process.invokeMethod(context, wrapperClass, methods.get(0), Collections.singletonList(value));
+    Method finalMethod = method;
+    List<PrimitiveValue> args = Collections.singletonList(value);
+    return context.computeAndKeep(() -> process.invokeMethod(context, wrapperClass, finalMethod, args));
   }
 }

@@ -27,6 +27,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
+ * Consider using {@link com.intellij.util.io.DirectoryContentBuilder} instead, it provides more convenient Kotlin DSL.
+ *
  * @author nik
  */
 public class TestFileSystemItem {
@@ -34,7 +36,7 @@ public class TestFileSystemItem {
   private final boolean myArchive;
   private final String myName;
   @Nullable private final String myContent;
-  private final Map<String, TestFileSystemItem> myChildren = new HashMap<String, TestFileSystemItem>();
+  private final Map<String, TestFileSystemItem> myChildren = new HashMap<>();
 
   TestFileSystemItem(String name, boolean archive, boolean directory, @Nullable String content) {
     myDirectory = directory;
@@ -63,7 +65,7 @@ public class TestFileSystemItem {
 
   private void assertDirectoryEqual(File file, String relativePath) {
     final File[] actualChildren = file.listFiles();
-    Set<String> notFound = new HashSet<String>(myChildren.keySet());
+    Set<String> notFound = new HashSet<>(myChildren.keySet());
     if (actualChildren != null) {
       for (File child : actualChildren) {
         final String name = child.getName();

@@ -18,10 +18,7 @@ package org.jetbrains.plugins.groovy.refactoring.convertToJava;
 import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.searches.MethodReferencesSearch;
-import com.intellij.util.Processor;
-import com.intellij.util.containers.HashMap;
 import gnu.trove.TIntArrayList;
-import gnu.trove.TIntProcedure;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrClosureSignature;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariable;
@@ -37,18 +34,18 @@ import org.jetbrains.plugins.groovy.lang.psi.impl.signatures.GrClosureSignatureU
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil;
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
  * @author Medvedev Max
  */
 public class TypeProvider {
-  private final Map<GrMethod, PsiType[]> inferredTypes = new HashMap<GrMethod, PsiType[]>();
+  private final Map<GrMethod, PsiType[]> inferredTypes = new HashMap<>();
 
   public TypeProvider() {
   }
 
-  @SuppressWarnings({"MethodMayBeStatic"})
   @NotNull
   public PsiType getReturnType(@NotNull PsiMethod method) {
     if (method instanceof GrMethod) {
@@ -64,7 +61,6 @@ public class TypeProvider {
     return TypesUtil.getJavaLangObject(method);
   }
 
-  @SuppressWarnings({"MethodMayBeStatic"})
   @NotNull
   public PsiType getVarType(@NotNull PsiVariable variable) {
     if (variable instanceof PsiParameter) return getParameterType((PsiParameter)variable);
@@ -137,26 +133,20 @@ public class TypeProvider {
           final GrClosureSignatureUtil.ArgInfo<PsiElement>[] argInfos = GrClosureSignatureUtil.mapParametersToArguments(signature, call);
 
           if (argInfos == null) return true;
-          paramInds.forEach(new TIntProcedure() {
-            @Override
-            public boolean execute(int i) {
-              PsiType type = GrClosureSignatureUtil.getTypeByArg(argInfos[i], manager, resolveScope);
-              types[i] = TypesUtil.getLeastUpperBoundNullable(type, types[i], manager);
-              return true;
-            }
+          paramInds.forEach(i -> {
+            PsiType type = GrClosureSignatureUtil.getTypeByArg(argInfos[i], manager, resolveScope);
+            types[i] = TypesUtil.getLeastUpperBoundNullable(type, types[i], manager);
+            return true;
           });
         }
         return true;
       });
     }
-    paramInds.forEach(new TIntProcedure() {
-      @Override
-      public boolean execute(int i) {
-        if (types[i] == null || types[i] == PsiType.NULL) {
-          types[i] = parameters[i].getType();
-        }
-        return true;
+    paramInds.forEach(i -> {
+      if (types[i] == null || types[i] == PsiType.NULL) {
+        types[i] = parameters[i].getType();
       }
+      return true;
     });
     inferredTypes.put(method, types);
     return types;

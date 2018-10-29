@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.find;
 
@@ -34,7 +20,6 @@ import com.intellij.openapi.editor.actions.EditorActionUtil;
 import com.intellij.openapi.editor.actions.IncrementalFindAction;
 import com.intellij.openapi.editor.colors.EditorColors;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
-import com.intellij.openapi.editor.event.CaretAdapter;
 import com.intellij.openapi.editor.event.CaretEvent;
 import com.intellij.openapi.editor.event.CaretListener;
 import com.intellij.openapi.editor.ex.RangeHighlighterEx;
@@ -63,16 +48,16 @@ import com.intellij.ui.LightweightHint;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.usages.*;
 import com.intellij.usages.impl.UsageViewImpl;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.Consumer;
+import com.intellij.util.Function;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
+import java.awt.event.ActionEvent;
+import java.util.*;
+import java.util.stream.Stream;
 
 public class FindUtil {
   private static final Key<Direction> KEY = Key.create("FindUtil.KEY");
@@ -87,73 +72,61 @@ public class FindUtil {
     return file != null ? file.getVirtualFile() : null;
   }
 
-  public static void initStringToFindWithSelection(FindModel findModel, Editor editor) {
+  public static void initStringToFindWithSelection(FindModel findModel, @Nullable Editor editor) {
     if (editor != null) {
       String s = editor.getSelectionModel().getSelectedText();
       if (s != null && s.length() < 10000) {
-        FindModel.initStringToFindNoMultiline(findModel, s);
+        FindModel.initStringToFind(findModel, s);
       }
     }
-  }
-
-  private static boolean isMultilineSelection(Editor editor) {
-    SelectionModel selectionModel = editor != null ? editor.getSelectionModel() : null;
-    if (selectionModel != null) {
-      String selectedText = selectionModel.getSelectedText();
-      if (selectedText != null && selectedText.contains("\n")) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private static boolean isWholeLineSelection(Editor editor) {
-    SelectionModel selectionModel = editor != null ? editor.getSelectionModel() : null;
-    if (selectionModel != null) {
-      String selectedText = selectionModel.getSelectedText();
-      final Document document = editor.getDocument();
-      final int line = document.getLineNumber(selectionModel.getSelectionStart());
-      final String lineText = document.getText(new TextRange(document.getLineStartOffset(line), document.getLineEndOffset(line)));
-      if (lineText.trim().equals(selectedText)) {
-        return true;
-      }
-    }
-    return false;
   }
 
   public static void configureFindModel(boolean replace, @Nullable Editor editor, FindModel model, boolean firstSearch) {
     boolean isGlobal = true;
-    String stringToFind = null;
+    String stringToFind = firstSearch ? "" : model.getStringToFind();
     final SelectionModel selectionModel = editor != null ? editor.getSelectionModel() : null;
     String selectedText = selectionModel != null ? selectionModel.getSelectedText() : null;
     if (!StringUtil.isEmpty(selectedText)) {
-      if (replace && (isMultilineSelection(editor) || isWholeLineSelection(editor))) {
-        isGlobal = false;
-        stringToFind = model.getStringToFind();
-      } else if (isMultilineSelection(editor)) {
-        model.setMultiline(true);
-      }
-      if (stringToFind == null) {
-        stringToFind = selectedText;
-      }
-    }
-    else {
-      stringToFind = firstSearch ? "" : model.getStringToFind();
+      stringToFind = selectedText;
     }
     model.setReplaceState(replace);
+    boolean multiline = stringToFind.contains("\n");
+    if (replace && multiline) {
+      isGlobal = false;
+      stringToFind = "";
+      multiline = false;
+    }
     model.setStringToFind(stringToFind);
+    model.setMultiline(multiline);
     model.setGlobal(isGlobal);
     model.setPromptOnReplace(false);
   }
 
-  public static void updateFindInFileModel(@Nullable Project project, @NotNull FindModel with) {
+  public static void updateFindInFileModel(@Nullable Project project, @NotNull FindModel with, boolean saveFindString) {
     FindModel model = FindManager.getInstance(project).getFindInFileModel();
     model.setCaseSensitive(with.isCaseSensitive());
     model.setWholeWordsOnly(with.isWholeWordsOnly());
     model.setRegularExpressions(with.isRegularExpressions());
     model.setSearchContext(with.getSearchContext());
+
+    if (saveFindString && !with.getStringToFind().isEmpty()) {
+      model.setStringToFind(with.getStringToFind());
+    }
+
     if (with.isReplaceState()) {
       model.setPreserveCase(with.isPreserveCase());
+      if (saveFindString) model.setStringToReplace(with.getStringToReplace());
+    }
+  }
+
+  public static void useFindStringFromFindInFileModel(FindModel findModel, Editor editor) {
+    if (editor != null) {
+      EditorSearchSession editorSearchSession = EditorSearchSession.get(editor);
+      if (editorSearchSession != null) {
+        FindModel currentFindModel = editorSearchSession.getFindModel();
+        findModel.setStringToFind(currentFindModel.getStringToFind());
+        if (findModel.isReplaceState()) findModel.setStringToReplace(currentFindModel.getStringToReplace());
+      }
     }
   }
 
@@ -191,8 +164,9 @@ public class FindUtil {
       return;
     }
     FindManager findManager = FindManager.getInstance(project);
+    FindInProjectSettings findInProjectSettings = FindInProjectSettings.getInstance(project);
     String s = text.subSequence(start, end).toString();
-    FindSettings.getInstance().addStringToFind(s);
+    findInProjectSettings.addStringToFind(s);
     findManager.getFindInFileModel().setStringToFind(s);
     findManager.setFindWasPerformed();
     findManager.clearFindingNextUsageInFile();
@@ -276,19 +250,24 @@ public class FindUtil {
 
   @Nullable
   public static List<Usage> findAll(@NotNull Project project, @NotNull Editor editor, @NotNull FindModel findModel) {
-    final Document document = editor.getDocument();
-    final PsiFile psiFile = PsiDocumentManager.getInstance(project).getPsiFile(document);
-    if (psiFile == null) return null;
+    return findAll(project, PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument()), findModel);
+  }
+
+  @Nullable
+  private static List<Usage> findAll(@NotNull Project project, @Nullable PsiFile psiFile, @NotNull FindModel findModel) {
+    if (psiFile == null || project.isDisposed()) return null;
+    Document document = PsiDocumentManager.getInstance(project).getDocument(psiFile);
+    if (document == null) return null;
 
     CharSequence text = document.getCharsSequence();
     int textLength = document.getTextLength();
-    final List<Usage> usages = new ArrayList<>();
     FindManager findManager = FindManager.getInstance(project);
     findModel.setForward(true); // when find all there is no diff in direction
 
     int offset = 0;
-    VirtualFile virtualFile = getVirtualFile(editor);
+    VirtualFile virtualFile = psiFile.getVirtualFile();
 
+    final List<Usage> usages = new ArrayList<>();
     while (offset < textLength) {
       FindResult result = findManager.findString(text, offset, findModel, virtualFile);
       if (!result.isStringFound()) break;
@@ -307,11 +286,27 @@ public class FindUtil {
   }
 
   public static void findAllAndShow(@NotNull Project project, @NotNull Editor editor, @NotNull FindModel findModel) {
-    List<Usage> usages = findAll(project, editor, findModel);
+    findAllAndShow(project, PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument()), findModel);
+  }
+
+  private static void findAllAndShow(@NotNull Project project, @Nullable PsiFile psiFile, @NotNull FindModel findModel) {
+    List<Usage> usages = findAll(project, psiFile, findModel);
     if (usages == null) return;
     final UsageTarget[] usageTargets = {new FindInProjectUtil.StringUsageTarget(project, findModel)};
     final UsageViewPresentation usageViewPresentation = FindInProjectUtil.setupViewPresentation(false, findModel);
-    UsageViewManager.getInstance(project).showUsages(usageTargets, usages.toArray(new Usage[usages.size()]), usageViewPresentation);
+    UsageView view =
+      UsageViewManager.getInstance(project).showUsages(usageTargets, usages.toArray(Usage.EMPTY_ARRAY), usageViewPresentation);
+    view.setRerunAction(new AbstractAction() {
+      @Override
+      public void actionPerformed(ActionEvent e) {
+        findAllAndShow(project, psiFile, findModel);
+      }
+
+      @Override
+      public boolean isEnabled() {
+        return !project.isDisposed() && psiFile.isValid();
+      }
+    });
   }
 
   public static void searchBack(Project project, FileEditor fileEditor, @Nullable DataContext dataContext) {
@@ -411,7 +406,7 @@ public class FindUtil {
     }
   }
 
-  public static void replace(final Project project, final Editor editor) {
+  public static void replace(@NotNull Project project, @NotNull Editor editor) {
     final FindManager findManager = FindManager.getInstance(project);
     final FindModel model = findManager.getFindInFileModel().clone();
     final String s = editor.getSelectionModel().getSelectedText();
@@ -475,11 +470,11 @@ public class FindUtil {
     });
   }
 
-  public static boolean replace(Project project, Editor editor, int offset, FindModel model) {
+  public static boolean replace(@NotNull Project project, @NotNull Editor editor, int offset, @NotNull FindModel model) {
     return replace(project, editor, offset, model, (range, replace) -> true);
   }
 
-  public static boolean replace(Project project, Editor editor, int offset, FindModel model, ReplaceDelegate delegate) {
+  public static boolean replace(@NotNull Project project, @NotNull Editor editor, int offset, @NotNull FindModel model, ReplaceDelegate delegate) {
     Document document = editor.getDocument();
 
     if (!FileDocumentManager.getInstance().requestWriting(document, project)) {
@@ -490,7 +485,7 @@ public class FindUtil {
     boolean toPrompt = model.isPromptOnReplace();
 
     try {
-      doReplace(project, editor, model, document, offset, toPrompt, delegate);
+      doReplace(project, editor, model, offset, toPrompt, delegate);
     }
     catch (ReadOnlyFragmentModificationException e) {
       EditorActionManager.getInstance().getReadonlyFragmentModificationHandler(document).handle(e);
@@ -502,8 +497,12 @@ public class FindUtil {
     return true;
   }
 
-  private static void doReplace(Project project, final Editor editor, final FindModel aModel, final Document document, int caretOffset,
-                                   boolean toPrompt, ReplaceDelegate delegate) {
+  private static void doReplace(@NotNull Project project,
+                                @NotNull Editor editor,
+                                @NotNull FindModel aModel,
+                                int caretOffset,
+                                boolean toPrompt,
+                                ReplaceDelegate delegate) {
     FindManager findManager = FindManager.getInstance(project);
     final FindModel model = aModel.clone();
     int occurrences = 0;
@@ -514,7 +513,8 @@ public class FindUtil {
     boolean reallyReplaced = false;
 
     int offset = caretOffset;
-    while (offset >= 0 && offset < editor.getDocument().getTextLength()) {
+    Document document = editor.getDocument();
+    while (offset >= 0 && offset < document.getTextLength()) {
       caretOffset = offset;
       FindResult result = doSearch(project, editor, offset, !replaced, model, toPrompt);
       if (result == null) {
@@ -562,6 +562,7 @@ public class FindUtil {
         TextRange textRange = doReplace(project, document, model, result, toReplace, toPrompt, rangesToChange);
         replaced = true;
         newOffset = model.isForward() ? textRange.getEndOffset() : textRange.getStartOffset();
+        if (textRange.isEmpty()) ++newOffset;
         occurrences++;
       }
       else {
@@ -575,10 +576,16 @@ public class FindUtil {
     }
 
     if (replaced) {
-      if (!toPrompt) {
+      if (toPrompt) {
+        if (caretOffset > document.getTextLength()) {
+          caretOffset = document.getTextLength();
+        }
+        editor.getCaretModel().moveToOffset(caretOffset);
+      }
+      else {
         CharSequence text = document.getCharsSequence();
         final StringBuilder newText = new StringBuilder(document.getTextLength());
-        Collections.sort(rangesToChange, (o1, o2) -> o1.getFirst().getStartOffset() - o2.getFirst().getStartOffset());
+        Collections.sort(rangesToChange, Comparator.comparingInt(o -> o.getFirst().getStartOffset()));
         int offsetBefore = 0;
         for (Pair<TextRange, String> pair : rangesToChange) {
           TextRange range = pair.getFirst();
@@ -608,14 +615,6 @@ public class FindUtil {
           }
         }), null, document);
       }
-      else {
-        if (reallyReplaced) {
-          if (caretOffset > document.getTextLength()) {
-            caretOffset = document.getTextLength();
-          }
-          editor.getCaretModel().moveToOffset(caretOffset);
-        }
-      }
     }
 
     ReplaceInProjectManager.reportNumberReplacedOccurrences(project, occurrences);
@@ -625,10 +624,7 @@ public class FindUtil {
   private static boolean selectionMayContainRange(SelectionModel selection, TextRange range) {
     int[] starts = selection.getBlockSelectionStarts();
     int[] ends = selection.getBlockSelectionEnds();
-    if (starts.length == 0) {
-      return false;
-    }
-    return new TextRange(starts[0], ends[starts.length - 1]).contains(range);
+    return starts.length != 0 && new TextRange(starts[0], ends[starts.length - 1]).contains(range);
   }
 
   private static boolean selectionStrictlyContainsRange(SelectionModel selection, TextRange range) {
@@ -731,7 +727,7 @@ public class FindUtil {
     return result;
   }
 
-  private static class MyListener extends CaretAdapter {
+  private static class MyListener implements CaretListener {
     private final Editor myEditor;
     private final RangeHighlighter mySegmentHighlighter;
 
@@ -741,7 +737,7 @@ public class FindUtil {
     }
 
     @Override
-    public void caretPositionChanged(CaretEvent e) {
+    public void caretPositionChanged(@NotNull CaretEvent e) {
       removeAll();
     }
 
@@ -797,9 +793,9 @@ public class FindUtil {
           position = HintManager.ABOVE;
         }
       }
-      CaretListener listener = new CaretAdapter() {
+      CaretListener listener = new CaretListener() {
         @Override
-        public void caretPositionChanged(CaretEvent e) {
+        public void caretPositionChanged(@NotNull CaretEvent e) {
           editor.putUserData(KEY, null);
           editor.getCaretModel().removeCaretListener(this);
         }
@@ -817,11 +813,11 @@ public class FindUtil {
 
   public static TextRange doReplace(final Project project,
                                     final Document document,
-                                    final FindModel model,
+                                    @NotNull FindModel model,
                                     FindResult result,
                                     @NotNull String stringToReplace,
                                     boolean reallyReplace,
-                                    List<Pair<TextRange, String>> rangesToChange) {
+                                    List<? super Pair<TextRange, String>> rangesToChange) {
     final int startOffset = result.getStartOffset();
     final int endOffset = result.getEndOffset();
 
@@ -888,37 +884,33 @@ public class FindUtil {
     boolean shouldReplace(TextRange range, String replace);
   }
 
-  @Nullable
-  public static UsageView showInUsageView(@Nullable PsiElement sourceElement,
-                                          @NotNull PsiElement[] targets,
-                                          @NotNull String title,
-                                          @NotNull final Project project) {
+  public static <T> UsageView showInUsageView(@Nullable PsiElement sourceElement,
+                                              @NotNull T[] targets,
+                                              @NotNull Function<? super T, ? extends Usage> usageConverter,
+                                              @NotNull String title,
+                                              @Nullable Consumer<? super UsageViewPresentation> presentationSetup,
+                                              @NotNull final Project project) {
     if (targets.length == 0) return null;
     final UsageViewPresentation presentation = new UsageViewPresentation();
     presentation.setCodeUsagesString(title);
     presentation.setTabName(title);
     presentation.setTabText(title);
+    if (presentationSetup != null) {
+      presentationSetup.consume(presentation);
+    }
     UsageTarget[] usageTargets = sourceElement == null ? UsageTarget.EMPTY_ARRAY : new UsageTarget[]{new PsiElement2UsageTargetAdapter(sourceElement)};
 
-    PsiElement[] primary = sourceElement == null ? PsiElement.EMPTY_ARRAY : new PsiElement[]{sourceElement};
     UsageView view = UsageViewManager.getInstance(project).showUsages(usageTargets, Usage.EMPTY_ARRAY, presentation);
-
-    SmartPointerManager smartPointerManager = SmartPointerManager.getInstance(project);
-    List<SmartPsiElementPointer> pointers = ContainerUtil.map(targets, smartPointerManager::createSmartPsiElementPointer);
-
-    // usage view will load document/AST so still referencing all these PSI elements might lead to out of memory
-    //noinspection UnusedAssignment
-    targets = PsiElement.EMPTY_ARRAY;
 
     ProgressManager.getInstance().run(new Task.Backgroundable(project, "Updating Usage View ...") {
       @Override
       public void run(@NotNull ProgressIndicator indicator) {
-        for (final SmartPsiElementPointer pointer : pointers) {
+        for (final T pointer : targets) {
           if (((UsageViewImpl)view).isDisposed()) break;
           ApplicationManager.getApplication().runReadAction(() -> {
-            final PsiElement target = pointer.getElement();
-            if (target != null) {
-              view.appendUsage(UsageInfoToUsageConverter.convert(primary, new UsageInfo(target)));
+            Usage usage = usageConverter.fun(pointer);
+            if (usage != null) {
+              view.appendUsage(usage);
             }
           });
         }
@@ -928,6 +920,25 @@ public class FindUtil {
     return view;
   }
 
+  @Nullable
+  public static UsageView showInUsageView(@Nullable PsiElement sourceElement,
+                                          @NotNull PsiElement[] targets,
+                                          @NotNull String title,
+                                          @NotNull Project project) {
+    if (targets.length == 0) return null;
+    PsiElement[] primary = sourceElement == null ? PsiElement.EMPTY_ARRAY : new PsiElement[]{sourceElement};
+
+    SmartPointerManager smartPointerManager = SmartPointerManager.getInstance(project);
+    SmartPsiElementPointer[] pointers = Stream.of(targets).map(smartPointerManager::createSmartPsiElementPointer).toArray(SmartPsiElementPointer[]::new);
+    // usage view will load document/AST so still referencing all these PSI elements might lead to out of memory
+    //noinspection UnusedAssignment
+    targets = PsiElement.EMPTY_ARRAY;
+    return showInUsageView(sourceElement, pointers, p -> {
+      PsiElement element = p.getElement();
+      return element == null ? null : UsageInfoToUsageConverter.convert(primary, new UsageInfo(element));
+    }, title, null, project);
+  }
+
   /**
    * Creates a selection in editor per each search result. Existing carets and selections in editor are discarded.
    *
@@ -935,7 +946,7 @@ public class FindUtil {
    *                                     if negative, carets will be positioned at selection ends
    */
   public static void selectSearchResultsInEditor(@NotNull Editor editor,
-                                                 @NotNull Iterator<FindResult> resultIterator,
+                                                 @NotNull Iterator<? extends FindResult> resultIterator,
                                                  int caretShiftFromSelectionStart) {
     if (!editor.getCaretModel().supportsMultipleCarets()) {
       return;
@@ -964,7 +975,7 @@ public class FindUtil {
    *
    * @param caretShiftFromSelectionStart if non-negative, defines caret position relative to selection start, for each created selection.
    *                                     if negative, caret will be positioned at selection end
-   * @return <code>true</code> if caret was added successfully, <code>false</code> if it cannot be done, e.g. because a caret already
+   * @return {@code true} if caret was added successfully, {@code false} if it cannot be done, e.g. because a caret already
    * exists at target position
    */
   public static boolean selectSearchResultInEditor(@NotNull Editor editor, @NotNull FindResult result, int caretShiftFromSelectionStart) {
@@ -972,8 +983,10 @@ public class FindUtil {
       return false;
     }
     int caretOffset = getCaretPosition(result, caretShiftFromSelectionStart);
+    LogicalPosition caretPosition = editor.offsetToLogicalPosition(caretOffset);
+    if (caretShiftFromSelectionStart == 0) caretPosition = caretPosition.leanForward(true);
     EditorActionUtil.makePositionVisible(editor, caretOffset);
-    Caret newCaret = editor.getCaretModel().addCaret(editor.offsetToVisualPosition(caretOffset));
+    Caret newCaret = editor.getCaretModel().addCaret(editor.logicalToVisualPosition(caretPosition));
     if (newCaret == null) {
       return false;
     }

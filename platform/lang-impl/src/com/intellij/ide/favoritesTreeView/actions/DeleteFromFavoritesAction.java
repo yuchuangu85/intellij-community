@@ -29,6 +29,7 @@ import com.intellij.ui.AnActionButton;
 import com.intellij.ui.CommonActionsPanel;
 import com.intellij.util.IconUtil;
 import com.intellij.util.containers.hash.HashMap;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,14 +41,14 @@ import java.util.Set;
  * @author Konstantin Bulenkov
  */
 public class DeleteFromFavoritesAction extends AnActionButton implements DumbAware {
-  private static final Logger LOG = Logger.getInstance("#" + DeleteFromFavoritesAction.class.getName());
+  private static final Logger LOG = Logger.getInstance(DeleteFromFavoritesAction.class);
 
   public DeleteFromFavoritesAction() {
     super(IdeBundle.message("action.remove.from.current.favorites"), IconUtil.getRemoveIcon());
   }
 
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public void actionPerformed(@NotNull AnActionEvent e) {
     final DataContext dataContext = e.getDataContext();
     Project project = e.getProject();
     FavoritesViewTreeBuilder builder = FavoritesTreeViewPanel.FAVORITES_TREE_BUILDER_KEY.getData(dataContext);
@@ -69,7 +70,7 @@ public class DeleteFromFavoritesAction extends AnActionButton implements DumbAwa
     final DnDAwareTree tree = FavoritesTreeViewPanel.FAVORITES_TREE_KEY.getData(dataContext);
 
     assert roots != null && tree != null;
-    Map<String, List<AbstractTreeNode>> toRemove = new HashMap<String, List<AbstractTreeNode>>();
+    Map<String, List<AbstractTreeNode>> toRemove = new HashMap<>();
     for (FavoritesTreeNodeDescriptor root : roots) {
       final AbstractTreeNode node = root.getElement();
       if (node instanceof FavoritesListNode) {
@@ -80,7 +81,7 @@ public class DeleteFromFavoritesAction extends AnActionButton implements DumbAwa
         LOG.assertTrue(listNode != null);
         final String name = listNode.getName();
         if (!toRemove.containsKey(name)) {
-          toRemove.put(name, new ArrayList<AbstractTreeNode>());
+          toRemove.put(name, new ArrayList<>());
         }
         toRemove.get(name).add(node);
       }
@@ -92,7 +93,7 @@ public class DeleteFromFavoritesAction extends AnActionButton implements DumbAwa
   }
 
   @Override
-  public void updateButton(AnActionEvent e) {
+  public void updateButton(@NotNull AnActionEvent e) {
     e.getPresentation().setText(getTemplatePresentation().getText());
     final DataContext dataContext = e.getDataContext();
     Project project = e.getProject();

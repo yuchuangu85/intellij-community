@@ -26,12 +26,12 @@ public class CollectionsDelta {
   }
 
   @Nullable
-  public static <T> Set<T> notInSecond(final Collection<T> first, final Collection<T> second) {
+  public static <T> Set<T> notInSecond(final Collection<? extends T> first, final Collection<? extends T> second) {
     Set<T> notInSecond = null;
     for (T topItem : first) {
       if (! second.contains(topItem)) {
         if (notInSecond == null) {
-          notInSecond = new HashSet<T>();
+          notInSecond = new HashSet<>();
         }
         notInSecond.add(topItem);
       }

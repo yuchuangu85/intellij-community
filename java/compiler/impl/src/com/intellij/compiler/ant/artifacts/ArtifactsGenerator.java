@@ -20,19 +20,17 @@ import com.intellij.compiler.ant.taskdefs.*;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Couple;
+import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.packaging.artifacts.Artifact;
 import com.intellij.packaging.artifacts.ArtifactManager;
 import com.intellij.packaging.artifacts.ArtifactType;
-import com.intellij.packaging.elements.PackagingElement;
 import com.intellij.packaging.elements.PackagingElementResolvingContext;
 import com.intellij.packaging.impl.artifacts.ArtifactUtil;
 import com.intellij.packaging.impl.elements.ArtifactPackagingElement;
 import com.intellij.packaging.impl.elements.ModuleOutputPackagingElement;
-import com.intellij.util.Processor;
 import org.jetbrains.annotations.NonNls;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -51,7 +49,7 @@ public class ArtifactsGenerator {
   public ArtifactsGenerator(Project project, GenerationOptions genOptions) {
     myResolvingContext = ArtifactManager.getInstance(project).getResolvingContext();
 
-    myAllArtifacts = new ArrayList<Artifact>(Arrays.asList(ArtifactManager.getInstance(project).getSortedArtifacts()));
+    myAllArtifacts = new ArrayList<>(Arrays.asList(ArtifactManager.getInstance(project).getSortedArtifacts()));
 
     myContext = new ArtifactAntGenerationContextImpl(project, genOptions, myAllArtifacts);
   }
@@ -61,7 +59,7 @@ public class ArtifactsGenerator {
   }
 
   public List<Generator> generate() {
-    final List<Generator> generators = new ArrayList<Generator>();
+    final List<Generator> generators = new ArrayList<>();
 
     final Target initTarget = new Target(INIT_ARTIFACTS_TARGET, null, null, null);
     generators.add(initTarget);
@@ -140,8 +138,8 @@ public class ArtifactsGenerator {
 
     final Couple<String> xmlNs = getArtifactXmlNs(artifact.getArtifactType());
     final Target artifactTarget =
-        new Target(myContext.getTargetName(artifact), depends.toString(), "Build '" + artifact.getName() + "' artifact", null, 
-                   xmlNs != null ? xmlNs.first : null, xmlNs != null ? xmlNs.second : null);
+        new Target(myContext.getTargetName(artifact), depends.toString(), "Build '" + artifact.getName() + "' artifact", null,
+                   Pair.getFirst(xmlNs), Pair.getSecond(xmlNs));
 
     if (myContext.shouldBuildIntoTempDirectory(artifact)) {
       final String outputDirectory = BuildProperties.propertyRelativePath(ArtifactAntGenerationContextImpl.ARTIFACTS_TEMP_DIR_PROPERTY,
@@ -155,7 +153,7 @@ public class ArtifactsGenerator {
 
     final DirectoryAntCopyInstructionCreator creator = new DirectoryAntCopyInstructionCreator(outputPath);
 
-    List<Generator> copyInstructions = new ArrayList<Generator>();
+    List<Generator> copyInstructions = new ArrayList<>();
     if (needAntArtifactInstructions(artifact.getArtifactType())) {
       copyInstructions.addAll(artifact.getRootElement().computeAntInstructions(myResolvingContext, creator, myContext, artifact.getArtifactType()));
     }
@@ -198,7 +196,7 @@ public class ArtifactsGenerator {
   }
 
   public List<String> getCleanTargetNames() {
-    final List<String> targets = new ArrayList<String>();
+    final List<String> targets = new ArrayList<>();
     for (Artifact artifact : myAllArtifacts) {
       if (!myContext.shouldBuildIntoTempDirectory(artifact)) {
         targets.add(myContext.getCleanTargetName(artifact));

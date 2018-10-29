@@ -32,7 +32,7 @@ public class RedmineRepositoryEditor extends BaseRepositoryEditor<RedmineReposit
   private JBLabel myProjectLabel;
   private JBLabel myAPIKeyLabel;
 
-  public RedmineRepositoryEditor(final Project project, final RedmineRepository repository, Consumer<RedmineRepository> changeListener) {
+  public RedmineRepositoryEditor(final Project project, final RedmineRepository repository, Consumer<? super RedmineRepository> changeListener) {
     super(project, repository, changeListener);
 
     myTestButton.setEnabled(myRepository.isConfigured());
@@ -139,7 +139,7 @@ public class RedmineRepositoryEditor extends BaseRepositoryEditor<RedmineReposit
     public final RedmineProject myProject;
     public final int myLevel;
 
-    public RedmineProjectItem(@NotNull RedmineProject project, int level) {
+    RedmineProjectItem(@NotNull RedmineProject project, int level) {
       myProject = project;
       myLevel = level;
     }
@@ -186,8 +186,8 @@ public class RedmineRepositoryEditor extends BaseRepositoryEditor<RedmineReposit
     protected List<RedmineProjectItem> fetch(@NotNull ProgressIndicator indicator) throws Exception {
       // Seems that Redmine always return its project hierarchy in DFS order.
       // So it's easy to find level of each project using stack of parents.
-      Stack<RedmineProject> parents = new Stack<RedmineProject>();
-      List<RedmineProjectItem> items = new ArrayList<RedmineProjectItem>();
+      Stack<RedmineProject> parents = new Stack<>();
+      List<RedmineProjectItem> items = new ArrayList<>();
       for (RedmineProject project : myRepository.fetchProjects()) {
         RedmineProject parentProject = project.getParent();
         if (parentProject == null) {

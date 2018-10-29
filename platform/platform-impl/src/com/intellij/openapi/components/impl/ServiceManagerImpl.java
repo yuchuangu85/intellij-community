@@ -1,25 +1,10 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.components.impl;
 
 import com.intellij.ide.plugins.PluginManager;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.AccessToken;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.components.BaseComponent;
 import com.intellij.openapi.components.ComponentManager;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.ServiceDescriptor;
@@ -30,25 +15,24 @@ import com.intellij.openapi.extensions.impl.ExtensionComponentAdapter;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.PairProcessor;
 import com.intellij.util.PlatformUtils;
 import com.intellij.util.io.storage.HeavyProcessLatch;
 import com.intellij.util.pico.AssignableToComponentAdapter;
 import com.intellij.util.pico.CachingConstructorInjectionComponentAdapter;
-import org.jetbrains.annotations.NonNls;
+import com.intellij.util.pico.DefaultPicoContainer;
 import org.jetbrains.annotations.NotNull;
 import org.picocontainer.*;
 import org.picocontainer.defaults.InstanceComponentAdapter;
 
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.BiPredicate;
 
-public class ServiceManagerImpl implements BaseComponent {
+public class ServiceManagerImpl implements Disposable {
   private static final Logger LOG = Logger.getInstance(ServiceManagerImpl.class);
 
-  private static final ExtensionPointName<ServiceDescriptor> APP_SERVICES = new ExtensionPointName<ServiceDescriptor>("com.intellij.applicationService");
-  private static final ExtensionPointName<ServiceDescriptor> PROJECT_SERVICES = new ExtensionPointName<ServiceDescriptor>("com.intellij.projectService");
+  private static final ExtensionPointName<ServiceDescriptor> APP_SERVICES = new ExtensionPointName<>("com.intellij.applicationService");
+  private static final ExtensionPointName<ServiceDescriptor> PROJECT_SERVICES = new ExtensionPointName<>("com.intellij.projectService");
   private ExtensionPointName<ServiceDescriptor> myExtensionPointName;
   private ExtensionPointListener<ServiceDescriptor> myExtensionPointListener;
 
@@ -80,7 +64,7 @@ public class ServiceManagerImpl implements BaseComponent {
           }
         }
 
-        if (!ComponentManagerImpl.isComponentSuitableForOs(descriptor.os)) {
+        if (!Extensions.isComponentSuitableForOs(descriptor.os)) {
           return;
         }
 
@@ -98,19 +82,20 @@ public class ServiceManagerImpl implements BaseComponent {
     extensionPoint.addExtensionPointListener(myExtensionPointListener);
   }
 
+  @NotNull
   public List<ServiceDescriptor> getAllDescriptors() {
-    ServiceDescriptor[] extensions = Extensions.getExtensions(myExtensionPointName);
-    return Arrays.asList(extensions);
+    return myExtensionPointName.getExtensionList();
   }
 
-  public static void processAllImplementationClasses(@NotNull ComponentManagerImpl componentManager, @NotNull PairProcessor<Class<?>, PluginDescriptor> processor) {
-    Collection adapters = componentManager.getPicoContainer().getComponentAdapters();
+  public static void processAllImplementationClasses(@NotNull ComponentManagerImpl componentManager, @NotNull BiPredicate<? super Class<?>, ? super PluginDescriptor> processor) {
+    @SuppressWarnings("unchecked")
+    Collection<ComponentAdapter> adapters = componentManager.getPicoContainer().getComponentAdapters();
     if (adapters.isEmpty()) {
       return;
     }
 
-    for (Object o : adapters) {
-      Class aClass;
+    for (ComponentAdapter o : adapters) {
+      Class<?> aClass;
       if (o instanceof MyComponentAdapter) {
         MyComponentAdapter adapter = (MyComponentAdapter)o;
         PluginDescriptor pluginDescriptor = adapter.myPluginDescriptor;
@@ -136,53 +121,44 @@ public class ServiceManagerImpl implements BaseComponent {
           continue;
         }
 
-        if (!processor.process(aClass, pluginDescriptor)) {
+        if (!processor.test(aClass, pluginDescriptor)) {
           break;
         }
       }
-      else if (o instanceof ComponentAdapter && !(o instanceof ExtensionComponentAdapter)) {
-        PluginId pluginId = componentManager.getConfig((ComponentAdapter)o);
+      else if (!(o instanceof ExtensionComponentAdapter)) {
+        PluginId pluginId = componentManager.getConfig(o);
         // allow InstanceComponentAdapter without pluginId to test
         if (pluginId != null || o instanceof InstanceComponentAdapter) {
           try {
-            aClass = ((ComponentAdapter)o).getComponentImplementation();
+            aClass = o.getComponentImplementation();
           }
           catch (Throwable e) {
             LOG.error(e);
             continue;
           }
 
-          processor.process(aClass, pluginId == null ? null : PluginManager.getPlugin(pluginId));
+          if (!processor.test(aClass, pluginId == null ? null : PluginManager.getPlugin(pluginId))) {
+            break;
+          }
         }
       }
     }
   }
 
   @Override
-  @NonNls
-  @NotNull
-  public String getComponentName() {
-    return getClass().getName();
-  }
-
-  @Override
-  public void initComponent() {
-  }
-
-  @Override
-  public void disposeComponent() {
+  public void dispose() {
     final ExtensionPoint<ServiceDescriptor> extensionPoint = Extensions.getArea(null).getExtensionPoint(myExtensionPointName);
     extensionPoint.removeExtensionPointListener(myExtensionPointListener);
   }
 
-  private static class MyComponentAdapter implements AssignableToComponentAdapter {
+  private static class MyComponentAdapter implements AssignableToComponentAdapter, DefaultPicoContainer.LazyComponentAdapter {
     private ComponentAdapter myDelegate;
     private final ServiceDescriptor myDescriptor;
     private final PluginDescriptor myPluginDescriptor;
     private final ComponentManagerEx myComponentManager;
     private volatile Object myInitializedComponentInstance;
 
-    public MyComponentAdapter(final ServiceDescriptor descriptor, final PluginDescriptor pluginDescriptor, ComponentManagerEx componentManager) {
+    MyComponentAdapter(final ServiceDescriptor descriptor, final PluginDescriptor pluginDescriptor, ComponentManagerEx componentManager) {
       myDescriptor = descriptor;
       myPluginDescriptor = pluginDescriptor;
       myComponentManager = componentManager;
@@ -197,6 +173,11 @@ public class ServiceManagerImpl implements BaseComponent {
     @Override
     public Class getComponentImplementation() {
       return getDelegate().getComponentImplementation();
+    }
+
+    @Override
+    public boolean isComponentInstantiated() {
+      return myInitializedComponentInstance != null;
     }
 
     @Override

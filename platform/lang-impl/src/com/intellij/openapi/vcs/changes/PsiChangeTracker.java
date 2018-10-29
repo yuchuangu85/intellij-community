@@ -38,9 +38,9 @@ public class PsiChangeTracker {
   public static <T extends PsiElement> Map<T, FileStatus> getElementsChanged(PsiElement file,
                                                                              PsiElement oldFile,
                                                                              final PsiFilter<T> filter) {
-    final HashMap<T, FileStatus> result = new HashMap<T, FileStatus>();
-    final List<T> oldElements = new ArrayList<T>();
-    final List<T> elements = new ArrayList<T>();
+    final HashMap<T, FileStatus> result = new HashMap<>();
+    final List<T> oldElements = new ArrayList<>();
+    final List<T> elements = new ArrayList<>();
 
     if (file == null) {
       oldFile.accept(filter.createVisitor(oldElements));
@@ -73,9 +73,9 @@ public class PsiChangeTracker {
     return result;
   }
 
-  private static <T extends PsiElement> Map<T, FileStatus> calculateStatuses(List<T> elements,
-                                                                             List<T> oldElements,
-                                                                             Map<T, FileStatus> result, PsiFilter<T> filter) {
+  private static <T extends PsiElement> Map<T, FileStatus> calculateStatuses(List<? extends T> elements,
+                                                                             List<? extends T> oldElements,
+                                                                             Map<T, FileStatus> result, PsiFilter<? super T> filter) {
     for (T element : elements) {
       T e = null;
       for (T oldElement : oldElements) {

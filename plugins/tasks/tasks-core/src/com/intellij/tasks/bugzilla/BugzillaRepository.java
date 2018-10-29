@@ -10,9 +10,8 @@ import com.intellij.tasks.*;
 import com.intellij.tasks.impl.BaseRepository;
 import com.intellij.tasks.impl.BaseRepositoryImpl;
 import com.intellij.tasks.impl.RequestFailedException;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.HashMap;
+import java.util.HashMap;
 import com.intellij.util.xmlb.annotations.Tag;
 import org.apache.xmlrpc.*;
 import org.jetbrains.annotations.NotNull;
@@ -84,7 +83,7 @@ public class BugzillaRepository extends BaseRepositoryImpl {
     Hashtable<String, Object> response = createIssueSearchRequest(query, offset, limit, withClosed).execute();
 
     Vector<Hashtable<String, Object>> bugs = (Vector<Hashtable<String, Object>>)response.get("bugs");
-    return ContainerUtil.map2Array(bugs, BugzillaTask.class, hashTable -> new BugzillaTask(hashTable, BugzillaRepository.this));
+    return ContainerUtil.map2Array(bugs, BugzillaTask.class, hashTable -> new BugzillaTask(hashTable, this));
   }
 
   private BugzillaXmlRpcRequest createIssueSearchRequest(String query, int offset, int limit, boolean withClosed) throws Exception {
@@ -192,14 +191,14 @@ public class BugzillaRepository extends BaseRepositoryImpl {
       final String name;
       final Iterable<String> canChangeTo;
 
-      public Status(String name, boolean isOpen, Iterable<String> canChangeTo) {
+      Status(String name, boolean isOpen, Iterable<String> canChangeTo) {
         this.isOpen = isOpen;
         this.name = name;
         this.canChangeTo = canChangeTo;
       }
     }
 
-    final Map<String, Status> statuses = new HashMap<String, Status>();
+    final Map<String, Status> statuses = new HashMap<>();
     for (Hashtable<String, ?> statusInfo : (Vector<Hashtable<String, ?>>)statusesInfo.get("values")) {
       final String name = (String)statusInfo.get("name");
       if (StringUtil.isEmpty(name)) {
@@ -213,7 +212,7 @@ public class BugzillaRepository extends BaseRepositoryImpl {
     if (currentState != null) {
       final Status status = statuses.get(currentState);
       if (status != null) {
-        final Set<CustomTaskState> result = new HashSet<CustomTaskState>();
+        final Set<CustomTaskState> result = new HashSet<>();
         for (String targetStatusName : status.canChangeTo) {
           final Status targetStatus = statuses.get(targetStatusName);
           if (targetStatus != null) {
@@ -281,8 +280,8 @@ public class BugzillaRepository extends BaseRepositoryImpl {
       .withParameter("ids", productIdsResponse.get("ids"))
       .execute();
 
-    List<String> productNames = new ArrayList<String>();
-    List<String> componentNames = new ArrayList<String>();
+    List<String> productNames = new ArrayList<>();
+    List<String> componentNames = new ArrayList<>();
 
     for (Hashtable<String, Object> info : (Vector<Hashtable<String, Object>>)productInfoResponse.get("products")) {
       productNames.add((String)info.get("name"));
@@ -321,12 +320,12 @@ public class BugzillaRepository extends BaseRepositoryImpl {
   }
 
   private static <T> Vector<T> newVector(T... elements) {
-    return new Vector<T>(Arrays.asList(elements));
+    return new Vector<>(Arrays.asList(elements));
   }
 
   private static <K, V> Hashtable<K, V> newHashTable(Object... pairs) {
     assert pairs.length % 2 == 0;
-    Hashtable<K, V> table = new Hashtable<K, V>();
+    Hashtable<K, V> table = new Hashtable<>();
     for (int i = 0; i < pairs.length; i += 2) {
       // Null values are not allowed, because Bugzilla reacts unexpectedly on them.
       if (pairs[i + 1] != null) {
@@ -361,7 +360,7 @@ public class BugzillaRepository extends BaseRepositoryImpl {
   private class BugzillaXmlRpcRequest {
     // Copied from Trac repository
     private class Transport extends CommonsXmlRpcTransport {
-      public Transport() throws MalformedURLException {
+      Transport() throws MalformedURLException {
         super(new URL(getUrl()), getHttpClient());
       }
 
@@ -372,10 +371,10 @@ public class BugzillaRepository extends BaseRepositoryImpl {
 
     private final String myMethodName;
     private boolean myRequireAuthentication;
-    private final HashMap<String, Object> myParameters = new HashMap<String, Object>();
+    private final HashMap<String, Object> myParameters = new HashMap<>();
     private final Transport myTransport;
 
-    public BugzillaXmlRpcRequest(@NotNull String methodName) throws MalformedURLException {
+    BugzillaXmlRpcRequest(@NotNull String methodName) throws MalformedURLException {
       myMethodName = methodName;
       myTransport = new Transport();
     }
@@ -408,8 +407,8 @@ public class BugzillaRepository extends BaseRepositoryImpl {
           myParameters.put("Bugzilla_token", myAuthenticationToken);
         }
       }
-      Vector<Hashtable<String, Object>> parameters = new Vector<Hashtable<String, Object>>();
-      parameters.add(new Hashtable<String, Object>(myParameters));
+      Vector<Hashtable<String, Object>> parameters = new Vector<>();
+      parameters.add(new Hashtable<>(myParameters));
       try {
         return  (T)new XmlRpcClient(getUrl()).execute(new XmlRpcRequest(myMethodName, parameters), myTransport);
       }

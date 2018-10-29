@@ -1,17 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
  */
 package com.intellij.execution.configurations;
 
@@ -64,12 +52,13 @@ public class JavaRunConfigurationModule extends RunConfigurationModule {
     }
   }
 
-  public static Collection<Module> getModulesForClass(@NotNull final Project project, final String className) {
-    if (project.isDefault()) return Arrays.asList(ModuleManager.getInstance(project).getModules());
+  public static Collection<Module> getModulesForClass(@NotNull Project project, @Nullable String className) {
+    if (project.isDefault()) {
+      return Arrays.asList(ModuleManager.getInstance(project).getModules());
+    }
     PsiDocumentManager.getInstance(project).commitAllDocuments();
-    final PsiClass[] possibleClasses = JavaPsiFacade.getInstance(project).findClasses(className, GlobalSearchScope.projectScope(project));
-
-    final Set<Module> modules = new THashSet<Module>();
+    final PsiClass[] possibleClasses = className == null ? PsiClass.EMPTY_ARRAY : JavaPsiFacade.getInstance(project).findClasses(className, GlobalSearchScope.projectScope(project));
+    final Set<Module> modules = new THashSet<>();
     for (PsiClass aClass : possibleClasses) {
       Module module = ModuleUtilCore.findModuleForPsiElement(aClass);
       if (module != null) {
@@ -80,7 +69,7 @@ public class JavaRunConfigurationModule extends RunConfigurationModule {
       return Arrays.asList(ModuleManager.getInstance(project).getModules());
     }
     else {
-      final Set<Module> result = new HashSet<Module>();
+      final Set<Module> result = new HashSet<>();
       for (Module module : modules) {
         ModuleUtilCore.collectModulesDependsOn(module, result);
       }
@@ -92,7 +81,12 @@ public class JavaRunConfigurationModule extends RunConfigurationModule {
     final PsiClass psiClass = findClass(className);
     if (psiClass == null) {
       throw new RuntimeConfigurationWarning(
-        ExecutionBundle.message("class.not.found.in.module.error.message", className, getModuleName()));
+        ExecutionBundle.message("class.not.found.in.module.error.message", className, getModuleName())) {
+        @Override
+        public boolean shouldShowInDumbMode() {
+          return false;
+        }
+      };
     }
     return psiClass;
   }

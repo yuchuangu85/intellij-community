@@ -16,7 +16,8 @@
 package git4idea.repo;
 
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.components.ServiceManager;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.ProjectLevelVcsManager;
@@ -24,10 +25,9 @@ import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.ChangeListManager;
 import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.openapi.vfs.VirtualFileManager;
-import com.intellij.openapi.vfs.newvfs.BulkFileListener;
 import com.intellij.openapi.vfs.newvfs.events.*;
-import com.intellij.util.messages.MessageBusConnection;
+import com.intellij.vfs.AsyncVfsEventsListener;
+import com.intellij.vfs.AsyncVfsEventsPostProcessor;
 import git4idea.GitLocalBranch;
 import git4idea.GitUtil;
 import git4idea.commands.Git;
@@ -47,7 +47,7 @@ import java.util.*;
  * <p>
  *   This class is used by {@link git4idea.status.GitNewChangesCollector}.
  *   By keeping track of unversioned files in the Git repository we may invoke
- *   <code>'git status --porcelain --untracked-files=no'</code> which gives a significant speed boost: the command gets more than twice
+ *   {@code 'git status --porcelain --untracked-files=no'} which gives a significant speed boost: the command gets more than twice
  *   faster, because it doesn't need to seek for untracked files.
  * </p>
  *
@@ -80,10 +80,8 @@ import java.util.*;
  *   This is done so, because the latter two variables are accessed from the AWT in after() and we don't want to lock the AWT long,
  *   while myDefinitelyUntrackedFiles is modified along with native request to Git.
  * </p>
- *
- * @author Kirill Likhodedov
  */
-public class GitUntrackedFilesHolder implements Disposable, BulkFileListener {
+public class GitUntrackedFilesHolder implements Disposable, AsyncVfsEventsListener {
 
   private static final Logger LOG = Logger.getInstance(GitUntrackedFilesHolder.class);
 
@@ -96,8 +94,8 @@ public class GitUntrackedFilesHolder implements Disposable, BulkFileListener {
   private final GitRepositoryFiles myRepositoryFiles;
   private final Git myGit;
 
-  private final Set<VirtualFile> myDefinitelyUntrackedFiles = new HashSet<VirtualFile>();
-  private final Set<VirtualFile> myPossiblyUntrackedFiles = new HashSet<VirtualFile>();
+  private final Set<VirtualFile> myDefinitelyUntrackedFiles = new HashSet<>();
+  private final Set<VirtualFile> myPossiblyUntrackedFiles = new HashSet<>();
   private boolean myReady;   // if false, total refresh is needed
   private final Object LOCK = new Object();
   private final GitRepositoryManager myRepositoryManager;
@@ -108,7 +106,7 @@ public class GitUntrackedFilesHolder implements Disposable, BulkFileListener {
     myRoot = repository.getRoot();
     myChangeListManager = ChangeListManager.getInstance(myProject);
     myDirtyScopeManager = VcsDirtyScopeManager.getInstance(myProject);
-    myGit = ServiceManager.getService(Git.class);
+    myGit = Git.getInstance();
     myVcsManager = ProjectLevelVcsManager.getInstance(myProject);
 
     myRepositoryManager = GitUtil.getRepositoryManager(myProject);
@@ -116,10 +114,11 @@ public class GitUntrackedFilesHolder implements Disposable, BulkFileListener {
   }
 
   void setupVfsListener(@NotNull Project project) {
-    if (!project.isDisposed()) {
-      MessageBusConnection connection = project.getMessageBus().connect(this);
-      connection.subscribe(VirtualFileManager.VFS_CHANGES, this);
-    }
+    ApplicationManager.getApplication().runReadAction(() -> {
+      if (!project.isDisposed()) {
+        AsyncVfsEventsPostProcessor.getInstance().addListener(this, this);
+      }
+    });
   }
 
   @Override
@@ -173,7 +172,7 @@ public class GitUntrackedFilesHolder implements Disposable, BulkFileListener {
       rescanAll();
     }
     synchronized (myDefinitelyUntrackedFiles) {
-      return new ArrayList<VirtualFile>(myDefinitelyUntrackedFiles);
+      return new ArrayList<>(myDefinitelyUntrackedFiles);
     }
   }
 
@@ -199,7 +198,7 @@ public class GitUntrackedFilesHolder implements Disposable, BulkFileListener {
   }
 
   /**
-   * @return <code>true</code> if untracked files list is initialized and being kept up-to-date, <code>false</code> if full refresh is needed.
+   * @return {@code true} if untracked files list is initialized and being kept up-to-date, {@code false} if full refresh is needed.
    */
   private boolean isReady() {
     synchronized (LOCK) {
@@ -211,9 +210,9 @@ public class GitUntrackedFilesHolder implements Disposable, BulkFileListener {
    * Queries Git to check the status of {@code myPossiblyUntrackedFiles} and moves them to {@code myDefinitelyUntrackedFiles}.
    */
   private void verifyPossiblyUntrackedFiles() throws VcsException {
-    Set<VirtualFile> suspiciousFiles = new HashSet<VirtualFile>();
+    Set<VirtualFile> suspiciousFiles;
     synchronized (LOCK) {
-      suspiciousFiles.addAll(myPossiblyUntrackedFiles);
+      suspiciousFiles = new HashSet<>(myPossiblyUntrackedFiles);
       myPossiblyUntrackedFiles.clear();
     }
 
@@ -230,13 +229,9 @@ public class GitUntrackedFilesHolder implements Disposable, BulkFileListener {
   }
 
   @Override
-  public void before(@NotNull List<? extends VFileEvent> events) {
-  }
-
-  @Override
-  public void after(@NotNull List<? extends VFileEvent> events) {
+  public void filesChanged(@NotNull List<VFileEvent> events) {
     boolean allChanged = false;
-    Set<VirtualFile> filesToRefresh = new HashSet<VirtualFile>();
+    Set<VirtualFile> filesToRefresh = new HashSet<>();
 
     for (VFileEvent event : events) {
       if (allChanged) {
@@ -301,13 +296,20 @@ public class GitUntrackedFilesHolder implements Disposable, BulkFileListener {
 
   @Nullable
   private static VirtualFile getAffectedFile(@NotNull VFileEvent event) {
-    if (event instanceof VFileCreateEvent || event instanceof VFileDeleteEvent || event instanceof VFileMoveEvent || isRename(event)) {
-      return event.getFile();
-    } else if (event instanceof VFileCopyEvent) {
-      VFileCopyEvent copyEvent = (VFileCopyEvent) event;
-      return copyEvent.getNewParent().findChild(copyEvent.getNewChildName());
-    }
-    return null;
+    return ReadAction.compute(() -> {
+      if (event instanceof VFileCreateEvent) {
+        return ((VFileCreateEvent)event).getParent().isValid() ? event.getFile() : null;
+      }
+      else if (event instanceof VFileDeleteEvent || event instanceof VFileMoveEvent || isRename(event)) {
+        return event.getFile();
+      }
+      else if (event instanceof VFileCopyEvent) {
+        VFileCopyEvent copyEvent = (VFileCopyEvent) event;
+        VirtualFile newParent = copyEvent.getNewParent();
+        return newParent.isValid() ? newParent.findChild(copyEvent.getNewChildName()) : null;
+      }
+      return null;
+    });
   }
 
   private static boolean isRename(@NotNull VFileEvent event) {

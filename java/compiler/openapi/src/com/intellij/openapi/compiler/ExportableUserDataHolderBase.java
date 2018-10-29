@@ -24,9 +24,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ExportableUserDataHolderBase extends UserDataHolderBase implements ExportableUserDataHolder{
+  @Override
   @NotNull
   public final Map<Key, Object> exportUserData() {
-    final Map<Key, Object> result = new HashMap<Key, Object>();
+    final Map<Key, Object> result = new HashMap<>();
 
     KeyFMap map = getUserMap();
     Key[] keys = map.getKeys();

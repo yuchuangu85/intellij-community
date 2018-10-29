@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,6 @@ import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.roots.OrderEntry;
 import com.intellij.ui.CheckBoxList;
 import com.intellij.ui.ToolbarDecorator;
-import com.intellij.util.Function;
 import com.intellij.util.ui.EditableListModelDecorator;
 import org.jetbrains.annotations.Nullable;
 
@@ -44,11 +43,11 @@ public class PyModuleDependenciesConfigurable implements UnnamedConfigurable {
   private List<Module> myInitialDependencies;
   private JPanel myMainPanel;
   private JPanel myListHolderPanel;
-  private CheckBoxList<Module> myDependenciesList;
+  private final CheckBoxList<Module> myDependenciesList;
 
   public PyModuleDependenciesConfigurable(Module module) {
     myModule = module;
-    myDependenciesList = new CheckBoxList<Module>();
+    myDependenciesList = new CheckBoxList<>();
     resetModel();
     ToolbarDecorator decorator = ToolbarDecorator.createDecorator(myDependenciesList,
                                                                   new EditableListModelDecorator((DefaultListModel) myDependenciesList.getModel()));
@@ -57,9 +56,8 @@ public class PyModuleDependenciesConfigurable implements UnnamedConfigurable {
   }
 
   private void resetModel() {
-    List<Module> possibleDependencies = new ArrayList<Module>();
     myInitialDependencies = Arrays.asList(ModuleRootManager.getInstance(myModule).getDependencies());
-    possibleDependencies.addAll(myInitialDependencies);
+    List<Module> possibleDependencies = new ArrayList<>(myInitialDependencies);
     for (Module otherModule : ModuleManager.getInstance(myModule.getProject()).getModules()) {
       if (!possibleDependencies.contains(otherModule) && otherModule != myModule) {
         possibleDependencies.add(otherModule);
@@ -84,9 +82,9 @@ public class PyModuleDependenciesConfigurable implements UnnamedConfigurable {
   }
 
   private List<Module> collectDependencies() {
-    List<Module> result = new ArrayList<Module>();
+    List<Module> result = new ArrayList<>();
     for (int i = 0; i < myDependenciesList.getItemsCount(); i++) {
-      Module module = (Module)myDependenciesList.getItemAt(i);
+      Module module = myDependenciesList.getItemAt(i);
       if (myDependenciesList.isItemSelected(module)) {
         result.add(module);
       }
@@ -98,7 +96,7 @@ public class PyModuleDependenciesConfigurable implements UnnamedConfigurable {
   public void apply() throws ConfigurationException {
     ApplicationManager.getApplication().runWriteAction(() -> {
       ModifiableRootModel model = ModuleRootManager.getInstance(myModule).getModifiableModel();
-      List<ModuleOrderEntry> entries = new ArrayList<ModuleOrderEntry>();
+      List<ModuleOrderEntry> entries = new ArrayList<>();
       for (OrderEntry entry : model.getOrderEntries()) {
         if (entry instanceof ModuleOrderEntry) {
           entries.add((ModuleOrderEntry) entry);
@@ -117,9 +115,5 @@ public class PyModuleDependenciesConfigurable implements UnnamedConfigurable {
   @Override
   public void reset() {
     resetModel();
-  }
-
-  @Override
-  public void disposeUIResources() {
   }
 }

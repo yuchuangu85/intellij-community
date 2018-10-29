@@ -14,10 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * User: anna
- * Date: 28-Jun-2007
- */
 package com.intellij.internal;
 
 import com.intellij.openapi.actionSystem.AnAction;
@@ -29,22 +25,22 @@ import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.newvfs.ManagingFS;
 import com.intellij.openapi.vfs.newvfs.impl.VirtualFileSystemEntry;
-import com.intellij.util.Function;
 import gnu.trove.TObjectIntHashMap;
 import gnu.trove.TObjectIntProcedure;
+import org.jetbrains.annotations.NotNull;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 
 public class ComputeVirtualFileNameStatAction extends AnAction implements DumbAware {
   public ComputeVirtualFileNameStatAction() {
     super("Compute VF Name Statistics");
   }
 
-  public static void main(String[] args) {
-    new ComputeVirtualFileNameStatAction().actionPerformed(null);
-  }
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public void actionPerformed(@NotNull AnActionEvent e) {
     long start = System.currentTimeMillis();
 
     suffixes.clear();
@@ -54,7 +50,7 @@ public class ComputeVirtualFileNameStatAction extends AnAction implements DumbAw
       compute(root);
     }
 
-    final List<Pair<String,Integer>> names = new ArrayList<Pair<String, Integer>>(nameCount.size());
+    final List<Pair<String,Integer>> names = new ArrayList<>(nameCount.size());
     nameCount.forEachEntry(new TObjectIntProcedure<String>() {
       @Override
       public boolean execute(String name, int count) {
@@ -81,7 +77,7 @@ public class ComputeVirtualFileNameStatAction extends AnAction implements DumbAw
     show(suffixes);
 
 
-    final TObjectIntHashMap<String> save = new TObjectIntHashMap<String>();
+    final TObjectIntHashMap<String> save = new TObjectIntHashMap<>();
     // compute economy
     suffixes.forEachEntry(new TObjectIntProcedure<String>() {
       @Override
@@ -95,7 +91,7 @@ public class ComputeVirtualFileNameStatAction extends AnAction implements DumbAw
     final List<Pair<String, Integer>> saveSorted = show(save);
 
 
-    final List<String> picked = new ArrayList<String>();
+    final List<String> picked = new ArrayList<>();
     //List<String> candidates = new ArrayList<String>();
     //int i =0;
     //for (Pair<String, Integer> pair : sorted) {
@@ -163,7 +159,7 @@ public class ComputeVirtualFileNameStatAction extends AnAction implements DumbAw
   }
 
   private static List<Pair<String,Integer>> show(final TObjectIntHashMap<String> prefixes) {
-    final List<Pair<String,Integer>> prefs = new ArrayList<Pair<String, Integer>>(prefixes.size());
+    final List<Pair<String,Integer>> prefs = new ArrayList<>(prefixes.size());
     prefixes.forEachEntry(new TObjectIntProcedure<String>() {
       @Override
       public boolean execute(String s, int count) {
@@ -185,8 +181,8 @@ public class ComputeVirtualFileNameStatAction extends AnAction implements DumbAw
   }
 
   //TObjectIntHashMap<String> prefixes = new TObjectIntHashMap<String>();
-  TObjectIntHashMap<String> suffixes = new TObjectIntHashMap<String>();
-  TObjectIntHashMap<String> nameCount = new TObjectIntHashMap<String>();
+  TObjectIntHashMap<String> suffixes = new TObjectIntHashMap<>();
+  TObjectIntHashMap<String> nameCount = new TObjectIntHashMap<>();
   private void compute(VirtualFile root) {
     String name = root.getName();
     if (!nameCount.increment(name)) nameCount.put(name, 1);

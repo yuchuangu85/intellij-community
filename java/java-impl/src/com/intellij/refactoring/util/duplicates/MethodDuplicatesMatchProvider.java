@@ -32,14 +32,10 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-/**
-* User: anna
-* Date: 1/16/12
-*/
 class MethodDuplicatesMatchProvider implements MatchProvider {
   private final PsiMethod myMethod;
   private final List<Match> myDuplicates;
-  private static final Logger LOG = Logger.getInstance("#" + MethodDuplicatesMatchProvider.class.getName());
+  private static final Logger LOG = Logger.getInstance(MethodDuplicatesMatchProvider.class);
 
   MethodDuplicatesMatchProvider(PsiMethod method, List<Match> duplicates) {
     myMethod = method;
@@ -58,7 +54,7 @@ class MethodDuplicatesMatchProvider implements MatchProvider {
       PsiUtil.setModifierProperty(myMethod, PsiModifier.STATIC, true);
     }
 
-    final PsiElementFactory factory = JavaPsiFacade.getInstance(myMethod.getProject()).getElementFactory();
+    final PsiElementFactory factory = JavaPsiFacade.getElementFactory(myMethod.getProject());
     final boolean needQualifier = match.getInstanceExpression() != null;
     final boolean needStaticQualifier = isExternal(match);
     final boolean nameConflicts = nameConflicts(match);

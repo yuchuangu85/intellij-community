@@ -26,6 +26,7 @@ import java.util.Collection;
  * A computation (typically an anonymous class) to used in {@link CachedValue} to cache some computation result.
  * @param <T> the type of the cached value
  */
+@FunctionalInterface
 public interface CachedValueProvider<T> {
 
   /**
@@ -93,6 +94,7 @@ public interface CachedValueProvider<T> {
      * Creates a result
      * @see #getDependencyItems()
      */
+    @NotNull
     public static <T> Result<T> createSingleDependency(@Nullable T value, @NotNull Object dependency) {
       return create(value, dependency);
     }
@@ -101,16 +103,18 @@ public interface CachedValueProvider<T> {
      * Creates a result
      * @see #getDependencyItems()
      */
+    @NotNull
     public static <T> Result<T> create(@Nullable T value, @NotNull Object... dependencies) {
-      return new Result<T>(value, dependencies);
+      return new Result<>(value, dependencies);
     }
 
     /**
      * Creates a result
      * @see #getDependencyItems()
      */
+    @NotNull
     public static <T> Result<T> create(@Nullable T value, @NotNull Collection<?> dependencies) {
-      return new Result<T>(value, ArrayUtil.toObjectArray(dependencies));
+      return new Result<>(value, ArrayUtil.toObjectArray(dependencies));
     }
 
   }

@@ -13,94 +13,57 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-
-
 package org.jetbrains.intellij.build
-
-import org.codehaus.gant.GantBinding
-import org.jetbrains.intellij.build.impl.BuildUtils
-import org.jetbrains.jps.gant.LayoutInfo
-
 /**
  * @author nik
  */
 class IdeaCommunityBuilder {
-  private final GantBinding binding
   private final BuildContext buildContext
 
-  IdeaCommunityBuilder(String home, String outputRootPath, GantBinding binding, BuildOptions options = new BuildOptions()) {
-    this.binding = binding
-    buildContext = BuildContext.createContext(binding.ant, binding.projectBuilder, binding.project, binding.global, home, home,
-                                              "$outputRootPath/release", new IdeaCommunityProperties(home), options)
+  IdeaCommunityBuilder(String home, BuildOptions options = new BuildOptions(), String projectHome = home) {
+    buildContext = BuildContext.createContext(home, projectHome, new IdeaCommunityProperties(home), ProprietaryBuildTools.DUMMY, options)
   }
 
-  IdeaCommunityBuilder(GantBinding binding, BuildContext buildContext) {
-    this.binding = binding
+  IdeaCommunityBuilder(BuildContext buildContext) {
     this.buildContext = buildContext
   }
 
   void compileModules() {
-    BuildTasks.create(buildContext).compileProjectAndTests(["jps-builders"])
+    BuildTasks.create(buildContext).compileProjectAndTests(["intellij.platform.jps.build"])
+  }
+
+  void buildFullUpdater() {
+    def tasks = BuildTasks.create(buildContext)
+    tasks.compileModules(["updater"])
+    tasks.buildFullUpdaterJar()
+  }
+
+  void buildIntelliJCore() {
+    def builder = new IntelliJCoreArtifactsBuilder(buildContext)
+    builder.compileModules()
+    builder.layoutIntelliJCore()
   }
 
   void buildDistJars() {
-    def tasks = BuildTasks.create(buildContext)
-    tasks.cleanOutput()
-    compileModules()
-    tasks.buildSearchableOptions("resources-en", ["community-main"], [])
-    layoutAll()
+    BuildTasks.create(buildContext).buildDistributions()
+    layoutCoreArtifacts()
   }
 
   void buildDistributions() {
     def tasks = BuildTasks.create(buildContext)
-    tasks.cleanOutput()
-    compileModules()
-    tasks.buildSearchableOptions("resources-en", ["community-main"], [])
-
-    layoutAll(true)
-    layoutUpdater(buildContext.paths.artifacts)
-    tasks.zipProjectSources()
+    tasks.buildDistributions()
+    buildContext.messages.block("Build standalone JPS") {
+      String jpsArtifactDir = "$buildContext.paths.artifacts/jps"
+      new CommunityStandaloneJpsBuilder(buildContext).layoutJps(jpsArtifactDir, buildContext.fullBuildNumber, {})
+    }
+    tasks.buildUpdaterJar()
   }
 
-  LayoutInfo layoutAll(boolean buildJps = false) {
-    def layouts = binding["includeFile"]("$buildContext.paths.communityHome/build/scripts/layouts.gant")
-    LayoutInfo info = layouts.layoutFull(buildContext)
-
-    buildContext.messages.block("Build intellij-core") {
-      String coreArtifactDir = "$buildContext.paths.artifacts/core"
-      buildContext.ant.mkdir(dir: coreArtifactDir)
-      layouts.layout_core(buildContext.paths.communityHome, coreArtifactDir)
-      buildContext.notifyArtifactBuilt(coreArtifactDir)
-
-      def intellijCoreZip = "${buildContext.paths.artifacts}/intellij-core-${buildContext.buildNumber}.zip"
-      buildContext.ant.zip(destfile: intellijCoreZip) {
-        fileset(dir: coreArtifactDir)
-      }
-      buildContext.notifyArtifactBuilt(intellijCoreZip)
-    }
-    if (buildJps) {
-      buildContext.messages.block("Build standalone JPS") {
-        String jpsArtifactDir = "$buildContext.paths.artifacts/jps"
-        layouts.layoutJps(buildContext.paths.communityHome, jpsArtifactDir, buildContext.fullBuildNumber, {})
-        buildContext.notifyArtifactBuilt(jpsArtifactDir)
-      }
-    }
-
-    BuildTasks.create(buildContext).buildDistributions()
-    return info
+  void buildUnpackedDistribution(String targetDirectory) {
+    BuildTasks.create(buildContext).buildUnpackedDistribution(targetDirectory)
   }
 
-  private void layoutUpdater(String target, String jarName = "updater.jar") {
-    BuildUtils.doLayout(binding) {
-      layout(target) {
-        jar(jarName) {
-          module("updater")
-          manifest {
-            attribute(name: "Main-Class", value: "com.intellij.updater.Bootstrap")
-          }
-        }
-      }
-    }
+  void layoutCoreArtifacts() {
+    new IntelliJCoreArtifactsBuilder(buildContext).layoutIntelliJCore()
   }
 }

@@ -99,9 +99,9 @@ public class ExternalDocumentValidator {
 
   private void runJaxpValidation(final XmlElement element, Validator.ValidationHost host) {
     final PsiFile file = element.getContainingFile();
+    if (file == null || file.getVirtualFile() == null) return;
 
     if (myFile == file &&
-        file != null &&
         myModificationStamp == file.getModificationStamp() &&
         !ValidateXmlActionHandler.isValidationDependentFilesOutOfDate((XmlFile)file) &&
         SoftReference.dereference(myInfos)!=null // we have validated before
@@ -115,13 +115,9 @@ public class ExternalDocumentValidator {
 
     final Document document = PsiDocumentManager.getInstance(project).getDocument(file);
     if (document==null) return;
-    final List<ValidationInfo> results = new LinkedList<ValidationInfo>();
+    final List<ValidationInfo> results = new LinkedList<>();
 
     myHost = new Validator.ValidationHost() {
-      @Override
-      public void addMessage(PsiElement context, String message, int type) {
-        addMessage(context, message, type==ERROR?ErrorType.ERROR : type==WARNING?ErrorType.WARNING : ErrorType.INFO);
-      }
 
       @Override
       public void addMessage(final PsiElement context, final String message, @NotNull final ErrorType type) {
@@ -266,11 +262,11 @@ public class ExternalDocumentValidator {
 
     });
 
-    myHandler.doValidate((XmlFile)element.getContainingFile());
+    myHandler.doValidate((XmlFile)file);
 
     myFile = file;
     myModificationStamp = myFile.getModificationStamp();
-    myInfos = new WeakReference<List<ValidationInfo>>(results);
+    myInfos = new WeakReference<>(results);
 
     addAllInfos(host,results);
   }
@@ -375,7 +371,7 @@ public class ExternalDocumentValidator {
 
     if(validator == null) {
       validator = new ExternalDocumentValidator();
-      project.putUserData(validatorInstanceKey,new SoftReference<ExternalDocumentValidator>(validator));
+      project.putUserData(validatorInstanceKey, new SoftReference<>(validator));
     }
 
     validator.runJaxpValidation(document,host);

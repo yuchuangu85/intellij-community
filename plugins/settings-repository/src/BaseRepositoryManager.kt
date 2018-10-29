@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,16 +17,18 @@ package org.jetbrains.settingsRepository
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.invokeAndWaitIfNeed
-import com.intellij.openapi.diagnostic.catchAndLog
 import com.intellij.openapi.diagnostic.debug
+import com.intellij.openapi.diagnostic.runAndLogException
 import com.intellij.openapi.fileTypes.StdFileTypes
+import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vcs.merge.MergeDialogCustomizer
 import com.intellij.openapi.vcs.merge.MergeProvider2
 import com.intellij.openapi.vcs.merge.MultipleFileMergeDialog
 import com.intellij.openapi.vfs.CharsetToolkit
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
-import com.intellij.util.*
+import com.intellij.util.PathUtilRt
+import com.intellij.util.io.*
 import java.io.IOException
 import java.io.InputStream
 import java.nio.file.Path
@@ -56,7 +58,7 @@ abstract class BaseRepositoryManager(protected val dir: Path) : RepositoryManage
 
         // we ignore empty files as well - delete if corrupted
         if (attributes.size() == 0L) {
-          LOG.catchAndLog {
+          LOG.runAndLogException {
             LOG.warn("File $path is empty (length 0), will be removed")
             delete(file, path)
           }
@@ -76,47 +78,42 @@ abstract class BaseRepositoryManager(protected val dir: Path) : RepositoryManage
 
   protected open fun isPathIgnored(path: String): Boolean = false
 
-  override fun read(path: String): InputStream? {
-    if (isPathIgnored(path)) {
-      LOG.debug { "$path is ignored" }
-      return null
-    }
-
+  override fun <R> read(path: String, consumer: (InputStream?) -> R): R {
     var fileToDelete: Path? = null
     lock.read {
       val file = dir.resolve(path)
       when (file.sizeOrNull()) {
-        -1L -> return null
+        -1L -> return consumer(null)
         0L -> {
           // we ignore empty files as well - delete if corrupted
           fileToDelete = file
         }
-        else -> return file.inputStream()
+        else -> return file.inputStream().use(consumer)
       }
     }
 
-    LOG.catchAndLog {
+    LOG.runAndLogException {
       if (fileToDelete!!.sizeOrNull() == 0L) {
         LOG.warn("File $path is empty (length 0), will be removed")
         delete(fileToDelete!!, path)
       }
     }
-    return null
+    return consumer(null)
   }
 
   override fun write(path: String, content: ByteArray, size: Int): Boolean {
-    if (isPathIgnored(path)) {
-      LOG.debug { "$path is ignored" }
-      return false
-    }
-
     LOG.debug { "Write $path" }
 
     try {
       lock.write {
         val file = dir.resolve(path)
         file.write(content, 0, size)
-        addToIndex(file, path, content, size)
+        if (isPathIgnored(path)) {
+          LOG.debug { "$path is ignored and will be not added to index" }
+        }
+        else {
+          addToIndex(file, path, content, size)
+        }
       }
     }
     catch (e: Exception) {
@@ -143,15 +140,17 @@ abstract class BaseRepositoryManager(protected val dir: Path) : RepositoryManage
       return false
     }
 
-    lock.write {
-      deleteFromIndex(path, isFile)
+    if (!isPathIgnored(path)) {
+      lock.write {
+        deleteFromIndex(path, isFile)
+      }
     }
     return true
   }
 
   protected abstract fun deleteFromIndex(path: String, isFile: Boolean)
 
-  override fun has(path: String) = lock.read { dir.resolve(path).exists() }
+  override fun has(path: String): Boolean = lock.read { dir.resolve(path).exists() }
 }
 
 var conflictResolver: ((files: List<VirtualFile>, mergeProvider: MergeProvider2) -> Unit)? = null
@@ -170,7 +169,7 @@ fun resolveConflicts(files: List<VirtualFile>, mergeProvider: MergeProvider2): L
   var processedFiles: List<VirtualFile>? = null
   invokeAndWaitIfNeed {
     val fileMergeDialog = MultipleFileMergeDialog(null, files, mergeProvider, object : MergeDialogCustomizer() {
-      override fun getMultipleFileDialogTitle() = "Settings Repository: Files Merged with Conflicts"
+      override fun getMultipleFileDialogTitle() = "Settings Repository: Conflicts"
     })
     fileMergeDialog.show()
     processedFiles = fileMergeDialog.processedFiles
@@ -179,16 +178,16 @@ fun resolveConflicts(files: List<VirtualFile>, mergeProvider: MergeProvider2): L
 }
 
 class RepositoryVirtualFile(private val path: String) : LightVirtualFile(PathUtilRt.getFileName(path), StdFileTypes.XML, "", CharsetToolkit.UTF8_CHARSET, 1L) {
-  var content: ByteArray? = null
+  var byteContent: ByteArray? = null
     private set
 
-  override fun getPath() = path
+  override fun getPath(): String = path
 
   override fun setBinaryContent(content: ByteArray, newModificationStamp: Long, newTimeStamp: Long, requestor: Any?) {
-    this.content = content
+    this.byteContent = content
   }
 
-  override fun getOutputStream(requestor: Any?, newModificationStamp: Long, newTimeStamp: Long) = throw IllegalStateException("You must use setBinaryContent")
+  override fun getOutputStream(requestor: Any?, newModificationStamp: Long, newTimeStamp: Long): Nothing = throw IllegalStateException("You must use setBinaryContent")
 
-  override fun setContent(requestor: Any?, content: CharSequence, fireEvent: Boolean) = throw IllegalStateException("You must use setBinaryContent")
+  override fun setContent(requestor: Any?, content: CharSequence, fireEvent: Boolean): Nothing = throw IllegalStateException("You must use setBinaryContent")
 }

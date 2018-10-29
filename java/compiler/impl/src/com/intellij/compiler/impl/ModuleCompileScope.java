@@ -16,20 +16,19 @@
 
 /*
  * @author: Eugene Zhuravlev
- * Date: Jan 20, 2003
- * Time: 5:34:19 PM
  */
 package com.intellij.compiler.impl;
 
-import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
+import com.intellij.openapi.module.UnloadedModuleDescription;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.*;
-import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.openapi.vfs.pointers.VirtualFilePointer;
 import com.intellij.util.CommonProcessors;
 import org.jetbrains.annotations.NotNull;
 
@@ -39,9 +38,10 @@ public class ModuleCompileScope extends FileIndexCompileScope {
   private final Project myProject;
   private final Set<Module> myScopeModules;
   private final Module[] myModules;
+  private final Collection<String> myIncludedUnloadedModules;
 
   public ModuleCompileScope(final Module module, boolean includeDependentModules) {
-    this(module.getProject(), Collections.singleton(module), includeDependentModules, false);
+    this(module.getProject(), Collections.singleton(module), Collections.emptyList(), includeDependentModules, false);
   }
 
   public ModuleCompileScope(Project project, final Module[] modules, boolean includeDependentModules) {
@@ -49,12 +49,13 @@ public class ModuleCompileScope extends FileIndexCompileScope {
   }
 
   public ModuleCompileScope(Project project, final Module[] modules, boolean includeDependentModules, boolean includeRuntimeDependencies) {
-    this(project, Arrays.asList(modules), includeDependentModules, includeRuntimeDependencies);
+    this(project, Arrays.asList(modules), Collections.emptyList(), includeDependentModules, includeRuntimeDependencies);
   }
 
-  private ModuleCompileScope(Project project, final Collection<Module> modules, boolean includeDependentModules, boolean includeRuntimeDeps) {
+  public ModuleCompileScope(Project project, final Collection<? extends Module> modules, Collection<String> includedUnloadedModules, boolean includeDependentModules, boolean includeRuntimeDeps) {
     myProject = project;
-    myScopeModules = new HashSet<Module>();
+    myIncludedUnloadedModules = includedUnloadedModules;
+    myScopeModules = new HashSet<>();
     for (Module module : modules) {
       if (module == null) {
         continue; // prevent NPE
@@ -64,7 +65,7 @@ public class ModuleCompileScope extends FileIndexCompileScope {
         if (!includeRuntimeDeps) {
           enumerator = enumerator.compileOnly();
         }
-        enumerator.forEachModule(new CommonProcessors.CollectProcessor<Module>(myScopeModules));
+        enumerator.forEachModule(new CommonProcessors.CollectProcessor<>(myScopeModules));
       }
       else {
         myScopeModules.add(module);
@@ -73,11 +74,19 @@ public class ModuleCompileScope extends FileIndexCompileScope {
     myModules = ModuleManager.getInstance(myProject).getModules();
   }
 
+  @Override
   @NotNull
   public Module[] getAffectedModules() {
-    return myScopeModules.toArray(new Module[myScopeModules.size()]);
+    return myScopeModules.toArray(Module.EMPTY_ARRAY);
   }
 
+  @NotNull
+  @Override
+  public Collection<String> getAffectedUnloadedModules() {
+    return Collections.unmodifiableCollection(myIncludedUnloadedModules);
+  }
+
+  @Override
   protected FileIndex[] getFileIndices() {
     final FileIndex[] indices = new FileIndex[myScopeModules.size()];
     int idx = 0;
@@ -87,8 +96,9 @@ public class ModuleCompileScope extends FileIndexCompileScope {
     return indices;
   }
 
+  @Override
   public boolean belongs(final String url) {
-    if (myScopeModules.isEmpty()) {
+    if (myScopeModules.isEmpty() && myIncludedUnloadedModules.isEmpty()) {
       return false; // optimization
     }
     Module candidateModule = null;
@@ -110,14 +120,12 @@ public class ModuleCompileScope extends FileIndexCompileScope {
           else {
             // the same content root exists in several modules
             if (!candidateModule.equals(module)) {
-              candidateModule = ApplicationManager.getApplication().runReadAction(new Computable<Module>() {
-                public Module compute() {
-                  final VirtualFile contentRootFile = VirtualFileManager.getInstance().findFileByUrl(contentRootUrl);
-                  if (contentRootFile != null) {
-                    return projectFileIndex.getModuleForFile(contentRootFile);
-                  }
-                  return null;
+              candidateModule = ReadAction.compute(() -> {
+                final VirtualFile contentRootFile = VirtualFileManager.getInstance().findFileByUrl(contentRootUrl);
+                if (contentRootFile != null) {
+                  return projectFileIndex.getModuleForFile(contentRootFile);
                 }
+                return null;
               });
             }
           }
@@ -145,6 +153,18 @@ public class ModuleCompileScope extends FileIndexCompileScope {
       }
     }
 
+    ModuleManager moduleManager = ModuleManager.getInstance(myProject);
+    for (String unloadedModule : myIncludedUnloadedModules) {
+      UnloadedModuleDescription moduleDescription = moduleManager.getUnloadedModuleDescription(unloadedModule);
+      if (moduleDescription != null) {
+        for (VirtualFilePointer pointer : moduleDescription.getContentRoots()) {
+          if (isUrlUnderRoot(url, pointer.getUrl())) {
+            return true;
+          }
+        }
+      }
+    }
+
     return false;
   }
 
@@ -152,7 +172,7 @@ public class ModuleCompileScope extends FileIndexCompileScope {
     return (url.length() > root.length()) && url.charAt(root.length()) == '/' && FileUtil.startsWith(url, root);
   }
 
-  private final Map<Module, String[]> myContentUrlsCache = new HashMap<Module, String[]>();
+  private final Map<Module, String[]> myContentUrlsCache = new HashMap<>();
 
   private String[] getModuleContentUrls(final Module module) {
     String[] contentRootUrls = myContentUrlsCache.get(module);

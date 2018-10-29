@@ -20,14 +20,14 @@ import com.intellij.openapi.roots.libraries.LibraryTable;
 import com.intellij.openapi.roots.libraries.LibraryTablesRegistrar;
 import com.intellij.openapi.Disposable;
 import com.intellij.util.SmartList;
-import com.intellij.util.containers.HashMap;
+import java.util.HashMap;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Map;
 
 public class LibraryTablesRegistrarImpl extends LibraryTablesRegistrar implements Disposable {
-  private static final Map<String, LibraryTable> myLibraryTables = new HashMap<String, LibraryTable>();
+  private static final Map<String, LibraryTable> myLibraryTables = new HashMap<>();
 
   @Override
   @NotNull
@@ -59,7 +59,7 @@ public class LibraryTablesRegistrarImpl extends LibraryTablesRegistrar implement
 
   @Override
   public List<LibraryTable> getCustomLibraryTables() {
-    return new SmartList<LibraryTable>(myLibraryTables.values());
+    return new SmartList<>(myLibraryTables.values());
   }
 
   @Override

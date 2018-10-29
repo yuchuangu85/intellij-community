@@ -96,7 +96,7 @@ public class GrMemberInfo extends MemberInfoBase<GrMember> {
   }
 
   public static List<GrMemberInfo> extractClassMembers(GrTypeDefinition subclass, Filter<GrMember> filter, boolean extractInterfacesDeep) {
-    List<GrMemberInfo> members = new ArrayList<GrMemberInfo>();
+    List<GrMemberInfo> members = new ArrayList<>();
     extractClassMembers(subclass, members, filter, extractInterfacesDeep);
     return members;
   }
@@ -110,7 +110,7 @@ public class GrMemberInfo extends MemberInfoBase<GrMember> {
 
 
     if (extractInterfacesDeep) {
-      extractSuperInterfaces(subclass, filter, result, ContainerUtil.<PsiClass>newHashSet());
+      extractSuperInterfaces(subclass, filter, result, ContainerUtil.newHashSet());
     }
     else {
       PsiClass[] interfaces = subclass.getInterfaces();

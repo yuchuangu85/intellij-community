@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.MultiMap;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.model.java.JavaModuleSourceRootTypes;
 
@@ -40,9 +41,9 @@ public class PackagePrefixIndex {
 
   public PackagePrefixIndex(Project project) {
     myProject = project;
-    project.getMessageBus().connect(project).subscribe(ProjectTopics.PROJECT_ROOTS, new ModuleRootAdapter() {
+    project.getMessageBus().connect(project).subscribe(ProjectTopics.PROJECT_ROOTS, new ModuleRootListener() {
       @Override
-      public void rootsChanged(final ModuleRootEvent event) {
+      public void rootsChanged(@NotNull final ModuleRootEvent event) {
         synchronized (LOCK) {
           myMap = null;
         }
@@ -51,12 +52,15 @@ public class PackagePrefixIndex {
   }
 
   public Collection<String> getAllPackagePrefixes(@Nullable GlobalSearchScope scope) {
-    MultiMap<String, Module> map = myMap;
+    MultiMap<String, Module> map;
+    synchronized (LOCK) {
+      map = myMap;
+    }
     if (map != null) {
       return getAllPackagePrefixes(scope, map);
     }
 
-    map = new MultiMap<String, Module>();
+    map = new MultiMap<>();
     for (final Module module : ModuleManager.getInstance(myProject).getModules()) {
       for (final ContentEntry entry : ModuleRootManager.getInstance(module).getContentEntries()) {
         for (final SourceFolder folder : entry.getSourceFolders(JavaModuleSourceRootTypes.SOURCES)) {
@@ -79,7 +83,7 @@ public class PackagePrefixIndex {
   private static Collection<String> getAllPackagePrefixes(final GlobalSearchScope scope, final MultiMap<String, Module> map) {
     if (scope == null) return map.keySet();
 
-    List<String> result = new SmartList<String>();
+    List<String> result = new SmartList<>();
     for (final String prefix : map.keySet()) {
       modules: for (final Module module : map.get(prefix)) {
         if (scope.isSearchInModuleContent(module)) {

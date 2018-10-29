@@ -26,10 +26,6 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
-/**
-* User: anna
-* Date: 3/14/13
-*/
 public class FxmlDataExternalizer implements DataExternalizer<Set<String>> {
   @Override
   public void save(@NotNull DataOutput out, Set<String> value) throws IOException {
@@ -42,7 +38,7 @@ public class FxmlDataExternalizer implements DataExternalizer<Set<String>> {
   @Override
   public Set<String> read(@NotNull DataInput in) throws IOException {
     final int size = DataInputOutputUtil.readINT(in);
-    final Set<String> result = new HashSet<String>(size);
+    final Set<String> result = new HashSet<>(size);
 
     for (int i = 0; i < size; i++) {
       final String s = IOUtil.readUTF(in);

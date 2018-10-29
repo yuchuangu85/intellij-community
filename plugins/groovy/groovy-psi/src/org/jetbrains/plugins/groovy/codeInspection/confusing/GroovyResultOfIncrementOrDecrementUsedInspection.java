@@ -30,13 +30,6 @@ public class GroovyResultOfIncrementOrDecrementUsedInspection extends BaseInspec
   @Override
   @Nls
   @NotNull
-  public String getGroupDisplayName() {
-    return CONFUSING_CODE_CONSTRUCTS;
-  }
-
-  @Override
-  @Nls
-  @NotNull
   public String getDisplayName() {
     return "Result of increment or decrement used";
   }
@@ -56,7 +49,7 @@ public class GroovyResultOfIncrementOrDecrementUsedInspection extends BaseInspec
   private static class Visitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitUnaryExpression(GrUnaryExpression grUnaryExpression) {
+    public void visitUnaryExpression(@NotNull GrUnaryExpression grUnaryExpression) {
       super.visitUnaryExpression(grUnaryExpression);
 
       final IElementType tokenType = grUnaryExpression.getOperationTokenType();

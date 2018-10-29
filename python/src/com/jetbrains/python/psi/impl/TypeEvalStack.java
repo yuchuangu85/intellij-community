@@ -24,14 +24,9 @@ import java.util.Set;
  * @author yole
  */
 public class TypeEvalStack {
-  private static ThreadLocal<TypeEvalStack> STACK = new ThreadLocal<TypeEvalStack>() {
-    @Override
-    protected TypeEvalStack initialValue() {
-      return new TypeEvalStack();
-    }
-  };
+  private static final ThreadLocal<TypeEvalStack> STACK = ThreadLocal.withInitial(TypeEvalStack::new);
 
-  private final Set<PsiElement> myBeingEvaluated = new HashSet<PsiElement>();
+  private final Set<PsiElement> myBeingEvaluated = new HashSet<>();
 
   public static boolean mayEvaluate(PsiElement element) {
     final TypeEvalStack curStack = STACK.get();

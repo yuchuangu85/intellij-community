@@ -1,18 +1,6 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2017 JetBrains s.r.o.
+// Use of this source code is governed by the Apache 2.0 license that can be
+// found in the LICENSE file.
 package com.jetbrains.python.codeInsight.dataflow.scope.impl;
 
 import com.google.common.collect.Lists;
@@ -31,7 +19,9 @@ import com.jetbrains.python.codeInsight.dataflow.scope.Scope;
 import com.jetbrains.python.codeInsight.dataflow.scope.ScopeVariable;
 import com.jetbrains.python.psi.*;
 import com.jetbrains.python.psi.impl.PyAugAssignmentStatementNavigator;
+import com.jetbrains.python.psi.impl.PyPsiUtils;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
@@ -60,6 +50,7 @@ public class ScopeImpl implements Scope {
     }
   }
 
+  @Override
   public ScopeVariable getDeclaredVariable(@NotNull final PsiElement anchorElement,
                                            @NotNull final String name) throws DFALimitExceededException {
     computeScopeVariables();
@@ -78,11 +69,12 @@ public class ScopeImpl implements Scope {
     if (myCachedScopeVariables == null) {
       final PyReachingDefsDfaInstance dfaInstance = new PyReachingDefsDfaInstance();
       final PyReachingDefsSemilattice semilattice = new PyReachingDefsSemilattice();
-      final DFAMapEngine<ScopeVariable> engine = new DFAMapEngine<ScopeVariable>(myFlow, dfaInstance, semilattice);
+      final DFAMapEngine<ScopeVariable> engine = new DFAMapEngine<>(myFlow, dfaInstance, semilattice);
       myCachedScopeVariables = engine.performDFA();
     }
   }
 
+  @Override
   public boolean isGlobal(final String name) {
     if (myGlobals == null || myNestedScopes == null) {
       collectDeclarations();
@@ -98,6 +90,7 @@ public class ScopeImpl implements Scope {
     return false;
   }
 
+  @Override
   public boolean isNonlocal(final String name) {
     if (myNonlocals == null || myNestedScopes == null) {
       collectDeclarations();
@@ -112,6 +105,7 @@ public class ScopeImpl implements Scope {
     return myAugAssignments.contains(name);
   }
 
+  @Override
   public boolean containsDeclaration(final String name) {
     if (myNamedElements == null || myImportedNameDefiners == null) {
       collectDeclarations();
@@ -149,12 +143,15 @@ public class ScopeImpl implements Scope {
       collectDeclarations();
     }
     if (myNamedElements.containsKey(name)) {
-      return myNamedElements.get(name);
+      final Collection<PsiNamedElement> elements = myNamedElements.get(name);
+      elements.forEach(PyPsiUtils::assertValid);
+      return elements;
     }
     if (includeNestedGlobals && isGlobal(name)) {
       for (Scope scope : myNestedScopes) {
         final Collection<PsiNamedElement> globals = scope.getNamedElements(name, true);
         if (!globals.isEmpty()) {
+          globals.forEach(PyPsiUtils::assertValid);
           return globals;
         }
       }
@@ -185,13 +182,13 @@ public class ScopeImpl implements Scope {
   }
 
   private void collectDeclarations() {
-    final Map<String, Collection<PsiNamedElement>> namedElements = new HashMap<String, Collection<PsiNamedElement>>();
-    final List<PyImportedNameDefiner> importedNameDefiners = new ArrayList<PyImportedNameDefiner>();
-    final List<Scope> nestedScopes = new ArrayList<Scope>();
-    final Set<String> globals = new HashSet<String>();
-    final Set<String> nonlocals = new HashSet<String>();
-    final Set<String> augAssignments = new HashSet<String>();
-    final List<PyTargetExpression> targetExpressions = new ArrayList<PyTargetExpression>();
+    final Map<String, Collection<PsiNamedElement>> namedElements = new LinkedHashMap<>();
+    final List<PyImportedNameDefiner> importedNameDefiners = new ArrayList<>();
+    final List<Scope> nestedScopes = new ArrayList<>();
+    final Set<String> globals = new HashSet<>();
+    final Set<String> nonlocals = new HashSet<>();
+    final Set<String> augAssignments = new HashSet<>();
+    final List<PyTargetExpression> targetExpressions = new ArrayList<>();
     myFlowOwner.acceptChildren(new PyRecursiveElementVisitor() {
       @Override
       public void visitPyTargetExpression(PyTargetExpression node) {
@@ -235,17 +232,29 @@ public class ScopeImpl implements Scope {
             defaultValue.accept(this);
           }
         }
+        visitDecorators(node.getDecoratorList());
         super.visitPyFunction(node);
+      }
+
+      @Override
+      public void visitPyNamedParameter(PyNamedParameter node) {
+        processNamedElement(node);
+      }
+
+      @Override
+      public void visitPyClass(PyClass node) {
+        visitDecorators(node.getDecoratorList());
+        super.visitPyClass(node);
+      }
+
+      @Override
+      public void visitPyDecoratorList(PyDecoratorList node) {
       }
 
       @Override
       public void visitPyElement(PyElement node) {
         if (node instanceof PsiNamedElement && !(node instanceof PyKeywordArgument)) {
-          final String name = node.getName();
-          if (!namedElements.containsKey(name)) {
-            namedElements.put(name, Sets.<PsiNamedElement>newLinkedHashSet());
-          }
-          namedElements.get(name).add((PsiNamedElement)node);
+          processNamedElement((PsiNamedElement)node);
         }
         if (node instanceof PyImportedNameDefiner) {
           importedNameDefiners.add((PyImportedNameDefiner)node);
@@ -257,6 +266,18 @@ public class ScopeImpl implements Scope {
         else {
           super.visitPyElement(node);
         }
+      }
+
+      private void visitDecorators(@Nullable PyDecoratorList list) {
+        if (list != null) {
+          for (PyDecorator decorator : list.getDecorators()) {
+            decorator.accept(this);
+          }
+        }
+      }
+
+      private void processNamedElement(@NotNull PsiNamedElement element) {
+        namedElements.computeIfAbsent(element.getName(), __ -> Sets.newLinkedHashSet()).add(element);
       }
     });
 

@@ -18,7 +18,6 @@ package com.intellij.openapi.vcs.history;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsKey;
-import com.intellij.openapi.vcs.annotate.VcsAnnotation;
 import com.intellij.util.Consumer;
 import com.intellij.util.containers.SLRUMap;
 import org.jetbrains.annotations.NotNull;
@@ -31,26 +30,22 @@ import java.util.Map;
 
 /**
  * @author irengrig
- *         Date: 2/28/11
- *         Time: 6:55 PM
  */
 public class VcsHistoryCache {
   private final Object myLock;
   private final SLRUMap<HistoryCacheBaseKey, CachedHistory> myHistoryCache;
-  private final SLRUMap<HistoryCacheWithRevisionKey, VcsAnnotation> myAnnotationCache;
-  //private final SLRUMap<HistoryCacheWithRevisionKey, String> myContentCache;
+  private final SLRUMap<HistoryCacheWithRevisionKey, Object> myAnnotationCache;
 
   public VcsHistoryCache() {
     myLock = new Object();
     // increase cache size when preload enabled
     boolean preloadEnabled = Registry.is("vcs.annotations.preload");
-    myHistoryCache = new SLRUMap<HistoryCacheBaseKey, CachedHistory>(
+    myHistoryCache = new SLRUMap<>(
       preloadEnabled ? 50 : 10,
       preloadEnabled ? 50 : 10);
-    myAnnotationCache = new SLRUMap<HistoryCacheWithRevisionKey, VcsAnnotation>(
+    myAnnotationCache = new SLRUMap<>(
       preloadEnabled ? 50 : 10,
       preloadEnabled ? 50 : 5);
-    //myContentCache = new SLRUMap<HistoryCacheWithRevisionKey, String>(20, 20);
   }
 
   public <C extends Serializable, T extends VcsAbstractHistorySession> void put(final FilePath filePath,
@@ -101,7 +96,7 @@ public class VcsHistoryCache {
     }
   }
 
-  public void clear() {
+  public void clearHistory() {
     synchronized (myLock) {
       final Iterator<Map.Entry<HistoryCacheBaseKey,CachedHistory>> iterator = myHistoryCache.entrySet().iterator();
       while (iterator.hasNext()) {
@@ -113,16 +108,22 @@ public class VcsHistoryCache {
     }
   }
 
-  public void put(@NotNull final FilePath filePath, @NotNull final VcsKey vcsKey, @NotNull final VcsRevisionNumber number,
-                  @NotNull final VcsAnnotation vcsAnnotation) {
+  public void putAnnotation(@NotNull final FilePath filePath, @NotNull final VcsKey vcsKey, @NotNull final VcsRevisionNumber number,
+                  @NotNull final Object vcsAnnotation) {
     synchronized (myLock) {
       myAnnotationCache.put(new HistoryCacheWithRevisionKey(filePath, vcsKey, number), vcsAnnotation);
     }
   }
 
-  public VcsAnnotation get(@NotNull final FilePath filePath, @NotNull final VcsKey vcsKey, @NotNull final VcsRevisionNumber number) {
+  public Object getAnnotation(@NotNull final FilePath filePath, @NotNull final VcsKey vcsKey, @NotNull final VcsRevisionNumber number) {
     synchronized (myLock) {
       return myAnnotationCache.get(new HistoryCacheWithRevisionKey(filePath, vcsKey, number));
+    }
+  }
+
+  public void clearAnnotations() {
+    synchronized (myLock) {
+      myAnnotationCache.clear();
     }
   }
 

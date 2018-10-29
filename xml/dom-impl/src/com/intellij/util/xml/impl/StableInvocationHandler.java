@@ -36,18 +36,18 @@ class StableInvocationHandler<T> implements InvocationHandler, StableElement {
   private T myOldValue;
   private T myCachedValue;
   private final Set<Class> myClasses;
-  private final Factory<T> myProvider;
-  private final Condition<T> myValidator;
+  private final Factory<? extends T> myProvider;
+  private final Condition<? super T> myValidator;
 
-  public StableInvocationHandler(final T initial, final Factory<T> provider, Condition<T> validator) {
+  StableInvocationHandler(final T initial, final Factory<? extends T> provider, Condition<? super T> validator) {
     myProvider = provider;
     myCachedValue = initial;
     myOldValue = initial;
     myValidator = validator;
     final Class superClass = initial.getClass().getSuperclass();
-    final Set<Class> classes = new HashSet<Class>();
+    final Set<Class> classes = new HashSet<>();
     ContainerUtil.addAll(classes, initial.getClass().getInterfaces());
-    ContainerUtil.addIfNotNull(superClass, classes);
+    ContainerUtil.addIfNotNull(classes, superClass);
     classes.remove(MergedObject.class);
     myClasses = classes;
   }

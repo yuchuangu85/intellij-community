@@ -16,7 +16,6 @@
 package com.intellij.openapi.editor.markup;
 
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.util.InvalidDataException;
 import org.intellij.lang.annotations.JdkConstants;
 import org.jdom.Element;
 import org.jetbrains.annotations.Contract;
@@ -32,8 +31,6 @@ public class TextAttributes implements Cloneable {
   private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.editor.markup.TextAttributes");
 
   public static final TextAttributes ERASE_MARKER = new TextAttributes();
-
-  private boolean myEnforceEmpty;
 
   @SuppressWarnings("NullableProblems")
   @NotNull
@@ -71,9 +68,8 @@ public class TextAttributes implements Cloneable {
     this(null, null, null, EffectType.BOXED, Font.PLAIN);
   }
 
-  private TextAttributes(@NotNull AttributesFlyweight attributesFlyweight, boolean enforced) {
+  private TextAttributes(@NotNull AttributesFlyweight attributesFlyweight) {
     myAttrs = attributesFlyweight;
-    myEnforceEmpty = enforced;
   }
 
   public TextAttributes(@NotNull Element element) {
@@ -82,6 +78,15 @@ public class TextAttributes implements Cloneable {
 
   public TextAttributes(@Nullable Color foregroundColor, @Nullable Color backgroundColor, @Nullable Color effectColor, EffectType effectType, @JdkConstants.FontStyle int fontType) {
     setAttributes(foregroundColor, backgroundColor, effectColor, null, effectType, fontType);
+  }
+
+  public void copyFrom(@NotNull TextAttributes other) {
+    setAttributes(other.getForegroundColor(),
+                  other.getBackgroundColor(),
+                  other.getEffectColor(),
+                  other.getErrorStripeColor(),
+                  other.getEffectType(),
+                  other.getFontType());
   }
 
   public void setAttributes(Color foregroundColor,
@@ -95,21 +100,6 @@ public class TextAttributes implements Cloneable {
 
   public boolean isEmpty(){
     return getForegroundColor() == null && getBackgroundColor() == null && getEffectColor() == null && getFontType() == Font.PLAIN;
-  }
-
-  public boolean isFallbackEnabled() {
-    return isEmpty() && !myEnforceEmpty;
-  }
-
-  public boolean containsValue() {
-    return !isEmpty() || myEnforceEmpty;
-  }
-
-  public void reset() {
-    setForegroundColor(null);
-    setBackgroundColor(null);
-    setEffectColor(null);
-    setFontType(Font.PLAIN);
   }
 
   @NotNull
@@ -177,9 +167,10 @@ public class TextAttributes implements Cloneable {
     myAttrs = myAttrs.withFontType(type);
   }
 
+  /** @noinspection MethodDoesntCallSuperMethod*/
   @Override
   public TextAttributes clone() {
-    return new TextAttributes(myAttrs, myEnforceEmpty);
+    return new TextAttributes(myAttrs);
   }
 
   public boolean equals(Object obj) {
@@ -194,17 +185,8 @@ public class TextAttributes implements Cloneable {
     return myAttrs.hashCode();
   }
 
-  public void readExternal(Element element) {
-    try {
-      myAttrs = AttributesFlyweight.create(element);
-    }
-    catch (InvalidDataException e) {
-      throw new RuntimeException(e);
-    }
-
-    if (isEmpty()) {
-      myEnforceEmpty = true;
-    }
+  public void readExternal(@NotNull Element element) {
+    myAttrs = AttributesFlyweight.create(element);
   }
 
   public void writeExternal(Element element) {
@@ -215,18 +197,5 @@ public class TextAttributes implements Cloneable {
   public String toString() {
     return "[" + getForegroundColor() + "," + getBackgroundColor() + "," + getFontType() + "," + getEffectType() + "," +
            getEffectColor() + "," + getErrorStripeColor() + "]";
-  }
-
-  /**
-   * Enforces empty attributes instead of treating empty values as undefined.
-   *
-   * @param enforceEmpty True if empty values should be used as is (fallback is disabled).
-   */
-  public void setEnforceEmpty(boolean enforceEmpty) {
-    myEnforceEmpty = enforceEmpty;
-  }
-
-  public boolean isEnforceEmpty() {
-    return myEnforceEmpty;
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,13 @@
 package com.intellij.codeInsight.hint.api.impls;
 
 import com.intellij.codeInsight.CodeInsightBundle;
-import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.MutableLookupElement;
 import com.intellij.lang.parameterInfo.*;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.meta.PsiMetaData;
 import com.intellij.psi.xml.XmlFile;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.psi.xml.XmlToken;
@@ -40,7 +40,7 @@ import java.util.Comparator;
  * @author Maxim.Mossienko
  */
 public class XmlParameterInfoHandler implements ParameterInfoHandler<XmlTag,XmlElementDescriptor> {
-  private static final Comparator<XmlAttributeDescriptor> COMPARATOR = (o1, o2) -> o1.getName().compareTo(o2.getName());
+  private static final Comparator<XmlAttributeDescriptor> COMPARATOR = Comparator.comparing(PsiMetaData::getName);
 
   @Override
   public Object[] getParametersForLookup(LookupElement item, ParameterInfoContext context) {
@@ -48,11 +48,6 @@ public class XmlParameterInfoHandler implements ParameterInfoHandler<XmlTag,XmlE
     final Object lookupItem = item.getObject();
     if (lookupItem instanceof XmlElementDescriptor) return new Object[]{lookupItem};
     return null;
-  }
-
-  @Override
-  public Object[] getParametersForDocumentation(final XmlElementDescriptor p, final ParameterInfoContext context) {
-    return getSortedDescriptors(p);
   }
 
   public static XmlAttributeDescriptor[] getSortedDescriptors(final XmlElementDescriptor p) {
@@ -72,7 +67,6 @@ public class XmlParameterInfoHandler implements ParameterInfoHandler<XmlTag,XmlE
     final XmlElementDescriptor descriptor = tag != null ? tag.getDescriptor() : null;
 
     if (descriptor == null) {
-      DaemonCodeAnalyzer.getInstance(context.getProject()).updateVisibleHighlighters(context.getEditor());
       return null;
     }
 
@@ -103,16 +97,6 @@ public class XmlParameterInfoHandler implements ParameterInfoHandler<XmlTag,XmlE
     } else {
       context.removeHint();
     }
-  }
-
-  @Override
-  public String getParameterCloseChars() {
-    return null;
-  }
-
-  @Override
-  public boolean tracksParameterIndex() {
-    return false;
   }
 
   @Nullable
@@ -166,7 +150,7 @@ public class XmlParameterInfoHandler implements ParameterInfoHandler<XmlTag,XmlE
   }
 
   public static void updateElementDescriptor(XmlElementDescriptor descriptor, ParameterInfoUIContext context,
-                                             Function<String, Boolean> attributePresentFun) {
+                                             Function<? super String, Boolean> attributePresentFun) {
     final XmlAttributeDescriptor[] attributes = descriptor != null ? getSortedDescriptors(descriptor) : XmlAttributeDescriptor.EMPTY;
 
     StringBuilder buffer = new StringBuilder();

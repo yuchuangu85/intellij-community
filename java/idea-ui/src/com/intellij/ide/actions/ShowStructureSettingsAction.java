@@ -26,8 +26,14 @@ import com.intellij.openapi.roots.ui.configuration.ProjectStructureConfigurable;
 import org.jetbrains.annotations.NotNull;
 
 public class ShowStructureSettingsAction extends AnAction implements DumbAware {
+
   @Override
-  public void actionPerformed(AnActionEvent e) {
+  public boolean startInTransaction() {
+    return true;
+  }
+
+  @Override
+  public void actionPerformed(@NotNull AnActionEvent e) {
     Project project = e.getProject();
     if (project == null) {
       project = ProjectManager.getInstance().getDefaultProject();

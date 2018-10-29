@@ -31,13 +31,13 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.idea.maven.dom.DependencyConflictId;
 import org.jetbrains.idea.maven.dom.MavenDomBundle;
 import org.jetbrains.idea.maven.dom.MavenDomProjectProcessorUtils;
-import org.jetbrains.idea.maven.dom.MavenDomUtil;
 import org.jetbrains.idea.maven.dom.model.MavenDomDependencies;
 import org.jetbrains.idea.maven.dom.model.MavenDomDependency;
 import org.jetbrains.idea.maven.dom.model.MavenDomProjectModel;
-import org.jetbrains.idea.maven.project.MavenProject;
 
 import java.util.*;
+
+import static org.jetbrains.idea.maven.dom.MavenDomUtil.getProjectName;
 
 public class MavenDuplicateDependenciesInspection extends DomElementsInspection<MavenDomProjectModel> {
   public MavenDuplicateDependenciesInspection() {
@@ -63,7 +63,7 @@ public class MavenDuplicateDependenciesInspection extends DomElementsInspection<
         Collection<MavenDomDependency> dependencies = allDuplicates.get(id);
         if (dependencies.size() > 1) {
 
-          List<MavenDomDependency> duplicatedDependencies = new ArrayList<MavenDomDependency>();
+          List<MavenDomDependency> duplicatedDependencies = new ArrayList<>();
 
           for (MavenDomDependency d : dependencies) {
             if (d == dependency) continue;
@@ -98,7 +98,7 @@ public class MavenDuplicateDependenciesInspection extends DomElementsInspection<
                                  @NotNull Collection<MavenDomDependency> dependencies,
                                  @NotNull DomElementAnnotationHolder holder) {
     StringBuilder sb = new StringBuilder();
-    Set<MavenDomProjectModel> processed = new HashSet<MavenDomProjectModel>();
+    Set<MavenDomProjectModel> processed = new HashSet<>();
     for (MavenDomDependency domDependency : dependencies) {
       if (dependency.equals(domDependency)) continue;
       MavenDomProjectModel model = domDependency.getParentOfType(MavenDomProjectModel.class, false);
@@ -120,23 +120,6 @@ public class MavenDuplicateDependenciesInspection extends DomElementsInspection<
     if (file == null) return getProjectName(model);
 
     return "<a href ='#navigation/" + file.getPath() + ":" + tag.getTextRange().getStartOffset() + "'>" + getProjectName(model) + "</a>";
-  }
-
-  @NotNull
-  private static String getProjectName(MavenDomProjectModel model) {
-    MavenProject mavenProject = MavenDomUtil.findProject(model);
-    if (mavenProject != null) {
-      return mavenProject.getDisplayName();
-    }
-    else {
-      String name = model.getName().getStringValue();
-      if (!StringUtil.isEmptyOrSpaces(name)) {
-        return name;
-      }
-      else {
-        return "pom.xml"; // ?
-      }
-    }
   }
 
   @NotNull
@@ -178,21 +161,25 @@ public class MavenDuplicateDependenciesInspection extends DomElementsInspection<
     }
   }
 
+  @Override
   @NotNull
   public String getGroupDisplayName() {
     return MavenDomBundle.message("inspection.group");
   }
 
+  @Override
   @NotNull
   public String getDisplayName() {
     return MavenDomBundle.message("inspection.duplicate.dependencies.name");
   }
 
+  @Override
   @NotNull
   public String getShortName() {
     return "MavenDuplicateDependenciesInspection";
   }
 
+  @Override
   @NotNull
   public HighlightDisplayLevel getDefaultLevel() {
     return HighlightDisplayLevel.WARNING;

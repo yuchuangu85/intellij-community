@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2016 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -106,19 +106,13 @@ public class NanoXmlUtil {
       try {
         parser.parse();
       }
+      catch (ParserStoppedXmlException ignore) {
+      }
       catch (XMLException e) {
-        if (e.getException() instanceof ParserStoppedException) return;
-        if (e.getException() instanceof ParserStoppedXmlException) return;
         LOG.debug(e);
       }
     }
-    catch (ClassNotFoundException e) {
-      LOG.error(e);
-    }
-    catch (InstantiationException e) {
-      LOG.error(e);
-    }
-    catch (IllegalAccessException e) {
+    catch (ClassNotFoundException | IllegalAccessException | InstantiationException e) {
       LOG.error(e);
     }
   }
@@ -135,30 +129,14 @@ public class NanoXmlUtil {
   }
 
   @NotNull
-  public static XmlFileHeader parseHeaderWithException(Reader reader) throws IOException {
+  public static XmlFileHeader parseHeaderWithException(Reader reader) {
     return parseHeader(new MyXMLReader(reader));
   }
 
   @NotNull
   public static XmlFileHeader parseHeaderWithException(final VirtualFile file) throws IOException {
-    final InputStream stream = file.getInputStream();
-    try {
+    try (InputStream stream = file.getInputStream()) {
       return parseHeader(new MyXMLReader(stream));
-    }
-    finally {
-      stream.close();
-    }
-  }
-
-  @Deprecated  // TODO: remove
-  @NotNull
-  public static XmlFileHeader parseHeader(final InputStream inputStream) {
-    try {
-      return parseHeader(new MyXMLReader(inputStream));
-    }
-    catch (IOException e) {
-      LOG.error(e);
-      return null;
     }
   }
 
@@ -230,7 +208,7 @@ public class NanoXmlUtil {
 
     @Override
     @Nullable
-    public Object getResult() throws Exception {
+    public Object getResult() {
       return null;
     }
 
@@ -240,10 +218,10 @@ public class NanoXmlUtil {
   }
 
   public static class BaseXmlBuilder extends IXMLBuilderAdapter {
-    private final Stack<String> myLocation = new Stack<String>();
+    private final Stack<String> myLocation = new Stack<>();
 
     @Override
-    public void startBuilding(String systemID, int lineNr) throws Exception {
+    public void startBuilding(String systemID, int lineNr) {
       myLocation.push("");
     }
 
@@ -333,7 +311,7 @@ public class NanoXmlUtil {
     }
 
     @Override
-    public Reader getEntity(IXMLReader xmlReader, String name) throws XMLParseException {
+    public Reader getEntity(IXMLReader xmlReader, String name) {
       return new StringReader("");
     }
 
@@ -347,16 +325,16 @@ public class NanoXmlUtil {
     private String publicId;
     private String systemId;
 
-    public MyXMLReader(final Reader documentReader) {
+    MyXMLReader(final Reader documentReader) {
       super(documentReader);
     }
 
-    public MyXMLReader(InputStream stream) throws IOException {
+    MyXMLReader(InputStream stream) throws IOException {
       super(stream);
     }
 
     @Override
-    public Reader openStream(String publicId, String systemId) throws IOException {
+    public Reader openStream(String publicId, String systemId) {
       this.publicId = StringUtil.isEmpty(publicId) ? null : publicId;
       this.systemId = StringUtil.isEmpty(systemId) ? null : systemId;
 
@@ -365,7 +343,7 @@ public class NanoXmlUtil {
   }
 
   public static class ParserStoppedXmlException extends XMLException {
-    public static final ParserStoppedException INSTANCE = new ParserStoppedException();
+    public static final ParserStoppedXmlException INSTANCE = new ParserStoppedXmlException();
 
     private ParserStoppedXmlException() {
       super("Parsing stopped");
@@ -377,26 +355,16 @@ public class NanoXmlUtil {
     }
   }
 
-  /**
-   * @deprecated throw {@link ParserStoppedXmlException#INSTANCE} instead
-   */
-  public static class ParserStoppedException extends RuntimeException {
-    @Override
-    public Throwable fillInStackTrace() {
-      return this;
-    }
-  }
-
   private static class RootTagInfoBuilder implements IXMLBuilder {
     private String myRootTagName;
     private String myNamespace;
 
     @Override
-    public void startBuilding(final String systemID, final int lineNr) throws Exception {
+    public void startBuilding(final String systemID, final int lineNr) {
     }
 
     @Override
-    public void newProcessingInstruction(final String target, final Reader reader) throws Exception {
+    public void newProcessingInstruction(final String target, final Reader reader) {
     }
 
     @Override
@@ -407,19 +375,19 @@ public class NanoXmlUtil {
     }
 
     @Override
-    public void addAttribute(final String key, final String nsPrefix, final String nsURI, final String value, final String type) throws Exception {
+    public void addAttribute(final String key, final String nsPrefix, final String nsURI, final String value, final String type) {
     }
 
     @Override
-    public void elementAttributesProcessed(final String name, final String nsPrefix, final String nsURI) throws Exception {
+    public void elementAttributesProcessed(final String name, final String nsPrefix, final String nsURI) {
     }
 
     @Override
-    public void endElement(final String name, final String nsPrefix, final String nsURI) throws Exception {
+    public void endElement(final String name, final String nsPrefix, final String nsURI) {
     }
 
     @Override
-    public void addPCData(final Reader reader, final String systemID, final int lineNr) throws Exception {
+    public void addPCData(final Reader reader, final String systemID, final int lineNr) {
     }
 
     public String getNamespace() {

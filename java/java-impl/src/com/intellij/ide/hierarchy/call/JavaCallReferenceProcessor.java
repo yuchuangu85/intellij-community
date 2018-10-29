@@ -18,6 +18,7 @@ package com.intellij.ide.hierarchy.call;
 import com.intellij.ide.util.treeView.NodeDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
+import com.intellij.psi.impl.light.LightMemberReference;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import org.jetbrains.annotations.NotNull;
@@ -25,9 +26,6 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Created by Max Medvedev on 10/5/13
- */
 public class JavaCallReferenceProcessor implements CallReferenceProcessor {
   @Override
   public boolean process(@NotNull PsiReference reference, @NotNull JavaCallHierarchyData data) {
@@ -44,7 +42,7 @@ public class JavaCallReferenceProcessor implements CallReferenceProcessor {
       if (qualifier instanceof PsiSuperExpression) { // filter super.foo() call inside foo() and similar cases (bug 8411)
         final PsiClass superClass = PsiUtil.resolveClassInType(qualifier.getType());
         if (superClass == null || originalClass.isInheritor(superClass, true)) {
-          return true;
+          return false;
         }
       }
       if (qualifier != null && !methodToFind.hasModifierProperty(PsiModifier.STATIC)) {
@@ -57,7 +55,7 @@ public class JavaCallReferenceProcessor implements CallReferenceProcessor {
             final PsiMethod callee = psiClass.findMethodBySignature(methodToFind, true);
             if (callee != null && !methodsToFind.contains(callee)) {
               // skip sibling methods
-              return true;
+              return false;
             }
           }
         }
@@ -71,15 +69,15 @@ public class JavaCallReferenceProcessor implements CallReferenceProcessor {
       final PsiElement parent = ((PsiElement)reference).getParent();
       if (parent instanceof PsiNewExpression) {
         if (((PsiNewExpression)parent).getClassReference() != reference) {
-          return true;
+          return false;
         }
       }
       else if (parent instanceof PsiAnonymousClass) {
         if (((PsiAnonymousClass)parent).getBaseClassReference() != reference) {
-          return true;
+          return false;
         }
       }
-      else {
+      else if (!(reference instanceof LightMemberReference)) {
         return true;
       }
     }

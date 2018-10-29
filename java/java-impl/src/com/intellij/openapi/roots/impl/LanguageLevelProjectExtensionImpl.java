@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import com.intellij.openapi.projectRoots.JavaSdkVersion;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.roots.LanguageLevelProjectExtension;
 import com.intellij.openapi.roots.ProjectExtension;
-import com.intellij.openapi.util.registry.Registry;
+import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.util.ObjectUtils;
 import org.jdom.Element;
@@ -30,11 +30,8 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * @author anna
- * @since 26-Dec-2007
  */
 public class LanguageLevelProjectExtensionImpl extends LanguageLevelProjectExtension {
-  private static final String ASSERT_KEYWORD_ATTR = "assert-keyword";
-  private static final String JDK_15_ATTR = "jdk-15";
   private static final String LANGUAGE_LEVEL = "languageLevel";
   private static final String DEFAULT_ATTRIBUTE = "default";
 
@@ -54,48 +51,35 @@ public class LanguageLevelProjectExtensionImpl extends LanguageLevelProjectExten
   private void readExternal(final Element element) {
     String level = element.getAttributeValue(LANGUAGE_LEVEL);
     if (level == null) {
-      myLanguageLevel = Registry.is("saving.state.in.new.format.is.allowed", true) ? null : migrateFromIdea7(element);
+      myLanguageLevel = null;
     }
     else {
-      myLanguageLevel = LanguageLevel.valueOf(level);
+      myLanguageLevel = readLanguageLevel(level);
     }
     String aDefault = element.getAttributeValue(DEFAULT_ATTRIBUTE);
     setDefault(aDefault == null ? null : Boolean.parseBoolean(aDefault));
   }
 
-  private static LanguageLevel migrateFromIdea7(Element element) {
-    final boolean assertKeyword = Boolean.valueOf(element.getAttributeValue(ASSERT_KEYWORD_ATTR)).booleanValue();
-    final boolean jdk15 = Boolean.valueOf(element.getAttributeValue(JDK_15_ATTR)).booleanValue();
-    if (jdk15) {
-      return LanguageLevel.JDK_1_5;
+  private static LanguageLevel readLanguageLevel(String level) {
+    for (LanguageLevel languageLevel : LanguageLevel.values()) {
+      if (level.equals(languageLevel.name())) {
+        return languageLevel;
+      }
     }
-    else if (assertKeyword) {
-      return LanguageLevel.JDK_1_4;
-    }
-    else {
-      return LanguageLevel.JDK_1_3;
-    }
+    return LanguageLevel.HIGHEST;
   }
 
   private void writeExternal(final Element element) {
     if (myLanguageLevel != null) {
       element.setAttribute(LANGUAGE_LEVEL, myLanguageLevel.name());
     }
-    Boolean aBoolean = getDefault();
-    if (aBoolean != null) {
-      element.setAttribute(DEFAULT_ATTRIBUTE, Boolean.toString(aBoolean));
-    }
 
-    if (!Registry.is("saving.state.in.new.format.is.allowed", true)) {
-      writeAttributesForIdea7(element);
+    if (!myProject.isDefault()) {
+      Boolean aBoolean = getDefault();
+      if (aBoolean != null) {
+        element.setAttribute(DEFAULT_ATTRIBUTE, Boolean.toString(aBoolean));
+      }
     }
-  }
-
-  private void writeAttributesForIdea7(Element element) {
-    final boolean is14 = LanguageLevel.JDK_1_4.equals(myLanguageLevel);
-    final boolean is15 = myLanguageLevel != null && myLanguageLevel.compareTo(LanguageLevel.JDK_1_5) >= 0;
-    element.setAttribute(ASSERT_KEYWORD_ATTR, Boolean.toString(is14 || is15));
-    element.setAttribute(JDK_15_ATTR, Boolean.toString(is15));
   }
 
   @Override
@@ -121,6 +105,7 @@ public class LanguageLevelProjectExtensionImpl extends LanguageLevelProjectExten
   @Override
   public void languageLevelsChanged() {
     if (!myProject.isDefault()) {
+      ProjectRootManager.getInstance(myProject).incModificationCount();
       JavaLanguageLevelPusher.pushLanguageLevel(myProject);
     }
   }

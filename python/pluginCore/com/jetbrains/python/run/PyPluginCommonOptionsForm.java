@@ -1,20 +1,7 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.run;
 
+import com.google.common.collect.Lists;
 import com.intellij.application.options.ModulesComboBox;
 import com.intellij.execution.configuration.EnvironmentVariablesComponent;
 import com.intellij.execution.util.PathMappingsComponent;
@@ -48,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * @author yole
@@ -72,6 +60,8 @@ public class PyPluginCommonOptionsForm implements AbstractPyCommonOptionsForm {
   private JComponent labelAnchor;
   private final HideableDecorator myDecorator;
 
+  private final List<Consumer<Boolean>> myRemoteInterpreterModeListeners = Lists.newArrayList();
+
   public PyPluginCommonOptionsForm(PyCommonOptionsFormData data) {
     // setting modules
     myProject = data.getProject();
@@ -84,9 +74,10 @@ public class PyPluginCommonOptionsForm implements AbstractPyCommonOptionsForm {
     myInterpreterComboBox.setMinimumAndPreferredWidth(100);
     myInterpreterComboBox.setRenderer(new SdkListCellRenderer("<Project Default>"));
     myWorkingDirectoryTextField.addBrowseFolderListener("Select Working Directory", "", data.getProject(),
-                                                  FileChooserDescriptorFactory.createSingleFolderDescriptor());
+                                                        FileChooserDescriptorFactory.createSingleFolderDescriptor());
 
     ActionListener listener = new ActionListener() {
+      @Override
       public void actionPerformed(ActionEvent e) {
         updateControls();
       }
@@ -111,6 +102,7 @@ public class PyPluginCommonOptionsForm implements AbstractPyCommonOptionsForm {
         super.off();
         storeState();
       }
+
       private void storeState() {
         PropertiesComponent.getInstance().setValue(EXPAND_PROPERTY_KEY, String.valueOf(isExpanded()), "true");
       }
@@ -119,6 +111,15 @@ public class PyPluginCommonOptionsForm implements AbstractPyCommonOptionsForm {
     myDecorator.setContentComponent(myMainPanel);
     myPathMappingsComponent.setAnchor(myEnvsComponent.getLabel());
     updateControls();
+
+    addInterpreterComboBoxActionListener(new ActionListener() {
+      @Override
+      public void actionPerformed(ActionEvent e) {
+        for (Consumer<Boolean> f : myRemoteInterpreterModeListeners) {
+          f.accept(PySdkUtil.isRemote(getSelectedSdk()));
+        }
+      }
+    });
   }
 
   private void updateControls() {
@@ -127,6 +128,7 @@ public class PyPluginCommonOptionsForm implements AbstractPyCommonOptionsForm {
     myPathMappingsComponent.setVisible(PySdkUtil.isRemote(getSelectedSdk()));
   }
 
+  @Override
   public JPanel getMainPanel() {
     return myHideablePanel;
   }
@@ -145,30 +147,41 @@ public class PyPluginCommonOptionsForm implements AbstractPyCommonOptionsForm {
     myInterpreterComboBox.removeActionListener(listener);
   }
 
+  @Override
+  public void addInterpreterModeListener(Consumer<Boolean> listener) {
+    myRemoteInterpreterModeListeners.add(listener);
+  }
+
+  @Override
   public String getInterpreterOptions() {
     return myInterpreterOptionsTextField.getText().trim();
   }
 
+  @Override
   public void setInterpreterOptions(String interpreterOptions) {
     myInterpreterOptionsTextField.setText(interpreterOptions);
   }
 
+  @Override
   public String getWorkingDirectory() {
     return FileUtil.toSystemIndependentName(myWorkingDirectoryTextField.getText().trim());
   }
 
+  @Override
   public void setWorkingDirectory(String workingDirectory) {
     myWorkingDirectoryTextField.setText(workingDirectory == null ? "" : FileUtil.toSystemDependentName(workingDirectory));
   }
 
+  @Override
   @Nullable
   public String getSdkHome() {
     Sdk selectedSdk = (Sdk)myInterpreterComboBox.getSelectedItem();
     return selectedSdk == null ? null : selectedSdk.getHomePath();
   }
 
+  @Override
   public void setSdkHome(String sdkHome) {
-    List<Sdk> sdkList = new ArrayList<Sdk>();
+    List<Sdk> sdkList = new ArrayList<>();
     sdkList.add(null);
     final List<Sdk> allSdks = PythonSdkType.getAllSdks();
     Collections.sort(allSdks, new PreferredSdkComparator());
@@ -182,6 +195,7 @@ public class PyPluginCommonOptionsForm implements AbstractPyCommonOptionsForm {
     myInterpreterComboBox.setModel(new CollectionComboBoxModel(sdkList, selection));
   }
 
+  @Override
   public Module getModule() {
     return myModuleComboBox.getSelectedModule();
   }
@@ -189,17 +203,20 @@ public class PyPluginCommonOptionsForm implements AbstractPyCommonOptionsForm {
   @Override
   public String getModuleName() {
     Module module = getModule();
-    return module != null? module.getName() : null;
+    return module != null ? module.getName() : null;
   }
 
+  @Override
   public void setModule(Module module) {
     myModuleComboBox.setSelectedModule(module);
   }
 
+  @Override
   public boolean isUseModuleSdk() {
     return myUseModuleSdkRadioButton.isSelected();
   }
 
+  @Override
   public void setUseModuleSdk(boolean useModuleSdk) {
     if (useModuleSdk) {
       myUseModuleSdkRadioButton.setSelected(true);
@@ -210,18 +227,22 @@ public class PyPluginCommonOptionsForm implements AbstractPyCommonOptionsForm {
     updateControls();
   }
 
+  @Override
   public boolean isPassParentEnvs() {
     return myEnvsComponent.isPassParentEnvs();
   }
 
+  @Override
   public void setPassParentEnvs(boolean passParentEnvs) {
     myEnvsComponent.setPassParentEnvs(passParentEnvs);
   }
 
+  @Override
   public Map<String, String> getEnvs() {
     return myEnvsComponent.getEnvs();
   }
 
+  @Override
   public void setEnvs(Map<String, String> envs) {
     myEnvsComponent.setEnvs(envs);
   }

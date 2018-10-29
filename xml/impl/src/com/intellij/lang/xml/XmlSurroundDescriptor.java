@@ -49,7 +49,7 @@ public class XmlSurroundDescriptor implements SurroundDescriptor {
       }
       return PsiElement.EMPTY_ARRAY;
     }
-    List<PsiElement> result = new ArrayList<PsiElement>();
+    List<PsiElement> result = new ArrayList<>();
     PsiElement first = childrenInRange.getFirst();
     PsiElement last = childrenInRange.getSecond();
     while(true) {
@@ -63,7 +63,7 @@ public class XmlSurroundDescriptor implements SurroundDescriptor {
 
   @Override
   @NotNull public Surrounder[] getSurrounders() {
-    return new Surrounder[0]; //everything is in live templates now
+    return Surrounder.EMPTY_ARRAY; //everything is in live templates now
   }
 
   @Override

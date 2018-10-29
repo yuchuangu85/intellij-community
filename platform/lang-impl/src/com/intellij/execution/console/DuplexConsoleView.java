@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.console;
 
 import com.google.common.collect.Lists;
@@ -34,6 +20,7 @@ import com.intellij.openapi.editor.actions.ToggleUseSoftWrapsToolbarAction;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NonNls;
@@ -91,7 +78,7 @@ public class DuplexConsoleView<S extends ConsoleView, T extends ConsoleView> ext
   public static <S extends ConsoleView, T extends ConsoleView> DuplexConsoleView<S, T> create(@NotNull S primary,
                                                                                               @NotNull T secondary,
                                                                                               @Nullable String stateStorageKey) {
-    return new DuplexConsoleView<S, T>(primary, secondary, stateStorageKey);
+    return new DuplexConsoleView<>(primary, secondary, stateStorageKey);
   }
 
   private void setStoredState(boolean primary) {
@@ -116,7 +103,9 @@ public class DuplexConsoleView<S extends ConsoleView, T extends ConsoleView> ext
     CardLayout cl = (CardLayout)(getLayout());
     cl.show(this, primary ? PRIMARY_CONSOLE_PANEL : SECONDARY_CONSOLE_PANEL);
 
-    getSubConsoleView(primary).getComponent().requestFocus();
+    IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
+      IdeFocusManager.getGlobalInstance().requestFocus(getSubConsoleView(primary).getComponent(), true);
+    });
 
     myPrimary = primary;
   }
@@ -182,23 +171,23 @@ public class DuplexConsoleView<S extends ConsoleView, T extends ConsoleView> ext
   }
 
   @Override
-  public void performWhenNoDeferredOutput(Runnable runnable) {
+  public void performWhenNoDeferredOutput(@NotNull Runnable runnable) {
   }
 
   @Override
-  public void setHelpId(String helpId) {
+  public void setHelpId(@NotNull String helpId) {
     myPrimaryConsoleView.setHelpId(helpId);
     mySecondaryConsoleView.setHelpId(helpId);
   }
 
   @Override
-  public void addMessageFilter(Filter filter) {
+  public void addMessageFilter(@NotNull Filter filter) {
     myPrimaryConsoleView.addMessageFilter(filter);
     mySecondaryConsoleView.addMessageFilter(filter);
   }
 
   @Override
-  public void printHyperlink(String hyperlinkText, HyperlinkInfo info) {
+  public void printHyperlink(@NotNull String hyperlinkText, HyperlinkInfo info) {
     myPrimaryConsoleView.printHyperlink(hyperlinkText, info);
     mySecondaryConsoleView.printHyperlink(hyperlinkText, info);
   }
@@ -261,7 +250,7 @@ public class DuplexConsoleView<S extends ConsoleView, T extends ConsoleView> ext
 
   @Nullable
   @Override
-  public Object getData(@NonNls String dataId) {
+  public Object getData(@NotNull @NonNls String dataId) {
     final ConsoleView consoleView = getSubConsoleView(isPrimaryConsoleEnabled());
     if (consoleView instanceof DataProvider) {
       return ((DataProvider)consoleView).getData(dataId);
@@ -308,7 +297,7 @@ public class DuplexConsoleView<S extends ConsoleView, T extends ConsoleView> ext
     }
 
     @Override
-    public void setSelected(AnActionEvent e, boolean state) {
+    public void setSelected(@NotNull AnActionEvent e, boolean state) {
       super.setSelected(e, state);
       DuplexConsoleView.this.getComponent().revalidate();
     }
@@ -316,18 +305,18 @@ public class DuplexConsoleView<S extends ConsoleView, T extends ConsoleView> ext
   
   private class SwitchDuplexConsoleViewAction extends ToggleAction implements DumbAware {
 
-    public SwitchDuplexConsoleViewAction() {
+    SwitchDuplexConsoleViewAction() {
       super(ExecutionBundle.message("run.configuration.show.command.line.action.name"), null,
-            AllIcons.Debugger.ToolConsole);
+            AllIcons.Debugger.Console);
     }
 
     @Override
-    public boolean isSelected(final AnActionEvent event) {
+    public boolean isSelected(@NotNull final AnActionEvent event) {
       return !isPrimaryConsoleEnabled();
     }
 
     @Override
-    public void setSelected(final AnActionEvent event, final boolean flag) {
+    public void setSelected(@NotNull final AnActionEvent event, final boolean flag) {
       enableConsole(!flag);
       setStoredState(!flag);
       ApplicationManager.getApplication().invokeLater(() -> update(event));
@@ -364,12 +353,12 @@ public class DuplexConsoleView<S extends ConsoleView, T extends ConsoleView> ext
     }
 
     @Override
-    public boolean isSelected(AnActionEvent e) {
+    public boolean isSelected(@NotNull AnActionEvent e) {
       return myAction1.isSelected(e);
     }
 
     @Override
-    public void setSelected(AnActionEvent e, boolean state) {
+    public void setSelected(@NotNull AnActionEvent e, boolean state) {
       myAction1.setSelected(e, state);
       myAction2.setSelected(e, state);
     }
@@ -388,7 +377,7 @@ public class DuplexConsoleView<S extends ConsoleView, T extends ConsoleView> ext
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
+    public void actionPerformed(@NotNull AnActionEvent e) {
       myAction1.actionPerformed(e);
       myAction2.actionPerformed(e);
     }

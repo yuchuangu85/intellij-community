@@ -34,12 +34,6 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.path.GrM
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrMethod;
 
 public class GroovyNotifyWhileNotSynchronizedInspection extends BaseInspection {
-  @Override
-  @Nls
-  @NotNull
-  public String getGroupDisplayName() {
-    return THREADING_ISSUES;
-  }
 
   @Override
   @Nls
@@ -63,7 +57,7 @@ public class GroovyNotifyWhileNotSynchronizedInspection extends BaseInspection {
 
   private static class Visitor extends BaseInspectionVisitor {
     @Override
-    public void visitMethodCallExpression(GrMethodCallExpression grMethodCallExpression) {
+    public void visitMethodCallExpression(@NotNull GrMethodCallExpression grMethodCallExpression) {
       super.visitMethodCallExpression(grMethodCallExpression);
       final GrExpression methodExpression = grMethodCallExpression.getInvokedExpression();
       if (!(methodExpression instanceof GrReferenceExpression)) {

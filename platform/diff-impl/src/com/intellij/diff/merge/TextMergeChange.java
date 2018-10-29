@@ -16,8 +16,8 @@
 package com.intellij.diff.merge;
 
 import com.intellij.diff.fragments.MergeLineFragment;
-import com.intellij.diff.tools.simple.MergeInnerDifferences;
 import com.intellij.diff.tools.simple.ThreesideDiffChangeBase;
+import com.intellij.diff.tools.util.text.MergeInnerDifferences;
 import com.intellij.diff.util.*;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -275,13 +275,11 @@ public class TextMergeChange extends ThreesideDiffChangeBase {
       myShiftPressed = myViewer.getModifierProvider().isShiftPressed();
 
       if (mySide == ThreeSide.BASE) {
-        switch (myType) {
-          case RESOLVE:
-            if (!Registry.is("diff.merge.resolve.conflict.action.visible")) return null;
-            return createResolveRenderer();
-          default:
-            throw new IllegalArgumentException(myType.name());
+        if (myType == OperationType.RESOLVE) {
+          if (!Registry.is("diff.merge.resolve.conflict.action.visible")) return null;
+          return createResolveRenderer();
         }
+        throw new IllegalArgumentException(myType.name());
       }
       else {
         Side versionSide = mySide.select(Side.LEFT, null, Side.RIGHT);
@@ -324,24 +322,24 @@ public class TextMergeChange extends ThreesideDiffChangeBase {
 
   @Nullable
   private GutterIconRenderer createResolveRenderer() {
-    if (myViewer.resolveConflictUsingInnerDifferences(this) == null) return null;
+    if (!this.isConflict() || !myViewer.canResolveChangeAutomatically(this, ThreeSide.BASE)) return null;
 
-    return createIconRenderer(DiffBundle.message("merge.dialog.resolve.change.action.name"), AllIcons.Actions.Checked, false, () -> {
+    return createIconRenderer(DiffBundle.message("merge.dialog.resolve.change.action.name"), AllIcons.Diff.MagicResolve, false, () -> {
       myViewer.executeMergeCommand("Resolve conflict", Collections.singletonList(this), () -> {
-        myViewer.resolveConflictedChange(this);
+        myViewer.resolveChangeAutomatically(this, ThreeSide.BASE);
       });
     });
   }
 
-  @Nullable
-  private GutterIconRenderer createIconRenderer(@NotNull final String text,
-                                                @NotNull final Icon icon,
-                                                boolean ctrlClickVisible,
-                                                @NotNull final Runnable perform) {
+  @NotNull
+  private static GutterIconRenderer createIconRenderer(@NotNull final String text,
+                                                       @NotNull final Icon icon,
+                                                       boolean ctrlClickVisible,
+                                                       @NotNull final Runnable perform) {
     final String tooltipText = DiffUtil.createTooltipText(text, ctrlClickVisible ? CTRL_CLICK_TO_RESOLVE : null);
     return new DiffGutterRenderer(icon, tooltipText) {
       @Override
-      protected void performAction(AnActionEvent e) {
+      protected void performAction(@NotNull AnActionEvent e) {
         perform.run();
       }
     };

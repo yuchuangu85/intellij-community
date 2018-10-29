@@ -53,7 +53,7 @@ public class MixinMemberContributor extends NonCodeMembersContributor {
     final PsiModifierList modifierList = aClass.getModifierList();
     if (modifierList == null) return;
 
-    List<PsiClass> mixins = new ArrayList<PsiClass>();
+    List<PsiClass> mixins = new ArrayList<>();
     for (PsiAnnotation annotation : getAllMixins(modifierList)) {
       final PsiAnnotationMemberValue value = annotation.findAttributeValue("value");
 
@@ -89,7 +89,7 @@ public class MixinMemberContributor extends NonCodeMembersContributor {
   }
 
   private static List<PsiAnnotation> getAllMixins(PsiModifierList modifierList) {
-    final ArrayList<PsiAnnotation> result = new ArrayList<PsiAnnotation>();
+    final ArrayList<PsiAnnotation> result = new ArrayList<>();
     for (PsiAnnotation annotation : modifierList.getAnnotations()) {
       if (GroovyCommonClassNames.GROOVY_LANG_MIXIN.equals(annotation.getQualifiedName())) {
         result.add(annotation);
@@ -102,7 +102,7 @@ public class MixinMemberContributor extends NonCodeMembersContributor {
     return place.getParent() instanceof GrAnnotation || place.getParent() instanceof GrAnnotationArrayInitializer;
   }
 
-  private static void addMixin(GrAnnotationMemberValue value, List<PsiClass> mixins) {
+  private static void addMixin(GrAnnotationMemberValue value, List<? super PsiClass> mixins) {
     if (value instanceof GrReferenceExpression) {
       final PsiElement resolved = ((GrReferenceExpression)value).resolve();
       if (resolved instanceof PsiClass) {
@@ -115,7 +115,7 @@ public class MixinMemberContributor extends NonCodeMembersContributor {
     private final String myOriginInfo;
     private final PsiMethod myPrototype;
 
-    public MixinedMethod(@NotNull PsiMethod method, String originInfo) {
+    MixinedMethod(@NotNull PsiMethod method, String originInfo) {
       super(method.getManager(), method, ObjectUtils.assertNotNull(method.getContainingClass()));
       myOriginInfo = originInfo;
       myPrototype = method;

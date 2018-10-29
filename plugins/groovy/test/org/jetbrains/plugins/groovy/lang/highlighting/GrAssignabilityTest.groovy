@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.highlighting
 
 import com.intellij.codeInsight.intention.IntentionAction
@@ -28,146 +14,148 @@ import org.jetbrains.plugins.groovy.codeInspection.untypedUnresolvedAccess.GrUnr
 class GrAssignabilityTest extends GrHighlightingTestBase {
   InspectionProfileEntry[] getCustomInspections() { [new GroovyAssignabilityCheckInspection()] }
 
-  public void testIncompatibleTypesAssignments() { doTest(); }
+  void testIncompatibleTypesAssignments() { doTest() }
 
-  public void testDefaultMapConstructorNamedArgs() {
+  void testDefaultMapConstructorNamedArgs() {
     addBigDecimal()
-    doTest(new GroovyConstructorNamedArgumentsInspection());
+    doTest(new GroovyConstructorNamedArgumentsInspection())
   }
 
-  public void testDefaultMapConstructorNamedArgsError() {
+  void testDefaultMapConstructorNamedArgsError() {
     addBigDecimal()
-    doTest(new GroovyConstructorNamedArgumentsInspection());
+    doTest(new GroovyConstructorNamedArgumentsInspection())
   }
 
-  public void testDefaultMapConstructorWhenDefConstructorExists() {
-    doTest(new GroovyConstructorNamedArgumentsInspection());
+  void testDefaultMapConstructorWhenDefConstructorExists() {
+    doTest(new GroovyConstructorNamedArgumentsInspection())
   }
 
-  public void testUnresolvedMethodCallWithTwoDeclarations() {
-    doTest();
+  void testUnresolvedMethodCallWithTwoDeclarations() {
+    doTest()
   }
 
-  public void testConstructor() {
-    doTest(new GroovyConstructorNamedArgumentsInspection());
+  void testConstructor() {
+    doTest(new GroovyConstructorNamedArgumentsInspection())
   }
 
-  public void testEverythingAssignableToString() {doTest();}
+  void testEverythingAssignableToString() { doTest() }
 
-  public void testMethodCallWithDefaultParameters() {doTest();}
+  void testMethodCallWithDefaultParameters() { doTest() }
 
-  public void testClosureWithDefaultParameters() {doTest();}
+  void testClosureWithDefaultParameters() { doTest() }
 
-  public void testClosureCallMethodWithInapplicableArguments() {doTest();}
+  void testClosureApplicability() { doTest() }
 
-  public void testCallIsNotApplicable() {doTest();}
+  void testSingleParameterMethodApplicability() { doTest() }
 
-  public void testPathCallIsNotApplicable() {doTest();}
+  void testCallIsNotApplicable() { doTest() }
 
-  public void testByteArrayArgument() {doTest();}
+  void testPathCallIsNotApplicable() { doTest() }
 
-  public void testPutValueToEmptyMap() {doTest();}
+  void testByteArrayArgument() { doTest() }
 
-  public void _testPutIncorrectValueToMap() {doTest();} //incorrect test
+  void testPutValueToEmptyMap() { doTest() }
 
-  public void testTupleTypeAssignments() {
-    addBigDecimal();
-    doTest();
+  void _testPutIncorrectValueToMap() { doTest() } //incorrect test
+
+  void testTupleTypeAssignments() {
+    addBigDecimal()
+    doTest()
   }
 
-  public void testSignatureIsNotApplicableToList() {
-    doTest();
+  void testSignatureIsNotApplicableToList() {
+    doTest()
   }
 
-  public void testInheritConstructorsAnnotation() {
-    doTest();
+  void testInheritConstructorsAnnotation() {
+    doTest()
   }
 
-  public void testCollectionAssignments() {doTest(); }
+  void testCollectionAssignments() { doTest() }
 
-  public void testReturnAssignability() {doTest(); }
+  void testReturnAssignability() { doTest() }
 
-  public void testMapNotAcceptedAsStringParameter() {doTest();}
+  void testMapNotAcceptedAsStringParameter() { doTest() }
 
-  public void testRawTypeInAssignment() {doTest();}
+  void testRawTypeInAssignment() { doTest() }
 
-  public void testMapParamWithNoArgs() {doTest();}
+  void testMapParamWithNoArgs() { doTest() }
 
-  public void testInheritInterfaceInDelegate() {
-    doTest();
+  void testInheritInterfaceInDelegate() {
+    doTest()
   }
 
-  public void testThisTypeInStaticContext() {
-    doTest();
+  void testThisTypeInStaticContext() {
+    doTest()
   }
 
-  public void testAnonymousClassArgList() {
-    doTest();
+  void testAnonymousClassArgList() {
+    doTest()
   }
 
-  public void testTupleConstructorAttributes() {
-    doTest();
+  void testTupleConstructorAttributes() {
+    doTest()
   }
 
-  public void testCanonicalConstructorApplicability() {
-    myFixture.addClass("package groovy.transform; public @interface Canonical {}");
-    doTest();
+  void testCanonicalConstructorApplicability() {
+    myFixture.addClass("package groovy.transform; public @interface Canonical {}")
+    doTest()
   }
 
-  public void testStringAssignableToChar() {
-    doTest();
+  void testStringAssignableToChar() {
+    doTest()
   }
 
 
-  public void testCurrying() {
-    doTest();
+  void testCurrying() {
+    doTest()
   }
 
-  public void testAnotherCurrying() {
-    doTest();
+  void testAnotherCurrying() {
+    doTest()
   }
 
-  public void testResultOfIncUsed() {
-    doTest(new GroovyResultOfIncrementOrDecrementUsedInspection());
+  void testResultOfIncUsed() {
+    doTest(new GroovyResultOfIncrementOrDecrementUsedInspection())
   }
 
-  public void testNativeMapAssignability() {
-    doTest();
+  void testNativeMapAssignability() {
+    doTest()
   }
 
-  public void testTwoLevelGrMap() {
-    doTest();
+  void testTwoLevelGrMap() {
+    doTest()
   }
 
-  public void testPassingCollectionSubtractionIntoGenericMethod() {
-    doTest(new GrUnresolvedAccessInspection());
+  void testPassingCollectionSubtractionIntoGenericMethod() {
+    doTest(new GrUnresolvedAccessInspection())
   }
 
-  public void testImplicitEnumCoercion() {
-    doTest();
+  void testImplicitEnumCoercion() {
+    doTest()
   }
 
-  public void testUnknownVarInArgList() {
-    doTest();
+  void testUnknownVarInArgList() {
+    doTest()
   }
 
-  public void testCallableProperty() {
-    doTest();
+  void testCallableProperty() {
+    doTest()
   }
 
-  public void testEnumConstantConstructors() {
-    doTest();
+  void testEnumConstantConstructors() {
+    doTest()
   }
 
-  public void testLiteralConstructorUsages() {
-    doTest();
+  void testLiteralConstructorUsages() {
+    doTest()
   }
 
-  public void testSpreadArguments() {
-    doTest();
+  void testSpreadArguments() {
+    doTest()
   }
 
-  public void testDiamondTypeInferenceSOE() {
+  void testDiamondTypeInferenceSOE() {
     testHighlighting(''' Map<Integer, String> a; a[2] = [:] ''', false, false, false)
   }
 
@@ -182,10 +170,10 @@ class A {
             }
         }.run()
     }
-}''', true, false, false);
+}''', true, false, false)
   }
 
-  public void testNonInferrableArgsOfDefParams() {
+  void testNonInferrableArgsOfDefParams() {
     testHighlighting('''\
 def foo0(def a) { }
 def bar0(def b) { foo0(b) }
@@ -198,7 +186,7 @@ def bar2(def b) { foo2<weak_warning descr="Cannot infer argument types">(b)</wea
 ''')
   }
 
-  public void testPutAtApplicability() {
+  void testPutAtApplicability() {
     myFixture.addClass("""\
 package java.util;
 public class LinkedHashMap<K,V> extends HashMap<K,V> implements Map<K,V> {}
@@ -211,7 +199,7 @@ files<warning descr="'putAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethod
 ''')
   }
 
-  public void testStringToCharAssignability() {
+  void testStringToCharAssignability() {
     testHighlighting('''\
 def foo(char c){}
 
@@ -247,7 +235,7 @@ class Bar {
   def foo(int i, int i2) {i2}
 }
 
-def cl = new Bar<error descr="'(' expected">.</error>&foo
+def cl = new Bar<error descr="'(' expected, got '.&'">.</error>&foo
 cl = cl.curry(1)
 String s = cl("2")
 int <warning descr="Cannot assign 'String' to 'int'">s2</warning> = cl("2")
@@ -290,10 +278,10 @@ class Ca {
 }
 
 use(Ca) {
-  1.<warning descr="Category method 'foo' cannot be applied to 'java.lang.Integer'">foo</warning>()
-  (1 as int).<warning descr="Category method 'foo' cannot be applied to 'int'">foo</warning>()
+  1.<warning descr="Cannot resolve symbol 'foo'">foo</warning>()
+  (1 as int).<warning descr="Cannot resolve symbol 'foo'">foo</warning>()
 }
-''')
+''', GrUnresolvedAccessInspection)
   }
 
   void testCompileStaticWithAssignabilityCheck() {
@@ -339,7 +327,8 @@ class A {
 
   void testTupleAssignment() {
     testHighlighting('''\
-def (String x, int y)
+String x 
+int y 
 (x, <warning descr="Cannot assign 'String' to 'int'">y</warning>) = foo()
 
 print x + y
@@ -406,7 +395,7 @@ private int getObjects() {
 
   void testForInAssignability() {
     testHighlighting('''\
-for (int <warning descr="Cannot assign 'String' to 'int'">x</warning> in ['a']){}
+for (<warning descr="Cannot assign 'String' to 'int'">int x</warning> in ['a']){}
 ''')
   }
 
@@ -479,7 +468,7 @@ _Boolean(null)
   void testInnerWarning() {
     testHighlighting('''\
 public static void main(String[] args) {
-    bar <warning descr="'bar' in '_' cannot be applied to '(java.lang.Number)'">(foo(foo(foo<warning descr="'foo' in '_' cannot be applied to '(java.lang.String)'">('2')</warning>)))</warning>
+    bar <warning descr="'bar' in '_' cannot be applied to '(T)'">(foo(foo(foo<warning descr="'foo' in '_' cannot be applied to '(java.lang.String)'">('2')</warning>)))</warning>
 }
 
 static def <T extends Number> T foo(T abc) {
@@ -520,10 +509,10 @@ Money d = [amount: 100, currency:'USA']
 int [] i = [1, 2]
 
 print i[1]
-print i<warning descr="'getAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '(java.lang.Integer, java.lang.Integer)'">[1, 2]</warning>
+print i[1, 2]
 print i[1..2]
 print i['a']
-print i<warning descr="'getAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '(java.lang.String, java.lang.String)'">['a', 'b']</warning>
+print i['a', 'b']
 ''')
   }
 
@@ -532,10 +521,10 @@ print i<warning descr="'getAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMeth
 int[] i() { [1, 2] }
 
 print i()[1]
-print i()<warning descr="'getAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '(java.lang.Integer, java.lang.Integer)'">[1, 2]</warning>
+print i()[1, 2]
 print i()[1..2]
 print i()['a']
-print i()<warning descr="'getAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '(java.lang.String, java.lang.String)'">['a', 'b']</warning>
+print i()['a', 'b']
 ''')
   }
 
@@ -548,10 +537,10 @@ class X {
 X i() { new X() }
 
 print i()[1]
-print i()<warning descr="'getAt' in 'X' cannot be applied to '(java.lang.Integer, java.lang.Integer)'">[1, 2]</warning>
+print i()<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.Integer, java.lang.Integer])'">[1, 2]</warning>
 print i()<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.Integer..java.lang.Integer])'">[1..2]</warning>
 print i()['a']
-print i()<warning descr="'getAt' in 'X' cannot be applied to '(java.lang.String, java.lang.String)'">['a', 'b']</warning>
+print i()<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.String, java.lang.String])'">['a', 'b']</warning>
 ''')
   }
 
@@ -564,16 +553,16 @@ class X {
 X i = new X()
 
 print i[1]
-print i<warning descr="'getAt' in 'X' cannot be applied to '(java.lang.Integer, java.lang.Integer)'">[1, 2]</warning>
+print i<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.Integer, java.lang.Integer])'">[1, 2]</warning>
 print i<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.Integer..java.lang.Integer])'">[1..2]</warning>
 print i['a']
-print i<warning descr="'getAt' in 'X' cannot be applied to '(java.lang.String, java.lang.String)'">['a', 'b']</warning>
+print i<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.String, java.lang.String])'">['a', 'b']</warning>
 ''')
   }
 
   void testArrayAccess5() {
     testHighlighting('''\
-print a<warning descr="'getAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '(java.lang.Integer, java.lang.Integer)'">[1, 2]</warning>
+print a<warning descr="'getAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '([java.lang.Integer, java.lang.Integer])'">[1, 2]</warning>
 ''')
   }
 
@@ -582,10 +571,10 @@ print a<warning descr="'getAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMeth
 int[] i = [1, 2]
 
 i[1] = 2
-i<warning descr="'putAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '(java.lang.Integer, java.lang.Integer, java.lang.Integer)'">[1, 2]</warning> = 2
-i<warning descr="Cannot resolve index access with arguments (java.lang.Integer, java.lang.String)">[1]</warning> = 'a'
-i['a'] = 'b'
-i<warning descr="'putAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '(java.lang.String, java.lang.String, java.lang.Integer)'">['a', 'b']</warning> = 1
+i<warning descr="'putAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '([java.lang.Integer, java.lang.Integer], java.lang.Integer)'">[1, 2]</warning> = 2
+<warning descr="Cannot assign 'String' to 'int'">i[1]</warning> = 'a'
+<warning descr="Cannot assign 'String' to 'int'">i['a']</warning> = 'b'
+i<warning descr="'putAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '([java.lang.String, java.lang.String], java.lang.Integer)'">['a', 'b']</warning> = 1
 ''')
   }
 
@@ -594,10 +583,10 @@ i<warning descr="'putAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' c
 int[] i() { [1, 2] }
 
 i()[1] = 2
-i()<warning descr="'putAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '(java.lang.Integer, java.lang.Integer, java.lang.Integer)'">[1, 2]</warning> = 2
-i()<warning descr="Cannot resolve index access with arguments (java.lang.Integer, java.lang.String)">[1]</warning> = 'a'
-i()['a'] = 'b'
-i()<warning descr="'putAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '(java.lang.String, java.lang.String, java.lang.Integer)'">['a', 'b']</warning> = 1
+i()<warning descr="'putAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '([java.lang.Integer, java.lang.Integer], java.lang.Integer)'">[1, 2]</warning> = 2
+<warning descr="Cannot assign 'String' to 'int'">i()[1]</warning> = 'a'
+<warning descr="Cannot assign 'String' to 'int'">i()['a']</warning> = 'b'
+i()<warning descr="'putAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '([java.lang.String, java.lang.String], java.lang.Integer)'">['a', 'b']</warning> = 1
 ''')
   }
 
@@ -610,10 +599,10 @@ class X {
 X i() { new X() }
 
 i()[1] = 2
-i()<warning descr="'putAt' in 'X' cannot be applied to '(java.lang.Integer, java.lang.Integer, java.lang.Integer)'">[1, 2]</warning> = 2
+i()<warning descr="'putAt' in 'X' cannot be applied to '([java.lang.Integer, java.lang.Integer], java.lang.Integer)'">[1, 2]</warning> = 2
 i()<warning descr="'putAt' in 'X' cannot be applied to '(java.lang.Integer, java.lang.String)'">[1]</warning> = 'a'
 i()['a'] = 'b'
-i()<warning descr="'putAt' in 'X' cannot be applied to '(java.lang.String, java.lang.String, java.lang.Integer)'">['a', 'b']</warning> = 1
+i()<warning descr="'putAt' in 'X' cannot be applied to '([java.lang.String, java.lang.String], java.lang.Integer)'">['a', 'b']</warning> = 1
 ''')
   }
 
@@ -626,20 +615,20 @@ class X {
 X i = new X()
 
 i[1] = 2
-i<warning descr="'putAt' in 'X' cannot be applied to '(java.lang.Integer, java.lang.Integer, java.lang.Integer)'">[1, 2]</warning> = 2
+i<warning descr="'putAt' in 'X' cannot be applied to '([java.lang.Integer, java.lang.Integer], java.lang.Integer)'">[1, 2]</warning> = 2
 i<warning descr="'putAt' in 'X' cannot be applied to '(java.lang.Integer, java.lang.String)'">[1]</warning> = 'a'
 i['a'] = 'b'
-i<warning descr="'putAt' in 'X' cannot be applied to '(java.lang.String, java.lang.String, java.lang.Integer)'">['a', 'b']</warning> = 1
+i<warning descr="'putAt' in 'X' cannot be applied to '([java.lang.String, java.lang.String], java.lang.Integer)'">['a', 'b']</warning> = 1
 ''')
   }
 
   void testArrayAccess10() {
     testHighlighting('''\
-a<warning descr="'putAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '(java.lang.Integer, java.lang.Integer, java.lang.Integer)'">[1, 3]</warning> = 2
+a<warning descr="'putAt' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '([java.lang.Integer, java.lang.Integer], java.lang.Integer)'">[1, 3]</warning> = 2
 ''')
   }
 
-  public void testVarWithInitializer() {
+  void testVarWithInitializer() {
     testHighlighting('''\
 Object o = new Date()
 foo(o)
@@ -725,56 +714,15 @@ String xx = 5
 
 xx = 'abc'
 ''')
-
   }
 
+  void testInnerClassConstructorDefault() { doTest() }
 
-  void testInnerClassConstructor0() {
-    testHighlighting('''\
-class A {
-  class Inner {
-    def Inner() {}
-  }
+  void testInnerClassConstructorNoArg() { doTest() }
 
-  def foo() {
-    new Inner() //correct
-  }
+  void testInnerClassConstructorWithArg() { doTest() }
 
-  static def bar() {
-    new <error>Inner</error>() //semi-correct
-    new Inner(new A()) //correct
-  }
-}
-
-new A.Inner() //semi-correct
-new A.Inner(new A()) //correct
-''')
-  }
-
-  void testInnerClassConstructor1() {
-    testHighlighting('''\
-class A {
-  class Inner {
-    def Inner(A a) {}
-  }
-
-  def foo() {
-    new Inner(new A()) //correct
-    new Inner<warning>()</warning>
-    new Inner<warning>(new A(), new A())</warning>
-  }
-
-  static def bar() {
-    new Inner(new A(), new A()) //correct
-    new Inner<warning>(new A())</warning> //incorrect: first arg is recognized as an enclosing instance arg
-  }
-}
-
-new A.Inner<warning>()</warning> //incorrect
-new A.Inner<warning>(new A())</warning> //incorrect: first arg is recognized as an enclosing instance arg
-new A.Inner(new A(), new A()) //correct
-''')
-  }
+  void testInnerClassConstructorWithAnotherArg() { doTest() }
 
   void testClosureIsNotAssignableToSAMInGroovy2_1() {
     testHighlighting('''\
@@ -816,5 +764,117 @@ print 1 + 2
 
 print 4 <warning descr="'plus' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '(java.util.ArrayList)'">+</warning> new ArrayList()
 ''')
+  }
+
+  void testMultiAssignmentCS() {
+    testHighlighting'''
+import groovy.transform.CompileStatic
+
+@CompileStatic
+def foo() {
+    def list = [1, 2]
+    def (a, b) = <error>list</error>
+}
+'''
+  }
+
+  void testMultiAssignmentWithTypeError() {
+    testHighlighting'''
+import groovy.transform.CompileStatic
+
+@CompileStatic
+def foo() {
+    def list = ["", ""]
+    def (Integer a, b) = <error>list</error>
+}
+'''
+  }
+
+  void testMultiAssignmentLiteralWithTypeError() {
+    testHighlighting'''
+import groovy.transform.CompileStatic
+
+@CompileStatic
+def foo() {
+    def (Integer <error>a</error>, b) = ["", ""]
+}
+'''
+  }
+
+  void testMultiAssignment() {
+    testHighlighting'''
+import groovy.transform.CompileStatic
+
+@CompileStatic
+def foo() {
+    def (a, b) = [1, 2]
+}
+'''
+  }
+
+  void testRawListReturn() {
+    testHighlighting'''
+import groovy.transform.CompileStatic
+
+@CompileStatic
+List foo() {
+    return [""]
+}
+'''
+  }
+
+  void 'test optional argument on CompileStatic'() {
+    testHighlighting '''\
+import groovy.transform.CompileStatic
+
+@CompileStatic
+class A {
+    A(String args) {}
+
+    def foo() {
+        new A<error>()</error>
+    }
+}
+'''
+  }
+
+  void 'test optional vararg argument on CompileStatic'() {
+    testHighlighting '''\
+import groovy.transform.CompileStatic
+
+@CompileStatic
+class A {
+    A(String... args) {}
+
+    def foo() {
+        new A()
+    }
+}
+'''
+  }
+
+  void 'test optional closure arg on CompileStatic'() {
+    testHighlighting '''\
+import groovy.transform.CompileStatic
+
+@CompileStatic
+def method() {
+    Closure<String> cl = {"str"}
+    cl()
+}
+'''
+  }
+
+  void 'test string tuple assignment'() {
+    testHighlighting '''\
+import groovy.transform.CompileStatic
+
+@CompileStatic
+class TestType {
+    static def bar(Object[] list) {
+        def (String name, Integer matcherEnd) = [list[0], list[2] as Integer]
+    }
+}
+'''
   }
 }

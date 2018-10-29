@@ -39,14 +39,12 @@ import java.util.List;
 
 /**
  * @author Maxim.Mossienko
- *         Date: Apr 15, 2008
- *         Time: 4:27:25 PM
  */
 public class XmlBraceMatcher implements XmlAwareBraceMatcher {
   private static final int XML_TAG_TOKEN_GROUP = 1;
   private static final int XML_VALUE_DELIMITER_GROUP = 2;
 
-  private static final BidirectionalMap<IElementType, IElementType> PAIRING_TOKENS = new BidirectionalMap<IElementType, IElementType>();
+  private static final BidirectionalMap<IElementType, IElementType> PAIRING_TOKENS = new BidirectionalMap<>();
 
   static {
     PAIRING_TOKENS.put(XmlTokenType.XML_TAG_END, XmlTokenType.XML_START_TAG_START);
@@ -179,14 +177,11 @@ public class XmlBraceMatcher implements XmlAwareBraceMatcher {
 
   @Override
   public boolean isStrictTagMatching(final FileType fileType, final int braceGroupId) {
-    switch(braceGroupId){
-      case XML_TAG_TOKEN_GROUP:
-        // Other xml languages may have nonbalanced tag names
-        return isStrictTagMatchingForFileType(fileType);
-
-      default:
-        return false;
+    if (braceGroupId == XML_TAG_TOKEN_GROUP) {
+      // Other xml languages may have nonbalanced tag names
+      return isStrictTagMatchingForFileType(fileType);
     }
+    return false;
   }
 
   protected boolean isStrictTagMatchingForFileType(final FileType fileType) {
@@ -196,12 +191,7 @@ public class XmlBraceMatcher implements XmlAwareBraceMatcher {
 
   @Override
   public boolean areTagsCaseSensitive(final FileType fileType, final int braceGroupId) {
-    switch(braceGroupId){
-      case XML_TAG_TOKEN_GROUP:
-        return fileType == StdFileTypes.XML;
-      default:
-        return false;
-    }
+    return braceGroupId == XML_TAG_TOKEN_GROUP && fileType == StdFileTypes.XML;
   }
 
   private static boolean findEndTagStart(HighlighterIterator iterator) {

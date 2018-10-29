@@ -1,3 +1,6 @@
+/*
+ * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+ */
 package com.intellij.tasks.generic;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -8,9 +11,7 @@ import com.intellij.tasks.Task;
 import com.intellij.tasks.impl.TaskUtil;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.xmlb.annotations.AbstractCollection;
-import com.intellij.util.xmlb.annotations.Property;
-import com.intellij.util.xmlb.annotations.Tag;
+import com.intellij.util.xmlb.annotations.XCollection;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -46,7 +47,7 @@ public abstract class SelectorBasedResponseHandler extends ResponseHandler {
   @NonNls protected static final String SINGLE_TASK_CREATED = "singleTask-created";
   @NonNls protected static final String ID = "id";
 
-  protected LinkedHashMap<String, Selector> mySelectors = new LinkedHashMap<String, Selector>();
+  protected LinkedHashMap<String, Selector> mySelectors = new LinkedHashMap<>();
 
   /**
    * Serialization constructor
@@ -83,12 +84,10 @@ public abstract class SelectorBasedResponseHandler extends ResponseHandler {
     ));
   }
 
-  @Tag("selectors")
-  @Property(surroundWithTag = false)
-  @AbstractCollection(surroundWithTag = false)
+  @XCollection(propertyElementName = "selectors")
   @NotNull
   public List<Selector> getSelectors() {
-    return new ArrayList<Selector>(mySelectors.values());
+    return new ArrayList<>(mySelectors.values());
   }
 
   public void setSelectors(@NotNull List<Selector> selectors) {
@@ -123,7 +122,7 @@ public abstract class SelectorBasedResponseHandler extends ResponseHandler {
   @Override
   public SelectorBasedResponseHandler clone() {
     SelectorBasedResponseHandler clone = (SelectorBasedResponseHandler)super.clone();
-    clone.mySelectors = new LinkedHashMap<String, Selector>(mySelectors.size());
+    clone.mySelectors = new LinkedHashMap<>(mySelectors.size());
     for (Selector selector : mySelectors.values()) {
       clone.mySelectors.put(selector.getName(), selector.clone());
     }
@@ -166,7 +165,7 @@ public abstract class SelectorBasedResponseHandler extends ResponseHandler {
     }
     List<Object> tasks = selectTasksList(response, max);
     LOG.debug(String.format("Total %d tasks extracted from response", tasks.size()));
-    List<Task> result = new ArrayList<Task>(tasks.size());
+    List<Task> result = new ArrayList<>(tasks.size());
     for (Object context : tasks) {
       String id = selectString(getSelector(ID), context);
       GenericTask task;
@@ -200,7 +199,7 @@ public abstract class SelectorBasedResponseHandler extends ResponseHandler {
       }
       result.add(task);
     }
-    return result.toArray(new Task[result.size()]);
+    return result.toArray(Task.EMPTY_ARRAY);
   }
 
   @Nullable

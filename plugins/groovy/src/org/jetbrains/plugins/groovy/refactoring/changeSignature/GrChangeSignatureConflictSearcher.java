@@ -29,7 +29,7 @@ import com.intellij.usageView.UsageInfo;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.VisibilityUtil;
-import com.intellij.util.containers.HashSet;
+import java.util.HashSet;
 import com.intellij.util.containers.MultiMap;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElement;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElementFactory;
@@ -55,11 +55,11 @@ class GrChangeSignatureConflictSearcher {
   }
 
   public MultiMap<PsiElement, String> findConflicts(Ref<UsageInfo[]> refUsages) {
-    MultiMap<PsiElement, String> conflictDescriptions = new MultiMap<PsiElement, String>();
+    MultiMap<PsiElement, String> conflictDescriptions = new MultiMap<>();
     addMethodConflicts(conflictDescriptions);
     UsageInfo[] usagesIn = refUsages.get();
     RenameUtil.addConflictDescriptions(usagesIn, conflictDescriptions);
-    Set<UsageInfo> usagesSet = new HashSet<UsageInfo>(Arrays.asList(usagesIn));
+    Set<UsageInfo> usagesSet = new HashSet<>(Arrays.asList(usagesIn));
     RenameUtil.removeConflictUsages(usagesSet);
     if (myChangeInfo.isVisibilityChanged()) {
       try {

@@ -16,6 +16,7 @@
 package com.intellij.designer.palette;
 
 import com.intellij.designer.model.MetaModel;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
@@ -24,6 +25,7 @@ import javax.swing.*;
  * @author Alexander Lobas
  */
 public interface PaletteItem {
+  @NotNull
   String getTitle();
 
   Icon getIcon();
@@ -52,17 +54,17 @@ public interface PaletteItem {
   String getDeprecatedHint();
 
   /**
-   * @return the creation data to be used by {@link com.intellij.designer.model.MetaModel#getCreation()}
+   * @return the creation data to be used by {@link MetaModel#getCreation()}
    */
   String getCreation();
 
   /**
-   * Returns the associated {@link com.intellij.designer.model.MetaModel}, if known
+   * Returns the associated {@link MetaModel}, if known
    */
   MetaModel getMetaModel();
 
   /**
-   * Sets the associated {@link com.intellij.designer.model.MetaModel}, if known
+   * Sets the associated {@link MetaModel}, if known
    */
   void setMetaModel(MetaModel metaModel);
 }

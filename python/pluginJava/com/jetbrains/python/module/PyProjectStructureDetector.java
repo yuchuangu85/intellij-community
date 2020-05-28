@@ -23,7 +23,7 @@ import com.intellij.ide.util.projectWizard.importSources.DetectedProjectRoot;
 import com.intellij.ide.util.projectWizard.importSources.ProjectFromSourcesBuilder;
 import com.intellij.ide.util.projectWizard.importSources.ProjectStructureDetector;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.module.WebModuleType;
+import com.intellij.openapi.module.WebModuleTypeBase;
 import com.intellij.openapi.util.io.FileUtilRt;
 import com.jetbrains.python.PythonModuleTypeBase;
 import org.jetbrains.annotations.NotNull;
@@ -38,13 +38,13 @@ import java.util.List;
  * @author yole
  */
 public class PyProjectStructureDetector extends ProjectStructureDetector {
-  private static final Logger LOG = Logger.getInstance("#com.jetbrains.python.module.PyProjectStructureDetector"); 
+  private static final Logger LOG = Logger.getInstance(PyProjectStructureDetector.class);
   
   
   @NotNull
   @Override
   public DirectoryProcessingResult detectRoots(@NotNull File dir,
-                                               @NotNull File[] children,
+                                               File @NotNull [] children,
                                                @NotNull File base,
                                                @NotNull List<DetectedProjectRoot> result) {
     LOG.info("Detecting roots under "  + dir);
@@ -52,7 +52,8 @@ public class PyProjectStructureDetector extends ProjectStructureDetector {
       final String name = child.getName();
       if (FileUtilRt.extensionEquals(name, "py")) {
         LOG.info("Found Python file " + child.getPath());
-        result.add(new DetectedContentRoot(dir, "Python", PythonModuleTypeBase.getInstance(), WebModuleType.getInstance()));
+        result.add(new DetectedContentRoot(dir, "Python", PythonModuleTypeBase.getInstance(),
+                                           WebModuleTypeBase.getInstance()));
         return DirectoryProcessingResult.SKIP_CHILDREN;
       }
       if ("node_modules".equals(name)) {

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.structureView;
 
 import com.intellij.openapi.editor.Editor;
@@ -11,7 +11,7 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * Default implementation of the {@link StructureViewBuilder} interface which uses the
- * standard IDEA implementation of the {@link StructureView} component and allows to
+ * standard implementation of the {@link StructureView} component and allows to
  * customize the data displayed in the structure view.
  *
  * @see StructureViewModel
@@ -31,7 +31,7 @@ public abstract class TreeBasedStructureViewBuilder implements StructureViewBuil
 
   @Override
   @NotNull
-  public StructureView createStructureView(FileEditor fileEditor, @NotNull Project project) {
+  public StructureView createStructureView(@Nullable FileEditor fileEditor, @NotNull Project project) {
     StructureViewModel model = createStructureViewModel(fileEditor instanceof TextEditor ? ((TextEditor)fileEditor).getEditor() : null);
     StructureView view = StructureViewFactory.getInstance(project).createStructureView(fileEditor, model, project, isRootNodeShown());
     Disposer.register(view, model);

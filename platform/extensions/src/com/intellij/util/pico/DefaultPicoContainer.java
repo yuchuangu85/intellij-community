@@ -1,59 +1,48 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.pico;
 
-import com.intellij.openapi.extensions.AreaPicoContainer;
-import com.intellij.util.ReflectionUtil;
-import com.intellij.util.SmartList;
-import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.FList;
-import gnu.trove.THashSet;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.picocontainer.*;
-import org.picocontainer.defaults.*;
+import org.picocontainer.ComponentAdapter;
+import org.picocontainer.MutablePicoContainer;
+import org.picocontainer.PicoContainer;
+import org.picocontainer.PicoRegistrationException;
+import org.picocontainer.defaults.AmbiguousComponentResolutionException;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
-public class DefaultPicoContainer implements AreaPicoContainer {
-  static final DelegatingComponentMonitor DEFAULT_DELEGATING_COMPONENT_MONITOR = new DelegatingComponentMonitor();
-  static final DefaultLifecycleStrategy DEFAULT_LIFECYCLE_STRATEGY = new DefaultLifecycleStrategy(DEFAULT_DELEGATING_COMPONENT_MONITOR);
-  private final PicoContainer parent;
-  private final Set<PicoContainer> children = new THashSet<>();
+@ApiStatus.Internal
+public class DefaultPicoContainer implements MutablePicoContainer {
+  private final DefaultPicoContainer parent;
 
-  private final Map<Object, ComponentAdapter> componentKeyToAdapterCache = ContainerUtil.newConcurrentMap();
+  private final ConcurrentMap<Object, ComponentAdapter> componentKeyToAdapterCache = new ConcurrentHashMap<>();
   private final LinkedHashSetWrapper<ComponentAdapter> componentAdapters = new LinkedHashSetWrapper<>();
-  private final Map<String, ComponentAdapter> classNameToAdapter = ContainerUtil.newConcurrentMap();
-  private final AtomicReference<FList<ComponentAdapter>> nonAssignableComponentAdapters = new AtomicReference<>(FList.emptyList());
 
-  public DefaultPicoContainer(@Nullable PicoContainer parent) {
-    this.parent = parent == null ? null : ImmutablePicoContainerProxyFactory.newProxyInstance(parent);
+  public DefaultPicoContainer(@Nullable DefaultPicoContainer parent) {
+    this.parent = parent;
   }
 
   public DefaultPicoContainer() {
     this(null);
   }
 
-  @Override
-  public Collection<ComponentAdapter> getComponentAdapters() {
+  public final @NotNull Collection<ComponentAdapter> getComponentAdapters() {
     return componentAdapters.getImmutableSet();
   }
 
-  private void appendNonAssignableAdaptersOfType(@NotNull Class componentType, @NotNull List<? super ComponentAdapter> result) {
-    List<ComponentAdapter> comp = new ArrayList<>();
-    for (final ComponentAdapter componentAdapter : nonAssignableComponentAdapters.get()) {
-      if (ReflectionUtil.isAssignable(componentType, componentAdapter.getComponentImplementation())) {
-        comp.add(componentAdapter);
-      }
-    }
-    for (int i = comp.size() - 1; i >= 0; i--) {
-      result.add(comp.get(i));
-    }
+  // order is not guarantied
+  @ApiStatus.Internal
+  public final @NotNull Iterable<ComponentAdapter> unsafeGetAdapters() {
+    // not yet possible to get rid of componentAdapters - access by key should be lock-free
+    //return componentKeyToAdapterCache.values();
+    return componentAdapters.getImmutableSet();
   }
 
   @Override
-  @Nullable
-  public final ComponentAdapter getComponentAdapter(Object componentKey) {
+  public final @Nullable ComponentAdapter getComponentAdapter(@NotNull Object componentKey) {
     ComponentAdapter adapter = getFromCache(componentKey);
     if (adapter == null && parent != null) {
       return parent.getComponentAdapter(componentKey);
@@ -61,23 +50,20 @@ public class DefaultPicoContainer implements AreaPicoContainer {
     return adapter;
   }
 
-  @Nullable
-  private ComponentAdapter getFromCache(final Object componentKey) {
+  public final void release() {
+    componentKeyToAdapterCache.clear();
+    componentAdapters.clear();
+  }
+
+  private @Nullable ComponentAdapter getFromCache(@NotNull Object componentKey) {
     ComponentAdapter adapter = componentKeyToAdapterCache.get(componentKey);
     if (adapter != null) {
       return adapter;
     }
-
-    if (componentKey instanceof Class) {
-      return componentKeyToAdapterCache.get(((Class)componentKey).getName());
-    }
-
-    return null;
+    return componentKey instanceof Class ? componentKeyToAdapterCache.get(((Class<?>)componentKey).getName()) : null;
   }
 
-  @Override
-  @Nullable
-  public ComponentAdapter getComponentAdapterOfType(@NotNull Class componentType) {
+  public final  @Nullable ComponentAdapter getComponentAdapterOfType(@NotNull Class<?> componentType) {
     // See http://jira.codehaus.org/secure/ViewIssue.jspa?key=PICO-115
     ComponentAdapter adapterByKey = getComponentAdapter(componentType);
     if (adapterByKey != null) {
@@ -92,271 +78,131 @@ public class DefaultPicoContainer implements AreaPicoContainer {
       return parent == null ? null : parent.getComponentAdapterOfType(componentType);
     }
 
-    Class[] foundClasses = new Class[found.size()];
+    Class<?>[] foundClasses = new Class[found.size()];
     for (int i = 0; i < foundClasses.length; i++) {
       foundClasses[i] = found.get(i).getComponentImplementation();
     }
     throw new AmbiguousComponentResolutionException(componentType, foundClasses);
   }
 
-  @Override
-  public List<ComponentAdapter> getComponentAdaptersOfType(final Class componentType) {
-    if (componentType == null || componentType == String.class) {
+  public final @NotNull List<ComponentAdapter> getComponentAdaptersOfType(@NotNull Class<?> componentType) {
+    if (componentType == String.class) {
       return Collections.emptyList();
     }
 
-    List<ComponentAdapter> result = new SmartList<>();
+    List<ComponentAdapter> result = new ArrayList<>();
 
-    final ComponentAdapter cacheHit = classNameToAdapter.get(componentType.getName());
+    ComponentAdapter cacheHit = componentKeyToAdapterCache.get(componentType.getName());
     if (cacheHit != null) {
       result.add(cacheHit);
     }
 
-    appendNonAssignableAdaptersOfType(componentType, result);
+    componentKeyToAdapterCache.forEach((key, adapter) -> {
+      // exclude services
+      if (!(key instanceof String)) {
+        Class<?> descendant = adapter.getComponentImplementation();
+        if (componentType == descendant || componentType.isAssignableFrom(descendant)) {
+          result.add(adapter);
+        }
+      }
+    });
     return result;
   }
 
   @Override
-  public ComponentAdapter registerComponent(@NotNull ComponentAdapter componentAdapter) {
+  public final ComponentAdapter registerComponent(@NotNull ComponentAdapter componentAdapter) {
     Object componentKey = componentAdapter.getComponentKey();
-    if (componentKeyToAdapterCache.containsKey(componentKey)) {
-      throw new DuplicateComponentKeyRegistrationException(componentKey);
-    }
 
-    if (componentAdapter instanceof AssignableToComponentAdapter) {
-      String classKey = ((AssignableToComponentAdapter)componentAdapter).getAssignableToClassName();
-      classNameToAdapter.put(classKey, componentAdapter);
-    }
-    else {
-      do {
-        FList<ComponentAdapter> oldList = nonAssignableComponentAdapters.get();
-        FList<ComponentAdapter> newList = oldList.prepend(componentAdapter);
-        if (nonAssignableComponentAdapters.compareAndSet(oldList, newList)) {
-          break;
-        }
-      }
-      while (true);
+    ComponentAdapter oldAdapter = componentKeyToAdapterCache.put(componentKey, componentAdapter);
+    if (oldAdapter != null) {
+      componentKeyToAdapterCache.put(componentKey, oldAdapter);
+      throw new PicoRegistrationException("Key " + componentKey + " duplicated");
     }
 
     componentAdapters.add(componentAdapter);
-
-    componentKeyToAdapterCache.put(componentKey, componentAdapter);
     return componentAdapter;
   }
 
   @Override
-  public ComponentAdapter unregisterComponent(@NotNull Object componentKey) {
+  public final @Nullable ComponentAdapter unregisterComponent(@NotNull Object componentKey) {
     ComponentAdapter adapter = componentKeyToAdapterCache.remove(componentKey);
+    if (adapter == null) {
+      return null;
+    }
+
     componentAdapters.remove(adapter);
-    if (adapter instanceof AssignableToComponentAdapter) {
-      classNameToAdapter.remove(((AssignableToComponentAdapter)adapter).getAssignableToClassName());
-    }
-    else {
-      do {
-        FList<ComponentAdapter> oldList = nonAssignableComponentAdapters.get();
-        FList<ComponentAdapter> newList = oldList.without(adapter);
-        if (nonAssignableComponentAdapters.compareAndSet(oldList, newList)) {
-          break;
-        }
-      }
-      while (true);
-    }
     return adapter;
   }
 
   @Override
-  public List getComponentInstances() {
-    return getComponentInstancesOfType(Object.class);
-  }
-
-  @Override
-  public List<Object> getComponentInstancesOfType(@Nullable Class componentType) {
-    if (componentType == null) {
-      return Collections.emptyList();
-    }
-
-    List<Object> result = new ArrayList<>();
-    for (ComponentAdapter componentAdapter : getComponentAdapters()) {
-      if (ReflectionUtil.isAssignable(componentType, componentAdapter.getComponentImplementation())) {
-        // may be null in the case of the "implicit" adapter representing "this".
-        ContainerUtil.addIfNotNull(result, getInstance(componentAdapter));
-      }
-    }
-    return result;
-  }
-
-  @FunctionalInterface
-  public interface LazyComponentAdapter {
-    boolean isComponentInstantiated();
-  }
-
-  @Nullable
-  public <T> T getComponentInstanceIfInstantiated(@NotNull String componentKey) {
-    ComponentAdapter adapter = getFromCache(componentKey);
-    if (!(adapter instanceof LazyComponentAdapter)) {
-      //noinspection unchecked
-      return (T)getComponentInstance(componentKey);
-    }
-
-    if (((LazyComponentAdapter)adapter).isComponentInstantiated()) {
-      //noinspection unchecked
-      return (T)getLocalInstance(adapter);
-    }
-    return null;
-  }
-
-  @Override
-  @Nullable
-  public Object getComponentInstance(Object componentKey) {
+  public @Nullable Object getComponentInstance(@NotNull Object componentKey) {
     ComponentAdapter adapter = getFromCache(componentKey);
     if (adapter != null) {
-      return getLocalInstance(adapter);
+      return adapter.getComponentInstance(this);
     }
-    if (parent != null) {
-      adapter = parent.getComponentAdapter(componentKey);
-      if (adapter != null) {
-        return parent.getComponentInstance(adapter.getComponentKey());
-      }
+    return parent == null ? null : parent.getComponentInstance(componentKey);
+  }
+
+  public final @Nullable <T> T getService(@NotNull Class<T> serviceClass) {
+    ComponentAdapter adapter = componentKeyToAdapterCache.get(serviceClass.getName());
+    if (adapter == null) {
+      return null;
     }
-    return null;
+
+    //noinspection unchecked
+    return (T)adapter.getComponentInstance(this);
+  }
+
+  @ApiStatus.Internal
+  public final @Nullable ComponentAdapter getServiceAdapter(@NotNull String key) {
+    return componentKeyToAdapterCache.get(key);
   }
 
   @Override
-  @Nullable
-  public Object getComponentInstanceOfType(Class componentType) {
-    final ComponentAdapter componentAdapter = getComponentAdapterOfType(componentType);
+  public final @Nullable Object getComponentInstanceOfType(@NotNull Class<?> componentType) {
+    ComponentAdapter componentAdapter = getComponentAdapterOfType(componentType);
     return componentAdapter == null ? null : getInstance(componentAdapter);
   }
 
-  @Nullable
-  private Object getInstance(@NotNull ComponentAdapter componentAdapter) {
-    if (getComponentAdapters().contains(componentAdapter)) {
-      return getLocalInstance(componentAdapter);
+  private @Nullable Object getInstance(@NotNull ComponentAdapter componentAdapter) {
+    if (componentAdapters.getImmutableSet().contains(componentAdapter)) {
+      return componentAdapter.getComponentInstance(this);
     }
     if (parent != null) {
       return parent.getComponentInstance(componentAdapter.getComponentKey());
     }
-
-    return null;
-  }
-
-  private Object getLocalInstance(@NotNull ComponentAdapter componentAdapter) {
-    PicoException firstLevelException;
-    try {
-      return componentAdapter.getComponentInstance(this);
-    }
-    catch (PicoInitializationException | PicoIntrospectionException e) {
-      firstLevelException = e;
-    }
-
-    if (parent != null) {
-      Object instance = parent.getComponentInstance(componentAdapter.getComponentKey());
-      if (instance != null) {
-        return instance;
-      }
-    }
-
-    throw firstLevelException;
-  }
-
-  @Override
-  @Nullable
-  public ComponentAdapter unregisterComponentByInstance(@NotNull Object componentInstance) {
-    for (ComponentAdapter adapter : getComponentAdapters()) {
-      Object o = getInstance(adapter);
-      if (componentInstance.equals(o)) {
-        return unregisterComponent(adapter.getComponentKey());
-      }
-    }
     return null;
   }
 
   @Override
-  public void verify() {
-    new VerifyingVisitor().traverse(this);
-  }
-
-  @Override
-  public void start() {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void stop() {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void dispose() {
-    throw new UnsupportedOperationException();
-  }
-
-  @NotNull
-  @Override
-  public MutablePicoContainer makeChildContainer() {
-    DefaultPicoContainer pc = new DefaultPicoContainer(this);
-    addChildContainer(pc);
-    return pc;
-  }
-
-  @Override
-  public boolean addChildContainer(@NotNull PicoContainer child) {
-    return children.add(child);
-  }
-
-  @Override
-  public boolean removeChildContainer(@NotNull PicoContainer child) {
-    return children.remove(child);
-  }
-
-  @Override
-  public void accept(PicoVisitor visitor) {
-    visitor.visitContainer(this);
-
-    for (ComponentAdapter adapter : getComponentAdapters()) {
-      adapter.accept(visitor);
-    }
-    for (PicoContainer child : new SmartList<>(children)) {
-      child.accept(visitor);
-    }
-  }
-
-  @Override
-  public ComponentAdapter registerComponentInstance(@NotNull Object component) {
+  public final ComponentAdapter registerComponentInstance(@NotNull Object component) {
     return registerComponentInstance(component.getClass(), component);
   }
 
   @Override
-  public ComponentAdapter registerComponentInstance(@NotNull Object componentKey, @NotNull Object componentInstance) {
-    return registerComponent(new InstanceComponentAdapter(componentKey, componentInstance, DEFAULT_LIFECYCLE_STRATEGY));
+  public final ComponentAdapter registerComponentInstance(@NotNull Object componentKey, @NotNull Object componentInstance) {
+    return registerComponent(new InstanceComponentAdapter(componentKey, componentInstance));
   }
 
   @Override
-  public ComponentAdapter registerComponentImplementation(@NotNull Class componentImplementation) {
+  public final ComponentAdapter registerComponentImplementation(@NotNull Class<?> componentImplementation) {
     return registerComponentImplementation(componentImplementation, componentImplementation);
   }
 
   @Override
-  public ComponentAdapter registerComponentImplementation(@NotNull Object componentKey, @NotNull Class componentImplementation) {
-    return registerComponentImplementation(componentKey, componentImplementation, null);
+  public final ComponentAdapter registerComponentImplementation(@NotNull Object componentKey, @NotNull Class<?> componentImplementation) {
+    //noinspection deprecation
+    return registerComponent(new CachingConstructorInjectionComponentAdapter(componentKey, componentImplementation));
   }
 
-  @Override
-  public ComponentAdapter registerComponentImplementation(@NotNull Object componentKey, @NotNull Class componentImplementation, Parameter[] parameters) {
-    ComponentAdapter componentAdapter = new CachingConstructorInjectionComponentAdapter(componentKey, componentImplementation, parameters, true);
-    return registerComponent(componentAdapter);
-  }
-
-  @Override
-  public PicoContainer getParent() {
+  public final DefaultPicoContainer getParent() {
     return parent;
   }
 
   /**
    * A linked hash set that's copied on write operations.
-   * @param <T>
    */
-  private static class LinkedHashSetWrapper<T> {
+  private static final class LinkedHashSetWrapper<T> {
     private final Object lock = new Object();
     private volatile Set<T> immutableSet;
     private LinkedHashSet<T> synchronizedSet = new LinkedHashSet<>();
@@ -383,25 +229,64 @@ public class DefaultPicoContainer implements AreaPicoContainer {
       }
     }
 
-    @NotNull
-    public Set<T> getImmutableSet() {
-      Set<T> res = immutableSet;
-      if (res == null) {
+    public void clear() {
+      synchronized (lock) {
+        if (immutableSet != null) {
+          immutableSet = null;
+        }
+        synchronizedSet = new LinkedHashSet<>();
+      }
+    }
+
+    public @NotNull Set<T> getImmutableSet() {
+      Set<T> result = immutableSet;
+      if (result == null) {
         synchronized (lock) {
-          res = immutableSet;
-          if (res == null) {
+          result = immutableSet;
+          if (result == null) {
             // Expose the same set as immutable. It should be never modified again. Next add/remove operations will copy synchronizedSet
-            immutableSet = res = Collections.unmodifiableSet(synchronizedSet);
+            result = Collections.unmodifiableSet(synchronizedSet);
+            immutableSet = result;
           }
         }
       }
 
-      return res;
+      return result;
     }
   }
 
   @Override
-  public String toString() {
-    return "DefaultPicoContainer" + (getParent() == null ? " (root)" : " (parent="+getParent()+")");
+  public final String toString() {
+    DefaultPicoContainer parent = this.parent;
+    return "DefaultPicoContainer" + (parent == null ? " (root)" : " (parent=" + parent + ")");
+  }
+
+  public static final class InstanceComponentAdapter implements ComponentAdapter {
+    private final Object componentKey;
+    private final Object componentInstance;
+
+    public InstanceComponentAdapter(@NotNull Object componentKey, @NotNull Object componentInstance) {
+      this.componentKey = componentKey;
+      this.componentInstance = componentInstance;
+    }
+
+    @Override
+    public Object getComponentInstance(PicoContainer container) {
+      return componentInstance;
+    }
+
+    @Override
+    public Object getComponentKey() {
+      return componentKey;
+    }
+
+    @Override
+    public Class<?> getComponentImplementation() {
+      return componentInstance.getClass();
+    }
+
+    public String toString() {
+      return getClass().getName() + "[" + getComponentKey() + "]";
+    }
   }
 }

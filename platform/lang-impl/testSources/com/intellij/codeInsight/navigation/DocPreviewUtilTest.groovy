@@ -23,7 +23,6 @@ import static org.junit.Assert.assertTrue
 
 /**
  * @author Denis Zhdanov
- * @since 07/10/2012
  */
 class DocPreviewUtilTest {
 
@@ -191,5 +190,14 @@ var abc: A &amp; B &amp; C'''
     def expected = '''ExternalModule.ts<br/>var abc: <a href="psi_element://A">A</a> &amp; <a href="psi_element://B">B</a> &amp; <a href="psi_element://C">C</a>'''
 
     assertEquals(expected, DocPreviewUtil.buildPreview(header, null, fullText))
+  }
+
+  @Test
+  void "empty qName doesn't hang"() {
+    def header = '''Header'''
+    def fullText = '''FullText'''
+    def expected = '''Header'''
+
+    assertEquals(expected, DocPreviewUtil.buildPreview(header, "", fullText))
   }
 }

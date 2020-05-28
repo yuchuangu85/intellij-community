@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.impl;
 
 import com.intellij.conversion.ConversionResult;
@@ -20,8 +6,10 @@ import com.intellij.conversion.impl.ConversionRunner;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vcs.AbstractVcsHelper;
-import com.intellij.openapi.vcs.VcsShowConfirmationOptionImpl;
+import com.intellij.openapi.vcs.VcsBundle;
+import com.intellij.openapi.vcs.VcsShowConfirmationOption;
 import com.intellij.openapi.vcs.changes.ChangeListManagerImpl;
 import com.intellij.openapi.vcs.changes.ChangesUtil;
 import com.intellij.openapi.vcs.changes.actions.EditAction;
@@ -30,12 +18,9 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.File;
+import java.nio.file.Path;
 import java.util.*;
 
-/**
- * @author nik
- */
 public class ConversionResultImpl implements ConversionResult {
   public static final ConversionResultImpl CONVERSION_NOT_NEEDED = new ConversionResultImpl(false, false, false);
   public static final ConversionResultImpl CONVERSION_CANCELED = new ConversionResultImpl(true, true, false);
@@ -43,8 +28,8 @@ public class ConversionResultImpl implements ConversionResult {
   private final boolean myConversionNeeded;
   private final boolean myConversionCanceled;
   private final boolean myErrorOccurred;
-  private final Set<File> myChangedFiles = new HashSet<>();
-  private final Set<File> myCreatedFiles = new HashSet<>();
+  private final Set<Path> myChangedFiles = new HashSet<>();
+  private final Set<Path> myCreatedFiles = new HashSet<>();
 
   public ConversionResultImpl(boolean conversionNeeded, boolean conversionCanceled, boolean errorOccurred) {
     myConversionNeeded = conversionNeeded;
@@ -84,9 +69,10 @@ public class ConversionResultImpl implements ConversionResult {
 
     final List<VirtualFile> createdFiles = findVirtualFiles(myCreatedFiles);
     if (containsFilesUnderVcs(createdFiles, project)) {
-      final VcsShowConfirmationOptionImpl option = new VcsShowConfirmationOptionImpl("", "", "", "", "");
       final Collection<VirtualFile> selected = AbstractVcsHelper.getInstance(project)
-        .selectFilesToProcess(createdFiles, "Files Created", "Select files to be added to version control", null, null, option);
+        .selectFilesToProcess(createdFiles, VcsBundle.message("dialog.title.files.created"),
+                              VcsBundle.message("label.select.files.to.be.added.to.version.control"), null, null,
+                              VcsShowConfirmationOption.STATIC_SHOW_CONFIRMATION);
       if (selected != null && !selected.isEmpty()) {
         final ChangeListManagerImpl changeListManager = ChangeListManagerImpl.getInstanceImpl(project);
         changeListManager.addUnversionedFiles(changeListManager.getDefaultChangeList(), new ArrayList<>(selected));
@@ -94,7 +80,7 @@ public class ConversionResultImpl implements ConversionResult {
     }
   }
 
-  private static boolean containsFilesUnderVcs(List<VirtualFile> files, Project project) {
+  private static boolean containsFilesUnderVcs(List<? extends VirtualFile> files, Project project) {
     for (VirtualFile file : files) {
       if (ChangesUtil.getVcsForFile(file, project) != null) {
         return true;
@@ -103,10 +89,10 @@ public class ConversionResultImpl implements ConversionResult {
     return false;
   }
 
-  private static List<VirtualFile> findVirtualFiles(Collection<File> ioFiles) {
+  private static List<VirtualFile> findVirtualFiles(Collection<? extends Path> ioFiles) {
     List<VirtualFile> files = new ArrayList<>();
-    for (File file : ioFiles) {
-      ContainerUtil.addIfNotNull(files, LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file));
+    for (Path file : ioFiles) {
+      ContainerUtil.addIfNotNull(files, LocalFileSystem.getInstance().refreshAndFindFileByPath(FileUtil.toSystemIndependentName(file.toString())));
     }
     return files;
   }

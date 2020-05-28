@@ -1,33 +1,26 @@
-/*
- * Copyright 2008-2018 Bas Leijdekkers
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.siyeh.ipp.concatenation;
 
+import com.intellij.codeInsight.daemon.impl.analysis.HighlightingFeature;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiConcatenationUtil;
+import com.intellij.psi.util.PsiLiteralUtil;
+import com.siyeh.IntentionPowerPackBundle;
 import com.siyeh.ig.PsiReplacementUtil;
 import com.siyeh.ig.psiutils.CommentTracker;
 import com.siyeh.ig.psiutils.ExpressionUtils;
-import com.siyeh.ipp.base.Intention;
+import com.siyeh.ipp.base.MutablyNamedIntention;
 import com.siyeh.ipp.base.PsiElementPredicate;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
-public class ReplaceConcatenationWithFormatStringIntention extends Intention {
+public class ReplaceConcatenationWithFormatStringIntention extends MutablyNamedIntention {
 
   @Override
   @NotNull
@@ -39,30 +32,40 @@ public class ReplaceConcatenationWithFormatStringIntention extends Intention {
   protected void processIntention(@NotNull PsiElement element) {
     PsiPolyadicExpression expression = (PsiPolyadicExpression)element;
     PsiElement parent = expression.getParent();
-    while (ExpressionUtils.isConcatenation(parent)) {
+    while (ExpressionUtils.isStringConcatenation(parent)) {
       expression = (PsiPolyadicExpression)parent;
       parent = expression.getParent();
     }
-    final StringBuilder formatString = new StringBuilder();
     final List<PsiExpression> formatParameters = new ArrayList<>();
-    PsiConcatenationUtil.buildFormatString(expression, formatString, formatParameters, true);
+    final String formatString = PsiConcatenationUtil.buildUnescapedFormatString(expression, true, formatParameters);
     if (replaceWithPrintfExpression(expression, formatString, formatParameters)) {
       return;
     }
     CommentTracker commentTracker = new CommentTracker();
     final StringBuilder newExpression = new StringBuilder();
-    newExpression.append("java.lang.String.format(\"");
-    newExpression.append(formatString);
-    newExpression.append('\"');
-    for (PsiExpression formatParameter : formatParameters) {
-      newExpression.append(", ");
-      newExpression.append(commentTracker.text(formatParameter));
+    if (HighlightingFeature.TEXT_BLOCKS.isAvailable(element)) {
+      appendFormatString(expression, formatString, false, newExpression);
+      newExpression.append(".formatted(");
+    } else {
+      newExpression.append("java.lang.String.format(");
+      appendFormatString(expression, formatString, false, newExpression);
+      if (!formatParameters.isEmpty()) {
+        newExpression.append(", ");
+      }
     }
+    newExpression.append(StreamEx.of(formatParameters).map(commentTracker::text).joining(", "));
     newExpression.append(')');
     PsiReplacementUtil.replaceExpression(expression, newExpression.toString(), commentTracker);
   }
 
-  private static boolean replaceWithPrintfExpression(PsiExpression expression, CharSequence formatString,
+  @Override
+  protected String getTextForElement(PsiElement element) {
+    return IntentionPowerPackBundle.message(HighlightingFeature.TEXT_BLOCKS.isAvailable(element)
+                                            ? "replace.concatenation.with.format.string.intention.name.formatted"
+                                            : "replace.concatenation.with.format.string.intention.name");
+  }
+
+  private static boolean replaceWithPrintfExpression(PsiPolyadicExpression expression, String formatString,
                                                      List<PsiExpression> formatParameters) {
     final PsiElement expressionParent = expression.getParent();
     if (!(expressionParent instanceof PsiExpressionList)) {
@@ -95,7 +98,7 @@ public class ReplaceConcatenationWithFormatStringIntention extends Intention {
     }
     final String qualifiedName = containingClass.getQualifiedName();
     if (!"java.io.PrintStream".equals(qualifiedName) &&
-        !"java.io.Printwriter".equals(qualifiedName)) {
+        !"java.io.PrintWriter".equals(qualifiedName)) {
       return false;
     }
     CommentTracker commentTracker = new CommentTracker();
@@ -104,16 +107,39 @@ public class ReplaceConcatenationWithFormatStringIntention extends Intention {
     if (qualifier != null) {
       newExpression.append(commentTracker.text(qualifier)).append('.');
     }
-    newExpression.append("printf(\"").append(formatString);
-    if (insertNewline) {
-      newExpression.append("%n");
-    }
-    newExpression.append('\"');
+    newExpression.append("printf(");
+    appendFormatString(expression, formatString, insertNewline, newExpression);
     for (PsiExpression formatParameter : formatParameters) {
-      newExpression.append(", ").append(commentTracker.text(formatParameter));
+      newExpression.append(",").append(commentTracker.text(formatParameter));
     }
     newExpression.append(')');
     PsiReplacementUtil.replaceExpression(methodCallExpression, newExpression.toString(), commentTracker);
     return true;
+  }
+
+  private static void appendFormatString(PsiPolyadicExpression expression,
+                                         String formatString,
+                                         boolean insertNewline,
+                                         StringBuilder newExpression) {
+    final boolean textBlocks = Arrays.stream(expression.getOperands())
+      .anyMatch(operand -> operand instanceof PsiLiteralExpression && ((PsiLiteralExpression)operand).isTextBlock());
+    if (textBlocks) {
+      newExpression.append("\"\"\"\n");
+      formatString = Arrays.stream(formatString.split("\n"))
+        .map(s -> PsiLiteralUtil.escapeTextBlockCharacters(s))
+        .collect(Collectors.joining("\n"));
+      newExpression.append(formatString);
+      if (insertNewline) {
+        newExpression.append('\n');
+      }
+      newExpression.append("\"\"\"");
+    } else {
+      newExpression.append('\"');
+      newExpression.append(StringUtil.escapeStringCharacters(formatString));
+      if (insertNewline) {
+        newExpression.append("%n");
+      }
+      newExpression.append('\"');
+    }
   }
 }

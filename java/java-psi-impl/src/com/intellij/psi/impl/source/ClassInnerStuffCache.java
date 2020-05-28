@@ -1,4 +1,4 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.source;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -10,17 +10,19 @@ import com.intellij.psi.impl.PsiImplUtil;
 import com.intellij.psi.impl.light.LightMethod;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
+import com.intellij.psi.util.PsiModificationTracker;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.containers.ConcurrentFactoryMap;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.containers.JBIterable;
 import gnu.trove.THashMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
-import static com.intellij.psi.util.PsiModificationTracker.OUT_OF_CODE_BLOCK_MODIFICATION_COUNT;
 import static com.intellij.util.ObjectUtils.notNull;
 
 public class ClassInnerStuffCache {
@@ -31,24 +33,24 @@ public class ClassInnerStuffCache {
     myClass = aClass;
   }
 
-  @NotNull
-  public PsiMethod[] getConstructors() {
+  public PsiMethod @NotNull [] getConstructors() {
     return copy(CachedValuesManager.getCachedValue(myClass, () -> makeResult(PsiImplUtil.getConstructors(myClass))));
   }
 
-  @NotNull
-  public PsiField[] getFields() {
-    return copy(CachedValuesManager.getCachedValue(myClass, () -> makeResult(getAllFields())));
+  public PsiField @NotNull [] getFields() {
+    return copy(CachedValuesManager.getCachedValue(myClass, () -> makeResult(calcFields())));
   }
 
-  @NotNull
-  public PsiMethod[] getMethods() {
-    return copy(CachedValuesManager.getCachedValue(myClass, () -> makeResult(getAllMethods())));
+  public PsiMethod @NotNull [] getMethods() {
+    return copy(CachedValuesManager.getCachedValue(myClass, () -> makeResult(calcMethods())));
   }
 
-  @NotNull
-  public PsiClass[] getInnerClasses() {
-    return copy(CachedValuesManager.getCachedValue(myClass, () -> makeResult(getAllInnerClasses())));
+  public PsiClass @NotNull [] getInnerClasses() {
+    return copy(CachedValuesManager.getCachedValue(myClass, () -> makeResult(calcInnerClasses())));
+  }
+
+  public PsiRecordComponent @NotNull [] getRecordComponents() {
+    return copy(CachedValuesManager.getCachedValue(myClass, () -> makeResult(calcRecordComponents())));
   }
 
   @Nullable
@@ -61,8 +63,7 @@ public class ClassInnerStuffCache {
     }
   }
 
-  @NotNull
-  public PsiMethod[] findMethodsByName(String name, boolean checkBases) {
+  public PsiMethod @NotNull [] findMethodsByName(String name, boolean checkBases) {
     if (checkBases) {
       return PsiClassImplUtil.findMethodsByName(myClass, name, true);
     }
@@ -82,13 +83,17 @@ public class ClassInnerStuffCache {
   }
 
   @Nullable
-  public PsiMethod getValuesMethod() {
-    return myClass.isEnum() && myClass.getName() != null ? CachedValuesManager.getCachedValue(myClass, () -> makeResult(makeValuesMethod())) : null;
+  PsiMethod getValuesMethod() {
+    return myClass.isEnum() && !isAnonymousClass() ? CachedValuesManager.getCachedValue(myClass, () -> makeResult(makeValuesMethod())) : null;
   }
 
   @Nullable
-  public PsiMethod getValueOfMethod() {
-    return myClass.isEnum() && myClass.getName() != null ? CachedValuesManager.getCachedValue(myClass, () -> makeResult(makeValueOfMethod())) : null;
+  private PsiMethod getValueOfMethod() {
+    return myClass.isEnum() && !isAnonymousClass() ? CachedValuesManager.getCachedValue(myClass, () -> makeResult(makeValueOfMethod())) : null;
+  }
+
+  private boolean isAnonymousClass() {
+    return myClass.getName() == null || myClass instanceof PsiAnonymousClass;
   }
 
   private static <T> T[] copy(T[] value) {
@@ -96,74 +101,68 @@ public class ClassInnerStuffCache {
   }
 
   private <T> CachedValueProvider.Result<T> makeResult(T value) {
-    return CachedValueProvider.Result.create(value, OUT_OF_CODE_BLOCK_MODIFICATION_COUNT, myTracker);
+    return CachedValueProvider.Result.create(value, PsiModificationTracker.MODIFICATION_COUNT, myTracker);
   }
 
-  @NotNull
-  private PsiField[] getAllFields() {
+  private PsiField @NotNull [] calcFields() {
     List<PsiField> own = myClass.getOwnFields();
-    List<PsiField> ext = PsiAugmentProvider.collectAugments(myClass, PsiField.class);
+    List<PsiField> ext = PsiAugmentProvider.collectAugments(myClass, PsiField.class, null);
     return ArrayUtil.mergeCollections(own, ext, PsiField.ARRAY_FACTORY);
   }
 
-  @NotNull
-  private PsiMethod[] getAllMethods() {
+  private PsiMethod @NotNull [] calcMethods() {
     List<PsiMethod> own = myClass.getOwnMethods();
-    List<PsiMethod> ext = PsiAugmentProvider.collectAugments(myClass, PsiMethod.class);
+    List<PsiMethod> ext = PsiAugmentProvider.collectAugments(myClass, PsiMethod.class, null);
+    if (myClass.isEnum()) {
+      ContainerUtil.addIfNotNull(ext, getValuesMethod());
+      ContainerUtil.addIfNotNull(ext, getValueOfMethod());
+    }
     return ArrayUtil.mergeCollections(own, ext, PsiMethod.ARRAY_FACTORY);
   }
 
-  @NotNull
-  private PsiClass[] getAllInnerClasses() {
+  private PsiClass @NotNull [] calcInnerClasses() {
     List<PsiClass> own = myClass.getOwnInnerClasses();
-    List<PsiClass> ext = PsiAugmentProvider.collectAugments(myClass, PsiClass.class);
+    List<PsiClass> ext = PsiAugmentProvider.collectAugments(myClass, PsiClass.class, null);
     return ArrayUtil.mergeCollections(own, ext, PsiClass.ARRAY_FACTORY);
+  }
+
+  private PsiRecordComponent @NotNull [] calcRecordComponents() {
+    PsiRecordHeader header = myClass.getRecordHeader();
+    return header == null ? PsiRecordComponent.EMPTY_ARRAY : header.getRecordComponents();
   }
 
   @NotNull
   private Map<String, PsiField> getFieldsMap() {
-    PsiField[] fields = getFields();
-    if (fields.length == 0) return Collections.emptyMap();
-
     Map<String, PsiField> cachedFields = new THashMap<>();
-    for (PsiField field : fields) {
+    for (PsiField field : myClass.getOwnFields()) {
       String name = field.getName();
       if (!cachedFields.containsKey(name)) {
         cachedFields.put(name, field);
       }
     }
-    return cachedFields;
+    return ConcurrentFactoryMap.createMap(name -> {
+      PsiField result = cachedFields.get(name);
+      return result != null ? result : ContainerUtil.getFirstItem(PsiAugmentProvider.collectAugments(myClass, PsiField.class, name));
+    });
   }
 
   @NotNull
   private Map<String, PsiMethod[]> getMethodsMap() {
-    PsiMethod[] methods = getMethods();
-    if (methods.length == 0) return Collections.emptyMap();
-
-    Map<String, List<PsiMethod>> collectedMethods = ContainerUtil.newHashMap();
-    for (PsiMethod method : methods) {
-      List<PsiMethod> list = collectedMethods.get(method.getName());
-      if (list == null) {
-        collectedMethods.put(method.getName(), list = ContainerUtil.newSmartList());
-      }
-      list.add(method);
-    }
-
-    Map<String, PsiMethod[]> cachedMethods = ContainerUtil.newTroveMap();
-    for (Map.Entry<String, List<PsiMethod>> entry : collectedMethods.entrySet()) {
-      List<PsiMethod> list = entry.getValue();
-      cachedMethods.put(entry.getKey(), list.toArray(PsiMethod.EMPTY_ARRAY));
-    }
-    return cachedMethods;
+    List<PsiMethod> ownMethods = myClass.getOwnMethods();
+    return ConcurrentFactoryMap.createMap(name -> {
+      return JBIterable
+        .from(ownMethods).filter(m -> name.equals(m.getName()))
+        .append("values".equals(name) ? getValuesMethod() : null)
+        .append("valueOf".equals(name) ? getValueOfMethod() : null)
+        .append(PsiAugmentProvider.collectAugments(myClass, PsiMethod.class, name))
+        .toArray(PsiMethod.EMPTY_ARRAY);
+    });
   }
 
   @NotNull
   private Map<String, PsiClass> getInnerClassesMap() {
-    PsiClass[] classes = getInnerClasses();
-    if (classes.length == 0) return Collections.emptyMap();
-
     Map<String, PsiClass> cachedInners = new THashMap<>();
-    for (PsiClass psiClass : classes) {
+    for (PsiClass psiClass : myClass.getOwnInnerClasses()) {
       String name = psiClass.getName();
       if (name == null) {
         Logger.getInstance(ClassInnerStuffCache.class).error(psiClass);
@@ -172,29 +171,50 @@ public class ClassInnerStuffCache {
         cachedInners.put(name, psiClass);
       }
     }
-    return cachedInners;
+    return ConcurrentFactoryMap.createMap(name -> {
+      PsiClass result = cachedInners.get(name);
+      return result != null ? result : ContainerUtil.getFirstItem(PsiAugmentProvider.collectAugments(myClass, PsiClass.class, name));
+    });
   }
 
   private PsiMethod makeValuesMethod() {
-    return getSyntheticMethod("public static " + myClass.getName() + "[] values() { }");
+    return new EnumSyntheticMethod(myClass, "public static " + myClass.getName() + "[] values() { }");
   }
 
   private PsiMethod makeValueOfMethod() {
-    return getSyntheticMethod("public static " + myClass.getName() + " valueOf(java.lang.String name) throws java.lang.IllegalArgumentException { }");
-  }
-
-  private PsiMethod getSyntheticMethod(String text) {
-    PsiElementFactory factory = JavaPsiFacade.getElementFactory(myClass.getProject());
-    PsiMethod method = factory.createMethodFromText(text, myClass);
-    return new LightMethod(myClass.getManager(), method, myClass) {
-      @Override
-      public int getTextOffset() {
-        return myClass.getTextOffset();
-      }
-    };
+    return new EnumSyntheticMethod(myClass, "public static " + myClass.getName() + " valueOf(java.lang.String name) throws java.lang.IllegalArgumentException { }");
   }
 
   public void dropCaches() {
     myTracker.incModificationCount();
+  }
+
+  private static class EnumSyntheticMethod extends LightMethod implements SyntheticElement {
+    private final PsiClass myClass;
+    private final String myText;
+
+    EnumSyntheticMethod(@NotNull PsiClass enumClass, @NotNull String text) {
+      super(enumClass.getManager(), JavaPsiFacade.getElementFactory(enumClass.getProject()).createMethodFromText(text, enumClass), enumClass);
+      myClass = enumClass;
+      myText = text;
+    }
+
+    @Override
+    public int getTextOffset() {
+      return myClass.getTextOffset();
+    }
+
+    @Override
+    public boolean equals(Object another) {
+      return this == another ||
+             another instanceof EnumSyntheticMethod &&
+             myClass.equals(((EnumSyntheticMethod)another).myClass) &&
+             myText.equals(((EnumSyntheticMethod)another).myText);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(myText, myClass);
+    }
   }
 }

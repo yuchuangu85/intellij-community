@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package org.jetbrains.idea.devkit.inspections;
 
@@ -55,7 +55,6 @@ public class InspectionDescriptionNotFoundInspection extends DevKitInspectionBas
 
   private static boolean isPathMethodsAreOverridden(PsiClass psiClass) {
     return !(isLastMethodDefinitionIn("getStaticDescription", INSPECTION_PROFILE_ENTRY, psiClass)
-             && isLastMethodDefinitionIn("getDescriptionUrl", INSPECTION_PROFILE_ENTRY, psiClass)
              && isLastMethodDefinitionIn("getDescriptionContextClass", INSPECTION_PROFILE_ENTRY, psiClass)
              && isLastMethodDefinitionIn("getDescriptionFileName", INSPECTION_PROFILE_ENTRY, psiClass));
   }
@@ -64,12 +63,10 @@ public class InspectionDescriptionNotFoundInspection extends DevKitInspectionBas
                                                   @NotNull String classFQN,
                                                   @Nullable PsiClass psiClass) {
     if (psiClass == null) return false;
-    for (PsiMethod method : psiClass.getMethods()) {
-      if (method.getName().equals(methodName)) {
-        final PsiClass containingClass = method.getContainingClass();
-        if (containingClass == null) return false;
-        return classFQN.equals(containingClass.getQualifiedName());
-      }
+    for (PsiMethod method : psiClass.findMethodsByName(methodName, false)) {
+      final PsiClass containingClass = method.getContainingClass();
+      if (containingClass == null) return false;
+      return classFQN.equals(containingClass.getQualifiedName());
     }
     return isLastMethodDefinitionIn(methodName, classFQN, psiClass.getSuperClass());
   }

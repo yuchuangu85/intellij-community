@@ -1,7 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.xmlb;
 
+import com.intellij.openapi.util.JDOMUtil;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.serialization.ClassUtil;
+import com.intellij.serialization.MutableAccessor;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
@@ -19,26 +22,29 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 
-abstract class AbstractCollectionBinding extends NotNullDeserializeBinding implements MultiNodeBinding {
+abstract class AbstractCollectionBinding extends NotNullDeserializeBinding implements MultiNodeBinding, NestedBinding {
+  private final MutableAccessor myAccessor;
   private List<Binding> itemBindings;
 
   protected final Class<?> itemType;
-  @SuppressWarnings("deprecation")
-  @Nullable
-  private final AbstractCollection annotation;
-  @Nullable
-  protected final XCollection newAnnotation;
+  @SuppressWarnings("deprecation") private final @Nullable AbstractCollection annotation;
+  protected final @Nullable XCollection newAnnotation;
 
   @SuppressWarnings("FieldAccessedSynchronizedAndUnsynchronized")
   private Serializer serializer;
 
   AbstractCollectionBinding(@NotNull Class elementType, @Nullable MutableAccessor accessor) {
-    super(accessor);
+    myAccessor = accessor;
 
     itemType = elementType;
     newAnnotation = accessor == null ? null : accessor.getAnnotation(XCollection.class);
     //noinspection deprecation
     annotation = newAnnotation == null ? (accessor == null ? null : accessor.getAnnotation(AbstractCollection.class)) : null;
+  }
+
+  @Override
+  public @NotNull MutableAccessor getAccessor() {
+    return myAccessor;
   }
 
   protected boolean isSortOrderedSet() {
@@ -59,30 +65,32 @@ abstract class AbstractCollectionBinding extends NotNullDeserializeBinding imple
     return newAnnotation == null && (annotation == null || annotation.surroundWithTag());
   }
 
-  @NotNull
-  private Class<?>[] getElementTypes() {
+  private @NotNull Class<?> @NotNull [] getElementTypes() {
     if (newAnnotation != null) {
       return newAnnotation.elementTypes();
     }
     return annotation == null ? ArrayUtil.EMPTY_CLASS_ARRAY : annotation.elementTypes();
   }
 
-  @NotNull
-  private synchronized List<Binding> getElementBindings() {
+  private @Nullable Binding getItemBinding(@NotNull Class<?> aClass) {
+    return ClassUtil.isPrimitive(aClass) ? null : serializer.getRootBinding(aClass, aClass);
+  }
+
+  private synchronized @NotNull List<Binding> getItemBindings() {
     if (itemBindings == null) {
-      Binding binding = serializer.getBinding(itemType);
+      Binding binding = getItemBinding(itemType);
       Class<?>[] elementTypes = getElementTypes();
       if (elementTypes.length == 0) {
-        itemBindings = binding == null ? Collections.<Binding>emptyList() : Collections.singletonList(binding);
+        itemBindings = binding == null ? Collections.emptyList() : Collections.singletonList(binding);
       }
       else {
-        itemBindings = new SmartList<Binding>();
+        itemBindings = new SmartList<>();
         if (binding != null) {
           itemBindings.add(binding);
         }
 
         for (Class<?> aClass : elementTypes) {
-          Binding b = serializer.getBinding(aClass);
+          Binding b = getItemBinding(aClass);
           if (b != null && !itemBindings.contains(b)) {
             itemBindings.add(b);
           }
@@ -95,9 +103,8 @@ abstract class AbstractCollectionBinding extends NotNullDeserializeBinding imple
     return itemBindings;
   }
 
-  @Nullable
-  private Binding getElementBinding(@NotNull Element element) {
-    for (Binding binding : getElementBindings()) {
+  private @Nullable Binding getElementBinding(@NotNull Element element) {
+    for (Binding binding : getItemBindings()) {
       if (binding.isBoundTo(element)) {
         return binding;
       }
@@ -105,18 +112,16 @@ abstract class AbstractCollectionBinding extends NotNullDeserializeBinding imple
     return null;
   }
 
-  @NotNull
-  abstract Collection<Object> getIterable(@NotNull Object o);
+  abstract @NotNull Collection<?> getIterable(@NotNull Object o);
 
-  @Nullable
   @Override
-  public Object serialize(@NotNull Object object, @Nullable Object context, @Nullable SerializationFilter filter) {
-    Collection<Object> collection = getIterable(object);
+  public @Nullable Object serialize(@NotNull Object object, @Nullable Object context, @Nullable SerializationFilter filter) {
+    Collection<?> collection = getIterable(object);
 
     String tagName = isSurroundWithTag() ? getCollectionTagName(object) : null;
     if (tagName == null) {
-      List<Object> result = new SmartList<Object>();
-      if (!ContainerUtil.isEmpty(collection)) {
+      List<Object> result = new SmartList<>();
+      if (!collection.isEmpty()) {
         for (Object item : collection) {
           ContainerUtil.addAllNotNull(result, serializeItem(item, result, filter));
         }
@@ -125,7 +130,7 @@ abstract class AbstractCollectionBinding extends NotNullDeserializeBinding imple
     }
     else {
       Element result = new Element(tagName);
-      if (!ContainerUtil.isEmpty(collection)) {
+      if (!collection.isEmpty()) {
         for (Object item : collection) {
           Content child = (Content)serializeItem(item, result, filter);
           if (child != null) {
@@ -138,8 +143,7 @@ abstract class AbstractCollectionBinding extends NotNullDeserializeBinding imple
   }
 
   @Override
-  @NotNull
-  public Object deserialize(@Nullable Object context, @NotNull Element element) {
+  public @NotNull Object deserialize(@Nullable Object context, @NotNull Element element) {
     if (!isSurroundWithTag()) {
       return doDeserializeList(context, Collections.singletonList(element));
     }
@@ -147,29 +151,26 @@ abstract class AbstractCollectionBinding extends NotNullDeserializeBinding imple
     return doDeserializeList(context, element.getChildren());
   }
 
-  @Nullable
   @Override
-  public Object deserializeList(@Nullable Object context, @NotNull List<? extends Element> elements) {
+  public @Nullable Object deserializeList(@Nullable Object context, @NotNull List<? extends Element> elements) {
     if (!isSurroundWithTag()) {
       return doDeserializeList(context, elements);
     }
 
     assert elements.size() == 1;
     Element element = elements.get(0);
-    return doDeserializeList(context == null && element.getName().equals(Constants.SET) ? new HashSet<Object>() : context, element.getChildren());
+    return doDeserializeList(context == null && element.getName().equals(Constants.SET) ? new HashSet<>() : context, element.getChildren());
   }
 
-  @NotNull
-  protected abstract Object doDeserializeList(@Nullable Object context, @NotNull List<? extends Element> elements);
+  protected abstract @NotNull Object doDeserializeList(@Nullable Object context, @NotNull List<? extends Element> elements);
 
-  @Nullable
-  private Object serializeItem(@Nullable Object value, Object context, @Nullable SerializationFilter filter) {
+  private @Nullable Object serializeItem(@Nullable Object value, Object context, @Nullable SerializationFilter filter) {
     if (value == null) {
       LOG.warn("Collection " + myAccessor + " contains 'null' object");
       return null;
     }
 
-    Binding binding = serializer.getBinding(value.getClass());
+    Binding binding = getItemBinding(value.getClass());
     if (binding == null) {
       String elementName = getElementName();
       if (StringUtil.isEmpty(elementName)) {
@@ -185,7 +186,7 @@ abstract class AbstractCollectionBinding extends NotNullDeserializeBinding imple
         }
       }
       else {
-        serializedItem.setAttribute(attributeName, XmlSerializerImpl.removeControlChars(serialized));
+        serializedItem.setAttribute(attributeName, JDOMUtil.removeControlChars(serialized));
       }
       return serializedItem;
     }
@@ -212,16 +213,14 @@ abstract class AbstractCollectionBinding extends NotNullDeserializeBinding imple
     }
   }
 
-  @NotNull
-  private String getElementName() {
+  private @NotNull String getElementName() {
     if (newAnnotation != null) {
       return newAnnotation.elementName();
     }
     return annotation == null ? Constants.OPTION : annotation.elementTag();
   }
 
-  @NotNull
-  private String getValueAttributeName() {
+  private @NotNull String getValueAttributeName() {
     if (newAnnotation != null) {
       return newAnnotation.valueAttributeName();
     }
@@ -233,7 +232,7 @@ abstract class AbstractCollectionBinding extends NotNullDeserializeBinding imple
     if (isSurroundWithTag()) {
       return element.getName().equals(getCollectionTagName(null));
     }
-    else if (getElementBindings().isEmpty()) {
+    else if (getItemBindings().isEmpty()) {
       return element.getName().equals(getElementName());
     }
     else {
@@ -241,6 +240,5 @@ abstract class AbstractCollectionBinding extends NotNullDeserializeBinding imple
     }
   }
 
-  @NotNull
-  protected abstract String getCollectionTagName(@Nullable Object target);
+  protected abstract @NotNull String getCollectionTagName(@Nullable Object target);
 }

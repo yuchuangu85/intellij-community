@@ -15,6 +15,7 @@
  */
 package com.intellij.openapi.roots.ui.configuration.classpath;
 
+import com.intellij.ide.JavaUiBundle;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.diagnostic.Logger;
@@ -23,7 +24,6 @@ import com.intellij.openapi.roots.*;
 import com.intellij.openapi.roots.impl.ClonableOrderEntry;
 import com.intellij.openapi.roots.impl.OrderEntryUtil;
 import com.intellij.openapi.roots.impl.ProjectRootManagerImpl;
-import com.intellij.openapi.roots.impl.RootModelImpl;
 import com.intellij.openapi.roots.ui.configuration.ModuleEditor;
 import com.intellij.openapi.roots.ui.configuration.ProjectStructureConfigurable;
 import com.intellij.openapi.roots.ui.configuration.projectRoot.StructureConfigurableContext;
@@ -32,50 +32,53 @@ import com.intellij.openapi.vfs.pointers.VirtualFilePointerManager;
 import org.jetbrains.annotations.NotNull;
 
 import java.lang.reflect.Proxy;
+import java.util.function.Predicate;
 
-/**
- * @author nik
- */
 public class InlineModuleDependencyAction extends AnAction {
   private static final Logger LOG = Logger.getInstance(InlineModuleDependencyAction.class);
   private final ClasspathPanelImpl myClasspathPanel;
 
   public InlineModuleDependencyAction(ClasspathPanelImpl classpathPanel) {
-    super("Inline Module Dependency", "Replace dependency on a module without source roots by the list of its dependencies", null);
+    super(JavaUiBundle.message("action.text.inline.module.dependency"),
+          JavaUiBundle.message("action.description.inline.module.dependency"), null);
     myClasspathPanel = classpathPanel;
   }
 
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
     OrderEntry selectedEntry = myClasspathPanel.getSelectedEntry();
-    if (!(selectedEntry instanceof ModuleOrderEntry)) return;
+    inlineEntry(myClasspathPanel, selectedEntry, depEntry -> depEntry instanceof LibraryOrderEntry || depEntry instanceof ModuleOrderEntry);
+  }
 
-    ModuleOrderEntry entryToInline = (ModuleOrderEntry)selectedEntry;
+  static void inlineEntry(ClasspathPanel classpathPanel, OrderEntry entry, Predicate<? super OrderEntry> dependencyEntryFilter) {
+    if (!(entry instanceof ModuleOrderEntry)) return;
+
+    ModuleOrderEntry entryToInline = (ModuleOrderEntry)entry;
     Module module = entryToInline.getModule();
     if (module == null) return;
 
-    ModifiableRootModel model = myClasspathPanel.getRootModel();
+    ModifiableRootModel model = classpathPanel.getRootModel();
     int toInlineIndex = findModuleEntryIndex(model, module);
     if (toInlineIndex == -1) return;
 
     model.removeOrderEntry(entryToInline);
 
-    RootModelImpl modelImpl;
+    ModifiableRootModel modelImpl;
     if (Proxy.isProxyClass(model.getClass())) {
-      modelImpl = (RootModelImpl)((ModuleEditor.ProxyDelegateAccessor)Proxy.getInvocationHandler(model)).getDelegate();
+      modelImpl = (ModifiableRootModel)((ModuleEditor.ProxyDelegateAccessor)Proxy.getInvocationHandler(model)).getDelegate();
     }
     else {
-      modelImpl = (RootModelImpl)model;
+      modelImpl = model;
     }
     int addedCount = 0;
-    ModuleRootModel otherModel = myClasspathPanel.getModuleConfigurationState().getModulesProvider().getRootModel(module);
-    ProjectRootManagerImpl rootManager = ProjectRootManagerImpl.getInstanceImpl(myClasspathPanel.getProject());
+    ModuleRootModel otherModel = classpathPanel.getModuleConfigurationState().getModulesProvider().getRootModel(module);
+    ProjectRootManagerImpl rootManager = ProjectRootManagerImpl.getInstanceImpl(classpathPanel.getProject());
     VirtualFilePointerManager virtualFilePointerManager = VirtualFilePointerManager.getInstance();
-    for (OrderEntry entry : otherModel.getOrderEntries()) {
-      if (entry instanceof LibraryOrderEntry || entry instanceof ModuleOrderEntry) {
-        LOG.assertTrue(entry instanceof ClonableOrderEntry, entry);
-        ExportableOrderEntry entryToCopy = (ExportableOrderEntry)entry;
-        ExportableOrderEntry cloned = (ExportableOrderEntry)((ClonableOrderEntry)entry).cloneEntry(modelImpl, rootManager, virtualFilePointerManager);
+    for (OrderEntry depEntry : otherModel.getOrderEntries()) {
+      if (dependencyEntryFilter.test(depEntry)) {
+        LOG.assertTrue(depEntry instanceof ClonableOrderEntry, depEntry);
+        ExportableOrderEntry entryToCopy = (ExportableOrderEntry)depEntry;
+        ExportableOrderEntry cloned = (ExportableOrderEntry)((ClonableOrderEntry)depEntry).cloneEntry(modelImpl, rootManager, virtualFilePointerManager);
         cloned.setExported(entryToInline.isExported() && entryToCopy.isExported());
         cloned.setScope(OrderEntryUtil.intersectScopes(entryToInline.getScope(), entryToCopy.getScope()));
         model.addOrderEntry(cloned);
@@ -90,7 +93,7 @@ public class InlineModuleDependencyAction extends AnAction {
     System.arraycopy(oldEntries, toInlineIndex, newEntries, toInlineIndex + addedCount, oldEntries.length - toInlineIndex - addedCount);
     model.rearrangeOrderEntries(newEntries);
 
-    StructureConfigurableContext context = ProjectStructureConfigurable.getInstance(myClasspathPanel.getProject()).getContext();
+    StructureConfigurableContext context = ProjectStructureConfigurable.getInstance(classpathPanel.getProject()).getContext();
     context.getDaemonAnalyzer().queueUpdate(new ModuleProjectStructureElement(context, module));
   }
 

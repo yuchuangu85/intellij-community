@@ -20,7 +20,8 @@ import com.intellij.openapi.application.PluginPathManager;
 import com.intellij.psi.PsiCatchSection;
 import com.intellij.psi.PsiTryStatement;
 import com.intellij.psi.util.PsiTreeUtil;
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
+import com.siyeh.InspectionGadgetsBundle;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,9 +29,8 @@ import java.util.List;
 /**
  * @author yole
  */
-public class TryWithIdenticalCatchesTest extends LightCodeInsightFixtureTestCase {
+public class TryWithIdenticalCatchesTest extends LightJavaCodeInsightFixtureTestCase {
   private static final String PATH = "com/siyeh/igtest/errorhandling/try_identical_catches/";
-  private static final String HINT = "Collapse 'catch' blocks";
 
   public void testTryIdenticalCatches() {
     doTest();
@@ -80,6 +80,10 @@ public class TryWithIdenticalCatchesTest extends LightCodeInsightFixtureTestCase
     doTest(false, true);
   }
 
+  public void testCatchParameterRewritten() {
+    highlightTest(false);
+  }
+
   public void doTest() {
     doTest(false, false);
   }
@@ -94,7 +98,7 @@ public class TryWithIdenticalCatchesTest extends LightCodeInsightFixtureTestCase
       List<IntentionAction> intentions = new ArrayList<>();
       for (PsiCatchSection section : catchSections) {
         getEditor().getCaretModel().moveToOffset(section.getTextOffset());
-        intentions.addAll(myFixture.filterAvailableIntentions(HINT));
+        intentions.addAll(myFixture.filterAvailableIntentions(InspectionGadgetsBundle.message("try.with.identical.catches.quickfix")));
       }
       assertFalse("intentions.isEmpty", intentions.isEmpty());
       for (IntentionAction intention : intentions) {
@@ -102,7 +106,7 @@ public class TryWithIdenticalCatchesTest extends LightCodeInsightFixtureTestCase
       }
     }
     else {
-      IntentionAction intention = myFixture.findSingleIntention(HINT);
+      IntentionAction intention = myFixture.findSingleIntention(InspectionGadgetsBundle.message("try.with.identical.catches.quickfix"));
       assertNotNull(intention);
       myFixture.launchAction(intention);
     }

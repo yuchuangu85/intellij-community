@@ -1,31 +1,14 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.remote;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * @author traff
- */
 public class RemoteSdkCredentialsBuilder {
   private String myInterpreterPath = null;
-  private final String myHelpersPath = null;
+  private static final String myHelpersPath = null;
   private RemoteCredentials myRemoteCredentials = null;
-  private final String myHelpersDefaultDirName = ".idea_helpers";
+  private static final String myHelpersDefaultDirName = ".idea_helpers";
 
 
   public RemoteSdkCredentials build() {
@@ -51,10 +34,10 @@ public class RemoteSdkCredentialsBuilder {
     copyCredentials(data, copyTo);
 
     copyTo.setInterpreterPath(data.getInterpreterPath());
+    copyTo.setRunAsRootViaSudo(data.isRunAsRootViaSudo());
     copyTo.setHelpersPath(data.getHelpersPath());
 
     copyTo.setHelpersVersionChecked(data.isHelpersVersionChecked());
-    copyTo.setRemoteRoots(data.getRemoteRoots());
   }
 
   public static void copyCredentials(@NotNull RemoteCredentials data, @NotNull MutableRemoteCredentials copyTo) {

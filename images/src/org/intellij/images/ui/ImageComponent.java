@@ -1,29 +1,16 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-/** $Id$ */
-
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.intellij.images.ui;
 
+import com.intellij.openapi.editor.colors.EditorColorsManager;
+import com.intellij.openapi.editor.colors.EditorColorsScheme;
+import com.intellij.ui.JBColor;
+import com.intellij.ui.scale.ScaleContext;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.ui.JBUI.ScaleContext;
 import org.intellij.images.ImagesBundle;
 import org.intellij.images.editor.ImageDocument;
 import org.intellij.images.options.GridOptions;
 import org.intellij.images.options.TransparencyChessboardOptions;
+import org.intellij.images.options.impl.ImageEditorColorSchemeSettingsKt;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.Nullable;
 
@@ -36,7 +23,7 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.List;
 
-import static com.intellij.util.ui.JBUI.ScaleType.OBJ_SCALE;
+import static com.intellij.ui.scale.ScaleType.OBJ_SCALE;
 
 /**
  * Image component is draw image box with effects.
@@ -80,6 +67,7 @@ public class ImageComponent extends JComponent {
     private boolean myFileSizeVisible = true;
     private boolean myFileNameVisible = true;
     private double zoomFactor = 1d;
+    private boolean myBorderVisible = true;
 
     public ImageComponent() {
         updateUI();
@@ -163,6 +151,16 @@ public class ImageComponent extends JComponent {
         boolean oldValue = myFileNameVisible;
         myFileNameVisible = fileNameVisible;
         firePropertyChange(FILE_NAME_VISIBLE_PROP, oldValue, fileNameVisible);
+    }
+
+    public boolean isBorderVisible() {
+        return myBorderVisible;
+    }
+
+    public void setBorderVisible(boolean borderVisible) {
+        boolean oldValue = myBorderVisible;
+        myBorderVisible = borderVisible;
+        firePropertyChange("Border.visible", oldValue, myBorderVisible);
     }
 
     public void setGridLineZoomFactor(int lineZoomFactor) {
@@ -283,7 +281,7 @@ public class ImageComponent extends JComponent {
         @Override
         public Rectangle getBounds(double scale) {
             ScaleContext ctx = ScaleContext.create(myComponent);
-            ctx.update(OBJ_SCALE.of(scale));
+            ctx.setScale(OBJ_SCALE.of(scale));
             return cachedBounds.getOrProvide(ctx);
         }
 
@@ -405,7 +403,9 @@ public class ImageComponent extends JComponent {
         }
 
         public Color getLineColor() {
-            return lineColor;
+            EditorColorsScheme editorScheme = EditorColorsManager.getInstance().getGlobalScheme();
+            Color color = editorScheme.getColor(ImageEditorColorSchemeSettingsKt.getGRID_LINE_COLOR_KEY());
+            return color != null ? color : JBColor.DARK_GRAY;
         }
 
         public void setLineColor(Color lineColor) {

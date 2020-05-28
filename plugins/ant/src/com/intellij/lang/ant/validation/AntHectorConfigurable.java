@@ -1,25 +1,10 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.lang.ant.validation;
 
 import com.intellij.lang.ant.AntImportsIndex;
 import com.intellij.lang.ant.config.AntConfigurationBase;
 import com.intellij.lang.ant.dom.AntDomFileDescription;
 import com.intellij.openapi.editor.HectorComponentPanel;
-import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.util.io.FileUtil;
@@ -31,7 +16,9 @@ import com.intellij.psi.xml.XmlFile;
 import com.intellij.ui.IdeBorderFactory;
 import com.intellij.util.PathUtil;
 import com.intellij.util.indexing.FileBasedIndex;
+import com.intellij.util.ui.JBInsets;
 import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NonNls;
 
 import javax.swing.*;
@@ -73,12 +60,13 @@ public class AntHectorConfigurable extends HectorComponentPanel {
   @Override
   public JComponent createComponent() {
     final JPanel panel = new JPanel(new GridBagLayout());
+    panel.setBackground(UIUtil.getToolTipActionBackground());
     panel.setBorder(IdeBorderFactory.createTitledBorder("File Context", false));
     myCombo = new ComboBox();
     myCombo.putClientProperty(CONTEXTS_COMBO_KEY, Boolean.TRUE);
     panel.add(
         new JLabel("Included into:"),
-        new GridBagConstraints(0, 0, 1, 1, 0.0, 0.0, GridBagConstraints.WEST, GridBagConstraints.NONE, JBUI.insets(5, 0), 0, 0)
+        new GridBagConstraints(0, 0, 1, 1, 0.0, 0.0, GridBagConstraints.WEST, GridBagConstraints.NONE, JBInsets.create(5, 0), 0, 0)
     );
     panel.add(
       myCombo,
@@ -102,7 +90,7 @@ public class AntHectorConfigurable extends HectorComponentPanel {
     }
 
     final List<String> paths = new ArrayList<>(myPathToFileMap.keySet());
-    Collections.sort(paths, (o1, o2) -> o1.compareTo(o2));
+    paths.sort(Comparator.naturalOrder());
 
     myCombo.addItem(NONE);
     for (String path : paths) {
@@ -132,7 +120,7 @@ public class AntHectorConfigurable extends HectorComponentPanel {
   }
 
   @Override
-  public void apply() throws ConfigurationException {
+  public void apply() {
     applyItem((String)myCombo.getSelectedItem());
   }
 

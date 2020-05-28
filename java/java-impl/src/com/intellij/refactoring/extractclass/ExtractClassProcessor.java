@@ -62,7 +62,8 @@ import org.jetbrains.annotations.NotNull;
 import java.util.*;
 
 public class ExtractClassProcessor extends FixableUsagesRefactoringProcessor {
-  private static final Logger logger = Logger.getInstance("com.siyeh.rpp.extractclass.ExtractClassProcessor");
+  private static final Logger LOG = Logger.getInstance(ExtractClassProcessor.class);
+
   @NonNls public static final String REFACTORING_NAME = "Extract Delegate";
 
   private final PsiClass sourceClass;
@@ -76,20 +77,21 @@ public class ExtractClassProcessor extends FixableUsagesRefactoringProcessor {
   private final String myNewVisibility;
   private final boolean myGenerateAccessors;
   private final List<PsiField> enumConstants;
+  @NotNull
   private final String newClassName;
   private final String delegateFieldName;
   private final boolean requiresBackpointer;
   private boolean delegationRequired;
   private final ExtractEnumProcessor myExtractEnumProcessor;
   private final PsiClass myClass;
-  private boolean extractInnerClass;
+  private final boolean extractInnerClass;
 
   public ExtractClassProcessor(PsiClass sourceClass,
                                List<? extends PsiField> fields,
                                List<? extends PsiMethod> methods,
                                List<? extends PsiClass> innerClasses,
                                String newPackageName,
-                               String newClassName) {
+                               @NotNull String newClassName) {
     this(sourceClass, fields, methods, innerClasses, newPackageName, null, newClassName, null, false, Collections.emptyList(), false);
   }
 
@@ -99,7 +101,7 @@ public class ExtractClassProcessor extends FixableUsagesRefactoringProcessor {
                                List<? extends PsiClass> classes,
                                String packageName,
                                MoveDestination moveDestination,
-                               String newClassName,
+                               @NotNull String newClassName,
                                String newVisibility,
                                boolean generateAccessors,
                                List<? extends MemberInfo> enumConstants,
@@ -173,19 +175,20 @@ public class ExtractClassProcessor extends FixableUsagesRefactoringProcessor {
       fieldsNeedingGetter.addAll(visitor.getFieldsNeedingGetter());
       fieldsNeedingGetter.addAll(srcVisitor.getFieldsNeedingGetter());
       for (PsiField field : fieldsNeedingGetter) {
-        conflicts.putValue(field, "Field \'" + field.getName() + "\' needs getter");
+        conflicts.putValue(field, "Field '" + field.getName() + "' needs getter");
       }
       final Set<PsiField> fieldsNeedingSetter = new LinkedHashSet<>();
       fieldsNeedingSetter.addAll(visitor.getFieldsNeedingSetter());
       fieldsNeedingSetter.addAll(srcVisitor.getFieldsNeedingSetter());
       for (PsiField field : fieldsNeedingSetter) {
-        conflicts.putValue(field, "Field \'" + field.getName() + "\' needs setter");
+        conflicts.putValue(field, "Field '" + field.getName() + "' needs setter");
       }
     }
     checkConflicts(refUsages, conflicts);
     return showConflicts(conflicts, refUsages.get());
   }
 
+  @NotNull
   private String getQualifiedName() {
     return extractInnerClass ? newClassName : StringUtil.getQualifiedName(newPackageName, newClassName);
   }
@@ -258,12 +261,12 @@ public class ExtractClassProcessor extends FixableUsagesRefactoringProcessor {
 
   @Override
   @NotNull
-  protected UsageViewDescriptor createUsageViewDescriptor(@NotNull UsageInfo[] usageInfos) {
+  protected UsageViewDescriptor createUsageViewDescriptor(UsageInfo @NotNull [] usageInfos) {
     return new ExtractClassUsageViewDescriptor(sourceClass);
   }
 
   @Override
-  protected void performRefactoring(@NotNull UsageInfo[] usageInfos) {
+  protected void performRefactoring(UsageInfo @NotNull [] usageInfos) {
     final PsiClass psiClass = buildClass(true);
     if (psiClass == null) return;
     if (delegationRequired) {
@@ -441,7 +444,7 @@ public class ExtractClassProcessor extends FixableUsagesRefactoringProcessor {
       codeStyleManager.reformat(JavaCodeStyleManager.getInstance(myProject).shortenClassReferences(newField));
     }
     catch (IncorrectOperationException e) {
-      logger.error(e);
+      LOG.error(e);
     }
   }
 
@@ -835,7 +838,7 @@ public class ExtractClassProcessor extends FixableUsagesRefactoringProcessor {
 
     private boolean isStaticFinal(PsiField field) {
       final PsiModifierList modifierList = field.getModifierList();
-      logger.assertTrue(modifierList != null);
+      LOG.assertTrue(modifierList != null);
       return modifierList.hasModifierProperty(PsiModifier.STATIC) && modifierList.hasModifierProperty(PsiModifier.FINAL);
     }
 

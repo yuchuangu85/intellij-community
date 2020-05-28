@@ -23,11 +23,9 @@ import com.intellij.codeInspection.reference.RefClass;
 import com.intellij.codeInspection.reference.RefEntity;
 import com.intellij.codeInspection.reference.RefJavaUtil;
 import com.intellij.codeInspection.reference.RefPackage;
-import com.intellij.psi.PsiClass;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseGlobalInspection;
 import com.siyeh.ig.dependency.DependencyUtils;
-import com.siyeh.ig.psiutils.ClassUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,18 +33,12 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class DisjointPackageInspection extends BaseGlobalInspection {
 
-  @NotNull
   @Override
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("disjoint.package.display.name");
-  }
-
-  @Override
-  @Nullable
-  public CommonProblemDescriptor[] checkElement(
+  public CommonProblemDescriptor @Nullable [] checkElement(
     @NotNull RefEntity refEntity, @NotNull AnalysisScope analysisScope,
     @NotNull InspectionManager inspectionManager,
     @NotNull GlobalInspectionContext globalInspectionContext) {
@@ -54,18 +46,12 @@ public class DisjointPackageInspection extends BaseGlobalInspection {
       return null;
     }
     final RefPackage refPackage = (RefPackage)refEntity;
-    final List<RefEntity> children = refPackage.getChildren();
-    final Set<RefClass> childClasses = new HashSet<>();
-    for (RefEntity child : children) {
-      if (!(child instanceof RefClass)) {
-        continue;
-      }
-      final PsiClass psiClass = ((RefClass)child).getUastElement().getJavaPsi();
-      if (ClassUtils.isInnerClass(psiClass)) {
-        continue;
-      }
-      childClasses.add((RefClass)child);
-    }
+    final Set<RefClass> childClasses = refPackage
+      .getChildren()
+      .stream()
+      .filter(child -> child instanceof RefClass)
+      .map(child -> (RefClass)child)
+      .collect(Collectors.toSet());
     if (childClasses.isEmpty()) {
       return null;
     }

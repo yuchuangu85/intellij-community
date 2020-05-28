@@ -1,7 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.debugger.containerview;
 
 import com.intellij.execution.process.ProcessHandler;
+import com.intellij.execution.ui.layout.impl.JBRunnerTabs;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ApplicationManager;
@@ -18,7 +19,9 @@ import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
 import com.intellij.ui.tabs.TabInfo;
 import com.intellij.ui.tabs.impl.JBEditorTabs;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.xdebugger.XDebuggerManager;
+import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.console.PydevConsoleCommunication;
 import com.jetbrains.python.debugger.PyDebugProcess;
 import com.jetbrains.python.debugger.PyDebugValue;
@@ -32,14 +35,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
-public class PyDataView implements DumbAware {
+public final class PyDataView implements DumbAware {
   public static final String DATA_VIEWER_ID = "SciView";
   public static final String COLORED_BY_DEFAULT = "python.debugger.dataview.coloredbydefault";
   public static final String AUTO_RESIZE = "python.debugger.dataview.autoresize";
   public static final String EMPTY_TAB_NAME = "empty";
   private static final Logger LOG = Logger.getInstance(PyDataView.class);
+  private static final String HELP_ID = "reference.toolWindows.PyDataView";
 
   @NotNull private final Project myProject;
   private JBEditorTabs myTabs;
@@ -154,16 +157,23 @@ public class PyDataView implements DumbAware {
   }
 
   public void init(@NotNull ToolWindow toolWindow) {
-    myTabs = new PyDataViewTabs(myProject);
+    myTabs = new JBRunnerTabs(myProject, myProject);
+    myTabs.setDataProvider(dataId -> {
+      if (PlatformDataKeys.HELP_ID.is(dataId)) {
+        return HELP_ID;
+      }
+      return null;
+    });
+    myTabs.getPresentation().setEmptyText(PyBundle.message("debugger.data.view.empty.text"));
     myTabs.setPopupGroup(new DefaultActionGroup(new ColoredAction()), ActionPlaces.UNKNOWN, true);
     myTabs.setTabDraggingEnabled(true);
-    final Content content = ContentFactory.SERVICE.getInstance().createContent(myTabs, "Data", false);
+    final Content content = ContentFactory.SERVICE.getInstance().createContent(myTabs, PyBundle.message("debugger.data.view.data"), false);
     content.setCloseable(true);
     toolWindow.getContentManager().addContent(content);
     myProject.getMessageBus().connect().subscribe(ToolWindowManagerListener.TOPIC, new ToolWindowManagerListener() {
       @Override
-      public void stateChanged() {
-        ToolWindow window = ToolWindowManager.getInstance(myProject).getToolWindow(DATA_VIEWER_ID);
+      public void stateChanged(@NotNull ToolWindowManager toolWindowManager) {
+        ToolWindow window = toolWindowManager.getToolWindow(DATA_VIEWER_ID);
         if (window == null) {
           return;
         }
@@ -183,12 +193,12 @@ public class PyDataView implements DumbAware {
     TabInfo info = new TabInfo(panel);
     if (frameAccessor instanceof PydevConsoleCommunication) {
       info.setIcon(PythonIcons.Python.PythonConsole);
-      info.setTooltipText("Connected to Python Console");
+      info.setTooltipText(PyBundle.message("debugger.data.view.connected.to.python.console"));
     }
     if (frameAccessor instanceof PyDebugProcess) {
       info.setIcon(AllIcons.Toolwindows.ToolWindowDebugger);
       String name = ((PyDebugProcess)frameAccessor).getSession().getSessionName();
-      info.setTooltipText("Connected to debug session '"+  name + "'");
+      info.setTooltipText(PyBundle.message("debugger.data.view.connected.to.debug.session", name));
     }
     info.setText(EMPTY_TAB_NAME);
     info.setPreferredFocusableComponent(panel.getSliceTextField());
@@ -212,7 +222,7 @@ public class PyDataView implements DumbAware {
   }
 
   public List<TabInfo> getVisibleTabs() {
-    return myTabs.getTabs().stream().filter(tabInfo -> !tabInfo.isHidden()).collect(Collectors.toList());
+    return ContainerUtil.filter(myTabs.getTabs(), tabInfo -> !tabInfo.isHidden());
   }
 
 
@@ -220,7 +230,7 @@ public class PyDataView implements DumbAware {
     private final PyFrameAccessor myFrameAccessor;
 
     NewViewerAction(PyFrameAccessor frameAccessor) {
-      super("View New Container", "Open new container viewer", AllIcons.General.Add);
+      super(PyBundle.message("debugger.data.view.view.new.container"), PyBundle.message("debugger.data.view.open.new.container.viewer"), AllIcons.General.Add);
       myFrameAccessor = frameAccessor;
     }
 
@@ -236,7 +246,7 @@ public class PyDataView implements DumbAware {
     private final PyFrameAccessor myFrameAccessor;
 
     CloseViewerAction(TabInfo info, PyFrameAccessor frameAccessor) {
-      super("Close Viewer", "Close selected viewer", AllIcons.Actions.Close);
+      super(PyBundle.message("debugger.data.view.close.viewer"), PyBundle.message("debugger.data.view.close.selected.viewer"), AllIcons.Actions.Close);
       myInfo = info;
       myFrameAccessor = frameAccessor;
     }
@@ -252,7 +262,7 @@ public class PyDataView implements DumbAware {
 
   private class ColoredAction extends ToggleAction {
     ColoredAction() {
-      super("Colored");
+      super(PyBundle.messagePointer("debugger.data.view.colored"));
     }
 
     @Override

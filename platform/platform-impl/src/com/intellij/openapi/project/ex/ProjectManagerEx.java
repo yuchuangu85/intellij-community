@@ -1,34 +1,30 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.project.ex;
 
+import com.intellij.configurationStore.StoreReloadManager;
+import com.intellij.ide.impl.OpenProjectTask;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
-import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.util.Disposer;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
-import java.io.IOException;
-import java.util.Collection;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Objects;
 
 public abstract class ProjectManagerEx extends ProjectManager {
   public static ProjectManagerEx getInstanceEx() {
-    return (ProjectManagerEx)ApplicationManager.getApplication().getComponent(ProjectManager.class);
+    return (ProjectManagerEx)ApplicationManager.getApplication().getService(ProjectManager.class);
+  }
+
+  @Nullable
+  public static ProjectManagerEx getInstanceExIfCreated() {
+    return (ProjectManagerEx)ProjectManager.getInstanceIfCreated();
   }
 
   /**
@@ -37,44 +33,79 @@ public abstract class ProjectManagerEx extends ProjectManager {
   @Nullable
   public abstract Project newProject(@Nullable String projectName, @NotNull String filePath, boolean useDefaultProjectSettings, boolean isDummy);
 
-  @Nullable
-  public abstract Project loadProject(@NotNull String filePath) throws IOException;
+  @TestOnly
+  @NotNull
+  public final Project newProjectForTest(@NotNull Path file, @NotNull Disposable parentDisposable) {
+    OpenProjectTask options = new OpenProjectTask();
+    options.useDefaultProjectAsTemplate = false;
+    options.isNewProject = true;
+    Project project = Objects.requireNonNull(newProject(file, null, options));
+    Disposer.register(parentDisposable, () -> forceCloseProject(project));
+    return project;
+  }
 
   @Nullable
-  public abstract Project loadProject(@NotNull String filePath, @Nullable String projectName) throws IOException;
+  public abstract Project newProject(@NotNull Path file, @Nullable String projectName, @NotNull OpenProjectTask options);
+
+  /**
+   * @deprecated Use {@link #loadProject(Path)}
+   */
+  @NotNull
+  @Deprecated
+  public final Project loadProject(@NotNull String filePath) {
+    return loadProject(Paths.get(filePath).toAbsolutePath(), null);
+  }
+
+  @NotNull
+  public final Project loadProject(@NotNull Path path) {
+    return loadProject(path, null);
+  }
+
+  @NotNull
+  public abstract Project loadProject(@NotNull Path file, @Nullable String projectName);
 
   public abstract boolean openProject(@NotNull Project project);
 
   @TestOnly
   public abstract boolean isDefaultProjectInitialized();
 
-  public abstract boolean isProjectOpened(Project project);
+  public abstract boolean isProjectOpened(@NotNull Project project);
 
   public abstract boolean canClose(@NotNull Project project);
 
-  public abstract void saveChangedProjectFile(@NotNull VirtualFile file, @NotNull Project project);
+  /**
+   * @deprecated Use {@link StoreReloadManager#blockReloadingProjectOnExternalChanges()}
+   */
+  @SuppressWarnings("MethodMayBeStatic")
+  @Deprecated
+  public final void blockReloadingProjectOnExternalChanges() {
+    StoreReloadManager.getInstance().blockReloadingProjectOnExternalChanges();
+  }
 
-  public abstract void blockReloadingProjectOnExternalChanges();
-  public abstract void unblockReloadingProjectOnExternalChanges();
+  /**
+   * @deprecated Use {@link StoreReloadManager#blockReloadingProjectOnExternalChanges()}
+   */
+  @SuppressWarnings("MethodMayBeStatic")
+  @Deprecated
+  public final void unblockReloadingProjectOnExternalChanges() {
+    StoreReloadManager.getInstance().unblockReloadingProjectOnExternalChanges();
+  }
 
   @TestOnly
   public abstract void openTestProject(@NotNull Project project);
 
   /**
-   * Without save and "check can close".
-   * Returns remaining open test projects.
+   * The project and the app settings will be not saved.
    */
-  @TestOnly
-  @NotNull
-  public abstract Collection<Project> closeTestProject(@NotNull Project project);
-
-  @TestOnly
-  public abstract boolean forceCloseProject(@NotNull Project project, boolean dispose);
+  public abstract boolean forceCloseProject(@NotNull Project project);
 
   // return true if successful
   public abstract boolean closeAndDisposeAllProjects(boolean checkCanClose);
 
-  // returns true on success
+  /**
+   * Save, close and dispose project. Please note that only the project will be saved, but not the application.
+   * @return true on success
+   */
   public abstract boolean closeAndDispose(@NotNull Project project);
 
   @Nullable
@@ -86,12 +117,6 @@ public abstract class ProjectManagerEx extends ProjectManager {
   @Nullable
   public abstract Project findOpenProjectByHash(@Nullable String locationHash);
 
-  @Nullable
-  public abstract Project convertAndLoadProject(@NotNull String filePath) throws IOException;
-
-  /**
-   * Internal use only. Force reload changed project files. Must be called before save otherwise saving maybe not performed (because storage saving is disabled).
-   */
-  public void flushChangedProjectFileAlarm() {
-  }
+  @ApiStatus.Internal
+  public abstract String @NotNull [] getAllExcludedUrls();
 }

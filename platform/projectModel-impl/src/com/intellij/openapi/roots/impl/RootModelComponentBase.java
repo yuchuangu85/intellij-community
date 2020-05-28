@@ -23,7 +23,7 @@ import org.jetbrains.annotations.NotNull;
 /**
  *  @author dsl
  */
-public abstract class RootModelComponentBase implements Disposable {
+abstract class RootModelComponentBase implements Disposable {
   @NotNull
   private final RootModelImpl myRootModel;
   private boolean myDisposed;
@@ -41,7 +41,10 @@ public abstract class RootModelComponentBase implements Disposable {
 
   @Override
   public void dispose() {
-    myDisposed = true;
+    if (!myDisposed) {
+      myRootModel.unregisterOnDispose(this);
+      myDisposed = true;
+    }
   }
 
   public boolean isDisposed() {

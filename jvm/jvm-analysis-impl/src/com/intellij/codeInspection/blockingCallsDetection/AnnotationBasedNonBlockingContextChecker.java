@@ -1,7 +1,12 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.blockingCallsDetection;
 
-import com.intellij.psi.*;
+import com.intellij.codeInsight.AnnotationUtil;
+import com.intellij.psi.JavaPsiFacade;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiMethod;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.uast.UCallExpression;
 import org.jetbrains.uast.UMethod;
@@ -9,8 +14,6 @@ import org.jetbrains.uast.UastContextKt;
 import org.jetbrains.uast.UastUtils;
 
 import java.util.List;
-
-import static com.intellij.codeInspection.blockingCallsDetection.AnnotationBasedBlockingMethodChecker.hasAnnotation;
 
 public class AnnotationBasedNonBlockingContextChecker implements NonBlockingContextChecker {
 
@@ -22,10 +25,10 @@ public class AnnotationBasedNonBlockingContextChecker implements NonBlockingCont
 
   @Override
   public boolean isApplicable(@NotNull PsiFile file) {
-    if (myNonBlockingAnnotations.isEmpty()) return false;
-    PsiClass annotationClass = JavaPsiFacade.getInstance(file.getProject())
-      .findClass(BlockingMethodInNonBlockingContextInspection.DEFAULT_NONBLOCKING_ANNOTATION, file.getResolveScope());
-    return annotationClass != null;
+    return myNonBlockingAnnotations != null &&
+           StreamEx.of(BlockingMethodInNonBlockingContextInspection.DEFAULT_NONBLOCKING_ANNOTATION)
+             .append(myNonBlockingAnnotations)
+             .anyMatch(annotation -> JavaPsiFacade.getInstance(file.getProject()).findClass(annotation, file.getResolveScope()) != null);
   }
 
   @Override
@@ -37,6 +40,6 @@ public class AnnotationBasedNonBlockingContextChecker implements NonBlockingCont
     if (callingMethod == null) return false;
     PsiMethod psiCallingMethod = callingMethod.getJavaPsi();
 
-    return hasAnnotation(psiCallingMethod, myNonBlockingAnnotations);
+    return AnnotationUtil.findAnnotation(psiCallingMethod, myNonBlockingAnnotations, false) != null;
   }
 }

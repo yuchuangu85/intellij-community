@@ -3,7 +3,9 @@
  */
 package com.intellij.analysis;
 
-import com.intellij.analysis.dialog.*;
+import com.intellij.analysis.dialog.ModelScopeItem;
+import com.intellij.analysis.dialog.ModelScopeItemPresenter;
+import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.find.FindSettings;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.diagnostic.Logger;
@@ -13,6 +15,7 @@ import com.intellij.openapi.module.ModuleUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.util.Disposer;
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.SearchScope;
 import com.intellij.refactoring.util.RadioUpDownListener;
@@ -22,7 +25,6 @@ import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.components.BorderLayoutPanel;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.jps.model.java.JavaSourceRootType;
 
 import javax.swing.*;
 import java.awt.*;
@@ -30,8 +32,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 
 public class BaseAnalysisActionDialog extends DialogWrapper {
@@ -50,7 +50,7 @@ public class BaseAnalysisActionDialog extends DialogWrapper {
    * @deprecated Use {@link BaseAnalysisActionDialog#BaseAnalysisActionDialog(String, String, Project, List, AnalysisUIOptions, boolean, boolean)} instead.
    */
   @Deprecated
-  public BaseAnalysisActionDialog(@NotNull String title,
+  public BaseAnalysisActionDialog(@NlsContexts.DialogTitle @NotNull String title,
                                    @NotNull String analysisNoon,
                                    @NotNull Project project,
                                    @NotNull final AnalysisScope scope,
@@ -58,10 +58,8 @@ public class BaseAnalysisActionDialog extends DialogWrapper {
                                    final boolean rememberScope,
                                    @NotNull AnalysisUIOptions analysisUIOptions,
                                    @Nullable PsiElement context) {
-    this(title, analysisNoon, project, standardItems(project, scope,
-                                                                              moduleName != null ? ModuleManager.getInstance(project).findModuleByName(moduleName) : null,
-                                                                              context),
-         analysisUIOptions, rememberScope, ModuleUtil.isSupportedRootType(project, JavaSourceRootType.TEST_SOURCE));
+    this(title, analysisNoon, project, standardItems(project, scope, moduleName != null ? ModuleManager.getInstance(project).findModuleByName(moduleName) : null, context),
+         analysisUIOptions, rememberScope);
   }
 
   @NotNull
@@ -69,25 +67,32 @@ public class BaseAnalysisActionDialog extends DialogWrapper {
                                                    @NotNull AnalysisScope scope,
                                                    @Nullable Module module,
                                                    @Nullable PsiElement context) {
-    return Stream.of(new ProjectScopeItem(project),
-                     new CustomScopeItem(project, context),
-                     VcsScopeItem.createIfHasVCS(project),
-                     ModuleScopeItem.tryCreate(module),
-                     OtherScopeItem.tryCreate(scope)).filter(x -> x != null).collect(Collectors.toList());
+    return ContainerUtil.mapNotNull(
+      ModelScopeItemPresenter.EP_NAME.getExtensionList(),
+      presenter -> presenter.tryCreate(project, scope, module, context));
   }
 
-  public BaseAnalysisActionDialog(@NotNull String title,
-                                   @NotNull String analysisNoon,
-                                   @NotNull Project project,
-                                   @NotNull List<? extends ModelScopeItem> items,
-                                   @NotNull AnalysisUIOptions options,
-                                   final boolean rememberScope,
-                                   final boolean showInspectTestSource) {
+  public BaseAnalysisActionDialog(@NlsContexts.DialogTitle @NotNull String title,
+                                @NotNull String analysisNoon,
+                                @NotNull Project project,
+                                @NotNull List<? extends ModelScopeItem> items,
+                                @NotNull AnalysisUIOptions options,
+                                final boolean rememberScope) {
+    this(title, analysisNoon, project, items, options, rememberScope, ModuleUtil.hasTestSourceRoots(project));
+  }
+
+  public BaseAnalysisActionDialog(@NlsContexts.DialogTitle @NotNull String title,
+                                  @NotNull String analysisNoon,
+                                  @NotNull Project project,
+                                  @NotNull List<? extends ModelScopeItem> items,
+                                  @NotNull AnalysisUIOptions options,
+                                  final boolean rememberScope,
+                                  final boolean showInspectTestSource) {
     super(true);
     myAnalysisNoon = analysisNoon;
     myProject = project;
 
-    myViewItems = ModelScopeItemPresenter.createOrderedViews(items);
+    myViewItems = ModelScopeItemPresenter.createOrderedViews(items, getDisposable());
     myOptions = options;
     myRememberScope = rememberScope;
     myShowInspectTestSource = showInspectTestSource;
@@ -149,7 +154,7 @@ public class BaseAnalysisActionDialog extends DialogWrapper {
       gridY++;
     }
 
-    myInspectTestSource.setText(AnalysisScopeBundle.message("scope.option.include.test.sources"));
+    myInspectTestSource.setText(CodeInsightBundle.message("scope.option.include.test.sources"));
     myInspectTestSource.setSelected(myOptions.ANALYZE_TEST_SOURCES);
     myInspectTestSource.setVisible(myShowInspectTestSource);
     gbc.gridy = gridY;

@@ -1,19 +1,19 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.xml.impl;
 
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
-import com.intellij.openapi.util.RecursionGuard;
+import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.RecursionManager;
 import com.intellij.psi.xml.XmlFile;
 import com.intellij.reference.SoftReference;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.Processor;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.WeakInterner;
+import com.intellij.util.containers.Interner;
+import com.intellij.util.indexing.FileBasedIndex;
 import com.intellij.util.xml.DomElement;
 import com.intellij.util.xml.GenericDomValue;
-import com.intellij.util.xml.JavaMethod;
 import com.intellij.util.xml.reflect.*;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NonNls;
@@ -28,9 +28,8 @@ import java.util.Set;
 /**
  * @author peter
  */
-public class DynamicGenericInfo extends DomGenericInfoEx {
-  private static final Key<SoftReference<WeakInterner<ChildrenDescriptionsHolder>>> HOLDERS_CACHE = Key.create("DOM_CHILDREN_HOLDERS_CACHE");
-  private static final RecursionGuard ourGuard = RecursionManager.createGuard("dynamicGenericInfo");
+public final class DynamicGenericInfo extends DomGenericInfoEx {
+  private static final Key<SoftReference<Interner<ChildrenDescriptionsHolder<?>>>> HOLDERS_CACHE = Key.create("DOM_CHILDREN_HOLDERS_CACHE");
   private final StaticGenericInfo myStaticGenericInfo;
   @NotNull private final DomInvocationHandler myInvocationHandler;
   private volatile boolean myInitialized;
@@ -49,18 +48,14 @@ public class DynamicGenericInfo extends DomGenericInfoEx {
   }
 
   @Override
-  public Invocation createInvocation(final JavaMethod method) {
-    return myStaticGenericInfo.createInvocation(method);
-  }
-
-  @Override
   public final boolean checkInitialized() {
     if (myInitialized) return true;
     myStaticGenericInfo.buildMethodMaps();
 
     if (!myInvocationHandler.exists()) return true;
 
-    return ourGuard.doPreventingRecursion(myInvocationHandler, false, () -> {
+    boolean fromIndexing = FileBasedIndex.getInstance().getFileBeingCurrentlyIndexed() != null;
+    return RecursionManager.doPreventingRecursion(Pair.create(myInvocationHandler, fromIndexing), false, () -> {
       DomExtensionsRegistrarImpl registrar = runDomExtenders();
 
       synchronized (myInvocationHandler) {
@@ -94,7 +89,8 @@ public class DynamicGenericInfo extends DomGenericInfoEx {
       ChildrenDescriptionsHolder<FixedChildDescriptionImpl> newFixeds = new ChildrenDescriptionsHolder<>(myStaticGenericInfo.getFixed());
       for (final DomExtensionImpl extension : fixeds) {
         //noinspection unchecked
-        newFixeds.addDescription(extension.addAnnotations(new FixedChildDescriptionImpl(extension.getXmlName(), extension.getType(), extension.getCount(), ArrayUtil.EMPTY_COLLECTION_ARRAY)));
+        newFixeds.addDescription(extension.addAnnotations(new FixedChildDescriptionImpl(extension.getXmlName(), extension.getType(), extension.getCount(),
+                                                                                        ArrayUtilRt.EMPTY_COLLECTION_ARRAY)));
       }
       myFixeds = internChildrenHolder(file, newFixeds);
     }
@@ -110,37 +106,35 @@ public class DynamicGenericInfo extends DomGenericInfoEx {
     }
 
     final List<DomExtensionImpl> customs = registrar.getCustoms();
-    myCustomChildren = customs.isEmpty() ? null : ContainerUtil.map(customs, extension -> new CustomDomChildrenDescriptionImpl(extension));
+    myCustomChildren = customs.isEmpty() ? null : ContainerUtil.map(customs, CustomDomChildrenDescriptionImpl::new);
   }
 
   private static <T extends DomChildDescriptionImpl> ChildrenDescriptionsHolder<T> internChildrenHolder(XmlFile file, ChildrenDescriptionsHolder<T> holder) {
-    SoftReference<WeakInterner<ChildrenDescriptionsHolder>> ref = file.getUserData(HOLDERS_CACHE);
-    WeakInterner<ChildrenDescriptionsHolder> cache = SoftReference.dereference(ref);
+    SoftReference<Interner<ChildrenDescriptionsHolder<?>>> ref = file.getUserData(HOLDERS_CACHE);
+    Interner<ChildrenDescriptionsHolder<?>> cache = SoftReference.dereference(ref);
     if (cache == null) {
-      cache = new WeakInterner<>();
+      cache = Interner.createWeakInterner();
       file.putUserData(HOLDERS_CACHE, new SoftReference<>(cache));
     }
     //noinspection unchecked
-    return cache.intern(holder);
+    return (ChildrenDescriptionsHolder<T>)cache.intern(holder);
   }
 
   @Nullable
   private DomExtensionsRegistrarImpl runDomExtenders() {
     DomExtensionsRegistrarImpl registrar = null;
-    final Project project = myInvocationHandler.getManager().getProject();
-    List<DomExtenderEP> extenders = DomExtenderEP.EP_NAME.getExtensionList();
-    if (extenders.size() > 0) {
-      for (final DomExtenderEP extenderEP : extenders) {
-        registrar = extenderEP.extend(project, myInvocationHandler, registrar);
-      }
+    Project project = myInvocationHandler.getManager().getProject();
+    for (DomExtenderEP extenderEP : DomExtenderEP.EP_NAME.getExtensionList()) {
+      registrar = extenderEP.extend(project, myInvocationHandler, registrar);
     }
 
-    final AbstractDomChildDescriptionImpl description = myInvocationHandler.getChildDescription();
+    AbstractDomChildDescriptionImpl description = myInvocationHandler.getChildDescription();
     if (description != null) {
-      final List<DomExtender> extendersFromParent = description.getUserData(DomExtensionImpl.DOM_EXTENDER_KEY);
+      List<DomExtender<?>> extendersFromParent = description.getUserData(DomExtensionImpl.DOM_EXTENDER_KEY);
       if (extendersFromParent != null) {
         if (registrar == null) registrar = new DomExtensionsRegistrarImpl();
-        for (final DomExtender extender : extendersFromParent) {
+        //noinspection rawtypes
+        for (DomExtender extender : extendersFromParent) {
           //noinspection unchecked
           extender.registerExtensions(myInvocationHandler.getProxy(), registrar);
         }
@@ -150,7 +144,7 @@ public class DynamicGenericInfo extends DomGenericInfoEx {
   }
 
   @Override
-  public GenericDomValue getNameDomElement(DomElement element) {
+  public GenericDomValue<?> getNameDomElement(DomElement element) {
     return myStaticGenericInfo.getNameDomElement(element);
   }
 
@@ -225,7 +219,7 @@ public class DynamicGenericInfo extends DomGenericInfoEx {
 
 
   @Override
-  public DomAttributeChildDescription getAttributeChildDescription(@NonNls String attributeName, @NonNls String namespace) {
+  public DomAttributeChildDescription<?> getAttributeChildDescription(@NonNls String attributeName, @NonNls String namespace) {
     checkInitialized();
     return myAttributes.getDescription(attributeName, namespace);
   }

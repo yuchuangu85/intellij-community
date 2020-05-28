@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testGuiFramework.fixtures
 
 import com.intellij.ide.projectView.ProjectView
@@ -32,6 +18,8 @@ import com.intellij.testGuiFramework.cellReader.ExtendedJTreeCellReader
 import com.intellij.testGuiFramework.framework.Timeouts
 import com.intellij.testGuiFramework.impl.GuiTestUtilKt
 import com.intellij.testGuiFramework.impl.GuiTestUtilKt.computeOnEdt
+import com.intellij.testGuiFramework.impl.GuiTestUtilKt.isComponentShowing
+import com.intellij.testGuiFramework.impl.GuiTestUtilKt.repeatUntil
 import com.intellij.testGuiFramework.impl.GuiTestUtilKt.runOnEdt
 import com.intellij.testGuiFramework.impl.GuiTestUtilKt.tryWithPause
 import com.intellij.testGuiFramework.impl.GuiTestUtilKt.waitUntil
@@ -46,10 +34,12 @@ import org.fest.swing.core.Robot
 import org.fest.swing.edt.GuiActionRunner
 import org.fest.swing.edt.GuiTask
 import org.fest.swing.exception.ComponentLookupException
+import org.fest.swing.timing.Timeout
 import org.junit.Assert.assertNotNull
 import java.awt.Point
 import java.awt.Rectangle
 import java.util.*
+import javax.swing.JPopupMenu
 import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.TreeModel
@@ -65,7 +55,7 @@ class ProjectViewFixture internal constructor(project: Project, robot: Robot) : 
 
   private fun getPaneById(id: String): PaneFixture {
     activate()
-    val projectView = ProjectView.getInstance(myProject)
+    val projectView = computeOnEdt { ProjectView.getInstance(myProject) } ?: throw Exception("Unable to compute ProjectView on EDT")
     assertProjectViewIsInitialized(projectView)
     runOnEdt { projectView.changeView(id) }
     return PaneFixture(projectView.getProjectViewPaneById(id))
@@ -83,12 +73,12 @@ class ProjectViewFixture internal constructor(project: Project, robot: Robot) : 
    * separated by slash sign: ["project_name/src/Test.java"]
    * @return NodeFixture object for a pathTo; may be used for expanding, scrolling and clicking node
    */
-  fun path(vararg pathTo: String): NodeFixture {
+  fun path(vararg pathTo: String, timeout: Timeout = Timeouts.seconds30): NodeFixture {
     val projectPane = selectProjectPane()
     val canonicalPath = pathTo.toList().expandSlashedPath()
     return tryWithPause(exceptionClass = ComponentLookupException::class.java,
                         condition = "node with path ${Arrays.toString(pathTo)} will appear",
-                        timeout = Timeouts.seconds30) {
+                        timeout = timeout) {
       activate()
       projectPane.getNode(canonicalPath)
     }
@@ -211,11 +201,9 @@ class ProjectViewFixture internal constructor(project: Project, robot: Robot) : 
         val tree = myPane.tree
         val boundsRef = Ref<Rectangle>()
         waitUntil("bounds of tree node with a tree path $myTreePath will be not null", Timeouts.defaultTimeout) {
-          return@waitUntil computeOnEdt {
-            val bounds = tree.getPathBounds(myTreePath)
-            if (bounds != null) boundsRef.set(bounds)
-            bounds != null
-          }!!
+          val bounds = computeOnEdt { tree.getPathBounds(myTreePath) }
+          if (bounds != null) boundsRef.set(bounds)
+          return@waitUntil bounds != null
         }
 
         val bounds = boundsRef.get()
@@ -240,7 +228,9 @@ class ProjectViewFixture internal constructor(project: Project, robot: Robot) : 
     }
 
     fun rightClick() {
-      invokeContextMenu()
+      repeatUntil({ isComponentShowing(JPopupMenu::class.java) }, {
+        invokeContextMenu()
+      })
     }
 
     fun invokeContextMenu() {
@@ -257,7 +247,7 @@ class ProjectViewFixture internal constructor(project: Project, robot: Robot) : 
           val orderEntry = value!!.orderEntry
           if (orderEntry is JdkOrderEntry) {
             val sdk = orderEntry.jdk
-            return sdk.sdkType is JavaSdk
+            return sdk?.sdkType is JavaSdk
           }
         }
         return false

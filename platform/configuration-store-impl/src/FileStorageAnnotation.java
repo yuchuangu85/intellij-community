@@ -1,7 +1,10 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.configurationStore;
 
-import com.intellij.openapi.components.*;
+import com.intellij.openapi.components.RoamingType;
+import com.intellij.openapi.components.StateSplitterEx;
+import com.intellij.openapi.components.StateStorage;
+import com.intellij.openapi.components.Storage;
 import com.intellij.util.ThreeState;
 import org.jetbrains.annotations.NotNull;
 
@@ -12,10 +15,16 @@ public class FileStorageAnnotation implements Storage {
   protected final String path;
 
   private final boolean deprecated;
+  private final Class<? extends StateSplitterEx> mySplitterClass;
 
   public FileStorageAnnotation(@NotNull String path, boolean deprecated) {
+    this(path, deprecated, StateSplitterEx.class);
+  }
+
+  public FileStorageAnnotation(@NotNull String path, boolean deprecated, Class<? extends StateSplitterEx> splitterClass) {
     this.path = path;
     this.deprecated = deprecated;
+    mySplitterClass = splitterClass;
   }
 
   @Override
@@ -44,11 +53,6 @@ public class FileStorageAnnotation implements Storage {
   }
 
   @Override
-  public StorageScheme scheme() {
-    return StorageScheme.DEFAULT;
-  }
-
-  @Override
   public boolean deprecated() {
     return deprecated;
   }
@@ -64,8 +68,8 @@ public class FileStorageAnnotation implements Storage {
   }
 
   @Override
-  public Class<StateSplitterEx> stateSplitter() {
-    return StateSplitterEx.class;
+  public Class<? extends StateSplitterEx> stateSplitter() {
+    return mySplitterClass;
   }
 
   @NotNull

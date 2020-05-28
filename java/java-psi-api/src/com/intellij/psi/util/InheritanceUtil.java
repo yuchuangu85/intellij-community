@@ -24,6 +24,7 @@ import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -80,12 +81,12 @@ public class InheritanceUtil {
   }
 
   @Contract("null, _ -> false")
-  public static boolean isInheritor(@Nullable PsiClass psiClass, @NotNull final String baseClassName) {
+  public static boolean isInheritor(@Nullable PsiClass psiClass, @NotNull @NonNls String baseClassName) {
     return isInheritor(psiClass, false, baseClassName);
   }
 
   @Contract("null, _, _ -> false")
-  public static boolean isInheritor(@Nullable PsiClass psiClass, final boolean strict, @NotNull final String baseClassName) {
+  public static boolean isInheritor(@Nullable PsiClass psiClass, final boolean strict, @NotNull @NonNls String baseClassName) {
     if (psiClass == null) {
       return false;
     }
@@ -115,11 +116,11 @@ public class InheritanceUtil {
   }
 
 
-    private static void getSuperClassesOfList(@NotNull PsiClassType[] types,
-                                            @NotNull Set<? super PsiClass> results,
-                                            boolean includeNonProject,
-                                            @NotNull Set<? super PsiClass> visited,
-                                            @NotNull PsiManager manager) {
+    private static void getSuperClassesOfList(PsiClassType @NotNull [] types,
+                                              @NotNull Set<? super PsiClass> results,
+                                              boolean includeNonProject,
+                                              @NotNull Set<? super PsiClass> visited,
+                                              @NotNull PsiManager manager) {
     for (PsiClassType type : types) {
       PsiClass resolved = type.resolve();
       if (resolved != null && visited.add(resolved)) {
@@ -131,21 +132,22 @@ public class InheritanceUtil {
     }
   }
 
-  public static boolean hasEnclosingInstanceInScope(PsiClass aClass,
+  public static boolean hasEnclosingInstanceInScope(@NotNull PsiClass aClass,
                                                     PsiElement scope,
                                                     boolean isSuperClassAccepted,
                                                     boolean isTypeParamsAccepted) {
     return hasEnclosingInstanceInScope(aClass, scope, psiClass -> isSuperClassAccepted, isTypeParamsAccepted);
   }
 
-  public static boolean hasEnclosingInstanceInScope(PsiClass aClass,
+  public static boolean hasEnclosingInstanceInScope(@NotNull PsiClass aClass,
                                                     PsiElement scope,
                                                     Condition<? super PsiClass> isSuperClassAccepted,
                                                     boolean isTypeParamsAccepted) {
     return findEnclosingInstanceInScope(aClass, scope, isSuperClassAccepted, isTypeParamsAccepted) != null;
   }
 
-  public static PsiClass findEnclosingInstanceInScope(PsiClass aClass,
+  @Nullable
+  public static PsiClass findEnclosingInstanceInScope(@NotNull PsiClass aClass,
                                                       PsiElement scope,
                                                       Condition<? super PsiClass> isSuperClassAccepted,
                                                       boolean isTypeParamsAccepted) {
@@ -188,4 +190,38 @@ public class InheritanceUtil {
     return true;
   }
 
+  @Nullable
+  private static PsiClass getCircularClass(@NotNull PsiClass aClass, @NotNull Collection<? super PsiClass> usedClasses) {
+    if (usedClasses.contains(aClass)) {
+      return aClass;
+    }
+    try {
+      usedClasses.add(aClass);
+      PsiClass[] superTypes = aClass.getSupers();
+      for (PsiElement superType : superTypes) {
+        while (superType instanceof PsiClass) {
+          if (!CommonClassNames.JAVA_LANG_OBJECT.equals(((PsiClass)superType).getQualifiedName())) {
+            PsiClass circularClass = getCircularClass((PsiClass)superType, usedClasses);
+            if (circularClass != null) return circularClass;
+          }
+          // check class qualifier
+          superType = superType.getParent();
+        }
+      }
+    }
+    finally {
+      usedClasses.remove(aClass);
+    }
+    return null;
+  }
+
+  /**
+   * Detects a circular inheritance
+   * @param aClass a class to check
+   * @return a class which is a part of the inheritance loop; null if no circular inheritance was detected
+   */
+  @Nullable
+  public static PsiClass getCircularClass(@NotNull PsiClass aClass) {
+    return getCircularClass(aClass, new HashSet<>());
+  }
 }

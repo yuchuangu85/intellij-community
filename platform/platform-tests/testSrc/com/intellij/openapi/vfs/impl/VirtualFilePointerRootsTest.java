@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vfs.impl;
 
 import com.intellij.openapi.Disposable;
@@ -20,10 +20,8 @@ import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
 import com.intellij.openapi.vfs.pointers.VirtualFilePointer;
 import com.intellij.openapi.vfs.pointers.VirtualFilePointerListener;
 import com.intellij.openapi.vfs.pointers.VirtualFilePointerManager;
-import com.intellij.testFramework.PlatformTestCase;
-import com.intellij.testFramework.PlatformTestUtil;
-import com.intellij.testFramework.PsiTestUtil;
-import com.intellij.util.ArrayUtil;
+import com.intellij.testFramework.*;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
@@ -32,7 +30,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class VirtualFilePointerRootsTest extends PlatformTestCase {
+@RunFirst
+@SkipSlowTestLocally
+public class VirtualFilePointerRootsTest extends HeavyPlatformTestCase {
   private final Disposable disposable = Disposer.newDisposable();
   private VirtualFilePointerManagerImpl myVirtualFilePointerManager;
   private int numberOfPointersBefore;
@@ -53,6 +53,9 @@ public class VirtualFilePointerRootsTest extends PlatformTestCase {
       assertEquals(numberOfPointersBefore, myVirtualFilePointerManager.numberOfPointers());
       assertEquals(numberOfListenersBefore, myVirtualFilePointerManager.numberOfListeners());
     }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
     finally {
       myVirtualFilePointerManager = null;
       super.tearDown();
@@ -69,14 +72,30 @@ public class VirtualFilePointerRootsTest extends PlatformTestCase {
     }).assertTiming();
   }
 
-  public void testMultipleCreationOfTheSamePointerPerformance() {
+  public void testMultipleCreatePointerWithTheSameUrlPerformance() throws IOException {
     VirtualFilePointerListener listener = new VirtualFilePointerListener() { };
-    String url = VfsUtilCore.pathToUrl("/a/b/c/d/e");
+    File f = new File(createTempDirectory(), "a/b/c/d");
+    String url = VfsUtilCore.pathToUrl(f.getPath());
     VirtualFilePointer thePointer = myVirtualFilePointerManager.create(url, disposable, listener);
     assertNotNull(TempFileSystem.getInstance());
     PlatformTestUtil.startPerformanceTest("same url vfp create", 9000, () -> {
-      for (int i = 0; i < 10_000_000; i++) {
+      for (int i = 0; i < 1_000_000; i++) {
         VirtualFilePointer pointer = myVirtualFilePointerManager.create(url, disposable, listener);
+        assertSame(pointer, thePointer);
+      }
+    }).assertTiming();
+  }
+
+  public void testMultipleCreatePointerWithTheSameFilePerformance() throws IOException {
+    VirtualFilePointerListener listener = new VirtualFilePointerListener() { };
+    File f = new File(createTempDirectory(), "a/b/c/d");
+    assertTrue(f.mkdirs());
+    VirtualFile v = refreshAndFindFile(f);
+    VirtualFilePointer thePointer = myVirtualFilePointerManager.create(v, disposable, listener);
+    assertNotNull(TempFileSystem.getInstance());
+    PlatformTestUtil.startPerformanceTest("same url vfp create", 9000, () -> {
+      for (int i = 0; i < 10_000_000; i++) {
+        VirtualFilePointer pointer = myVirtualFilePointerManager.create(v, disposable, listener);
         assertSame(pointer, thePointer);
       }
     }).assertTiming();
@@ -89,13 +108,15 @@ public class VirtualFilePointerRootsTest extends PlatformTestCase {
     myVirtualFilePointerManager.shelveAllPointersIn(() -> {
       for (int i = 0; i < 100_000; i++) {
         myVirtualFilePointerManager.create(VfsUtilCore.pathToUrl("/a/b/c/d/" + i), disposable, listener);
-        events.add(new VFileCreateEvent(this, temp, "xxx" + i, false, true));
+        String name = "xxx" + (i%20);
+        events.add(new VFileCreateEvent(this, temp, name, true, null, null, true, null));
       }
-      PlatformTestUtil.startPerformanceTest("vfp update", 7_000, () -> {
+      PlatformTestUtil.startPerformanceTest("vfp update", 7_500, () -> {
         for (int i = 0; i < 100; i++) {
           // simulate VFS refresh events since launching the actual refresh is too slow
-          myVirtualFilePointerManager.before(events);
-          myVirtualFilePointerManager.after(events);
+          AsyncFileListener.ChangeApplier applier = myVirtualFilePointerManager.prepareChange(events);
+          applier.beforeVfsChange();
+          applier.afterVfsChange();
         }
       }).assertTiming();
     });
@@ -107,7 +128,7 @@ public class VirtualFilePointerRootsTest extends PlatformTestCase {
     VirtualFile dir2 = WriteAction.compute(() -> root.createChildDirectory(this, "dir2"));
 
     PsiTestUtil.addSourceRoot(getModule(), dir1);
-    PsiTestUtil.addLibrary(getModule(), "myLib", "", new String[]{dir2.getPath()}, ArrayUtil.EMPTY_STRING_ARRAY);
+    PsiTestUtil.addLibrary(getModule(), "myLib", "", new String[]{dir2.getPath()}, ArrayUtilRt.EMPTY_STRING_ARRAY);
     assertSourceIs(dir1);
     assertLibIs(dir2);
 

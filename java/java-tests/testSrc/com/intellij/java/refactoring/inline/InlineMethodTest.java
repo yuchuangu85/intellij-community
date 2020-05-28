@@ -144,6 +144,10 @@ public class InlineMethodTest extends LightRefactoringTestCase {
     doTest();
   }
 
+  public void testEnumConstantConstructorParameterNestedLambda() {
+    doTest();
+  }
+
   public void testEnumConstantConstructorWithArgs() {
     doTest();
   }
@@ -230,15 +234,54 @@ public class InlineMethodTest extends LightRefactoringTestCase {
   }
 
   public void testNotAStatement() {
-    doTestConflict("Inlined result would contain parse errors");
+    doTest();
   }
 
+  public void testNotAStatement2() {
+    doTest();
+  }
+  
+  public void testNotAStatement3() {
+    doTest();
+  }
+  
+  public void testNotAStatement4() {
+    doTest();
+  }
+  
+  public void testForContinue() {
+    doTest();
+  }
+  
+  public void testSingleReturn1() {
+    doTestAssertBadReturn();
+  }
+  
+  public void testSingleReturn1NotFinal() {
+    doTestAssertBadReturn();
+  }
+  
+  public void testSingleReturn2() {
+    doTestAssertBadReturn();
+  }
 
   public void testInSuperCall() {
     doTestConflict("Inline cannot be applied to multiline method in constructor call");
   }
 
   public void testMethodReferenceInsideMethodCall() {
+    doTest();
+  }
+  
+  public void testVolatilePassed() {
+    doTest();
+  }
+
+  public void testBooleanConstantArgument() {
+    doTest();
+  }
+
+  public void testBooleanConstantArgument2() {
     doTest();
   }
 
@@ -309,6 +352,10 @@ public class InlineMethodTest extends LightRefactoringTestCase {
   }
   
   public void testReturnStatementWithoutBraces() {
+    doTestInlineThisOnly();
+  }
+
+  public void testIfElseIfWithSingleStatement() {
     doTestInlineThisOnly();
   }
 
@@ -383,6 +430,10 @@ public class InlineMethodTest extends LightRefactoringTestCase {
   public void testPrivateFieldInSuperClassInSameFile() {
     doTest();
   }
+  
+  public void testWidenArgument() {
+    doTest();
+  }
 
   public void testInlineMultipleOccurrencesInFieldInitializer() {
     doTest();
@@ -427,6 +478,84 @@ public class InlineMethodTest extends LightRefactoringTestCase {
   public void testNotTailCallInsideIf() {
     doTestAssertBadReturn();
   }
+  
+  public void testConvertToSingleReturnWithFinished() {
+    doTestAssertBadReturn();
+  }
+
+  public void testConvertToSingleReturnWithFinishedUnusedResult() {
+    doTestAssertBadReturn();
+  }
+
+  public void testUnusedResult() {
+    doTest();
+  }
+  
+  public void testReuseResultVar() {
+    doTest();
+  }
+
+  public void testSpecializeClassGetName() {
+    doTest();
+  }
+  
+  public void testSpecializeEnumName() {
+    doTest();
+  }
+  
+  public void testSpecializeEnumValueOf() {
+    doTest();
+  }
+  
+  public void testBooleanModelSimple() {
+    doTestAssertBadReturn();
+  }
+  
+  public void testBooleanModelMultiReturns() {
+    doTestAssertBadReturn();
+  }
+  
+  public void testBooleanModelIfElse() {
+    doTestAssertBadReturn();
+  }
+
+  public void testBooleanModelIfElse2() {
+    doTestAssertBadReturn();
+  }
+
+  public void testBooleanModelContinue() {
+    doTestAssertBadReturn();
+  }
+
+  public void testBooleanModelFinalCondition() {
+    doTestAssertBadReturn();
+  }
+  
+  public void testInvertMethod() {
+    doTest();
+  }
+  
+  public void testUnusedParameter() {
+    doTest();
+  }
+
+  public void testEnumStaticMethod() {
+    doTest();
+  }
+  
+  public void testTypeParameterMethodRefArgument() {
+    doTest();
+  }
+  
+  public void testIgnoreReturnValue() {
+    doTest();
+  }
+  
+  public void testSingleReturnComplexQualifier() {
+    doTestAssertBadReturn();
+  }
+  
+  public void testAnonymousCall() { doTest(); }
 
   @Override
   protected Sdk getProjectJDK() {
@@ -456,7 +585,8 @@ public class InlineMethodTest extends LightRefactoringTestCase {
 
   private void doTestAssertBadReturn() {
     @NonNls String fileName = configure();
-    performAction(new MockInlineMethodOptions(), false, true);
+    BaseRefactoringProcessor.ConflictsInTestsException.withIgnoredConflicts(() -> performAction(new MockInlineMethodOptions(), false, true));
+    checkResultByFile(fileName + ".after");
   }
 
   @NotNull
@@ -466,14 +596,14 @@ public class InlineMethodTest extends LightRefactoringTestCase {
     return fileName;
   }
 
-  private static void performAction(final boolean nonCode) {
+  private void performAction(final boolean nonCode) {
     performAction(new MockInlineMethodOptions(), nonCode, false);
   }
 
-  private static void performAction(final InlineOptions options, final boolean nonCode, final boolean assertBadReturn) {
+  private void performAction(final InlineOptions options, final boolean nonCode, final boolean assertBadReturn) {
     PsiElement element = TargetElementUtil
-      .findTargetElement(myEditor, TargetElementUtil.ELEMENT_NAME_ACCEPTED | TargetElementUtil.REFERENCED_ELEMENT_ACCEPTED);
-    final PsiReference ref = myFile.findReferenceAt(myEditor.getCaretModel().getOffset());
+      .findTargetElement(getEditor(), TargetElementUtil.ELEMENT_NAME_ACCEPTED | TargetElementUtil.REFERENCED_ELEMENT_ACCEPTED);
+    final PsiReference ref = getFile().findReferenceAt(getEditor().getCaretModel().getOffset());
     if (ref instanceof PsiJavaCodeReferenceElement) {
       final PsiElement parent = ((PsiJavaCodeReferenceElement)ref).getParent();
       if (parent instanceof PsiNewExpression) {
@@ -488,10 +618,10 @@ public class InlineMethodTest extends LightRefactoringTestCase {
       assertTrue("Bad returns not found", condition);
     } else {
       assertFalse("Bad returns found", condition);
-      final InlineMethodProcessor processor =
-        new InlineMethodProcessor(getProject(), method, refExpr, myEditor, options.isInlineThisOnly(), nonCode, nonCode,
-                                  !options.isKeepTheDeclaration());
-      processor.run();
     }
+    final InlineMethodProcessor processor =
+      new InlineMethodProcessor(getProject(), method, refExpr, getEditor(), options.isInlineThisOnly(), nonCode, nonCode,
+                                !options.isKeepTheDeclaration());
+    processor.run();
   }
 }

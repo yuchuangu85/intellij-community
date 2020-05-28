@@ -11,7 +11,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.LinkedList;
+import java.util.Arrays;
 import java.util.List;
 
 public class PathMerger {
@@ -79,10 +79,7 @@ public class PathMerger {
       final boolean downResult = merger.down(piece);
       if (! downResult) {
         if (tail != null) {
-          for (int j = i; j < pieces.length; j++) {
-            final String pieceInner = pieces[j];
-            tail.add(pieceInner);
-          }
+          tail.addAll(Arrays.asList(pieces).subList(i, pieces.length));
         }
         return merger.getResult();
       }
@@ -163,7 +160,7 @@ public class PathMerger {
 
     public IoFilePathMerger(final File base) {
       myBase = base;
-      myChildPathElements = new LinkedList<>();
+      myChildPathElements = new ArrayList<>();
     }
 
     @Override

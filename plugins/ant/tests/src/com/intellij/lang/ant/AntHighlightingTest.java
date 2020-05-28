@@ -17,31 +17,24 @@
 package com.intellij.lang.ant;
 
 import com.intellij.codeInsight.daemon.DaemonAnalyzerTestCase;
-import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.analysis.XmlPathReferenceInspection;
 import com.intellij.codeInspection.LocalInspectionTool;
 import com.intellij.lang.ant.dom.AntResolveInspection;
 import com.intellij.lang.ant.validation.AntDuplicateTargetsInspection;
 import com.intellij.openapi.application.PluginPathManager;
-import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.testFramework.TestDataFile;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Collections;
-import java.util.List;
-
 /**
- * @by Maxim.Mossienko
+ * @author Maxim.Mossienko
  */
-@SuppressWarnings({"HardCodedStringLiteral"})
 public class AntHighlightingTest extends DaemonAnalyzerTestCase {
+  @NotNull
   @Override
   protected String getTestDataPath() {
     return PluginPathManager.getPluginHomePath("ant") + "/tests/data/highlighting/";
   }
-
-  private boolean myIgnoreInfos;
 
   private void doTest() throws Exception {
     doTest(false);
@@ -50,7 +43,7 @@ public class AntHighlightingTest extends DaemonAnalyzerTestCase {
   private void doTest(final boolean lowercaseFirstLetter) throws Exception {
     doTest(getTestName(lowercaseFirstLetter) + ".xml", false, false);
   }
-  
+
   @Override
   protected void configureByFile(@TestDataFile @NonNls String filePath) throws Exception {
     super.configureByFile(filePath);
@@ -73,7 +66,7 @@ public class AntHighlightingTest extends DaemonAnalyzerTestCase {
   public void testRefid() throws Exception {
     doTest();
   }
-  
+
   public void testRefidInCustomDomElement() throws Exception {
     doTest();
   }
@@ -105,34 +98,12 @@ public class AntHighlightingTest extends DaemonAnalyzerTestCase {
     doTest();
   }
 
-  public void testBigFilePerformance() {
-    try {
-      myIgnoreInfos = true;
-      PlatformTestUtil.startPerformanceTest("Big ant file highlighting", 15_000, () -> {
-        configureByFiles(null, getVirtualFile(getTestName(false) + ".xml"), getVirtualFile("buildserver.xml"), getVirtualFile("buildserver.properties"));
-        doDoTest(true, false);
-      }).assertTiming();
-    }
-    finally {
-      myIgnoreInfos = false;
-    }
-  }
-
-
-  @NotNull
-  @Override
-  protected List<HighlightInfo> doHighlighting() {
-    final List<HighlightInfo> infos = super.doHighlighting();
-    if (!myIgnoreInfos) {
-      return infos;
-    }
-    return Collections.emptyList();
-  }
-
   @Override
   protected LocalInspectionTool[] configureLocalInspectionTools() {
-    return new LocalInspectionTool[]{new AntDuplicateTargetsInspection(),
+    return new LocalInspectionTool[]{
+      new AntDuplicateTargetsInspection(),
       new AntResolveInspection(),
-    new XmlPathReferenceInspection()};
+      new XmlPathReferenceInspection()
+    };
   }
 }

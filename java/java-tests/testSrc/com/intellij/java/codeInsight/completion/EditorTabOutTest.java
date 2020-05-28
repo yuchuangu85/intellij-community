@@ -20,6 +20,9 @@ public class EditorTabOutTest extends AbstractParameterInfoTestCase {
     try {
       CodeInsightSettings.getInstance().TAB_EXITS_BRACKETS_AND_QUOTES = mySavedTabOutSetting;
     }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
     finally {
       super.tearDown();
     }
@@ -85,6 +88,61 @@ public class EditorTabOutTest extends AbstractParameterInfoTestCase {
                 "class C {\n" +
                 "  java.util.List<ArrayList><caret>\n" +
                 "}");
+  }
+
+  public void testSemicolon() {
+    configureJava("class C { void m() { System.exi<caret> } }");
+    complete("exit");
+    checkResult("class C { void m() { System.exit(<caret>); } }");
+    type('1');
+    tabOut();
+    checkResult("class C { void m() { System.exit(1);<caret> } }");
+  }
+
+  public void testScopeRange() {
+    configureJava("class C { static { new HashM<caret> }}");
+    complete("HashMap");
+    checkResult("import java.util.HashMap;\n\nclass C { static { new HashMap<<caret>>()\n}}");
+    tabOut();
+    checkResult("import java.util.HashMap;\n\nclass C { static { new HashMap<>(<caret>)\n}}");
+    tabOut();
+    checkResult("import java.util.HashMap;\n\nclass C { static { new HashMap<>()<caret>\n}}");
+  }
+
+  public void testScopeRangeInjected() {
+    configureJava("import org.intellij.lang.annotations.Language;" +
+                  "class Main { " +
+                  "  static {" +
+                  "    injected(\"class C { static { new HashM<caret> }}\");" +
+                  "  } " +
+                  "  static void injected(@Language(\"JAVA\") String value){}" +
+                  "}");
+    complete("HashMap");
+    checkResult("import org.intellij.lang.annotations.Language;" +
+                "class Main { " +
+                "  static {" +
+                "    injected(\"import java.util.HashMap;class C { static { new HashMap<<caret>>() }}\");" +
+                "  } " +
+                "  static void injected(@Language(\"JAVA\") String value){}" +
+                "}");
+    tabOut();
+    checkResult("import org.intellij.lang.annotations.Language;" +
+                "class Main { " +
+                "  static {" +
+                "    injected(\"import java.util.HashMap;class C { static { new HashMap<>(<caret>) }}\");" +
+                "  } " +
+                "  static void injected(@Language(\"JAVA\") String value){}" +
+                "}"
+    );
+    tabOut();
+    checkResult("import org.intellij.lang.annotations.Language;" +
+                "class Main { " +
+                "  static {" +
+                "    injected(\"import java.util.HashMap;class C { static { new HashMap<>()<caret> }}\");" +
+                "  } " +
+                "  static void injected(@Language(\"JAVA\") String value){}" +
+                "}"
+    );
   }
 
   private void tabOut() {

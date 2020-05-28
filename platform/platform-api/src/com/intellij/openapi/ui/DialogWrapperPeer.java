@@ -1,22 +1,9 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.ui;
 
 import com.intellij.openapi.util.ActionCallback;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
+import com.intellij.util.ObjectUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -27,32 +14,32 @@ import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
 
 public abstract class DialogWrapperPeer {
-  public static Object HAVE_INITIAL_SELECTION = new Object();
+  public static final Object HAVE_INITIAL_SELECTION = ObjectUtils.sentinel("DialogWrapperPeer.HAVE_INITIAL_SELECTION");
 
   public abstract void setUndecorated(boolean undecorated);
 
   /**
-   * @see java.awt.Component#addMouseListener
+   * @see Component#addMouseListener
    */
   public abstract void addMouseListener(MouseListener listener);
 
   /**
-   * @see java.awt.Component#addMouseMotionListener
+   * @see Component#addMouseMotionListener
    */
   public abstract void addMouseListener(MouseMotionListener listener);
 
   /**
-   * @see java.awt.Component#addKeyListener
+   * @see Component#addKeyListener
    */
   public abstract void addKeyListener(KeyListener listener);
 
   /**
-   * @see java.awt.Window#toFront()
+   * @see Window#toFront()
    */
   public abstract void toFront();
 
   /**
-   * @see java.awt.Window#toBack()
+   * @see Window#toBack()
    */
   public abstract void toBack();
 
@@ -64,30 +51,30 @@ public abstract class DialogWrapperPeer {
   protected abstract void dispose();
 
   /**
-   * @see javax.swing.JDialog#getContentPane
+   * @see JDialog#getContentPane
    */
   @Nullable
   public abstract Container getContentPane();
 
   /**
-   * @see java.awt.Window#getOwner
+   * @see Window#getOwner
    */
   public abstract Window getOwner();
 
   public abstract Window getWindow();
 
   /**
-   * @see javax.swing.JDialog#getRootPane
+   * @see JDialog#getRootPane
    */
   public abstract JRootPane getRootPane();
 
   /**
-   * @see java.awt.Window#getSize
+   * @see Window#getSize
    */
   public abstract Dimension getSize();
 
   /**
-   * @see java.awt.Dialog#getTitle
+   * @see Dialog#getTitle
    */
   public abstract String getTitle();
 
@@ -98,48 +85,48 @@ public abstract class DialogWrapperPeer {
   public abstract boolean isModal();
 
   /**
-   * @see java.awt.Component#isVisible
+   * @see Component#isVisible
    */
   public abstract boolean isVisible();
 
   /**
-   * @see java.awt.Window#isShowing
+   * @see Window#isShowing
    */
   public abstract boolean isShowing();
 
   /**
-   * @see javax.swing.JDialog#setSize
+   * @see JDialog#setSize
    */
   public abstract void setSize(int width, int height);
 
   /**
-   * @see javax.swing.JDialog#setTitle
+   * @see JDialog#setTitle
    */
   public abstract void setTitle(String title);
 
   /**
-   * @see javax.swing.JDialog#isResizable
+   * @see JDialog#isResizable
    */
   public abstract void isResizable();
 
   /**
-   * @see javax.swing.JDialog#setResizable
+   * @see JDialog#setResizable
    */
   public abstract void setResizable(boolean resizable);
 
   /**
-   * @see javax.swing.JDialog#getLocation
+   * @see JDialog#getLocation
    */
   @NotNull
   public abstract Point getLocation();
 
   /**
-   * @see javax.swing.JDialog#setLocation(java.awt.Point)
+   * @see JDialog#setLocation(Point)
    */
   public abstract void setLocation(@NotNull Point p);
 
   /**
-   * @see javax.swing.JDialog#setLocation(int,int)
+   * @see JDialog#setLocation(int,int)
    */
   public abstract void setLocation(int x, int y);
 
@@ -158,6 +145,6 @@ public abstract class DialogWrapperPeer {
   public abstract boolean isHeadless();
 
   public Object[] getCurrentModalEntities() {
-    return ArrayUtil.EMPTY_OBJECT_ARRAY;
+    return ArrayUtilRt.EMPTY_OBJECT_ARRAY;
   }
 }

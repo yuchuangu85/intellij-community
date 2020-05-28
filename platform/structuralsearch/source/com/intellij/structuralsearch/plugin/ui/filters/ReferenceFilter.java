@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.structuralsearch.plugin.ui.filters;
 
 import com.intellij.openapi.actionSystem.ActionManager;
@@ -7,6 +7,8 @@ import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiElement;
 import com.intellij.structuralsearch.MatchVariableConstraint;
+import com.intellij.structuralsearch.NamedScriptableDefinition;
+import com.intellij.structuralsearch.SSRBundle;
 import com.intellij.structuralsearch.plugin.ui.ConfigurationManager;
 import com.intellij.structuralsearch.plugin.ui.UIUtil;
 import com.intellij.ui.ContextHelpLabel;
@@ -23,47 +25,53 @@ import java.util.List;
 public class ReferenceFilter extends FilterAction {
 
   public ReferenceFilter(FilterTable filterTable) {
-    super("Reference", filterTable);
+    super(SSRBundle.messagePointer("reference.filter.name"), filterTable);
   }
 
   @Override
   public boolean hasFilter() {
-    return !StringUtil.isEmpty(myTable.getConstraint().getReferenceConstraint());
+    final NamedScriptableDefinition variable = myTable.getVariable();
+    if (!(variable instanceof MatchVariableConstraint)) {
+      return false;
+    }
+    final MatchVariableConstraint constraint = (MatchVariableConstraint)variable;
+    return !StringUtil.isEmpty(constraint.getReferenceConstraint());
   }
 
   @Override
   public void clearFilter() {
-    final MatchVariableConstraint constraint = myTable.getConstraint();
+    final NamedScriptableDefinition variable = myTable.getVariable();
+    if (!(variable instanceof MatchVariableConstraint)) {
+      return;
+    }
+    final MatchVariableConstraint constraint = (MatchVariableConstraint)variable;
     constraint.setReferenceConstraint("");
     constraint.setInvertReference(false);
   }
 
   @Override
-  public boolean isApplicable(List<PsiElement> nodes, boolean completePattern, boolean target) {
-    return myTable.getProfile().isApplicableConstraint(UIUtil.REFERENCE, nodes, completePattern, target);
+  public boolean isApplicable(List<? extends PsiElement> nodes, boolean completePattern, boolean target) {
+    return myTable.getVariable() instanceof MatchVariableConstraint &&
+           myTable.getProfile().isApplicableConstraint(UIUtil.REFERENCE, nodes, completePattern, target);
   }
 
   @Override
   protected void setLabel(SimpleColoredComponent component) {
-    final MatchVariableConstraint constraint = myTable.getConstraint();
-    component.append("reference=");
-    if (constraint.isInvertReference()) component.append("!");
-    component.append(constraint.getReferenceConstraint());
+    final MatchVariableConstraint constraint = (MatchVariableConstraint)myTable.getVariable();
+    final String value = constraint.isInvertReference() ? "!" + constraint.getReferenceConstraint() : constraint.getReferenceConstraint();
+    component.append(SSRBundle.message("reference.0.label", value));
   }
 
   @Override
   public FilterEditor getEditor() {
-    return new FilterEditor(myTable.getConstraint()) {
+    return new FilterEditor<MatchVariableConstraint>(myTable.getVariable(), myTable.getConstraintChangedCallback()) {
 
-      private final JLabel myLabel = new JLabel("reference=");
+      private final JLabel myLabel = new JLabel(SSRBundle.message("reference.label"));
       private final TextFieldWithAutoCompletion<String> textField =
         TextFieldWithAutoCompletion.create(myTable.getProject(), Collections.emptyList(), false, "");
       private final String shortcut =
         KeymapUtil.getFirstKeyboardShortcutText(ActionManager.getInstance().getAction(IdeActions.ACTION_CODE_COMPLETION));
-      private final ContextHelpLabel myHelpLabel = ContextHelpLabel.create(
-        "<p>Preconfigured search patterns can be autocompleted with " +
-        shortcut + ".<p>The referenced element is checked against the provided pattern.\n\n" +
-        "<p>Use \"!\" to invert the pattern.");
+      private final ContextHelpLabel myHelpLabel = ContextHelpLabel.create(SSRBundle.message("reference.filter.help.text", shortcut));
 
       @Override
       protected void layoutComponents() {

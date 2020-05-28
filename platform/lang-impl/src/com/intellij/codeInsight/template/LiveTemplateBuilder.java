@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.template;
 
 import com.intellij.codeInsight.template.impl.TemplateImpl;
@@ -20,8 +6,7 @@ import com.intellij.codeInsight.template.impl.Variable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.registry.Registry;
-import java.util.HashMap;
-import java.util.HashSet;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
@@ -49,7 +34,7 @@ public class LiveTemplateBuilder {
   public LiveTemplateBuilder() {
     this(false, Registry.intValue("emmet.segments.limit"));
   }
-  
+
   public LiveTemplateBuilder(boolean addEndVariableAtTheEndOfTemplate, int segmentLimit) {
     mySegmentLimit = segmentLimit;
     myAddEndVariableAtTheEndOfTemplate = addEndVariableAtTheEndOfTemplate;
@@ -133,7 +118,7 @@ public class LiveTemplateBuilder {
     }
 
     List<VarOccurence> variableOccurrences = getListWithLimit(myVariableOccurrences);
-    Collections.sort(variableOccurrences, Comparator.comparingInt(o -> o.myOffset));
+    variableOccurrences.sort(Comparator.comparingInt(o -> o.myOffset));
     int last = 0;
     for (VarOccurence occurence : variableOccurrences) {
       template.addTextSegment(myText.substring(last, occurence.myOffset));
@@ -154,7 +139,7 @@ public class LiveTemplateBuilder {
     }
     if (mySegmentLimit > 0 && list.size() > mySegmentLimit) {
       warnTooManySegments(list.size());
-      return list.subList(0, Math.min(list.size(), mySegmentLimit));
+      return ContainerUtil.getFirstItems(list, mySegmentLimit);
     }
     return list;
   }
@@ -263,7 +248,7 @@ public class LiveTemplateBuilder {
       int localOffset = template.getSegmentOffset(i);
       if (TemplateImpl.END.equals(segmentName)) {
         end = offset + localOffset;
-      } 
+      }
       else {
         if (predefinedVarValues != null && predefinedVarValues.containsKey(segmentName)) {
           String value = predefinedVarValues.get(segmentName);
@@ -313,6 +298,7 @@ public class LiveTemplateBuilder {
     for (VarOccurence occurence : myVariableOccurrences) {
       if (occurence.myOffset == offset) {
         flag = true;
+        break;
       }
     }
     return flag;

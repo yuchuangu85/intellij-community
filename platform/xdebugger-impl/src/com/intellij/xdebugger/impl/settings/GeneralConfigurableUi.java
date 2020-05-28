@@ -1,8 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xdebugger.impl.settings;
 
 import com.intellij.openapi.options.ConfigurableUi;
 import com.intellij.openapi.util.registry.Registry;
+import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -16,6 +17,15 @@ class GeneralConfigurableUi implements ConfigurableUi<XDebuggerGeneralSettings> 
   private JRadioButton myClickRadioButton;
   private JRadioButton myDragToTheEditorRadioButton;
   private JCheckBox myConfirmBreakpointRemoval;
+  private JCheckBox myRunToCursorGesture;
+
+  GeneralConfigurableUi() {
+    myShowDebugWindowOnCheckBox.addActionListener(e -> updateControls());
+  }
+
+  private void updateControls() {
+    UIUtil.setEnabled(focusApplicationOnBreakpointCheckBox, myShowDebugWindowOnCheckBox.isSelected(), false);
+  }
 
   @Override
   public void reset(@NotNull XDebuggerGeneralSettings settings) {
@@ -26,6 +36,8 @@ class GeneralConfigurableUi implements ConfigurableUi<XDebuggerGeneralSettings> 
     myClickRadioButton.setSelected(!Registry.is("debugger.click.disable.breakpoints"));
     myDragToTheEditorRadioButton.setSelected(Registry.is("debugger.click.disable.breakpoints"));
     myConfirmBreakpointRemoval.setSelected(settings.isConfirmBreakpointRemoval());
+    myRunToCursorGesture.setSelected(settings.isRunToCursorGestureEnabled());
+    updateControls();
   }
 
   @Override
@@ -35,7 +47,8 @@ class GeneralConfigurableUi implements ConfigurableUi<XDebuggerGeneralSettings> 
            myShowDebugWindowOnCheckBox.isSelected() != settings.isShowDebuggerOnBreakpoint() ||
            myScrollExecutionPointToCheckBox.isSelected() != settings.isScrollToCenter() ||
            myDragToTheEditorRadioButton.isSelected() != Registry.is("debugger.click.disable.breakpoints") ||
-           myConfirmBreakpointRemoval.isSelected() != settings.isConfirmBreakpointRemoval();
+           myConfirmBreakpointRemoval.isSelected() != settings.isConfirmBreakpointRemoval() ||
+           myRunToCursorGesture.isSelected() != settings.isRunToCursorGestureEnabled();
   }
 
   @Override
@@ -46,6 +59,7 @@ class GeneralConfigurableUi implements ConfigurableUi<XDebuggerGeneralSettings> 
     settings.setScrollToCenter(myScrollExecutionPointToCheckBox.isSelected());
     Registry.get("debugger.click.disable.breakpoints").setValue(myDragToTheEditorRadioButton.isSelected());
     settings.setConfirmBreakpointRemoval(myConfirmBreakpointRemoval.isSelected());
+    settings.setRunToCursorGestureEnabled(myRunToCursorGesture.isSelected());
   }
 
   @NotNull

@@ -15,7 +15,7 @@ import gnu.trove.TIntStack
  * @author Yuli Fiterman
  */
 
-private val MasterModels = ConcurrentFactoryMap.createMap<String, MasterModel>(
+private val MasterModels = ConcurrentFactoryMap.create<String, MasterModel>(
   {
     MasterModel()
   }, {
@@ -23,7 +23,7 @@ private val MasterModels = ConcurrentFactoryMap.createMap<String, MasterModel>(
   })
 
 
-private fun assertDispatchThread() = ApplicationManager.getApplication().assertIsDispatchThread()
+private fun assertWriteThread() = ApplicationManager.getApplication().assertIsWriteThread()
 
 
 fun createModel(persistenceId: String, console: LanguageConsoleView): ConsoleHistoryModel {
@@ -59,7 +59,7 @@ private class PrefixHistoryModel constructor(private val masterModel: MasterMode
   }
 
   override fun addToHistory(statement: String?) {
-    assertDispatchThread()
+    assertWriteThread()
     if (statement.isNullOrEmpty()) {
       return
     }
@@ -68,7 +68,7 @@ private class PrefixHistoryModel constructor(private val masterModel: MasterMode
   }
 
   override fun removeFromHistory(statement: String?) {
-    assertDispatchThread()
+    assertWriteThread()
     if (statement.isNullOrEmpty()) {
       return
     }

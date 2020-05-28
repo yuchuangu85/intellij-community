@@ -37,9 +37,9 @@ public class AsyncProcessIcon extends AnimatedIcon {
     super(name, icons, passive, CYCLE_LENGTH);
   }
 
-  @Deprecated
-  public AsyncProcessIcon setUseMask(boolean useMask) {
-    return this;
+  @Override
+  protected Dimension calcPreferredSize() {
+    return new Dimension(myPassiveIcon.getIconWidth(), myPassiveIcon.getIconHeight());
   }
 
   @Override
@@ -71,6 +71,21 @@ public class AsyncProcessIcon extends AnimatedIcon {
       super(name, BIG_ICONS, AllIcons.Process.Big.Step_passive);
     }
   }
+
+  public static class BigCentered extends Big {
+    public BigCentered(@NonNls final String name) {
+      super(name);
+    }
+
+    @NotNull
+    @Override
+    protected Rectangle calculateBounds(@NotNull JComponent container) {
+      Dimension size = container.getSize();
+      Dimension iconSize = getPreferredSize();
+      return new Rectangle((size.width - iconSize.width) / 2, (size.height - iconSize.height) / 2, iconSize.width, iconSize.height);
+    }
+  }
+
 
   public boolean isDisposed() {
     return myAnimator.isDisposed();

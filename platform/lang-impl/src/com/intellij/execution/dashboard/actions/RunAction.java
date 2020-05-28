@@ -27,12 +27,6 @@ import org.jetbrains.annotations.NotNull;
  * @author konstantin.aleev
  */
 public class RunAction extends ExecutorAction {
-  public RunAction() {
-    super(ExecutionBundle.message("run.dashboard.run.action.name"),
-          ExecutionBundle.message("run.dashboard.run.action.description"),
-          AllIcons.Actions.Execute);
-  }
-
   @Override
   protected Executor getExecutor() {
     return DefaultRunExecutor.getRunExecutorInstance();
@@ -42,13 +36,13 @@ public class RunAction extends ExecutorAction {
   protected void update(@NotNull AnActionEvent e, boolean running) {
     Presentation presentation = e.getPresentation();
     if (running) {
-      presentation.setText(ExecutionBundle.message("run.dashboard.rerun.action.name"));
-      presentation.setDescription(ExecutionBundle.message("run.dashboard.rerun.action.description"));
+      presentation.setText(ExecutionBundle.messagePointer("run.dashboard.rerun.action.name"));
+      presentation.setDescription(ExecutionBundle.messagePointer("run.dashboard.rerun.action.description"));
       presentation.setIcon(AllIcons.Actions.Restart);
     }
     else {
-      presentation.setText(ExecutionBundle.message("run.dashboard.run.action.name"));
-      presentation.setDescription(ExecutionBundle.message("run.dashboard.run.action.description"));
+      presentation.setText(ExecutionBundle.messagePointer("run.dashboard.run.action.name"));
+      presentation.setDescription(ExecutionBundle.messagePointer("run.dashboard.run.action.description"));
       presentation.setIcon(AllIcons.Actions.Execute);
     }
   }

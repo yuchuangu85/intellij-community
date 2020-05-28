@@ -1,9 +1,12 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.components
 
-import java.io.IOException
+import com.intellij.configurationStore.SaveSessionProducer
 
 interface StateStorage {
+  val isUseVfsForWrite: Boolean
+    get() = false
+
   /**
    * You can call this method only once.
    * If state exists and not archived - not-null result.
@@ -13,29 +16,17 @@ interface StateStorage {
 
   fun hasState(componentName: String, reloadData: Boolean): Boolean
 
+  /**
+   * Returning `null` means that nothing to save.
+   */
   fun createSaveSessionProducer(): SaveSessionProducer?
 
   /**
    * Get changed component names
    */
-  fun analyzeExternalChangesAndUpdateIfNeed(componentNames: MutableSet<in String>)
+  fun analyzeExternalChangesAndUpdateIfNeeded(componentNames: MutableSet<in String>)
 
   fun getResolution(component: PersistentStateComponent<*>, operation: StateStorageOperation): StateStorageChooserEx.Resolution {
     return StateStorageChooserEx.Resolution.DO
-  }
-
-  interface SaveSessionProducer {
-    @Throws(IOException::class)
-    fun setState(component: Any?, componentName: String, state: Any?)
-
-    /**
-     * return null if nothing to save
-     */
-    fun createSaveSession(): SaveSession?
-  }
-
-  interface SaveSession {
-    @Throws(IOException::class)
-    fun save()
   }
 }

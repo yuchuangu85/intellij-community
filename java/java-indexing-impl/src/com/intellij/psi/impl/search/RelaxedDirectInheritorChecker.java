@@ -1,11 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.search;
 
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.VolatileNotNullLazyValue;
+import com.intellij.psi.CommonClassNames;
 import com.intellij.psi.PsiClass;
+import com.intellij.psi.PsiCompiledElement;
 import com.intellij.psi.PsiModifierList;
 import com.intellij.psi.impl.source.resolve.JavaResolveUtil;
 import com.intellij.psi.search.GlobalSearchScope;
@@ -24,6 +26,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * To avoid expensive super type resolve, if there's only one suitable class with the required name in the project anyway
@@ -41,10 +44,9 @@ public class RelaxedDirectInheritorChecker {
     myFileIndex = ProjectFileIndex.getInstance(myBaseClass.getProject());
   }
 
-  @NotNull
-  private static Pair<PsiClass[], Boolean> getClassesAndTheirAmbiguities(@NotNull Project project, @NotNull String classShortName) {
+  private static @NotNull Pair<PsiClass[], Boolean> getClassesAndTheirAmbiguities(@NotNull Project project, @NotNull String classShortName) {
     Map<String, Reference<Pair<PsiClass[],Boolean>>> cache = CachedValuesManager.getManager(project).getCachedValue(project, () -> {
-      Map<String, Reference<Pair<PsiClass[], Boolean>>> map = ContainerUtil.newConcurrentMap();
+      Map<String, Reference<Pair<PsiClass[], Boolean>>> map = new ConcurrentHashMap<>();
       return CachedValueProvider.Result.create(map, PsiModificationTracker.JAVA_STRUCTURE_MODIFICATION_COUNT);
     });
     Pair<PsiClass[], Boolean> result = SoftReference.dereference(cache.get(classShortName));
@@ -78,6 +80,9 @@ public class RelaxedDirectInheritorChecker {
     return locals == 1 && theFQN != null;
   }
 
+  /**
+   * This assumes that {@code inheritorCandidate} is in the use scope of {@link #myBaseClass}
+   */
   public boolean checkInheritance(@NotNull PsiClass inheritorCandidate) {
     if (!inheritorCandidate.isValid() || !myBaseClass.isValid()) return false;
     if (myFileIndex.isInSourceContent(inheritorCandidate.getContainingFile().getVirtualFile())) {
@@ -96,7 +101,21 @@ public class RelaxedDirectInheritorChecker {
       }
     }
 
+    if (inheritorCandidate instanceof PsiCompiledElement && isEnumOrAnnotationInheritor(inheritorCandidate)) {
+      return true;
+    }
+
     return inheritorCandidate.isInheritor(myBaseClass, false);
+  }
+
+  private boolean isEnumOrAnnotationInheritor(@NotNull PsiClass inheritorCandidate) {
+    if (inheritorCandidate.isEnum() && CommonClassNames.JAVA_LANG_ENUM.equals(myBaseClass.getQualifiedName())) {
+      return true;
+    }
+    if (inheritorCandidate.isAnnotationType() && CommonClassNames.JAVA_LANG_ANNOTATION_ANNOTATION.equals(myBaseClass.getQualifiedName())) {
+      return true;
+    }
+    return false;
   }
 
   private static boolean isAccessibleLight(@NotNull PsiClass inheritorCandidate, @NotNull PsiClass base) {
@@ -104,7 +123,7 @@ public class RelaxedDirectInheritorChecker {
     if (modifierList != null && PsiUtil.getAccessLevel(modifierList) == PsiUtil.ACCESS_LEVEL_PROTECTED) {
       return true; // requires hierarchy checks => resolve
     }
-    
+
     return JavaResolveUtil.isAccessible(base, base.getContainingClass(), modifierList, inheritorCandidate, null, null);
   }
 }

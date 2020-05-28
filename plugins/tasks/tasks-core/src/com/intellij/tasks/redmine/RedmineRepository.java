@@ -1,4 +1,10 @@
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.tasks.redmine;
+
+import static com.intellij.tasks.impl.httpclient.TaskResponseUtil.GsonSingleObjectDeserializer;
+import static com.intellij.tasks.redmine.model.RedmineResponseWrapper.IssueWrapper;
+import static com.intellij.tasks.redmine.model.RedmineResponseWrapper.IssuesWrapper;
+import static com.intellij.tasks.redmine.model.RedmineResponseWrapper.ProjectsWrapper;
 
 import com.google.gson.Gson;
 import com.intellij.openapi.diagnostic.Logger;
@@ -10,10 +16,16 @@ import com.intellij.tasks.impl.gson.TaskGsonUtil;
 import com.intellij.tasks.impl.httpclient.NewBaseRepositoryImpl;
 import com.intellij.tasks.redmine.model.RedmineIssue;
 import com.intellij.tasks.redmine.model.RedmineProject;
-import com.intellij.util.ArrayUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xmlb.annotations.Tag;
 import com.intellij.util.xmlb.annotations.Transient;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.regex.Pattern;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
 import org.apache.http.StatusLine;
@@ -24,16 +36,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.regex.Pattern;
-
-import static com.intellij.tasks.impl.httpclient.TaskResponseUtil.GsonSingleObjectDeserializer;
-import static com.intellij.tasks.redmine.model.RedmineResponseWrapper.*;
-
 /**
  * @author Mikhail Golubev
  * @author Dennis.Ushakov
@@ -43,7 +45,7 @@ public class RedmineRepository extends NewBaseRepositoryImpl {
   private static final Gson GSON = TaskGsonUtil.createDefaultBuilder().create();
   private static final Pattern ID_PATTERN = Pattern.compile("\\d+");
   private static final Logger LOG = Logger.getInstance(RedmineRepository.class);
-  
+
   public static final RedmineProject UNSPECIFIED_PROJECT = createUnspecifiedProject();
 
   @NotNull
@@ -55,7 +57,7 @@ public class RedmineRepository extends NewBaseRepositoryImpl {
         return "-- from all projects --";
       }
 
-      @Nullable
+      @NotNull
       @Override
       public String getIdentifier() {
         return getName();
@@ -102,7 +104,7 @@ public class RedmineRepository extends NewBaseRepositoryImpl {
     if (!super.equals(o)) return false;
     if (!(o instanceof RedmineRepository)) return false;
     RedmineRepository that = (RedmineRepository)o;
-    if (!Comparing.equal(getAPIKey(), that.getAPIKey())) return false;
+    if (!Objects.equals(getAPIKey(), that.getAPIKey())) return false;
     if (!Comparing.equal(getCurrentProject(), that.getCurrentProject())) return false;
     if (isAssignedToMe() != that.isAssignedToMe()) return false;
     return true;
@@ -159,7 +161,7 @@ public class RedmineRepository extends NewBaseRepositoryImpl {
         result = ContainerUtil.append(result, found);
       }
     }
-    return ArrayUtil.toObjectArray(result, Task.class);
+    return result.toArray(Task.EMPTY_ARRAY);
   }
 
   public List<RedmineIssue> fetchIssues(String query, int offset, int limit, boolean withClosed) throws Exception {
@@ -250,7 +252,7 @@ public class RedmineRepository extends NewBaseRepositoryImpl {
   }
 
   @NotNull
-  private URIBuilder createUriBuilderWithApiKey(@NotNull Object... pathParts) throws URISyntaxException {
+  private URIBuilder createUriBuilderWithApiKey(Object @NotNull ... pathParts) throws URISyntaxException {
     final URIBuilder builder = new URIBuilder(getRestApiUrl(pathParts));
     if (isUseApiKeyAuthentication()) {
       builder.addParameter("key", myAPIKey);

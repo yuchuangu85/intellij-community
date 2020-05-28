@@ -1,5 +1,5 @@
 /*
- * Copyright 2005-2015 Bas Leijdekkers
+ * Copyright 2005-2019 Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import com.intellij.codeInsight.daemon.impl.analysis.JavaGenericsUtil;
 import com.intellij.codeInspection.CommonQuickFixBundle;
 import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PsiUtil;
@@ -37,12 +38,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class SuspiciousToArrayCallInspection extends BaseInspection {
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("suspicious.to.array.call.display.name");
-  }
 
   @Override
   @NotNull
@@ -91,7 +86,8 @@ public class SuspiciousToArrayCallInspection extends BaseInspection {
       if (arguments.length != 1) {
         return;
       }
-      final PsiExpression argument = arguments[0];
+      final PsiExpression argument = PsiUtil.skipParenthesizedExprDown(arguments[0]);
+      if (argument == null) return;
 
       final PsiClassType classType = (PsiClassType)type;
       final PsiClass aClass = classType.resolve();
@@ -140,7 +136,7 @@ public class SuspiciousToArrayCallInspection extends BaseInspection {
                                                        PsiType itemType) {
       itemType = GenericsUtil.getVariableTypeByExpressionType(itemType);
       final PsiType componentType = arrayType.getComponentType();
-      final PsiElement parent = expression.getParent();
+      final PsiElement parent = PsiUtil.skipParenthesizedExprUp(expression.getParent());
       if (parent instanceof PsiTypeCastExpression) {
         final PsiTypeCastExpression castExpression = (PsiTypeCastExpression)parent;
         final PsiTypeElement castTypeElement = castExpression.getCastType();
@@ -148,7 +144,9 @@ public class SuspiciousToArrayCallInspection extends BaseInspection {
         final PsiType castType = castTypeElement.getType();
         if (castType.equals(arrayType) || !(castType instanceof PsiArrayType)) return null;
         final PsiArrayType castArrayType = (PsiArrayType)castType;
-        return castArrayType.getComponentType();
+        PsiType type = castArrayType.getComponentType();
+        if (JavaGenericsUtil.isReifiableType(type)) return type;
+        return null;
       }
       if (itemType == null || componentType.isAssignableFrom(itemType)) return null;
       if (itemType instanceof PsiClassType) {
@@ -178,8 +176,10 @@ public class SuspiciousToArrayCallInspection extends BaseInspection {
         myReplacement = wantedType.getCanonicalText() + "[]::new";
         myPresented = wantedType.getPresentableText() + "[]::new";
       } else {
-        myReplacement = "new "+wantedType.getCanonicalText() + "[0]";
-        myPresented = "new "+wantedType.getPresentableText() + "[0]";
+        final String index = StringUtil.repeat("[0]", wantedType.getArrayDimensions() + 1);
+        final PsiType componentType = wantedType.getDeepComponentType();
+        myReplacement = "new " + componentType.getCanonicalText() + index;
+        myPresented = "new " + componentType.getPresentableText() + index;
       }
     }
 
@@ -201,7 +201,7 @@ public class SuspiciousToArrayCallInspection extends BaseInspection {
     @NotNull
     @Override
     public String getFamilyName() {
-      return "Replace with proper array";
+      return InspectionGadgetsBundle.message("suspicious.to.array.call.fix.family.name");
     }
   }
 }

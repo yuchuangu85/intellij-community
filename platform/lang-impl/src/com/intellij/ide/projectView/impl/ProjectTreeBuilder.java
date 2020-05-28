@@ -1,5 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
-
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.projectView.impl;
 
 import com.intellij.ProjectTopics;
@@ -22,6 +21,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.problems.ProblemListener;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiManager;
+import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.util.Alarm;
 import com.intellij.util.SmartList;
 import com.intellij.util.messages.MessageBusConnection;
@@ -41,7 +41,7 @@ public class ProjectTreeBuilder extends BaseProjectTreeBuilder {
   public ProjectTreeBuilder(@NotNull Project project,
                             @NotNull JTree tree,
                             @NotNull DefaultTreeModel treeModel,
-                            @Nullable Comparator<NodeDescriptor> comparator,
+                            @Nullable Comparator<NodeDescriptor<?>> comparator,
                             @NotNull ProjectAbstractTreeStructureBase treeStructure) {
     super(project, tree, treeModel, treeStructure, comparator);
 
@@ -136,9 +136,7 @@ public class ProjectTreeBuilder extends BaseProjectTreeBuilder {
   }
 
   private PsiElement findPsi(@NotNull VirtualFile vFile) {
-    if (!vFile.isValid()) return null;
-    PsiManager psiManager = PsiManager.getInstance(myProject);
-    return vFile.isDirectory() ? psiManager.findDirectory(vFile) : psiManager.findFile(vFile);
+    return PsiUtilCore.findFileSystemItem(myProject, vFile);
   }
 
   private class MyProblemListener implements ProblemListener {
@@ -178,7 +176,7 @@ public class ProjectTreeBuilder extends BaseProjectTreeBuilder {
     }
   }
 
-  private void updateNodesContaining(@NotNull Collection<VirtualFile> filesToRefresh, @NotNull DefaultMutableTreeNode rootNode) {
+  private void updateNodesContaining(@NotNull Collection<? extends VirtualFile> filesToRefresh, @NotNull DefaultMutableTreeNode rootNode) {
     if (!(rootNode.getUserObject() instanceof ProjectViewNode)) return;
     ProjectViewNode node = (ProjectViewNode)rootNode.getUserObject();
     Collection<VirtualFile> containingFiles = null;

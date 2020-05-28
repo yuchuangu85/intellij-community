@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.history.core;
 
@@ -37,6 +23,7 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.rules.TestRule;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -53,7 +40,7 @@ public abstract class LocalHistoryTestCase extends Assert {
   }
 
   protected static byte[] b(String s) {
-    return s.getBytes();
+    return s.getBytes(StandardCharsets.UTF_8);
   }
 
   protected static Content c(String data) {
@@ -163,7 +150,7 @@ public abstract class LocalHistoryTestCase extends Assert {
       }
     }
     facade.endChangeSet(changeSetName);
-    return (ChangeSet)facade.getChangeListInTests().getChangesInTests().get(0);
+    return facade.getChangeListInTests().getChangesInTests().get(0);
   }
 
   public static List<Revision> collectRevisions(LocalHistoryFacade facade, RootEntry root, String path, String projectId, @Nullable String pattern) {
@@ -177,12 +164,12 @@ public abstract class LocalHistoryTestCase extends Assert {
   }
 
   @SafeVarargs
-  public static <T> T[] array(@NotNull T... objects) {
+  public static <T> T[] array(T @NotNull ... objects) {
     return objects;
   }
 
   @SafeVarargs
-  public static <T> List<T> list(@NotNull T... objects) {
+  public static <T> List<T> list(T @NotNull ... objects) {
     return Arrays.asList(objects);
   }
 
@@ -212,7 +199,7 @@ public abstract class LocalHistoryTestCase extends Assert {
   }
 
   protected static void assertContent(String expected, Content c) {
-    assertEquals(expected, new String(c.getBytes()));
+    assertEquals(expected, new String(c.getBytes(), StandardCharsets.UTF_8));
   }
 
   protected static void assertEquals(Object[] expected, Collection actual) {

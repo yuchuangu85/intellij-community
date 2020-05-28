@@ -47,9 +47,9 @@ public class ConsoleHistoryControllerTest extends LightPlatformCodeInsightTestCa
     myHistoryController.setModel(PrefixHistoryModelKt.createModel("default", myConsole));
     myHistoryController.install();
     myConsole.setConsoleEditorEnabled(true);
-    myEditor = myConsole.getConsoleEditor();
-    myVFile = myConsole.getVirtualFile();
-    myFile = PsiDocumentManager.getInstance(getProject()).getPsiFile(myEditor.getDocument());
+    setEditor(myConsole.getConsoleEditor());
+    setVFile(myConsole.getVirtualFile());
+    setFile(PsiDocumentManager.getInstance(getProject()).getPsiFile(getEditor().getDocument()));
   }
 
   private void setCaretWithText(String markedText) {
@@ -133,9 +133,11 @@ public class ConsoleHistoryControllerTest extends LightPlatformCodeInsightTestCa
   @Override
   public void tearDown() throws Exception {
     try {
-
       Disposer.dispose(myConsole);
-      myVFile = null;
+      setVFile(null);
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
     }
     finally {
       super.tearDown();

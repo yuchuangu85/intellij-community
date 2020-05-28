@@ -3,8 +3,8 @@
  */
 package com.intellij.codeInsight.intention.impl;
 
-import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInsight.intention.PsiElementBaseIntentionAction;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
@@ -13,7 +13,9 @@ import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiExpressionTrimRenderer;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.IncorrectOperationException;
+import com.intellij.util.ObjectUtils;
 import com.siyeh.ig.psiutils.CommentTracker;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -49,7 +51,7 @@ public class ExtractIfConditionAction extends PsiElementBaseIntentionAction {
     if (operand == null) {
       return false;
     }
-    setText(CodeInsightBundle.message("intention.extract.if.condition.text", PsiExpressionTrimRenderer.render(operand)));
+    setText(JavaBundle.message("intention.extract.if.condition.text", PsiExpressionTrimRenderer.render(operand)));
     return true;
   }
 
@@ -108,7 +110,8 @@ public class ExtractIfConditionAction extends PsiElementBaseIntentionAction {
       if (token != null && sb.length() != 0) {
         sb.append(token.getText()).append(" ");
       }
-      sb.append(tracker.text(e));
+      tracker.markUnchanged(ObjectUtils.notNull(PsiUtil.skipParenthesizedExprDown(e), e));
+      sb.append(e.getText());
     }
     return factory.createExpressionFromText(sb.toString(), expression);
   }
@@ -129,6 +132,6 @@ public class ExtractIfConditionAction extends PsiElementBaseIntentionAction {
   @NotNull
   @Override
   public String getFamilyName() {
-    return CodeInsightBundle.message("intention.extract.if.condition.family");
+    return JavaBundle.message("intention.extract.if.condition.family");
   }
 }

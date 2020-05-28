@@ -4,7 +4,6 @@ package com.intellij.openapi.vcs.changes.actions;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
-import com.intellij.openapi.diff.impl.patch.BinaryFilePatch;
 import com.intellij.openapi.diff.impl.patch.FilePatch;
 import com.intellij.openapi.diff.impl.patch.IdeaTextPatchBuilder;
 import com.intellij.openapi.diff.impl.patch.formove.PatchApplier;
@@ -16,6 +15,7 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.vcs.VcsBundle;
 import com.intellij.openapi.vcs.VcsDataKeys;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.Change;
@@ -39,8 +39,7 @@ abstract class RevertCommittedStuffAbstractAction extends AnAction implements Du
     myReverse = reverse;
   }
 
-  @Nullable
-  protected abstract Change[] getChanges(@NotNull AnActionEvent e, boolean isFromUpdate);
+  protected abstract Change @Nullable [] getChanges(@NotNull AnActionEvent e, boolean isFromUpdate);
 
   @Override
   public void actionPerformed(@NotNull final AnActionEvent e) {
@@ -64,30 +63,25 @@ abstract class RevertCommittedStuffAbstractAction extends AnAction implements Du
     String errorPrefix = String.format("Failed to %s changes: ", StringUtil.toLowerCase(action));
 
     final ChangeListChooser chooser = new ChangeListChooser(project, ChangeListManager.getInstance(project).getChangeListsCopy(), null,
-                                                            "Select Target Changelist", defaultName);
+                                                            VcsBundle.message("revert.changes.changelist.chooser.title"), defaultName);
     if (!chooser.showAndGet()) {
       return;
     }
 
-    final List<FilePatch> patches = new ArrayList<>();
     ProgressManager.getInstance().run(new Task.Backgroundable(project, title, true) {
       @Override
       public void run(@NotNull ProgressIndicator indicator) {
         try {
-          final List<Change> preprocessed = ChangesPreprocess.preprocessChangesRemoveDeletedForDuplicateMoved(changesList);
-          patches.addAll(IdeaTextPatchBuilder.buildPatch(project, preprocessed, baseDir.getPresentableUrl(), myReverse));
+          List<Change> preprocessed = ChangesPreprocess.preprocessChangesRemoveDeletedForDuplicateMoved(changesList);
+          List<FilePatch> patches =
+            new ArrayList<>(IdeaTextPatchBuilder.buildPatch(project, preprocessed, baseDir.getPresentableUrl(), myReverse));
+          new PatchApplier(project, baseDir, patches, chooser.getSelectedList(), null).execute();
         }
         catch (final VcsException ex) {
-          WaitForProgressToShow.runOrInvokeLaterAboveProgress(() -> {
-            Messages.showErrorDialog(project, errorPrefix + ex.getMessage(), title);
-          }, null, myProject);
+          WaitForProgressToShow
+            .runOrInvokeLaterAboveProgress(() -> Messages.showErrorDialog(project, errorPrefix + ex.getMessage(), title), null, project);
           indicator.cancel();
         }
-      }
-
-      @Override
-      public void onSuccess() {
-        new PatchApplier<BinaryFilePatch>(project, baseDir, patches, chooser.getSelectedList(), null).execute();
       }
     });
   }

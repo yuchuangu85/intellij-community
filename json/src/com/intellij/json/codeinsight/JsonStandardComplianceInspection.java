@@ -2,12 +2,17 @@
 package com.intellij.json.codeinsight;
 
 import com.intellij.codeHighlighting.HighlightDisplayLevel;
-import com.intellij.codeInspection.*;
+import com.intellij.codeInspection.LocalInspectionTool;
+import com.intellij.codeInspection.LocalQuickFix;
+import com.intellij.codeInspection.ProblemDescriptor;
+import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.codeInspection.ui.MultipleCheckboxOptionsPanel;
 import com.intellij.json.JsonBundle;
 import com.intellij.json.JsonDialectUtil;
 import com.intellij.json.JsonElementTypes;
+import com.intellij.json.JsonLanguage;
 import com.intellij.json.psi.*;
+import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiComment;
@@ -40,12 +45,6 @@ public class JsonStandardComplianceInspection extends LocalInspectionTool {
   public boolean myWarnAboutNanInfinity = true;
   public boolean myWarnAboutTrailingCommas = true;
   public boolean myWarnAboutMultipleTopLevelValues = true;
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return JsonBundle.message("inspection.compliance.name");
-  }
 
   @NotNull
   @Override
@@ -134,6 +133,7 @@ public class JsonStandardComplianceInspection extends LocalInspectionTool {
 
   protected class StandardJsonValidatingElementVisitor extends JsonElementVisitor {
     private final ProblemsHolder myHolder;
+    private final static String MISSING_VALUE = "missingValue";
 
     public StandardJsonValidatingElementVisitor(ProblemsHolder holder) {myHolder = holder;}
 
@@ -147,10 +147,11 @@ public class JsonStandardComplianceInspection extends LocalInspectionTool {
     }
 
     @Override
-    public void visitComment(PsiComment comment) {
+    public void visitComment(@NotNull PsiComment comment) {
       if (!allowComments() && myWarnAboutComments) {
-        if (JsonStandardComplianceProvider.shouldWarnAboutComment(comment)) {
-          myHolder.registerProblem(comment, JsonBundle.message("inspection.compliance.msg.comments"), ProblemHighlightType.WEAK_WARNING);
+        if (JsonStandardComplianceProvider.shouldWarnAboutComment(comment) &&
+            comment.getContainingFile().getLanguage() instanceof JsonLanguage) {
+          myHolder.registerProblem(comment, JsonBundle.message("inspection.compliance.msg.comments"));
         }
       }
     }
@@ -190,7 +191,9 @@ public class JsonStandardComplianceInspection extends LocalInspectionTool {
     @Override
     public void visitReferenceExpression(@NotNull JsonReferenceExpression reference) {
       if (!allowIdentifierPropertyNames() || !JsonPsiUtil.isPropertyKey(reference) || !isValidPropertyName(reference)) {
-        myHolder.registerProblem(reference, JsonBundle.message("inspection.compliance.msg.bad.token"), new AddDoubleQuotesFix());
+        if (!MISSING_VALUE.equals(reference.getText()) || !InjectedLanguageManager.getInstance(myHolder.getProject()).isInjectedFragment(myHolder.getFile())) {
+          myHolder.registerProblem(reference, JsonBundle.message("inspection.compliance.msg.bad.token"), new AddDoubleQuotesFix());
+        }
       }
       // May be illegal property key as well
       super.visitReferenceExpression(reference);

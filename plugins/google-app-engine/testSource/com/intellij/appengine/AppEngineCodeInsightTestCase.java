@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2018 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,9 +32,6 @@ import org.jetbrains.annotations.NonNls;
 
 import java.io.File;
 
-/**
- * @author nik
- */
 public abstract class AppEngineCodeInsightTestCase extends UsefulTestCase {
   @NonNls private static final String DEFAULT_VERSION = "1.3.7";
   private JavaModuleFixtureBuilder myModuleBuilder;
@@ -66,8 +63,15 @@ public abstract class AppEngineCodeInsightTestCase extends UsefulTestCase {
 
   @Override
   protected void tearDown() throws Exception {
-    myCodeInsightFixture.tearDown();
-    super.tearDown();
+    try {
+      myCodeInsightFixture.tearDown();
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
+    finally {
+      super.tearDown();
+    }
   }
 
   protected CodeInsightTestFixture createCodeInsightFixture(final String relativeTestDataPath) throws Exception {
@@ -81,12 +85,7 @@ public abstract class AppEngineCodeInsightTestCase extends UsefulTestCase {
     Assert.assertNotNull("Test data directory not found: " + testDataPath, dir);
     VfsUtil.processFilesRecursively(dir, new CommonProcessors.CollectProcessor<>());
     dir.refresh(false, true);
-    tempDir.copyAll(testDataPath, "", new VirtualFileFilter() {
-      @Override
-      public boolean accept(VirtualFile file) {
-        return !file.getName().contains("_after");
-      }
-    });
+    tempDir.copyAll(testDataPath, "", file -> !file.getName().contains("_after"));
     return codeInsightFixture;
   }
 

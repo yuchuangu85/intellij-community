@@ -15,14 +15,10 @@
  */
 package com.jetbrains.python.inspections;
 
-import com.intellij.codeInspection.*;
+import com.intellij.codeInspection.ex.ExternalAnnotatorBatchInspection;
 import com.intellij.codeInspection.ui.ListEditForm;
-import com.intellij.openapi.util.Key;
-import com.intellij.psi.PsiElementVisitor;
-import com.intellij.psi.PsiFile;
-import com.jetbrains.python.validation.Pep8ExternalAnnotator;
+import com.jetbrains.python.PyBundle;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.util.ArrayList;
@@ -34,28 +30,19 @@ import java.util.List;
  *
  * @author yole
  */
-public class PyPep8Inspection extends PyInspection {
+public class PyPep8Inspection extends PyInspection implements ExternalAnnotatorBatchInspection {
   public List<String> ignoredErrors = new ArrayList<>();
   public static final String INSPECTION_SHORT_NAME = "PyPep8Inspection";
-  public static final Key<PyPep8Inspection> KEY = Key.create(INSPECTION_SHORT_NAME);
 
   @Override
   public JComponent createOptionsPanel() {
-    ListEditForm form = new ListEditForm("Ignore errors", ignoredErrors);
+    ListEditForm form = new ListEditForm(PyBundle.message("INSP.settings.pep8.ignore.errors"), ignoredErrors);
     return form.getContentPanel();
   }
 
   @NotNull
   @Override
-  public PsiElementVisitor buildVisitor(@NotNull ProblemsHolder holder,
-                                        boolean isOnTheFly,
-                                        @NotNull LocalInspectionToolSession session) {
-    return new ExternalAnnotatorInspectionVisitor(holder, new Pep8ExternalAnnotator(), isOnTheFly);
-  }
-
-  @Nullable
-  @Override
-  public ProblemDescriptor[] checkFile(@NotNull PsiFile file, @NotNull InspectionManager manager, boolean isOnTheFly) {
-    return ExternalAnnotatorInspectionVisitor.checkFileWithExternalAnnotator(file, manager, isOnTheFly, new Pep8ExternalAnnotator());
+  public String getShortName() {
+    return INSPECTION_SHORT_NAME;
   }
 }

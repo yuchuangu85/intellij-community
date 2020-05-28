@@ -21,10 +21,10 @@ import com.intellij.codeInsight.documentation.DocumentationManager;
 import com.intellij.codeInsight.highlighting.HighlightUsagesHandler;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInsight.lookup.LookupElement;
+import com.intellij.codeInsight.lookup.LookupElementPresentation;
 import com.intellij.find.findUsages.PsiElement2UsageTargetAdapter;
 import com.intellij.lang.documentation.DocumentationProvider;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
-import com.intellij.openapi.actionSystem.DataProvider;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.markup.RangeHighlighter;
 import com.intellij.openapi.util.Comparing;
@@ -41,6 +41,7 @@ import com.intellij.psi.xml.XmlTag;
 import com.intellij.refactoring.rename.PsiElementRenameHandler;
 import com.intellij.refactoring.rename.RenameHandler;
 import com.intellij.refactoring.rename.RenameHandlerRegistry;
+import com.intellij.refactoring.rename.inplace.VariableInplaceRenameHandler;
 import com.intellij.refactoring.util.CommonRefactoringUtil;
 import com.intellij.testFramework.MapDataContext;
 import com.intellij.testFramework.fixtures.CodeInsightTestFixture;
@@ -52,7 +53,6 @@ import com.intellij.usages.UsageTargetUtil;
 import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.THashMap;
 import org.intellij.lang.annotations.Language;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.maven.MavenImportingTestCase;
@@ -64,11 +64,20 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 public abstract class MavenDomTestCase extends MavenImportingTestCase {
   protected CodeInsightTestFixture myFixture;
   private final Map<VirtualFile, Long> myConfigTimestamps = new THashMap<>();
   private boolean myOriginalAutoCompletion;
+
+  protected static final Function<LookupElement, String> RENDERING_TEXT = li -> {
+    LookupElementPresentation presentation = new LookupElementPresentation();
+    li.renderElement(presentation);
+    return presentation.getItemText();
+  };
+
+  protected static final Function<LookupElement, String> LOOKUP_STRING = LookupElement::getLookupString;
 
   @Override
   protected void setUpFixtures() throws Exception {
@@ -257,12 +266,28 @@ public abstract class MavenDomTestCase extends MavenImportingTestCase {
   }
 
   protected void assertCompletionVariants(VirtualFile f, String... expected) {
-    List<String> actual = getCompletionVariants(f);
+    assertCompletionVariants(f, LOOKUP_STRING, expected);
+  }
+
+  protected void assertCompletionVariants(VirtualFile f, Function<LookupElement, String> lookupElementStringFunction, String... expected) {
+    List<String> actual = getCompletionVariants(f, lookupElementStringFunction);
     assertUnorderedElementsAreEqual(actual, expected);
   }
 
-  protected void assertCompletionVariantsInclude(VirtualFile f, String... expected) {
-    assertContain(getCompletionVariants(f), expected);
+  protected void assertCompletionVariants(CodeInsightTestFixture f, Function<LookupElement, String> lookupElementStringFunction, String... expected) {
+    List<String> actual = getCompletionVariants(f, lookupElementStringFunction);
+    assertUnorderedElementsAreEqual(actual, expected);
+  }
+
+  protected void assertCompletionVariantsInclude(VirtualFile f,
+                                                 String... expected) {
+    assertCompletionVariantsInclude(f, LOOKUP_STRING, expected);
+  }
+
+  protected void assertCompletionVariantsInclude(VirtualFile f,
+                                                 Function<LookupElement, String> lookupElementStringFunction,
+                                                 String... expected) {
+    assertContain(getCompletionVariants(f, lookupElementStringFunction), expected);
   }
 
   protected void assertCompletionVariantsDoNotInclude(VirtualFile f, String... expected) {
@@ -270,12 +295,26 @@ public abstract class MavenDomTestCase extends MavenImportingTestCase {
   }
 
   protected List<String> getCompletionVariants(VirtualFile f) {
+    return getCompletionVariants(f, li -> li.getLookupString());
+  }
+
+  protected List<String> getCompletionVariants(VirtualFile f, Function<LookupElement, String> lookupElementStringFunction) {
     configTest(f);
     LookupElement[] variants = myFixture.completeBasic();
 
     List<String> result = new ArrayList<>();
-    for (LookupElement each: variants) {
-      result.add(each.getLookupString());
+    for (LookupElement each : variants) {
+      result.add(lookupElementStringFunction.apply(each));
+    }
+    return result;
+  }
+
+  protected List<String> getCompletionVariants(CodeInsightTestFixture fixture, Function<LookupElement, String> lookupElementStringFunction) {
+    LookupElement[] variants = fixture.getLookupElements();
+
+    List<String> result = new ArrayList<>();
+    for (LookupElement each : variants) {
+      result.add(lookupElementStringFunction.apply(each));
     }
     return result;
   }
@@ -342,6 +381,14 @@ public abstract class MavenDomTestCase extends MavenImportingTestCase {
     invokeRename(context, renameHandler);
   }
 
+  protected void doInlineRename(final VirtualFile f, String value) {
+    final MapDataContext context = createRenameDataContext(f, value);
+    final RenameHandler renameHandler = RenameHandlerRegistry.getInstance().getRenameHandler(context);
+    assertNotNull(renameHandler);
+    assertInstanceOf(renameHandler, VariableInplaceRenameHandler.class);
+    CodeInsightTestUtil.doInlineRename((VariableInplaceRenameHandler)renameHandler, value, myFixture);
+  }
+
   protected void assertCannotRename() {
     MapDataContext context = createRenameDataContext(myProjectPom, "new name");
     RenameHandler handler = RenameHandlerRegistry.getInstance().getRenameHandler(context);
@@ -386,15 +433,10 @@ public abstract class MavenDomTestCase extends MavenImportingTestCase {
 
   protected List<PsiElement> search(VirtualFile file) {
     final MapDataContext context = createDataContext(file);
-    UsageTarget[] targets = UsageTargetUtil.findUsageTargets(new DataProvider() {
-      @Override
-      public Object getData(@NotNull @NonNls String dataId) {
-        return context.getData(dataId);
-      }
-    });
+    UsageTarget[] targets = UsageTargetUtil.findUsageTargets(context::getData);
     PsiElement target = ((PsiElement2UsageTargetAdapter)targets[0]).getElement();
     List<PsiReference> result = new ArrayList<>(ReferencesSearch.search(target).findAll());
-    return ContainerUtil.map(result, psiReference -> psiReference.getElement());
+    return ContainerUtil.map(result, PsiReference::getElement);
   }
 
   protected void assertHighlighted(VirtualFile file, HighlightInfo... expected) {

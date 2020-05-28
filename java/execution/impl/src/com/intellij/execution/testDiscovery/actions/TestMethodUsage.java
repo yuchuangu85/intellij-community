@@ -30,12 +30,9 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
 
 class TestMethodUsage implements Usage, UsageInFile, UsageInModule, PsiElementUsage, DataProvider {
-  @NotNull
-  private final Collection<String> myParameters;
   @NotNull
   private final SmartPsiElementPointer<? extends PsiMethod> myTestMethodPointer;
   @Nullable
@@ -46,7 +43,6 @@ class TestMethodUsage implements Usage, UsageInFile, UsageInModule, PsiElementUs
                   @NotNull Collection<String> parameters) {
     myTestMethodPointer = testMethod;
     myTestClassPointer = parameters.isEmpty() ? null : testClass;
-    myParameters = parameters;
   }
 
   @Nullable
@@ -72,9 +68,8 @@ class TestMethodUsage implements Usage, UsageInFile, UsageInModule, PsiElementUs
   @Override
   public UsagePresentation getPresentation() {
     return new UsagePresentation() {
-      @NotNull
       @Override
-      public TextChunk[] getText() {
+      public TextChunk @NotNull [] getText() {
         return new TextChunk[]{new TextChunk(SimpleTextAttributes.REGULAR_ATTRIBUTES.toTextAttributes(), getPlainText())};
       }
 

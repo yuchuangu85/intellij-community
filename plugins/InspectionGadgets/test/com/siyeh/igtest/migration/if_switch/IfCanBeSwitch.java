@@ -2,7 +2,19 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 class IfCanBeSwitch {
   void m1(int i) {  // ok
-    <warning descr="'if' statement replaceable with 'switch' statement">if</warning> (i == 0) System.out.println("zero"); else if (i == 1) System.out.println("one"); else System.out.println("many");
+    <warning descr="'if' statement replaceable with 'switch' statement">if</warning> (i == 0) System.out.println("zero"); else if (((i) == (1))) System.out.println("one"); else System.out.println("many");
+    if (i == 0) {
+      System.out.println("zero");
+    }
+    else if ((i == (1))) {
+      System.out.println("one");
+    }
+    else if (i == 1) { // duplicate case value not legal in switch
+      System.out.println("one too");
+    }
+    else {
+      System.out.println("many");
+    }
   }
 
   void m1(char c) {  // ok
@@ -90,6 +102,30 @@ class IfCanBeSwitch {
       System.out.println(2);
     } else {
       System.out.println("-");
+    }
+  }
+}
+class MyText implements Comparable<MyText> {
+
+  private String name;
+
+  String getSuperType() {
+    return name.startsWith("a") ? "b" : "c";
+  }
+
+  @Override
+  public int compareTo(MyText o) {
+    String superType = getSuperType();
+    if (superType.equals(o.getSuperType())) {
+      return this.name.compareTo(o.name);
+    } else if (superType.equals("a")) {
+      return -1;
+    } else if (superType.equals("b")) {
+      return 1;
+    } else if (superType.equals("c")) {
+      return o.getSuperType().equals("a") ? 1 : -1;
+    } else {
+      return 0;
     }
   }
 }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.config;
 
 import com.intellij.ProjectTopics;
@@ -38,7 +24,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.Function;
 import com.intellij.util.JdomKt;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.FactoryMap;
 import com.intellij.util.xmlb.XmlSerializer;
 import gnu.trove.THashMap;
@@ -51,6 +36,7 @@ import org.jetbrains.plugins.gradle.model.ExternalProject;
 import org.jetbrains.plugins.gradle.model.ExternalSourceDirectorySet;
 import org.jetbrains.plugins.gradle.model.ExternalSourceSet;
 import org.jetbrains.plugins.gradle.service.project.data.ExternalProjectDataCache;
+import org.jetbrains.plugins.gradle.util.GradleBundle;
 import org.jetbrains.plugins.gradle.util.GradleConstants;
 
 import java.io.File;
@@ -59,6 +45,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author Vladislav.Soroka
@@ -67,19 +54,17 @@ public class GradleResourceCompilerConfigurationGenerator {
 
   private static final Logger LOG = Logger.getInstance(GradleResourceCompilerConfigurationGenerator.class);
 
-  @NotNull
-  private final Project myProject;
-  @NotNull
-  private final Map<String, Integer> myModulesConfigurationHash;
+  private final @NotNull Project myProject;
+  private final @NotNull Map<String, Integer> myModulesConfigurationHash;
   private final ExternalProjectDataCache externalProjectDataCache;
 
-  public GradleResourceCompilerConfigurationGenerator(@NotNull final Project project) {
+  public GradleResourceCompilerConfigurationGenerator(final @NotNull Project project) {
     myProject = project;
-    myModulesConfigurationHash = ContainerUtil.newConcurrentMap();
+    myModulesConfigurationHash = new ConcurrentHashMap<>();
     externalProjectDataCache = ExternalProjectDataCache.getInstance(project);
     assert externalProjectDataCache != null;
 
-    project.getMessageBus().connect(project).subscribe(ProjectTopics.MODULES, new ModuleListener() {
+    project.getMessageBus().connect().subscribe(ProjectTopics.MODULES, new ModuleListener() {
       @Override
       public void moduleRemoved(@NotNull Project project, @NotNull Module module) {
         myModulesConfigurationHash.remove(module.getName());
@@ -96,7 +81,7 @@ public class GradleResourceCompilerConfigurationGenerator {
     });
   }
 
-  public void generateBuildConfiguration(@NotNull final CompileContext context) {
+  public void generateBuildConfiguration(final @NotNull CompileContext context) {
 
     if (shouldBeBuiltByExternalSystem(myProject)) return;
 
@@ -146,8 +131,7 @@ public class GradleResourceCompilerConfigurationGenerator {
     });
   }
 
-  @NotNull
-  private GradleProjectConfiguration loadLastConfiguration(@NotNull File gradleConfigFile) {
+  private @NotNull GradleProjectConfiguration loadLastConfiguration(@NotNull File gradleConfigFile) {
     final GradleProjectConfiguration projectConfig = new GradleProjectConfiguration();
     if (gradleConfigFile.exists()) {
       try {
@@ -171,12 +155,11 @@ public class GradleResourceCompilerConfigurationGenerator {
     return projectConfig;
   }
 
-  @NotNull
-  private Map<String, GradleModuleResourceConfiguration> generateAffectedGradleModulesConfiguration(@NotNull CompileContext context) {
-    final Map<String, GradleModuleResourceConfiguration> affectedGradleModuleConfigurations = ContainerUtil.newTroveMap();
+  private @NotNull Map<String, GradleModuleResourceConfiguration> generateAffectedGradleModulesConfiguration(@NotNull CompileContext context) {
+    final Map<String, GradleModuleResourceConfiguration> affectedGradleModuleConfigurations = new THashMap<>();
 
     final Map<String, ExternalProject> lazyExternalProjectMap = FactoryMap.create(
-      gradleProjectPath1 -> externalProjectDataCache.getRootExternalProject(GradleConstants.SYSTEM_ID, new File(gradleProjectPath1)));
+      gradleProjectPath1 -> externalProjectDataCache.getRootExternalProject(gradleProjectPath1));
 
     for (Module module : context.getCompileScope().getAffectedModules()) {
       if (!ExternalSystemApiUtil.isExternalSystemAwareModule(GradleConstants.SYSTEM_ID, module)) continue;
@@ -188,10 +171,8 @@ public class GradleResourceCompilerConfigurationGenerator {
 
       final ExternalProject externalRootProject = lazyExternalProjectMap.get(gradleProjectPath);
       if (externalRootProject == null) {
-        context.addMessage(CompilerMessageCategory.WARNING,
-                           String.format("Unable to make the module: %s, related gradle configuration was not found. " +
-                                         "Please, re-import the Gradle project and try again.",
-                                         module.getName()), VfsUtilCore.pathToUrl(gradleProjectPath), -1, -1);
+        String message = GradleBundle.message("compiler.build.messages.gradle.configuration.not.found", module.getName());
+        context.addMessage(CompilerMessageCategory.WARNING, message, null, -1, -1);
         continue;
       }
 
@@ -259,8 +240,8 @@ public class GradleResourceCompilerConfigurationGenerator {
   }
 
   private static void addResources(@NotNull List<ResourceRootConfiguration> container,
-                                   @Nullable final ExternalSourceDirectorySet directorySet,
-                                   @Nullable final ExternalSourceDirectorySet sourcesDirectorySet) {
+                                   final @Nullable ExternalSourceDirectorySet directorySet,
+                                   final @Nullable ExternalSourceDirectorySet sourcesDirectorySet) {
     if (directorySet == null) return;
 
     for (File file : directorySet.getSrcDirs()) {

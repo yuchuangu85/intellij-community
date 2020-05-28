@@ -1,8 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.inline;
 
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.NlsContexts.BorderTitle;
+import com.intellij.openapi.util.NlsContexts.Label;
+import com.intellij.openapi.util.NlsContexts.RadioButton;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiNameIdentifierOwner;
 import com.intellij.psi.PsiReference;
@@ -11,7 +14,7 @@ import com.intellij.psi.search.PsiSearchHelper;
 import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.refactoring.ui.RefactoringDialog;
 import com.intellij.refactoring.util.RadioUpDownListener;
-import com.intellij.util.ui.JBUI;
+import com.intellij.ui.scale.JBUIScale;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -57,7 +60,7 @@ public abstract class InlineOptionsDialog extends RefactoringDialog implements I
   @Override
   protected JComponent createCenterPanel() {
     JPanel optionsPanel = new JPanel();
-    optionsPanel.setBorder(new EmptyBorder(JBUI.scale(10), 0, 0, 0));
+    optionsPanel.setBorder(new EmptyBorder(JBUIScale.scale(10), 0, 0, 0));
     optionsPanel.setLayout(new BoxLayout(optionsPanel, BoxLayout.Y_AXIS));
 
     myRbInlineAll = new JRadioButton();
@@ -73,11 +76,11 @@ public abstract class InlineOptionsDialog extends RefactoringDialog implements I
       myKeepTheDeclaration.setText(keepDeclarationText);
       optionsPanel.add(myKeepTheDeclaration);
     }
-    
+
     optionsPanel.add(myRbInlineThisOnly);
     ButtonGroup bg = new ButtonGroup();
-    final JRadioButton[] buttons = myKeepTheDeclaration != null 
-                                   ? new JRadioButton[] {myRbInlineAll, myKeepTheDeclaration, myRbInlineThisOnly} 
+    final JRadioButton[] buttons = myKeepTheDeclaration != null
+                                   ? new JRadioButton[] {myRbInlineAll, myKeepTheDeclaration, myRbInlineThisOnly}
                                    : new JRadioButton[] {myRbInlineAll, myRbInlineThisOnly};
     for (JRadioButton button : buttons) {
       bg.add(button);
@@ -90,12 +93,12 @@ public abstract class InlineOptionsDialog extends RefactoringDialog implements I
       if (canInlineThisOnly()) {
         myRbInlineAll.setSelected(false);
         myRbInlineAll.setEnabled(false);
-        
+
         if (myKeepTheDeclaration != null) {
           myKeepTheDeclaration.setSelected(false);
           myKeepTheDeclaration.setEnabled(false);
         }
-        
+
         myRbInlineThisOnly.setSelected(true);
       } else {
         if (writable) {
@@ -127,7 +130,7 @@ public abstract class InlineOptionsDialog extends RefactoringDialog implements I
     for (JRadioButton button : buttons) {
       button.addActionListener(previewListener);
     }
-    
+
 
     return optionsPanel;
   }
@@ -136,10 +139,15 @@ public abstract class InlineOptionsDialog extends RefactoringDialog implements I
     return myElement.isWritable();
   }
 
+  @Label
   protected abstract String getNameLabelText();
+  @BorderTitle
   protected abstract String getBorderTitle();
+  @RadioButton
   protected abstract String getInlineAllText();
+  @RadioButton
   protected String getKeepTheDeclarationText() {return null;}
+  @RadioButton
   protected abstract String getInlineThisText();
   protected abstract boolean isInlineThis();
   protected boolean canInlineThisOnly() {

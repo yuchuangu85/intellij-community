@@ -1,39 +1,20 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.deprecation;
 
 import com.intellij.codeInspection.DeprecationUtil;
-import com.intellij.codeInspection.ProblemHighlightType;
 import com.intellij.codeInspection.ProblemsHolder;
+import com.intellij.codeInspection.apiUsage.ApiUsageUastVisitor;
 import com.intellij.codeInspection.ui.MultipleCheckboxOptionsPanel;
-import com.intellij.openapi.util.TextRange;
-import com.intellij.psi.PsiElement;
+import com.intellij.java.analysis.JavaAnalysisBundle;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.psi.PsiElementVisitor;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 
-/**
- * @author max
- */
 public class DeprecationInspection extends DeprecationInspectionBase {
   public static final String SHORT_NAME = DeprecationUtil.DEPRECATION_SHORT_NAME;
   public static final String ID = DeprecationUtil.DEPRECATION_ID;
-  public static final String DISPLAY_NAME = DeprecationUtil.DEPRECATION_DISPLAY_NAME;
   public static final String IGNORE_METHODS_OF_DEPRECATED_NAME = "IGNORE_METHODS_OF_DEPRECATED";
 
   public boolean IGNORE_INSIDE_DEPRECATED = true;
@@ -44,15 +25,14 @@ public class DeprecationInspection extends DeprecationInspectionBase {
   @Override
   @NotNull
   public PsiElementVisitor buildVisitor(@NotNull final ProblemsHolder holder, boolean isOnTheFly) {
-    return new DeprecationElementVisitor(holder, IGNORE_INSIDE_DEPRECATED, IGNORE_ABSTRACT_DEPRECATED_OVERRIDES,
-                                         IGNORE_IMPORT_STATEMENTS, IGNORE_METHODS_OF_DEPRECATED,
-                                         IGNORE_IN_SAME_OUTERMOST_CLASS, false, null);
-  }
+    if(!Registry.is("kotlin.deprecation.inspection.enabled", false) && holder.getFile().getLanguage().getID().equals("kotlin"))
+      return PsiElementVisitor.EMPTY_VISITOR;
 
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return DISPLAY_NAME;
+    return ApiUsageUastVisitor.createPsiElementVisitor(
+      new DeprecatedApiUsageProcessor(holder, IGNORE_INSIDE_DEPRECATED, IGNORE_ABSTRACT_DEPRECATED_OVERRIDES,
+                                      IGNORE_IMPORT_STATEMENTS, IGNORE_METHODS_OF_DEPRECATED,
+                                      IGNORE_IN_SAME_OUTERMOST_CLASS, false, null)
+    );
   }
 
   @Override
@@ -77,19 +57,11 @@ public class DeprecationInspection extends DeprecationInspectionBase {
   @Override
   public JComponent createOptionsPanel() {
     final MultipleCheckboxOptionsPanel panel = new MultipleCheckboxOptionsPanel(this);
-    panel.addCheckbox("Ignore inside deprecated members", "IGNORE_INSIDE_DEPRECATED");
-    panel.addCheckbox("Ignore inside non-static imports", "IGNORE_IMPORT_STATEMENTS");
-    panel.addCheckbox("<html>Ignore overrides of deprecated abstract methods from non-deprecated supers</html>", "IGNORE_ABSTRACT_DEPRECATED_OVERRIDES");
-    panel.addCheckbox("Ignore members of deprecated classes", IGNORE_METHODS_OF_DEPRECATED_NAME);
+    panel.addCheckbox(JavaAnalysisBundle.message("ignore.inside.deprecated.members"), "IGNORE_INSIDE_DEPRECATED");
+    panel.addCheckbox(JavaAnalysisBundle.message("ignore.inside.non.static.imports"), "IGNORE_IMPORT_STATEMENTS");
+    panel.addCheckbox(JavaAnalysisBundle.message("html.ignore.overrides.of.deprecated.abstract.methods"), "IGNORE_ABSTRACT_DEPRECATED_OVERRIDES");
+    panel.addCheckbox(JavaAnalysisBundle.message("ignore.members.of.deprecated.classes"), IGNORE_METHODS_OF_DEPRECATED_NAME);
     addSameOutermostClassCheckBox(panel);
     return panel;
-  }
-
-  public static void checkDeprecated(PsiElement refElement,
-                                     PsiElement elementToHighlight,
-                                     @Nullable TextRange rangeInElement,
-                                     ProblemsHolder holder) {
-    checkDeprecated(refElement, elementToHighlight, rangeInElement, false, false, true, false, holder, false,
-                    ProblemHighlightType.LIKE_DEPRECATED);
   }
 }

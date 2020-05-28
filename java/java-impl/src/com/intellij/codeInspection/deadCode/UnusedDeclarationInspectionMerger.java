@@ -31,14 +31,13 @@ public class UnusedDeclarationInspectionMerger extends InspectionElementsMergerB
     return UnusedDeclarationInspectionBase.SHORT_NAME;
   }
 
-  @NotNull
   @Override
-  public String[] getSourceToolNames() {
+  public String @NotNull [] getSourceToolNames() {
     return new String[] {UNUSED_SYMBOL, UNUSED_DECLARATION};
   }
 
   @Override
-  protected Element writeOldSettings(String sourceToolName) throws WriteExternalException {
+  protected Element writeOldSettings(@NotNull String sourceToolName) throws WriteExternalException {
     Element sourceElement = super.writeOldSettings(sourceToolName);
     if (UNUSED_SYMBOL.equals(sourceToolName)) {
       new UnusedSymbolLocalInspection().writeSettings(sourceElement);

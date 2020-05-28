@@ -1,7 +1,8 @@
 // Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.lang.properties;
 
-import com.intellij.codeInsight.CodeInsightTestCase;
+import com.intellij.codeInsight.JavaCodeInsightTestCase;
+import com.intellij.idea.HardwareAgentRequired;
 import com.intellij.openapi.application.PluginPathManager;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.roots.ModuleRootManager;
@@ -21,8 +22,8 @@ import java.io.IOException;
 /**
  * @author cdr
  */
-public class PropertiesPerformanceTest extends CodeInsightTestCase {
-
+@HardwareAgentRequired
+public class PropertiesPerformanceTest extends JavaCodeInsightTestCase {
   @Override
   protected void setUp() throws Exception {
     super.setUp();
@@ -38,6 +39,7 @@ public class PropertiesPerformanceTest extends CodeInsightTestCase {
     return module != null ? module : super.createMainModule();
   }
 
+  @NotNull
   @Override
   protected String getTestDataPath() {
     return PluginPathManager.getPluginHomePath("java-i18n") + "/testData/performance/";
@@ -45,7 +47,7 @@ public class PropertiesPerformanceTest extends CodeInsightTestCase {
 
   public void testTypingInBigFile() throws Exception {
     configureByFile(getTestName(true) + "/File1.properties");
-    PlatformTestUtil.startPerformanceTest(getTestName(false), 100, () -> {
+    PlatformTestUtil.startPerformanceTest(getTestName(false), 300, () -> {
       type(' ');
       PsiDocumentManager.getInstance(myProject).commitDocument(myEditor.getDocument());
       backspace();
@@ -56,7 +58,7 @@ public class PropertiesPerformanceTest extends CodeInsightTestCase {
   public void testResolveManyLiterals() throws Exception {
     final PsiClass aClass = generateTestFiles();
     assertNotNull(aClass);
-    PlatformTestUtil.startPerformanceTest(getTestName(false), 2000, () -> aClass.accept(new JavaRecursiveElementWalkingVisitor() {
+    PlatformTestUtil.startPerformanceTest(getTestName(false), 4000, () -> aClass.accept(new JavaRecursiveElementWalkingVisitor() {
       @Override
       public void visitLiteralExpression(PsiLiteralExpression expression) {
         PsiReference[] references = expression.getReferences();

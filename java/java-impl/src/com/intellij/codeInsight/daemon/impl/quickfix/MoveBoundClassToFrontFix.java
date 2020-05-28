@@ -17,6 +17,7 @@ package com.intellij.codeInsight.daemon.impl.quickfix;
 
 import com.intellij.codeInsight.daemon.QuickFixBundle;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
+import com.intellij.codeInsight.intention.impl.BaseIntentionAction;
 import com.intellij.openapi.command.undo.UndoUtil;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
@@ -27,7 +28,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class MoveBoundClassToFrontFix extends ExtendsListFix {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.daemon.impl.quickfix.MoveBoundClassToFrontFix");
+  private static final Logger LOG = Logger.getInstance(MoveBoundClassToFrontFix.class);
   private final String myName;
 
   public MoveBoundClassToFrontFix(@NotNull PsiClass aClass, @NotNull PsiClassType classToExtendFrom) {
@@ -54,7 +55,7 @@ public class MoveBoundClassToFrontFix extends ExtendsListFix {
   @Override
   public void invoke(@NotNull Project project,
                      @NotNull PsiFile file,
-                     @Nullable("is null when called from inspection") Editor editor,
+                     @Nullable Editor editor,
                      @NotNull PsiElement startElement,
                      @NotNull PsiElement endElement) {
     final PsiClass myClass = (PsiClass)startElement;
@@ -79,7 +80,7 @@ public class MoveBoundClassToFrontFix extends ExtendsListFix {
     PsiClass classToExtendFrom = myClassToExtendFromPointer != null ? myClassToExtendFromPointer.getElement() : null;
 
     return
-      myClass.getManager().isInProject(myClass)
+      BaseIntentionAction.canModify(myClass)
       && classToExtendFrom != null
       && classToExtendFrom.isValid()
     ;

@@ -59,9 +59,7 @@ public class MavenSelectProjectPopup {
       if (focusAfterSelection != null) {
         ApplicationManager.getApplication().invokeLater(() -> {
           if (workingDirectoryField.hasFocus()) {
-            IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-              IdeFocusManager.getGlobalInstance().requestFocus(focusAfterSelection, true);
-            });
+            IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(focusAfterSelection, true));
           }
         });
       }
@@ -155,7 +153,7 @@ public class MavenSelectProjectPopup {
         });
 
         JBPopup popup = new PopupChooserBuilder(projectTree)
-          .setTitle("Select maven project")
+          .setTitle(RunnerBundle.message("maven.select.project"))
           .setResizable(true)
           .setItemChoosenCallback(clickCallBack).setAutoselectOnMouseMove(true)
           .setCloseOnEnter(false)

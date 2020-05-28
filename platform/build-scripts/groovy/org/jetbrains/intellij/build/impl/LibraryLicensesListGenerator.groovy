@@ -15,7 +15,7 @@
  */
 package org.jetbrains.intellij.build.impl
 
-import com.intellij.util.containers.ContainerUtil
+import com.google.gson.GsonBuilder
 import groovy.text.SimpleTemplateEngine
 import groovy.transform.CompileStatic
 import org.jetbrains.intellij.build.BuildMessages
@@ -25,45 +25,52 @@ import org.jetbrains.jps.model.java.JpsJavaClasspathKind
 import org.jetbrains.jps.model.java.JpsJavaExtensionService
 import org.jetbrains.jps.model.library.JpsLibrary
 import org.jetbrains.jps.model.library.JpsOrderRootType
+import org.jetbrains.jps.model.library.JpsRepositoryLibraryType
 import org.jetbrains.jps.model.module.JpsModule
-/**
- * @author nik
- */
 @CompileStatic
 class LibraryLicensesListGenerator {
   private final BuildMessages messages
-  private final JpsProject project
-  private final List<LibraryLicense> licensesList
+  private Map<LibraryLicense, String> licensesInModules
 
-  LibraryLicensesListGenerator(BuildMessages messages, JpsProject project, List<LibraryLicense> licensesList) {
+  private LibraryLicensesListGenerator(BuildMessages messages,
+                                       Map<LibraryLicense, String> licensesInModules) {
     this.messages = messages
-    this.project = project
-    this.licensesList = licensesList
+    this.licensesInModules = licensesInModules
   }
 
-  static List<String> getLibraryNames(JpsLibrary lib) {
-    def name = lib.name
-    if (name.startsWith("#")) {
-      return ContainerUtil.map(lib.getFiles(JpsOrderRootType.COMPILED), {f->f.getName()})
-    }
-    return Collections.singletonList(name)
+  static LibraryLicensesListGenerator create(BuildMessages messages,
+                                             JpsProject project,
+                                             List<LibraryLicense> licensesList,
+                                             Set<String> usedModulesNames) {
+    Map<LibraryLicense, String> licences = generateLicenses(messages, project, licensesList, usedModulesNames)
+    return new LibraryLicensesListGenerator(messages, licences)
   }
 
-  void generateLicensesTable(String filePath, Set<String> usedModulesNames) {
+  private static Map<LibraryLicense, String> generateLicenses(BuildMessages messages,
+                                                              JpsProject project,
+                                                              List<LibraryLicense> licensesList,
+                                                              Set<String> usedModulesNames) {
+    Map<LibraryLicense, String> licenses = [:]
     messages.debug("Generating licenses table")
     messages.debug("Used modules: $usedModulesNames")
     Set<JpsModule> usedModules = project.modules.findAll { usedModulesNames.contains(it.name) } as Set<JpsModule>
     Map<String, String> usedLibraries = [:]
     usedModules.each { JpsModule module ->
       JpsJavaExtensionService.dependencies(module).includedIn(JpsJavaClasspathKind.PRODUCTION_RUNTIME).getLibraries().each { item ->
-        getLibraryNames(item).forEach { String name ->
-          usedLibraries[name] = module.name
-        }
+        def libraryName = getLibraryName(item)
+        usedLibraries[libraryName] = module.name
       }
     }
+    Map<String, String> libraryVersions = (project.libraryCollection.libraries + project.modules.collectMany {it.libraryCollection.libraries})
+      .collect { it.asTyped(JpsRepositoryLibraryType.INSTANCE) }
+      .findAll { it != null}
+      .collectEntries { [it.name, it.properties.data.version] }
 
-    Map<LibraryLicense, String> licenses = [:]
-    licensesList.findAll {it.license != LibraryLicense.JETBRAINS_OWN}.each { LibraryLicense lib ->
+    licensesList.findAll { it.license != LibraryLicense.JETBRAINS_OWN }.each { LibraryLicense lib ->
+      if (lib.libraryName != null && lib.version == null && libraryVersions.containsKey(lib.libraryName)) {
+        lib = new LibraryLicense(lib.name, lib.url, libraryVersions[lib.libraryName], lib.libraryName, lib.additionalLibraryNames,
+                                 lib.attachedTo, lib.transitiveDependency, lib.license, lib.licenseUrl)
+      }
       if (usedModulesNames.contains(lib.attachedTo)) {
         licenses[lib] = lib.attachedTo
       }
@@ -76,7 +83,19 @@ class LibraryLicensesListGenerator {
         }
       }
     }
+    return licenses
+  }
 
+  static String getLibraryName(JpsLibrary lib) {
+    def name = lib.name
+    if (name.startsWith("#")) {
+      //unnamed module libraries in IntelliJ project may have only one root
+      return lib.getFiles(JpsOrderRootType.COMPILED).first().name
+    }
+    return name
+  }
+
+  void generateHtml(String filePath) {
     messages.debug("Used libraries:")
     List<String> lines = []
 
@@ -93,25 +112,21 @@ class LibraryLicensesListGenerator {
       '''.trim()
     def engine = new SimpleTemplateEngine()
 
-    licenses.entrySet().each {
+    licensesInModules.entrySet().each {
       LibraryLicense lib = it.key
       String moduleName = it.value
 
-      String libKey = (lib.name + "_" + lib.version ?: "").replace(" ", "_")
+      String libKey = (lib.presentableName + "_" + lib.version ?: "").replace(" ", "_")
       // id here is needed because of a bug IDEA-188262
-      String name = lib.url != null ? "<a id=\"${libKey}_lib_url\" class=\"name\" href=\"$lib.url\">$lib.name</a>" :
-                    "<span class=\"name\">$lib.name</span>"
+      String name = lib.url != null ? "<a id=\"${libKey}_lib_url\" class=\"name\" href=\"$lib.url\">$lib.presentableName</a>" :
+                    "<span class=\"name\">$lib.presentableName</span>"
       String license = lib.libraryLicenseUrl != null ?
                        "<a id=\"${libKey}_license_url\" class=\"licence\" href=\"$lib.libraryLicenseUrl\">$lib.license</a>" :
                        "<span class=\"licence\">$lib.license</span>"
 
-      messages.debug(" $lib.name (in module $moduleName)")
+      messages.debug(" $lib.presentableName (in module $moduleName)")
       lines << engine.createTemplate(line).make(["name": name, "libVersion": lib.version ?: "", "license": license]).toString()
     }
-    //projectBuilder.info("Unused libraries:")
-    //licensesList.findAll {!licenses.containsKey(it)}.each {LibraryLicense lib ->
-    //  projectBuilder.info(" $lib.name")
-    //}
 
     lines.sort(true, String.CASE_INSENSITIVE_ORDER)
     File file = new File(filePath)
@@ -169,6 +184,28 @@ class LibraryLicensesListGenerator {
     }
     finally {
       out.close()
+    }
+  }
+
+  void generateJson(String filePath) {
+    List<LibraryLicenseData> entries = []
+
+    licensesInModules.keySet().sort( {it.presentableName} ).each {
+      entries.add(
+        new LibraryLicenseData(
+          name: it.presentableName,
+          url: it.url,
+          version: it.version,
+          license: it.license,
+          licenseUrl: it.libraryLicenseUrl
+        )
+      )
+    }
+
+    File file = new File(filePath)
+    file.parentFile.mkdirs()
+    file.withWriter {
+      new GsonBuilder().setPrettyPrinting().create().toJson(entries, it)
     }
   }
 }

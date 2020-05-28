@@ -16,15 +16,15 @@
 package com.siyeh.ig.style;
 
 import com.intellij.codeInspection.InspectionProfileEntry;
-import com.siyeh.ig.LightInspectionTestCase;
+import com.siyeh.ig.LightJavaInspectionTestCase;
 import org.jetbrains.annotations.Nullable;
 
-public class UnnecessaryFinalOnLocalVariableOrParameterInspectionJava8Test extends LightInspectionTestCase {
+public class UnnecessaryFinalOnLocalVariableOrParameterInspectionJava8Test extends LightJavaInspectionTestCase {
 
   public void testFinalWithoutInnerClass() {
     doTest("class Issue {\n" +
            "    public static void main(String[] args) {\n" +
-           "        /*Unnecessary 'final' on variable 's'*/final/**/ Integer s;\n" +
+           "        /*Unnecessary 'final' on variable 's'*/final/**/ int s;\n" +
            "        if (args.length == 0) {\n" +
            "            s = 1;\n" +
            "        } else {\n" +

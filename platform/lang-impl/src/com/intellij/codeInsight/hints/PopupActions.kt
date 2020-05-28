@@ -8,8 +8,9 @@ import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.codeInsight.daemon.impl.ParameterHintsPresentationManager
 import com.intellij.codeInsight.hints.HintInfo.MethodInfo
 import com.intellij.codeInsight.hints.settings.Diff
-import com.intellij.codeInsight.hints.settings.ParameterNameHintsConfigurable
+import com.intellij.codeInsight.hints.settings.InlayHintsConfigurable
 import com.intellij.codeInsight.hints.settings.ParameterNameHintsSettings
+import com.intellij.codeInsight.hints.settings.language.ParameterInlayProviderSettingsModel
 import com.intellij.codeInsight.intention.HighPriorityAction
 import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.codeInsight.intention.LowPriorityAction
@@ -22,7 +23,6 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.editor.ex.EditorSettingsExternalizable
 import com.intellij.openapi.editor.impl.EditorImpl
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
@@ -32,6 +32,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.util.PsiTreeUtil
+import java.util.function.Predicate
 
 
 class ShowSettingsWithAddedPattern : AnAction() {
@@ -46,7 +47,7 @@ class ShowSettingsWithAddedPattern : AnAction() {
     
     val offset = editor.caretModel.offset
     val info = getHintInfoFromProvider(offset, file, editor)
-    if (info is HintInfo.MethodInfo) {
+    if (info is MethodInfo) {
       e.presentation.setText(CodeInsightBundle.message("inlay.hints.show.settings", info.getMethodName()), false)
     }
     else {
@@ -55,40 +56,35 @@ class ShowSettingsWithAddedPattern : AnAction() {
   }
 
   override fun actionPerformed(e: AnActionEvent) {
-    val file = CommonDataKeys.PSI_FILE.getData(e.dataContext) ?: return
-    val editor = CommonDataKeys.EDITOR.getData(e.dataContext) ?: return
-
-    val fileLanguage = file.language.baseLanguage ?: file.language
-    InlayParameterHintsExtension.forLanguage(fileLanguage) ?: return
-    
-    val offset = editor.caretModel.offset
-    val info = getHintInfoFromProvider(offset, file, editor) ?: return
-    
-    val newPreselectedPattern = when (info) {
-      is HintInfo.OptionInfo -> null
-      is HintInfo.MethodInfo -> info.toPattern()
-    }
-
-    val selectedLanguage = (info as? HintInfo.MethodInfo)?.language ?: fileLanguage
-    val dialog = ParameterNameHintsConfigurable(selectedLanguage, newPreselectedPattern)
-    dialog.show()
+    showParameterHintsDialog(e) {
+      when (it) {
+        is HintInfo.OptionInfo -> null
+        is MethodInfo -> it.toPattern()
+      }}
   }
 }
 
 class ShowParameterHintsSettings : AnAction() {
   override fun actionPerformed(e: AnActionEvent) {
-    val file = CommonDataKeys.PSI_FILE.getData(e.dataContext) ?: return
-    val editor = CommonDataKeys.EDITOR.getData(e.dataContext) ?: return
+    showParameterHintsDialog(e) {null}
+  }
+}
 
-    val fileLanguage = file.language.baseLanguage ?: file.language
-    InlayParameterHintsExtension.forLanguage(fileLanguage) ?: return
+fun showParameterHintsDialog(e: AnActionEvent, getPattern: (HintInfo) -> String?) {
+  val file = CommonDataKeys.PSI_FILE.getData(e.dataContext) ?: return
+  val editor = CommonDataKeys.EDITOR.getData(e.dataContext) ?: return
 
-    val offset = editor.caretModel.offset
-    val info = getHintInfoFromProvider(offset, file, editor) ?: return
+  val fileLanguage = file.language
+  InlayParameterHintsExtension.forLanguage(fileLanguage) ?: return
 
-    val selectedLanguage = (info as? HintInfo.MethodInfo)?.language ?: fileLanguage
-    val dialog = ParameterNameHintsConfigurable(selectedLanguage, null)
-    dialog.show()
+  val offset = editor.caretModel.offset
+  val info = getHintInfoFromProvider(offset, file, editor) ?: return
+
+  val selectedLanguage = (info as? MethodInfo)?.language ?: fileLanguage
+
+  when (val pattern = getPattern(info)) {
+    null -> InlayHintsConfigurable.showSettingsDialogForLanguage(file.project, fileLanguage, Predicate { it is ParameterInlayProviderSettingsModel })
+    else -> BlackListDialog(selectedLanguage, pattern).show()
   }
 }
 
@@ -120,7 +116,7 @@ class BlacklistCurrentMethodIntention : IntentionAction, LowPriorityAction {
     val info = getHintInfoFromProvider(offset, file, editor) as? MethodInfo ?: return
     val language = info.language ?: file.language
 
-    ParameterNameHintsSettings.getInstance().addIgnorePattern(language, info.toPattern())
+    ParameterNameHintsSettings.getInstance().addIgnorePattern(getLanguageForSettingKey(language), info.toPattern())
     refreshAllOpenEditors()
     showHint(project, language, info)
   }
@@ -136,27 +132,29 @@ class BlacklistCurrentMethodIntention : IntentionAction, LowPriorityAction {
       notification.expire()
     }
 
-    val notification = Notification("Parameter Name Hints", "Method \"$methodName\" added to blacklist", 
-                 "<html><a href='settings'>Show Parameter Hints Settings</a> or <a href='undo'>Undo</a></html>",
-                 NotificationType.INFORMATION, listener)
+
+    val notification = Notification("Parameter Name Hints",
+                                    CodeInsightBundle.message("notification.inlay.method.added.to.blacklist", methodName),
+                                    CodeInsightBundle.message("notification.show.parameter.hints.settings.or.undo.label"),
+                                    NotificationType.INFORMATION, listener)
     
     notification.notify(project)
   }
   
   private fun showSettings(language: Language) {
-    val dialog = ParameterNameHintsConfigurable(language, null)
-    dialog.show()
+    BlackListDialog(language).show()
   }
   
   private fun undo(language: Language, info: MethodInfo) {
     val settings = ParameterNameHintsSettings.getInstance()
-    
-    val diff = settings.getBlackListDiff(language)
+    val languageForSettings = getLanguageForSettingKey(language)
+
+    val diff = settings.getBlackListDiff(languageForSettings)
     val updated = diff.added.toMutableSet().apply {
       remove(info.toPattern())
     }
     
-    settings.setBlackListDiff(language, Diff(updated, diff.removed))
+    settings.setBlackListDiff(languageForSettings, Diff(updated, diff.removed))
     refreshAllOpenEditors()
   }
 
@@ -224,7 +222,8 @@ class EnableCustomHintsOption: IntentionAction, HighPriorityAction {
   override fun getFamilyName(): String = presentableFamilyName
 
   override fun isAvailable(project: Project, editor: Editor, file: PsiFile): Boolean {
-    if (!EditorSettingsExternalizable.getInstance().isShowParameterNameHints) return false
+    val language = file.language
+    if(!isParameterHintsEnabledForLanguage(language)) return false
     if (editor !is EditorImpl) return false
     
     InlayParameterHintsExtension.forLanguage(file.language) ?: return false
@@ -241,8 +240,10 @@ class EnableCustomHintsOption: IntentionAction, HighPriorityAction {
     val element = file.findElementAt(offset) ?: return null
     val provider = InlayParameterHintsExtension.forLanguage(file.language) ?: return null
 
-    val target = PsiTreeUtil.findFirstParent(element, { provider.hasDisabledOptionHintInfo(it) }) ?: return null
-    return provider.getHintInfo(target) as? HintInfo.OptionInfo
+    val target = PsiTreeUtil.findFirstParent(element) { it is PsiFile
+                                                        || provider.hasDisabledOptionHintInfo(it, file) }
+    if (target == null || target is PsiFile) return null
+    return provider.getHintInfo(target, file) as? HintInfo.OptionInfo
   }
 
   override fun invoke(project: Project, editor: Editor, file: PsiFile) {
@@ -256,8 +257,8 @@ class EnableCustomHintsOption: IntentionAction, HighPriorityAction {
 }
 
 
-private fun InlayParameterHintsProvider.hasDisabledOptionHintInfo(element: PsiElement): Boolean {
-  val info = getHintInfo(element)
+private fun InlayParameterHintsProvider.hasDisabledOptionHintInfo(element: PsiElement, file: PsiFile): Boolean {
+  val info = getHintInfo(element, file)
   return info is HintInfo.OptionInfo && !info.isOptionEnabled()
 }
 
@@ -274,16 +275,18 @@ class ToggleInlineHintsAction : AnAction() {
       e.presentation.isEnabledAndVisible = false
       return
     }
-    
-    val isHintsShownNow = EditorSettingsExternalizable.getInstance().isShowParameterNameHints
+
+    val file = CommonDataKeys.PSI_FILE.getData(e.dataContext) ?: return
+    val isHintsShownNow = isParameterHintsEnabledForLanguage(file.language)
     e.presentation.text = if (isHintsShownNow) disableText else enableText
     e.presentation.isEnabledAndVisible = true
   }
 
   override fun actionPerformed(e: AnActionEvent) {
-    val settings = EditorSettingsExternalizable.getInstance()
-    val before = settings.isShowParameterNameHints
-    settings.isShowParameterNameHints = !before
+    val file = CommonDataKeys.PSI_FILE.getData(e.dataContext) ?: return
+    val language = file.language
+    val before = isParameterHintsEnabledForLanguage(language)
+    setShowParameterHintsForLanguage(!before, language)
 
     refreshAllOpenEditors()
   }
@@ -299,19 +302,19 @@ private fun hasEditorParameterHintAtOffset(editor: Editor, file: PsiFile): Boole
   val startOffset = element?.textRange?.startOffset ?: offset
   val endOffset = element?.textRange?.endOffset ?: offset
   
-  return !ParameterHintsPresentationManager.getInstance().getParameterHintsInRange(editor, startOffset, endOffset).isEmpty()
+  return ParameterHintsPresentationManager.getInstance().getParameterHintsInRange(editor, startOffset, endOffset).isNotEmpty()
 }
 
 
 private fun refreshAllOpenEditors() {
-  ParameterHintsPassFactory.forceHintsUpdateOnNextPass();
-  ProjectManager.getInstance().openProjects.forEach {
-    val psiManager = PsiManager.getInstance(it)
-    val daemonCodeAnalyzer = DaemonCodeAnalyzer.getInstance(it)
-    val fileEditorManager = FileEditorManager.getInstance(it)
+  ParameterHintsPassFactory.forceHintsUpdateOnNextPass()
+  ProjectManager.getInstance().openProjects.forEach { project ->
+    val psiManager = PsiManager.getInstance(project)
+    val daemonCodeAnalyzer = DaemonCodeAnalyzer.getInstance(project)
+    val fileEditorManager = FileEditorManager.getInstance(project)
 
-    fileEditorManager.selectedFiles.forEach {
-      psiManager.findFile(it)?.let { daemonCodeAnalyzer.restart(it) }
+    fileEditorManager.selectedFiles.forEach { file ->
+      psiManager.findFile(file)?.let { daemonCodeAnalyzer.restart(it) }
     }
   }
 }
@@ -320,20 +323,13 @@ private fun refreshAllOpenEditors() {
 private fun getHintInfoFromProvider(offset: Int, file: PsiFile, editor: Editor): HintInfo? {
   val element = file.findElementAt(offset) ?: return null
   val provider = InlayParameterHintsExtension.forLanguage(file.language) ?: return null
-  
-  val isHintOwnedByElement: (PsiElement) -> Boolean = { e -> provider.getHintInfo(e) != null && e.isOwnsInlayInEditor(editor) }
-  val method = PsiTreeUtil.findFirstParent(element, isHintOwnedByElement) ?: return null
-  
-  return provider.getHintInfo(method)
+
+  val method = PsiTreeUtil.findFirstParent(element) { it is PsiFile
+                                                      // hint owned by element
+                                                      || (provider.getHintInfo(it, file)?.isOwnedByPsiElement(it, editor) ?: false)}
+  if (method == null || method is PsiFile) return null
+  return provider.getHintInfo(method, file)
 }
-
-
-fun PsiElement.isOwnsInlayInEditor(editor: Editor): Boolean {
-  if (textRange == null) return false
-  val start = if (textRange.isEmpty) textRange.startOffset else textRange.startOffset + 1
-  return editor.inlayModel.hasInlineElementsInRange(start, textRange.endOffset)
-}
-
 
 fun MethodInfo.toPattern(): String = this.fullyQualifiedName + '(' + this.paramNames.joinToString(",") + ')'
 

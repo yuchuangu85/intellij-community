@@ -15,6 +15,7 @@ import com.intellij.psi.impl.source.resolve.JavaResolveUtil;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -76,6 +77,12 @@ public class JavaConstructorCallElement extends LookupElementDecorator<LookupEle
     return myConstructor;
   }
 
+  @Nullable
+  @Override
+  public PsiElement getPsiElement() {
+    return myConstructor;
+  }
+
   @Override
   public boolean equals(Object o) {
     return this == o || super.equals(o) && myConstructor.equals(((JavaConstructorCallElement)o).myConstructor);
@@ -110,6 +117,16 @@ public class JavaConstructorCallElement extends LookupElementDecorator<LookupEle
     presentation.appendTailText(tailText.substring(genericsEnd), true);
   }
 
+  @NotNull
+  public PsiClass getConstructedClass() {
+    PsiClass aClass = myConstructor.getContainingClass();
+    if (aClass == null) {
+      PsiUtilCore.ensureValid(myConstructor);
+      throw new AssertionError(myConstructor + " of " + myConstructor.getClass() + " returns null containing class, file=" + myConstructor.getContainingFile());
+    }
+    return aClass;
+  }
+
   static List<? extends LookupElement> wrap(@NotNull JavaPsiClassReferenceElement classItem, @NotNull PsiElement position) {
     PsiClass psiClass = classItem.getObject();
     return wrap(classItem, psiClass, position, () -> JavaPsiFacade.getElementFactory(psiClass.getProject()).createType(psiClass, PsiSubstitutor.EMPTY));
@@ -136,7 +153,7 @@ public class JavaConstructorCallElement extends LookupElementDecorator<LookupEle
     return !constructor.hasModifierProperty(PsiModifier.PRIVATE) && psiClass.hasModifierProperty(PsiModifier.ABSTRACT);
   }
 
-  private static boolean isConstructorCallPlace(@NotNull PsiElement position) {
+  static boolean isConstructorCallPlace(@NotNull PsiElement position) {
     return CachedValuesManager.getCachedValue(position, () -> {
       boolean result = JavaClassNameCompletionContributor.AFTER_NEW.accepts(position) &&
                        !JavaClassNameInsertHandler.isArrayTypeExpected(PsiTreeUtil.getParentOfType(position, PsiNewExpression.class));

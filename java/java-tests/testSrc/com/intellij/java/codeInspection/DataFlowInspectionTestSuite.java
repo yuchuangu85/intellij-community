@@ -20,6 +20,7 @@ import com.intellij.java.codeInsight.completion.SmartTypeCompletionDfaTest;
 import com.intellij.java.codeInsight.daemon.quickFix.*;
 import com.intellij.java.slicer.SliceBackwardTest;
 import com.intellij.java.slicer.SliceTreeTest;
+import com.siyeh.ig.redundancy.RedundantOperationOnEmptyContainerInspectionTest;
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 
@@ -29,12 +30,15 @@ import org.junit.runners.Suite;
   DataFlowInspection8Test.class,
   DataFlowInspection9Test.class,
   DataFlowInspection10Test.class,
+  DataFlowInspection14Test.class,
   DataFlowInspectionHeavyTest.class,
   DataFlowInspectionAncientTest.class,
   DataFlowInspectionCancellingTest.class,
   ContractCheckTest.class,
   HardcodedContractsTest.class,
   DataFlowRangeAnalysisTest.class,
+  OptionalGetWithoutIsPresentInspectionTest.class,
+  RedundantOperationOnEmptyContainerInspectionTest.class,
 
   ContractInferenceFromSourceTest.class,
   NullityInferenceFromSourceTestCase.DfaInferenceTest.class,
@@ -66,6 +70,9 @@ import org.junit.runners.Suite;
   RedundantInstanceofFixTest.class,
   ReplaceComputeWithComputeIfPresentFixTest.class,
   DeleteSwitchLabelFixTest.class,
+  DeleteRedundantUpdateFixTest.class,
+  ReplaceTypeInCastFixTest.class,
+  ReplaceMinMaxWithArgumentFixTest.class
   })
 public class DataFlowInspectionTestSuite {
 }

@@ -16,7 +16,7 @@
 package com.intellij.ui;
 
 import com.intellij.openapi.project.Project;
-import org.jetbrains.annotations.Nls;
+import com.intellij.openapi.util.NlsContexts;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
@@ -32,17 +32,17 @@ import java.util.List;
 public class ColorChooser {
   @Nullable
   public static Color chooseColor(Component parent,
-                                  @Nls(capitalization = Nls.Capitalization.Title) String caption,
+                                  @NlsContexts.DialogTitle String caption,
                                   @Nullable Color preselectedColor,
                                   boolean enableOpacity,
-                                  List<ColorPickerListener> listeners,
+                                  List<? extends ColorPickerListener> listeners,
                                   boolean opacityInPercent) {
     return ColorChooserService.getInstance().showDialog(null, parent, caption, preselectedColor, enableOpacity, listeners, opacityInPercent);
   }
 
   @Nullable
   public static Color chooseColor(Component parent,
-                                  @Nls(capitalization = Nls.Capitalization.Title) String caption,
+                                  @NlsContexts.DialogTitle String caption,
                                   @Nullable Color preselectedColor,
                                   boolean enableOpacity) {
     return chooseColor(parent, caption, preselectedColor, enableOpacity, Collections.emptyList(), false);
@@ -50,7 +50,7 @@ public class ColorChooser {
 
   @Nullable
   public static Color chooseColor(Component parent,
-                                  @Nls(capitalization = Nls.Capitalization.Title) String caption,
+                                  @NlsContexts.DialogTitle String caption,
                                   @Nullable Color preselectedColor,
                                   boolean enableOpacity,
                                   boolean opacityInPercent) {
@@ -59,7 +59,7 @@ public class ColorChooser {
 
   @Nullable
   public static Color chooseColor(Component parent,
-                                  @Nls(capitalization = Nls.Capitalization.Title) String caption,
+                                  @NlsContexts.DialogTitle String caption,
                                   @Nullable Color preselectedColor) {
     return chooseColor(parent, caption, preselectedColor, false);
   }
@@ -67,10 +67,10 @@ public class ColorChooser {
   @Nullable
   public static Color chooseColor(@Nullable Project project,
                                   Component parent,
-                                  @Nls(capitalization = Nls.Capitalization.Title) String caption,
+                                  @NlsContexts.DialogTitle String caption,
                                   @Nullable Color preselectedColor,
                                   boolean enableOpacity,
-                                  List<ColorPickerListener> listeners,
+                                  List<? extends ColorPickerListener> listeners,
                                   boolean opacityInPercent) {
     return ColorChooserService.getInstance().showDialog(project, parent, caption, preselectedColor, enableOpacity, listeners, opacityInPercent);
   }
@@ -78,7 +78,7 @@ public class ColorChooser {
   @Nullable
   public static Color chooseColor(@Nullable Project project,
                                   Component parent,
-                                  @Nls(capitalization = Nls.Capitalization.Title) String caption,
+                                  @NlsContexts.DialogTitle String caption,
                                   @Nullable Color preselectedColor,
                                   boolean enableOpacity) {
     return chooseColor(project, parent, caption, preselectedColor, enableOpacity, Collections.emptyList(), false);
@@ -87,7 +87,7 @@ public class ColorChooser {
   @Nullable
   public static Color chooseColor(@Nullable Project project,
                                   Component parent,
-                                  @Nls(capitalization = Nls.Capitalization.Title) String caption,
+                                  @NlsContexts.DialogTitle String caption,
                                   @Nullable Color preselectedColor,
                                   boolean enableOpacity,
                                   boolean opacityInPercent) {
@@ -97,7 +97,7 @@ public class ColorChooser {
   @Nullable
   public static Color chooseColor(@Nullable Project project,
                                   Component parent,
-                                  @Nls(capitalization = Nls.Capitalization.Title) String caption,
+                                  @NlsContexts.DialogTitle String caption,
                                   @Nullable Color preselectedColor) {
     return chooseColor(project, parent, caption, preselectedColor, false);
   }

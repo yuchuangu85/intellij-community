@@ -16,6 +16,7 @@
 package com.intellij.refactoring.changeClassSignature;
 
 import com.intellij.codeInsight.daemon.impl.quickfix.ChangeClassSignatureFromUsageFix;
+import com.intellij.java.refactoring.JavaRefactoringBundle;
 import com.intellij.lang.findUsages.DescriptiveNameUtil;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
@@ -32,6 +33,7 @@ import com.intellij.ui.*;
 import com.intellij.ui.table.JBTable;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.EditableModel;
+import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -64,7 +66,6 @@ public class ChangeClassSignatureDialog extends RefactoringDialog {
   private final Project myProject;
   private final MyTableModel myTableModel;
   private JBTable myTable;
-  static final String REFACTORING_NAME = RefactoringBundle.message("changeClassSignature.refactoring.name");
   private final boolean myHideDefaultValueColumn;
 
   public ChangeClassSignatureDialog(@NotNull PsiClass aClass, boolean hideDefaultValueColumn) {
@@ -90,7 +91,7 @@ public class ChangeClassSignatureDialog extends RefactoringDialog {
                                     boolean hideDefaultValueColumn) {
     super(aClass.getProject(), true);
     myHideDefaultValueColumn = hideDefaultValueColumn;
-    setTitle(REFACTORING_NAME);
+    setTitle(getRefactoringName());
     myClass = aClass;
     myProject = myClass.getProject();
     myOriginalParameters = myClass.getTypeParameters();
@@ -111,7 +112,7 @@ public class ChangeClassSignatureDialog extends RefactoringDialog {
 
   @Override
   protected JComponent createNorthPanel() {
-    return new JLabel(RefactoringBundle.message("changeClassSignature.class.label.text", DescriptiveNameUtil.getDescriptiveName(myClass)));
+    return new JLabel(JavaRefactoringBundle.message("changeClassSignature.class.label.text", DescriptiveNameUtil.getDescriptiveName(myClass)));
   }
 
   @Override
@@ -134,12 +135,13 @@ public class ChangeClassSignatureDialog extends RefactoringDialog {
     Project project = myClass.getProject();
     nameColumn.setCellRenderer(new MyCellRenderer());
     nameColumn.setCellEditor(new StringTableCellEditor(project));
-    boundColumn.setCellRenderer(new MyCodeFragmentTableCellRenderer());
+    boundColumn.setCellRenderer(new CodeFragmentTableCellRenderer(project));
     boundColumn.setCellEditor(new JavaCodeFragmentTableCellEditor(project));
-    valueColumn.setCellRenderer(new MyCodeFragmentTableCellRenderer());
+    valueColumn.setCellRenderer(new CodeFragmentTableCellRenderer(project));
     valueColumn.setCellEditor(new JavaCodeFragmentTableCellEditor(project));
 
-    myTable.setPreferredScrollableViewportSize(new Dimension(210, myTable.getRowHeight() * 4));
+    myTable.setPreferredScrollableViewportSize(JBUI.size(210, -1));
+    myTable.setVisibleRowCount(4);
     myTable.getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     myTable.getSelectionModel().setSelectionInterval(0, 0);
     myTable.setSurrendersFocusOnKeystroke(true);
@@ -165,7 +167,7 @@ public class ChangeClassSignatureDialog extends RefactoringDialog {
     }
 
     final JPanel panel = new JPanel(new BorderLayout());
-    panel.add(SeparatorFactory.createSeparator(RefactoringBundle.message("changeClassSignature.parameters.panel.border.title"), myTable), BorderLayout.NORTH);
+    panel.add(SeparatorFactory.createSeparator(JavaRefactoringBundle.message("changeClassSignature.parameters.panel.border.title"), myTable), BorderLayout.NORTH);
     panel.add(ToolbarDecorator.createDecorator(myTable).createPanel(), BorderLayout.CENTER);
     return panel;
   }
@@ -175,7 +177,7 @@ public class ChangeClassSignatureDialog extends RefactoringDialog {
     TableUtil.stopEditing(myTable);
     String message = validateAndCommitData();
     if (message != null) {
-      CommonRefactoringUtil.showErrorMessage(RefactoringBundle.message("error.incorrect.data"), message, HelpID.CHANGE_CLASS_SIGNATURE, myClass.getProject());
+      CommonRefactoringUtil.showErrorMessage(JavaRefactoringBundle.message("error.incorrect.data"), message, HelpID.CHANGE_CLASS_SIGNATURE, myClass.getProject());
       return;
     }
     ChangeClassSignatureProcessor processor =
@@ -190,7 +192,7 @@ public class ChangeClassSignatureDialog extends RefactoringDialog {
     for (final TypeParameterInfo info : myTypeParameterInfos) {
       if (info instanceof TypeParameterInfo.New &&
           !PsiNameHelper.getInstance(myClass.getProject()).isIdentifier(info.getName(parameters))) {
-        return RefactoringBundle.message("error.wrong.name.input", info.getName(parameters));
+        return JavaRefactoringBundle.message("error.wrong.name.input", info.getName(parameters));
       }
       final String newName = info.getName(parameters);
       TypeParameterInfo existing = infos.get(newName);
@@ -221,12 +223,12 @@ public class ChangeClassSignatureDialog extends RefactoringDialog {
       }
     }
     catch (PsiTypeCodeFragment.TypeSyntaxException e) {
-      return RefactoringBundle
+      return JavaRefactoringBundle
         .message("changeClassSignature.bad.value", updater.getValueName(), source.getText(), info.getName(null));
     }
     catch (PsiTypeCodeFragment.NoTypeException e) {
       return updater == InfoUpdater.DEFAULT_VALUE
-             ? RefactoringBundle.message("changeSignature.no.type.for.parameter", "default value", info.getName(null))
+             ? JavaRefactoringBundle.message("changeSignature.no.type.for.parameter", "default value", info.getName(null))
              : null;
     }
     updater.updateInfo(info, valueType);
@@ -285,9 +287,9 @@ public class ChangeClassSignatureDialog extends RefactoringDialog {
         case NAME_COLUMN:
           return RefactoringBundle.message("column.name.name");
         case BOUND_VALUE_COLUMN:
-          return RefactoringBundle.message("changeSignature.bound.value.column");
+          return JavaRefactoringBundle.message("changeSignature.bound.value.column");
         case DEFAULT_VALUE_COLUMN:
-          return RefactoringBundle.message("changeSignature.default.value.column");
+          return JavaRefactoringBundle.message("changeSignature.default.value.column");
         default:
           LOG.assertTrue(false);
       }
@@ -343,7 +345,7 @@ public class ChangeClassSignatureDialog extends RefactoringDialog {
     }
   }
 
-  private class MyCellRenderer extends ColoredTableCellRenderer {
+  private static class MyCellRenderer extends ColoredTableCellRenderer {
 
     @Override
     public void customizeCellRenderer(JTable table, Object value,
@@ -353,25 +355,6 @@ public class ChangeClassSignatureDialog extends RefactoringDialog {
       acquireState(table, isSelected, false, row, col);
       getCellState().updateRenderer(this);
       append((String)value);
-    }
-  }
-
-  private class MyCodeFragmentTableCellRenderer extends CodeFragmentTableCellRenderer {
-
-    MyCodeFragmentTableCellRenderer() {
-      super(getProject());
-    }
-
-    @Override
-    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-      final Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-      //if (!myTableModel.isCellEditable(row, column)) {
-      //  component.setBackground(component.getBackground().darker());
-      //}
-
-      //TODO: better solution
-
-      return component;
     }
   }
 
@@ -403,5 +386,9 @@ public class ChangeClassSignatureDialog extends RefactoringDialog {
         return "bound";
       }
     };
+  }
+
+  static String getRefactoringName() {
+    return JavaRefactoringBundle.message("changeClassSignature.refactoring.name");
   }
 }

@@ -16,13 +16,21 @@
 package com.siyeh.ig.controlflow;
 
 import com.intellij.codeInspection.InspectionProfileEntry;
-import com.siyeh.ig.LightInspectionTestCase;
+import com.intellij.testFramework.LightProjectDescriptor;
+import com.siyeh.ig.LightJavaInspectionTestCase;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public class SwitchStatementWithTooFewBranchesInspectionTest extends LightInspectionTestCase {
+public class SwitchStatementWithTooFewBranchesInspectionTest extends LightJavaInspectionTestCase {
 
   public void testSwitchStatementWithTooFewBranches() {
     doTest();
+  }
+
+  @NotNull
+  @Override
+  protected LightProjectDescriptor getProjectDescriptor() {
+    return JAVA_13;
   }
 
   @Nullable

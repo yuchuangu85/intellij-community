@@ -1,13 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.ui.tree.render;
 
 import com.intellij.debugger.engine.DebugProcessImpl;
+import com.intellij.debugger.engine.DebuggerUtils;
 import com.intellij.debugger.engine.SuspendContextImpl;
 import com.intellij.debugger.engine.evaluation.EvaluateException;
 import com.intellij.debugger.engine.evaluation.EvaluationContext;
 import com.intellij.debugger.engine.evaluation.EvaluationContextImpl;
 import com.intellij.debugger.engine.events.SuspendContextCommandImpl;
-import com.intellij.debugger.settings.NodeRendererSettings;
 import com.intellij.debugger.ui.tree.ValueDescriptor;
 import com.intellij.util.ui.ColorIcon;
 import com.intellij.util.ui.JBUI;
@@ -19,8 +19,8 @@ import java.awt.*;
 import java.util.Collections;
 
 class ColorObjectRenderer extends CompoundReferenceRenderer {
-  ColorObjectRenderer(final NodeRendererSettings rendererSettings) {
-    super(rendererSettings, "Color", null, null);
+  ColorObjectRenderer() {
+    super("Color", null, null);
     setClassName("java.awt.Color");
     setEnabled(true);
   }
@@ -34,7 +34,7 @@ class ColorObjectRenderer extends CompoundReferenceRenderer {
         ReferenceType refType = objRef.referenceType();
         if (refType instanceof ClassType) {
           Value rgbValue = null;
-          Method getRGBMethod = ((ClassType)refType).concreteMethodByName("getRGB", "()I");
+          Method getRGBMethod = DebuggerUtils.findMethod(refType, "getRGB", "()I");
           if (getRGBMethod != null) {
             ReferenceType rgbMethodDeclaringType = getRGBMethod.declaringType();
             if (rgbMethodDeclaringType.name().equals(getClassName())) { // getRGB is not overridden

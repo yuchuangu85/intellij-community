@@ -19,6 +19,7 @@ import com.intellij.codeInsight.template.emmet.tokens.TemplateToken;
 import com.intellij.lang.xml.XMLLanguage;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.xml.XmlTag;
+import com.intellij.xml.XmlBundle;
 import com.intellij.xml.util.HtmlUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -45,14 +46,24 @@ public class CommentZenCodingFilter extends ZenCodingFilter {
   public String filterText(@NotNull String text, @NotNull TemplateToken token) {
     XmlTag tag = token.getXmlTag();
     if (tag != null) {
-      String classAttr = tag.getAttributeValue(HtmlUtil.CLASS_ATTRIBUTE_NAME);
+      String classAttr = tag.getAttributeValue(getClassAttributeName());
       String idAttr = tag.getAttributeValue(HtmlUtil.ID_ATTRIBUTE_NAME);
       if (!isNullOrEmpty(classAttr) || !isNullOrEmpty(idAttr)) {
         String commentString = buildCommentString(classAttr, idAttr);
-        return text + "\n<!-- /" + commentString + " -->";
+        return String.format(getCommentFormat(), text, commentString);
       }
     }
     return text;
+  }
+
+  @NotNull
+  protected String getCommentFormat() {
+    return "%s\n<!-- /%s -->";
+  }
+
+  @NotNull
+  public String getClassAttributeName() {
+    return HtmlUtil.CLASS_ATTRIBUTE_NAME;
   }
 
   @NotNull
@@ -63,12 +74,12 @@ public class CommentZenCodingFilter extends ZenCodingFilter {
 
   @Override
   public boolean isMyContext(@NotNull PsiElement context) {
-    return context.getLanguage() instanceof XMLLanguage;
+    return context.getParent().getLanguage() instanceof XMLLanguage;
   }
 
   @NotNull
   @Override
   public String getDisplayName() {
-    return "Comment tags";
+    return XmlBundle.message("emmet.filter.comment.tags");
   }
 }

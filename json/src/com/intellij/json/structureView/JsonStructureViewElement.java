@@ -5,7 +5,6 @@ import com.intellij.ide.util.treeView.smartTree.TreeElement;
 import com.intellij.json.psi.*;
 import com.intellij.navigation.ItemPresentation;
 import com.intellij.psi.util.PsiTreeUtil;
-import com.intellij.util.ArrayUtil;
 import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
@@ -51,9 +50,8 @@ public class JsonStructureViewElement implements StructureViewTreeElement {
     return presentation;
   }
 
-  @NotNull
   @Override
-  public TreeElement[] getChildren() {
+  public TreeElement @NotNull [] getChildren() {
     JsonElement value = null;
     if (myElement instanceof JsonFile) {
       value = ((JsonFile)myElement).getTopLevelValue();
@@ -79,7 +77,7 @@ public class JsonStructureViewElement implements StructureViewTreeElement {
         }
         return null;
       });
-      return ArrayUtil.toObjectArray(childObjects, TreeElement.class);
+      return childObjects.toArray(TreeElement.EMPTY_ARRAY);
     }
     return EMPTY_ARRAY;
   }

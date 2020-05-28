@@ -17,52 +17,69 @@
 package com.intellij.java.codeInspection;
 
 import com.intellij.JavaTestUtil;
-import com.intellij.codeInspection.ex.LocalInspectionToolWrapper;
 import com.intellij.codeInspection.java15api.Java15APIUsageInspection;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.testFramework.IdeaTestUtil;
-import com.intellij.testFramework.InspectionTestCase;
+import com.intellij.testFramework.LightProjectDescriptor;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
+import org.jetbrains.annotations.NotNull;
 
-public class JavaAPIUsagesInspectionTest extends InspectionTestCase {
+public class JavaAPIUsagesInspectionTest extends LightJavaCodeInsightFixtureTestCase {
   @Override
   protected String getTestDataPath() {
-    return JavaTestUtil.getJavaTestDataPath() + "/inspection";
+    return JavaTestUtil.getJavaTestDataPath() + "/inspection/usage1.5/";
   }
 
-  private void doTest() {
-    final Java15APIUsageInspection usageInspection = new Java15APIUsageInspection();
-    doTest("usage1.5/" + getTestName(true), new LocalInspectionToolWrapper(usageInspection), "java 1.5");
+
+  @Override
+  protected void setUp() throws Exception {
+    super.setUp();
+    myFixture.enableInspections(new Java15APIUsageInspection());
+  }
+
+  @NotNull
+  @Override
+  protected LightProjectDescriptor getProjectDescriptor() {
+    return JAVA_8;
   }
 
   public void testConstructor() {
-    IdeaTestUtil.withLevel(getModule(), LanguageLevel.JDK_1_4, this::doTest);
+    IdeaTestUtil.setModuleLanguageLevel(myFixture.getModule(), LanguageLevel.JDK_1_4, getTestRootDisposable());
+    myFixture.testHighlighting(getTestName(false) + ".java");
   }
 
   public void testIgnored() {
-    doTest();
+    myFixture.addClass("package java.awt.geom; public class GeneralPath {public void moveTo(int x, int y){}}");
+    doTest(); 
   }
-
-  public void testAnnotation() {
-    IdeaTestUtil.withLevel(getModule(), LanguageLevel.JDK_1_6, this::doTest);
-  }
-
-  public void testDefaultMethods() {
-    IdeaTestUtil.withLevel(getModule(), LanguageLevel.JDK_1_6, this::doTest);
-  }
-
-  public void testOverrideAnnotation() {
-    IdeaTestUtil.withLevel(getModule(), LanguageLevel.JDK_1_6, this::doTest);
-  }
-
+  public void testAnnotation() { doTest(); }
+  public void testDefaultMethods() { doTest(); }
+  public void testOverrideAnnotation() { doTest(); }
   public void testRawInheritFromNewlyGenerified() {
-    IdeaTestUtil.withLevel(getModule(), LanguageLevel.JDK_1_6, this::doTest);
+    myFixture.addClass("package javax.swing; public class AbstractListModel<K> {}");
+    doTest(); 
+  }
+  
+  private void doTest() {
+    IdeaTestUtil.setModuleLanguageLevel(myFixture.getModule(), LanguageLevel.JDK_1_6, getTestRootDisposable());
+    myFixture.testHighlighting(getTestName(false) + ".java");
   }
 
   //generate apiXXX.txt
-  /*
+  //configure jdk and set test project descriptor
+ /* private static final String JDK_HOME = "/Users/anna/Downloads/jdk-12.0.2.jdk/Contents/Home";
+  private static final String VERSION = "12";
+  private static final LightProjectDescriptor API_VERSION_PROJECT_DESCRIPTOR = new LightProjectDescriptor() {
+    @Nullable
+    @Override
+    public Sdk getSdk() {
+      return JavaSdk.getInstance().createJdk(VERSION, JDK_HOME + "/", false);
+    }
+  };
+
   //todo exclude inheritors of ConcurrentMap#putIfAbsent
   public void testCollectSinceApiUsages() {
-    final String version = "9";
+    VfsRootAccess.allowRootAccess("/");
     final LinkedHashSet<String> notDocumented = new LinkedHashSet<String>();
     final ContentIterator contentIterator = new ContentIterator() {
       @Override
@@ -85,7 +102,7 @@ public class JavaAPIUsagesInspectionTest extends InspectionTestCase {
                   for (PsiDocTag tag : comment.getTags()) {
                     if (Comparing.strEqual(tag.getName(), "since")) {
                       final PsiDocTagValue value = tag.getValueElement();
-                      if (value != null && value.getText().equals(version)) {
+                      if (value != null && value.getText().equals(VERSION)) {
                         return true;
                       }
                       break;
@@ -100,19 +117,10 @@ public class JavaAPIUsagesInspectionTest extends InspectionTestCase {
         return true;
       }
     };
-    final VirtualFile srcFile = JarFileSystem.getInstance().findFileByPath("c:/tools/jdk9/lib/src.zip!/");
+    final VirtualFile srcFile = JarFileSystem.getInstance().findFileByPath(JDK_HOME + "/lib/src.zip!/");
     assert srcFile != null;
     VfsUtilCore.iterateChildrenRecursively(srcFile, VirtualFileFilter.ALL, contentIterator);
 
     notDocumented.forEach(System.out::println);
-  }
-
-  @Override
-  protected void setUpJdk() {
-    Module[] modules = ModuleManager.getInstance(myProject).getModules();
-    final Sdk sdk = JavaSdk.getInstance().createJdk("9.0", "c:/tools/jdk9/", false);
-    for (Module module : modules) {
-      ModuleRootModificationUtil.setModuleSdk(module, sdk);
-    }
   }*/
 }

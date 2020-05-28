@@ -43,6 +43,7 @@ public class DiffHyperlink implements Printable {
   protected final String myActualFilePath;
   private final boolean myPrintOneLine;
   private final HyperlinkInfo myDiffHyperlink = new DiffHyperlinkInfo();
+  private String myTestProxyName;
 
 
   public DiffHyperlink(final String expected, final String actual, final String filePath) {
@@ -68,12 +69,16 @@ public class DiffHyperlink implements Printable {
     myPrintOneLine = printOneLine;
   }
 
+  public void setTestProxyName(String name) {
+    myTestProxyName = name;
+  }
+
   private static String normalizeSeparators(String filePath) {
     return filePath == null ? null : filePath.replace(File.separatorChar, '/');
   }
 
   protected String getTitle() {
-    return ExecutionBundle.message("strings.equal.failed.dialog.title");
+    return ExecutionBundle.message("strings.equal.failed.dialog.title") + (myTestProxyName != null ? " (" + myTestProxyName + ")" : "");
   }
 
   public String getDiffTitle() {
@@ -99,11 +104,7 @@ public class DiffHyperlink implements Printable {
   @Override
   public void printOn(final Printer printer) {
     if (!hasMoreThanOneLine(myActual) && !hasMoreThanOneLine(myExpected) && myPrintOneLine) {
-      printer.print(NEW_LINE, ConsoleViewContentType.ERROR_OUTPUT);
-      printer.print(ExecutionBundle.message("diff.content.expected.for.file.title"), ConsoleViewContentType.SYSTEM_OUTPUT);
-      printer.print(myExpected + NEW_LINE, ConsoleViewContentType.ERROR_OUTPUT);
-      printer.print(ExecutionBundle.message("junit.actual.text.label"), ConsoleViewContentType.SYSTEM_OUTPUT);
-      printer.print(myActual, ConsoleViewContentType.ERROR_OUTPUT);
+      printer.printExpectedActualHeader(myExpected, myActual);
     }
     printer.print(NEW_LINE, ConsoleViewContentType.ERROR_OUTPUT);
     printer.printHyperlink(ExecutionBundle.message("junit.click.to.see.diff.link"), myDiffHyperlink);

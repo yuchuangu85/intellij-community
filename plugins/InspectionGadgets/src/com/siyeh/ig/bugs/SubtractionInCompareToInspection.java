@@ -16,7 +16,6 @@
 package com.siyeh.ig.bugs;
 
 import com.intellij.codeInspection.dataFlow.CommonDataflow;
-import com.intellij.codeInspection.dataFlow.DfaFactType;
 import com.intellij.codeInspection.dataFlow.rangeSet.LongRangeSet;
 import com.intellij.codeInspection.ui.ListTable;
 import com.intellij.codeInspection.ui.ListWrappingTableModel;
@@ -32,7 +31,6 @@ import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.psiutils.ExpressionUtils;
 import com.siyeh.ig.psiutils.MethodMatcher;
 import com.siyeh.ig.psiutils.MethodUtils;
-import com.siyeh.ig.psiutils.ParenthesesUtils;
 import com.siyeh.ig.ui.UiUtils;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
@@ -86,12 +84,6 @@ public class SubtractionInCompareToInspection extends BaseInspection {
 
   @Override
   @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("subtraction.in.compareto.display.name");
-  }
-
-  @Override
-  @NotNull
   public String buildErrorString(Object... infos) {
     return InspectionGadgetsBundle.message("subtraction.in.compareto.problem.descriptor");
   }
@@ -113,7 +105,7 @@ public class SubtractionInCompareToInspection extends BaseInspection {
       final PsiLambdaExpression lambdaExpression =
         PsiTreeUtil.getParentOfType(expression, PsiLambdaExpression.class, true, PsiMember.class);
       if (lambdaExpression != null) {
-        final PsiClass functionalInterface = PsiUtil.resolveClassInType(lambdaExpression.getFunctionalInterfaceType());
+        final PsiClass functionalInterface = LambdaUtil.resolveFunctionalInterfaceClass(lambdaExpression);
         if (functionalInterface != null && CommonClassNames.JAVA_UTIL_COMPARATOR.equals(functionalInterface.getQualifiedName())) {
           registerError(expression);
           return;
@@ -158,36 +150,16 @@ public class SubtractionInCompareToInspection extends BaseInspection {
         return true;
       }
       if (isSafeOperand(lhs) && isSafeOperand(rhs)) return true;
-      LongRangeSet leftRange = CommonDataflow.getExpressionFact(lhs, DfaFactType.RANGE);
-      LongRangeSet rightRange = CommonDataflow.getExpressionFact(rhs, DfaFactType.RANGE);
+      LongRangeSet leftRange = CommonDataflow.getExpressionRange(lhs);
+      LongRangeSet rightRange = CommonDataflow.getExpressionRange(rhs);
       if (leftRange != null && !leftRange.isEmpty() && rightRange != null && !rightRange.isEmpty()) {
-        long leftMin = leftRange.min();
-        long leftMax = leftRange.max();
-        long rightMin = rightRange.min();
-        long rightMax = rightRange.max();
-        if (PsiType.INT.equals(type) && !overflowsInt(leftMin, rightMax) && !overflowsInt(leftMax, rightMin)) {
-          return true;
-        }
-        if (PsiType.LONG.equals(type) && !overflowsLong(leftMin, rightMax) && !overflowsLong(leftMax, rightMin)) {
-          return true;
-        }
+        if (!leftRange.subtractionMayOverflow(rightRange, PsiType.LONG.equals(type))) return true;
       }
       return false;
     }
 
-    private boolean overflowsInt(long a, long b) {
-      long diff = a - b;
-      return diff < Integer.MIN_VALUE || diff > Integer.MAX_VALUE;
-    }
-
-    private boolean overflowsLong(long a, long b) {
-      long diff = a - b;
-      // Hacker's Delight 2nd Edition, 2-13 Overflow Detection
-      return ((a ^ b) & (a ^ diff)) < 0;
-    }
-
     private boolean isSafeOperand(PsiExpression operand) {
-      operand = ParenthesesUtils.stripParentheses(operand);
+      operand = PsiUtil.skipParenthesizedExprDown(operand);
       if (operand instanceof PsiMethodCallExpression) {
         final PsiMethodCallExpression methodCallExpression = (PsiMethodCallExpression)operand;
         return methodMatcher.matches(methodCallExpression);

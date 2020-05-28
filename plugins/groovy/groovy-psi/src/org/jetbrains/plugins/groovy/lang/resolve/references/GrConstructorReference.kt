@@ -1,62 +1,68 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.resolve.references
 
-import com.intellij.psi.CommonClassNames
+import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
-import com.intellij.psi.PsiType
-import com.intellij.psi.util.InheritanceUtil
 import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult
-import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrNewExpression
-import org.jetbrains.plugins.groovy.lang.psi.api.types.GrCodeReferenceElement
-import org.jetbrains.plugins.groovy.lang.psi.impl.GrMapType
-import org.jetbrains.plugins.groovy.lang.psi.util.GrInnerClassConstructorUtil
-import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil.getConstructorCandidates
-import org.jetbrains.plugins.groovy.lang.resolve.api.GroovyCachingReference
-import org.jetbrains.plugins.groovy.lang.resolve.processors.inference.buildTopLevelArgumentTypes
+import org.jetbrains.plugins.groovy.lang.psi.util.GrInnerClassConstructorUtil.enclosingClass
+import org.jetbrains.plugins.groovy.lang.resolve.DiamondResolveResult
+import org.jetbrains.plugins.groovy.lang.resolve.api.*
+import org.jetbrains.plugins.groovy.lang.resolve.impl.*
 
-class GrConstructorReference(element: GrNewExpression) : GroovyCachingReference<GrNewExpression>(element) {
+abstract class GrConstructorReference<T : PsiElement>(element: T) : GroovyCachingReference<T>(element),
+                                                                    GroovyConstructorReference {
 
-  override fun doResolve(incomplete: Boolean): Collection<GroovyResolveResult> {
-    val ref = element.referenceElement ?: return emptyList()
-    val classCandidate = inferClassCandidate(ref) ?: return emptyList()
-    assert(classCandidate.element is PsiClass)
-    if (incomplete) {
-      return getConstructorCandidates(ref, classCandidate, null).toList()
+  final override fun resolveClass(): GroovyResolveResult? = myConstructedClassReference.resolve(false).singleOrNull()
+
+  private val myConstructedClassReference = object : GroovyCachingReference<T>(element) {
+    override fun doResolve(incomplete: Boolean): Collection<GroovyResolveResult> {
+      return doResolveClass()?.let(::listOf) ?: emptyList()
     }
-    val argumentList = element.argumentList ?: return emptyList()
-
-    if (argumentList.namedArguments.isNotEmpty() && argumentList.expressionArguments.isEmpty()) {
-      val mapType = GrMapType.createFromNamedArgs(argumentList, element.namedArguments)
-      val constructorResults = getConstructorCandidates(ref, classCandidate, arrayOf<PsiType>(mapType)) //one Map parameter, actually
-      for (result in constructorResults) {
-        val resolved = result.element
-        if (resolved is PsiMethod) {
-          val constructor = resolved as PsiMethod?
-          val parameters = constructor!!.parameterList.parameters
-          if (parameters.size == 1 && InheritanceUtil.isInheritor(parameters[0].type, CommonClassNames.JAVA_UTIL_MAP)) {
-            return constructorResults.toList()
-          }
-        }
-      }
-      val emptyConstructors = getConstructorCandidates(ref, classCandidate, PsiType.EMPTY_ARRAY)
-      if (emptyConstructors.isNotEmpty()) {
-        return emptyConstructors.toList()
-      }
-    }
-
-    var types = buildTopLevelArgumentTypes(ref)
-    types = GrInnerClassConstructorUtil.addEnclosingArgIfNeeded(types, element, classCandidate.element as PsiClass)
-    return getConstructorCandidates(ref, classCandidate, types).toList()
   }
 
-  private fun inferClassCandidate(ref: GrCodeReferenceElement): GroovyResolveResult? {
-    val classResults = ref.multiResolve(false)
-    for (result in classResults) {
-      if (result.element is PsiClass) {
-        return result
+  protected abstract fun doResolveClass(): GroovyResolveResult?
+
+  protected open val supportsMapInvocation: Boolean get() = true
+
+  protected open val supportsEnclosingInstance: Boolean get() = true
+
+  final override fun doResolve(incomplete: Boolean): Collection<GroovyResolveResult> {
+    val classCandidate: GroovyResolveResult = resolveClass() ?: return emptyList()
+    val clazz: PsiClass = classCandidate.element as? PsiClass ?: return emptyList()
+    val place: T = element
+    val arguments: Arguments? = arguments
+
+    val constructors: List<PsiMethod> = getAllConstructors(clazz, place)
+    if (incomplete || arguments == null) {
+      return constructors.toResolveResults()
+    }
+
+    val withArguments: WithArguments = withArguments(place, classCandidate.contextSubstitutor, classCandidate is DiamondResolveResult)
+    val withEnclosingClassArguments: WithArguments = withEnclosingClassArguments(clazz, withArguments)
+    return chooseConstructors(constructors, arguments, supportsMapInvocation, withEnclosingClassArguments)
+  }
+
+  private fun withEnclosingClassArguments(clazz: PsiClass, withArguments: WithArguments): WithArguments {
+    if (!supportsEnclosingInstance) {
+      return withArguments
+    }
+    val enclosingClassArgument: Argument? = enclosingClassArgument(element, clazz)
+    if (enclosingClassArgument == null) {
+      return withArguments
+    }
+    else {
+      val enclosingClassArguments: Arguments = listOf(enclosingClassArgument)
+      return { arguments: Arguments, mapConstructor: Boolean ->
+        withArguments(enclosingClassArguments + arguments, mapConstructor)
       }
     }
-    return null
+  }
+
+  private fun enclosingClassArgument(place: PsiElement, constructedClass: PsiClass): Argument? {
+    val enclosingClass = enclosingClass(element, constructedClass) ?: return null
+    val type = JavaPsiFacade.getElementFactory(place.project).createType(enclosingClass)
+    return JustTypeArgument(type)
   }
 }

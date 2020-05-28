@@ -1,25 +1,12 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.compiler.impl.javaCompiler.eclipse;
 
 import com.intellij.compiler.impl.javaCompiler.CompilerModuleOptionsComponent;
 import com.intellij.compiler.options.ComparingUtils;
-import com.intellij.openapi.compiler.CompilerBundle;
+import com.intellij.ide.highlighter.ArchiveFileType;
+import com.intellij.openapi.compiler.JavaCompilerBundle;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
-import com.intellij.openapi.fileTypes.StdFileTypes;
+import com.intellij.openapi.fileTypes.FileTypeRegistry;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.Project;
@@ -48,11 +35,11 @@ public class EclipseCompilerConfigurable implements Configurable {
   public EclipseCompilerConfigurable(Project project, EclipseCompilerOptions options) {
     myProject = project;
     myCompilerSettings = options;
-    myAdditionalOptionsField.setDialogCaption(CompilerBundle.message("java.compiler.option.additional.command.line.parameters"));
+    myAdditionalOptionsField.setDialogCaption(JavaCompilerBundle.message("java.compiler.option.additional.command.line.parameters"));
     myAdditionalOptionsField.setDescriptor(null, false);
     myPathToEcjField.addBrowseFolderListener(
-      "Path to ecj compiler tool", null, project,
-      new FileChooserDescriptor(true, false, true, true, false, false).withFileFilter(file -> file.getFileType() == StdFileTypes.ARCHIVE)
+      JavaCompilerBundle.message("path.to.ecj.compiler.tool"), null, project,
+      new FileChooserDescriptor(true, false, true, true, false, false).withFileFilter(file -> FileTypeRegistry.getInstance().isFileOfType(file, ArchiveFileType.INSTANCE))
     );
   }
 

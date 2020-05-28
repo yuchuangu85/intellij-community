@@ -22,11 +22,11 @@ import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiMember;
 import com.intellij.refactoring.util.duplicates.MethodDuplicatesHandler;
-import com.intellij.testFramework.LightCodeInsightTestCase;
+import com.intellij.testFramework.LightJavaCodeInsightTestCase;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
-public abstract class FindMethodDuplicatesBaseTest extends LightCodeInsightTestCase {
+public abstract class FindMethodDuplicatesBaseTest extends LightJavaCodeInsightTestCase {
   @NotNull
   @Override
   protected String getTestDataPath() {
@@ -58,7 +58,7 @@ public abstract class FindMethodDuplicatesBaseTest extends LightCodeInsightTestC
       checkResultByFile(filePath + ".after");
     }
     else {
-      fail("duplicates found");
+      fail("duplicates found" + "; file content: " + getFile().getText());
     }
   }
 

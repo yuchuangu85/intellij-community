@@ -15,8 +15,8 @@
  */
 package com.intellij.codeInsight.generation.surroundWith;
 
-import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInsight.ExceptionUtil;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
@@ -26,6 +26,7 @@ import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import com.intellij.psi.codeStyle.VariableKind;
 import com.intellij.util.IncorrectOperationException;
+import com.siyeh.ig.psiutils.VariableNameGenerator;
 import org.jetbrains.annotations.NonNls;
 
 import java.util.Collections;
@@ -36,7 +37,7 @@ public class JavaWithTryCatchSurrounder extends JavaStatementsSurrounder {
 
   @Override
   public String getTemplateDescription() {
-    return CodeInsightBundle.message("surround.with.try.catch.template");
+    return JavaBundle.message("surround.with.try.catch.template");
   }
 
   @Override
@@ -71,25 +72,24 @@ public class JavaWithTryCatchSurrounder extends JavaStatementsSurrounder {
     PsiTryStatement tryStatement = (PsiTryStatement)factory.createStatementFromText(text, null);
     tryStatement = (PsiTryStatement)CodeStyleManager.getInstance(project).reformat(tryStatement);
 
-    tryStatement = (PsiTryStatement)container.addAfter(tryStatement, statements[statements.length - 1]);
+    tryStatement = (PsiTryStatement)addAfter(tryStatement, container, statements);
 
     PsiCodeBlock tryBlock = tryStatement.getTryBlock();
     SurroundWithUtil.indentCommentIfNecessary(tryBlock, statements);
-    tryBlock.addRange(statements[0], statements[statements.length - 1]);
+    addRangeWithinContainer(tryBlock, container, statements, true);
 
     PsiCatchSection[] catchSections = tryStatement.getCatchSections();
 
     for (int i = 0; i < exceptions.size(); i++) {
       PsiClassType exception = exceptions.get(i);
-      String[] nameSuggestions = codeStyleManager.suggestVariableName(VariableKind.PARAMETER, null, null, exception).names;
-      String name = codeStyleManager.suggestUniqueVariableName(nameSuggestions[0], tryBlock, false);
+      String name = new VariableNameGenerator(tryBlock, VariableKind.PARAMETER).byType(exception).byName("e", "ex", "exc").generate(false);
       PsiCatchSection catchSection;
       try {
-        catchSection = factory.createCatchSection(exception, name, null);
+        catchSection = factory.createCatchSection(exception, name, tryBlock);
       }
       catch (IncorrectOperationException e) {
-        Messages.showErrorDialog(project, CodeInsightBundle.message("surround.with.try.catch.incorrect.template.message"),
-                                 CodeInsightBundle.message("surround.with.try.catch.incorrect.template.title"));
+        Messages.showErrorDialog(project, JavaBundle.message("surround.with.try.catch.incorrect.template.message"),
+                                 JavaBundle.message("surround.with.try.catch.incorrect.template.title"));
         return null;
       }
       catchSection = (PsiCatchSection)catchSections[i].replace(catchSection);

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.builtInWebServer
 
 import com.google.common.cache.CacheBuilder
@@ -9,17 +9,16 @@ import com.intellij.notification.NotificationType
 import com.intellij.notification.SingletonNotificationManager
 import com.intellij.openapi.application.ApplicationNamesInfo
 import com.intellij.openapi.application.PathManager
-import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.diagnostic.runAndLogException
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.MessageDialogBuilder
 import com.intellij.openapi.ui.Messages
-import com.intellij.openapi.util.SystemInfoRt
+import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.io.endsWithName
-import com.intellij.openapi.util.io.setOwnerPermissions
 import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
@@ -31,6 +30,7 @@ import io.netty.handler.codec.http.*
 import io.netty.handler.codec.http.cookie.DefaultCookie
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder
+import org.jetbrains.ide.BuiltInServerBundle
 import org.jetbrains.ide.BuiltInServerManagerImpl
 import org.jetbrains.ide.HttpRequestHandler
 import org.jetbrains.io.orInSafeMode
@@ -39,21 +39,22 @@ import java.awt.datatransfer.StringSelection
 import java.io.IOException
 import java.math.BigInteger
 import java.net.InetAddress
+import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.security.SecureRandom
+import java.nio.file.attribute.PosixFileAttributeView
+import java.nio.file.attribute.PosixFilePermission
 import java.util.*
 import java.util.concurrent.TimeUnit
 import javax.swing.SwingUtilities
 
-internal val LOG = Logger.getInstance(BuiltInWebServer::class.java)
+internal val LOG = logger<BuiltInWebServer>()
 
 // name is duplicated in the ConfigImportHelper
 private const val IDE_TOKEN_FILE = "user.web.token"
 
 private val notificationManager by lazy {
-  SingletonNotificationManager(BuiltInServerManagerImpl.NOTIFICATION_GROUP.value, NotificationType.INFORMATION,
-                                                         null)
+  SingletonNotificationManager(BuiltInServerManagerImpl.NOTIFICATION_GROUP.value, NotificationType.INFORMATION, null)
 }
 
 class BuiltInWebServer : HttpRequestHandler() {
@@ -65,23 +66,14 @@ class BuiltInWebServer : HttpRequestHandler() {
   override fun isSupported(request: FullHttpRequest): Boolean = super.isSupported(request) || request.method() == HttpMethod.POST
 
   override fun process(urlDecoder: QueryStringDecoder, request: FullHttpRequest, context: ChannelHandlerContext): Boolean {
-    var host = request.host
-    if (host.isNullOrEmpty()) {
-      return false
-    }
-
-    val portIndex = host!!.indexOf(':')
-    if (portIndex > 0) {
-      host = host.substring(0, portIndex)
-    }
-
+    var hostName = request.hostName ?: return false
     val projectName: String?
-    val isIpv6 = host[0] == '[' && host.length > 2 && host[host.length - 1] == ']'
+    val isIpv6 = hostName[0] == '[' && hostName.length > 2 && hostName[hostName.length - 1] == ']'
     if (isIpv6) {
-      host = host.substring(1, host.length - 1)
+      hostName = hostName.substring(1, hostName.length - 1)
     }
 
-    if (isIpv6 || InetAddresses.isInetAddress(host) || isOwnHostName(host) || host.endsWith(".ngrok.io")) {
+    if (isIpv6 || InetAddresses.isInetAddress(hostName) || isOwnHostName(hostName) || hostName.endsWith(".ngrok.io")) {
       if (urlDecoder.path().length < 2) {
         return false
       }
@@ -89,11 +81,11 @@ class BuiltInWebServer : HttpRequestHandler() {
       projectName = null
     }
     else {
-      if (host.endsWith(".localhost")) {
-        projectName = host.substring(0, host.lastIndexOf('.'))
+      if (hostName.endsWith(".localhost")) {
+        projectName = hostName.substring(0, hostName.lastIndexOf('.'))
       }
       else {
-        projectName = host
+        projectName = hostName
       }
     }
     return doProcess(urlDecoder, request, context, projectName)
@@ -102,8 +94,8 @@ class BuiltInWebServer : HttpRequestHandler() {
 
 internal fun isActivatable() = Registry.`is`("ide.built.in.web.server.activatable", false)
 
-const val TOKEN_PARAM_NAME: String = "_ijt"
-const val TOKEN_HEADER_NAME: String = "x-ijt"
+const val TOKEN_PARAM_NAME = "_ijt"
+const val TOKEN_HEADER_NAME = "x-ijt"
 
 private val STANDARD_COOKIE by lazy {
   val productName = ApplicationNamesInfo.getInstance().lowercaseProductName
@@ -121,7 +113,8 @@ private val STANDARD_COOKIE by lazy {
   if (token == null) {
     token = UUID.randomUUID().toString()
     file.write(token!!)
-    file.setOwnerPermissions()
+    Files.getFileAttributeView(file, PosixFileAttributeView::class.java)
+      ?.setPermissions(EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE))
   }
 
   // explicit setting domain cookie on localhost doesn't work for chrome
@@ -139,21 +132,19 @@ private val tokens = CacheBuilder.newBuilder().expireAfterAccess(1, TimeUnit.MIN
 fun acquireToken(): String {
   var token = tokens.asMap().keys.firstOrNull()
   if (token == null) {
-    token = TokenGenerator.generate()
+    token = randomToken()
     tokens.put(token, java.lang.Boolean.TRUE)
   }
   return token
 }
 
 // http://stackoverflow.com/a/41156 - shorter than UUID, but secure
-private object TokenGenerator {
-  private val random = SecureRandom()
-
-  fun generate(): String = BigInteger(130, random).toString(32)
+private fun randomToken(): String {
+  return BigInteger(130, DigestUtil.random).toString(32)
 }
 
 private fun doProcess(urlDecoder: QueryStringDecoder, request: FullHttpRequest, context: ChannelHandlerContext, projectNameAsHost: String?): Boolean {
-  val decodedPath = URLUtil.unescapePercentSequences(urlDecoder.path())
+  val decodedPath = urlDecoder.path()
   var offset: Int
   var isEmptyPath: Boolean
   val isCustomHost = projectNameAsHost != null
@@ -180,7 +171,7 @@ private fun doProcess(urlDecoder: QueryStringDecoder, request: FullHttpRequest, 
     if (isCustomHost) {
       // domain name is case-insensitive
       if (projectName.equals(name, ignoreCase = true)) {
-        if (!SystemInfoRt.isFileSystemCaseSensitive) {
+        if (!SystemInfo.isFileSystemCaseSensitive) {
           // may be passed path is not correct
           projectName = name
         }
@@ -189,7 +180,7 @@ private fun doProcess(urlDecoder: QueryStringDecoder, request: FullHttpRequest, 
     }
     else {
       // WEB-17839 Internal web server reports 404 when serving files from project with slashes in name
-      if (decodedPath.regionMatches(1, name, 0, name.length, !SystemInfoRt.isFileSystemCaseSensitive)) {
+      if (decodedPath.regionMatches(1, name, 0, name.length, !SystemInfo.isFileSystemCaseSensitive)) {
         val isEmptyPathCandidate = decodedPath.length == (name.length + 1)
         if (isEmptyPathCandidate || decodedPath[name.length + 1] == '/') {
           projectName = name
@@ -207,7 +198,7 @@ private fun doProcess(urlDecoder: QueryStringDecoder, request: FullHttpRequest, 
   }) ?: candidateByDirectoryName ?: return false
 
   if (isActivatable() && !PropertiesComponent.getInstance().getBoolean("ide.built.in.web.server.active")) {
-    notificationManager.notify("Built-in web server is deactivated, to activate, please use Open in Browser", null)
+    notificationManager.notify(BuiltInServerBundle.message("notification.content.built.in.web.server.is.deactivated"), null)
     return false
   }
 
@@ -223,7 +214,7 @@ private fun doProcess(urlDecoder: QueryStringDecoder, request: FullHttpRequest, 
     return true
   }
 
-  for (pathHandler in WebServerPathHandler.EP_NAME.extensions) {
+  for (pathHandler in WebServerPathHandler.EP_NAME.extensionList) {
     LOG.runAndLogException {
       if (pathHandler.process(path, project, request, context, projectName, decodedPath, isCustomHost)) {
         return true
@@ -274,10 +265,9 @@ fun validateToken(request: HttpRequest, channel: Channel, isSignedRequest: Boole
       ProjectUtil.focusProjectWindow(null, true)
 
       if (MessageDialogBuilder
-          .yesNo("", "Page '" + StringUtil.trimMiddle(url, 50) + "' requested without authorization, " +
-              "\nyou can copy URL and open it in browser to trust it.")
+          .yesNo("", BuiltInServerBundle.message("dialog.message.page", StringUtil.trimMiddle(url, 50)))
           .icon(Messages.getWarningIcon())
-          .yesText("Copy authorization URL to clipboard")
+          .yesText(BuiltInServerBundle.message("dialog.button.copy.authorization.url.to.clipboard"))
           .show() == Messages.YES) {
         CopyPasteManager.getInstance().setContents(StringSelection(url + "?" + TOKEN_PARAM_NAME + "=" + acquireToken()))
       }

@@ -2,14 +2,13 @@
 package com.intellij.projectView
 
 import com.intellij.openapi.module.ModuleManager
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Queryable
 import com.intellij.testFramework.PsiTestUtil
 import com.intellij.util.io.directoryContent
 import com.intellij.util.io.generateInVirtualTempDir
+import java.nio.file.Path
 
-/**
- * @author nik
- */
 class ModulesInProjectViewTest : BaseProjectViewTestCase() {
   init {
     myPrintInfo = Queryable.PrintInfo()
@@ -35,10 +34,10 @@ class ModulesInProjectViewTest : BaseProjectViewTestCase() {
         }
       }
     }.generateInVirtualTempDir()
-    PsiTestUtil.addContentRoot(createModule("loaded"), root.findChild("loaded"))
-    PsiTestUtil.addContentRoot(createModule("unloaded-inner"), root.findFileByRelativePath("loaded/unloaded-inner"))
-    PsiTestUtil.addContentRoot(createModule("unloaded"), root.findChild("unloaded"))
-    PsiTestUtil.addContentRoot(createModule("loaded-inner"), root.findFileByRelativePath("unloaded/loaded-inner"))
+    PsiTestUtil.addContentRoot(createModule("loaded"), root.findChild("loaded")!!)
+    PsiTestUtil.addContentRoot(createModule("unloaded-inner"), root.findFileByRelativePath("loaded/unloaded-inner")!!)
+    PsiTestUtil.addContentRoot(createModule("unloaded"), root.findChild("unloaded")!!)
+    PsiTestUtil.addContentRoot(createModule("loaded-inner"), root.findFileByRelativePath("unloaded/loaded-inner")!!)
     val expected = """
           |Project
           | loaded
@@ -72,8 +71,8 @@ class ModulesInProjectViewTest : BaseProjectViewTestCase() {
         dir("subdir") {}
       }
     }.generateInVirtualTempDir()
-    PsiTestUtil.addContentRoot(createModule("foo.bar.unloaded"), root.findChild("unloaded"))
-    PsiTestUtil.addContentRoot(createModule("unloaded2"), root.findChild("unloaded2"))
+    PsiTestUtil.addContentRoot(createModule("foo.bar.unloaded"), root.findChild("unloaded")!!)
+    PsiTestUtil.addContentRoot(createModule("unloaded2"), root.findChild("unloaded2")!!)
 
     val expected = """
           |Project
@@ -100,7 +99,7 @@ class ModulesInProjectViewTest : BaseProjectViewTestCase() {
         dir("subdir") {}
       }
     }.generateInVirtualTempDir()
-    PsiTestUtil.addContentRoot(createModule("foo.bar.module"), root.findChild("module"))
+    PsiTestUtil.addContentRoot(createModule("foo.bar.module"), root.findChild("module")!!)
     assertStructureEqual("""
           |Project
           | foo.bar.module.iml
@@ -116,8 +115,8 @@ class ModulesInProjectViewTest : BaseProjectViewTestCase() {
       dir("module1") {}
       dir("module2") {}
     }.generateInVirtualTempDir()
-    PsiTestUtil.addContentRoot(createModule("foo.bar.module1"), root.findChild("module1"))
-    PsiTestUtil.addContentRoot(createModule("foo.bar.module2"), root.findChild("module2"))
+    PsiTestUtil.addContentRoot(createModule("foo.bar.module1"), root.findChild("module1")!!)
+    PsiTestUtil.addContentRoot(createModule("foo.bar.module2"), root.findChild("module2")!!)
     myStructure.isFlattenModules = true
     assertStructureEqual("""
           |Project
@@ -135,8 +134,8 @@ class ModulesInProjectViewTest : BaseProjectViewTestCase() {
       dir("foo") {}
       dir("foo.bar") {}
     }.generateInVirtualTempDir()
-    PsiTestUtil.addContentRoot(createModule("xxx.foo"), root.findChild("foo"))
-    PsiTestUtil.addContentRoot(createModule("xxx.foo.bar"), root.findChild("foo.bar"))
+    PsiTestUtil.addContentRoot(createModule("xxx.foo"), root.findChild("foo")!!)
+    PsiTestUtil.addContentRoot(createModule("xxx.foo.bar"), root.findChild("foo.bar")!!)
     assertStructureEqual("""
           |Project
           | Group: xxx
@@ -158,8 +157,8 @@ class ModulesInProjectViewTest : BaseProjectViewTestCase() {
         dir("subdir") {}
       }
     }.generateInVirtualTempDir()
-    PsiTestUtil.addContentRoot(createModule("foo.bar.module1"), root.findChild("module1"))
-    PsiTestUtil.addContentRoot(createModule("foo.baz.module2"), root.findChild("module2"))
+    PsiTestUtil.addContentRoot(createModule("foo.bar.module1"), root.findChild("module1")!!)
+    PsiTestUtil.addContentRoot(createModule("foo.baz.module2"), root.findChild("module2")!!)
     assertStructureEqual("""
           |Project
           | Group: foo
@@ -174,6 +173,11 @@ class ModulesInProjectViewTest : BaseProjectViewTestCase() {
           | test modules with common parent group.iml
           |
           """.trimMargin())
+  }
+
+  override fun getProjectDirOrFile(): Path {
+    //use directory-based project to ensure that .iws/.ipr file won't break the test (they may be created if workspace model is used)
+    return getProjectDirOrFile(true)
   }
 
   override fun getTestPath() = null

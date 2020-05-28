@@ -63,7 +63,7 @@ public class MarkdownUtil {
       if (imageEndIndex != -1) {
         TextRange linkRange = findEnclosingLink(text, i, imageEndIndex);
         if (intervals == null) {
-          intervals = new ArrayList<TextRange>(1);
+          intervals = new ArrayList<>(1);
         }
         final TextRange range;
         if (linkRange != null) {
@@ -169,12 +169,7 @@ public class MarkdownUtil {
 
     private void handleLocalCodeBlock(int ind, @NotNull String line) {
       boolean codeBlock = false;
-      if (line.startsWith("    ")) {
-        line = line.substring(4);
-        codeBlock = true;
-      }
-      else if (line.startsWith("\t")) {
-        line = line.substring(1);
+      if (line.startsWith("    ") || line.startsWith("\t")) {
         codeBlock = true;
       }
 

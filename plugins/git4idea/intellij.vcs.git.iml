@@ -13,7 +13,6 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="intellij.platform.vcs" />
-    <orderEntry type="library" name="trilead-ssh2" level="project" />
     <orderEntry type="library" name="XmlRPC" level="project" />
     <orderEntry type="module" module-name="intellij.platform.ide.impl" />
     <orderEntry type="module" module-name="intellij.platform.vcs.impl" />
@@ -24,12 +23,9 @@
     <orderEntry type="module" module-name="intellij.platform.ide" />
     <orderEntry type="library" name="Guava" level="project" />
     <orderEntry type="module" module-name="intellij.platform.lang.impl" />
+    <orderEntry type="module" module-name="intellij.platform.execution.impl" />
     <orderEntry type="module" module-name="intellij.vcs.git.rt" />
-    <orderEntry type="module" module-name="intellij.platform.images" />
-    <orderEntry type="library" scope="TEST" name="Groovy" level="project" />
     <orderEntry type="module" module-name="intellij.platform.vcs.dvcs.impl" exported="" />
-    <orderEntry type="library" scope="TEST" name="cucumber-core" level="project" />
-    <orderEntry type="library" name="JSch" level="project" />
     <orderEntry type="module" module-name="intellij.platform.vcs.log" />
     <orderEntry type="module" module-name="intellij.platform.vcs.log.impl" />
     <orderEntry type="module" module-name="intellij.platform.vcs.log.graph.impl" />
@@ -37,8 +33,7 @@
     <orderEntry type="module" module-name="intellij.platform.builtInServer.impl" scope="TEST" />
     <orderEntry type="module" module-name="intellij.platform.builtInServer" />
     <orderEntry type="library" scope="TEST" name="mockito" level="project" />
-    <orderEntry type="library" scope="TEST" name="cucumber-java" level="project" />
-    <orderEntry type="library" scope="TEST" name="KotlinTest" level="project" />
+    <orderEntry type="library" scope="TEST" name="kotlin-test" level="project" />
     <orderEntry type="module" module-name="intellij.platform.vcs.tests" scope="TEST" />
     <orderEntry type="module" module-name="intellij.platform.util" />
     <orderEntry type="library" exported="" scope="TEST" name="cucumber-testing" level="project" />
@@ -47,5 +42,13 @@
     <orderEntry type="module" module-name="intellij.platform.tasks" scope="TEST" />
     <orderEntry type="library" scope="TEST" name="assertJ" level="project" />
     <orderEntry type="library" name="commons-codec" level="project" />
+    <orderEntry type="module" module-name="intellij.platform.diff.impl" />
+    <orderEntry type="library" name="jackson" level="project" />
+    <orderEntry type="library" name="jackson-databind" level="project" />
+    <orderEntry type="library" name="xz" level="project" />
+    <orderEntry type="library" name="StreamEx" level="project" />
+    <orderEntry type="module" module-name="intellij.platform.statistics" />
+    <orderEntry type="library" name="Trove4j" level="project" />
+    <orderEntry type="library" name="miglayout-swing" level="project" />
   </component>
 </module>

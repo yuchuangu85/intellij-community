@@ -30,8 +30,8 @@ import java.util.*;
  * Null values are NOT allowed
  */
 abstract class ConcurrentIntKeyRefValueHashMap<V> implements ConcurrentIntObjectMap<V> {
-  private final ConcurrentIntObjectHashMap<IntReference<V>> myMap = new ConcurrentIntObjectHashMap<IntReference<V>>();
-  private final ReferenceQueue<V> myQueue = new ReferenceQueue<V>();
+  private final ConcurrentIntObjectHashMap<IntReference<V>> myMap = new ConcurrentIntObjectHashMap<>();
+  private final ReferenceQueue<V> myQueue = new ReferenceQueue<>();
 
   @NotNull
   protected abstract IntReference<V> createReference(int key, @NotNull V value, @NotNull ReferenceQueue<V> queue);
@@ -42,8 +42,8 @@ abstract class ConcurrentIntKeyRefValueHashMap<V> implements ConcurrentIntObject
 
   private void processQueue() {
     while (true) {
-      @SuppressWarnings("unchecked")
-      IntReference<V> ref = (IntReference)myQueue.poll();
+      //noinspection unchecked
+      IntReference<V> ref = (IntReference<V>)myQueue.poll();
       if (ref == null) {
         return;
       }
@@ -119,9 +119,8 @@ abstract class ConcurrentIntKeyRefValueHashMap<V> implements ConcurrentIntObject
     processQueue();
   }
 
-  @NotNull
   @Override
-  public int[] keys() {
+  public int @NotNull [] keys() {
     return myMap.keys();
   }
 
@@ -176,7 +175,7 @@ abstract class ConcurrentIntKeyRefValueHashMap<V> implements ConcurrentIntObject
             continue;
           }
           final int key = entry.getKey();
-          nextVEntry = new SimpleEntry<V>(key, v);
+          nextVEntry = new SimpleEntry<>(key, v);
           nextReferenceEntry = entry;
           return;
         }
@@ -256,7 +255,7 @@ abstract class ConcurrentIntKeyRefValueHashMap<V> implements ConcurrentIntObject
   @NotNull
   @Override
   public Collection<V> values() {
-    Set<V> result = new THashSet<V>();
+    Set<V> result = new THashSet<>();
     ContainerUtil.addAll(result, elements());
     return result;
   }

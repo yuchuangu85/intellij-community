@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.history.actions;
 
 import com.intellij.history.LocalHistory;
@@ -38,13 +38,14 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.util.Collections;
 
 public class GetVersionAction extends AnAction implements DumbAware {
   private static final Logger LOG = Logger.getInstance(GetVersionAction.class);
 
   public GetVersionAction() {
-    super(VcsBundle.message("action.name.get.file.content.from.repository"),
-          VcsBundle.message("action.description.get.file.content.from.repository"), AllIcons.Actions.Download);
+    super(VcsBundle.messagePointer("action.name.get.file.content.from.repository"),
+          VcsBundle.messagePointer("action.description.get.file.content.from.repository"), AllIcons.Actions.Download);
   }
 
   @Override
@@ -184,7 +185,7 @@ public class GetVersionAction extends AnAction implements DumbAware {
       ApplicationManager.getApplication().invokeLater(() -> {
         try {
           if (myFile != null && !myFile.isWritable() &&
-              ReadonlyStatusHandler.getInstance(myProject).ensureFilesWritable(myFile).hasReadonlyFiles()) {
+              ReadonlyStatusHandler.getInstance(myProject).ensureFilesWritable(Collections.singletonList(myFile)).hasReadonlyFiles()) {
             return;
           }
 

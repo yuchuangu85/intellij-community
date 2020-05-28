@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.configurations
 
+import com.intellij.execution.ui.FragmentedSettings
 import com.intellij.openapi.components.BaseState
 import com.intellij.util.xmlb.annotations.*
 
@@ -17,7 +18,7 @@ class PredefinedLogFile() : BaseState() {
   var isEnabled by property(false)
 }
 
-open class RunConfigurationOptions : BaseState() {
+open class RunConfigurationOptions : BaseState(), FragmentedSettings {
   @Tag("output_file")
   class OutputFileOptions : BaseState() {
     @get:Attribute("path")
@@ -25,7 +26,7 @@ open class RunConfigurationOptions : BaseState() {
     @get:Attribute("is_save")
     var isSaveOutput by property(false)
   }
-  
+
   // we use object instead of 2 fields because XML serializer cannot reuse tag for several fields
   @get:Property(surroundWithTag = false)
   var fileOutput by property(OutputFileOptions())
@@ -45,9 +46,15 @@ open class RunConfigurationOptions : BaseState() {
   @get:XCollection
   var logFiles by list<LogFileOptions>()
 
-  @com.intellij.configurationStore.Property(description = "Allow running in parallel")
+  @com.intellij.configurationStore.Property(description = "Allow parallel run")
   @get:Transient
   var isAllowRunningInParallel by property(false)
+
+  @get:OptionTag(tag = "target", valueAttribute = "name", nameAttribute = "")
+  var remoteTarget by string()
+
+  @get:XCollection(propertyElementName = "selectedOptions", elementName = "option", valueAttributeName = "name")
+  override var selectedOptions by stringSet()
 }
 
 open class LocatableRunConfigurationOptions : RunConfigurationOptions() {

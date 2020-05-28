@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.junit;
 
 import com.intellij.execution.JavaRunConfigurationExtensionManager;
@@ -19,12 +19,24 @@ import org.jetbrains.annotations.Nullable;
  * @author yole
  */
 public abstract class JavaRunConfigurationProducerBase<T extends ModuleBasedConfiguration> extends RunConfigurationProducer<T> {
+  /**
+   * @deprecated Override {@link #getConfigurationFactory()}.
+   */
+  @Deprecated
   protected JavaRunConfigurationProducerBase(ConfigurationFactory configurationFactory) {
     super(configurationFactory);
   }
 
+  /**
+   * @deprecated Override {@link #getConfigurationFactory()}.
+   */
+  @Deprecated
   protected JavaRunConfigurationProducerBase(@NotNull ConfigurationType configurationType) {
-    super(configurationType);
+    super(configurationType.getConfigurationFactories()[0]);
+  }
+
+  protected JavaRunConfigurationProducerBase() {
+    super(true);
   }
 
   protected boolean setupConfigurationModule(@Nullable ConfigurationContext context, T configuration) {
@@ -65,7 +77,7 @@ public abstract class JavaRunConfigurationProducerBase<T extends ModuleBasedConf
 
   @Nullable
   @Override
-  public ConfigurationFromContext createConfigurationFromContext(ConfigurationContext context) {
+  public ConfigurationFromContext createConfigurationFromContext(@NotNull ConfigurationContext context) {
     ConfigurationFromContext fromContext = super.createConfigurationFromContext(context);
     if (fromContext != null) {
       JavaRunConfigurationExtensionManager.getInstance().extendCreatedConfiguration((RunConfigurationBase)fromContext.getConfiguration(),

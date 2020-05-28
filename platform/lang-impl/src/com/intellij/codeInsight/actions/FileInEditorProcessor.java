@@ -32,11 +32,13 @@ import com.intellij.openapi.editor.Caret;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.VisualPosition;
 import com.intellij.openapi.editor.ex.EditorSettingsExternalizable;
+import com.intellij.openapi.editor.ex.util.EditorUtil;
 import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
 import com.intellij.ui.ColorUtil;
 import com.intellij.ui.HyperlinkAdapter;
 import com.intellij.ui.JBColor;
@@ -56,14 +58,12 @@ public class FileInEditorProcessor {
   private static final Logger LOG = Logger.getInstance(FileInEditorProcessor.class);
 
   private final Editor myEditor;
-  private final boolean myShouldCleanupCode;
 
   private boolean myNoChangesDetected = false;
   private final boolean myProcessChangesTextOnly;
 
-  private final boolean myShouldOptimizeImports;
-  private final boolean myShouldRearrangeCode;
   private final boolean myProcessSelectedText;
+  private final LayoutCodeOptions myOptions;
 
   private final Project myProject;
 
@@ -78,9 +78,7 @@ public class FileInEditorProcessor {
     myProject = file.getProject();
     myEditor = editor;
 
-    myShouldCleanupCode = runOptions.isCodeCleanup();
-    myShouldOptimizeImports = runOptions.isOptimizeImports();
-    myShouldRearrangeCode = runOptions.isRearrangeCode();
+    myOptions = runOptions;
     myProcessSelectedText = myEditor != null && runOptions.getTextRangeType() == SELECTED_TEXT;
     myProcessChangesTextOnly = runOptions.getTextRangeType() == VCS_CHANGED_TEXT;
   }
@@ -93,20 +91,20 @@ public class FileInEditorProcessor {
       return;
     }
 
-    if (myShouldOptimizeImports) {
+    if (myOptions.isOptimizeImports()) {
       myProcessor = new OptimizeImportsProcessor(myProject, myFile);
     }
 
-    if (myProcessChangesTextOnly && !FormatChangedTextUtil.hasChanges(myFile)) {
+    if (myProcessChangesTextOnly && !VcsFacade.getInstance().hasChanges(myFile)) {
       myNoChangesDetected = true;
     }
 
     myProcessor = mixWithReformatProcessor(myProcessor);
-    if (myShouldRearrangeCode) {
+    if (myOptions.isRearrangeCode()) {
       myProcessor = mixWithRearrangeProcessor(myProcessor);
     }
 
-    if (myShouldCleanupCode) {
+    if (myOptions.isCodeCleanup()) {
       myProcessor = mixWithCleanupProcessor(myProcessor);
     }
 
@@ -120,6 +118,10 @@ public class FileInEditorProcessor {
     }
 
     myProcessor.run();
+
+    if (myEditor != null && myOptions.getTextRangeType() == TextRangeType.WHOLE_FILE) {
+      CodeStyleSettingsManager.getInstance(myProject).notifyCodeStyleSettingsChanged();
+    }
   }
 
   @NotNull
@@ -174,13 +176,6 @@ public class FileInEditorProcessor {
     return firstNotificationLine;
   }
 
-  private static boolean isCaretVisible(Editor editor) {
-    Rectangle visibleArea = editor.getScrollingModel().getVisibleArea();
-    Caret currentCaret = editor.getCaretModel().getCurrentCaret();
-    Point caretPoint = editor.visualPositionToXY(currentCaret.getVisualPosition());
-    return visibleArea.contains(caretPoint);
-  }
-
   private static void showHint(@NotNull Editor editor, @NotNull MessageBuilder messageBuilder) {
     showHint(editor, messageBuilder.getMessage(), messageBuilder.createHyperlinkListener());
   }
@@ -190,7 +185,7 @@ public class FileInEditorProcessor {
     LightweightHint hint = new LightweightHint(component);
 
     int flags = HintManager.HIDE_BY_ANY_KEY | HintManager.HIDE_BY_TEXT_CHANGE | HintManager.HIDE_BY_SCROLLING;
-    if (isCaretVisible(editor)) {
+    if (EditorUtil.isPrimaryCaretVisible(editor)) {
       HintManagerImpl.getInstanceImpl().showEditorHint(hint, editor, HintManager.UNDER, flags, 0, false);
     }
     else {
@@ -229,8 +224,8 @@ public class FileInEditorProcessor {
 
   private boolean shouldNotify() {
     if (isInHeadlessMode()) return false;
-    EditorSettingsExternalizable.OptionSet editorOptions = EditorSettingsExternalizable.getInstance().getOptions();
-    return editorOptions.SHOW_NOTIFICATION_AFTER_REFORMAT_CODE_ACTION && myEditor != null && !myProcessSelectedText;
+    EditorSettingsExternalizable es = EditorSettingsExternalizable.getInstance();
+    return es.isShowNotificationAfterReformat() && myEditor != null && !myProcessSelectedText;
   }
 
   private static boolean isInHeadlessMode() {

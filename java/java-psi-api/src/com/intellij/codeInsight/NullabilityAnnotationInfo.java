@@ -12,7 +12,7 @@ public class NullabilityAnnotationInfo {
   private final @NotNull Nullability myNullability;
   private final boolean myContainer;
 
-  NullabilityAnnotationInfo(@NotNull PsiAnnotation annotation, @NotNull Nullability nullability, boolean container) {
+  public NullabilityAnnotationInfo(@NotNull PsiAnnotation annotation, @NotNull Nullability nullability, boolean container) {
     myAnnotation = annotation;
     myNullability = nullability;
     myContainer = container;
@@ -53,5 +53,13 @@ public class NullabilityAnnotationInfo {
    */
   public boolean isInferred() {
     return AnnotationUtil.isInferredAnnotation(myAnnotation);
+  }
+
+  @Override
+  public String toString() {
+    return "NullabilityAnnotationInfo{" +
+           myNullability + "(" + myAnnotation.getQualifiedName() + ")" +
+           (myContainer ? ", container=" : "") +
+           "}";
   }
 }

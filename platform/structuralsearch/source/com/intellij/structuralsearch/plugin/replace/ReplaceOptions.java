@@ -1,6 +1,7 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.structuralsearch.plugin.replace;
 
+import com.intellij.codeInsight.template.impl.TemplateImplUtil;
 import com.intellij.openapi.util.JDOMExternalizable;
 import com.intellij.structuralsearch.MatchOptions;
 import com.intellij.structuralsearch.ReplacementVariableDefinition;
@@ -10,9 +11,7 @@ import org.jdom.Element;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Collection;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * @author Maxim.Mossienko
@@ -93,6 +92,14 @@ public class ReplaceOptions implements JDOMExternalizable {
     myToUseStaticImport = useStaticImport;
   }
 
+  private Set<String> getUsedVariableNames() {
+    return TemplateImplUtil.parseVariableNames(replacement);
+  }
+
+  public void removeUnusedVariables() {
+    variableDefs.keySet().removeIf(key -> !getUsedVariableNames().contains(key));
+  }
+
   @Override
   public void readExternal(Element element) {
     matchOptions.readExternal(element);
@@ -135,7 +142,11 @@ public class ReplaceOptions implements JDOMExternalizable {
     }
     element.setAttribute(REPLACEMENT_ATTR_NAME,replacement);
 
+    final Set<String> nameSet = getUsedVariableNames();
     for (final ReplacementVariableDefinition variableDefinition : variableDefs.values()) {
+      if (!nameSet.contains(variableDefinition.getName())) {
+        continue;
+      }
       final Element infoElement = new Element(VARIABLE_DEFINITION_TAG_NAME);
       element.addContent(infoElement);
       variableDefinition.writeExternal(infoElement);
@@ -152,7 +163,7 @@ public class ReplaceOptions implements JDOMExternalizable {
     if (toShortenFQN != replaceOptions.toShortenFQN) return false;
     if (myToUseStaticImport != replaceOptions.myToUseStaticImport) return false;
     if (!matchOptions.equals(replaceOptions.matchOptions)) return false;
-    if (replacement != null ? !replacement.equals(replaceOptions.replacement) : replaceOptions.replacement != null) return false;
+    if (!Objects.equals(replacement, replaceOptions.replacement)) return false;
     if (!variableDefs.equals(replaceOptions.variableDefs)) return false;
 
     return true;
@@ -174,6 +185,12 @@ public class ReplaceOptions implements JDOMExternalizable {
 
   public void addVariableDefinition(ReplacementVariableDefinition definition) {
     variableDefs.put(definition.getName(), definition);
+  }
+
+  public ReplacementVariableDefinition addNewVariableDefinition(String name) {
+    final ReplacementVariableDefinition definition = new ReplacementVariableDefinition(name);
+    variableDefs.put(name, definition);
+    return definition;
   }
 
   public Collection<ReplacementVariableDefinition> getVariableDefinitions() {

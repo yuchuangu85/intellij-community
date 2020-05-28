@@ -1,6 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.projectView;
 
 import com.intellij.ide.projectView.PresentationData;
@@ -61,8 +59,7 @@ public class ProjectViewUpdatingTest extends BaseProjectViewTestCase {
     WriteCommandAction.runWriteCommandAction(null, () -> classes[0].delete());
 
 
-    PlatformTestUtil.waitForAlarm(600);
-
+    PlatformTestUtil.waitWhileBusy(pane.getTree());
     PlatformTestUtil.assertTreeEqual(pane.getTree(), "-Project\n" +
                                                      " -PsiDirectory: standardProviders\n" +
                                                      "  -PsiDirectory: src\n" +
@@ -111,7 +108,7 @@ public class ProjectViewUpdatingTest extends BaseProjectViewTestCase {
     CommandProcessor.getInstance().executeCommand(myProject,
                                                   () -> new RenameProcessor(myProject, aClass, "Form1_renamed", false, false).run(), null, null);
 
-    PlatformTestUtil.waitForAlarm(600);
+    PlatformTestUtil.waitWhileBusy(pane.getTree());
     PlatformTestUtil.assertTreeEqual(tree, "-Project\n" +
                                            " -PsiDirectory: updateProjectView\n" +
                                            "  -PsiDirectory: src\n" +
@@ -135,7 +132,7 @@ public class ProjectViewUpdatingTest extends BaseProjectViewTestCase {
 
     final PsiClass aClass2 = JavaDirectoryService.getInstance()
       .createClass(getContentDirectory().findSubdirectory("src").findSubdirectory("com").findSubdirectory("package1"), "Class6");
-    PlatformTestUtil.waitForAlarm(600);
+
     final PsiFile containingFile2 = aClass2.getContainingFile();
     pane.select(aClass2, containingFile2.getVirtualFile(), true);
     PlatformTestUtil.waitWhileBusy(pane.getTree());
@@ -197,8 +194,8 @@ public class ProjectViewUpdatingTest extends BaseProjectViewTestCase {
 
 
     PsiDocumentManager.getInstance(myProject).commitDocument(document);
-    PlatformTestUtil.waitForAlarm(600);
 
+    PlatformTestUtil.waitWhileBusy(pane.getTree());
     PlatformTestUtil.assertTreeEqual(pane.getTree(), "-Project\n" +
                                                      " -PsiDirectory: showClassMembers\n" +
                                                      "  -PsiDirectory: src\n" +
@@ -243,7 +240,7 @@ public class ProjectViewUpdatingTest extends BaseProjectViewTestCase {
       }
     }), null, null);
 
-    PlatformTestUtil.waitForAlarm(600);
+    PlatformTestUtil.waitWhileBusy(pane.getTree());
     if (tree.getModel() instanceof AsyncTreeModel) {
       // TODO:SAM new model loses selection of moved node for now
       tree.setSelectionPath(PlatformTestUtil.waitForPromise(pane.promisePathToElement(lastField)));
@@ -264,7 +261,7 @@ public class ProjectViewUpdatingTest extends BaseProjectViewTestCase {
   }
 
   public void testAnnoyingScrolling() {
-                                  
+
     getProjectTreeStructure().setProviders(new ClassesTreeStructureProvider(myProject));
 
     final AbstractProjectViewPSIPane pane = myStructure.createPane();
@@ -284,13 +281,13 @@ public class ProjectViewUpdatingTest extends BaseProjectViewTestCase {
     for (int i=0;i<100;i++) {
       JavaDirectoryService.getInstance().createClass(directory, "A" + i);
     }
-    PlatformTestUtil.waitForAlarm(600);
+    PlatformTestUtil.waitWhileBusy(pane.getTree());
     Point viewPositionAfter = ((JViewport)tree.getParent()).getViewPosition();
     assertEquals(viewPosition, viewPositionAfter);
 
   }
 
-  class NodeWrapper extends AbstractTreeNode<Object> {
+  static class NodeWrapper extends AbstractTreeNode<Object> {
     String myName;
     List<NodeWrapper> myChildren = new ArrayList<>();
 
@@ -301,7 +298,7 @@ public class ProjectViewUpdatingTest extends BaseProjectViewTestCase {
 
     @Override
     @NotNull
-    public Collection<? extends AbstractTreeNode> getChildren() {
+    public Collection<? extends AbstractTreeNode<?>> getChildren() {
       return myChildren;
     }
 
@@ -410,12 +407,12 @@ public class ProjectViewUpdatingTest extends BaseProjectViewTestCase {
     return new TreeStructureProvider() {
       @NotNull
       @Override
-      public Collection<AbstractTreeNode> modify(@NotNull AbstractTreeNode parent, @NotNull Collection<AbstractTreeNode> children, ViewSettings settings) {
+      public Collection<AbstractTreeNode<?>> modify(@NotNull AbstractTreeNode<?> parent, @NotNull Collection<AbstractTreeNode<?>> children, ViewSettings settings) {
 
         if (parent instanceof NodeWrapper) {
           return children;
         }
-        List<AbstractTreeNode> result = new ArrayList<>();
+        List<AbstractTreeNode<?>> result = new ArrayList<>();
         result.add(rootWrapper);
         return result;
       }

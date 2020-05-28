@@ -1,7 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util;
 
 import com.intellij.openapi.util.SystemInfo;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
@@ -10,9 +11,8 @@ import org.jetbrains.annotations.TestOnly;
  * Utility wrappers for accessing system properties.
  *
  * @see SystemInfo
- * @author yole
  */
-public class SystemProperties {
+public final class SystemProperties {
   private static String ourTestUserName;
 
   private SystemProperties() { }
@@ -35,20 +35,23 @@ public class SystemProperties {
     return System.getProperty("line.separator");
   }
 
-  /** @deprecated use {@link SystemInfo#OS_NAME} (to be removed in IDEA 2020) */
+  /** @deprecated use {@link SystemInfo#OS_NAME} */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.1")
   public static String getOsName() {
     return SystemInfo.OS_NAME;
   }
 
-  /** @deprecated use {@link SystemInfo#JAVA_VERSION} (to be removed in IDEA 2020) */
+  /** @deprecated use {@link SystemInfo#JAVA_VERSION} */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.1")
   public static String getJavaVersion() {
     return SystemInfo.JAVA_VERSION;
   }
 
-  /** @deprecated use {@link SystemInfo#JAVA_VENDOR} (to be removed in IDEA 2020) */
+  /** @deprecated use {@link SystemInfo#JAVA_VENDOR} */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.1")
   public static String getJavaVmVendor() {
     return SystemInfo.JAVA_VENDOR;
   }
@@ -72,22 +75,24 @@ public class SystemProperties {
     return defaultValue;
   }
 
-  /**
-   * Returns the value of given property as a boolean, or {@code defaultValue} if the property is not specified or malformed.
-   */
-  public static boolean getBooleanProperty(@NotNull final String key, final boolean defaultValue) {
-    final String value = System.getProperty(key);
+  public static float getFloatProperty(@NotNull String key, float defaultValue) {
+    String value = System.getProperty(key);
     if (value != null) {
-      return Boolean.parseBoolean(value);
+      try {
+        return Float.parseFloat(value);
+      }
+      catch (NumberFormatException ignored) {
+      }
     }
-
     return defaultValue;
   }
 
-  /** @deprecated use {@link SystemInfo#JAVA_VENDOR} (to be removed in IDEA 2020) */
-  @Deprecated
-  public static String getJavaVendor() {
-    return SystemInfo.JAVA_VENDOR;
+  /**
+   * Returns the value of given property as a boolean, or {@code defaultValue} if the property is not specified or malformed.
+   */
+  public static boolean getBooleanProperty(@NotNull String key, boolean defaultValue) {
+    String value = System.getProperty(key);
+    return value == null ? defaultValue : Boolean.parseBoolean(value);
   }
 
   public static boolean is(String key) {

@@ -21,17 +21,13 @@ import org.jetbrains.jps.builders.java.CannotCreateJavaCompilerException;
 import org.jetbrains.jps.builders.java.JavaCompilingTool;
 import org.jetbrains.jps.javac.JavacMain;
 
-import javax.tools.JavaCompiler;
-import javax.tools.ToolProvider;
+import javax.tools.*;
 import java.io.File;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * @author nik
- */
 public class JavacCompilerTool extends JavaCompilingTool {
 
   public static final String ID = "Javac"; // duplicates org.jetbrains.jps.model.java.compiler.JavaCompilers.JAVAC_ID;
@@ -47,6 +43,11 @@ public class JavacCompilerTool extends JavaCompilingTool {
   @Override
   public String getAlternativeId() {
     return ALTERNATIVE_ID;
+  }
+
+  @Override
+  public boolean isCompilerTreeAPISupported() {
+    return true;
   }
 
   @NotNull

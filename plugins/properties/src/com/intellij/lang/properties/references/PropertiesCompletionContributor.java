@@ -59,7 +59,8 @@ public class PropertiesCompletionContributor extends CompletionContributor {
 
   private static void doAdd(CompletionParameters parameters, final CompletionResultSet result) {
     PsiElement position = parameters.getPosition();
-    PsiReference[] references = ArrayUtil.mergeArrays(position.getReferences(), position.getParent().getReferences());
+    PsiElement parent = position.getParent();
+    PsiReference[] references = parent == null ? position.getReferences() : ArrayUtil.mergeArrays(position.getReferences(), parent.getReferences());
     PropertyReference propertyReference = ContainerUtil.findInstance(references, PropertyReference.class);
     if (propertyReference != null && !hasMoreImportantReference(references, propertyReference)) {
       final int startOffset = parameters.getOffset();
@@ -75,7 +76,7 @@ public class PropertiesCompletionContributor extends CompletionContributor {
     }
   }
 
-  public static boolean hasMoreImportantReference(@NotNull PsiReference[] references, @NotNull PropertyReference propertyReference) {
+  public static boolean hasMoreImportantReference(PsiReference @NotNull [] references, @NotNull PropertyReference propertyReference) {
     return propertyReference.isSoft() && ContainerUtil.or(references, reference -> !reference.isSoft());
   }
 
@@ -105,27 +106,12 @@ public class PropertiesCompletionContributor extends CompletionContributor {
         presentation.setTypeText(resourceBundle.getBaseName(), AllIcons.FileTypes.Properties);
       }
 
-      if (presentation instanceof RealLookupElementPresentation && value != null) {
-        value = "=" + value;
-        int limit = 1000;
-        if (value.length() > limit || !((RealLookupElementPresentation)presentation).hasEnoughSpaceFor(value, false)) {
-          if (value.length() > limit) {
-            value = value.substring(0, limit);
-          }
-          while (value.length() > 0 && !((RealLookupElementPresentation)presentation).hasEnoughSpaceFor(value + "...", false)) {
-            value = value.substring(0, value.length() - 1);
-          }
-          value += "...";
-        }
-      }
-
       TextAttributes attrs = EditorColorsManager.getInstance().getGlobalScheme().getAttributes(PropertiesHighlighter.PROPERTY_VALUE);
-      presentation.setTailText(value, attrs.getForegroundColor());
+      presentation.setTailText("=" + value, attrs.getForegroundColor());
     }
   };
 
-  @NotNull
-  public static LookupElement[] getVariants(final PropertyReferenceBase propertyReference) {
+  public static LookupElement @NotNull [] getVariants(final PropertyReferenceBase propertyReference) {
     final Set<Object> variants = PropertiesPsiCompletionUtil.getPropertiesKeys(propertyReference);
     return getVariants(variants);
   }

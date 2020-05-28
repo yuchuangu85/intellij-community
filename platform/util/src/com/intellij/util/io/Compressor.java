@@ -1,16 +1,17 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.io;
 
-import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.*;
+import java.util.function.BiPredicate;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
@@ -19,17 +20,25 @@ import java.util.zip.ZipOutputStream;
 
 public abstract class Compressor implements Closeable {
   public static class Tar extends Compressor {
-    public Tar(@NotNull File file) throws IOException {
-      myStream = new TarArchiveOutputStream(new GzipCompressorOutputStream(new FileOutputStream(file)));
-      myStream.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
-    }
+    public enum Compression { GZIP, BZIP2, NONE }
 
-    public Tar(@NotNull TarArchiveOutputStream stream) {
-      myStream = stream;
+    public Tar(@NotNull File file, @NotNull Compression compression) throws IOException {
+      this(new FileOutputStream(file), compression);
     }
 
     //<editor-fold desc="Implementation">
     private final TarArchiveOutputStream myStream;
+
+    public Tar(@NotNull OutputStream stream, @NotNull Compression compression) throws IOException {
+      myStream = new TarArchiveOutputStream(compressedStream(stream, compression));
+      myStream.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
+    }
+
+    private static OutputStream compressedStream(OutputStream stream, Compression compression) throws IOException {
+      if (compression == Compression.GZIP) return new GzipCompressorOutputStream(stream);
+      if (compression == Compression.BZIP2) return new BZip2CompressorOutputStream(stream);
+      return stream;
+    }
 
     @Override
     protected void writeDirectoryEntry(String name, long timestamp) throws IOException {
@@ -58,15 +67,24 @@ public abstract class Compressor implements Closeable {
 
   public static class Zip extends Compressor {
     public Zip(@NotNull File file) throws FileNotFoundException {
-      myStream = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(file)));
+      this(new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(file))));
     }
 
-    public Zip(@NotNull ZipOutputStream stream) {
-      myStream = stream;
+    public Zip(@NotNull OutputStream stream) {
+      this(new ZipOutputStream(stream));
+    }
+
+    public Zip withLevel(int compressionLevel) {
+      myStream.setLevel(compressionLevel);
+      return this;
     }
 
     //<editor-fold desc="Implementation">
     private final ZipOutputStream myStream;
+
+    protected Zip(ZipOutputStream stream) {
+      myStream = stream;
+    }
 
     @Override
     protected void writeDirectoryEntry(String name, long timestamp) throws IOException {
@@ -112,33 +130,33 @@ public abstract class Compressor implements Closeable {
     }
   }
 
-  private Condition<? super String> myFilter = null;
+  private BiPredicate<String, File> myFilter = null;
 
-  public Compressor filter(@Nullable Condition<? super String> filter) {
+  /**
+   * Allows filtering entries being added to the archive.
+   * Please note that <b>the second parameter of a filter ({@code File}) could be {@code null}</b> when the filter is applied
+   * to an entry not present on a disk - e.g. via {@link #addFile(String, byte[])}.
+   */
+  public Compressor filter(@Nullable BiPredicate<String, /*@Nullable*/ File> filter) {
     myFilter = filter;
     return this;
   }
 
   public final void addFile(@NotNull String entryName, @NotNull File file) throws IOException {
-    entryName = entryName(entryName);
-    if (accepts(entryName)) {
-      InputStream source = new FileInputStream(file);
-      try {
+    if (accepts(entryName, file)) {
+      try (InputStream source = new FileInputStream(file)) {
         writeFileEntry(entryName, source, file.length(), file.lastModified());
-      }
-      finally {
-        source.close();
       }
     }
   }
 
-  public final void addFile(@NotNull String entryName, @NotNull byte[] content) throws IOException {
+  public final void addFile(@NotNull String entryName, byte @NotNull [] content) throws IOException {
     addFile(entryName, content, -1);
   }
 
-  public final void addFile(@NotNull String entryName, @NotNull byte[] content, long timestamp) throws IOException {
+  public final void addFile(@NotNull String entryName, byte @NotNull [] content, long timestamp) throws IOException {
     entryName = entryName(entryName);
-    if (accepts(entryName)) {
+    if (accepts(entryName, null)) {
       writeFileEntry(entryName, new ByteArrayInputStream(content), content.length, timestamp(timestamp));
     }
   }
@@ -149,7 +167,7 @@ public abstract class Compressor implements Closeable {
 
   public final void addFile(@NotNull String entryName, @NotNull InputStream content, long timestamp) throws IOException {
     entryName = entryName(entryName);
-    if (accepts(entryName)) {
+    if (accepts(entryName, null)) {
       writeFileEntry(entryName, content, -1, timestamp(timestamp));
     }
   }
@@ -160,7 +178,7 @@ public abstract class Compressor implements Closeable {
 
   public final void addDirectory(@NotNull String entryName, long timestamp) throws IOException {
     entryName = entryName(entryName);
-    if (accepts(entryName)) {
+    if (accepts(entryName, null)) {
       writeDirectoryEntry(entryName, timestamp(timestamp));
     }
   }
@@ -186,16 +204,21 @@ public abstract class Compressor implements Closeable {
     return timestamp == -1 ? System.currentTimeMillis() : timestamp;
   }
 
-  private boolean accepts(String entryName) {
-    return myFilter == null || myFilter.value(entryName);
+  private boolean accepts(String entryName, @Nullable File file) {
+    return myFilter == null || myFilter.test(entryName, file);
   }
 
   private void addRecursively(String prefix, File directory) throws IOException {
+    if (!accepts(prefix, directory)) {
+      return;
+    }
+
+    if (!prefix.isEmpty()) {
+      writeDirectoryEntry(prefix, directory.lastModified());
+    }
+
     File[] children = directory.listFiles();
     if (children != null) {
-      if (!prefix.isEmpty()) {
-        addDirectory(prefix, directory.lastModified());
-      }
       for (File child: children) {
         String name = prefix.isEmpty() ? child.getName() : prefix + '/' + child.getName();
         if (child.isDirectory()) {

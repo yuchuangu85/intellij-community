@@ -1,20 +1,21 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.module.impl;
 
 import com.intellij.ide.highlighter.ModuleFileType;
-import com.intellij.ide.plugins.IdeaPluginDescriptor;
+import com.intellij.ide.plugins.ContainerDescriptor;
+import com.intellij.ide.plugins.IdeaPluginDescriptorImpl;
+import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.impl.ApplicationInfoImpl;
-import com.intellij.openapi.components.*;
-import com.intellij.openapi.components.impl.ModuleServiceManagerImpl;
-import com.intellij.openapi.components.impl.PlatformComponentManagerImpl;
+import com.intellij.openapi.components.ComponentConfig;
+import com.intellij.openapi.components.PersistentStateComponent;
+import com.intellij.openapi.components.State;
+import com.intellij.openapi.components.StoragePathMacros;
+import com.intellij.openapi.components.impl.stores.IComponentStore;
+import com.intellij.openapi.components.impl.stores.ModuleStore;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.extensions.AreaInstance;
-import com.intellij.openapi.extensions.ExtensionPointName;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleComponent;
-import com.intellij.openapi.module.ModuleServiceManager;
+import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.module.impl.scopes.ModuleScopeProviderImpl;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
@@ -23,85 +24,113 @@ import com.intellij.openapi.roots.ExternalProjectSystemRegistry;
 import com.intellij.openapi.roots.ProjectModelElement;
 import com.intellij.openapi.roots.ProjectModelExternalSource;
 import com.intellij.openapi.util.SimpleModificationTracker;
-import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.pointers.VirtualFilePointer;
+import com.intellij.openapi.vfs.pointers.VirtualFilePointerListener;
+import com.intellij.openapi.vfs.pointers.VirtualFilePointerManager;
 import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.serviceContainer.ComponentManagerImpl;
 import com.intellij.util.xmlb.annotations.MapAnnotation;
 import com.intellij.util.xmlb.annotations.Property;
 import gnu.trove.THashMap;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.picocontainer.MutablePicoContainer;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
-/**
- * @author max
- */
-public class ModuleImpl extends PlatformComponentManagerImpl implements ModuleEx {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.module.impl.ModuleImpl");
+public class ModuleImpl extends ComponentManagerImpl implements ModuleEx {
+  private static final Logger LOG = Logger.getInstance(ModuleImpl.class);
 
   @NotNull private final Project myProject;
+  @Nullable private final VirtualFilePointer myImlFilePointer;
   private volatile boolean isModuleAdded;
 
   private String myName;
 
   private final ModuleScopeProvider myModuleScopeProvider;
 
-  ModuleImpl(@NotNull String name, @NotNull Project project) {
-    super(project, "Module " + name);
+  @ApiStatus.Internal
+  public ModuleImpl(@NotNull String name, @NotNull Project project, @Nullable String filePath) {
+    super((ComponentManagerImpl)project);
 
-    getPicoContainer().registerComponentInstance(Module.class, this);
+    registerServiceInstance(Module.class, this, ComponentManagerImpl.getFakeCorePluginDescriptor());
 
     myProject = project;
     myModuleScopeProvider = new ModuleScopeProviderImpl(this);
 
     myName = name;
-  }
-
-  @Override
-  protected void bootstrapPicoContainer(@NotNull String name) {
-    Extensions.instantiateArea(ExtensionAreas.IDEA_MODULE, this, (AreaInstance)getParentComponentManager());
-    super.bootstrapPicoContainer(name);
+    if (filePath == null) {
+      myImlFilePointer = null;
+    }
+    else {
+      myImlFilePointer = VirtualFilePointerManager.getInstance().create(
+        VfsUtilCore.pathToUrl(filePath), this,
+        new VirtualFilePointerListener() {
+          @Override
+          public void validityChanged(@NotNull VirtualFilePointer @NotNull [] pointers) {
+            VirtualFile virtualFile = myImlFilePointer.getFile();
+            if (virtualFile != null) {
+              ((ModuleStore)getStore()).setPath(virtualFile.getPath(), virtualFile, false);
+              ModuleManager.getInstance(myProject).incModificationCount();
+            }
+          }
+        });
+    }
   }
 
   @Override
   public void init(@Nullable Runnable beforeComponentCreation) {
-    init(null, () -> {
-      // create ServiceManagerImpl at first to force extension classes registration
-      getPicoContainer().getComponentInstance(ModuleServiceManagerImpl.class);
-      if (beforeComponentCreation != null) {
-        beforeComponentCreation.run();
-      }
-    });
+    // do not measure (activityNamePrefix method not overridden by this class)
+    // because there are a lot of modules and no need to measure each one
+    //noinspection unchecked
+    registerComponents((List<IdeaPluginDescriptorImpl>)PluginManagerCore.getLoadedPlugins());
+    if (!isPersistent()) {
+      registerService(IComponentStore.class,
+                      NonPersistentModuleStore.class,
+                      Objects.requireNonNull(PluginManagerCore.getPlugin(PluginManagerCore.CORE_ID),
+                                             "Could not find plugin by id: " + PluginManagerCore.CORE_ID),
+                      true);
+    }
+    if (beforeComponentCreation != null) {
+      beforeComponentCreation.run();
+    }
+    createComponents(null);
   }
 
-  @Nullable
-  @Override
-  protected ProgressIndicator getProgressIndicator() {
-    // module loading progress is not tracked, progress updated by ModuleManagerImpl on module load
-    return null;
+  private boolean isPersistent() {
+    return myImlFilePointer != null;
   }
 
   @Override
-  public boolean isDisposed() {
+  protected void setProgressDuringInit(@NotNull ProgressIndicator indicator) {
+    // Component loading progress is not reported for module, because at this stage minimal reporting unit it is the module itself.
+    // Stage "Loading modules" — progress reported for each loaded module and module component count doesn't matter.
+  }
+
+  @Override
+  public final boolean isDisposed() {
     // in case of light project in tests when it's temporarily disposed, the module should be treated as disposed too.
     //noinspection TestOnlyProblems
     return super.isDisposed() || ((ProjectImpl)myProject).isLight() && myProject.isDisposed();
   }
 
   @Override
-  protected boolean isComponentSuitable(@Nullable Map<String, String> options) {
-    if (!super.isComponentSuitable(options)) {
+  protected boolean isComponentSuitable(@NotNull ComponentConfig componentConfig) {
+    if (!super.isComponentSuitable(componentConfig)) {
       return false;
     }
+
+    Map<String, String> options = componentConfig.options;
     if (options == null || options.isEmpty()) {
       return true;
     }
 
     for (String optionName : options.keySet()) {
-      if ("workspace".equals(optionName)) {
+      if ("workspace".equals(optionName) || "overrides".equals(optionName)) {
         continue;
       }
 
@@ -121,41 +150,48 @@ public class ModuleImpl extends PlatformComponentManagerImpl implements ModuleEx
   @Override
   @Nullable
   public VirtualFile getModuleFile() {
-    return LocalFileSystem.getInstance().findFileByPath(getModuleFilePath());
+    if (myImlFilePointer == null) {
+      return null;
+    }
+    return myImlFilePointer.getFile();
   }
 
   @Override
   public void rename(@NotNull String newName, boolean notifyStorage) {
     myName = newName;
     if (notifyStorage) {
-      ServiceKt.getStateStore(this).getStorageManager()
-        .rename(StoragePathMacros.MODULE_FILE, newName + ModuleFileType.DOT_DEFAULT_EXTENSION);
+      getStore().getStorageManager().rename(StoragePathMacros.MODULE_FILE, newName + ModuleFileType.DOT_DEFAULT_EXTENSION);
     }
+  }
+
+  private @NotNull IComponentStore getStore() {
+    return Objects.requireNonNull(getService(IComponentStore.class));
   }
 
   @Override
   @NotNull
   public String getModuleFilePath() {
-    return ServiceKt.getStateStore(this).getStorageManager().expandMacros(StoragePathMacros.MODULE_FILE);
+    if (!isPersistent()) {
+      return "";
+    }
+    return getStore().getStorageManager().expandMacros(StoragePathMacros.MODULE_FILE);
   }
 
   @Override
   public synchronized void dispose() {
     isModuleAdded = false;
-    disposeComponents();
-    Extensions.disposeArea(this);
     super.dispose();
   }
 
   @NotNull
   @Override
-  public List<ComponentConfig> getMyComponentConfigsFromDescriptor(@NotNull IdeaPluginDescriptor plugin) {
-    return plugin.getModuleComponents();
+  protected ContainerDescriptor getContainerDescriptor(@NotNull IdeaPluginDescriptorImpl pluginDescriptor) {
+    return pluginDescriptor.getModule();
   }
 
   @Override
   public void projectOpened() {
-    for (ModuleComponent component : getComponentInstancesOfType(ModuleComponent.class)) {
+    for (ModuleComponent component : getModuleComponents()) {
       try {
         //noinspection deprecation
         component.projectOpened();
@@ -168,7 +204,7 @@ public class ModuleImpl extends PlatformComponentManagerImpl implements ModuleEx
 
   @Override
   public void projectClosed() {
-    List<ModuleComponent> components = getComponentInstancesOfType(ModuleComponent.class);
+    List<ModuleComponent> components = getModuleComponents();
     for (int i = components.size() - 1; i >= 0; i--) {
       try {
         //noinspection deprecation
@@ -200,9 +236,15 @@ public class ModuleImpl extends PlatformComponentManagerImpl implements ModuleEx
   @Override
   public void moduleAdded() {
     isModuleAdded = true;
-    for (ModuleComponent component : getComponentInstancesOfType(ModuleComponent.class)) {
+    for (ModuleComponent component : getModuleComponents()) {
       component.moduleAdded();
     }
+  }
+
+  @NotNull
+  private List<ModuleComponent> getModuleComponents() {
+    //noinspection deprecation
+    return getComponentInstancesOfType(ModuleComponent.class);
   }
 
   @Override
@@ -221,7 +263,7 @@ public class ModuleImpl extends PlatformComponentManagerImpl implements ModuleEx
   @NotNull
   private DeprecatedModuleOptionManager getOptionManager() {
     //noinspection ConstantConditions
-    return ModuleServiceManager.getService(this, DeprecatedModuleOptionManager.class);
+    return ((Module)this).getService(DeprecatedModuleOptionManager.class);
   }
 
   @Override
@@ -294,27 +336,10 @@ public class ModuleImpl extends PlatformComponentManagerImpl implements ModuleEx
     myModuleScopeProvider.clearCache();
   }
 
-  @SuppressWarnings("HardCodedStringLiteral")
+  @Override
   public String toString() {
     if (myName == null) return "Module (not initialized)";
     return "Module: '" + getName() + "'";
-  }
-
-  @NotNull
-  @Override
-  public <T> T[] getExtensions(@NotNull final ExtensionPointName<T> extensionPointName) {
-    return Extensions.getArea(this).getExtensionPoint(extensionPointName).getExtensions();
-  }
-
-  @Override
-  protected boolean logSlowComponents() {
-    return super.logSlowComponents() || ApplicationInfoImpl.getShadowInstance().isEAP();
-  }
-
-  @NotNull
-  @Override
-  protected MutablePicoContainer createPicoContainer() {
-    return Extensions.getArea(this).getPicoContainer();
   }
 
   @Override
@@ -322,8 +347,9 @@ public class ModuleImpl extends PlatformComponentManagerImpl implements ModuleEx
     return getOptionManager().getModificationCount();
   }
 
-  @State(name = "DeprecatedModuleOptionManager")
-  static class DeprecatedModuleOptionManager extends SimpleModificationTracker implements PersistentStateComponent<DeprecatedModuleOptionManager.State>,
+  @ApiStatus.Internal
+  @State(name = "DeprecatedModuleOptionManager", useLoadedStateAsExisting = false /* doesn't make sense to check it */)
+  public static class DeprecatedModuleOptionManager extends SimpleModificationTracker implements PersistentStateComponent<DeprecatedModuleOptionManager.State>,
                                                                                           ProjectModelElement {
     private final Module module;
 
@@ -334,12 +360,10 @@ public class ModuleImpl extends PlatformComponentManagerImpl implements ModuleEx
     @Override
     @Nullable
     public ProjectModelExternalSource getExternalSource() {
-      if (state.options.size() > 1 || (state.options.size() == 1 && !state.options.containsKey(Module.ELEMENT_TYPE) /* unrealistic case, but just to be sure */)) {
+      if (state.options.size() > 1 || state.options.size() == 1 && !state.options.containsKey(Module.ELEMENT_TYPE) /* unrealistic case, but just to be sure */) {
         return null;
       }
-      else {
-        return ExternalProjectSystemRegistry.getInstance().getExternalSource(module);
-      }
+      return ExternalProjectSystemRegistry.getInstance().getExternalSource(module);
     }
 
     static final class State {

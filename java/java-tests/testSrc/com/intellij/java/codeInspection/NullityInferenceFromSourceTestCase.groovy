@@ -25,7 +25,7 @@ import com.intellij.psi.PsiMethod
 import com.intellij.psi.impl.source.PsiFileImpl
 import com.intellij.psi.impl.source.PsiMethodImpl
 import com.intellij.testFramework.LightProjectDescriptor
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import org.jetbrains.annotations.Contract
 import org.jetbrains.annotations.NotNull
 
@@ -33,7 +33,7 @@ import static com.intellij.codeInsight.Nullability.*
 /**
  * @author peter
  */
-abstract class NullityInferenceFromSourceTestCase extends LightCodeInsightFixtureTestCase {
+abstract class NullityInferenceFromSourceTestCase extends LightJavaCodeInsightFixtureTestCase {
   @NotNull
   @Override
   protected LightProjectDescriptor getProjectDescriptor() {
@@ -159,6 +159,117 @@ Object foo(Object o) { if (o == null) return o.hashCode(); return 2; }
                                   'catch(Exception ex) {System.exit(1);return null;}' +
                                   'return "xyz".trim();' +
                                   '}')) == UNKNOWN
+  }
+  
+  void "test declare and fill"() {
+    assert inferNullability(parse("""java.util.List<String> foo() {
+                                    java.util.List<String> x = new java.util.ArrayList<>();
+                                    for(int i=0; i<10; i++) x.add("foo");
+                                    return x;
+                                  }""")) == NOT_NULL
+  }
+
+  void "test assign and fill"() {
+    assert inferNullability(parse("""java.util.List<String> foo() {
+                                    java.util.List<String> x;
+                                    x = new java.util.ArrayList<>();
+                                    for(int i=0; i<10; i++) x.add("foo");
+                                    return x;
+                                  }""")) == NOT_NULL
+  }
+  
+  void "test dereference"() {
+    assert inferNullability(parse("""String foo() {
+                                    String x = getUnknown();
+                                    System.out.println(x.trim());
+                                    return x;
+                                  }""")) == NOT_NULL
+  }
+  
+  void "test reassigned in if"() {
+    assert inferNullability(parse("""String foo() {
+                                      String res = "start";
+                                      if(foo) {
+                                        res = getBar();
+                                      }
+                                      return res;
+                                    }""")) == UNKNOWN
+  }
+  
+  void "test reassigned in both branches"() {
+    assert inferNullability(parse("""String foo() {
+                                      String res;
+                                      if(foo) {
+                                        res = getBar();
+                                      } else {
+                                        res = null;
+                                      }
+                                      return res;
+                                    }""")) == NULLABLE
+  }
+  
+  void "test reassigned in switch"() {
+    assert inferNullability(parse("""String foo(int foo) {
+                                      String res = "bar";
+                                      switch(foo) {
+                                      case 1:res = getSomething();
+                                      case 2:return res;
+                                      }
+                                      return "";
+                                    }""")) == UNKNOWN
+  }
+  
+  void "test null check with return"() {
+    assert inferNullability(parse("""String foo() {
+                                      String res = getUnknown();
+                                      if (res == null) return "foo";
+                                      return res;
+                                    }""")) == NOT_NULL
+  }
+  
+  void "test if null reassign"() {
+    assert inferNullability(parse("""String test() {
+                            String result = getFoo();
+                            if (result != null && result.isEmpty()) {
+                              result = null;
+                            }
+                            if (result == null) {
+                              result = getBar();
+                            }
+                            return result;
+                          }""")) == UNKNOWN
+  }
+  
+  void "test nested ifs"() {
+    assert inferNullability(parse("""String test() {
+                            String result = "foo";
+                            if (bar) {
+                              if(baz) {
+                                System.out.println(result.trim());
+                              }
+                            }
+                            return result;
+                          }""")) == NOT_NULL
+  }
+  
+  void "test null or empty"() {
+    assert inferNullability(parse("""String test() {
+                            String p = isFoo() ? null : getFoo();
+                            if (p == null || p.isEmpty()) return p;
+                            return "foo";
+                          }""")) == NULLABLE
+  }
+  
+  void "test set to null in if branch"() {
+    assert inferNullability(parse("""String test(String r) {
+                            String p;
+                            if(r == null) {
+                              p = null;
+                            } else {
+                              p = " foo ".trim();
+                            }
+                            return p;
+                          }""")) != NOT_NULL
   }
 
   protected abstract Nullability inferNullability(PsiMethod method)

@@ -149,7 +149,7 @@ public class Py3TypeCheckerInspectionTest extends PyInspectionTestCase {
 
   // PY-20769
   public void testPathLikePassedToStdlibFunctions() {
-    doMultiFileTest();
+    doTest();
   }
 
   // PY-21048
@@ -344,5 +344,66 @@ public class Py3TypeCheckerInspectionTest extends PyInspectionTestCase {
   // PY-28127 PY-31424
   public void testInitializingTypeVar() {
     doTest();
+  }
+
+  // PY-24832
+  public void testAssignment() {
+    doTest();
+  }
+
+  // PY-24832
+  public void testReAssignment() {
+    doTest();
+  }
+
+  // PY-24832
+  public void testTypeCommentAssignment() {
+    doTest();
+  }
+
+  // PY-24832
+  public void testTypeDeclarationAndAssignment() {
+    doTest();
+  }
+
+  // PY-24832
+  public void testClassLevelAssignment() {
+    doTest();
+  }
+
+  // PY-24832
+  public void testNoTypeMismatchInAssignmentWithoutTypeAnnotation() {
+    doTest();
+  }
+
+  // PY-35235
+  public void testTypingLiteralStrings() {
+    runWithLanguageLevel(
+      LanguageLevel.PYTHON36,
+      () -> doTestByText("from typing_extensions import Literal\n" +
+                         "\n" +
+                         "a: Literal[\"abc\"] = undefined\n" +
+                         "b: Literal[b\"abc\"] = undefined\n" +
+                         "\n" +
+                         "def foo1(p1: Literal[\"abc\"]):\n" +
+                         "    pass\n" +
+                         "foo1(a)\n" +
+                         "foo1(<warning descr=\"Expected type 'Literal[\\\"abc\\\"]', got 'Literal[b\\\"abc\\\"]' instead\">b</warning>)\n" +
+                         "\n" +
+                         "def foo2(p1: Literal[b\"abc\"]):\n" +
+                         "    pass\n" +
+                         "foo2(<warning descr=\"Expected type 'Literal[b\\\"abc\\\"]', got 'Literal[\\\"abc\\\"]' instead\">a</warning>)\n" +
+                         "foo2(b)\n" +
+                         "\n" +
+                         "def foo3(p1: str):\n" +
+                         "    pass\n" +
+                         "foo3(a)\n" +
+                         "foo3(<warning descr=\"Expected type 'str', got 'Literal[b\\\"abc\\\"]' instead\">b</warning>)\n" +
+                         "\n" +
+                         "def foo4(p1: bytes):\n" +
+                         "    pass\n" +
+                         "foo4(<warning descr=\"Expected type 'bytes', got 'Literal[\\\"abc\\\"]' instead\">a</warning>)\n" +
+                         "foo4(b)\n")
+    );
   }
 }

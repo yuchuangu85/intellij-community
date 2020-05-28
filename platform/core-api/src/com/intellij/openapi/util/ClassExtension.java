@@ -1,49 +1,46 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-/*
- * @author max
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.util;
 
-import gnu.trove.THashSet;
-import org.jetbrains.annotations.NonNls;
+import com.intellij.util.KeyedLazyInstance;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
 public class ClassExtension<T> extends KeyedExtensionCollector<T, Class> {
-  public ClassExtension(@NonNls final String epName) {
+  public ClassExtension(@NotNull String epName) {
     super(epName);
   }
 
   @NotNull
   @Override
-  protected String keyToString(@NotNull final Class key) {
+  protected String keyToString(@NotNull Class key) {
     return key.getName();
   }
 
   @NotNull
   @Override
-  protected List<T> buildExtensions(@NotNull final String key, @NotNull final Class classKey) {
-    final Set<String> allSupers = new THashSet<>();
+  protected List<T> buildExtensions(@NotNull String key, @NotNull Class classKey) {
+    final Set<String> allSupers = new LinkedHashSet<>();
     collectSupers(classKey, allSupers);
-    return buildExtensions(allSupers);
+    return buildExtensionsWithInheritance(allSupers);
+  }
+
+  private List<T> buildExtensionsWithInheritance(Set<String> supers) {
+    List<KeyedLazyInstance<T>> extensions = getExtensions();
+    synchronized (myLock) {
+      List<T> result = null;
+      for (String aSuper : supers) {
+        result = buildExtensionsFromExplicitRegistration(result, key -> aSuper.equals(key));
+      }
+      for (String aSuper : supers) {
+        result = buildExtensionsFromExtensionPoint(result, bean -> aSuper.equals(bean.getKey()), extensions);
+      }
+      return ContainerUtil.notNullize(result);
+    }
   }
 
   private static void collectSupers(@NotNull Class classKey, @NotNull Set<? super String> allSupers) {
@@ -63,5 +60,10 @@ public class ClassExtension<T> extends KeyedExtensionCollector<T, Class> {
   public T forClass(@NotNull Class t) {
     final List<T> ts = forKey(t);
     return ts.isEmpty() ? null : ts.get(0);
+  }
+
+  @Override
+  protected void invalidateCacheForExtension(String key) {
+    clearCache();
   }
 }

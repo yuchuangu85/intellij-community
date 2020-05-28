@@ -30,33 +30,22 @@ public class PythonSdkDetailsStep extends BaseListPopupStep<String> {
   private final Sdk[] myExistingSdks;
   private final NullableConsumer<? super Sdk> mySdkAddedCallback;
 
-  private static final String ADD = PyBundle.message("sdk.details.step.add");
-  private static final String ALL = PyBundle.message("sdk.details.step.show.all");
-  @Nullable private String myNewProjectPath;
-
   public static void show(@Nullable final Project project,
                           @Nullable final Module module,
-                          @NotNull final Sdk[] existingSdks,
-                          @Nullable final DialogWrapper showAllDialog,
+                          final Sdk @NotNull [] existingSdks,
+                          @NotNull final DialogWrapper showAllDialog,
                           @NotNull JComponent ownerComponent,
                           @NotNull final Point popupPoint,
-                          @Nullable String newProjectPath,
                           @NotNull final NullableConsumer<? super Sdk> sdkAddedCallback) {
     final PythonSdkDetailsStep sdkHomesStep = new PythonSdkDetailsStep(project, module, showAllDialog, existingSdks, sdkAddedCallback);
-    if (showAllDialog == null) {
-      sdkHomesStep.createLocalSdk();
-    }
-    else {
-      sdkHomesStep.myNewProjectPath = newProjectPath;
-      final ListPopup popup = JBPopupFactory.getInstance().createListPopup(sdkHomesStep);
-      popup.showInScreenCoordinates(ownerComponent, popupPoint);
-    }
+    final ListPopup popup = JBPopupFactory.getInstance().createListPopup(sdkHomesStep);
+    popup.showInScreenCoordinates(ownerComponent, popupPoint);
   }
 
   public PythonSdkDetailsStep(@Nullable final Project project,
                               @Nullable final Module module,
                               @Nullable final DialogWrapper showAllDialog,
-                              @NotNull final Sdk[] existingSdks,
+                              final Sdk @NotNull [] existingSdks,
                               @NotNull final NullableConsumer<? super Sdk> sdkAddedCallback) {
     super(null, getAvailableOptions(showAllDialog != null));
     myProject = project;
@@ -68,9 +57,9 @@ public class PythonSdkDetailsStep extends BaseListPopupStep<String> {
 
   private static List<String> getAvailableOptions(boolean showAll) {
     final List<String> options = new ArrayList<>();
-    options.add(ADD);
+    options.add(getAdd());
     if (showAll) {
-      options.add(ALL);
+      options.add(getAll());
     }
     return options;
   }
@@ -78,25 +67,18 @@ public class PythonSdkDetailsStep extends BaseListPopupStep<String> {
   @Nullable
   @Override
   public ListSeparator getSeparatorAbove(String value) {
-    return ALL.equals(value) ? new ListSeparator() : null;
+    return getAll().equals(value) ? new ListSeparator() : null;
   }
 
   private void optionSelected(final String selectedValue) {
-    if (!ALL.equals(selectedValue) && myShowAll != null)
+    if (!getAll().equals(selectedValue) && myShowAll != null)
       Disposer.dispose(myShowAll.getDisposable());
-    if (ADD.equals(selectedValue)) {
-      createLocalSdk();
+    if (getAdd().equals(selectedValue)) {
+      PyAddSdkDialog.show(myProject, myModule, Arrays.asList(myExistingSdks), sdk -> mySdkAddedCallback.consume(sdk));
     }
     else if (myShowAll != null) {
       myShowAll.show();
     }
-  }
-
-  private void createLocalSdk() {
-    final Project project = myNewProjectPath != null ? null : myProject;
-    final PyAddSdkDialog dialog = PyAddSdkDialog.create(project, myModule, Arrays.asList(myExistingSdks), myNewProjectPath);
-    final Sdk sdk = dialog.showAndGet() ? dialog.getOrCreateSdk() : null;
-    mySdkAddedCallback.consume(sdk);
   }
 
   @Override
@@ -108,5 +90,13 @@ public class PythonSdkDetailsStep extends BaseListPopupStep<String> {
   @Override
   public PopupStep onChosen(final String selectedValue, boolean finalChoice) {
     return doFinalStep(() -> optionSelected(selectedValue));
+  }
+
+  private static String getAdd() {
+    return PyBundle.message("sdk.details.step.add");
+  }
+
+  private static String getAll() {
+    return PyBundle.message("sdk.details.step.show.all");
   }
 }

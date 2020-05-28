@@ -72,7 +72,7 @@ public class InplaceChangeSignature implements DocumentListener {
       myMarkAction = StartMarkAction.start(editor, project, ChangeSignatureHandler.REFACTORING_NAME);
     }
     catch (StartMarkAction.AlreadyStartedException e) {
-      final int exitCode = Messages.showYesNoDialog(myProject, e.getMessage(), ChangeSignatureHandler.REFACTORING_NAME, "Navigate to Started", "Cancel", Messages.getErrorIcon());
+      final int exitCode = Messages.showYesNoDialog(myProject, e.getMessage(), ChangeSignatureHandler.REFACTORING_NAME, RefactoringBundle.message("inplace.refactoring.navigate.to.started"), RefactoringBundle.message("inplace.refactoring.cancel.current"), Messages.getErrorIcon());
       if (exitCode == Messages.CANCEL) return;
       PsiElement method = myStableChange.getMethod();
       VirtualFile virtualFile = PsiUtilCore.getVirtualFile(method);
@@ -184,20 +184,14 @@ public class InplaceChangeSignature implements DocumentListener {
     String methodSignature = myDetector.getMethodSignaturePreview(changeInfo, deleteRanges, newRanges);
 
     myPreview.getMarkupModel().removeAllHighlighters();
-    WriteCommandAction.writeCommandAction(null).run(() -> {
-      myPreview.getDocument().replaceString(0, myPreview.getDocument().getTextLength(), methodSignature);
-    });
-    TextAttributes deprecatedAttributes =
-      EditorColorsManager.getInstance().getGlobalScheme().getAttributes(CodeInsightColors.DEPRECATED_ATTRIBUTES);
+    WriteCommandAction.writeCommandAction(null).run(() -> myPreview.getDocument().replaceString(0, myPreview.getDocument().getTextLength(), methodSignature));
     for (TextRange range : deleteRanges) {
-      myPreview.getMarkupModel().addRangeHighlighter(range.getStartOffset(), range.getEndOffset(), HighlighterLayer.ADDITIONAL_SYNTAX,
-                                                     deprecatedAttributes, HighlighterTargetArea.EXACT_RANGE);
+      myPreview.getMarkupModel().addRangeHighlighter(CodeInsightColors.DEPRECATED_ATTRIBUTES, range.getStartOffset(), range.getEndOffset(), HighlighterLayer.ADDITIONAL_SYNTAX,
+                                                     HighlighterTargetArea.EXACT_RANGE);
     }
-    TextAttributes todoAttributes =
-      EditorColorsManager.getInstance().getGlobalScheme().getAttributes(CodeInsightColors.TODO_DEFAULT_ATTRIBUTES);
     for (TextRange range : newRanges) {
-      myPreview.getMarkupModel().addRangeHighlighter(range.getStartOffset(), range.getEndOffset(), HighlighterLayer.ADDITIONAL_SYNTAX,
-                                                     todoAttributes, HighlighterTargetArea.EXACT_RANGE);
+      myPreview.getMarkupModel().addRangeHighlighter(CodeInsightColors.TODO_DEFAULT_ATTRIBUTES, range.getStartOffset(), range.getEndOffset(), HighlighterLayer.ADDITIONAL_SYNTAX,
+                                                     HighlighterTargetArea.EXACT_RANGE);
     }
   }
 
@@ -208,7 +202,7 @@ public class InplaceChangeSignature implements DocumentListener {
       updateCurrentInfo();
     });
     JPanel content = new JPanel(new BorderLayout());
-    content.add(new JBLabel("Performed signature modifications:"), BorderLayout.NORTH);
+    content.add(new JBLabel(RefactoringBundle.message("inplace.change.signature.preview.label")), BorderLayout.NORTH);
     content.add(myPreview.getComponent(), BorderLayout.CENTER);
     updateMethodSignature(myStableChange);
     content.add(checkBox, BorderLayout.SOUTH);

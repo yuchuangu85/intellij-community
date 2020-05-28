@@ -39,6 +39,12 @@ public interface DocumentWindow extends Document {
 
   int injectedToHost(int injectedOffset);
 
+  /**
+   * @param minHostOffset if {@code true} minimum host offset corresponding to given injected offset is returned, otherwise maximum related
+   *                      host offset is returned
+   */
+  int injectedToHost(int injectedOffset, boolean minHostOffset);
+
   @NotNull
   TextRange injectedToHost(@NotNull TextRange injectedOffset);
 
@@ -49,8 +55,7 @@ public interface DocumentWindow extends Document {
 
   int injectedToHostLine(int line);
 
-  @NotNull
-  Segment[] getHostRanges();
+  Segment @NotNull [] getHostRanges();
 
   boolean areRangesEqual(@NotNull DocumentWindow documentWindow);
 

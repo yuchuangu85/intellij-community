@@ -15,16 +15,19 @@
  */
 package com.intellij.codeInsight.daemon.impl.analysis;
 
-import com.intellij.codeInsight.daemon.XmlErrorMessages;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.quickfix.QuickFixAction;
 import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.lang.injection.InjectedLanguageManager;
+import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
+import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiErrorElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.xml.XmlTag;
+import com.intellij.xml.analysis.XmlAnalysisBundle;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
@@ -40,12 +43,12 @@ public class XmlErrorQuickFixProvider implements ErrorQuickFixProvider {
 
   private static void registerXmlErrorQuickFix(final PsiErrorElement element, final HighlightInfo highlightInfo) {
     final String text = element.getErrorDescription();
-    if (text.startsWith(XmlErrorMessages.message("unescaped.ampersand"))) {
+    if (text.startsWith(XmlAnalysisBundle.message("unescaped.ampersand"))) {
       QuickFixAction.registerQuickFixAction(highlightInfo, new IntentionAction() {
         @Override
         @NotNull
         public String getText() {
-          return XmlErrorMessages.message("escape.ampersand.quickfix");
+          return XmlAnalysisBundle.message("escape.ampersand.quickfix");
         }
 
         @Override
@@ -61,8 +64,11 @@ public class XmlErrorQuickFixProvider implements ErrorQuickFixProvider {
 
         @Override
         public void invoke(@NotNull Project project, Editor editor, PsiFile file) {
+          PsiFile topLevelFile = InjectedLanguageManager.getInstance(project).getTopLevelFile(file);
+          Document document = PsiDocumentManager.getInstance(project).getDocument(topLevelFile);
+          assert document != null;
           final int textOffset = element.getTextOffset();
-          editor.getDocument().replaceString(textOffset,textOffset + 1,AMP_ENTITY);
+          document.replaceString(textOffset, textOffset + 1, AMP_ENTITY);
         }
 
         @Override

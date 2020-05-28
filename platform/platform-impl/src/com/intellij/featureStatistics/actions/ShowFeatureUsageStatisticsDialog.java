@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.featureStatistics.actions;
 
 import com.intellij.CommonBundle;
@@ -7,11 +7,11 @@ import com.intellij.ide.util.TipUIUtil;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ApplicationNamesInfo;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Splitter;
 import com.intellij.openapi.ui.VerticalFlowLayout;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.TableViewSpeedSearch;
 import com.intellij.ui.table.TableView;
@@ -31,12 +31,10 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.Date;
 
-public class ShowFeatureUsageStatisticsDialog extends DialogWrapper {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.featureStatistics.actions.ShowFeatureUsageStatisticsDialog");
-  private static final Comparator<FeatureDescriptor> DISPLAY_NAME_COMPARATOR =
-    (fd1, fd2) -> fd1.getDisplayName().compareTo(fd2.getDisplayName());
-  private static final Comparator<FeatureDescriptor> GROUP_NAME_COMPARATOR = (fd1, fd2) -> getGroupName(fd1).compareTo(getGroupName(fd2));
-  private static final Comparator<FeatureDescriptor> USAGE_COUNT_COMPARATOR = (fd1, fd2) -> fd1.getUsageCount() - fd2.getUsageCount();
+public final class ShowFeatureUsageStatisticsDialog extends DialogWrapper {
+  private static final Comparator<FeatureDescriptor> DISPLAY_NAME_COMPARATOR = Comparator.comparing(FeatureDescriptor::getDisplayName);
+  private static final Comparator<FeatureDescriptor> GROUP_NAME_COMPARATOR = Comparator.comparing(ShowFeatureUsageStatisticsDialog::getGroupName);
+  private static final Comparator<FeatureDescriptor> USAGE_COUNT_COMPARATOR = Comparator.comparingInt(FeatureDescriptor::getUsageCount);
   private static final Comparator<FeatureDescriptor> LAST_USED_COMPARATOR =
     (fd1, fd2) -> new Date(fd2.getLastTimeUsed()).compareTo(new Date(fd1.getLastTimeUsed()));
 
@@ -103,9 +101,8 @@ public class ShowFeatureUsageStatisticsDialog extends DialogWrapper {
     return "#com.intellij.featureStatistics.actions.ShowFeatureUsageStatisticsDialog";
   }
 
-  @NotNull
   @Override
-  protected Action[] createActions() {
+  protected Action @NotNull [] createActions() {
     return new Action[]{getCancelAction(), getHelpAction()};
   }
 
@@ -124,7 +121,7 @@ public class ShowFeatureUsageStatisticsDialog extends DialogWrapper {
     for (String id : registry.getFeatureIds()) {
       features.add(registry.getFeatureDescriptor(id));
     }
-    final TableView table = new TableView<>(new ListTableModel<>(COLUMNS, features, 0));
+    TableView<FeatureDescriptor> table = new TableView<>(new ListTableModel<>(COLUMNS, features, 0));
     new TableViewSpeedSearch<FeatureDescriptor>(table) {
       @Override
       protected String getItemText(@NotNull FeatureDescriptor element) {
@@ -141,10 +138,10 @@ public class ShowFeatureUsageStatisticsDialog extends DialogWrapper {
 
     final String uptimeS = FeatureStatisticsBundle.message("feature.statistics.application.uptime",
                                                            ApplicationNamesInfo.getInstance().getFullProductName(),
-                                                           DateFormatUtil.formatDuration(uptime));
+                                                           StringUtil.formatDurationApproximate(uptime));
 
     final String idleTimeS = FeatureStatisticsBundle.message("feature.statistics.application.idle.time",
-                                                             DateFormatUtil.formatDuration(idleTime));
+                                                             StringUtil.formatDurationApproximate(idleTime));
 
     String labelText = uptimeS + ", " + idleTimeS;
     CompletionStatistics stats = ((FeatureUsageTrackerImpl)FeatureUsageTracker.getInstance()).getCompletionStatistics();
@@ -182,8 +179,7 @@ public class ShowFeatureUsageStatisticsDialog extends DialogWrapper {
           browser.setText("");
         }
         else {
-          FeatureDescriptor feature = (FeatureDescriptor)selection.iterator().next();
-          TipUIUtil.openTipInBrowser(feature.getTipFileName(), browser, null);
+          TipUIUtil.openTipInBrowser(TipUIUtil.getTip((FeatureDescriptor)selection.iterator().next()), browser);
         }
       }
     });
@@ -202,7 +198,7 @@ public class ShowFeatureUsageStatisticsDialog extends DialogWrapper {
     return result;
   }
 
-  private static String getGroupName(FeatureDescriptor featureDescriptor) {
+  private static String getGroupName(@NotNull FeatureDescriptor featureDescriptor) {
     final ProductivityFeaturesRegistry registry = ProductivityFeaturesRegistry.getInstance();
     final GroupDescriptor groupDescriptor = registry.getGroupDescriptor(featureDescriptor.getGroupId());
     return groupDescriptor != null ? groupDescriptor.getDisplayName() : "";

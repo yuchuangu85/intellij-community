@@ -1,12 +1,12 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.tabs;
 
+import com.intellij.ide.IdeBundle;
 import com.intellij.ui.ColorChooser;
 import com.intellij.ui.ColorUtil;
 import com.intellij.ui.FileColorManager;
 import com.intellij.ui.JBColor;
-import com.intellij.util.ObjectUtils;
-import com.intellij.util.ui.UIUtil;
+import com.intellij.util.ui.StartupUiUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -19,6 +19,7 @@ import java.awt.event.ActionEvent;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * @author gregsh
@@ -89,7 +90,7 @@ public class ColorSelectionComponent extends JPanel {
       if (!button.isSelected()) continue;
       if (button instanceof CustomColorButton) {
         final String color = ColorUtil.toHex(button.getColor());
-        String colorName  = findColorName(button.getColor());
+        String colorName  = FileColorManagerImpl.getColorName(button.getColor());
         return colorName == null ? color : colorName;
       }
       return name;
@@ -97,33 +98,9 @@ public class ColorSelectionComponent extends JPanel {
     return null;
   }
 
-  @Nullable
-  public static String findColorName(Color color) {
-    final String hex = ColorUtil.toHex(color);
-    if ("ffffe4".equals(hex) || "494539".equals(hex)) {
-      return "Yellow";
-    }
-
-    if ("e7fadb".equals(hex) || "2a3b2c".equals(hex)) {
-      return "Green";
-    }
-
-    return null;
-  }
-
-  @Nullable
-  public Color getSelectedColor() {
-    for (String name : myColorToButtonMap.keySet()) {
-      ColorButton button = myColorToButtonMap.get(name);
-      if (!button.isSelected()) continue;
-      return button.getColor();
-    }
-    return null;
-  }
-
   public void initDefault(@NotNull FileColorManager manager, @Nullable String selectedColorName) {
     for (String name : manager.getColorNames()) {
-      addColorButton(name, ObjectUtils.assertNotNull(manager.getColor(name)));
+      addColorButton(name, Objects.requireNonNull(manager.getColor(name)));
     }
     addCustomColorButton();
     setSelectedColor(selectedColorName);
@@ -154,7 +131,7 @@ public class ColorSelectionComponent extends JPanel {
 
     @Override
     protected void doPerformAction(ActionEvent e) {
-      final Color color = ColorChooser.chooseColor(this, "Choose Color", myColor);
+      final Color color = ColorChooser.chooseColor(this, IdeBundle.message("dialog.title.choose.color"), myColor);
       if (color != null) {
         myColor = color;
       }
@@ -168,7 +145,7 @@ public class ColorSelectionComponent extends JPanel {
         @Nullable
         @Override
         protected Color getUnfocusedBorderColor(@NotNull ColorButtonBase button) {
-          if (UIUtil.isUnderDarcula()) return JBColor.GRAY;
+          if (StartupUiUtil.isUnderDarcula()) return JBColor.GRAY;
           return super.getUnfocusedBorderColor(button);
         }
       };

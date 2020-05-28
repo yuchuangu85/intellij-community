@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.devkit.gradle;
 
 import com.intellij.execution.RunManager;
@@ -10,6 +10,7 @@ import com.intellij.framework.addSupport.FrameworkSupportInModuleProvider;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.fileTemplates.FileTemplate;
 import com.intellij.ide.fileTemplates.FileTemplateManager;
+import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.application.ex.ApplicationInfoEx;
@@ -28,6 +29,7 @@ import com.intellij.openapi.util.BuildNumber;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.ui.HyperlinkLabel;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.concurrency.SequentialTaskExecutor;
 import com.intellij.util.io.HttpRequests;
@@ -53,6 +55,9 @@ public class GradleIntellijPluginFrameworkSupportProvider extends KotlinDslGradl
 
   private static final String LATEST_GRADLE_VERSION_KEY = "LATEST_GRADLE_VERSION_KEY";
   private static final String LATEST_UPDATING_TIME_KEY = "LATEST_UPDATING_TIME_KEY";
+
+  private static final String FALLBACK_VERSION = "0.4.20";
+  protected static final String HELP_COMMENT = "// See https://github.com/JetBrains/gradle-intellij-plugin/\n";
 
   private static class Lazy {
     static final ExecutorService EXECUTOR = SequentialTaskExecutor.createSequentialApplicationPoolExecutor("UPDATE_GRADLE_PLUGIN_VERSIONS");
@@ -88,7 +93,7 @@ public class GradleIntellijPluginFrameworkSupportProvider extends KotlinDslGradl
                          @NotNull ModifiableRootModel rootModel,
                          @NotNull ModifiableModelsProvider modifiableModelsProvider,
                          @NotNull BuildScriptDataBuilder buildScriptData) {
-    String pluginVersion = PropertiesComponent.getInstance().getValue(LATEST_GRADLE_VERSION_KEY, "0.2.13");
+    String pluginVersion = PropertiesComponent.getInstance().getValue(LATEST_GRADLE_VERSION_KEY, FALLBACK_VERSION);
     ApplicationInfoEx applicationInfo = ApplicationInfoEx.getInstanceEx();
     String ideVersion;
     if (applicationInfo.isEAP()) {
@@ -113,7 +118,8 @@ public class GradleIntellijPluginFrameworkSupportProvider extends KotlinDslGradl
                                       String ideVersion) {
     buildScriptData
       .addPluginDefinitionInPluginsGroup("id 'org.jetbrains.intellij' version '" + pluginVersion + "'")
-      .addOther("intellij {\n    version '" + ideVersion + "'\n}\n")
+      .addOther(HELP_COMMENT +
+                "intellij {\n    version '" + ideVersion + "'\n}\n")
       .addOther("patchPluginXml {\n" +
                 "    changeNotes \"\"\"\n" +
                 "      Add change notes here.<br>\n" +
@@ -125,10 +131,10 @@ public class GradleIntellijPluginFrameworkSupportProvider extends KotlinDslGradl
   public JComponent createComponent() {
     // checking new gradle version on creating component
     String latestVersion = PropertiesComponent.getInstance().getValue(LATEST_GRADLE_VERSION_KEY);
-    long timeCheck = PropertiesComponent.getInstance().getOrInitLong(LATEST_UPDATING_TIME_KEY, System.currentTimeMillis());
+    long timeCheck = PropertiesComponent.getInstance().getLong(LATEST_UPDATING_TIME_KEY, System.currentTimeMillis());
     if (latestVersion == null || TimeUnit.MILLISECONDS.toDays(System.currentTimeMillis() - timeCheck) >= 1) {
       ModalityState modalityState = ModalityState.defaultModalityState();
-      Lazy.EXECUTOR.submit(() -> {
+      Lazy.EXECUTOR.execute(() -> {
         try {
           // sadly plugins.gradle.org has no API and doesn't support meta-versions like latest.
           // Let's parse HTML with REGEXPs muhahaha
@@ -146,7 +152,11 @@ public class GradleIntellijPluginFrameworkSupportProvider extends KotlinDslGradl
         }
       });
     }
-    return null;
+
+    final HyperlinkLabel linkLabel = new HyperlinkLabel();
+    linkLabel.setHtmlText("Learn how to <a>build plugins with Gradle</a>");
+    linkLabel.setHyperlinkTarget("https://www.jetbrains.org/intellij/sdk/docs/tutorials/build_system.html");
+    return linkLabel;
   }
 
   private boolean createPluginXml(@NotNull ProjectId projectId, @NotNull Module module, @NotNull String contentRootPath) {
@@ -155,16 +165,14 @@ public class GradleIntellijPluginFrameworkSupportProvider extends KotlinDslGradl
       if (metaInf == null) {
         return false;
       }
-      if (metaInf.findChild("plugin.xml") != null) {
+      if (metaInf.findChild(PluginManagerCore.PLUGIN_XML) != null) {
         return true;
       }
       Project project = module.getProject();
-      VirtualFile pluginXml = metaInf.createChildData(this, "plugin.xml");
+      VirtualFile pluginXml = metaInf.createChildData(this, PluginManagerCore.PLUGIN_XML);
       FileTemplateManager templateManager = FileTemplateManager.getInstance(project);
       FileTemplate template = templateManager.getJ2eeTemplate("gradleBasedPlugin.xml");
-      if (template == null) {
-        return false;
-      }
+
       Map<String, String> attributes = new HashMap<>();
       String groupId = projectId.getGroupId();
       String artifactId = projectId.getArtifactId();

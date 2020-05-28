@@ -18,14 +18,14 @@ import java.util.LinkedList;
 /**
  * @author peter
  */
-class OffsetTranslator implements Disposable {
+public class OffsetTranslator implements Disposable {
   static final Key<OffsetTranslator> RANGE_TRANSLATION = Key.create("completion.rangeTranslation");
 
   private final PsiFile myOriginalFile;
   private final Document myCopyDocument;
   private final LinkedList<DocumentEvent> myTranslation = new LinkedList<>();
 
-  OffsetTranslator(Document originalDocument, PsiFile originalFile, Document copyDocument, int start, int end, String replacement) {
+  public OffsetTranslator(Document originalDocument, PsiFile originalFile, Document copyDocument, int start, int end, String replacement) {
     myOriginalFile = originalFile;
     myCopyDocument = copyDocument;
     myCopyDocument.putUserData(RANGE_TRANSLATION, this);
@@ -45,7 +45,7 @@ class OffsetTranslator implements Disposable {
     }, this);
 
     originalFile.getProject().getMessageBus().connect(this).subscribe(PsiModificationTracker.TOPIC, new PsiModificationTracker.Listener() {
-      long lastModCount = originalFile.getViewProvider().getModificationStamp();
+      final long lastModCount = originalFile.getViewProvider().getModificationStamp();
       @Override
       public void modificationCountChanged() {
         if (isUpToDate() && lastModCount != originalFile.getViewProvider().getModificationStamp()) {

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.java.refactoring;
 
@@ -24,7 +10,7 @@ import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.refactoring.BaseRefactoringProcessor;
-import com.intellij.refactoring.MultiFileTestCase;
+import com.intellij.refactoring.LightMultiFileTestCase;
 import com.intellij.refactoring.changeSignature.JavaMethodDescriptor;
 import com.intellij.refactoring.changeSignature.ParameterInfoImpl;
 import com.intellij.refactoring.introduceParameterObject.IntroduceParameterObjectProcessor;
@@ -35,15 +21,11 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
-public class IntroduceParameterObjectTest extends MultiFileTestCase {
+public class IntroduceParameterObjectTest extends LightMultiFileTestCase {
   @NotNull
   @Override
-  protected String getTestRoot() {
-    return "/refactoring/introduceParameterObject/";
-  }
-  @Override
   protected String getTestDataPath() {
-    return JavaTestUtil.getJavaTestDataPath();
+    return JavaTestUtil.getJavaTestDataPath() + "/refactoring/introduceParameterObject/";
   }
 
   private void doTest() {
@@ -57,11 +39,8 @@ public class IntroduceParameterObjectTest extends MultiFileTestCase {
   private void doTest(final boolean delegate,
                       final boolean createInner,
                       final Function<PsiMethod, ParameterInfoImpl[]> function) {
-    doTest((rootDir, rootAfter) -> {
-      PsiClass aClass = myJavaFacade.findClass("Test", GlobalSearchScope.projectScope(getProject()));
-
-      assertNotNull("Class Test not found", aClass);
-
+    doTest(() -> {
+      PsiClass aClass = myFixture.findClass("Test");
       final PsiMethod method = aClass.findMethodsByName("foo", false)[0];
       final ParameterInfoImpl[] datas = function.fun(method);
 
@@ -83,7 +62,7 @@ public class IntroduceParameterObjectTest extends MultiFileTestCase {
     final ParameterInfoImpl[] datas = new ParameterInfoImpl[parameters.length];
     for (int i = 0; i < parameters.length; i++) {
       PsiParameter parameter = parameters[i];
-      datas[i] = new ParameterInfoImpl(i, parameter.getName(), parameter.getType());
+      datas[i] = ParameterInfoImpl.create(i).withName(parameter.getName()).withType(parameter.getType());
     }
     return datas;
   }
@@ -151,7 +130,7 @@ public class IntroduceParameterObjectTest extends MultiFileTestCase {
       final ParameterInfoImpl[] datas = new ParameterInfoImpl[parameters.length - 1];
       for (int i = 0; i < parameters.length - 1; i++) {
         PsiParameter parameter = parameters[i];
-        datas[i] = new ParameterInfoImpl(i, parameter.getName(), parameter.getType());
+        datas[i] = ParameterInfoImpl.create(i).withName(parameter.getName()).withType(parameter.getType());
       }
       return datas;
     });
@@ -164,7 +143,7 @@ public class IntroduceParameterObjectTest extends MultiFileTestCase {
       final ParameterInfoImpl[] datas = new ParameterInfoImpl[parameters.length - 1];
       for (int i = 0; i < parameters.length - 1; i++) {
         PsiParameter parameter = parameters[i];
-        datas[i] = new ParameterInfoImpl(i, parameter.getName(), parameter.getType());
+        datas[i] = ParameterInfoImpl.create(i).withName(parameter.getName()).withType(parameter.getType());
       }
       return datas;
     });
@@ -174,16 +153,17 @@ public class IntroduceParameterObjectTest extends MultiFileTestCase {
     doTestExistingClass("Param", "", false, "public", method -> {
       final PsiParameter[] parameters = method.getParameterList().getParameters();
       PsiParameter parameter = parameters[1];
-      return new ParameterInfoImpl[]{new ParameterInfoImpl(1, parameter.getName(), parameter.getType())};
+      return new ParameterInfoImpl[]{ParameterInfoImpl.create(1).withName(parameter.getName()).withType(parameter.getType())};
     });
   }
 
   public void testTypeParametersWithChosenSubtype() {
     doTest(false, true, psiMethod -> {
       final PsiParameter parameter = psiMethod.getParameterList().getParameters()[0];
-      final PsiClass collectionClass = getJavaFacade().findClass(CommonClassNames.JAVA_UTIL_COLLECTION);
-      final ParameterInfoImpl variableData =
-        new ParameterInfoImpl(0, parameter.getName(), JavaPsiFacade.getElementFactory(getProject()).createType(collectionClass));
+      final PsiClass collectionClass = myFixture.findClass(CommonClassNames.JAVA_UTIL_COLLECTION);
+      final ParameterInfoImpl variableData = ParameterInfoImpl.create(0)
+        .withName(parameter.getName())
+        .withType(JavaPsiFacade.getElementFactory(getProject()).createType(collectionClass));
       return new ParameterInfoImpl[]{variableData};
     });
   }
@@ -196,25 +176,25 @@ public class IntroduceParameterObjectTest extends MultiFileTestCase {
     doTest(true, false);
   }
 
-  private void doTestExistingClass(final String existingClassName, final String existingClassPackage, final boolean generateAccessors) {
+  private void doTestExistingClass(@NotNull String existingClassName, final String existingClassPackage, final boolean generateAccessors) {
     doTestExistingClass(existingClassName, existingClassPackage, generateAccessors, null);
   }
 
-  private void doTestExistingClass(final String existingClassName, final String existingClassPackage, final boolean generateAccessors,
+  private void doTestExistingClass(@NotNull String existingClassName, final String existingClassPackage, final boolean generateAccessors,
                                    final String newVisibility) {
     doTestExistingClass(existingClassName, existingClassPackage, generateAccessors, newVisibility,
                         IntroduceParameterObjectTest::generateParams);
   }
 
-  private void doTestExistingClass(final String existingClassName,
+  private void doTestExistingClass(@NotNull String existingClassName,
                                    final String existingClassPackage,
                                    final boolean generateAccessors,
                                    final String newVisibility,
                                    final Function<PsiMethod, ParameterInfoImpl[]> function) {
-    doTest((rootDir, rootAfter) -> {
-      PsiClass aClass = myJavaFacade.findClass("Test", GlobalSearchScope.projectScope(getProject()));
+    doTest(() -> {
+      PsiClass aClass = myFixture.getJavaFacade().findClass("Test", GlobalSearchScope.projectScope(getProject()));
       if (aClass == null) {
-        aClass = myJavaFacade.findClass("p2.Test", GlobalSearchScope.projectScope(getProject()));
+        aClass = myFixture.getJavaFacade().findClass("p2.Test", GlobalSearchScope.projectScope(getProject()));
       }
       assertNotNull("Class Test not found", aClass);
 
@@ -243,7 +223,7 @@ public class IntroduceParameterObjectTest extends MultiFileTestCase {
     checkExceptionThrown("Integer", "java.lang", "Setter for field 'value' is required");
   }
 
-  private void checkExceptionThrown(String existingClassName, String existingClassPackage, String exceptionMessage) {
+  private void checkExceptionThrown(@NotNull String existingClassName, String existingClassPackage, String exceptionMessage) {
     try {
       doTestExistingClass(existingClassName, existingClassPackage, false);
     }

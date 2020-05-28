@@ -1,8 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.credentialStore
 
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.util.ArrayUtilRt
+import com.intellij.util.text.nullize
 import com.sun.jna.*
 import com.sun.jna.ptr.IntByReference
 import com.sun.jna.ptr.PointerByReference
@@ -23,7 +24,7 @@ private const val kSecAccountItemAttr = (('a'.toInt() shl 8 or 'c'.toInt()) shl 
 
 internal class KeyChainCredentialStore : CredentialStore {
   companion object {
-    private val library = Native.loadLibrary("Security", MacOsKeychainLibrary::class.java)
+    private val library = Native.load("Security", MacOsKeychainLibrary::class.java)
 
     private fun findGenericPassword(serviceName: ByteArray, accountName: String?): Credentials? {
       val accountNameBytes = accountName?.toByteArray()
@@ -33,6 +34,9 @@ internal class KeyChainCredentialStore : CredentialStore {
       val errorCode = checkForError("find", library.SecKeychainFindGenericPassword(null, serviceName.size, serviceName, accountNameBytes?.size ?: 0, accountNameBytes, passwordSize, passwordRef, itemRef))
       if (errorCode == errSecUserCanceled) {
         return ACCESS_TO_KEY_CHAIN_DENIED
+      }
+      if (errorCode == errUserNameNotCorrect) {
+        return CANNOT_UNLOCK_KEYCHAIN
       }
 
       val pointer = passwordRef.value ?: return null
@@ -86,14 +90,14 @@ internal class KeyChainCredentialStore : CredentialStore {
   }
 
   override fun get(attributes: CredentialAttributes): Credentials? {
-    return findGenericPassword(attributes.serviceName.toByteArray(), attributes.userName)
+    return findGenericPassword(attributes.serviceName.toByteArray(), attributes.userName.nullize())
   }
 
   override fun set(attributes: CredentialAttributes, credentials: Credentials?) {
     val serviceName = attributes.serviceName.toByteArray()
     if (credentials.isEmpty()) {
       val itemRef = PointerByReference()
-      val userName = attributes.userName?.toByteArray()
+      val userName = attributes.userName.nullize()?.toByteArray()
       val code = library.SecKeychainFindGenericPassword(null, serviceName.size, serviceName, userName?.size ?: 0, userName, null, null, itemRef)
       if (code == errSecItemNotFound || code == errSecInvalidRecord) {
         return
@@ -107,7 +111,7 @@ internal class KeyChainCredentialStore : CredentialStore {
       return
     }
 
-    val userName = (attributes.userName ?: credentials!!.userName)?.toByteArray()
+    val userName = (attributes.userName.nullize() ?: credentials!!.userName)?.toByteArray()
     val searchUserName = if (attributes.serviceName == SERVICE_NAME_PREFIX) userName else null
     val itemRef = PointerByReference()
     val library = library
@@ -182,15 +186,11 @@ private interface MacOsKeychainLibrary : Library {
 }
 
 // must be not private
+@Structure.FieldOrder("count", "tag", "format")
 internal class SecKeychainAttributeInfo : Structure() {
-  @JvmField
-  var count: Int = 0
-  @JvmField
-  var tag: Pointer? = null
-  @JvmField
-  var format: Pointer? = null
-
-  override fun getFieldOrder() = listOf("count", "tag", "format")
+  @JvmField var count: Int = 0
+  @JvmField var tag: Pointer? = null
+  @JvmField var format: Pointer? = null
 }
 
 @Suppress("FunctionName")
@@ -213,33 +213,24 @@ private fun SecKeychainAttributeInfo(vararg ids: Int): SecKeychainAttributeInfo 
 }
 
 // must be not private
+@Structure.FieldOrder("count", "attr")
 internal class SecKeychainAttributeList : Structure {
-  @JvmField
-  var count = 0
-  @JvmField
-  var attr: Pointer? = null
+  @JvmField var count = 0
+  @JvmField var attr: Pointer? = null
 
   constructor(p: Pointer) : super(p)
-
   constructor() : super()
-
-  override fun getFieldOrder() = listOf("count", "attr")
 }
 
 // must be not private
+@Structure.FieldOrder("tag", "length", "data")
 internal class SecKeychainAttribute : Structure, Structure.ByReference {
-  @JvmField
-  var tag = 0
-  @JvmField
-  var length = 0
-  @JvmField
-  var data: Pointer? = null
+  @JvmField var tag = 0
+  @JvmField var length = 0
+  @JvmField var data: Pointer? = null
 
   internal constructor(p: Pointer) : super(p)
-
   internal constructor() : super()
-
-  override fun getFieldOrder() = listOf("tag", "length", "data")
 }
 
 private fun readAttributes(list: SecKeychainAttributeList): TIntObjectHashMap<String> {

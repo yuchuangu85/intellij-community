@@ -8,6 +8,7 @@ const int g_marginBorders = 10;
 
 @interface ScrubberItemView() {
     bool _isSelected;
+    bool _isEnabled;
 }
 @property (retain) NSImageView * imageView;
 @property (retain) NSTextField * textField;
@@ -22,6 +23,7 @@ const int g_marginBorders = 10;
         self.imageView = [[[NSImageView alloc] initWithFrame:NSZeroRect] autorelease];
 
         _isSelected = false;
+        _isEnabled = true;
 
         self.textField.font = [NSFont systemFontOfSize: 0]; // If size is 0 then macOS will give you the proper font metrics for the NSTouchBar.
         self.textField.textColor = [NSColor alternateSelectedControlTextColor];
@@ -39,8 +41,17 @@ const int g_marginBorders = 10;
 
 - (void)setBackgroundSelected:(bool)selected {
     _isSelected = selected;
-//    NSLog(@"set selected %s [%@]", selected ? "true" : "false", self);
 //    [self.view setNeedsDisplayInRect:self.bounds];
+}
+
+- (void)setEnabled:(bool)enabled {
+    _isEnabled = enabled;
+
+    self.textField.textColor = _isEnabled ? [NSColor alternateSelectedControlTextColor] : [NSColor disabledControlTextColor];
+}
+
+- (bool)isEnabled {
+    return _isEnabled;
 }
 
 - (void)drawRect:(NSRect)dirtyRect {
@@ -92,8 +103,13 @@ const int g_marginBorders = 10;
     [NSLayoutConstraint activateConstraints:constraints];
 }
 
-- (void)setImgAndText:(NSImage *)img text:(NSString *)txt {
+- (void)setImage:(NSImage *)img {
     _imageView.image = img;
+}
+
+- (void)setText:(NSString *)txt {
+    if (txt == nil)
+      txt = @"";
     _textField.stringValue = txt;
     [_textField sizeToFit];
 

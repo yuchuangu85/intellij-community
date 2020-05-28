@@ -1,12 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xdebugger.impl.settings;
 
 import com.intellij.util.xmlb.annotations.Tag;
 import com.intellij.xdebugger.evaluation.EvaluationMode;
 
-/**
- * @author egor
- */
 @Tag("general")
 public class XDebuggerGeneralSettings {
   private EvaluationMode myEvaluationDialogMode = EvaluationMode.EXPRESSION;
@@ -16,6 +13,7 @@ public class XDebuggerGeneralSettings {
   private boolean myShowDebuggerOnBreakpoint = true;
   private boolean myScrollToCenter = false;
   private boolean myConfirmBreakpointRemoval = false;
+  private boolean myRunToCursorGesture = true;
 
   @Tag("evaluation-dialog-mode")
   public EvaluationMode getEvaluationDialogMode() {
@@ -67,5 +65,14 @@ public class XDebuggerGeneralSettings {
 
   public void setConfirmBreakpointRemoval(boolean confirmBreakpointRemoval) {
     myConfirmBreakpointRemoval = confirmBreakpointRemoval;
+  }
+
+  @Tag("run-to-cursor-gesture")
+  public boolean isRunToCursorGestureEnabled() {
+    return myRunToCursorGesture;
+  }
+
+  public void setRunToCursorGestureEnabled(boolean runToCursorGesture) {
+    myRunToCursorGesture = runToCursorGesture;
   }
 }

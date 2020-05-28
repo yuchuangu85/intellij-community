@@ -17,10 +17,15 @@ package com.intellij.testFramework.propertyBased;
 
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.codeInsight.intention.IntentionActionDelegate;
 import com.intellij.codeInsight.intention.impl.ShowIntentionActionsHandler;
+import com.intellij.codeInsight.intention.impl.preview.IntentionPreviewPopupUpdateProcessor;
+import com.intellij.codeInspection.SuppressIntentionAction;
 import com.intellij.injected.editor.EditorWindow;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.Disposable;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
@@ -36,11 +41,11 @@ import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
-import com.intellij.psi.impl.DebugUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtilBase;
 import com.intellij.testFramework.PsiTestUtil;
 import com.intellij.testFramework.fixtures.impl.CodeInsightTestFixtureImpl;
+import com.intellij.ui.UiInterceptors;
 import com.intellij.util.containers.ContainerUtil;
 import one.util.streamex.EntryStream;
 import one.util.streamex.StreamEx;
@@ -53,7 +58,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class InvokeIntention extends ActionOnFile {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.testFramework.propertyBased.InvokeIntention");
+  private static final Logger LOG = Logger.getInstance(InvokeIntention.class);
   private final IntentionPolicy myPolicy;
 
   public InvokeIntention(@NotNull PsiFile file, @NotNull IntentionPolicy policy) {
@@ -81,7 +86,7 @@ public class InvokeIntention extends ActionOnFile {
     return result;
   }
 
-  private void doInvokeIntention(int offset, Environment env) {
+  protected void doInvokeIntention(int offset, Environment env) {
     Project project = getProject();
     Editor editor = FileEditorManager.getInstance(project).openTextEditor(new OpenFileDescriptor(project, getVirtualFile(), offset), true);
     assert editor != null;
@@ -89,27 +94,24 @@ public class InvokeIntention extends ActionOnFile {
     PsiDocumentManager.getInstance(project).commitAllDocuments();
 
     FileViewProvider viewProvider = getFile().getViewProvider();
-    String filesBefore = viewProvider.getAllFiles().toString();
     boolean containsErrorElements = MadTestingUtil.containsErrorElements(viewProvider);
-
-    String treesBefore = viewProvider.getAllFiles().stream().map(f -> DebugUtil.psiToString(f, false)).collect(
-      Collectors.joining("\n\n"))
-                         + "\n\n hasErrorPSI=" + containsErrorElements
-                         + "\n hasErrorPSI2=" + MadTestingUtil.containsErrorElements(viewProvider)
-                         + "\n filesBefore=" + filesBefore;
 
     List<HighlightInfo> errors = highlightErrors(project, editor);
     boolean hasErrors = !errors.isEmpty() || containsErrorElements;
-
 
     PsiFile file = PsiUtilBase.getPsiFileInEditor(editor, getProject());
     assert file != null;
     List<IntentionAction> intentions = getAvailableIntentions(editor, file);
     // Do not reuse originally passed offset here, sometimes it's adjusted by Editor
     PsiElement currentElement = file.findElementAt(editor.getCaretModel().getOffset());
-    intentions = wrapAndCheck(env, editor, currentElement, containsErrorElements, hasErrors, intentions);
+    if (!containsErrorElements) {
+      intentions = wrapAndCheck(env, editor, currentElement, hasErrors, intentions);
+    }
     IntentionAction intention = chooseIntention(env, intentions);
     if (intention == null) return;
+    if (myPolicy.shouldCheckPreview(intention) && intention.getElementToMakeWritable(file) == file) {
+      checkPreview(intention, editor);
+    }
 
     String intentionString = intention.toString();
 
@@ -124,10 +126,11 @@ public class InvokeIntention extends ActionOnFile {
     String textBefore = changedDocument == null ? null : changedDocument.getText();
     Long stampBefore = changedDocument == null ? null : changedDocument.getModificationStamp();
 
-    Runnable r = () -> CodeInsightTestFixtureImpl.invokeIntention(intention, file, editor, intention.getText());
+    Runnable r = () -> CodeInsightTestFixtureImpl.invokeIntention(intention, file, editor);
 
     Disposable disposable = Disposer.newDisposable();
     try {
+      UiInterceptors.register(new RandomActivityInterceptor(env, disposable));
       if (containsErrorElements) {
         Registry.get("ide.check.structural.psi.text.consistency.in.tests").setValue(false, disposable);
         Disposer.register(disposable, this::restoreAfterPotentialPsiTextInconsistency);
@@ -156,13 +159,6 @@ public class InvokeIntention extends ActionOnFile {
           message += ".\nIf it's by design that " + intentionString + " doesn't change source files, " +
                      "it should return false from 'startInWriteAction'";
         }
-        message += "\n  Debug info: " + treesBefore + "\n\nafter:" +
-                   file.getViewProvider().getAllFiles().stream().map(
-                     f ->
-                       DebugUtil.psiToString(f, false) +
-                       "\n\n" +
-                       SyntaxTraverser.psiTraverser(file).filter(PsiErrorElement.class).toList()
-                   ).collect(Collectors.joining("\n\n"));
         throw new AssertionError(message);
       }
 
@@ -191,11 +187,34 @@ public class InvokeIntention extends ActionOnFile {
     }
   }
 
+  private void checkPreview(IntentionAction intention, Editor editor) {
+    IntentionAction unwrapped = IntentionActionDelegate.unwrap(intention);
+    // Suppress actions are under submenu, no preview is generated for them anyway
+    if (unwrapped instanceof SuppressIntentionAction) return;
+    String previewText;
+    try {
+      // Should not require EDT or write-action
+      previewText = ApplicationManager.getApplication().executeOnPooledThread(
+        () -> ReadAction.compute(
+          () -> IntentionPreviewPopupUpdateProcessor.Companion.getPreviewText(getProject(), intention, getFile(), editor))
+      ).get();
+    }
+    catch (Exception e) {
+      throw new RuntimeException(
+        "Intention action " + MadTestingUtil.getIntentionDescription(intention) + " fails during preview", e);
+    }
+    if (previewText == null) {
+      throw new RuntimeException(
+        "Intention action " + MadTestingUtil.getIntentionDescription(intention) + " is not preview-friendly");
+    }
+    // TODO: check that preview text is the same as actual text
+    //       may require explicit formatting
+  }
+
   @NotNull
   private List<IntentionAction> wrapAndCheck(Environment env,
                                              Editor editor,
                                              PsiElement currentElement,
-                                             boolean containsErrorElements,
                                              boolean hasErrors,
                                              List<IntentionAction> intentions) {
     if (currentElement == null) return intentions;
@@ -228,14 +247,13 @@ public class InvokeIntention extends ActionOnFile {
     List<String> messages = new ArrayList<>();
 
     boolean newContainsErrorElements = MadTestingUtil.containsErrorElements(getFile().getViewProvider());
-    if (newContainsErrorElements != containsErrorElements) {
-      messages.add(newContainsErrorElements ? "File contains parse errors after wrapping" : "File parse errors were fixed after wrapping");
+    if (newContainsErrorElements) {
+      messages.add("File contains parse errors after wrapping");
     }
     else {
-      boolean newHasErrors = !highlightErrors(project, editor).isEmpty() || containsErrorElements;
+      boolean newHasErrors = !highlightErrors(project, editor).isEmpty();
       if (newHasErrors != hasErrors) {
-        messages
-          .add(newHasErrors ? "File contains errors after wrapping" : "File errors were fixed after wrapping");
+        messages.add(newHasErrors ? "File contains errors after wrapping" : "File errors were fixed after wrapping");
       }
     }
     intentions = getAvailableIntentions(editor, file);
@@ -260,6 +278,24 @@ public class InvokeIntention extends ActionOnFile {
       messages.add("Intentions removed after parenthesizing:\n" + describeIntentions(removed));
     }
     if (!messages.isEmpty()) {
+      WriteCommandAction.runWriteCommandAction(project, () -> {
+        getDocument().deleteString(range.getStartOffset(), range.getStartOffset() + prefix.length());
+        getDocument().deleteString(range.getEndOffset(), range.getEndOffset() + suffix.length());
+        editor.getCaretModel().moveToOffset(offset);
+      });
+      intentions = getAvailableIntentions(editor, file);
+      Map<String, IntentionAction> namesBackAgain =
+        StreamEx.of(intentions).toMap(IntentionAction::getText, Function.identity(), (a, b) -> a);
+      if (!namesBackAgain.keySet().equals(names.keySet())) {
+        if (namesBackAgain.keySet().equals(namesWithParentheses.keySet())) {
+          messages.add(0, "Unstable result: intentions changed after parenthesizing, but remain the same when parentheses removed");
+        }
+        else {
+          messages
+            .add(0, "Unstable result: intentions changed after parenthesizing, but restored in a different way when parentheses removed");
+        }
+      }
+      LOG.debug("Error occurred, file text before adding parentheses:\n" + file.getText());
       throw new AssertionError(String.join("\n", messages));
     }
     return intentions;
@@ -299,7 +335,7 @@ public class InvokeIntention extends ActionOnFile {
   }
 
   @NotNull
-  private static List<HighlightInfo> highlightErrors(Project project, Editor editor) {
+  static List<HighlightInfo> highlightErrors(Project project, Editor editor) {
     List<HighlightInfo> infos = RehighlightAllEditors.highlightEditor(editor, project);
     return ContainerUtil.filter(infos, i -> i.getSeverity() == HighlightSeverity.ERROR);
   }

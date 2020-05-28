@@ -2,6 +2,7 @@
 
 package com.intellij.openapi.roots.ui.configuration.actions;
 
+import com.intellij.CommonBundle;
 import com.intellij.ide.DeleteProvider;
 import com.intellij.ide.TitledHandler;
 import com.intellij.ide.projectView.ProjectView;
@@ -10,6 +11,7 @@ import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.LangDataKeys;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.CommandProcessor;
+import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.*;
 import com.intellij.openapi.module.impl.LoadedModuleDescriptionImpl;
 import com.intellij.openapi.project.Project;
@@ -74,8 +76,8 @@ public class ModuleDeleteProvider  implements DeleteProvider, TitledHandler  {
       moduleDescriptions.addAll(unloadedModules);
     }
 
-    String names = StringUtil.join(moduleDescriptions, description -> "\'" + description.getName() + "\'", ", ");
-    int ret = Messages.showOkCancelDialog(getConfirmationText(names, moduleDescriptions.size()), getActionTitle(), Messages.getQuestionIcon());
+    String names = StringUtil.join(moduleDescriptions, description -> "'" + description.getName() + "'", ", ");
+    int ret = Messages.showOkCancelDialog(getConfirmationText(names, moduleDescriptions.size()), getActionTitle(), CommonBundle.message("button.remove"), CommonBundle.getCancelButtonText(), Messages.getQuestionIcon());
     if (ret != Messages.OK) return;
     CommandProcessor.getInstance().executeCommand(project, () -> {
       final Runnable action = () -> {
@@ -92,6 +94,9 @@ public class ModuleDeleteProvider  implements DeleteProvider, TitledHandler  {
         removeDependenciesOnModules(moduleNamesToDelete, otherModuleRootModels.values());
         if (modules != null) {
           for (final Module module : modules) {
+            for (ProjectAttachProcessor processor : ProjectAttachProcessor.EP_NAME.getExtensionList()) {
+              processor.beforeDetach(module);
+            }
             modifiableModuleModel.disposeModule(module);
           }
         }
@@ -114,7 +119,8 @@ public class ModuleDeleteProvider  implements DeleteProvider, TitledHandler  {
 
   @Override
   public String getActionTitle() {
-    return ProjectAttachProcessor.canAttachToProject() ? "Remove from Project View" : "Remove Module";
+    return ProjectAttachProcessor.canAttachToProject() ? ProjectBundle.message("action.text.remove.from.project.view")
+                                                       : ProjectBundle.message("action.text.remove.module");
   }
 
   public static void removeModule(@NotNull final Module moduleToRemove,

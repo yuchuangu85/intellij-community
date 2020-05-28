@@ -1,45 +1,31 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.impl.signatures;
 
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrClosureSignature;
 import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrSignature;
-import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrSignatureVisitor;
 import org.jetbrains.plugins.groovy.lang.psi.api.types.GrClosureParameter;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil;
+
+import java.util.Arrays;
 
 /**
  * @author Maxim.Medvedev
  */
-public class GrImmediateClosureSignatureImpl implements GrClosureSignature {
+public class GrImmediateClosureSignatureImpl implements GrSignature {
+
   private static final Logger LOG = Logger.getInstance(GrImmediateClosureSignatureImpl.class);
 
   private final boolean myIsVarargs;
   private final boolean myCurried;
   @Nullable private final PsiType myReturnType;
-  @NotNull private final GrClosureParameter[] myParameters;
+  private final GrClosureParameter @NotNull [] myParameters;
   @NotNull private final PsiSubstitutor mySubstitutor;
 
-  public GrImmediateClosureSignatureImpl(@NotNull PsiParameter[] parameters,
+  public GrImmediateClosureSignatureImpl(PsiParameter @NotNull [] parameters,
                                          @Nullable PsiType returnType,
                                          @NotNull PsiSubstitutor substitutor) {
     LOG.assertTrue(returnType == null || returnType.isValid());
@@ -60,7 +46,7 @@ public class GrImmediateClosureSignatureImpl implements GrClosureSignature {
     this(parameters, returnType, PsiSubstitutor.EMPTY);
   }
 
-  public GrImmediateClosureSignatureImpl(@NotNull GrClosureParameter[] params, @Nullable PsiType returnType, boolean isVarArgs, boolean isCurried) {
+  public GrImmediateClosureSignatureImpl(GrClosureParameter @NotNull [] params, @Nullable PsiType returnType, boolean isVarArgs, boolean isCurried) {
     myParameters = params;
     myReturnType = returnType;
     myIsVarargs = isVarArgs;
@@ -87,8 +73,7 @@ public class GrImmediateClosureSignatureImpl implements GrClosureSignature {
   }
 
   @Override
-  @NotNull
-  public GrClosureParameter[] getParameters() {
+  public GrClosureParameter @NotNull [] getParameters() {
     GrClosureParameter[] result = new GrClosureParameter[myParameters.length];
     System.arraycopy(myParameters, 0, result, 0, myParameters.length);
     return result;
@@ -97,12 +82,6 @@ public class GrImmediateClosureSignatureImpl implements GrClosureSignature {
   @Override
   public int getParameterCount() {
     return myParameters.length;
-  }
-
-  @Override
-  @Nullable
-  public GrSignature curry(@NotNull PsiType[] args, int position, @NotNull PsiElement context) {
-    return GrClosureSignatureUtil.curryImpl(this, args, position, context);
   }
 
   @Override
@@ -116,9 +95,9 @@ public class GrImmediateClosureSignatureImpl implements GrClosureSignature {
 
   @Override
   public boolean equals(Object obj) {
-    if (obj instanceof GrClosureSignature) {
-      return Comparing.equal(myParameters, ((GrClosureSignature)obj).getParameters()) &&
-             Comparing.equal(myIsVarargs, ((GrClosureSignature)obj).isVarargs());
+    if (obj instanceof GrSignature) {
+      return Arrays.equals(myParameters, ((GrSignature)obj).getParameters()) &&
+             myIsVarargs == ((GrSignature)obj).isVarargs();
     }
     return super.equals(obj);
   }
@@ -129,9 +108,9 @@ public class GrImmediateClosureSignatureImpl implements GrClosureSignature {
   }
 
   @Nullable
-  public static GrClosureSignature getLeastUpperBound(@NotNull GrClosureSignature signature1,
-                                                      @NotNull GrClosureSignature signature2,
-                                                      PsiManager manager) {
+  public static GrSignature getLeastUpperBound(@NotNull GrSignature signature1,
+                                               @NotNull GrSignature signature2,
+                                               @NotNull PsiManager manager) {
     GrClosureParameter[] parameters1 = signature1.getParameters();
     GrClosureParameter[] parameters2 = signature2.getParameters();
 
@@ -153,11 +132,6 @@ public class GrImmediateClosureSignatureImpl implements GrClosureSignature {
       return new GrImmediateClosureSignatureImpl(params, returnType, isVarArgs, false);
     }
     return null; //todo
-  }
-
-  @Override
-  public void accept(@NotNull GrSignatureVisitor visitor) {
-    visitor.visitClosureSignature(this);
   }
 }
 

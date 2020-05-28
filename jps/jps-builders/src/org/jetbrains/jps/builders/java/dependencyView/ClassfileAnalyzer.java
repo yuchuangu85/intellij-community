@@ -3,6 +3,7 @@ package org.jetbrains.jps.builders.java.dependencyView;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Ref;
+import com.intellij.util.ArrayUtil;
 import com.intellij.util.SmartList;
 import gnu.trove.THashMap;
 import gnu.trove.THashSet;
@@ -13,14 +14,13 @@ import org.jetbrains.org.objectweb.asm.signature.SignatureReader;
 import org.jetbrains.org.objectweb.asm.signature.SignatureVisitor;
 
 import java.lang.annotation.RetentionPolicy;
-import java.lang.reflect.Array;
 import java.util.*;
 
 /**
  * @author: db
  */
 class ClassfileAnalyzer {
-  private final static Logger LOG = Logger.getInstance("#org.jetbrains.jps.builders.java.dependencyView.ClassfileAnalyzer");
+  private final static Logger LOG = Logger.getInstance(ClassfileAnalyzer.class);
   public static final String LAMBDA_FACTORY_CLASS = "java/lang/invoke/LambdaMetafactory";
   private static final int ASM_API_VERSION = Opcodes.API_VERSION;
 
@@ -508,7 +508,7 @@ class ClassfileAnalyzer {
                 if (!myAcc.isEmpty()) {
                   final Object elem = myAcc.get(0);
                   if (elem != null) {
-                    template = (Object[])Array.newInstance(elem.getClass(), 0);
+                    template = ArrayUtil.newArray(elem.getClass(), 0);
                   }
                 }
                 defaultValue.set(template != null? myAcc.toArray(template) : myAcc.toArray());

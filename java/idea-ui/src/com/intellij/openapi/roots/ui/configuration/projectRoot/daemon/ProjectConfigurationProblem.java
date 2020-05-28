@@ -23,15 +23,12 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 
-/**
-* @author nik
-*/
 public class ProjectConfigurationProblem extends ConfigurationError {
   private final ProjectStructureProblemDescription myDescription;
   private final Project myProject;
 
   public ProjectConfigurationProblem(ProjectStructureProblemDescription description, Project project) {
-    super(StringUtil.unescapeXml(description.getMessage(true)), computeDescription(description),
+    super(StringUtil.unescapeXmlEntities(description.getMessage(true)), computeDescription(description),
           getSettings(project, description.getProblemLevel()).isIgnored(description));
     myDescription = description;
     myProject = project;

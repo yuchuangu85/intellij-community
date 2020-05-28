@@ -5,6 +5,7 @@ import com.intellij.codeInsight.Nullability;
 import com.intellij.codeInspection.dataFlow.NullabilityUtil;
 import com.intellij.codeInspection.ui.MultipleCheckboxOptionsPanel;
 import com.intellij.codeInspection.util.LambdaGenerationUtil;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
@@ -41,7 +42,7 @@ public class ReplaceNullCheckInspection extends AbstractBaseJavaLocalInspectionT
   public JComponent createOptionsPanel() {
     MultipleCheckboxOptionsPanel panel = new MultipleCheckboxOptionsPanel(this);
     panel
-      .addCheckbox(InspectionsBundle.message("inspection.require.non.null.no.warning.replacement.bigger"), "noWarningReplacementBigger");
+      .addCheckbox(JavaBundle.message("inspection.require.non.null.no.warning.replacement.bigger"), "noWarningReplacementBigger");
     return panel;
   }
 
@@ -62,9 +63,9 @@ public class ReplaceNullCheckInspection extends AbstractBaseJavaLocalInspectionT
         PsiStatement nextToDelete = context.myNextToDelete;
         int maybeImplicitElseLength = nextToDelete != null ? nextToDelete.getTextLength() : 0;
         boolean isInfoLevel = noWarningReplacementBigger && ifStatement.getTextLength() + maybeImplicitElseLength - context.getLenAfterReplace() < MINIMAL_WARN_DELTA_SIZE;
-        if (!isOnTheFly && isInfoLevel) return;
         ProblemHighlightType highlight = getHighlight(context, isInfoLevel);
-        holder.registerProblem(ifStatement.getFirstChild(), InspectionsBundle.message("inspection.require.non.null.message", method), highlight,
+        if (!isOnTheFly && highlight == ProblemHighlightType.INFORMATION) return;
+        holder.registerProblem(ifStatement.getFirstChild(), JavaBundle.message("inspection.require.non.null.message", method), highlight,
                                new ReplaceWithRequireNonNullFix(method, false));
       }
 
@@ -90,7 +91,8 @@ public class ReplaceNullCheckInspection extends AbstractBaseJavaLocalInspectionT
           && context.myNullExpr.getTextLength() + method.length() + name.length() < context.myTernary.getTextLength() + MINIMAL_WARN_DELTA_SIZE;
         boolean isInfoLevel = noWarningReplacementBigger && replacementShorter;
         ProblemHighlightType highlightType = isInfoLevel ? ProblemHighlightType.INFORMATION : ProblemHighlightType.GENERIC_ERROR_OR_WARNING;
-        holder.registerProblem(ternary, InspectionsBundle.message("inspection.require.non.null.message", method),
+        if (!isOnTheFly && highlightType == ProblemHighlightType.INFORMATION) return;
+        holder.registerProblem(ternary, JavaBundle.message("inspection.require.non.null.message", method),
                                highlightType, new ReplaceWithRequireNonNullFix(method, true));
       }
     };
@@ -108,14 +110,14 @@ public class ReplaceNullCheckInspection extends AbstractBaseJavaLocalInspectionT
     @NotNull
     @Override
     public String getName() {
-      return InspectionsBundle.message("inspection.require.non.null.message", myMethod);
+      return JavaBundle.message("inspection.require.non.null.message", myMethod);
     }
 
     @Nls
     @NotNull
     @Override
     public String getFamilyName() {
-      return InspectionsBundle.message("inspection.require.non.null");
+      return JavaBundle.message("inspection.require.non.null");
     }
 
     @Override
@@ -146,7 +148,7 @@ public class ReplaceNullCheckInspection extends AbstractBaseJavaLocalInspectionT
         CommentTracker tracker = new CommentTracker();
         PsiExpression requireCall =
           createRequireExpression(tracker, context.myNullExpr, project, context.myReferenceExpression, context.myNullExpr);
-        result = tracker.replace(context.myTernary, requireCall);
+        result = tracker.replaceAndRestoreComments(context.myTernary, requireCall);
       } else return;
       LambdaCanBeMethodReferenceInspection.replaceAllLambdasWithMethodReferences(result);
       CodeStyleManager.getInstance(project).reformat(JavaCodeStyleManager.getInstance(project).shortenClassReferences(result));
@@ -262,6 +264,7 @@ public class ReplaceNullCheckInspection extends AbstractBaseJavaLocalInspectionT
         if(!ExpressionUtils.isReferenceTo(nullDiff, variable)) return null;
       }
       if(NullabilityUtil.getExpressionNullability(nonNullDiff, true) != Nullability.NOT_NULL) return null;
+      if (nonNullDiff instanceof PsiSuperExpression) return null;
       if(!LambdaGenerationUtil.canBeUncheckedLambda(nonNullDiff)) return null;
       return new NotNullContext(nonNullDiff, nullDiff, nullBranch, reference, ifStatement, toDelete, false);
     }

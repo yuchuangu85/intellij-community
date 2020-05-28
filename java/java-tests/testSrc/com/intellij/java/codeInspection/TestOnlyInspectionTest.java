@@ -18,26 +18,40 @@ package com.intellij.java.codeInspection;
 import com.intellij.analysis.AnalysisScope;
 import com.intellij.codeInspection.ex.LocalInspectionToolWrapper;
 import com.intellij.codeInspection.testOnly.TestOnlyInspection;
-import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.module.Module;
+import com.intellij.openapi.roots.ContentEntry;
+import com.intellij.openapi.roots.ModifiableRootModel;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.testFramework.InspectionTestCase;
+import com.intellij.project.IntelliJProjectConfiguration;
+import com.intellij.testFramework.JavaInspectionTestCase;
+import com.intellij.testFramework.LightProjectDescriptor;
 import com.intellij.testFramework.PsiTestUtil;
+import com.intellij.testFramework.fixtures.DefaultLightProjectDescriptor;
+import com.intellij.util.ArrayUtil;
 import org.jetbrains.annotations.NotNull;
 
-public class TestOnlyInspectionTest extends InspectionTestCase {
+public class TestOnlyInspectionTest extends JavaInspectionTestCase {
+
+  private final static DefaultLightProjectDescriptor ourProjectDescriptor = new DefaultLightProjectDescriptor() {
+    @Override
+    public void configureModule(@NotNull Module module, @NotNull ModifiableRootModel model, @NotNull ContentEntry contentEntry) {
+      super.configureModule(module, model, contentEntry);
+      contentEntry.addSourceFolder(contentEntry.getUrl() + "/test", true);
+      IntelliJProjectConfiguration.LibraryRoots junit4Library = IntelliJProjectConfiguration.getProjectLibrary("JUnit4");
+      PsiTestUtil.addLibrary(model, "JUnit4", "", ArrayUtil.toStringArray(junit4Library.getClassesPaths()));
+    }
+  };
+
+  @NotNull
   @Override
-  protected void setupRootModel(@NotNull String testDir, @NotNull VirtualFile[] sourceDir, String jdkName) {
-    super.setupRootModel(testDir, sourceDir, jdkName);
-    VirtualFile projectDir = LocalFileSystem.getInstance().findFileByPath(testDir);
-    assertNotNull(projectDir);
-    VirtualFile test = projectDir.findChild("test");
-    if (test != null) PsiTestUtil.addSourceRoot(myModule, test, true);
+  protected LightProjectDescriptor getProjectDescriptor() {
+    return ourProjectDescriptor;
   }
 
   @NotNull
   @Override
   protected AnalysisScope createAnalysisScope(VirtualFile sourceDir) {
-    return new AnalysisScope(myModule);
+    return new AnalysisScope(getModule());
   }
 
   public void testSimple() {
@@ -66,8 +80,12 @@ public class TestOnlyInspectionTest extends InspectionTestCase {
     doTest();
   }
 
+  public void testInsideTestOnlyClass() {
+    doTest();
+  }
+
   private void doTest() {
     TestOnlyInspection i = new TestOnlyInspection();
-    doTest("testOnly/" + getTestName(true), new LocalInspectionToolWrapper(i), "java 1.5");
+    doTest("testOnly/" + getTestName(true), new LocalInspectionToolWrapper(i));
   }
 }

@@ -1,12 +1,15 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.yaml.structureView;
 
 import com.intellij.icons.AllIcons;
+import com.intellij.ide.impl.StructureViewWrapperImpl;
 import com.intellij.ide.structureView.*;
 import com.intellij.ide.util.treeView.smartTree.NodeProvider;
 import com.intellij.ide.util.treeView.smartTree.Sorter;
 import com.intellij.lang.PsiStructureViewFactory;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.extensions.ExtensionPointUtil;
 import com.intellij.openapi.util.Ref;
 import com.intellij.psi.PsiFile;
 import com.intellij.util.containers.ContainerUtil;
@@ -18,11 +21,14 @@ import javax.swing.*;
 import java.util.Collection;
 import java.util.Collections;
 
-/**
- * @author oleg
- */
 public class YAMLStructureViewFactory implements PsiStructureViewFactory {
-  static final Icon ALIAS_ICON = AllIcons.Nodes.TreeRightArrow;
+  static final Icon ALIAS_ICON = AllIcons.Nodes.Alias;
+
+  public YAMLStructureViewFactory() {
+    YAMLCustomStructureViewFactory.EP_NAME.addChangeListener(
+        () -> ApplicationManager.getApplication().getMessageBus().syncPublisher(StructureViewWrapperImpl.STRUCTURE_CHANGED).run(),
+        ExtensionPointUtil.createKeyedExtensionDisposable(this, PsiStructureViewFactory.EP_NAME.getPoint()));
+  }
 
   @Override
   @Nullable
@@ -31,7 +37,7 @@ public class YAMLStructureViewFactory implements PsiStructureViewFactory {
       return null;
     }
 
-    for (YAMLCustomStructureViewFactory extension : YAMLCustomStructureViewFactory.EP_NAME.getExtensions()) {
+    for (YAMLCustomStructureViewFactory extension : YAMLCustomStructureViewFactory.EP_NAME.getExtensionList()) {
       final StructureViewBuilder builder = extension.getStructureViewBuilder((YAMLFile)psiFile);
       if (builder != null) {
         return builder;

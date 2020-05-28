@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.find;
 
@@ -8,6 +8,8 @@ import com.intellij.codeInsight.hint.HintUtil;
 import com.intellij.find.findUsages.PsiElement2UsageTargetAdapter;
 import com.intellij.find.impl.FindInProjectUtil;
 import com.intellij.find.replaceInProject.ReplaceInProjectManager;
+import com.intellij.internal.statistic.eventLog.FeatureUsageData;
+import com.intellij.internal.statistic.service.fus.collectors.FUCounterUsageLogger;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.DataContext;
@@ -19,17 +21,13 @@ import com.intellij.openapi.editor.actionSystem.EditorActionManager;
 import com.intellij.openapi.editor.actions.EditorActionUtil;
 import com.intellij.openapi.editor.actions.IncrementalFindAction;
 import com.intellij.openapi.editor.colors.EditorColors;
-import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.event.CaretEvent;
 import com.intellij.openapi.editor.event.CaretListener;
 import com.intellij.openapi.editor.ex.RangeHighlighterEx;
 import com.intellij.openapi.editor.markup.HighlighterLayer;
 import com.intellij.openapi.editor.markup.HighlighterTargetArea;
 import com.intellij.openapi.editor.markup.RangeHighlighter;
-import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
-import com.intellij.openapi.fileEditor.FileEditor;
-import com.intellij.openapi.fileEditor.TextEditor;
 import com.intellij.openapi.fileEditor.ex.IdeDocumentHistory;
 import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.progress.ProgressIndicator;
@@ -41,6 +39,7 @@ import com.intellij.openapi.util.JDOMUtil;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
@@ -56,7 +55,10 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.event.ActionEvent;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.List;
 import java.util.stream.Stream;
 
 public class FindUtil {
@@ -74,30 +76,38 @@ public class FindUtil {
 
   public static void initStringToFindWithSelection(FindModel findModel, @Nullable Editor editor) {
     if (editor != null) {
-      String s = editor.getSelectionModel().getSelectedText();
+      String s = getSelectedText(editor);
       if (s != null && s.length() < 10000) {
-        FindModel.initStringToFind(findModel, s);
+        if (findModel.isRegularExpressions() && Registry.is("ide.find.escape.selected.text.for.regex")) {
+          findModel.setStringToFind(StringUtil.escapeToRegexp(s));
+        } else {
+          FindModel.initStringToFind(findModel, s);
+        }
       }
     }
   }
 
   public static void configureFindModel(boolean replace, @Nullable Editor editor, FindModel model, boolean firstSearch) {
-    boolean isGlobal = true;
-    String stringToFind = firstSearch ? "" : model.getStringToFind();
-    final SelectionModel selectionModel = editor != null ? editor.getSelectionModel() : null;
-    String selectedText = selectionModel != null ? selectionModel.getSelectedText() : null;
+    String selectedText = getSelectedText(editor);
+    boolean multiline = selectedText != null && selectedText.contains("\n");
+    String stringToFind = firstSearch || model.getStringToFind().contains("\n") ? "" : model.getStringToFind();
+    boolean isSelectionUsed = false;
     if (!StringUtil.isEmpty(selectedText)) {
-      stringToFind = selectedText;
+      if (!multiline || !replace) {
+        stringToFind = selectedText;
+        isSelectionUsed = true;
+      } else {
+        stringToFind = "";
+      }
     }
     model.setReplaceState(replace);
-    boolean multiline = stringToFind.contains("\n");
-    if (replace && multiline) {
-      isGlobal = false;
-      stringToFind = "";
-      multiline = false;
-    }
-    model.setStringToFind(stringToFind);
-    model.setMultiline(multiline);
+    boolean isGlobal = !multiline || !replace;
+    model.setStringToFind(isSelectionUsed
+                          && model.isRegularExpressions()
+                          && Registry.is("ide.find.escape.selected.text.for.regex")
+                          ? StringUtil.escapeToRegexp(stringToFind)
+                          : stringToFind);
+    model.setMultiline(false);
     model.setGlobal(isGlobal);
     model.setPromptOnReplace(false);
   }
@@ -134,7 +144,18 @@ public class FindUtil {
     UP, DOWN
   }
 
-  public static void findWordAtCaret(Project project, Editor editor) {
+  private static String getSelectedText(@Nullable Editor editor) {
+    if (editor == null) return null;
+    String selectedText = editor.getSelectionModel().getSelectedText();
+    if (selectedText == null && Registry.is("ide.find.select.word.at.caret")) {
+      selectedText  = getWordAtCaret(editor, true);
+    }
+    return selectedText;
+  }
+
+  @Nullable
+  private static String getWordAtCaret(@Nullable Editor editor, boolean selectWordIfFound) {
+    if (editor == null) return null;
     int caretOffset = editor.getCaretModel().getOffset();
     Document document = editor.getDocument();
     CharSequence text = document.getCharsSequence();
@@ -155,17 +176,24 @@ public class FindUtil {
           break;
         }
       }
+      if (start < end && selectWordIfFound) {
+        editor.getSelectionModel().setSelection(start, end);
+      }
     }
     else {
       start = editor.getSelectionModel().getSelectionStart();
       end = editor.getSelectionModel().getSelectionEnd();
     }
-    if (start >= end) {
+    return start < end? text.subSequence(start, end).toString() : null;
+  }
+
+  public static void findWordAtCaret(Project project, @NotNull Editor editor) {
+    String s = getWordAtCaret(editor, false);
+    if (s == null) {
       return;
     }
     FindManager findManager = FindManager.getInstance(project);
     FindInProjectSettings findInProjectSettings = FindInProjectSettings.getInstance(project);
-    String s = text.subSequence(start, end).toString();
     findInProjectSettings.addStringToFind(s);
     findManager.getFindInFileModel().setStringToFind(s);
     findManager.setFindWasPerformed();
@@ -181,13 +209,13 @@ public class FindUtil {
     }
 
     findManager.setFindNextModel(model);
-    doSearch(project, editor, caretOffset, true, model, true);
+    doSearch(project, editor, editor.getCaretModel().getOffset(), true, model, true);
   }
 
   public static void find(@NotNull final Project project, @NotNull final Editor editor) {
     ApplicationManager.getApplication().assertIsDispatchThread();
     final FindManager findManager = FindManager.getInstance(project);
-    String s = editor.getSelectionModel().getSelectedText();
+    String s = getSelectedText(editor);
 
     final FindModel model = findManager.getFindInFileModel().clone();
     if (StringUtil.isEmpty(s)) {
@@ -204,12 +232,13 @@ public class FindUtil {
     }
 
     model.setReplaceState(false);
-    model.setFindAllEnabled(PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument()) != null);
+    PsiFile psiFile = PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument());
+    model.setFindAllEnabled(psiFile != null);
 
     findManager.showFindDialog(model, () -> {
-      if (model.isFindAll()) {
+      if (model.isFindAll() && psiFile != null) {
         findManager.setFindNextModel(model);
-        findAllAndShow(project, editor, model);
+        findAllAndShow(project, psiFile, model);
         return;
       }
 
@@ -249,13 +278,14 @@ public class FindUtil {
   }
 
   @Nullable
-  public static List<Usage> findAll(@NotNull Project project, @NotNull Editor editor, @NotNull FindModel findModel) {
-    return findAll(project, PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument()), findModel);
-  }
-
-  @Nullable
-  private static List<Usage> findAll(@NotNull Project project, @Nullable PsiFile psiFile, @NotNull FindModel findModel) {
-    if (psiFile == null || project.isDisposed()) return null;
+  static List<Usage> findAll(@NotNull Project project, @NotNull PsiFile psiFile, @NotNull FindModel findModel) {
+    if (project.isDisposed()) {
+      return null;
+    }
+    psiFile = (PsiFile)psiFile.getNavigationElement();
+    if (psiFile == null) {
+      return null;
+    }
     Document document = PsiDocumentManager.getInstance(project).getDocument(psiFile);
     if (document == null) return null;
 
@@ -285,11 +315,10 @@ public class FindUtil {
     return usages;
   }
 
-  public static void findAllAndShow(@NotNull Project project, @NotNull Editor editor, @NotNull FindModel findModel) {
-    findAllAndShow(project, PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument()), findModel);
-  }
-
-  private static void findAllAndShow(@NotNull Project project, @Nullable PsiFile psiFile, @NotNull FindModel findModel) {
+  static void findAllAndShow(@NotNull Project project, @NotNull PsiFile psiFile, @NotNull FindModel findModel) {
+    findModel.setCustomScope(true);
+    findModel.setProjectScope(false);
+    findModel.setCustomScopeName("File " + psiFile.getName());
     List<Usage> usages = findAll(project, psiFile, findModel);
     if (usages == null) return;
     final UsageTarget[] usageTargets = {new FindInProjectUtil.StringUsageTarget(project, findModel)};
@@ -309,18 +338,10 @@ public class FindUtil {
     });
   }
 
-  public static void searchBack(Project project, FileEditor fileEditor, @Nullable DataContext dataContext) {
-    if (!(fileEditor instanceof TextEditor)) return;
-    TextEditor textEditor = (TextEditor)fileEditor;
-    Editor editor = textEditor.getEditor();
-
-    searchBack(project, editor, dataContext);
-  }
-
   public static void searchBack(final Project project, final Editor editor, @Nullable DataContext context) {
     FindManager findManager = FindManager.getInstance(project);
     if (!findManager.findWasPerformed() && !findManager.selectNextOccurrenceWasPerformed()) {
-      new IncrementalFindAction().getHandler().execute(editor, context);
+      new IncrementalFindAction().getHandler().execute(editor, null, context);
       return;
     }
 
@@ -351,18 +372,10 @@ public class FindUtil {
     searchAgain(project, editor, offset, model);
   }
 
-  public static boolean searchAgain(Project project, FileEditor fileEditor, @Nullable DataContext context) {
-    if (!(fileEditor instanceof TextEditor)) return false;
-    TextEditor textEditor = (TextEditor)fileEditor;
-    Editor editor = textEditor.getEditor();
-
-    return searchAgain(project, editor, context);
-  }
-
-  private static boolean searchAgain(final Project project, final Editor editor, @Nullable DataContext context) {
+  public static boolean searchAgain(final Project project, final Editor editor, @Nullable DataContext context) {
     FindManager findManager = FindManager.getInstance(project);
     if (!findManager.findWasPerformed() && !findManager.selectNextOccurrenceWasPerformed()) {
-      new IncrementalFindAction().getHandler().execute(editor, context);
+      new IncrementalFindAction().getHandler().execute(editor, null, context);
       return false;
     }
 
@@ -585,7 +598,7 @@ public class FindUtil {
       else {
         CharSequence text = document.getCharsSequence();
         final StringBuilder newText = new StringBuilder(document.getTextLength());
-        Collections.sort(rangesToChange, Comparator.comparingInt(o -> o.getFirst().getStartOffset()));
+        rangesToChange.sort(Comparator.comparingInt(o -> o.getFirst().getStartOffset()));
         int offsetBefore = 0;
         for (Pair<TextRange, String> pair : rangesToChange) {
           TextRange range = pair.getFirst();
@@ -613,7 +626,7 @@ public class FindUtil {
           if (model.isGlobal()) {
             editor.getSelectionModel().removeSelection();
           }
-        }), null, document);
+        }), null, null);
       }
     }
 
@@ -707,15 +720,13 @@ public class FindUtil {
       }
       IdeDocumentHistory.getInstance(project).includeCurrentCommandAsNavigation();
 
-      EditorColorsManager manager = EditorColorsManager.getInstance();
-      TextAttributes selectionAttributes = manager.getGlobalScheme().getAttributes(EditorColors.SEARCH_RESULT_ATTRIBUTES);
-
       if (!model.isGlobal()) {
         final RangeHighlighterEx segmentHighlighter = (RangeHighlighterEx)editor.getMarkupModel().addRangeHighlighter(
+          EditorColors.SEARCH_RESULT_ATTRIBUTES,
           result.getStartOffset(),
           result.getEndOffset(),
           HighlighterLayer.SELECTION + 1,
-          selectionAttributes, HighlighterTargetArea.EXACT_RANGE);
+          HighlighterTargetArea.EXACT_RANGE);
         MyListener listener = new MyListener(editor, segmentHighlighter);
         caretModel.addCaretListener(listener);
       }
@@ -885,11 +896,11 @@ public class FindUtil {
   }
 
   public static <T> UsageView showInUsageView(@Nullable PsiElement sourceElement,
-                                              @NotNull T[] targets,
+                                              T @NotNull [] targets,
                                               @NotNull Function<? super T, ? extends Usage> usageConverter,
                                               @NotNull String title,
                                               @Nullable Consumer<? super UsageViewPresentation> presentationSetup,
-                                              @NotNull final Project project) {
+                                              @NotNull Project project) {
     if (targets.length == 0) return null;
     final UsageViewPresentation presentation = new UsageViewPresentation();
     presentation.setCodeUsagesString(title);
@@ -902,11 +913,12 @@ public class FindUtil {
 
     UsageView view = UsageViewManager.getInstance(project).showUsages(usageTargets, Usage.EMPTY_ARRAY, presentation);
 
-    ProgressManager.getInstance().run(new Task.Backgroundable(project, "Updating Usage View ...") {
+    ProgressManager.getInstance().run(new Task.Backgroundable(project, FindBundle.message("progress.title.updating.usage.view")) {
       @Override
       public void run(@NotNull ProgressIndicator indicator) {
-        for (final T pointer : targets) {
-          if (((UsageViewImpl)view).isDisposed()) break;
+        UsageViewImpl impl = (UsageViewImpl)view;
+        for (T pointer : targets) {
+          if (impl.isDisposed()) break;
           ApplicationManager.getApplication().runReadAction(() -> {
             Usage usage = usageConverter.fun(pointer);
             if (usage != null) {
@@ -914,7 +926,9 @@ public class FindUtil {
             }
           });
         }
-        UIUtil.invokeLaterIfNeeded(((UsageViewImpl)view)::expandAll);
+        UIUtil.invokeLaterIfNeeded(() -> {
+          if (!impl.isDisposed()) impl.expandRoot();
+        });
       }
     });
     return view;
@@ -922,14 +936,14 @@ public class FindUtil {
 
   @Nullable
   public static UsageView showInUsageView(@Nullable PsiElement sourceElement,
-                                          @NotNull PsiElement[] targets,
+                                          PsiElement @NotNull [] targets,
                                           @NotNull String title,
                                           @NotNull Project project) {
     if (targets.length == 0) return null;
     PsiElement[] primary = sourceElement == null ? PsiElement.EMPTY_ARRAY : new PsiElement[]{sourceElement};
 
     SmartPointerManager smartPointerManager = SmartPointerManager.getInstance(project);
-    SmartPsiElementPointer[] pointers = Stream.of(targets).map(smartPointerManager::createSmartPsiElementPointer).toArray(SmartPsiElementPointer[]::new);
+    SmartPsiElementPointer<?>[] pointers = Stream.of(targets).map(smartPointerManager::createSmartPsiElementPointer).toArray(SmartPsiElementPointer[]::new);
     // usage view will load document/AST so still referencing all these PSI elements might lead to out of memory
     //noinspection UnusedAssignment
     targets = PsiElement.EMPTY_ARRAY;
@@ -986,7 +1000,7 @@ public class FindUtil {
     LogicalPosition caretPosition = editor.offsetToLogicalPosition(caretOffset);
     if (caretShiftFromSelectionStart == 0) caretPosition = caretPosition.leanForward(true);
     EditorActionUtil.makePositionVisible(editor, caretOffset);
-    Caret newCaret = editor.getCaretModel().addCaret(editor.logicalToVisualPosition(caretPosition));
+    Caret newCaret = editor.getCaretModel().addCaret(caretPosition, true);
     if (newCaret == null) {
       return false;
     }
@@ -1003,5 +1017,21 @@ public class FindUtil {
   private static int getCaretPosition(FindResult findResult, int caretShiftFromSelectionStart) {
     return caretShiftFromSelectionStart < 0
            ? findResult.getEndOffset() : Math.min(findResult.getStartOffset() + caretShiftFromSelectionStart, findResult.getEndOffset());
+  }
+
+  public static void triggerUsedOptionsStats(@NotNull String type, @NotNull FindModel model) {
+    FeatureUsageData data = new FeatureUsageData().
+      addData("type", type).
+      addData("case_sensitive", model.isCaseSensitive()).
+      addData("whole_words_only", model.isWholeWordsOnly()).
+      addData("regular_expressions", model.isRegularExpressions()).
+      addData("with_file_filter", model.getFileFilter() != null).
+      addData("context", model.getSearchContext().name());
+    FUCounterUsageLogger.getInstance().logEvent("find", "search.session.started", data);
+  }
+
+  public static void triggerRegexHelpClicked(@Nullable String type) {
+    FeatureUsageData data = new FeatureUsageData().addData("type", StringUtil.notNullize(type, "Unknown"));
+    FUCounterUsageLogger.getInstance().logEvent("find", "regexp.help.clicked", data);
   }
 }

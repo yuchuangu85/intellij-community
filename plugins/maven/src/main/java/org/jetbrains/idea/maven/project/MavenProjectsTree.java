@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.project;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -22,16 +8,12 @@ import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.util.Comparing;
-import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
-import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.containers.ArrayListSet;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.MultiMap;
 import com.intellij.util.containers.Stack;
 import com.intellij.util.io.PathKt;
 import gnu.trove.THashSet;
@@ -43,10 +25,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 import org.jetbrains.idea.maven.dom.references.MavenFilteredPropertyPsiReferenceProvider;
-import org.jetbrains.idea.maven.importing.MavenImporter;
 import org.jetbrains.idea.maven.model.*;
-import org.jetbrains.idea.maven.server.MavenEmbedderWrapper;
 import org.jetbrains.idea.maven.server.NativeMavenProjectHolder;
+import org.jetbrains.idea.maven.utils.MavenJDOMUtil;
 import org.jetbrains.idea.maven.utils.*;
 
 import java.io.*;
@@ -56,6 +37,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Pattern;
 import java.util.zip.CRC32;
+
 
 public class MavenProjectsTree {
 
@@ -98,8 +80,17 @@ public class MavenProjectsTree {
     }
   };
 
-  public MavenProjectsTree(Project project) {
+  public MavenProjectsTree(@NotNull Project project) {
     myProject = project;
+  }
+
+  Project getProject() {
+    return myProject;
+  }
+
+
+  public MavenProjectReaderProjectLocator getProjectLocator() {
+    return myProjectLocator;
   }
 
   @Nullable
@@ -526,8 +517,7 @@ public class MavenProjectsTree {
       return;
     }
     updateStack.push(mavenProject);
-
-    process.setText(ProjectBundle.message("maven.reading.pom", mavenProject.getPath()));
+    process.setText(MavenProjectBundle.message("maven.reading.pom", mavenProject.getPath()));
     process.setText2("");
 
     List<MavenProject> prevModules = getModules(mavenProject);
@@ -669,9 +659,9 @@ public class MavenProjectsTree {
       long parentLastReadStamp = parent == null ? -1 : parent.getLastReadStamp();
       VirtualFile profilesXmlFile = mavenProject.getProfilesXmlFile();
       long profilesTimestamp = getFileTimestamp(profilesXmlFile);
-      VirtualFile jvmConfigFile = getConfigFile(mavenProject, MavenConstants.JVM_CONFIG_RELATIVE_PATH);
+      VirtualFile jvmConfigFile = MavenUtil.getConfigFile(mavenProject, MavenConstants.JVM_CONFIG_RELATIVE_PATH);
       long jvmConfigTimestamp = getFileTimestamp(jvmConfigFile);
-      VirtualFile mavenConfigFile = getConfigFile(mavenProject, MavenConstants.MAVEN_CONFIG_RELATIVE_PATH);
+      VirtualFile mavenConfigFile = MavenUtil.getConfigFile(mavenProject, MavenConstants.MAVEN_CONFIG_RELATIVE_PATH);
       long mavenConfigTimestamp = getFileTimestamp(mavenConfigFile);
 
       long userSettingsTimestamp = getFileTimestamp(generalSettings.getEffectiveUserSettingsFile());
@@ -690,12 +680,12 @@ public class MavenProjectsTree {
     });
   }
 
-  private static VirtualFile getConfigFile(MavenProject mavenProject, String fileRelativePath) {
-    VirtualFile baseDir = VfsUtil.findFileByIoFile(MavenUtil.getBaseDir(mavenProject.getDirectoryFile()), false);
-    if (baseDir != null) {
-      return baseDir.findFileByRelativePath(fileRelativePath);
-    }
-    return null;
+  @Override
+  public String toString() {
+    return "MavenProjectsTree{" +
+           "myRootProjects=" + myRootProjects +
+           ", myProject=" + myProject +
+           '}';
   }
 
   private static long getFileTimestamp(VirtualFile file) {
@@ -1066,7 +1056,7 @@ public class MavenProjectsTree {
     return findProject(artifact.getMavenId());
   }
 
-  private MavenWorkspaceMap getWorkspaceMap() {
+  MavenWorkspaceMap getWorkspaceMap() {
     readLock();
     try {
       return myWorkspaceMap.copy();
@@ -1232,215 +1222,6 @@ public class MavenProjectsTree {
     }
   }
 
-  @TestOnly
-  public void resolve(@NotNull Project project,
-                      @NotNull MavenProject mavenProject,
-                      @NotNull MavenGeneralSettings generalSettings,
-                      @NotNull MavenEmbeddersManager embeddersManager,
-                      @NotNull MavenConsole console,
-                      @NotNull MavenProgressIndicator process) throws MavenProcessCanceledException {
-    resolve(project, ContainerUtil.list(mavenProject), generalSettings, embeddersManager, console, new ResolveContext(), process);
-  }
-
-  public void resolve(@NotNull Project project,
-                      @NotNull Collection<MavenProject> mavenProjects,
-                      @NotNull MavenGeneralSettings generalSettings,
-                      @NotNull MavenEmbeddersManager embeddersManager,
-                      @NotNull MavenConsole console,
-                      @NotNull ResolveContext context,
-                      @NotNull MavenProgressIndicator process) throws MavenProcessCanceledException {
-    MultiMap<File, MavenProject> projectMultiMap = groupByBasedir(mavenProjects);
-
-    for (Map.Entry<File, Collection<MavenProject>> entry : projectMultiMap.entrySet()) {
-      String baseDir = entry.getKey().getPath();
-      MavenEmbedderWrapper embedder = embeddersManager.getEmbedder(MavenEmbeddersManager.FOR_DEPENDENCIES_RESOLVE, baseDir, baseDir);
-      try {
-        Properties userProperties = new Properties();
-        for (MavenProject mavenProject : mavenProjects) {
-          for (MavenImporter mavenImporter : mavenProject.getSuitableImporters()) {
-            mavenImporter.customizeUserProperties(project, mavenProject, userProperties);
-          }
-        }
-        embedder.customizeForResolve(getWorkspaceMap(), console, process, generalSettings.isAlwaysUpdateSnapshots(), userProperties);
-        doResolve(project, entry.getValue(), generalSettings, embedder, context, process);
-      }
-      finally {
-        embeddersManager.release(embedder);
-      }
-    }
-  }
-
-  private void doResolve(@NotNull Project project,
-                         @NotNull Collection<MavenProject> mavenProjects,
-                         @NotNull MavenGeneralSettings generalSettings,
-                         @NotNull MavenEmbedderWrapper embedder,
-                         @NotNull ResolveContext context,
-                         @NotNull MavenProgressIndicator process) throws MavenProcessCanceledException {
-    if (mavenProjects.isEmpty()) return;
-
-    process.checkCanceled();
-    final List<String> names = ContainerUtil.mapNotNull(mavenProjects, p -> p.getDisplayName());
-    final String text = StringUtil.shortenPathWithEllipsis(StringUtil.join(names, ", "), 200);
-    process.setText(ProjectBundle.message("maven.resolving.pom", text));
-    process.setText2("");
-
-    final MavenExplicitProfiles explicitProfiles = new MavenExplicitProfiles(new LinkedHashSet<>(), new LinkedHashSet<>());
-    Collection<VirtualFile> files = ContainerUtil.map(mavenProjects, p -> {
-      explicitProfiles.getEnabledProfiles().addAll(p.getActivatedProfilesIds().getEnabledProfiles());
-      explicitProfiles.getDisabledProfiles().addAll(p.getActivatedProfilesIds().getDisabledProfiles());
-      return p.getFile();
-    });
-    Collection<MavenProjectReaderResult> results = new MavenProjectReader(project).resolveProject(
-      generalSettings, embedder, files, explicitProfiles, myProjectLocator);
-
-    for (MavenProjectReaderResult result : results) {
-      MavenProject mavenProjectCandidate = null;
-      for (MavenProject mavenProject : mavenProjects) {
-        MavenId mavenId = result.mavenModel.getMavenId();
-        if (mavenProject.getMavenId().equals(mavenId)) {
-          mavenProjectCandidate = mavenProject;
-          break;
-        }
-        else if (mavenProject.getMavenId().equals(mavenId.getGroupId(), mavenId.getArtifactId())) {
-          mavenProjectCandidate = mavenProject;
-        }
-      }
-
-      if (mavenProjectCandidate == null) continue;
-      MavenProjectChanges changes = mavenProjectCandidate.set(result, generalSettings, false, result.readingProblems.isEmpty(), false);
-      if (result.nativeMavenProject != null) {
-        for (MavenImporter eachImporter : mavenProjectCandidate.getSuitableImporters()) {
-          eachImporter.resolve(project, mavenProjectCandidate, result.nativeMavenProject, embedder, context);
-        }
-      }
-      fireProjectResolved(Pair.create(mavenProjectCandidate, changes), result.nativeMavenProject);
-    }
-  }
-
-  public void resolvePlugins(@NotNull MavenProject mavenProject,
-                             @NotNull NativeMavenProjectHolder nativeMavenProject,
-                             @NotNull MavenEmbeddersManager embeddersManager,
-                             @NotNull MavenConsole console,
-                             @NotNull MavenProgressIndicator process) throws MavenProcessCanceledException {
-    MavenEmbedderWrapper embedder = embeddersManager.getEmbedder(mavenProject, MavenEmbeddersManager.FOR_PLUGINS_RESOLVE);
-    embedder.customizeForResolve(console, process);
-    embedder.clearCachesFor(mavenProject.getMavenId());
-
-    Set<File> filesToRefresh = new HashSet<>();
-
-    try {
-      process.setText(ProjectBundle.message("maven.downloading.pom.plugins", mavenProject.getDisplayName()));
-
-      for (MavenPlugin each : mavenProject.getDeclaredPlugins()) {
-        process.checkCanceled();
-
-        Collection<MavenArtifact> artifacts = embedder.resolvePlugin(each, mavenProject.getRemoteRepositories(), nativeMavenProject, false);
-
-        for (MavenArtifact artifact : artifacts) {
-          File pluginJar = artifact.getFile();
-          File pluginDir = pluginJar.getParentFile();
-          if (pluginDir != null) {
-            filesToRefresh.add(pluginDir); // Refresh both *.pom and *.jar files.
-          }
-        }
-      }
-
-      mavenProject.resetCache();
-      firePluginsResolved(mavenProject);
-    }
-    finally {
-      if (filesToRefresh.size() > 0) {
-        LocalFileSystem.getInstance().refreshIoFiles(filesToRefresh);
-      }
-
-      embeddersManager.release(embedder);
-    }
-  }
-
-  public void resolveFolders(@NotNull final MavenProject mavenProject,
-                             @NotNull final MavenImportingSettings importingSettings,
-                             @NotNull final MavenEmbeddersManager embeddersManager,
-                             @NotNull final MavenConsole console,
-                             @NotNull final MavenProgressIndicator process) throws MavenProcessCanceledException {
-    executeWithEmbedder(mavenProject,
-                        embeddersManager,
-                        MavenEmbeddersManager.FOR_FOLDERS_RESOLVE,
-                        console,
-                        process,
-                        new EmbedderTask() {
-                          @Override
-                          public void run(MavenEmbedderWrapper embedder) throws MavenProcessCanceledException {
-                            process.checkCanceled();
-                            process.setText(ProjectBundle.message("maven.updating.folders.pom", mavenProject.getDisplayName()));
-                            process.setText2("");
-
-                            Pair<Boolean, MavenProjectChanges> resolveResult = mavenProject.resolveFolders(embedder,
-                                                                                                           importingSettings,
-                                                                                                           console);
-                            if (resolveResult.first) {
-                              fireFoldersResolved(Pair.create(mavenProject, resolveResult.second));
-                            }
-                          }
-                        });
-  }
-
-  public MavenArtifactDownloader.DownloadResult downloadSourcesAndJavadocs(@NotNull Project project,
-                                                                           @NotNull Collection<MavenProject> projects,
-                                                                           @Nullable Collection<MavenArtifact> artifacts,
-                                                                           boolean downloadSources,
-                                                                           boolean downloadDocs,
-                                                                           @NotNull MavenEmbeddersManager embeddersManager,
-                                                                           @NotNull MavenConsole console,
-                                                                           @NotNull MavenProgressIndicator process)
-    throws MavenProcessCanceledException {
-    MultiMap<File, MavenProject> projectMultiMap = groupByBasedir(projects);
-    MavenArtifactDownloader.DownloadResult result = new MavenArtifactDownloader.DownloadResult();
-    for (Map.Entry<File, Collection<MavenProject>> entry : projectMultiMap.entrySet()) {
-      String baseDir = entry.getKey().getPath();
-      MavenEmbedderWrapper embedder = embeddersManager.getEmbedder(MavenEmbeddersManager.FOR_DOWNLOAD, baseDir, baseDir);
-      try {
-        embedder.customizeForResolve(console, process);
-        MavenArtifactDownloader.DownloadResult result1 =
-          MavenArtifactDownloader.download(project, this, projects, artifacts, downloadSources, downloadDocs, embedder, process);
-
-        for (MavenProject each : projects) {
-          fireArtifactsDownloaded(each);
-        }
-
-        result.resolvedDocs.addAll(result1.resolvedDocs);
-        result.resolvedSources.addAll(result1.resolvedSources);
-        result.unresolvedDocs.addAll(result1.unresolvedDocs);
-        result.unresolvedSources.addAll(result1.unresolvedSources);
-      }
-      finally {
-        embeddersManager.release(embedder);
-      }
-    }
-    return result;
-  }
-
-  @NotNull
-  private MultiMap<File, MavenProject> groupByBasedir(@NotNull Collection<MavenProject> projects) {
-    return ContainerUtil.groupBy(projects, p -> MavenUtil.getBaseDir(findRootProject(p).getDirectoryFile()));
-  }
-
-  public void executeWithEmbedder(@NotNull MavenProject mavenProject,
-                                  @NotNull MavenEmbeddersManager embeddersManager,
-                                  @NotNull Key embedderKind,
-                                  @NotNull MavenConsole console,
-                                  @NotNull MavenProgressIndicator process,
-                                  @NotNull EmbedderTask task) throws MavenProcessCanceledException {
-    MavenEmbedderWrapper embedder = embeddersManager.getEmbedder(mavenProject, embedderKind);
-    embedder.customizeForResolve(getWorkspaceMap(), console, process, false);
-    embedder.clearCachesFor(mavenProject.getMavenId());
-    try {
-      task.run(embedder);
-    }
-    finally {
-      embeddersManager.release(embedder);
-    }
-  }
-
   public <Result> Result visit(Visitor<Result> visitor) {
     for (MavenProject each : getRootProjects()) {
       if (visitor.isDone()) break;
@@ -1480,44 +1261,44 @@ public class MavenProjectsTree {
     myListeners.add(l);
   }
 
-  private void fireProfilesChanged() {
+  void fireProfilesChanged() {
     for (Listener each : myListeners) {
       each.profilesChanged();
     }
   }
 
-  private void fireProjectsIgnoredStateChanged(@NotNull List<MavenProject> ignored, @NotNull List<MavenProject> unignored, boolean fromImport) {
+  void fireProjectsIgnoredStateChanged(@NotNull List<MavenProject> ignored, @NotNull List<MavenProject> unignored, boolean fromImport) {
     for (Listener each : myListeners) {
       each.projectsIgnoredStateChanged(ignored, unignored, fromImport);
     }
   }
 
-  private void fireProjectsUpdated(@NotNull List<Pair<MavenProject, MavenProjectChanges>> updated, @NotNull List<MavenProject> deleted) {
+  void fireProjectsUpdated(@NotNull List<Pair<MavenProject, MavenProjectChanges>> updated, @NotNull List<MavenProject> deleted) {
     for (Listener each : myListeners) {
       each.projectsUpdated(updated, deleted);
     }
   }
 
-  private void fireProjectResolved(@NotNull Pair<MavenProject, MavenProjectChanges> projectWithChanges,
-                                   @Nullable NativeMavenProjectHolder nativeMavenProject) {
+  void fireProjectResolved(@NotNull Pair<MavenProject, MavenProjectChanges> projectWithChanges,
+                           @Nullable NativeMavenProjectHolder nativeMavenProject) {
     for (Listener each : myListeners) {
       each.projectResolved(projectWithChanges, nativeMavenProject);
     }
   }
 
-  private void firePluginsResolved(@NotNull MavenProject project) {
+  void firePluginsResolved(@NotNull MavenProject project) {
     for (Listener each : myListeners) {
       each.pluginsResolved(project);
     }
   }
 
-  private void fireFoldersResolved(@NotNull Pair<MavenProject, MavenProjectChanges> projectWithChanges) {
+  void fireFoldersResolved(@NotNull Pair<MavenProject, MavenProjectChanges> projectWithChanges) {
     for (Listener each : myListeners) {
       each.foldersResolved(projectWithChanges);
     }
   }
 
-  private void fireArtifactsDownloaded(@NotNull MavenProject project) {
+  void fireArtifactsDownloaded(@NotNull MavenProject project) {
     for (Listener each : myListeners) {
       each.artifactsDownloaded(project);
     }
@@ -1544,7 +1325,10 @@ public class MavenProjectsTree {
     }
 
     public void fireUpdatedIfNecessary() {
-      if (updatedProjectsWithChanges.isEmpty() && deletedProjects.isEmpty()) return;
+      if (updatedProjectsWithChanges.isEmpty() && deletedProjects.isEmpty()) {
+        //MavenProjectsManager.getInstance(myProject).getSyncConsole().finishImport();
+        return;
+      }
       List<MavenProject> mavenProjects = deletedProjects.isEmpty()
                                          ? Collections.emptyList()
                                          : new ArrayList<>(deletedProjects);
@@ -1553,10 +1337,6 @@ public class MavenProjectsTree {
                                                               : MavenUtil.mapToList(updatedProjectsWithChanges);
       fireProjectsUpdated(updated, mavenProjects);
     }
-  }
-
-  public interface EmbedderTask {
-    void run(MavenEmbedderWrapper embedder) throws MavenProcessCanceledException;
   }
 
   public abstract static class Visitor<Result> {
@@ -1694,7 +1474,7 @@ public class MavenProjectsTree {
     }
 
     default void projectResolved(@NotNull Pair<MavenProject, MavenProjectChanges> projectWithChanges,
-                         @Nullable NativeMavenProjectHolder nativeMavenProject) {
+                                 @Nullable NativeMavenProjectHolder nativeMavenProject) {
     }
 
     default void pluginsResolved(@NotNull MavenProject project) {
@@ -1716,9 +1496,9 @@ public class MavenProjectsTree {
 
     @Override
     public boolean equals(MavenCoordinate o1, MavenCoordinate o2) {
-      return Comparing.equal(o1.getArtifactId(), o2.getArtifactId())
-        && Comparing.equal(o1.getVersion(), o2.getVersion())
-        && Comparing.equal(o1.getGroupId(), o2.getGroupId());
+      return Objects.equals(o1.getArtifactId(), o2.getArtifactId())
+             && Objects.equals(o1.getVersion(), o2.getVersion())
+             && Objects.equals(o1.getGroupId(), o2.getGroupId());
     }
   }
 }

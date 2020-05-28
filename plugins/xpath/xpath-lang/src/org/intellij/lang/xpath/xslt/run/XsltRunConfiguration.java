@@ -32,8 +32,10 @@ import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.options.SettingsEditor;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectBundle;
-import com.intellij.openapi.projectRoots.*;
+import com.intellij.openapi.projectRoots.JavaSdkType;
+import com.intellij.openapi.projectRoots.ProjectJdkTable;
+import com.intellij.openapi.projectRoots.Sdk;
+import com.intellij.openapi.projectRoots.SimpleJavaSdkType;
 import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.roots.ProjectRootManager;
@@ -208,8 +210,7 @@ public final class XsltRunConfiguration extends LocatableConfigurationBase imple
 
     // return modules to compile before run. Null or empty list to build project
     @Override
-    @NotNull
-    public Module[] getModules() {
+    public Module @NotNull [] getModules() {
         return getModule() != null ? new Module[]{ getModule() } : Module.EMPTY_ARRAY;
     }
 
@@ -266,14 +267,7 @@ public final class XsltRunConfiguration extends LocatableConfigurationBase imple
     @Nullable
     private static FileType getFileType(String value) {
         if (value == null) return null;
-
-        final FileType[] fileTypes = FileTypeManager.getInstance().getRegisteredFileTypes();
-        for (FileType fileType : fileTypes) {
-            if (fileType.getName().equals(value)) {
-                return fileType;
-            }
-        }
-        return null;
+        return FileTypeManager.getInstance().findFileTypeByName(value);
     }
 
     @Override
@@ -439,13 +433,7 @@ public final class XsltRunConfiguration extends LocatableConfigurationBase imple
 
     private static synchronized Sdk getDefaultSdk() {
         if (ourDefaultSdk == null) {
-            final String jdkHome = SystemProperties.getJavaHome();
-            final String versionName = ProjectBundle.message("sdk.java.name.template", SystemInfo.JAVA_VERSION);
-            Sdk sdk = ProjectJdkTable.getInstance().createSdk(versionName, new SimpleJavaSdkType());
-            SdkModificator modificator = sdk.getSdkModificator();
-            modificator.setHomePath(jdkHome);
-            modificator.commitChanges();
-            ourDefaultSdk = sdk;
+            ourDefaultSdk = new SimpleJavaSdkType().createJdk("tmp", SystemProperties.getJavaHome());
         }
 
         return ourDefaultSdk;
@@ -453,9 +441,6 @@ public final class XsltRunConfiguration extends LocatableConfigurationBase imple
 
     @Nullable
     public Sdk getEffectiveJDK() {
-        if (!XsltRunSettingsEditor.ALLOW_CHOOSING_SDK) {
-            return getDefaultSdk();
-        }
         if (myJdkChoice == JdkChoice.JDK) {
             return myJdk != null ? ProjectJdkTable.getInstance().findJdk(myJdk) : null;
         }

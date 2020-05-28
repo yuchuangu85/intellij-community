@@ -16,6 +16,7 @@
 package com.intellij.ui.content;
 
 import com.intellij.openapi.util.Pair;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -23,12 +24,15 @@ import java.util.List;
 
 /**
  * @author Konstantin Bulenkov
- * @since 14.1
  */
 public interface TabbedContent extends Content {
   String SPLIT_PROPERTY_PREFIX = "tabbed.toolwindow.expanded.";
 
   void addContent(@NotNull JComponent content, @NotNull String name, boolean selectTab);
+
+  default void addContent(@NotNull TabDescriptor tab, boolean selectTab) {
+    addContent(tab.getComponent(), tab.getDisplayName(), selectTab);
+  }
 
   void removeContent(@NotNull JComponent content);
 
@@ -48,15 +52,24 @@ public interface TabbedContent extends Content {
   void selectContent(int index);
 
   @NotNull
-  List<Pair<String, JComponent>> getTabs();
+  List<Pair<@Nls String, JComponent>> getTabs();
 
   default boolean hasMultipleTabs() {
     return getTabs().size() > 1;
   }
 
+  @NotNull
+  default TabGroupId getId() {
+    return new TabGroupId(getTitlePrefix(), getTitlePrefix());
+  }
+
+  @Nls
   String getTitlePrefix();
 
-  void setTitlePrefix(String titlePrefix);
+  @Deprecated
+  default void setTitlePrefix(String titlePrefix) {
+    throw new UnsupportedOperationException("Setting title prefix is not supported");
+  }
 
   void split();
 }

@@ -15,6 +15,7 @@
  */
 package com.intellij.refactoring.typeMigration.ui;
 
+import com.intellij.java.refactoring.JavaRefactoringBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.refactoring.RefactoringBundle;
@@ -39,15 +40,14 @@ public class FailedConversionsDialog extends DialogWrapper {
   public FailedConversionsDialog(String[] conflictDescriptions, Project project) {
     super(project, true);
     myConflictDescriptions = conflictDescriptions;
-    setTitle(RefactoringBundle.message("usages.detected.title"));
-    setOKButtonText(RefactoringBundle.message("ignore.button"));
+    setTitle(JavaRefactoringBundle.message("usages.detected.title"));
+    setOKButtonText(JavaRefactoringBundle.message("ignore.button"));
     getOKAction().putValue(Action.MNEMONIC_KEY, new Integer('I'));
     init();
   }
 
   @Override
-  @NotNull
-  protected Action[] createActions() {
+  protected Action @NotNull [] createActions() {
     return new Action[]{getOKAction(), new ViewUsagesAction(), new CancelAction()};
   }
 
@@ -55,6 +55,7 @@ public class FailedConversionsDialog extends DialogWrapper {
   protected JComponent createCenterPanel() {
     JPanel panel = new JPanel(new BorderLayout());
     final JEditorPane messagePane = new JEditorPane(UIUtil.HTML_MIME, "");
+    messagePane.setEditorKit(UIUtil.getHTMLEditorKit());
     messagePane.setEditable(false);
     JScrollPane scrollPane = ScrollPaneFactory.createScrollPane(messagePane);
     scrollPane.setPreferredSize(JBUI.size(500, 400));

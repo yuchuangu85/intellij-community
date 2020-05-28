@@ -1,11 +1,12 @@
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+package com.intellij.configurationStore
 
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.impl.ApplicationImpl
 import com.intellij.openapi.components.PersistentStateComponent
-import com.intellij.openapi.components.impl.ComponentManagerImpl
-import com.intellij.openapi.components.impl.ServiceManagerImpl
-import com.intellij.openapi.components.impl.stores.StoreUtil
 import com.intellij.openapi.extensions.PluginDescriptor
+import com.intellij.serviceContainer.ComponentManagerImpl
+import com.intellij.serviceContainer.processAllImplementationClasses
+import com.intellij.serviceContainer.processComponentInstancesOfType
 import com.intellij.testFramework.ProjectRule
 import com.intellij.util.xmlb.XmlSerializerUtil
 import org.jdom.Attribute
@@ -26,7 +27,7 @@ class DoNotStorePasswordTest {
   @Test
   fun printPasswordComponents() {
     val processor = BiPredicate<Class<*>, PluginDescriptor?> { aClass, _ ->
-      val stateAnnotation = StoreUtil.getStateSpec(aClass)
+      val stateAnnotation = getStateSpec(aClass)
       if (stateAnnotation == null || stateAnnotation.name.isEmpty()) {
         return@BiPredicate true
       }
@@ -45,32 +46,30 @@ class DoNotStorePasswordTest {
       true
     }
 
-    val app = ApplicationManager.getApplication() as ApplicationImpl
-    ServiceManagerImpl.processAllImplementationClasses(app, processor)
+    val app = ApplicationManager.getApplication() as ComponentManagerImpl
+    processAllImplementationClasses(app.picoContainer, processor::test)
     // yes, we don't use default project here to be sure
-    ServiceManagerImpl.processAllImplementationClasses(projectRule.project as ComponentManagerImpl, processor)
+    processAllImplementationClasses(projectRule.project.picoContainer, processor::test)
 
-    @Suppress("DEPRECATION")
-    for (c in app.getComponentInstancesOfType(PersistentStateComponent::class.java)) {
-      processor.test(c.javaClass, null)
+    processComponentInstancesOfType(app.picoContainer, PersistentStateComponent::class.java) {
+      processor.test(it.javaClass, null)
     }
-    @Suppress("DEPRECATION")
-    for (c in (projectRule.project as ComponentManagerImpl).getComponentInstancesOfType(PersistentStateComponent::class.java)) {
-      processor.test(c.javaClass, null)
+    processComponentInstancesOfType(projectRule.project.picoContainer, PersistentStateComponent::class.java) {
+      processor.test(it.javaClass, null)
     }
   }
 
-  private fun isSavePasswordField(name: String) = name.contains("remember", ignoreCase = true) || name.contains("keep", ignoreCase = true) || name.contains("save", ignoreCase = true)
-
   fun check(clazz: Class<*>) {
-    if (clazz === Attribute::class.java || clazz === Element::class.java) {
+    if (clazz === Attribute::class.java || clazz === Element::class.java || clazz === java.lang.String::class.java || Map::class.java.isAssignableFrom(clazz)) {
       return
     }
 
     for (accessor in XmlSerializerUtil.getAccessors(clazz)) {
       val name = accessor.name
-      if (name.contains("password", ignoreCase = true) && !isSavePasswordField(name)) {
-        System.out.println("${clazz.typeName}.${accessor.name}")
+      if (BaseXmlOutputter.doesNameSuggestSensitiveInformation(name)) {
+        if (clazz.typeName != "com.intellij.docker.registry.DockerRegistry") {
+          throw RuntimeException("${clazz.typeName}.${accessor.name}")
+        }
       }
       else if (!accessor.valueClass.isPrimitive) {
         @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")

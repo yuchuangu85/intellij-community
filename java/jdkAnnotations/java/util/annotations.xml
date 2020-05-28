@@ -9,6 +9,57 @@
   <item name='java.util.AbstractCollection java.lang.Object[] toArray()'>
     <annotation name='org.jetbrains.annotations.NotNull'/>
   </item>
+  <item name='java.util.AbstractMap java.util.Collection&lt;V&gt; values()'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.AbstractMap java.util.Set&lt;K&gt; keySet()'>
+        <annotation name='org.jetbrains.annotations.NotNull'/>
+    </item>
+  <item name='java.util.AbstractMap java.util.Set&lt;java.util.Map.Entry&lt;K,V&gt;&gt; entrySet()'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque E element()'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque E getFirst()'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque E getLast()'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque E pop()'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque E remove()'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque E removeFirst()'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque E removeLast()'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque boolean add(E) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque boolean offer(E) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque boolean offerFirst(E) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque boolean offerLast(E) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque void addFirst(E) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque void addLast(E) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.ArrayDeque void push(E) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
   <item name="java.util.ArrayList ArrayList(java.util.Collection&lt;? extends E&gt;) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
     <annotation name='org.intellij.lang.annotations.Flow'>
@@ -184,6 +235,18 @@
   <item name="java.util.Arrays int binarySearch(T[], int, int, T, java.util.Comparator&lt;? super T&gt;) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays int binarySearch(T[], int, int, T, java.util.Comparator&lt;? super T&gt;) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays int binarySearch(T[], int, int, T, java.util.Comparator&lt;? super T&gt;) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name="java.util.Arrays int binarySearch(T[], int, int, T, java.util.Comparator&lt;? super T&gt;) 4">
     <annotation name="org.jetbrains.annotations.Nullable" />
   </item>
@@ -193,11 +256,35 @@
   <item name="java.util.Arrays int binarySearch(byte[], int, int, byte) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays int binarySearch(byte[], int, int, byte) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays int binarySearch(byte[], int, int, byte) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name="java.util.Arrays int binarySearch(char[], char) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
   <item name="java.util.Arrays int binarySearch(char[], int, int, char) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
+  </item>
+  <item name='java.util.Arrays int binarySearch(char[], int, int, char) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays int binarySearch(char[], int, int, char) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name="java.util.Arrays int binarySearch(double[], double) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
@@ -205,11 +292,35 @@
   <item name="java.util.Arrays int binarySearch(double[], int, int, double) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays int binarySearch(double[], int, int, double) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays int binarySearch(double[], int, int, double) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name="java.util.Arrays int binarySearch(float[], float) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
   <item name="java.util.Arrays int binarySearch(float[], int, int, float) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
+  </item>
+  <item name='java.util.Arrays int binarySearch(float[], int, int, float) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays int binarySearch(float[], int, int, float) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name="java.util.Arrays int binarySearch(int[], int) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
@@ -217,8 +328,32 @@
   <item name="java.util.Arrays int binarySearch(int[], int, int, int) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays int binarySearch(int[], int, int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays int binarySearch(int[], int, int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name="java.util.Arrays int binarySearch(java.lang.Object[], int, int, java.lang.Object) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
+  </item>
+  <item name='java.util.Arrays int binarySearch(java.lang.Object[], int, int, java.lang.Object) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays int binarySearch(java.lang.Object[], int, int, java.lang.Object) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name="java.util.Arrays int binarySearch(java.lang.Object[], java.lang.Object) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
@@ -226,11 +361,35 @@
   <item name="java.util.Arrays int binarySearch(long[], int, int, long) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays int binarySearch(long[], int, int, long) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays int binarySearch(long[], int, int, long) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name="java.util.Arrays int binarySearch(long[], long) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
   <item name="java.util.Arrays int binarySearch(short[], int, int, short) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
+  </item>
+  <item name='java.util.Arrays int binarySearch(short[], int, int, short) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays int binarySearch(short[], int, int, short) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name="java.util.Arrays int binarySearch(short[], short) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
@@ -343,10 +502,106 @@
   <item name="java.util.Arrays java.util.List&lt;T&gt; asList(T...) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays java.util.Spliterator&lt;T&gt; spliterator(T[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.Spliterator&lt;T&gt; spliterator(T[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.Spliterator.OfDouble spliterator(double[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.Spliterator.OfDouble spliterator(double[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.Spliterator.OfInt spliterator(int[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.Spliterator.OfInt spliterator(int[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.Spliterator.OfLong spliterator(long[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.Spliterator.OfLong spliterator(long[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.stream.DoubleStream stream(double[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.stream.DoubleStream stream(double[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.stream.IntStream stream(int[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.stream.IntStream stream(int[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.stream.LongStream stream(long[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.stream.LongStream stream(long[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays java.util.stream.Stream&lt;T&gt; stream(T[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="pure" val="true"/>
     </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.stream.Stream&lt;T&gt; stream(T[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays java.util.stream.Stream&lt;T&gt; stream(T[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name="java.util.Arrays long[] copyOf(long[], int)">
     <annotation name="org.jetbrains.annotations.NotNull" />
@@ -388,6 +643,18 @@
   <item name="java.util.Arrays void fill(boolean[], int, int, boolean) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays void fill(boolean[], int, int, boolean) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void fill(boolean[], int, int, boolean) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void fill(byte[], byte)'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -403,6 +670,18 @@
   </item>
   <item name="java.util.Arrays void fill(byte[], int, int, byte) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
+  </item>
+  <item name='java.util.Arrays void fill(byte[], int, int, byte) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void fill(byte[], int, int, byte) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name='java.util.Arrays void fill(char[], char)'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -420,6 +699,18 @@
   <item name="java.util.Arrays void fill(char[], int, int, char) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays void fill(char[], int, int, char) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void fill(char[], int, int, char) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void fill(double[], double)'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -435,6 +726,18 @@
   </item>
   <item name="java.util.Arrays void fill(double[], int, int, double) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
+  </item>
+  <item name='java.util.Arrays void fill(double[], int, int, double) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void fill(double[], int, int, double) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name='java.util.Arrays void fill(float[], float)'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -452,6 +755,18 @@
   <item name="java.util.Arrays void fill(float[], int, int, float) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays void fill(float[], int, int, float) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void fill(float[], int, int, float) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void fill(int[], int)'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -468,6 +783,18 @@
   <item name="java.util.Arrays void fill(int[], int, int, int) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays void fill(int[], int, int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void fill(int[], int, int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void fill(java.lang.Object[], int, int, java.lang.Object)'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -475,6 +802,18 @@
   </item>
   <item name="java.util.Arrays void fill(java.lang.Object[], int, int, java.lang.Object) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
+  </item>
+  <item name='java.util.Arrays void fill(java.lang.Object[], int, int, java.lang.Object) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void fill(java.lang.Object[], int, int, java.lang.Object) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name='java.util.Arrays void fill(java.lang.Object[], java.lang.Object)'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -492,6 +831,18 @@
   <item name="java.util.Arrays void fill(long[], int, int, long) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays void fill(long[], int, int, long) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void fill(long[], int, int, long) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void fill(long[], long)'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -508,6 +859,18 @@
   <item name="java.util.Arrays void fill(short[], int, int, short) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays void fill(short[], int, int, short) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void fill(short[], int, int, short) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void fill(short[], short)'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -521,6 +884,18 @@
       <val name="mutates" val="&quot;param1&quot;"/>
     </annotation>
   </item>
+  <item name='java.util.Arrays void parallelPrefix(T[], int, int, java.util.function.BinaryOperator&lt;T&gt;) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelPrefix(T[], int, int, java.util.function.BinaryOperator&lt;T&gt;) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void parallelPrefix(T[], java.util.function.BinaryOperator&lt;T&gt;)'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -530,6 +905,18 @@
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
     </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelPrefix(double[], int, int, java.util.function.DoubleBinaryOperator) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelPrefix(double[], int, int, java.util.function.DoubleBinaryOperator) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name='java.util.Arrays void parallelPrefix(double[], java.util.function.DoubleBinaryOperator)'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -541,6 +928,18 @@
       <val name="mutates" val="&quot;param1&quot;"/>
     </annotation>
   </item>
+  <item name='java.util.Arrays void parallelPrefix(int[], int, int, java.util.function.IntBinaryOperator) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelPrefix(int[], int, int, java.util.function.IntBinaryOperator) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void parallelPrefix(int[], java.util.function.IntBinaryOperator)'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -550,6 +949,18 @@
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
     </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelPrefix(long[], int, int, java.util.function.LongBinaryOperator) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelPrefix(long[], int, int, java.util.function.LongBinaryOperator) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name='java.util.Arrays void parallelPrefix(long[], java.util.function.LongBinaryOperator)'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -586,10 +997,34 @@
       <val name="mutates" val="&quot;param1&quot;"/>
     </annotation>
   </item>
+  <item name='java.util.Arrays void parallelSort(T[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelSort(T[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void parallelSort(T[], int, int, java.util.Comparator&lt;? super T&gt;)'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
     </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelSort(T[], int, int, java.util.Comparator&lt;? super T&gt;) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelSort(T[], int, int, java.util.Comparator&lt;? super T&gt;) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name='java.util.Arrays void parallelSort(T[], java.util.Comparator&lt;? super T&gt;)'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -606,6 +1041,18 @@
       <val name="mutates" val="&quot;param1&quot;"/>
     </annotation>
   </item>
+  <item name='java.util.Arrays void parallelSort(byte[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelSort(byte[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void parallelSort(char[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -615,6 +1062,18 @@
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
     </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelSort(char[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelSort(char[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name='java.util.Arrays void parallelSort(double[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -626,6 +1085,18 @@
       <val name="mutates" val="&quot;param1&quot;"/>
     </annotation>
   </item>
+  <item name='java.util.Arrays void parallelSort(double[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelSort(double[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void parallelSort(float[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -635,6 +1106,18 @@
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
     </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelSort(float[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelSort(float[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name='java.util.Arrays void parallelSort(int[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -646,6 +1129,18 @@
       <val name="mutates" val="&quot;param1&quot;"/>
     </annotation>
   </item>
+  <item name='java.util.Arrays void parallelSort(int[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelSort(int[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void parallelSort(long[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -656,6 +1151,18 @@
       <val name="mutates" val="&quot;param1&quot;"/>
     </annotation>
   </item>
+  <item name='java.util.Arrays void parallelSort(long[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelSort(long[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void parallelSort(short[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -665,6 +1172,18 @@
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
     </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelSort(short[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void parallelSort(short[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name='java.util.Arrays void setAll(T[], java.util.function.IntFunction&lt;? extends T&gt;)'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -693,6 +1212,18 @@
   </item>
   <item name="java.util.Arrays void sort(T[], int, int, java.util.Comparator&lt;? super T&gt;) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
+  </item>
+  <item name='java.util.Arrays void sort(T[], int, int, java.util.Comparator&lt;? super T&gt;) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void sort(T[], int, int, java.util.Comparator&lt;? super T&gt;) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name="java.util.Arrays void sort(T[], int, int, java.util.Comparator&lt;? super T&gt;) 3">
     <annotation name="org.jetbrains.annotations.Nullable" />
@@ -724,6 +1255,18 @@
   <item name="java.util.Arrays void sort(byte[], int, int) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays void sort(byte[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void sort(byte[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void sort(char[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -739,6 +1282,18 @@
   </item>
   <item name="java.util.Arrays void sort(char[], int, int) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
+  </item>
+  <item name='java.util.Arrays void sort(char[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void sort(char[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name='java.util.Arrays void sort(double[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -756,6 +1311,18 @@
   <item name="java.util.Arrays void sort(double[], int, int) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays void sort(double[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void sort(double[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void sort(float[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -771,6 +1338,18 @@
   </item>
   <item name="java.util.Arrays void sort(float[], int, int) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
+  </item>
+  <item name='java.util.Arrays void sort(float[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void sort(float[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name='java.util.Arrays void sort(int[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -788,6 +1367,18 @@
   <item name="java.util.Arrays void sort(int[], int, int) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays void sort(int[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void sort(int[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void sort(java.lang.Object[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -803,6 +1394,18 @@
   </item>
   <item name="java.util.Arrays void sort(java.lang.Object[], int, int) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
+  </item>
+  <item name='java.util.Arrays void sort(java.lang.Object[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void sort(java.lang.Object[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
   </item>
   <item name='java.util.Arrays void sort(long[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -820,6 +1423,18 @@
   <item name="java.util.Arrays void sort(long[], int, int) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Arrays void sort(long[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void sort(long[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
   <item name='java.util.Arrays void sort(short[])'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;param1&quot;"/>
@@ -835,6 +1450,205 @@
   </item>
   <item name="java.util.Arrays void sort(short[], int, int) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
+  </item>
+  <item name='java.util.Arrays void sort(short[], int, int) 1'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.Arrays void sort(short[], int, int) 2'>
+      <annotation name='org.jetbrains.annotations.Range'>
+          <val name="from" val="0"/>
+          <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+      </annotation>
+  </item>
+  <item name='java.util.BitSet boolean get(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet boolean intersects(java.util.BitSet)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet boolean intersects(java.util.BitSet) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.BitSet boolean isEmpty()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet byte[] toByteArray()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.BitSet int cardinality()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet int length()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet int nextClearBit(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet int nextSetBit(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet int previousClearBit(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet int previousSetBit(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet int size()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet java.util.BitSet get(int, int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.BitSet java.util.BitSet valueOf(byte[])'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.BitSet java.util.BitSet valueOf(byte[]) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.BitSet java.util.BitSet valueOf(java.nio.ByteBuffer)'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet java.util.BitSet valueOf(java.nio.ByteBuffer) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.BitSet java.util.BitSet valueOf(java.nio.LongBuffer)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.BitSet java.util.BitSet valueOf(java.nio.LongBuffer) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.BitSet java.util.BitSet valueOf(long[])'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.BitSet java.util.BitSet valueOf(long[]) 0'>
+        <annotation name='org.jetbrains.annotations.NotNull'/>
+    </item>
+    <item name='java.util.BitSet java.util.stream.IntStream stream()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+      <annotation name='org.jetbrains.annotations.NotNull'/>
+    </item>
+  <item name='java.util.BitSet long[] toLongArray()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.BitSet void and(java.util.BitSet)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet void and(java.util.BitSet) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.BitSet void andNot(java.util.BitSet)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet void andNot(java.util.BitSet) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.BitSet void clear()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet void clear(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet void clear(int, int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet void flip(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet void flip(int, int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet void or(java.util.BitSet)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet void or(java.util.BitSet) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.BitSet void set(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet void set(int, boolean)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet void set(int, int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet void set(int, int, boolean)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet void xor(java.util.BitSet)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.BitSet void xor(java.util.BitSet) 0'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
   </item>
   <item name="java.util.Calendar boolean isSet(int) 0">
     <annotation name="org.intellij.lang.annotations.MagicConstant">
@@ -1007,6 +1821,11 @@
   <item name="java.util.Collection boolean retainAll(java.util.Collection&lt;?&gt;) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
   </item>
+  <item name='java.util.Collection int size()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
   <item name="java.util.Collection java.lang.Object[] toArray()">
     <annotation name="org.jetbrains.annotations.NotNull" />
     <annotation name='org.intellij.lang.annotations.Flow'>
@@ -1036,6 +1855,18 @@
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;this&quot;"/>
     </annotation>
+  </item>
+  <item name='java.util.Collections EMPTY_LIST'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+    <annotation name='org.jetbrains.annotations.Unmodifiable'/>
+  </item>
+  <item name='java.util.Collections EMPTY_MAP'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+    <annotation name='org.jetbrains.annotations.Unmodifiable'/>
+  </item>
+  <item name='java.util.Collections EMPTY_SET'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+    <annotation name='org.jetbrains.annotations.Unmodifiable'/>
   </item>
   <item name="java.util.Collections T max(java.util.Collection&lt;? extends T&gt;) 0">
     <annotation name="org.jetbrains.annotations.NotNull" />
@@ -1382,11 +2213,154 @@
       <val name="pure" val="true"/>
     </annotation>
   </item>
-  <item name='java.util.Deque E pollFirst()'>
-    <annotation name='org.jetbrains.annotations.Nullable'/>
+  <item name='java.util.Date Date(int, int, int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
   </item>
-  <item name='java.util.Deque E pollLast()'>
-    <annotation name='org.jetbrains.annotations.Nullable'/>
+  <item name="java.util.Date Date(int, int, int) 1">
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="intValues" val="{java.util.Calendar.JANUARY, java.util.Calendar.FEBRUARY, java.util.Calendar.MARCH, java.util.Calendar.APRIL, java.util.Calendar.MAY, java.util.Calendar.JUNE, java.util.Calendar.JULY, java.util.Calendar.AUGUST, java.util.Calendar.SEPTEMBER, java.util.Calendar.OCTOBER, java.util.Calendar.NOVEMBER, java.util.Calendar.DECEMBER}" />
+    </annotation>
+  </item>
+  <item name='java.util.Date Date(int, int, int, int, int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name="java.util.Date Date(int, int, int, int, int) 1">
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="intValues" val="{java.util.Calendar.JANUARY, java.util.Calendar.FEBRUARY, java.util.Calendar.MARCH, java.util.Calendar.APRIL, java.util.Calendar.MAY, java.util.Calendar.JUNE, java.util.Calendar.JULY, java.util.Calendar.AUGUST, java.util.Calendar.SEPTEMBER, java.util.Calendar.OCTOBER, java.util.Calendar.NOVEMBER, java.util.Calendar.DECEMBER}" />
+    </annotation>
+  </item>
+  <item name='java.util.Date Date(int, int, int, int, int, int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name="java.util.Date Date(int, int, int, int, int, int) 1">
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="intValues" val="{java.util.Calendar.JANUARY, java.util.Calendar.FEBRUARY, java.util.Calendar.MARCH, java.util.Calendar.APRIL, java.util.Calendar.MAY, java.util.Calendar.JUNE, java.util.Calendar.JULY, java.util.Calendar.AUGUST, java.util.Calendar.SEPTEMBER, java.util.Calendar.OCTOBER, java.util.Calendar.NOVEMBER, java.util.Calendar.DECEMBER}" />
+    </annotation>
+  </item>
+  <item name='java.util.Date Date(java.lang.String)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date boolean after(java.util.Date)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date boolean before(java.util.Date)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date int getDate()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date int getDay()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date int getHours()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date int getMinutes()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name="java.util.Date int getMonth()">
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="intValues" val="{java.util.Calendar.JANUARY, java.util.Calendar.FEBRUARY, java.util.Calendar.MARCH, java.util.Calendar.APRIL, java.util.Calendar.MAY, java.util.Calendar.JUNE, java.util.Calendar.JULY, java.util.Calendar.AUGUST, java.util.Calendar.SEPTEMBER, java.util.Calendar.OCTOBER, java.util.Calendar.NOVEMBER, java.util.Calendar.DECEMBER}" />
+    </annotation>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date int getSeconds()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date int getYear()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date java.lang.Object clone()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="value" val="&quot;-&gt; new&quot;"/>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date long UTC(int, int, int, int, int, int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name="java.util.Date long UTC(int, int, int, int, int, int) 1">
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="intValues" val="{java.util.Calendar.JANUARY, java.util.Calendar.FEBRUARY, java.util.Calendar.MARCH, java.util.Calendar.APRIL, java.util.Calendar.MAY, java.util.Calendar.JUNE, java.util.Calendar.JULY, java.util.Calendar.AUGUST, java.util.Calendar.SEPTEMBER, java.util.Calendar.OCTOBER, java.util.Calendar.NOVEMBER, java.util.Calendar.DECEMBER}" />
+    </annotation>
+  </item>
+  <item name='java.util.Date long getTime()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date long parse(java.lang.String)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date void setDate(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date void setHours(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date void setMinutes(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date void setMonth(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name="java.util.Date void setMonth(int) 0">
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="intValues" val="{java.util.Calendar.JANUARY, java.util.Calendar.FEBRUARY, java.util.Calendar.MARCH, java.util.Calendar.APRIL, java.util.Calendar.MAY, java.util.Calendar.JUNE, java.util.Calendar.JULY, java.util.Calendar.AUGUST, java.util.Calendar.SEPTEMBER, java.util.Calendar.OCTOBER, java.util.Calendar.NOVEMBER, java.util.Calendar.DECEMBER}" />
+    </annotation>
+  </item>
+  <item name='java.util.Date void setSeconds(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date void setTime(long)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.Date void setYear(int)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
   </item>
   <item name="java.util.Deque java.util.Iterator&lt;E&gt; descendingIterator()">
     <annotation name="org.jetbrains.annotations.NotNull" />
@@ -1448,6 +2422,21 @@
   <item name='java.util.Formatter java.util.Formatter format(java.util.Locale, java.lang.String, java.lang.Object...) 1'>
     <annotation name='org.jetbrains.annotations.NotNull'/>
   </item>
+  <item name="java.util.GregorianCalendar GregorianCalendar(int, int, int) 1">
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="intValues" val="{java.util.Calendar.JANUARY, java.util.Calendar.FEBRUARY, java.util.Calendar.MARCH, java.util.Calendar.APRIL, java.util.Calendar.MAY, java.util.Calendar.JUNE, java.util.Calendar.JULY, java.util.Calendar.AUGUST, java.util.Calendar.SEPTEMBER, java.util.Calendar.OCTOBER, java.util.Calendar.NOVEMBER, java.util.Calendar.DECEMBER}" />
+    </annotation>
+  </item>
+  <item name="java.util.GregorianCalendar GregorianCalendar(int, int, int, int, int) 1">
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="intValues" val="{java.util.Calendar.JANUARY, java.util.Calendar.FEBRUARY, java.util.Calendar.MARCH, java.util.Calendar.APRIL, java.util.Calendar.MAY, java.util.Calendar.JUNE, java.util.Calendar.JULY, java.util.Calendar.AUGUST, java.util.Calendar.SEPTEMBER, java.util.Calendar.OCTOBER, java.util.Calendar.NOVEMBER, java.util.Calendar.DECEMBER}" />
+    </annotation>
+  </item>
+  <item name="java.util.GregorianCalendar GregorianCalendar(int, int, int, int, int, int) 1">
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="intValues" val="{java.util.Calendar.JANUARY, java.util.Calendar.FEBRUARY, java.util.Calendar.MARCH, java.util.Calendar.APRIL, java.util.Calendar.MAY, java.util.Calendar.JUNE, java.util.Calendar.JULY, java.util.Calendar.AUGUST, java.util.Calendar.SEPTEMBER, java.util.Calendar.OCTOBER, java.util.Calendar.NOVEMBER, java.util.Calendar.DECEMBER}" />
+    </annotation>
+  </item>
   <item name='java.util.HashSet HashSet(java.util.Collection&lt;? extends E&gt;) 0'>
     <annotation name='org.jetbrains.annotations.NotNull'/>
     <annotation name='org.intellij.lang.annotations.Flow'>
@@ -1479,6 +2468,12 @@
       <val name="sourceIsContainer" val="true"/>
     </annotation>
   </item>
+  <item name="java.util.List E get(int) 0">
+    <annotation name="org.jetbrains.annotations.Range" >
+      <val name="from" val="0"/>
+      <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+    </annotation>
+  </item>
   <item name='java.util.List E remove(int)'>
     <annotation name='org.intellij.lang.annotations.Flow'>
       <val name="sourceIsContainer" val="true"/>
@@ -1487,7 +2482,13 @@
       <val name="mutates" val="&quot;this&quot;"/>
     </annotation>
   </item>
-  <item name='java.util.List E set(int, E)'>
+    <item name='java.util.List E remove(int) 0'>
+        <annotation name='org.jetbrains.annotations.Range'>
+            <val name="from" val="0"/>
+            <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+        </annotation>
+    </item>
+    <item name='java.util.List E set(int, E)'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;this&quot;"/>
     </annotation>
@@ -1609,15 +2610,24 @@
       <val name="mutates" val="&quot;this&quot;"/>
     </annotation>
   </item>
+  <item name='java.util.Map V compute(K, java.util.function.BiFunction&lt;? super K,? super V,? extends V&gt;) 1'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
   <item name='java.util.Map V computeIfAbsent(K, java.util.function.Function&lt;? super K,? extends V&gt;)'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;this&quot;"/>
     </annotation>
   </item>
+  <item name='java.util.Map V computeIfAbsent(K, java.util.function.Function&lt;? super K,? extends V&gt;) 1'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
   <item name='java.util.Map V computeIfPresent(K, java.util.function.BiFunction&lt;? super K,? super V,? extends V&gt;)'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;this&quot;"/>
     </annotation>
+  </item>
+  <item name='java.util.Map V computeIfPresent(K, java.util.function.BiFunction&lt;? super K,? super V,? extends V&gt;) 1'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
   </item>
   <item name='java.util.Map V get(java.lang.Object)'>
     <annotation name='org.intellij.lang.annotations.Flow'>
@@ -1629,6 +2639,12 @@
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="mutates" val="&quot;this&quot;"/>
     </annotation>
+  </item>
+  <item name='java.util.Map V merge(K, V, java.util.function.BiFunction&lt;? super V,? super V,? extends V&gt;) 1'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
+  </item>
+  <item name='java.util.Map V merge(K, V, java.util.function.BiFunction&lt;? super V,? super V,? extends V&gt;) 2'>
+    <annotation name='org.jetbrains.annotations.NotNull'/>
   </item>
   <item name='java.util.Map V put(K, V)'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -1706,13 +2722,23 @@
     </annotation>
   </item>
   <item name="java.util.Map java.util.Set&lt;java.util.Map.Entry&lt;K,V&gt;&gt; entrySet()">
-    <annotation name="org.jetbrains.annotations.NotNull" />
+    <annotation name="org.jetbrains.annotations.NotNull"/>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="pure" val="true"/>
     </annotation>
   </item>
+  <item name='java.util.Map void clear()'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
+  <item name='java.util.Map void putAll(java.util.Map&lt;? extends K,? extends V&gt;)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="mutates" val="&quot;this&quot;"/>
+    </annotation>
+  </item>
   <item name="java.util.Map void putAll(java.util.Map&lt;? extends K,? extends V&gt;) 0">
-    <annotation name="org.jetbrains.annotations.NotNull" />
+    <annotation name="org.jetbrains.annotations.NotNull"/>
   </item>
   <item name='java.util.Map void replaceAll(java.util.function.BiFunction&lt;? super K,? super V,? extends V&gt;)'>
     <annotation name='org.jetbrains.annotations.Contract'>
@@ -1800,6 +2826,18 @@
   <item name='java.util.NavigableSet java.util.SortedSet&lt;E&gt; tailSet(E)'>
     <annotation name='org.jetbrains.annotations.NotNull'/>
   </item>
+  <item name='java.util.Objects T requireNonNullElse(T, T)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="value" val="&quot;!null, _ -&gt; param1; null, !null -&gt; param2; null, null -&gt; fail&quot;"/>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Objects T requireNonNullElseGet(T, java.util.function.Supplier&lt;? extends T&gt;)'>
+    <annotation name='org.jetbrains.annotations.Contract'>
+      <val name="value" val="&quot;!null, _ -&gt; param1; null, _ -&gt; !null&quot;"/>
+      <val name="pure" val="true"/>
+    </annotation>
+  </item>
   <item name='java.util.Objects java.lang.String toString(java.lang.Object, java.lang.String)'>
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="value" val="&quot;null, _ -&gt; param2&quot;"/>
@@ -1817,6 +2855,15 @@
       <val name="value" val="&quot;!null -&gt; !null&quot;"/>
       <val name="pure" val="true"/>
     </annotation>
+  </item>
+  <item name='java.util.Properties java.lang.String getProperty(java.lang.String) 0'>
+    <annotation name='org.jetbrains.annotations.NonNls'/>
+  </item>
+  <item name='java.util.Properties java.lang.String getProperty(java.lang.String, java.lang.String) 0'>
+    <annotation name='org.jetbrains.annotations.NonNls'/>
+  </item>
+  <item name='java.util.Properties java.lang.String getProperty(java.lang.String, java.lang.String) 1'>
+    <annotation name='org.jetbrains.annotations.NonNls'/>
   </item>
   <item name='java.util.Properties void store(java.io.OutputStream, java.lang.String) 1'>
     <annotation name='org.jetbrains.annotations.Nullable'/>
@@ -1846,6 +2893,36 @@
       <val name="mutates" val="&quot;this&quot;"/>
     </annotation>
   </item>
+  <item name='java.util.Random int nextInt(int) 0'>
+    <annotation name='org.jetbrains.annotations.Range'>
+      <val name="from" val="1"/>
+      <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+    </annotation>
+  </item>
+  <item name='java.util.Random java.util.stream.IntStream ints(long) 0'>
+    <annotation name='org.jetbrains.annotations.Range'>
+      <val name="from" val="0"/>
+      <val name="to" val="java.lang.Long.MAX_VALUE"/>
+    </annotation>
+  </item>
+  <item name='java.util.Random java.util.stream.IntStream ints(long, int, int) 0'>
+    <annotation name='org.jetbrains.annotations.Range'>
+      <val name="from" val="0"/>
+      <val name="to" val="java.lang.Long.MAX_VALUE"/>
+    </annotation>
+  </item>
+  <item name='java.util.Random java.util.stream.LongStream longs(long) 0'>
+    <annotation name='org.jetbrains.annotations.Range'>
+      <val name="from" val="0"/>
+      <val name="to" val="java.lang.Long.MAX_VALUE"/>
+    </annotation>
+  </item>
+  <item name='java.util.Random java.util.stream.LongStream longs(long, long, long) 0'>
+    <annotation name='org.jetbrains.annotations.Range'>
+      <val name="from" val="0"/>
+      <val name="to" val="java.lang.Long.MAX_VALUE"/>
+    </annotation>
+  </item>
   <item name='java.util.ResourceBundle boolean containsKey(java.lang.String) 0'>
     <annotation name='org.jetbrains.annotations.NotNull'/>
   </item>
@@ -1863,6 +2940,7 @@
   </item>
   <item name='java.util.ResourceBundle java.lang.String getString(java.lang.String) 0'>
     <annotation name='org.jetbrains.annotations.NotNull'/>
+    <annotation name='org.jetbrains.annotations.PropertyKey'/>
   </item>
   <item name='java.util.ResourceBundle java.lang.String[] getStringArray(java.lang.String)'>
     <annotation name='org.jetbrains.annotations.NotNull'/>
@@ -2075,6 +3153,132 @@
     <annotation name="org.jetbrains.annotations.NotNull" />
     <annotation name='org.jetbrains.annotations.Contract'>
       <val name="pure" val="true"/>
+    </annotation>
+  </item>
+  <item name='java.util.Spliterator boolean hasCharacteristics(int) 0'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterator int characteristics()'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators java.util.Spliterator&lt;T&gt; spliterator(java.util.Collection&lt;? extends T&gt;, int) 1'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators java.util.Spliterator&lt;T&gt; spliterator(java.util.Iterator&lt;? extends T&gt;, long, int) 2'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators java.util.Spliterator&lt;T&gt; spliteratorUnknownSize(java.util.Iterator&lt;? extends T&gt;, int) 1'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators java.util.Spliterator.OfDouble spliterator(double[], int) 1'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators java.util.Spliterator.OfDouble spliterator(double[], int, int, int) 3'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators java.util.Spliterator.OfDouble spliterator(java.util.PrimitiveIterator.OfDouble, long, int) 2'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators java.util.Spliterator.OfDouble spliteratorUnknownSize(java.util.PrimitiveIterator.OfDouble, int) 1'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators java.util.Spliterator.OfInt spliterator(java.util.PrimitiveIterator.OfInt, long, int) 2'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators java.util.Spliterator.OfInt spliteratorUnknownSize(java.util.PrimitiveIterator.OfInt, int) 1'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators java.util.Spliterator.OfLong spliterator(java.util.PrimitiveIterator.OfLong, long, int) 2'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators java.util.Spliterator.OfLong spliteratorUnknownSize(java.util.PrimitiveIterator.OfLong, int) 1'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators.AbstractDoubleSpliterator AbstractDoubleSpliterator(long, int) 1'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators.AbstractIntSpliterator AbstractIntSpliterator(long, int) 1'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators.AbstractLongSpliterator AbstractLongSpliterator(long, int) 1'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators.AbstractSpliterator AbstractSpliterator(long, int) 1'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.Spliterators.IteratorSpliterator IteratorSpliterator(java.util.Iterator&lt;? extends T&gt;, int) 1'>
+    <annotation name="org.intellij.lang.annotations.MagicConstant">
+      <val name="flagsFromClass" val="java.util.Spliterator.class" />
+    </annotation>
+  </item>
+  <item name='java.util.SplittableRandom int nextInt(int) 0'>
+    <annotation name='org.jetbrains.annotations.Range'>
+      <val name="from" val="1"/>
+      <val name="to" val="java.lang.Integer.MAX_VALUE"/>
+    </annotation>
+  </item>
+  <item name='java.util.SplittableRandom java.util.stream.IntStream ints(long) 0'>
+    <annotation name='org.jetbrains.annotations.Range'>
+      <val name="from" val="0"/>
+      <val name="to" val="java.lang.Long.MAX_VALUE"/>
+    </annotation>
+  </item>
+  <item name='java.util.SplittableRandom java.util.stream.IntStream ints(long, int, int) 0'>
+    <annotation name='org.jetbrains.annotations.Range'>
+      <val name="from" val="0"/>
+      <val name="to" val="java.lang.Long.MAX_VALUE"/>
+    </annotation>
+  </item>
+  <item name='java.util.SplittableRandom java.util.stream.LongStream longs(long) 0'>
+    <annotation name='org.jetbrains.annotations.Range'>
+      <val name="from" val="0"/>
+      <val name="to" val="java.lang.Long.MAX_VALUE"/>
+    </annotation>
+  </item>
+  <item name='java.util.SplittableRandom java.util.stream.LongStream longs(long, long, long) 0'>
+    <annotation name='org.jetbrains.annotations.Range'>
+      <val name="from" val="0"/>
+      <val name="to" val="java.lang.Long.MAX_VALUE"/>
+    </annotation>
+  </item>
+  <item name='java.util.SplittableRandom long nextLong(long) 0'>
+    <annotation name='org.jetbrains.annotations.Range'>
+      <val name="from" val="1"/>
+      <val name="to" val="java.lang.Long.MAX_VALUE"/>
     </annotation>
   </item>
   <item name="java.util.TimeZone java.util.TimeZone getTimeZone(java.lang.String) 0">

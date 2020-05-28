@@ -28,7 +28,7 @@ import java.util.List;
  */
 public class GrDocMethodParamsImpl extends GroovyDocPsiElementImpl implements GrDocMethodParams {
 
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.plugins.groovy.lang.groovydoc.psi.impl.GrDocMethodParamsImpl");
+  private static final Logger LOG = Logger.getInstance(GrDocMethodParamsImpl.class);
 
   public GrDocMethodParamsImpl(@NotNull ASTNode node) {
     super(node);
@@ -68,7 +68,7 @@ public class GrDocMethodParamsImpl extends GroovyDocPsiElementImpl implements Gr
   public GrDocMethodParameter[] getParameters() {
     List<GrDocMethodParameter> result = new ArrayList<>();
     for (PsiElement cur = getFirstChild(); cur != null; cur = cur.getNextSibling()) {
-      if (GrDocMethodParameter.class.isInstance(cur)) result.add((GrDocMethodParameter)cur);
+      if (cur instanceof GrDocMethodParameter) result.add((GrDocMethodParameter)cur);
     }
     return result.toArray(new GrDocMethodParameter[0]);
   }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.util;
 
 import com.intellij.openapi.components.ServiceManager;
@@ -32,7 +18,6 @@ import org.jetbrains.annotations.NotNull;
  *   <li/> Make a {@link CachedValue} instance dependent on a specific PSI modification tracker.
  *   To achieve that, one should can one of the constants in this interface as {@link CachedValueProvider.Result}
  *   dependencies.
- *   See {@link #MODIFICATION_COUNT}, {@link #JAVA_STRUCTURE_MODIFICATION_COUNT}, {@link #OUT_OF_CODE_BLOCK_MODIFICATION_COUNT}
  *
  *   <li/> Subscribe to any PSI change (for example, to drop caches in the listener manually).
  *   See {@link PsiModificationTracker.Listener}
@@ -40,7 +25,6 @@ import org.jetbrains.annotations.NotNull;
  * </ol>
  */
 public interface PsiModificationTracker extends ModificationTracker {
-
   /**
    * Provides a way to get the instance of {@link PsiModificationTracker} corresponding to a given project.
    * @see #getInstance(Project)
@@ -50,14 +34,13 @@ public interface PsiModificationTracker extends ModificationTracker {
     }
 
     /**
-     * @param project
      * @return The instance of {@link PsiModificationTracker} corresponding to the given project.
      */
     public static PsiModificationTracker getInstance(Project project) {
       return ServiceManager.getService(project, PsiModificationTracker.class);
     }
   }
-  
+
   /**
    * This key can be passed as a dependency in a {@link CachedValueProvider}.
    * The corresponding {@link CachedValue} will then be flushed on every physical PSI change.
@@ -79,14 +62,17 @@ public interface PsiModificationTracker extends ModificationTracker {
    * This key can be passed as a dependency in a {@link CachedValueProvider}.
    * The corresponding {@link CachedValue} will then be flushed on every physical PSI change that can affect Java structure and resolve.
    * @see #getJavaStructureModificationCount()
+   * @deprecated rarely supported by JVM language plugins; also a wrong way for optimisations
    */
+  @Deprecated
   Key JAVA_STRUCTURE_MODIFICATION_COUNT = Key.create("JAVA_STRUCTURE_MODIFICATION_COUNT");
 
   /**
    * A topic to subscribe for all PSI modification count changes.
    * @see com.intellij.util.messages.MessageBus
    */
-  Topic<Listener> TOPIC = new Topic<>("modification tracker", Listener.class, Topic.BroadcastDirection.TO_PARENT);
+  @Topic.ProjectLevel
+  Topic<Listener> TOPIC = new Topic<>(Listener.class, Topic.BroadcastDirection.TO_PARENT);
 
   /**
    * Tracks any PSI modification.
@@ -114,12 +100,16 @@ public interface PsiModificationTracker extends ModificationTracker {
    * Tracks structural Java modifications, i.e. the ones on class/method/field/file level. Modifications inside method bodies are not tracked.
    * Useful to work with resolve caches that only depend on Java structure, and not the method code.
    * @return current counter value. Increased whenever any physical PSI in Java structure is changed.
+   * @deprecated rarely supported by JVM language plugins; also a wrong way for optimisations
    */
+  @Deprecated
   long getJavaStructureModificationCount();
 
   /**
    * @return an object returning {@link #getJavaStructureModificationCount()}
+   * @deprecated rarely supported by JVM language plugins; also a wrong way for optimisations
    */
+  @Deprecated
   @NotNull
   ModificationTracker getJavaStructureModificationTracker();
 
@@ -127,8 +117,8 @@ public interface PsiModificationTracker extends ModificationTracker {
    * A listener to be notified on any PSI modification count change (which happens on any physical PSI change).
    * @see #TOPIC
    */
+  @FunctionalInterface
   interface Listener {
-
     /**
      * A method invoked on Swing EventDispatchThread each time any physical PSI change is detected
      */

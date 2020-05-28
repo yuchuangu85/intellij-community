@@ -1,14 +1,23 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.impl;
+
+import static com.intellij.openapi.diagnostic.Logger.getInstance;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
-import com.intellij.openapi.application.TransactionGuard;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Computable;
-import com.intellij.openapi.vcs.changes.*;
+import com.intellij.openapi.vcs.changes.Change;
+import com.intellij.openapi.vcs.changes.ChangeListChange;
+import com.intellij.openapi.vcs.changes.ChangeListManagerEx;
+import com.intellij.openapi.vcs.changes.ChangeListManagerImpl;
+import com.intellij.openapi.vcs.changes.ContentRevision;
+import com.intellij.openapi.vcs.changes.CurrentContentRevision;
+import com.intellij.openapi.vcs.changes.InvokeAfterUpdateMode;
+import com.intellij.openapi.vcs.changes.LocalChangeList;
+import com.intellij.openapi.vcs.changes.conflicts.ChangelistConflictTracker;
+import com.intellij.openapi.vcs.ex.ExclusionState;
 import com.intellij.openapi.vcs.ex.LineStatusTracker;
 import com.intellij.openapi.vcs.ex.PartialLocalLineStatusTracker;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -16,15 +25,14 @@ import com.intellij.util.ObjectUtils;
 import com.intellij.util.PairFunction;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
+import com.intellij.util.ui.ThreeStateCheckBox;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-
-import static com.intellij.openapi.diagnostic.Logger.getInstance;
+import java.util.Objects;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class PartialChangesUtil {
   private static final Logger LOG = getInstance(PartialChangesUtil.class);
@@ -100,7 +108,7 @@ public class PartialChangesUtil {
     };
 
     if (executeOnEDT && !ApplicationManager.getApplication().isDispatchThread()) {
-      TransactionGuard.getInstance().submitTransactionAndWait(task);
+      ApplicationManager.getApplication().invokeAndWait(task);
     }
     else {
       task.run();
@@ -112,36 +120,18 @@ public class PartialChangesUtil {
   public static void runUnderChangeList(@NotNull Project project,
                                         @Nullable LocalChangeList targetChangeList,
                                         @NotNull Runnable task) {
-    computeUnderChangeList(project, targetChangeList, () -> {
+    computeUnderChangeList(project, targetChangeList, null, () -> {
       task.run();
       return null;
-    });
+    }, false);
   }
 
   public static <T> T computeUnderChangeList(@NotNull Project project,
-                                             @Nullable LocalChangeList targetChangeList,
-                                             @NotNull Computable<T> task) {
-    ChangeListManagerEx clm = (ChangeListManagerEx)ChangeListManager.getInstance(project);
-    LocalChangeList oldDefaultList = clm.getDefaultChangeList();
-
-    if (targetChangeList == null || targetChangeList.equals(oldDefaultList)) {
-      return task.compute();
-    }
-
-    switchChangeList(clm, targetChangeList, oldDefaultList);
-    try {
-      return task.compute();
-    }
-    finally {
-      restoreChangeList(clm, targetChangeList, oldDefaultList);
-    }
-  }
-
-  public static <T> T computeUnderChangeListWithRefresh(@NotNull Project project,
                                                         @Nullable LocalChangeList targetChangeList,
                                                         @Nullable String title,
-                                                        @NotNull Computable<T> task) {
-    ChangeListManagerEx clm = (ChangeListManagerEx)ChangeListManager.getInstance(project);
+                                                        @NotNull Computable<T> task,
+                                                        boolean shouldAwaitCLMRefresh) {
+    ChangeListManagerImpl clm = ChangeListManagerImpl.getInstanceImpl(project);
     LocalChangeList oldDefaultList = clm.getDefaultChangeList();
 
     if (targetChangeList == null || targetChangeList.equals(oldDefaultList)) {
@@ -149,14 +139,22 @@ public class PartialChangesUtil {
     }
 
     switchChangeList(clm, targetChangeList, oldDefaultList);
+    ChangelistConflictTracker clmConflictTracker = clm.getConflictTracker();
     try {
+      clmConflictTracker.setIgnoreModifications(true);
       return task.compute();
     }
     finally {
-      InvokeAfterUpdateMode mode = title != null
-                                   ? InvokeAfterUpdateMode.BACKGROUND_NOT_CANCELLABLE
-                                   : InvokeAfterUpdateMode.SILENT_CALLBACK_POOLED;
-      clm.invokeAfterUpdate(() -> restoreChangeList(clm, targetChangeList, oldDefaultList), mode, title, ModalityState.NON_MODAL);
+      clmConflictTracker.setIgnoreModifications(false);
+      if (shouldAwaitCLMRefresh) {
+        InvokeAfterUpdateMode mode = title != null
+                                     ? InvokeAfterUpdateMode.BACKGROUND_NOT_CANCELLABLE
+                                     : InvokeAfterUpdateMode.SILENT_CALLBACK_POOLED;
+        clm.invokeAfterUpdate(() -> restoreChangeList(clm, targetChangeList, oldDefaultList), mode, title, ModalityState.NON_MODAL);
+      }
+      else {
+        restoreChangeList(clm, targetChangeList, oldDefaultList);
+      }
     }
   }
 
@@ -170,12 +168,27 @@ public class PartialChangesUtil {
   private static void restoreChangeList(@NotNull ChangeListManagerEx clm,
                                         @NotNull LocalChangeList targetChangeList,
                                         @NotNull LocalChangeList oldDefaultList) {
-    if (Comparing.equal(clm.getDefaultChangeList().getId(), targetChangeList.getId())) {
+    LocalChangeList defaultChangeList = clm.getDefaultChangeList();
+    if (Objects.equals(defaultChangeList.getId(), targetChangeList.getId())) {
       clm.setDefaultChangeList(oldDefaultList, true);
       LOG.debug(String.format("Active changelist restored: %s -> %s", targetChangeList.getName(), oldDefaultList.getName()));
     }
     else {
-      LOG.warn(new Throwable("Active changelist was changed during the operation"));
+      LOG.warn(new Throwable(String.format("Active changelist was changed during the operation. Expected: %s -> %s, actual default: %s",
+                                           targetChangeList.getName(), oldDefaultList.getName(), defaultChangeList.getName())));
+    }
+  }
+
+  @NotNull
+  public static ThreeStateCheckBox.State convertExclusionState(@NotNull ExclusionState exclusionState) {
+    if (exclusionState == ExclusionState.ALL_INCLUDED) {
+      return ThreeStateCheckBox.State.SELECTED;
+    }
+    else if (exclusionState == ExclusionState.ALL_EXCLUDED) {
+      return ThreeStateCheckBox.State.NOT_SELECTED;
+    }
+    else {
+      return ThreeStateCheckBox.State.DONT_CARE;
     }
   }
 }

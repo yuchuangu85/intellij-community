@@ -15,9 +15,15 @@
  */
 package com.intellij.codeInspection;
 
-import com.intellij.ide.SelectInEditorManager;
+import com.intellij.codeInsight.template.TemplateBuilder;
+import com.intellij.codeInsight.template.TemplateBuilderFactory;
+import com.intellij.codeInsight.template.impl.ConstantNode;
+import com.intellij.java.JavaBundle;
+import com.intellij.lang.injection.InjectedLanguageManager;
+import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.project.Project;
-import com.intellij.pom.Navigatable;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.util.PsiTypesUtil;
@@ -37,7 +43,7 @@ public class ReplaceWithTernaryOperatorFix implements LocalQuickFix {
   @Override
   @NotNull
   public String getName() {
-    return InspectionsBundle.message("inspection.replace.ternary.quickfix", myText);
+    return JavaBundle.message("inspection.replace.ternary.quickfix", myText);
   }
 
   public ReplaceWithTernaryOperatorFix(@NotNull PsiExpression expressionToAssert) {
@@ -47,7 +53,7 @@ public class ReplaceWithTernaryOperatorFix implements LocalQuickFix {
   @NotNull
   @Override
   public String getFamilyName() {
-    return InspectionsBundle.message("inspection.surround.if.family");
+    return JavaBundle.message("inspection.surround.if.family");
   }
 
   @Override
@@ -77,10 +83,18 @@ public class ReplaceWithTernaryOperatorFix implements LocalQuickFix {
   static void selectElseBranch(PsiFile file, PsiConditionalExpression conditionalExpression) {
     PsiExpression elseExpression = conditionalExpression.getElseExpression();
     if (elseExpression != null) {
-      ((Navigatable)elseExpression).navigate(true);
-      SelectInEditorManager.getInstance(file.getProject())
-        .selectInEditor(file.getVirtualFile(), elseExpression.getTextRange().getStartOffset(), elseExpression.getTextRange().getEndOffset(),
-                        false, true);
+      Project project = file.getProject();
+      Editor editor = FileEditorManager.getInstance(project).getSelectedTextEditor();
+      if (editor != null) {
+        Document document = editor.getDocument();
+        PsiFile topLevelFile = InjectedLanguageManager.getInstance(project).getTopLevelFile(file);
+        if (topLevelFile != null && document == topLevelFile.getViewProvider().getDocument()) {
+          PsiDocumentManager.getInstance(project).doPostponedOperationsAndUnblockDocument(document);
+          TemplateBuilder builder = TemplateBuilderFactory.getInstance().createTemplateBuilder(elseExpression);
+          builder.replaceElement(elseExpression, new ConstantNode(elseExpression.getText()));
+          builder.run(editor, true);
+        }
+      }
     }
   }
 
@@ -118,7 +132,7 @@ public class ReplaceWithTernaryOperatorFix implements LocalQuickFix {
     @NotNull
     @Override
     public String getFamilyName() {
-      return InspectionsBundle.message("inspection.replace.methodref.ternary.quickfix");
+      return JavaBundle.message("inspection.replace.methodref.ternary.quickfix");
     }
 
     @Override

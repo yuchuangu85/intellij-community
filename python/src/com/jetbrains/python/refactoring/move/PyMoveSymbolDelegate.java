@@ -1,22 +1,8 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.refactoring.move;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Lists;
+import com.intellij.lang.Language;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Document;
@@ -37,6 +23,7 @@ import com.intellij.refactoring.util.CommonRefactoringUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
 import com.jetbrains.python.PyBundle;
+import com.jetbrains.python.PythonLanguage;
 import com.jetbrains.python.codeInsight.controlflow.ScopeOwner;
 import com.jetbrains.python.psi.PyElement;
 import com.jetbrains.python.psi.PyFile;
@@ -55,6 +42,7 @@ import com.jetbrains.python.refactoring.move.moduleMembers.PyMoveModuleMembersPr
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -65,15 +53,15 @@ import static com.jetbrains.python.psi.PyUtil.as;
  */
 public class PyMoveSymbolDelegate extends MoveHandlerDelegate {
   @Override
-  public boolean canMove(PsiElement[] elements, @Nullable PsiElement targetContainer) {
-    if (targetContainer != null && !super.canMove(elements, targetContainer)) {
+  public boolean canMove(PsiElement[] elements, @Nullable PsiElement targetContainer, @Nullable PsiReference reference) {
+    if (targetContainer != null && !super.canMove(elements, targetContainer, reference)) {
       return false;
     }
     // Local function or method
     if (isMovableLocalFunctionOrMethod(elements[0])) {
       return true;
     }
-    
+
     // Top-level module member
     for (PsiElement element : elements) {
       if (!PyMoveModuleMembersHelper.isMovableModuleMember(element)) {
@@ -103,7 +91,7 @@ public class PyMoveSymbolDelegate extends MoveHandlerDelegate {
       processor.setPreviewUsages(dialog.isPreviewUsages());
     }
     else {
-      final List<PsiNamedElement> initialElements = Lists.newArrayList();
+      final List<PsiNamedElement> initialElements = new ArrayList<>();
       for (PsiElement element : elements) {
         final PsiNamedElement e = PyMoveModuleMembersHelper.extractNamedElement(element);
         if (e == null) {
@@ -119,7 +107,7 @@ public class PyMoveSymbolDelegate extends MoveHandlerDelegate {
       processor = new PyMoveModuleMembersProcessor(selectedElements, dialog.getTargetPath());
       processor.setPreviewUsages(dialog.isPreviewUsages());
     }
-    
+
     try {
       processor.run();
     }
@@ -211,4 +199,11 @@ public class PyMoveSymbolDelegate extends MoveHandlerDelegate {
   private static boolean isLocalFunction(@Nullable PsiElement resolved) {
     return resolved instanceof PyFunction && PsiTreeUtil.getParentOfType(resolved, ScopeOwner.class, true) instanceof PyFunction;
   }
+
+
+  @Override
+  public boolean supportsLanguage(@NotNull Language language) {
+    return language.isKindOf(PythonLanguage.getInstance());
+  }
+
 }

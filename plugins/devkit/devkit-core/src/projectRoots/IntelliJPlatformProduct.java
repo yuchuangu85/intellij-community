@@ -23,9 +23,11 @@ import com.intellij.util.PlatformUtils;
 public enum IntelliJPlatformProduct {
   IDEA("IU", "IntelliJ IDEA", null),
   IDEA_IC("IC", "IntelliJ IDEA Community Edition", PlatformUtils.IDEA_CE_PREFIX),
+  IDEA_IE("IE", "IntelliJ IDEA Educational Edition", PlatformUtils.IDEA_EDU_PREFIX),
   RUBYMINE("RM", "RubyMine", PlatformUtils.RUBY_PREFIX),
   PYCHARM("PY", "PyCharm", PlatformUtils.PYCHARM_PREFIX),
   PYCHARM_PC("PC", "PyCharm Community Edition", PlatformUtils.PYCHARM_CE_PREFIX),
+  PYCHARM_DS("PD", "PyCharm Data Science Edition", PlatformUtils.PYCHARM_DS_PREFIX),
   PYCHARM_EDU("PE", "PyCharm Educational Edition", PlatformUtils.PYCHARM_EDU_PREFIX),
   PHPSTORM("PS", "PhpStorm", PlatformUtils.PHP_PREFIX),
   WEBSTORM("WS", "WebStorm", PlatformUtils.WEB_PREFIX),
@@ -34,7 +36,8 @@ public enum IntelliJPlatformProduct {
   DBE("DB", "DataGrip", PlatformUtils.DBE_PREFIX),
   RIDER("RD", "Rider", PlatformUtils.RIDER_PREFIX),
   GOIDE("GO", "GoLand", PlatformUtils.GOIDE_PREFIX),
-  ANDROID_STUDIO("AI", "Android Studio", "AndroidStudio");
+  ANDROID_STUDIO("AI", "Android Studio", "AndroidStudio"),
+  INTELLIJ_CLIENT("IJC", "IntelliJ Client", PlatformUtils.INTELLIJ_CLIENT_PREFIX);
 
   private final String myProductCode;
   private final String myName;

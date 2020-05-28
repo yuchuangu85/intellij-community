@@ -49,6 +49,11 @@ public class MockPsiDocumentManager extends PsiDocumentManager {
   }
 
   @Override
+  public boolean commitAllDocumentsUnderProgress() {
+    return true;
+  }
+
+  @Override
   public void performForCommittedDocument(@NotNull final Document document, @NotNull final Runnable action) {
     action.run();
   }
@@ -75,8 +80,7 @@ public class MockPsiDocumentManager extends PsiDocumentManager {
   }
 
   @Override
-  @NotNull
-  public Document[] getUncommittedDocuments() {
+  public Document @NotNull [] getUncommittedDocuments() {
     throw new UnsupportedOperationException("Method getUncommittedDocuments is not yet implemented in " + getClass().getName());
   }
 
@@ -132,7 +136,7 @@ public class MockPsiDocumentManager extends PsiDocumentManager {
   }
 
   @Override
-  public void reparseFiles(@NotNull Collection<VirtualFile> files, boolean includeOpenFiles) {
+  public void reparseFiles(@NotNull Collection<? extends VirtualFile> files, boolean includeOpenFiles) {
     throw new UnsupportedOperationException();
   }
 

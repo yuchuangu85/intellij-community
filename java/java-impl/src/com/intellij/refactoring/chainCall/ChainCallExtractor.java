@@ -16,7 +16,7 @@
 package com.intellij.refactoring.chainCall;
 
 import com.intellij.codeInspection.LambdaCanBeMethodReferenceInspection;
-import com.intellij.codeInspection.util.OptionalUtil;
+import com.intellij.codeInspection.util.OptionalRefactoringUtil;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
@@ -45,6 +45,7 @@ public interface ChainCallExtractor {
    * @param expressionType resulting type of the extracted expression
    * @return true if this extractor can create a mapping step from given expression
    */
+  @Contract(pure = true)
   boolean canExtractChainCall(@NotNull PsiMethodCallExpression call, PsiExpression expression, PsiType expressionType);
 
   /**
@@ -56,11 +57,12 @@ public interface ChainCallExtractor {
    * @return chain call. Result is correct only if {@link #canExtractChainCall} was checked before
    * for given expression and expressionType
    */
+  @Contract(pure = true)
   default String buildChainCall(PsiVariable variable, PsiExpression expression, PsiType expressionType) {
     if(expression instanceof PsiArrayInitializerExpression) {
       expression = RefactoringUtil.convertInitializerToNormalExpression(expression, expressionType);
     }
-    String typeArgument = OptionalUtil.getMapTypeArgument(expression, expressionType);
+    String typeArgument = OptionalRefactoringUtil.getMapTypeArgument(expression, expressionType);
     return "." + typeArgument + getMethodName(variable, expression, expressionType) +
            "(" + variable.getName() + "->" + expression.getText() + ")";
   }
@@ -74,6 +76,7 @@ public interface ChainCallExtractor {
    * @return chain call. Result is correct only if {@link #canExtractChainCall} was checked before
    * for given expression and expressionType
    */
+  @Contract(pure = true)
   String getMethodName(PsiVariable variable, PsiExpression expression, PsiType expressionType);
 
   /**
@@ -84,6 +87,7 @@ public interface ChainCallExtractor {
    * @param newElementType new element type (to be passed as lambda parameter)
    * @return new call name. Default implementation returns current name.
    */
+  @Contract(pure = true)
   default String fixCallName(PsiMethodCallExpression call, PsiType newElementType) {
     return call.getMethodExpression().getReferenceName();
   }
@@ -95,7 +99,7 @@ public interface ChainCallExtractor {
     if (parameters.getParametersCount() != 1) return null;
     PsiExpressionList args = tryCast(PsiUtil.skipParenthesizedExprUp(lambda.getParent()), PsiExpressionList.class);
     if (args == null || args.getExpressionCount() != 1) return null;
-    PsiParameter parameter = parameters.getParameters()[0];
+    PsiParameter parameter = parameters.getParameter(0);
     if (ExpressionUtils.isReferenceTo(expression, parameter) && parameter.getType().equals(targetType)) {
       // No-op extraction is useless
       return null;
@@ -113,8 +117,6 @@ public interface ChainCallExtractor {
 
   static PsiLambdaExpression extractMappingStep(@NotNull Project project, PsiLocalVariable variable) {
     if (variable == null) return null;
-    String name = variable.getName();
-    if (name == null) return null;
     PsiExpression initializer = variable.getInitializer();
     if (initializer == null) return null;
     PsiLambdaExpression lambda = PsiTreeUtil.getParentOfType(variable, PsiLambdaExpression.class);

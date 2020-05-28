@@ -16,7 +16,6 @@
 package com.intellij.psi.search.scope.packageSet;
 
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import com.intellij.util.containers.ContainerUtil;
@@ -27,7 +26,7 @@ import java.util.function.Function;
 
 public class UnionPackageSet extends CompoundPackageSet {
   @NotNull
-  public static PackageSet create(@NotNull PackageSet... sets) {
+  public static PackageSet create(PackageSet @NotNull ... sets) {
     if (sets.length == 0) throw new IllegalArgumentException("empty arguments");
     return sets.length == 1 ? sets[0] : new UnionPackageSet(sets);
   }
@@ -40,7 +39,7 @@ public class UnionPackageSet extends CompoundPackageSet {
     super(set1, set2);
   }
 
-  private UnionPackageSet(@NotNull PackageSet... sets) {
+  private UnionPackageSet(PackageSet @NotNull ... sets) {
     super(sets);
   }
 
@@ -74,12 +73,4 @@ public class UnionPackageSet extends CompoundPackageSet {
     return create(ContainerUtil.map(mySets, s -> transformation.apply(s), new PackageSet[mySets.length]));
   }
 
-  @Override
-  @NotNull
-  public String getText() {
-    if (myText == null) {
-      myText = StringUtil.join(mySets, s->s.getText(), "||");
-    }
-    return myText;
-  }
 }

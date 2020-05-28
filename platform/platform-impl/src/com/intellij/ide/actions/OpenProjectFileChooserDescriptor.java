@@ -1,22 +1,8 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.actions;
 
-import com.intellij.ide.ui.ProductIcons;
 import com.intellij.ide.highlighter.ProjectFileType;
+import com.intellij.ide.ui.ProductIcons;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.vfs.VfsUtil;
@@ -59,7 +45,7 @@ public class OpenProjectFileChooserDescriptor extends FileChooserDescriptor {
   public Icon getIcon(VirtualFile file) {
     if (canInspectDirectory(file)) {
       if (isIprFile(file) || isIdeaDirectory(file)) {
-        return dressIcon(file, ProductIcons.getInstance().getProjectIcon());
+        return dressIcon(file, ProductIcons.getInstance().getProjectNodeIcon());
       }
       Icon icon = getImporterIcon(file);
       if (icon != null) {
@@ -89,7 +75,7 @@ public class OpenProjectFileChooserDescriptor extends FileChooserDescriptor {
   private static Icon getImporterIcon(VirtualFile file) {
     ProjectOpenProcessor provider = ProjectOpenProcessor.getImportProvider(file);
     if (provider != null) {
-      return file.isDirectory() && provider.lookForProjectsInDirectory() ? ProductIcons.getInstance().getProjectIcon()
+      return file.isDirectory() && provider.lookForProjectsInDirectory() ? ProductIcons.getInstance().getProjectNodeIcon()
                                                                          : provider.getIcon(file);
     }
     return null;

@@ -24,15 +24,18 @@ import com.intellij.psi.search.LocalSearchScope;
 import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiPrecedenceUtil;
-import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.util.IncorrectOperationException;
+import com.intellij.util.containers.ContainerUtil;
+import com.siyeh.ig.psiutils.CommentTracker;
 import com.siyeh.ig.psiutils.ExpressionUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Objects;
+
 public class DeclarationJoinLinesHandler implements JoinLinesHandlerDelegate {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.editorActions.DeclarationJoinLinesHandler");
+  private static final Logger LOG = Logger.getInstance(DeclarationJoinLinesHandler.class);
 
   @Override
   public int tryJoinLines(@NotNull final Document document, @NotNull final PsiFile file, final int start, final int end) {
@@ -72,7 +75,6 @@ public class DeclarationJoinLinesHandler implements JoinLinesHandlerDelegate {
       return -1;
     }
 
-    final PsiElementFactory factory = JavaPsiFacade.getElementFactory(psiManager.getProject());
     final PsiExpression initializerExpression = getInitializerExpression(var, assignment);
     if (initializerExpression == null) return -1;
 
@@ -80,15 +82,11 @@ public class DeclarationJoinLinesHandler implements JoinLinesHandlerDelegate {
 
     int startOffset = decl.getTextRange().getStartOffset();
     try {
-      PsiDeclarationStatement newDecl = factory.createVariableDeclarationStatement(var.getName(), var.getType(), initializerExpression);
-      PsiVariable newVar = (PsiVariable)newDecl.getDeclaredElements()[0];
-      if (var.getModifierList().getText().length() > 0) {
-        PsiUtil.setModifierProperty(newVar, PsiModifier.FINAL, true);
-      }
-      newVar.getModifierList().replace(var.getModifierList());
-      PsiVariable variable = (PsiVariable)newDecl.getDeclaredElements()[0];
-      final int offsetBeforeEQ = variable.getNameIdentifier().getTextRange().getEndOffset();
-      final int offsetAfterEQ = variable.getInitializer().getTextRange().getStartOffset() + 1;
+      PsiLocalVariable variable = copyVarWithInitializer(var, initializerExpression);
+      if (variable == null) return -1;
+      PsiDeclarationStatement newDecl = (PsiDeclarationStatement)variable.getParent();
+      final int offsetBeforeEQ = Objects.requireNonNull(variable.getNameIdentifier()).getTextRange().getEndOffset();
+      final int offsetAfterEQ = Objects.requireNonNull(variable.getInitializer()).getTextRange().getStartOffset() + 1;
       newDecl = (PsiDeclarationStatement)CodeStyleManager.getInstance(psiManager).reformatRange(newDecl, offsetBeforeEQ, offsetAfterEQ);
 
       PsiElement child = statement.getLastChild();
@@ -99,8 +97,12 @@ public class DeclarationJoinLinesHandler implements JoinLinesHandlerDelegate {
         newDecl.addRangeBefore(child.getNextSibling(), statement.getLastChild(), null);
       }
 
-      decl.replace(newDecl);
+      PsiElement prev = statement.getPrevSibling();
+      if (prev instanceof PsiWhiteSpace) {
+        prev.delete();
+      }
       statement.delete();
+      decl.replace(newDecl);
       return startOffset + newDecl.getTextRange().getEndOffset() - newDecl.getTextRange().getStartOffset();
     }
     catch (IncorrectOperationException e) {
@@ -149,5 +151,44 @@ public class DeclarationJoinLinesHandler implements JoinLinesHandlerDelegate {
     }
     initializerExpression = JavaPsiFacade.getElementFactory(project).createExpressionFromText(initializerText, assignment);
     return (PsiExpression)CodeStyleManager.getInstance(project).reformat(initializerExpression);
+  }
+
+  @Nullable
+  public static PsiLocalVariable copyVarWithInitializer(PsiLocalVariable origVar, PsiExpression initializer) {
+    // Don't normalize the original declaration: it may declare many variables
+    PsiElement declCopy = origVar.getParent().copy();
+    PsiLocalVariable varCopy = (PsiLocalVariable)ContainerUtil.find(
+      declCopy.getChildren(), e -> e instanceof PsiLocalVariable && Objects.equals(origVar.getName(), ((PsiLocalVariable)e).getName()));
+
+    if (varCopy != null) {
+      varCopy.setInitializer(initializer);
+      varCopy.normalizeDeclaration();
+    }
+    return varCopy;
+  }
+
+  /**
+   * Join declaration and assignment
+   * @param variable variable
+   * @param assignment assignment (assuming its parent is expression statement)
+   * @return new variable
+   */
+  public static PsiLocalVariable joinDeclarationAndAssignment(@NotNull PsiLocalVariable variable, @NotNull PsiAssignmentExpression assignment) {
+    PsiExpression initializer = getInitializerExpression(variable, assignment);
+    PsiElement elementToReplace = assignment.getParent();
+    if (elementToReplace != null) {
+      PsiLocalVariable varCopy = copyVarWithInitializer(variable, initializer);
+      if (varCopy != null) {
+        String text = varCopy.getText();
+
+        CommentTracker tracker = new CommentTracker();
+        tracker.markUnchanged(initializer);
+        tracker.markUnchanged(variable);
+        tracker.delete(variable);
+        PsiDeclarationStatement decl = (PsiDeclarationStatement)tracker.replaceAndRestoreComments(elementToReplace, text);
+        return ((PsiLocalVariable)decl.getDeclaredElements()[0]);
+      }
+    }
+    return variable;
   }
 }

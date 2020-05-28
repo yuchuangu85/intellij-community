@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.config;
 
 import com.intellij.execution.ExecutableValidator;
@@ -15,6 +15,7 @@ import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.CharsetToolkit;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.text.ParseException;
 import java.util.Objects;
@@ -27,7 +28,7 @@ import java.util.regex.Pattern;
  * The class is able to distinct MSYS and CYGWIN Gits under Windows assuming that msysgit adds the 'msysgit' suffix to the output
  * of the 'git version' command.
  * This is not a very good way to distinguish msys and cygwin since in old versions of msys they didn't add the suffix.
- *
+ * <p>
  * Note: this class has a natural ordering that is inconsistent with equals.
  */
 public final class GitVersion implements Comparable<GitVersion> {
@@ -40,7 +41,10 @@ public final class GitVersion implements Comparable<GitVersion> {
     UNIX,
     MSYS,
     CYGWIN,
-    /** The type doesn't matter or couldn't be detected. */
+    WSL,
+    /**
+     * The type doesn't matter or couldn't be detected.
+     */
     UNDEFINED,
     /**
      * Information about Git version is unavailable because the GitVcs hasn't fully initialized yet, or because Git executable is invalid.
@@ -51,7 +55,8 @@ public final class GitVersion implements Comparable<GitVersion> {
   /**
    * The minimal supported version
    */
-  public static final GitVersion MIN = new GitVersion(1, 8, 0, 0);
+  public static final GitVersion MIN = SystemInfo.isWindows ? new GitVersion(2, 4, 0, 0)
+                                                            : new GitVersion(1, 8, 0, 0);
 
   /**
    * Special version with a special Type which indicates, that Git version information is unavailable.
@@ -88,11 +93,16 @@ public final class GitVersion implements Comparable<GitVersion> {
     this(major, minor, revision, patchLevel, Type.UNDEFINED);
   }
 
+  @NotNull
+  public static GitVersion parse(@NotNull String output) throws ParseException {
+    return parse(output, null);
+  }
+
   /**
    * Parses output of "git version" command.
    */
   @NotNull
-  public static GitVersion parse(@NotNull String output) throws ParseException {
+  public static GitVersion parse(@NotNull String output, @Nullable GitExecutable executable) throws ParseException {
     if (StringUtil.isEmptyOrSpaces(output)) {
       throw new ParseException("Empty git --version output: " + output, 0);
     }
@@ -104,20 +114,32 @@ public final class GitVersion implements Comparable<GitVersion> {
     int minor = getIntGroup(m, 2);
     int rev = getIntGroup(m, 3);
     int patch = getIntGroup(m, 4);
-    boolean msys = (m.groupCount() >= 5) && m.group(5) != null && m.group(5).toLowerCase().contains("msysgit");
+
     Type type;
     if (SystemInfo.isWindows) {
-      type = msys ? Type.MSYS : Type.CYGWIN;
-    } else {
+      String suffix = getStringGroup(m, 5);
+      if (executable instanceof GitExecutable.Wsl) {
+        type = Type.WSL;
+      }
+      else if (StringUtil.toLowerCase(suffix).contains("msysgit") ||
+               StringUtil.toLowerCase(suffix).contains("windows")) {
+        type = Type.MSYS;
+      }
+      else {
+        type = Type.CYGWIN;
+      }
+    }
+    else {
       type = Type.UNIX;
     }
+
     return new GitVersion(major, minor, rev, patch, type);
   }
 
   // Utility method used in parsing - checks that the given capture group exists and captured something - then returns the captured value,
   // otherwise returns 0.
   private static int getIntGroup(@NotNull Matcher matcher, int group) {
-    if (group > matcher.groupCount()+1) {
+    if (group > matcher.groupCount() + 1) {
       return 0;
     }
     final String match = matcher.group(group);
@@ -125,6 +147,19 @@ public final class GitVersion implements Comparable<GitVersion> {
       return 0;
     }
     return Integer.parseInt(match);
+  }
+
+  @NotNull
+  private static String getStringGroup(@NotNull Matcher matcher, int group) {
+    if (group > matcher.groupCount() + 1) {
+      return "";
+    }
+    final String match = matcher.group(group);
+    if (match == null) {
+      return "";
+    }
+
+    return match.trim();
   }
 
   /**

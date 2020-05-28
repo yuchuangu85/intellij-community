@@ -18,10 +18,8 @@ package com.intellij.psi.impl.compiled;
 import com.intellij.pom.Navigatable;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.PsiImplUtil;
-import com.intellij.psi.impl.meta.MetaRegistry;
 import com.intellij.psi.impl.source.SourceTreeToPsiMap;
 import com.intellij.psi.impl.source.tree.TreeElement;
-import com.intellij.psi.meta.PsiMetaData;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -61,8 +59,7 @@ abstract class ClsAnnotationValueImpl extends ClsElementImpl implements PsiAnnot
   }
 
   @Override
-  @NotNull
-  public PsiElement[] getChildren() {
+  public PsiElement @NotNull [] getChildren() {
     return new PsiElement[]{myReferenceElement, myParameterList};
   }
 
@@ -119,10 +116,5 @@ abstract class ClsAnnotationValueImpl extends ClsElementImpl implements PsiAnnot
     final StringBuilder buffer = new StringBuilder();
     appendMirrorText(0, buffer);
     return buffer.toString();
-  }
-
-  @Override
-  public PsiMetaData getMetaData() {
-    return MetaRegistry.getMetaBase(this);
   }
 }

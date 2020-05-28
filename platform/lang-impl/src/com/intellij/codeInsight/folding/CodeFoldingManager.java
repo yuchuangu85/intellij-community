@@ -1,6 +1,4 @@
-/*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.folding;
 
 import com.intellij.openapi.editor.Document;
@@ -14,12 +12,10 @@ import org.jetbrains.annotations.Nullable;
 
 public abstract class CodeFoldingManager {
   public static CodeFoldingManager getInstance(Project project) {
-    return project.getComponent(CodeFoldingManager.class);
+    return project.getService(CodeFoldingManager.class);
   }
 
   public abstract void updateFoldRegions(@NotNull Editor editor);
-
-  public abstract void forceDefaultState(@NotNull Editor editor);
 
   @Nullable
   public abstract Runnable updateFoldRegionsAsync(@NotNull Editor editor, boolean firstTime);

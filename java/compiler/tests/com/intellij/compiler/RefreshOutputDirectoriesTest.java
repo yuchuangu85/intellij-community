@@ -15,9 +15,6 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * @author nik
- */
 public class RefreshOutputDirectoriesTest extends BaseCompilerTestCase {
   private int myRootsChangedCount;
 
@@ -81,6 +78,6 @@ public class RefreshOutputDirectoriesTest extends BaseCompilerTestCase {
       VirtualFile outputDir = LocalFileSystem.getInstance().findFileByIoFile(dir);
       assertNotNull("output directory wasn't refreshed: " + dir.getAbsolutePath(), outputDir);
     }
-    System.out.println("myRootsChangedCount = " + myRootsChangedCount);
+    LOG.debug("myRootsChangedCount = " + myRootsChangedCount);
   }
 }

@@ -19,12 +19,14 @@ package com.intellij.java.codeInsight.daemon.quickFix
 import com.intellij.codeInsight.daemon.quickFix.LightQuickFixParameterizedTestCase
 import com.intellij.codeInspection.LocalInspectionTool
 import com.intellij.codeInspection.dataFlow.DataFlowInspection
-import com.intellij.openapi.Disposable
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import groovy.transform.CompileStatic
 import org.jetbrains.annotations.NotNull
 
+@CompileStatic
 class ReplaceFromOfNullableFixTest extends LightQuickFixParameterizedTestCase {
   @NotNull
   @Override
@@ -37,7 +39,7 @@ class ReplaceFromOfNullableFixTest extends LightQuickFixParameterizedTestCase {
     return "/codeInsight/daemonCodeAnalyzer/quickFix/replaceFromOfNullable"
   }
 
-  static void addGuavaOptional(Disposable parent) {
+  static void addGuavaOptional(Project project) {
     WriteCommandAction.runWriteCommandAction(project) {
       VirtualFile optional = getSourceRoot()
         .createChildDirectory(this, "com")
@@ -58,7 +60,7 @@ public abstract class Optional<T> {
     }
   }
 
-  static void cleanupGuava() {
+  static void cleanupGuava(Project project) {
     WriteCommandAction.runWriteCommandAction(project) {
       getSourceRoot().findChild("com")?.delete(this)
     }
@@ -67,14 +69,14 @@ public abstract class Optional<T> {
   @Override
   protected void beforeActionStarted(String testName, String contents) {
     if (testName.contains("Guava")) {
-      addGuavaOptional(testRootDisposable)
+      addGuavaOptional(project)
     }
     super.beforeActionStarted(testName, contents)
   }
 
   @Override
   protected void afterActionCompleted(String testName, String contents) {
-    cleanupGuava()
+    cleanupGuava(project)
     super.afterActionCompleted(testName, contents)
   }
 

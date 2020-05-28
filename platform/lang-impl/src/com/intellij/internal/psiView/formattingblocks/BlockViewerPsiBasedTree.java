@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.internal.psiView.formattingblocks;
 
 import com.intellij.application.options.CodeStyle;
@@ -29,7 +29,6 @@ import com.intellij.ui.tree.TreeVisitor;
 import com.intellij.ui.treeStructure.SimpleNode;
 import com.intellij.ui.treeStructure.Tree;
 import com.intellij.util.Function;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.JBTreeTraverser;
 import com.intellij.util.ui.tree.TreeUtil;
 import org.jetbrains.annotations.NotNull;
@@ -43,6 +42,7 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import java.awt.*;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Set;
 
 import static com.intellij.internal.psiView.PsiViewerDialog.initTree;
@@ -133,7 +133,7 @@ public class BlockViewerPsiBasedTree implements ViewerPsiBasedTree {
     myBlockTree.setVisible(true);
     BlockTreeStructure blockTreeStructure = new BlockTreeStructure();
     BlockTreeNode rootNode = new BlockTreeNode(rootBlock, null);
-    StructureTreeModel treeModel = new StructureTreeModel(blockTreeStructure);
+    StructureTreeModel treeModel = new StructureTreeModel<>(blockTreeStructure, myTreeModelDisposable);
     initMap(rootNode, rootElement);
     assert myPsiToBlockMap != null;
 
@@ -178,13 +178,17 @@ public class BlockViewerPsiBasedTree implements ViewerPsiBasedTree {
     Function<Object, BlockTreeNode> converter = el -> el instanceof DefaultMutableTreeNode ?
                                                       (BlockTreeNode)((DefaultMutableTreeNode)el).getUserObject() :
                                                       null;
-    Set<SimpleNode> parents = ContainerUtil.newHashSet();
+    Set<SimpleNode> parents = new HashSet<>();
     SimpleNode parent = currentBlockNode.getParent();
     while (parent != null) {
       parents.add(parent);
       parent = parent.getParent();
     }
-    parents.add((SimpleNode)getRoot().getUserObject());
+
+    DefaultMutableTreeNode root = getRoot();
+    if (root != null) {
+      parents.add((SimpleNode)root.getUserObject());
+    }
 
     return new TreeVisitor.ByComponent<BlockTreeNode, BlockTreeNode>(currentBlockNode, converter) {
 
@@ -257,7 +261,10 @@ public class BlockViewerPsiBasedTree implements ViewerPsiBasedTree {
       return null;
     }
 
-    BlockTreeNode node = (BlockTreeNode)getRoot().getUserObject();
+    DefaultMutableTreeNode root = getRoot();
+    if (root == null) return null;
+
+    BlockTreeNode node = (BlockTreeNode)root.getUserObject();
     main_loop:
     while (true) {
       if (node.getBlock().getTextRange().equals(range)) {
@@ -316,6 +323,7 @@ public class BlockViewerPsiBasedTree implements ViewerPsiBasedTree {
     }
   }
 
+  @Nullable
   private DefaultMutableTreeNode getRoot() {
     return (DefaultMutableTreeNode)myBlockTree.getModel().getRoot();
   }

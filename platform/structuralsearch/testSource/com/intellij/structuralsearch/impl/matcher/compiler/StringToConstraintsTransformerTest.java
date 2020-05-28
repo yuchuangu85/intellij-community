@@ -1,16 +1,18 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.structuralsearch.impl.matcher.compiler;
 
 import com.intellij.structuralsearch.MalformedPatternException;
 import com.intellij.structuralsearch.MatchOptions;
 import com.intellij.structuralsearch.MatchVariableConstraint;
 import com.intellij.structuralsearch.plugin.ui.Configuration;
+import org.jetbrains.annotations.NotNull;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.startsWith;
 import static org.junit.Assert.*;
 
 /**
@@ -56,15 +58,15 @@ public class StringToConstraintsTransformerTest {
   @Test
   public void testCountedOccurs() {
     test("'_a{3,}'_b{4} '_c{,5}");
-    MatchVariableConstraint constraint = myOptions.getVariableConstraint("a");
-    assertEquals(3, constraint.getMinCount());
-    assertEquals(Integer.MAX_VALUE, constraint.getMaxCount());
-    constraint = myOptions.getVariableConstraint("b");
-    assertEquals(4, constraint.getMinCount());
-    assertEquals(4, constraint.getMaxCount());
-    constraint = myOptions.getVariableConstraint("c");
-    assertEquals(0, constraint.getMinCount());
-    assertEquals(5, constraint.getMaxCount());
+    MatchVariableConstraint a = myOptions.getVariableConstraint("a");
+    assertEquals(3, a.getMinCount());
+    assertEquals(Integer.MAX_VALUE, a.getMaxCount());
+    MatchVariableConstraint b = myOptions.getVariableConstraint("b");
+    assertEquals(4, b.getMinCount());
+    assertEquals(4, b.getMaxCount());
+    MatchVariableConstraint c = myOptions.getVariableConstraint("c");
+    assertEquals(0, c.getMinCount());
+    assertEquals(5, c.getMaxCount());
   }
 
   @Test
@@ -140,9 +142,9 @@ public class StringToConstraintsTransformerTest {
 
   @Test
   public void testInvalidRegularExpression() {
-    expectException("'a:x!(", String.format("Invalid regular expression: Unclosed group near index 3%n" +
-                              "x!(%n" +
-                              "   ^"));
+    thrown.expect(MalformedPatternException.class);
+    thrown.expectMessage(startsWith(String.format("Invalid regular expression: Unclosed group near index 3%nx!(")));
+    test("'a:x!(");
   }
 
   @Test
@@ -306,16 +308,16 @@ public class StringToConstraintsTransformerTest {
   public void testBrackets() {
     test("'_x:[exprtype( java\\.lang\\.String\\[\\]\\[\\] )]");
     final MatchVariableConstraint constraint = myOptions.getVariableConstraint("x");
-    assertEquals("java.lang.String[][]", constraint.getNameOfExprType());
+    assertEquals("java\\.lang\\.String\\[\\]\\[\\]", constraint.getNameOfExprType());
   }
 
-  private void expectException(String criteria, String exceptionMessage) {
+  private void expectException(@NotNull String criteria, @NotNull String exceptionMessage) {
     thrown.expect(MalformedPatternException.class);
     thrown.expectMessage(equalTo(exceptionMessage));
     test(criteria);
   }
 
-  private void test(String criteria) {
+  private void test(@NotNull String criteria) {
     StringToConstraintsTransformer.transformCriteria(criteria, myOptions);
   }
 }

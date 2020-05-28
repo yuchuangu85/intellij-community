@@ -1,20 +1,7 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.inline;
 
+import com.intellij.java.refactoring.JavaRefactoringBundle;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Ref;
@@ -33,7 +20,6 @@ import com.intellij.usageView.UsageInfo;
 import com.intellij.usageView.UsageViewDescriptor;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.MultiMap;
-import com.siyeh.ig.psiutils.ExpressionUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -43,7 +29,7 @@ import java.util.*;
  * @author yole
  */
 public class InlineToAnonymousClassProcessor extends BaseRefactoringProcessor {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.inline.InlineToAnonymousClassProcessor");
+  private static final Logger LOG = Logger.getInstance(InlineToAnonymousClassProcessor.class);
 
   private PsiClass myClass;
   private final PsiCall myCallToInline;
@@ -68,19 +54,17 @@ public class InlineToAnonymousClassProcessor extends BaseRefactoringProcessor {
 
   @Override
   @NotNull
-  protected UsageViewDescriptor createUsageViewDescriptor(@NotNull UsageInfo[] usages) {
+  protected UsageViewDescriptor createUsageViewDescriptor(UsageInfo @NotNull [] usages) {
     return new InlineViewDescriptor(myClass);
   }
 
   @Override
-  @NotNull
-  public UsageInfo[] findUsages() {
+  public UsageInfo @NotNull [] findUsages() {
     if (myInlineThisOnly) {
       return new UsageInfo[] { new UsageInfo(myCallToInline) };
     }
     Set<UsageInfo> usages = new HashSet<>();
-    final GlobalSearchScope searchScope = GlobalSearchScope.projectScope(myProject);
-    for (PsiReference reference : ReferencesSearch.search(myClass, searchScope)) {
+    for (PsiReference reference : ReferencesSearch.search(myClass, myRefactoringScope)) {
       usages.add(new UsageInfo(reference.getElement()));
     }
 
@@ -88,13 +72,13 @@ public class InlineToAnonymousClassProcessor extends BaseRefactoringProcessor {
     if (qName != null) {
       List<UsageInfo> nonCodeUsages = new ArrayList<>();
       if (mySearchInComments) {
-        TextOccurrencesUtil.addUsagesInStringsAndComments(myClass, qName, nonCodeUsages,
-                                                      new NonCodeUsageInfoFactory(myClass, qName));
+        TextOccurrencesUtil.addUsagesInStringsAndComments(myClass, myRefactoringScope, qName, nonCodeUsages,
+                                                          new NonCodeUsageInfoFactory(myClass, qName));
       }
 
-      if (mySearchInNonJavaFiles) {
-        TextOccurrencesUtil.addTextOccurences(myClass, qName, searchScope, nonCodeUsages,
-                                              new NonCodeUsageInfoFactory(myClass, qName));
+      if (mySearchInNonJavaFiles && myRefactoringScope instanceof GlobalSearchScope) {
+        TextOccurrencesUtil.addTextOccurrences(myClass, qName, (GlobalSearchScope)myRefactoringScope,
+                                               nonCodeUsages, new NonCodeUsageInfoFactory(myClass, qName));
       }
       usages.addAll(nonCodeUsages);
     }
@@ -112,13 +96,13 @@ public class InlineToAnonymousClassProcessor extends BaseRefactoringProcessor {
   }
 
   @Override
-  protected void refreshElements(@NotNull PsiElement[] elements) {
+  protected void refreshElements(PsiElement @NotNull [] elements) {
     assert elements.length == 1;
     myClass = (PsiClass) elements [0];
   }
 
   @Override
-  protected boolean isPreviewUsages(@NotNull UsageInfo[] usages) {
+  protected boolean isPreviewUsages(UsageInfo @NotNull [] usages) {
     if (super.isPreviewUsages(usages)) return true;
     for(UsageInfo usage: usages) {
       if (isForcePreview(usage)) {
@@ -219,7 +203,7 @@ public class InlineToAnonymousClassProcessor extends BaseRefactoringProcessor {
   }
 
   @Override
-  protected void performRefactoring(@NotNull UsageInfo[] usages) {
+  protected void performRefactoring(UsageInfo @NotNull [] usages) {
     final PsiClassType superType = getSuperType(myClass);
     LOG.assertTrue(superType != null);
     List<PsiElement> elementsToDelete = new ArrayList<>();
@@ -246,7 +230,7 @@ public class InlineToAnonymousClassProcessor extends BaseRefactoringProcessor {
       }
     }
 
-    Collections.sort(newExpressions, PsiUtil.BY_POSITION);
+    newExpressions.sort(PsiUtil.BY_POSITION);
     for(PsiNewExpression newExpression: newExpressions) {
       replaceNewOrType(newExpression, superType);
     }
@@ -273,7 +257,7 @@ public class InlineToAnonymousClassProcessor extends BaseRefactoringProcessor {
 
   private void replaceNewOrType(final PsiNewExpression psiNewExpression, final PsiClassType superType) {
     try {
-      if (!ExpressionUtils.isArrayCreationExpression(psiNewExpression)) {
+      if (!psiNewExpression.isArrayCreation()) {
         new InlineToAnonymousConstructorProcessor(myClass, psiNewExpression, superType).run();
       }
       else {
@@ -335,7 +319,7 @@ public class InlineToAnonymousClassProcessor extends BaseRefactoringProcessor {
   @Override
   @NotNull
   protected String getCommandName() {
-    return RefactoringBundle.message("inline.to.anonymous.command.name", myClass.getQualifiedName());
+    return JavaRefactoringBundle.message("inline.to.anonymous.command.name", myClass.getQualifiedName());
   }
 
 }

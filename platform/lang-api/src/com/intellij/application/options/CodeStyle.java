@@ -1,22 +1,28 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options;
 
+import com.intellij.application.options.codeStyle.cache.CodeStyleCachingService;
 import com.intellij.lang.Language;
-import com.intellij.openapi.components.ServiceManager;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.codeStyle.*;
-import org.jetbrains.annotations.ApiStatus;
+import com.intellij.psi.codeStyle.modifier.CodeStyleSettingsModifier;
+import com.intellij.psi.codeStyle.modifier.TransientCodeStyleSettings;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
+import java.util.function.Consumer;
+
 /**
  * Utility class for miscellaneous code style settings retrieving methods.
  */
+@SuppressWarnings("unused") // Contains API methods which may be used externally
 public class CodeStyle {
 
   private CodeStyle() {
@@ -55,19 +61,35 @@ public class CodeStyle {
   }
 
   /**
-   * Returns root code style settings for the given PSI file. For configurable language settings use {@link #getLanguageSettings(PsiFile)} or
-   * {@link #getLanguageSettings(PsiFile, Language)}.
+   * Returns root {@link CodeStyleSettings} for the given PSI file. In some cases the returned instance may be of
+   * {@link TransientCodeStyleSettings} class if the original (project) settings are modified for specific PSI file by
+   * {@link CodeStyleSettingsModifier} extensions. In these cases the returned instance may change upon the next call if some of
+   * {@link TransientCodeStyleSettings} dependencies become outdated.
+   * <p>
+   * A shorter way to get language-specific settings it to use one of the methods {@link #getLanguageSettings(PsiFile)}
+   * or {@link #getLanguageSettings(PsiFile, Language)}.
+   *
    * @param file The file to get code style settings for.
    * @return The current root code style settings associated with the file or default settings if the file is invalid.
    */
   @NotNull
   public static CodeStyleSettings getSettings(@NotNull PsiFile file) {
-    if (file.isValid()) {
-      Project project = file.getProject();
-      //noinspection deprecation
-      return CodeStyleSettingsManager.getInstance(project).getCurrentSettings();
+    final Project project = file.getProject();
+    CodeStyleSettings tempSettings = CodeStyleSettingsManager.getInstance(project).getTemporarySettings();
+    if (tempSettings != null) {
+      return tempSettings;
     }
-    return getDefaultSettings();
+
+    CodeStyleSettings result = FileCodeStyleProvider.EP_NAME.computeSafeIfAny(provider -> provider.getSettings(file));
+    if (result != null) {
+      return result;
+    }
+
+    if (!file.isPhysical()) {
+      return getSettings(project);
+    }
+    CodeStyleSettings cachedSettings = CodeStyleCachingService.getInstance(project).tryGetSettings(file);
+    return cachedSettings != null ? cachedSettings : getSettings(project);
   }
 
 
@@ -152,14 +174,21 @@ public class CodeStyle {
     return rootSettings.getIndentOptionsByFile(file);
   }
 
+
   /**
-   * Explicitly retrieves indent options by file type.
-   * @param file The file to get indent options for.
-   * @return The indent options associated with the file type.
+   * Returns indent options by virtual file's type. If {@code null} is given instead of the virtual file or the type of the virtual
+   * file doesn't have it's own configuration, returns other indent options configured via "Other File Types" section in Settings.
+   * <p>
+   * <b>Note:</b> This method is faster then {@link #getIndentOptions(PsiFile)} but it doesn't take into account possible configurations
+   * overwriting the default, for example EditorConfig.
+   *
+   * @param project The current project.
+   * @param file    The virtual file to get indent options for or {@code null} if the file is unknown.
+   * @return The indent options for the given project and file.
    */
   @NotNull
-  public static CommonCodeStyleSettings.IndentOptions getIndentOptionsByFileType(@NotNull PsiFile file) {
-    return getSettings(file).getIndentOptions(file.getFileType());
+  public static CommonCodeStyleSettings.IndentOptions getIndentOptionsByFileType(@NotNull Project project, @Nullable VirtualFile file) {
+    return file != null ? getSettings(project).getIndentOptions(file.getFileType()) : getSettings(project).getIndentOptions();
   }
 
   /**
@@ -193,12 +222,13 @@ public class CodeStyle {
    *   <b>Note</b>
    * The method is supposed to be used in test's {@code setUp()} method. In production code use
    * {@link #doWithTemporarySettings(Project, CodeStyleSettings, Runnable)}.
+   * or {@link #doWithTemporarySettings(Project, CodeStyleSettings, Consumer)}
    *
-   * @param project The project.
+   * @param project The project or {@code null} for default settings.
    * @param settings The settings to use temporarily with the project.
    */
   @TestOnly
-  public static void setTemporarySettings(@NotNull Project project, @NotNull CodeStyleSettings settings) {
+  public static void setTemporarySettings(@Nullable Project project, @NotNull CodeStyleSettings settings) {
     CodeStyleSettingsManager.getInstance(project).setTemporarySettings(settings);
   }
 
@@ -210,18 +240,21 @@ public class CodeStyle {
    * The method is supposed to be used in test's {@code tearDown()} method. In production code use
    * {@link #doWithTemporarySettings(Project, CodeStyleSettings, Runnable)}.
    *
-   * @param project The project to drop temporary settings for.
+   * @param project The project to drop temporary settings for or {@code null} for default settings.
    * @see #setTemporarySettings(Project, CodeStyleSettings)
    */
   @TestOnly
   public static void dropTemporarySettings(@Nullable Project project) {
+    CodeStyleSettingsManager codeStyleSettingsManager;
     if (project == null || project.isDefault()) {
-      return;
+      codeStyleSettingsManager = ApplicationManager.getApplication().getServiceIfCreated(AppCodeStyleSettingsManager.class);
+    }
+    else {
+      codeStyleSettingsManager = project.getServiceIfCreated(ProjectCodeStyleSettingsManager.class);
     }
 
-    ProjectCodeStyleSettingsManager manager = ServiceManager.getServiceIfCreated(project, ProjectCodeStyleSettingsManager.class);
-    if (manager != null) {
-      manager.dropTemporarySettings();
+    if (codeStyleSettingsManager != null) {
+      codeStyleSettingsManager.dropTemporarySettings();
     }
   }
 
@@ -233,21 +266,50 @@ public class CodeStyle {
    * @param tempSettings  The temporary code style settings.
    * @param runnable      The runnable to execute with the temporary settings.
    */
-  @SuppressWarnings("TestOnlyProblems")
   public static void doWithTemporarySettings(@NotNull Project project,
                                              @NotNull CodeStyleSettings tempSettings,
                                              @NotNull Runnable runnable) {
-    CodeStyleSettings tempSettingsBefore = CodeStyleSettingsManager.getInstance(project).getTemporarySettings();
+    final CodeStyleSettingsManager settingsManager = CodeStyleSettingsManager.getInstance(project);
+    CodeStyleSettings tempSettingsBefore = settingsManager.getTemporarySettings();
     try {
-      setTemporarySettings(project, tempSettings);
+      settingsManager.setTemporarySettings(tempSettings);
       runnable.run();
     }
     finally {
       if (tempSettingsBefore != null) {
-        setTemporarySettings(project, tempSettingsBefore);
+        settingsManager.setTemporarySettings(tempSettingsBefore);
       }
       else {
-        dropTemporarySettings(project);
+        settingsManager.dropTemporarySettings();
+      }
+    }
+  }
+
+  /**
+   * Invoke the specified consumer with a copy of the given <b>baseSettings</b> and restore the old settings even if the
+   * consumer fails with an exception. It is safe to make any changes to the copy of settings passed to consumer, these
+   * changes will not affect any currently set code style.
+   *
+   * @param project              The current project.
+   * @param baseSettings         The base settings to be cloned and used in consumer.
+   * @param tempSettingsConsumer The consumer to execute with the base settings copy.
+   */
+  public static void doWithTemporarySettings(@NotNull Project project,
+                                             @NotNull CodeStyleSettings baseSettings,
+                                             @NotNull Consumer<CodeStyleSettings> tempSettingsConsumer) {
+    final CodeStyleSettingsManager settingsManager = CodeStyleSettingsManager.getInstance(project);
+    CodeStyleSettings tempSettingsBefore = settingsManager.getTemporarySettings();
+    try {
+      CodeStyleSettings tempSettings = settingsManager.createTemporarySettings();
+      tempSettings.copyFrom(baseSettings);
+      tempSettingsConsumer.accept(tempSettings);
+    }
+    finally {
+      if (tempSettingsBefore != null) {
+        settingsManager.setTemporarySettings(tempSettingsBefore);
+      }
+      else {
+        settingsManager.dropTemporarySettings();
       }
     }
   }
@@ -293,27 +355,6 @@ public class CodeStyle {
     codeStyleSettingsManager.USE_PER_PROJECT_SETTINGS = true;
   }
 
-  @ApiStatus.Experimental
-  @NotNull
-  public static CodeStyleBean getBean(@NotNull Project project, @NotNull Language language) {
-    LanguageCodeStyleSettingsProvider provider = LanguageCodeStyleSettingsProvider.forLanguage(language);
-    CodeStyleBean codeStyleBean = null;
-    if (provider != null) {
-      codeStyleBean = provider.createBean();
-    }
-    if (codeStyleBean == null) {
-      codeStyleBean = new CodeStyleBean() {
-        @NotNull
-        @Override
-        protected Language getLanguage() {
-          return language;
-        }
-      };
-    }
-    codeStyleBean.setRootSettings(getSettings(project));
-    return codeStyleBean;
-  }
-
   /**
    * Checks if the file can be formatted according to code style settings. If formatting is disabled, all related operations including
    * optimize imports and rearrange code should be blocked (cause no changes).
@@ -324,4 +365,40 @@ public class CodeStyle {
   public static boolean isFormattingEnabled(@NotNull PsiFile file) {
     return !getSettings(file).getExcludedFiles().contains(file);
   }
+
+  /**
+   * Reformat the given {@code fileToReformat} using code style settings for the {@code contextFile}. The method may be
+   * useful to reformat a fragment of code (temporary file) which eventually will be inserted to the context file.
+   *
+   * @param fileToReformat The file to reformat (may be a temporary dummy file).
+   * @param contextFile    The actual (target) file whose settings must be used.
+   */
+  public static void reformatWithFileContext(@NotNull PsiFile fileToReformat, @NotNull PsiFile contextFile) {
+    final Project project = contextFile.getProject();
+    CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
+    CodeStyleSettings realFileSettings = getSettings(contextFile);
+    doWithTemporarySettings(project, realFileSettings, () -> codeStyleManager.reformat(fileToReformat));
+  }
+
+
+  /**
+   * Create an instance of {@code CodeStyleSettings} with settings copied from {@code baseSettings}
+   * for testing purposes.
+   * @param baseSettings Base settings to be used for created {@code CodeStyleSettings} instance.
+   * @return Test code style settings.
+   */
+  @TestOnly
+  public static CodeStyleSettings createTestSettings(@Nullable CodeStyleSettings baseSettings) {
+    return CodeStyleSettingsManager.createTestSettings(baseSettings);
+  }
+
+  /**
+   * Create a clean instance of {@code CodeStyleSettings} for testing purposes.
+   * @return Test code style settings.
+   */
+  @TestOnly
+  public static CodeStyleSettings createTestSettings() {
+    return CodeStyleSettingsManager.createTestSettings(null);
+  }
+
 }

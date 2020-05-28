@@ -26,7 +26,6 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiFormatUtil;
 import com.intellij.psi.util.PsiUtilCore;
-import com.intellij.util.ObjectUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -98,7 +97,9 @@ public class JavaPsiClassReferenceElement extends LookupItem<Object> implements 
   @NotNull
   @Override
   public PsiClass getObject() {
-    return ObjectUtils.assertNotNull(myClass.getElement());
+    PsiClass element = myClass.getElement();
+    if (element == null) throw new IllegalStateException("Cannot restore from " + myClass);
+    return element;
   }
 
   @Override
@@ -132,13 +133,13 @@ public class JavaPsiClassReferenceElement extends LookupItem<Object> implements 
 
   @Override
   public void renderElement(LookupElementPresentation presentation) {
-    renderClassItem(presentation, this, getObject(), false, " (" + myPackageDisplayName + ")", mySubstitutor);
+    renderClassItem(presentation, this, getObject(), false, " " + myPackageDisplayName, mySubstitutor);
   }
 
   public static void renderClassItem(LookupElementPresentation presentation, LookupElement item, PsiClass psiClass, boolean diamond,
                                      @NotNull String locationString, @NotNull PsiSubstitutor substitutor) {
     if (!(psiClass instanceof PsiTypeParameter)) {
-      presentation.setIcon(DefaultLookupItemRenderer.getRawIcon(item, presentation.isReal()));
+      presentation.setIcon(DefaultLookupItemRenderer.getRawIcon(item));
     }
 
     boolean strikeout = JavaElementLookupRenderer.isToStrikeout(item);
@@ -162,7 +163,7 @@ public class JavaPsiClassReferenceElement extends LookupItem<Object> implements 
   }
 
   public String getLocationString() {
-    return " (" + myPackageDisplayName + ")";
+    return " " + myPackageDisplayName;
   }
 
   private static String getName(final PsiClass psiClass, final LookupElement item, boolean diamond, @NotNull PsiSubstitutor substitutor) {
@@ -188,7 +189,7 @@ public class JavaPsiClassReferenceElement extends LookupItem<Object> implements 
     return StringUtil.notNullize(name);
   }
 
-  @Nullable
+  @NotNull
   private static String formatTypeParameters(@NotNull final PsiSubstitutor substitutor, final PsiTypeParameter[] params) {
     final boolean space = showSpaceAfterComma(params[0]);
     StringBuilder buffer = new StringBuilder();

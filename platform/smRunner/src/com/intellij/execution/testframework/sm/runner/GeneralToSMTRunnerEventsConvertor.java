@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.testframework.sm.runner;
 
 import com.intellij.execution.testframework.sm.SMTestRunnerConnectionUtil;
@@ -7,12 +7,14 @@ import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static com.intellij.rt.execution.TestListenerProtocol.CLASS_CONFIGURATION;
 
 /**
  * This class fires events to SMTRunnerEventsListener in event dispatch thread.
@@ -21,7 +23,7 @@ import java.util.*;
  */
 public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcessor {
 
-  private final Map<String, SMTestProxy> myRunningTestsFullNameToProxy = ContainerUtil.newConcurrentMap();
+  private final Map<String, SMTestProxy> myRunningTestsFullNameToProxy = new ConcurrentHashMap<>();
   private final TestSuiteStack mySuitesStack;
   private final Map<String, List<SMTestProxy>> myCurrentChildren = new HashMap<>();
 
@@ -77,6 +79,7 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
 
   @Override
   public void onFinishTesting() {
+    fireOnBeforeTestingFinished(myTestsRootProxy);
     // has been already invoked!
     // We don't know whether process was destroyed by user
     // or it finished after all tests have been run
@@ -112,7 +115,7 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
   }
 
   @Override
-  public void onTestStarted(@NotNull final TestStartedEvent testStartedEvent) {
+  public void onTestStarted(final @NotNull TestStartedEvent testStartedEvent) {
     //Duplicated event
     // creates test
     // adds to running tests map
@@ -133,6 +136,11 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
 
     SMTestProxy parentSuite = getCurrentSuite();
     SMTestProxy testProxy = findChild(parentSuite, locationUrl != null ? locationUrl : fullName, false);
+
+    if (testProxy != null && CLASS_CONFIGURATION.equals(fullName)) {
+      parentSuite = testProxy;
+      testProxy = null;
+    }
     if (testProxy == null) {
       // creates test
       testProxy = new SMTestProxy(testName, false, locationUrl, testStartedEvent.getMetainfo(), false);
@@ -142,10 +150,8 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
       if (myLocator != null) {
         testProxy.setLocator(myLocator);
       }
-
       parentSuite.addChild(testProxy);
     }
-
     // adds to running tests map
     myRunningTestsFullNameToProxy.put(fullName, testProxy);
 
@@ -157,7 +163,7 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
   }
 
   @Override
-  public void onSuiteStarted(@NotNull final TestSuiteStartedEvent suiteStartedEvent) {
+  public void onSuiteStarted(final @NotNull TestSuiteStartedEvent suiteStartedEvent) {
     //new suite
     //Progress started
     //fire event
@@ -219,10 +225,18 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
           }
         }
         if (!acceptedProxies.isEmpty()) {
-          return acceptedProxies.stream()
-            .filter(proxy -> proxy.isSuite() == preferSuite && proxy.getParent() == parentSuite)
-            .findFirst()
-            .orElse(acceptedProxies.iterator().next());
+          SMTestProxy accepted = null;
+          for (SMTestProxy proxy : acceptedProxies) {
+            if (proxy.isSuite() == preferSuite && proxy.getParent() == parentSuite) {
+              if (!proxy.isFinal()) {
+                return proxy;
+              }
+              if (accepted == null) {
+                accepted = proxy;
+              }
+            }
+          }
+          return accepted != null ? accepted : acceptedProxies.iterator().next();
         }
       }
     }
@@ -230,7 +244,7 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
   }
 
   @Override
-  public void onTestFinished(@NotNull final TestFinishedEvent testFinishedEvent) {
+  public void onTestFinished(final @NotNull TestFinishedEvent testFinishedEvent) {
     final String testName = testFinishedEvent.getName();
     final Long duration = testFinishedEvent.getDuration();
     final String fullTestName = getFullTestName(testName);
@@ -261,7 +275,7 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
   }
 
   @Override
-  public void onSuiteFinished(@NotNull final TestSuiteFinishedEvent suiteFinishedEvent) {
+  public void onSuiteFinished(final @NotNull TestSuiteFinishedEvent suiteFinishedEvent) {
     //fire events
     final String suiteName = suiteFinishedEvent.getName();
     final SMTestProxy mySuite = mySuitesStack.popSuite(suiteName);
@@ -279,14 +293,14 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
   }
 
   @Override
-  public void onUncapturedOutput(@NotNull final String text, final Key outputType) {
+  public void onUncapturedOutput(final @NotNull String text, final Key outputType) {
     final SMTestProxy currentProxy = findCurrentTestOrSuite();
     currentProxy.addOutput(text, outputType);
   }
 
   @Override
-  public void onError(@NotNull final String localizedMessage,
-                      @Nullable final String stackTrace,
+  public void onError(final @NotNull String localizedMessage,
+                      final @Nullable String stackTrace,
                       final boolean isCritical) {
     final SMTestProxy currentProxy = findCurrentTestOrSuite();
     currentProxy.addError(localizedMessage, stackTrace, isCritical);
@@ -294,7 +308,7 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
 
 
   @Override
-  public void onTestFailure(@NotNull final TestFailedEvent testFailedEvent) {
+  public void onTestFailure(final @NotNull TestFailedEvent testFailedEvent) {
     // if hasn't been already reported
     // 1. report
     // 2. add failure
@@ -355,7 +369,7 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
   }
 
   @Override
-  public void onTestIgnored(@NotNull final TestIgnoredEvent testIgnoredEvent) {
+  public void onTestIgnored(final @NotNull TestIgnoredEvent testIgnoredEvent) {
     // try to fix
     // 1. report test opened
     // 2. report failure
@@ -396,7 +410,7 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
   }
 
   @Override
-  public void onTestOutput(@NotNull final TestOutputEvent testOutputEvent) {
+  public void onTestOutput(final @NotNull TestOutputEvent testOutputEvent) {
     final String testName = testOutputEvent.getName();
     final String text = testOutputEvent.getText();
     final Key outputType = testOutputEvent.getOutputType();
@@ -417,8 +431,7 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
     fireOnTestsCountInSuite(count);
   }
 
-  @NotNull
-  protected final SMTestProxy getCurrentSuite() {
+  protected final @NotNull SMTestProxy getCurrentSuite() {
     final SMTestProxy currentSuite = mySuitesStack.getCurrentSuite();
 
     if (currentSuite != null) {
@@ -441,8 +454,7 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
     return myRunningTestsFullNameToProxy.size();
   }
 
-  @Nullable
-  protected SMTestProxy getProxyByFullTestName(final String fullTestName) {
+  protected @Nullable SMTestProxy getProxyByFullTestName(final String fullTestName) {
     return myRunningTestsFullNameToProxy.get(fullTestName);
   }
 
@@ -497,7 +509,7 @@ public class GeneralToSMTRunnerEventsConvertor extends GeneralTestEventsProcesso
         currentProxy = null;
       }
     }
-    
+
     if (currentProxy == null) {
       //current suite
       //

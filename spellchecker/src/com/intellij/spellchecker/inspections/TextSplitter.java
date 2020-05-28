@@ -15,16 +15,16 @@
  */
 package com.intellij.spellchecker.inspections;
 
+import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.Consumer;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import static com.intellij.openapi.util.text.StringUtil.newBombedCharSequence;
 
 public class TextSplitter extends BaseSplitter {
   private static final TextSplitter INSTANCE = new TextSplitter();
@@ -45,11 +45,22 @@ public class TextSplitter extends BaseSplitter {
 
   protected void doSplit(@NotNull String text, @NotNull TextRange range, Consumer<TextRange> consumer) {
     final WordSplitter ws = WordSplitter.getInstance();
-    Matcher matcher = EXTENDED_WORD_AND_SPECIAL.matcher(newBombedCharSequence(text, 500));
-    matcher.region(range.getStartOffset(), range.getEndOffset());
-    while (matcher.find()) {
-      TextRange found = new TextRange(matcher.start(), matcher.end());
-      ws.split(text, found, consumer);
+    try {
+      Matcher matcher = getExtendedWordAndSpecial().matcher(newBombedCharSequence(text));
+
+      matcher.region(range.getStartOffset(), range.getEndOffset());
+      while (matcher.find()) {
+        TextRange found = new TextRange(matcher.start(), matcher.end());
+        ws.split(text, found, consumer);
+      }
     }
+    catch (ProcessCanceledException ignored) {
+    }
+  }
+
+  @NotNull
+  @Contract(pure = true)
+  protected Pattern getExtendedWordAndSpecial() {
+    return EXTENDED_WORD_AND_SPECIAL;
   }
 }

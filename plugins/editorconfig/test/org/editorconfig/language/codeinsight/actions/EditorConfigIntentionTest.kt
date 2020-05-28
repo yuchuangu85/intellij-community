@@ -3,13 +3,13 @@ package org.editorconfig.language.codeinsight.actions
 
 import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.openapi.application.ex.PathManagerEx
-import com.intellij.testFramework.fixtures.LightPlatformCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import org.editorconfig.language.messages.EditorConfigBundle
 import org.jetbrains.annotations.PropertyKey
 
-class EditorConfigIntentionTest : LightPlatformCodeInsightFixtureTestCase() {
+class EditorConfigIntentionTest : BasePlatformTestCase() {
   override fun getTestDataPath() =
-    "${PathManagerEx.getCommunityHomePath()}/plugins/editorconfig/testSrc/org/editorconfig/language/codeinsight/actions/intention/"
+    "${PathManagerEx.getCommunityHomePath()}/plugins/editorconfig/testData/org/editorconfig/language/codeinsight/actions/intention/"
 
   fun testInvertBooleanValue() = doTest("intention.invert-option-value")
   fun testInvertSpaceValue() = doTest("intention.invert-option-value")

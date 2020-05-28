@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 /*
  * @author: Eugene Zhuravlev
@@ -45,7 +31,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.UUID;
 
 public class CompileContextImpl extends UserDataHolderBase implements CompileContextEx {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.compiler.impl.CompileContextImpl");
+  private static final Logger LOG = Logger.getInstance(CompileContextImpl.class);
   private final Project myProject;
   private final CompilerTask myBuildSession;
   private final MessagesContainer myMessages;
@@ -75,7 +61,7 @@ public class CompileContextImpl extends UserDataHolderBase implements CompileCon
     myProjectFileIndex = ProjectRootManager.getInstance(myProject).getFileIndex();
     myProjectCompileScope = new ProjectCompileScope(myProject);
     myIsAnnotationProcessorsEnabled = CompilerConfiguration.getInstance(project).isAnnotationProcessorsEnabled();
-
+    myBuildSession.setStartCompilationStamp(myStartCompilationStamp);
     final Object sessionId = ExecutionManagerImpl.EXECUTION_SESSION_ID_KEY.get(compileScope);
     if (sessionId != null) {
       // in case compilation is started as a part of some execution session,
@@ -106,9 +92,8 @@ public class CompileContextImpl extends UserDataHolderBase implements CompileCon
     return myProject;
   }
 
-  @NotNull
   @Override
-  public CompilerMessage[] getMessages(@NotNull CompilerMessageCategory category) {
+  public CompilerMessage @NotNull [] getMessages(@NotNull CompilerMessageCategory category) {
     return myMessages.getMessages(category).toArray(CompilerMessage.EMPTY_ARRAY);
   }
 
@@ -138,7 +123,7 @@ public class CompileContextImpl extends UserDataHolderBase implements CompileCon
   private void addToProblemsView(CompilerMessage msg) {
     myBuildSession.addMessage(msg);
     if (myShouldUpdateProblemsView && msg.getCategory() == CompilerMessageCategory.ERROR) {
-      ProblemsView.SERVICE.getInstance(myProject).addMessage(msg, mySessionId);
+      ProblemsView.getInstance(myProject).addMessage(msg, mySessionId);
     }
   }
 

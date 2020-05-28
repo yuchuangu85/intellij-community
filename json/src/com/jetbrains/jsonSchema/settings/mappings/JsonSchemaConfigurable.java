@@ -2,6 +2,7 @@
 package com.jetbrains.jsonSchema.settings.mappings;
 
 import com.intellij.execution.configurations.RuntimeConfigurationWarning;
+import com.intellij.json.JsonBundle;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.MessageType;
@@ -24,6 +25,8 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.io.File;
+
+import static com.jetbrains.jsonSchema.remote.JsonFileResolver.isHttpPath;
 
 /**
  * @author Irina.Chernushina on 2/2/2016.
@@ -78,12 +81,12 @@ public class JsonSchemaConfigurable extends NamedConfigurable<UserDefinedJsonSch
   @Override
   public JComponent createOptionsPanel() {
     if (myView == null) {
-      myView = new JsonSchemaMappingsView(myProject, myTreeUpdater, s -> {
-        if (myDisplayName.startsWith(JsonSchemaMappingsConfigurable.STUB_SCHEMA_NAME)) {
+      myView = new JsonSchemaMappingsView(myProject, myTreeUpdater, (s, force) -> {
+        if (myDisplayName.startsWith(JsonSchemaMappingsConfigurable.STUB_SCHEMA_NAME) || force) {
           int lastSlash = Math.max(s.lastIndexOf('/'), s.lastIndexOf('\\'));
-          if (lastSlash > 0) {
-            String substring = s.substring(lastSlash + 1);
-            int dot = substring.lastIndexOf('.');
+          if (lastSlash > 0 || force) {
+            String substring = lastSlash > 0 ? s.substring(lastSlash + 1) : s;
+            int dot = lastSlash > 0 ? substring.lastIndexOf('.') : -1;
             if (dot != -1) {
               substring = substring.substring(0, dot);
             }
@@ -128,31 +131,31 @@ public class JsonSchemaConfigurable extends NamedConfigurable<UserDefinedJsonSch
   }
 
   public static boolean isValidURL(@NotNull final String url) {
-    return JsonFileResolver.isHttpPath(url) && Urls.parse(url, false) != null;
+    return isHttpPath(url) && Urls.parse(url, false) != null;
   }
 
   private void doValidation() throws ConfigurationException {
     String schemaSubPath = myView.getSchemaSubPath();
 
     if (StringUtil.isEmptyOrSpaces(schemaSubPath)) {
-      throw new ConfigurationException((!StringUtil.isEmptyOrSpaces(myDisplayName) ? (myDisplayName + ": ") : "") + "Schema path is empty");
+      throw new ConfigurationException((!StringUtil.isEmptyOrSpaces(myDisplayName) ? (myDisplayName + ": ") : "") + JsonBundle.message("schema.configuration.error.empty.path"));
     }
 
     VirtualFile vFile;
     String filename;
 
-    if (JsonFileResolver.isHttpPath(schemaSubPath)) {
+    if (isHttpPath(schemaSubPath)) {
       filename = schemaSubPath;
 
       if (!isValidURL(schemaSubPath)) {
         throw new ConfigurationException(
-          (!StringUtil.isEmptyOrSpaces(myDisplayName) ? (myDisplayName + ": ") : "") + "Invalid schema URL");
+          (!StringUtil.isEmptyOrSpaces(myDisplayName) ? (myDisplayName + ": ") : "") + JsonBundle.message("schema.configuration.error.invalid.url"));
       }
 
       vFile = JsonFileResolver.urlToFile(schemaSubPath);
       if (vFile == null) {
         throw new ConfigurationException(
-          (!StringUtil.isEmptyOrSpaces(myDisplayName) ? (myDisplayName + ": ") : "") + "Invalid URL resource");
+          (!StringUtil.isEmptyOrSpaces(myDisplayName) ? (myDisplayName + ": ") : "") + JsonBundle.message("schema.configuration.error.invalid.url.resource"));
       }
     }
     else {
@@ -160,12 +163,12 @@ public class JsonSchemaConfigurable extends NamedConfigurable<UserDefinedJsonSch
       final File file = subPath.isAbsolute() ? subPath : new File(myProject.getBasePath(), schemaSubPath);
       if (!file.exists() || (vFile = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file)) == null) {
         throw new ConfigurationException(
-          (!StringUtil.isEmptyOrSpaces(myDisplayName) ? (myDisplayName + ": ") : "") + "Schema file does not exist");
+          (!StringUtil.isEmptyOrSpaces(myDisplayName) ? (myDisplayName + ": ") : "") + JsonBundle.message("schema.configuration.error.file.does.not.exist"));
       }
       filename = file.getName();
     }
 
-    if (StringUtil.isEmptyOrSpaces(myDisplayName)) throw new ConfigurationException(filename + ": Schema name is empty");
+    if (StringUtil.isEmptyOrSpaces(myDisplayName)) throw new ConfigurationException(filename + ": " + JsonBundle.message("schema.configuration.error.empty.name"));
 
     // we don't validate remote schemas while in options dialog
     if (vFile instanceof HttpVirtualFile) return;

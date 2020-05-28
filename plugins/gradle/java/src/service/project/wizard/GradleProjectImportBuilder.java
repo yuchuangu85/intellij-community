@@ -1,11 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.service.project.wizard;
 
 import com.intellij.externalSystem.JavaProjectData;
 import com.intellij.ide.util.projectWizard.WizardContext;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.ServiceManager;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.externalSystem.model.DataNode;
+import com.intellij.openapi.externalSystem.model.ExternalSystemDataKeys;
 import com.intellij.openapi.externalSystem.model.internal.InternalExternalProjectInfo;
 import com.intellij.openapi.externalSystem.model.project.ProjectData;
 import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkUtil;
@@ -29,6 +31,7 @@ import com.intellij.pom.java.LanguageLevel;
 import com.intellij.util.ObjectUtils;
 import gnu.trove.THashSet;
 import icons.GradleIcons;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.gradle.service.settings.ImportFromGradleControl;
@@ -44,8 +47,16 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
+ * @deprecated Use {@link JavaGradleProjectImportBuilder} instead
  */
-public class GradleProjectImportBuilder extends AbstractExternalProjectImportBuilder<ImportFromGradleControl> {
+@Deprecated
+public final class GradleProjectImportBuilder extends AbstractExternalProjectImportBuilder<ImportFromGradleControl> {
+  private static final Logger LOG = Logger.getInstance(GradleProjectImportBuilder.class);
+
+  public GradleProjectImportBuilder() {
+    this(ProjectDataManager.getInstance());
+  }
+
   /**
    * @deprecated use {@link GradleProjectImportBuilder#GradleProjectImportBuilder(ProjectDataManager)}
    */
@@ -56,6 +67,14 @@ public class GradleProjectImportBuilder extends AbstractExternalProjectImportBui
 
   public GradleProjectImportBuilder(@NotNull ProjectDataManager dataManager) {
     super(dataManager, () -> new ImportFromGradleControl(), GradleConstants.SYSTEM_ID);
+    LOG.warn("Do not use `GradleProjectImportBuilder` directly. Use instead:\n" +
+             "Internal stable Api\n" +
+             " Use `com.intellij.ide.actions.ImportModuleAction.doImport` to import (attach) a new project.\n" +
+             " Use `com.intellij.ide.impl.ProjectUtil.openOrImport` to open (import) a new project.\n" +
+             "Internal experimental Api\n" +
+             " Use `org.jetbrains.plugins.gradle.service.project.open.openGradleProject` to open (import) a new gradle project.\n" +
+             " Use `org.jetbrains.plugins.gradle.service.project.open.linkAndRefreshGradleProject` to link a gradle project to an opened idea project.",
+             new Throwable());
   }
 
   @NotNull
@@ -79,7 +98,7 @@ public class GradleProjectImportBuilder extends AbstractExternalProjectImportBui
     Predicate<Sdk> sdkCondition = sdk -> {
       JavaSdkVersion v = javaSdkType.getVersion(sdk);
       return v != null && v.isAtLeast(JavaSdkVersion.JDK_1_6) && !v.isAtLeast(JavaSdkVersion.JDK_1_9) &&
-             ExternalSystemJdkUtil.isValidJdk(sdk.getHomePath());
+             ExternalSystemJdkUtil.isValidJdk(sdk);
     };
 
     Sdk mostRecentSdk = jdkTable.getSdksOfType(javaSdkType).stream().filter(sdkCondition).max(javaSdkType.versionComparator()).orElse(null);
@@ -158,6 +177,10 @@ public class GradleProjectImportBuilder extends AbstractExternalProjectImportBui
 
   @Override
   protected void beforeCommit(@NotNull DataNode<ProjectData> dataNode, @NotNull Project project) {
+    if (project.getUserData(ExternalSystemDataKeys.NEWLY_IMPORTED_PROJECT) == Boolean.TRUE &&
+        GradleSettings.getInstance(project).getLinkedProjectsSettings().isEmpty()) {
+      ExternalProjectsManagerImpl.getInstance(project).setStoreExternally(true);
+    }
     DataNode<JavaProjectData> javaProjectNode = ExternalSystemApiUtil.find(dataNode, JavaProjectData.KEY);
     if (javaProjectNode == null) {
       return;
@@ -204,5 +227,15 @@ public class GradleProjectImportBuilder extends AbstractExternalProjectImportBui
   @Override
   public Project createProject(String name, String path) {
     return ExternalProjectsManagerImpl.setupCreatedProject(super.createProject(name, path));
+  }
+
+  private static GradleProjectImportBuilder ourInstance = null;
+
+  @ApiStatus.Experimental
+  static GradleProjectImportBuilder getInstance() {
+    if (ourInstance == null) {
+      ourInstance = new GradleProjectImportBuilder();
+    }
+    return ourInstance;
   }
 }

@@ -33,6 +33,7 @@ public abstract class ValueContainer<Value> {
     int size();
   }
 
+  @FunctionalInterface
   public interface IntPredicate {
     boolean contains(int id);
   }
@@ -50,6 +51,7 @@ public abstract class ValueContainer<Value> {
 
   public abstract int size();
 
+  @FunctionalInterface
   public interface ContainerAction<T> {
     boolean perform(int id, T value);
   }

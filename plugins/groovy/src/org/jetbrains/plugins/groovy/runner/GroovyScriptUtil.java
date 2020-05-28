@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.runner;
 
 import com.intellij.psi.PsiFile;
@@ -27,11 +13,6 @@ import javax.swing.*;
 
 public class GroovyScriptUtil {
   public static final GroovyRunnableScriptType DEFAULT_TYPE = new GroovyRunnableScriptType("default") {
-    @Override
-    public boolean shouldBeCompiled(GroovyFile script) {
-      return true;
-    }
-
     @NotNull
     @Override
     public Icon getScriptIcon() {
@@ -69,12 +50,11 @@ public class GroovyScriptUtil {
 
   @NotNull
   public static GroovyRunnableScriptType getScriptType(@NotNull GroovyFile script) {
-    for (GroovyScriptTypeDetector detector : GroovyScriptTypeDetector.EP_NAME.getExtensions()) {
-      if (detector.isSpecificScriptFile(script)) {
-        return (GroovyRunnableScriptType)detector.getScriptType();
-      }
-    }
+    GroovyScriptType scriptType = GroovyScriptTypeDetector.getScriptType(script);
+    return scriptType == null ? DEFAULT_TYPE : (GroovyRunnableScriptType)scriptType;
+  }
 
-    return DEFAULT_TYPE;
+  public static boolean isPlainGroovyScript(@NotNull GroovyFile script) {
+    return GroovyScriptTypeDetector.getScriptType(script) == null;
   }
 }

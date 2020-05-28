@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.hierarchy.method;
 
 import com.intellij.ide.hierarchy.HierarchyBrowserManager;
@@ -20,148 +6,103 @@ import com.intellij.ide.hierarchy.HierarchyNodeDescriptor;
 import com.intellij.ide.hierarchy.HierarchyTreeStructure;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
+import com.intellij.psi.search.SearchScope;
 import com.intellij.psi.search.searches.ClassInheritorsSearch;
 import com.intellij.psi.search.searches.FunctionalExpressionSearch;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Stream;
 
 public final class MethodHierarchyTreeStructure extends HierarchyTreeStructure {
-  private final SmartPsiElementPointer myMethod;
+  private static final Comparator<PsiMethod> SUPER_METHOD_COMPARATOR = Comparator.comparing(
+    PsiMethod::getContainingClass, Comparator.nullsLast(
+      Comparator.comparing(PsiClass::isInterface).thenComparing(PsiClass::getQualifiedName)));
+  private final SmartPsiElementPointer<PsiMethod> myMethod;
+  private final String myScopeType;
 
   /**
    * Should be called in read action
    */
-  public MethodHierarchyTreeStructure(@NotNull Project project, @NotNull PsiMethod method) {
+  public MethodHierarchyTreeStructure(@NotNull Project project, @NotNull PsiMethod method, String type) {
     super(project, null);
+    myScopeType = type;
     myBaseDescriptor = buildHierarchyElement(project, method);
     ((MethodHierarchyNodeDescriptor)myBaseDescriptor).setTreeStructure(this);
     myMethod = SmartPointerManager.getInstance(myProject).createSmartPsiElementPointer(method);
     setBaseElement(myBaseDescriptor); //to set myRoot
   }
 
-  private HierarchyNodeDescriptor buildHierarchyElement(final Project project, final PsiMethod method) {
-    final PsiClass suitableBaseClass = findSuitableBaseClass(method);
-
-    final ArrayList<PsiClass> superClasses = createSuperClasses(suitableBaseClass);
-
-    if (!suitableBaseClass.equals(method.getContainingClass())) {
-      superClasses.add(0, suitableBaseClass);
-    }
-
-    // remove from the top of the branch the classes that contain no 'method'
-    for(int i = superClasses.size() - 1; i >= 0; i--){
-      final PsiClass psiClass = superClasses.get(i);
-
-      if (MethodHierarchyUtil.findBaseMethodInClass(method, psiClass, false) == null) {
-        superClasses.remove(i);
-      }
-      else {
-        break;
-      }
-    }
+  private @NotNull HierarchyNodeDescriptor buildHierarchyElement(final Project project, final PsiMethod method) {
+    List<PsiClass> superClasses = buildSuperChain(method);
+    PsiClass containingClass = method.getContainingClass();
+    assert containingClass != null;
 
     HierarchyNodeDescriptor descriptor = null;
-    for(int i = superClasses.size() - 1; i >= 0; i--){
-      final PsiClass superClass = superClasses.get(i);
+    for (final PsiClass superClass : superClasses) {
       final HierarchyNodeDescriptor newDescriptor = new MethodHierarchyNodeDescriptor(project, descriptor, superClass, false, this);
-      if (descriptor != null){
-        descriptor.setCachedChildren(new HierarchyNodeDescriptor[] {newDescriptor});
+      if (descriptor != null) {
+        descriptor.setCachedChildren(new HierarchyNodeDescriptor[]{newDescriptor});
       }
       descriptor = newDescriptor;
     }
-    final HierarchyNodeDescriptor newDescriptor = new MethodHierarchyNodeDescriptor(project, descriptor, method.getContainingClass(), true, this);
+    final HierarchyNodeDescriptor newDescriptor = new MethodHierarchyNodeDescriptor(project, descriptor, containingClass, true, this);
     if (descriptor != null) {
       descriptor.setCachedChildren(new HierarchyNodeDescriptor[] {newDescriptor});
     }
     return newDescriptor;
   }
 
-  private static ArrayList<PsiClass> createSuperClasses(PsiClass aClass) {
-    if (!aClass.isValid()) {
-      return new ArrayList<>();
+  private static @NotNull List<PsiClass> buildSuperChain(@NotNull PsiMethod method) {
+    List<PsiClass> superClasses = new ArrayList<>();
+    while (true) {
+      PsiMethod superMethod = Stream.of(method.findSuperMethods()).min(SUPER_METHOD_COMPARATOR).orElse(null);
+      if (superMethod == null || superClasses.contains(superMethod.getContainingClass())) break;
+      superClasses.addAll(0, findInheritanceChain(method.getContainingClass(), superMethod.getContainingClass()));
+      method = superMethod;
     }
-
-    final ArrayList<PsiClass> superClasses = new ArrayList<>();
-    while (!isJavaLangObject(aClass)) {
-      final PsiClass aClass1 = aClass;
-      final PsiClass[] superTypes = aClass1.getSupers();
-      PsiClass superType = null;
-      // find class first
-      for (final PsiClass type : superTypes) {
-        if (!type.isInterface() && !isJavaLangObject(type)) {
-          superType = type;
-          break;
-        }
-      }
-      // if we haven't found a class, try to find an interface
-      if (superType == null) {
-        for (final PsiClass type : superTypes) {
-          if (!isJavaLangObject(type)) {
-            superType = type;
-            break;
-          }
-        }
-      }
-      if (superType == null) break;
-      if (superClasses.contains(superType)) break;
-      superClasses.add(superType);
-      aClass = superType;
-    }
-
     return superClasses;
   }
 
-  private static boolean isJavaLangObject(final PsiClass aClass) {
-    return CommonClassNames.JAVA_LANG_OBJECT.equals(aClass.getQualifiedName());
-  }
-
-  private static PsiClass findSuitableBaseClass(final PsiMethod method) {
-    final PsiClass containingClass = method.getContainingClass();
-
-    if (containingClass instanceof PsiAnonymousClass) {
-      return containingClass;
-    }
-
-    final PsiClass superClass = containingClass.getSuperClass();
-    if (superClass == null) {
-      return containingClass;
-    }
-
-    if (MethodHierarchyUtil.findBaseMethodInClass(method, superClass, true) == null) {
-      for (final PsiClass anInterface : containingClass.getInterfaces()) {
-        if (MethodHierarchyUtil.findBaseMethodInClass(method, anInterface, true) != null) {
-          return anInterface;
+  private static List<PsiClass> findInheritanceChain(PsiClass subClass, PsiClass superClass) {
+    Map<PsiClass, PsiClass> inheritanceMap = new HashMap<>();
+    Queue<PsiClass> workQueue = new ArrayDeque<>();
+    workQueue.add(subClass);
+    while (!workQueue.isEmpty()) {
+      PsiClass cls = workQueue.poll();
+      for (PsiClass sup : StreamEx.of(cls.getInterfaces()).prepend(cls.getSuperClass()).nonNull()) {
+        if (!inheritanceMap.containsKey(sup)) {
+          inheritanceMap.put(sup, cls);
+          workQueue.offer(sup);
+          if (sup == superClass) {
+            return StreamEx.iterate(superClass, c -> c != subClass, inheritanceMap::get).toList();
+          }
         }
       }
     }
-
-    return containingClass;
+    return Collections.emptyList();
   }
 
   @Nullable
   public final PsiMethod getBaseMethod() {
-    final PsiElement element = myMethod.getElement();
-    return element instanceof PsiMethod ? (PsiMethod)element : null;
+    return myMethod.getElement();
   }
 
-
-  @NotNull
   @Override
-  protected final Object[] buildChildren(@NotNull final HierarchyNodeDescriptor descriptor) {
+  protected final Object @NotNull [] buildChildren(@NotNull final HierarchyNodeDescriptor descriptor) {
     final PsiElement psiElement = ((MethodHierarchyNodeDescriptor)descriptor).getPsiClass();
-    if (!(psiElement instanceof PsiClass)) return ArrayUtil.EMPTY_OBJECT_ARRAY;
+    if (!(psiElement instanceof PsiClass)) return ArrayUtilRt.EMPTY_OBJECT_ARRAY;
     final PsiClass psiClass = (PsiClass)psiElement;
     final Collection<PsiClass> subclasses = getSubclasses(psiClass);
 
     final List<HierarchyNodeDescriptor> descriptors = new ArrayList<>(subclasses.size());
+    HierarchyBrowserManager.State state = HierarchyBrowserManager.getInstance(myProject).getState();
+    boolean hideNotImplemented = state != null && state.HIDE_CLASSES_WHERE_METHOD_NOT_IMPLEMENTED;
     for (final PsiClass aClass : subclasses) {
-      if (HierarchyBrowserManager.getInstance(myProject).getState().HIDE_CLASSES_WHERE_METHOD_NOT_IMPLEMENTED) {
+      if (hideNotImplemented) {
         if (shouldHideClass(aClass)) {
           continue;
         }
@@ -182,12 +123,13 @@ public final class MethodHierarchyTreeStructure extends HierarchyTreeStructure {
     return descriptors.toArray(new HierarchyNodeDescriptor[0]);
   }
 
-  private static Collection<PsiClass> getSubclasses(final PsiClass psiClass) {
+  private Collection<PsiClass> getSubclasses(final PsiClass psiClass) {
     if (psiClass instanceof PsiAnonymousClass || psiClass.hasModifierProperty(PsiModifier.FINAL)) {
       return Collections.emptyList();
     }
 
-    return ClassInheritorsSearch.search(psiClass, false).findAll();
+    final SearchScope searchScope = getSearchScope(myScopeType, psiClass);
+    return ClassInheritorsSearch.search(psiClass, searchScope, false).findAll();
   }
 
   private boolean shouldHideClass(final PsiClass psiClass) {
@@ -207,7 +149,7 @@ public final class MethodHierarchyTreeStructure extends HierarchyTreeStructure {
     return false;
   }
 
-  private boolean isAbstract(final PsiModifierListOwner owner) {
+  private static boolean isAbstract(final @NotNull PsiModifierListOwner owner) {
     return owner.hasModifierProperty(PsiModifier.ABSTRACT);
   }
 

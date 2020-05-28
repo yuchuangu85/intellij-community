@@ -1,9 +1,14 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.devkit.inspections;
 
 import com.intellij.openapi.module.Module;
+import com.intellij.psi.PsiClass;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.idea.devkit.inspections.quickfix.CreateHtmlDescriptionFix;
+import org.jetbrains.idea.devkit.util.ExtensionCandidate;
+import org.jetbrains.idea.devkit.util.ExtensionLocatorKt;
+
+import java.util.List;
 
 /**
  * @author Konstantin Bulenkov
@@ -20,6 +25,12 @@ public class IntentionDescriptionNotFoundInspection extends DescriptionNotFoundI
   }
 
   @Override
+  protected boolean skipIfNotRegistered(PsiClass epClass) {
+    final List<ExtensionCandidate> registrations = ExtensionLocatorKt.locateExtensionsByPsiClass(epClass);
+    return registrations.isEmpty();
+  }
+
+  @Override
   @NotNull
   protected String getHasNotDescriptionError() {
     return "Intention does not have a description";
@@ -29,11 +40,5 @@ public class IntentionDescriptionNotFoundInspection extends DescriptionNotFoundI
   @NotNull
   protected String getHasNotBeforeAfterError() {
     return "Intention must have 'before.*.template' and 'after.*.template' beside 'description.html'";
-  }
-
-  @Override
-  @NotNull
-  public String getShortName() {
-    return "IntentionDescriptionNotFoundInspection";
   }
 }

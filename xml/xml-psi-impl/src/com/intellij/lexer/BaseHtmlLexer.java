@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.lexer;
 
 import com.intellij.codeInsight.completion.CompletionUtilCore;
@@ -35,22 +21,19 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Locale;
 
 /**
  * @author Maxim.Mossienko
  */
 public abstract class BaseHtmlLexer extends DelegateLexer {
   protected static final int BASE_STATE_MASK = 0x3F;
-  private static final int SEEN_STYLE = 0x40;
-  private static final int SEEN_TAG = 0x80;
-  private static final int SEEN_SCRIPT = 0x100;
-  private static final int SEEN_ATTRIBUTE = 0x200;
-  private static final int SEEN_CONTENT_TYPE = 0x400;
-  private static final int SEEN_STYLESHEET_TYPE = 0x800;
-  protected static final int BASE_STATE_SHIFT = 11;
-  @Nullable
-  protected static final Language ourDefaultLanguage = Language.findLanguageByID("JavaScript");
+  private static final int SEEN_TAG = 0x40;
+  private static final int SEEN_ATTRIBUTE = 0x80;
+  private static final int SEEN_CONTENT_TYPE = 0x100;
+  private static final int SEEN_STYLESHEET_TYPE = 0x200;
+  private static final int SEEN_STYLE_SCRIPT_SHIFT = 10;
+  private static final int SEEN_STYLE_SCRIPT_MASK = 0x7 << SEEN_STYLE_SCRIPT_SHIFT;
+  protected static final int BASE_STATE_SHIFT = 13;
   @Nullable
   protected static final Language ourDefaultStyleLanguage = Language.findLanguageByID("CSS");
 
@@ -59,12 +42,16 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
   protected boolean seenStyle;
   protected boolean seenScript;
 
+  private static final char SCRIPT = 1;
+  private static final char STYLE = 2;
+  private final int[] scriptStyleStack = new int[] {0, 0};
+
   @Nullable
   protected String scriptType = null;
   @Nullable
   protected String styleType = null;
 
-  private final boolean caseInsensitive;
+  protected final boolean caseInsensitive;
   protected boolean seenContentType;
   protected boolean seenStylesheetType;
   private CharSequence cachedBufferSequence;
@@ -85,15 +72,7 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
 
     @Override
     public void handleElement(Lexer lexer) {
-      final CharSequence buffer;
-      if (lexerOfCacheBufferSequence == lexer) {
-        buffer = cachedBufferSequence;
-      } else {
-        cachedBufferSequence = lexer.getBufferSequence();
-        buffer = cachedBufferSequence;
-        lexerOfCacheBufferSequence = lexer;
-      }
-      final char firstCh = buffer.charAt(lexer.getTokenStart());
+      final char firstCh = getFirstChar(lexer);
 
       if (seenScript && !seenTag) {
         seenContentType = false;
@@ -116,7 +95,7 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
       }
 
       String name = TreeUtil.getTokenText(lexer);
-      if (caseInsensitive) name = name.toLowerCase(Locale.US);
+      if (caseInsensitive) name = StringUtil.toLowerCase(name);
 
       final boolean style = name.equals(TOKEN_STYLE);
       final int state = getState() & BASE_STATE_MASK;
@@ -133,8 +112,11 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
           return;
         }
 
-        seenStyle = style;
-        seenScript = script;
+        // If we have seenAttribute it means that we need to pop state
+        if (seenAttribute) {
+          popScriptStyle();
+        }
+        pushScriptStyle(script, style);
 
         if (!isHtmlTagState(state)) {
           seenAttribute=true;
@@ -143,12 +125,23 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
     }
   }
 
+  protected char getFirstChar(Lexer lexer) {
+    final CharSequence buffer;
+    if (lexerOfCacheBufferSequence == lexer) {
+      buffer = cachedBufferSequence;
+    } else {
+      cachedBufferSequence = lexer.getBufferSequence();
+      buffer = cachedBufferSequence;
+      lexerOfCacheBufferSequence = lexer;
+    }
+    return buffer.charAt(lexer.getTokenStart());
+  }
+
   class XmlAttributeValueEndHandler implements TokenHandler {
     @Override
     public void handleElement(Lexer lexer) {
       if (seenAttribute) {
-        seenStyle = false;
-        seenScript = false;
+        popScriptStyle();
         seenAttribute = false;
       }
       seenContentType = false;
@@ -156,16 +149,32 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
     }
   }
 
+  protected void pushScriptStyle(boolean script, boolean style) {
+    int position = scriptStyleStack[0] == 0 ? 0 : 1;
+    scriptStyleStack[position] = script ? SCRIPT :
+                                 style ? STYLE :
+                                 0;
+    seenStyle = style;
+    seenScript = script;
+  }
+
+  protected void popScriptStyle() {
+    int position = scriptStyleStack[1] == 0 ? 0 : 1;
+    scriptStyleStack[position] = 0;
+    seenStyle = scriptStyleStack[0] == STYLE;
+    seenScript = scriptStyleStack[0] == SCRIPT;
+  }
+
   class XmlAttributeValueHandler implements TokenHandler {
     @Override
     public void handleElement(Lexer lexer) {
       if (seenContentType && seenScript && !seenAttribute) {
         @NonNls String mimeType = TreeUtil.getTokenText(lexer);
-        scriptType = caseInsensitive ? mimeType.toLowerCase(Locale.US) : mimeType;
+        scriptType = caseInsensitive ? StringUtil.toLowerCase(mimeType) : mimeType;
       }
       if (seenStylesheetType && seenStyle && !seenAttribute) {
         @NonNls String type = TreeUtil.getTokenText(lexer).trim();
-        styleType = caseInsensitive ? type.toLowerCase(Locale.US) : type;
+        styleType = caseInsensitive ? StringUtil.toLowerCase(type) : type;
       }
     }
   }
@@ -175,7 +184,7 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
     Collection<Language> instancesByMimeType = Language.findInstancesByMimeType(scriptType != null ? scriptType.trim() : null);
     return instancesByMimeType.isEmpty() ? null : instancesByMimeType.iterator().next();
   }
-  
+
   @Nullable
   protected Language getStyleLanguage() {
     if (ourDefaultStyleLanguage != null && styleType != null && !"text/css".equals(styleType)) {
@@ -200,7 +209,7 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
   protected IElementType getCurrentStylesheetElementType() {
     Language language = getStyleLanguage();
     if (language != null) {
-      for (EmbeddedTokenTypesProvider provider : EmbeddedTokenTypesProvider.EXTENSION_POINT_NAME.getExtensions()) {
+      for (EmbeddedTokenTypesProvider provider : EmbeddedTokenTypesProvider.EXTENSION_POINT_NAME.getExtensionList()) {
         IElementType elementType = provider.getElementType();
         if (language.is(elementType.getLanguage())) {
           return elementType;
@@ -213,7 +222,8 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
   @Nullable
   protected HtmlScriptContentProvider findScriptContentProvider(@Nullable String mimeType) {
     if (StringUtil.isEmpty(mimeType)) {
-      return ourDefaultLanguage != null ? LanguageHtmlScriptContentProvider.getScriptContentProvider(ourDefaultLanguage) : null;
+      Language defaultLanguage = Language.findLanguageByID("JavaScript");
+      return defaultLanguage != null ? LanguageHtmlScriptContentProvider.getScriptContentProvider(defaultLanguage) : null;
     }
     Collection<Language> instancesByMimeType = Language.findInstancesByMimeType(mimeType.trim());
     if (instancesByMimeType.isEmpty() && mimeType.contains("template")) {
@@ -232,9 +242,7 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
     @Override
     public void handleElement(Lexer lexer) {
       if (seenAttribute) {
-        seenScript=false;
-        seenStyle=false;
-
+        popScriptStyle();
         seenAttribute=false;
       } else {
         if (seenStyle || seenScript) {
@@ -247,8 +255,7 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
   class XmlTagEndHandler implements TokenHandler {
     @Override
     public void handleElement(Lexer lexer) {
-      seenStyle=false;
-      seenScript=false;
+      popScriptStyle();
       seenAttribute=false;
       seenContentType=false;
       seenStylesheetType=false;
@@ -297,12 +304,14 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
   }
 
   private void initState(final int initialState) {
-    seenScript = (initialState & SEEN_SCRIPT)!=0;
-    seenStyle = (initialState & SEEN_STYLE)!=0;
     seenTag = (initialState & SEEN_TAG)!=0;
     seenAttribute = (initialState & SEEN_ATTRIBUTE)!=0;
     seenContentType = (initialState & SEEN_CONTENT_TYPE) != 0;
     seenStylesheetType = (initialState & SEEN_STYLESHEET_TYPE) != 0;
+    decodeScriptStack(((initialState & SEEN_STYLE_SCRIPT_MASK) >> SEEN_STYLE_SCRIPT_SHIFT));
+    int position = scriptStyleStack[1] == 0 ? 0 : 1;
+    seenStyle = scriptStyleStack[position] == STYLE;
+    seenScript = scriptStyleStack[position] == SCRIPT;
     lexerOfCacheBufferSequence = null;
     cachedBufferSequence = null;
   }
@@ -349,10 +358,8 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
         if (base.getTokenType() != XmlTokenType.XML_END_TAG_START) { // we are inside comment
           base.start(buf,lastStart+1,getBufferEnd(),lastState);
           base.getTokenType();
-          base.advance();
-        } else {
-          base.advance();
         }
+        base.advance();
 
         while(XmlTokenType.WHITESPACES.contains(base.getTokenType())) {
           base.advance();
@@ -360,7 +367,7 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
 
         if (base.getTokenType() == XmlTokenType.XML_NAME) {
           String name = TreeUtil.getTokenText(base);
-          if (caseInsensitive) name = name.toLowerCase(Locale.US);
+          if (caseInsensitive) name = StringUtil.toLowerCase(name);
 
           if(endOfTheEmbeddment(name)) {
             break; // really found end
@@ -413,14 +420,35 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
   public int getState() {
     int state = super.getState();
 
-    state |= ((seenScript)?SEEN_SCRIPT:0);
     state |= ((seenTag)?SEEN_TAG:0);
-    state |= ((seenStyle)?SEEN_STYLE:0);
     state |= ((seenAttribute)?SEEN_ATTRIBUTE:0);
     state |= ((seenContentType)?SEEN_CONTENT_TYPE:0);
     state |= ((seenStylesheetType)?SEEN_STYLESHEET_TYPE:0);
+    state |= encodeScriptStack() << SEEN_STYLE_SCRIPT_SHIFT;
 
     return state;
+  }
+
+  private int encodeScriptStack() {
+    if (scriptStyleStack[1] == 0) {
+      return scriptStyleStack[0];
+    }
+    if (scriptStyleStack[0] == 0) {
+      throw new IllegalStateException();
+    }
+    return scriptStyleStack[0] * 2 + scriptStyleStack[1];
+  }
+
+  private void decodeScriptStack(int value) {
+    if (value <= 2) {
+      scriptStyleStack[0] = value;
+      scriptStyleStack[1] = 0;
+    }
+    else {
+      value -= 3;
+      scriptStyleStack[0] = (value / 2) + 1;
+      scriptStyleStack[1] = (value % 2) + 1;
+    }
   }
 
   protected final boolean hasSeenStyle() {
@@ -437,6 +465,10 @@ public abstract class BaseHtmlLexer extends DelegateLexer {
 
   protected boolean hasSeenScript() {
     return seenScript;
+  }
+
+  protected int getBaseStateShift() {
+    return BASE_STATE_SHIFT;
   }
 
   protected abstract boolean isHtmlTagState(int state);

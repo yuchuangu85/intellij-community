@@ -1,5 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
-
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.impl.auxiliary;
 
 import com.intellij.lang.ASTNode;
@@ -11,10 +10,9 @@ import com.intellij.psi.impl.PsiManagerEx;
 import com.intellij.psi.impl.light.LightClassReference;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyTokenTypes;
-import org.jetbrains.plugins.groovy.lang.parser.GroovyElementTypes;
+import org.jetbrains.plugins.groovy.lang.parser.GroovyStubElementTypes;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyElementVisitor;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElementFactory;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.GrThrowsClause;
@@ -23,6 +21,7 @@ import org.jetbrains.plugins.groovy.lang.psi.impl.statements.typedef.GrReference
 import org.jetbrains.plugins.groovy.lang.psi.stubs.GrReferenceListStub;
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -31,7 +30,7 @@ import java.util.List;
  */
 public class GrThrowsClauseImpl extends GrReferenceListImpl implements GrThrowsClause {
   public GrThrowsClauseImpl(GrReferenceListStub stub) {
-    super(stub, GroovyElementTypes.THROW_CLAUSE);
+    super(stub, GroovyStubElementTypes.THROWS_CLAUSE);
   }
 
   @Override
@@ -54,14 +53,13 @@ public class GrThrowsClauseImpl extends GrReferenceListImpl implements GrThrowsC
   }
 
   @Override
-  @NotNull
-  public PsiJavaCodeReferenceElement[] getReferenceElements() {
+  public PsiJavaCodeReferenceElement @NotNull [] getReferenceElements() {
     PsiClassType[] types = getReferencedTypes();
     if (types.length == 0) return PsiJavaCodeReferenceElement.EMPTY_ARRAY;
 
     PsiManagerEx manager = getManager();
 
-    List<PsiJavaCodeReferenceElement> result = ContainerUtil.newArrayList();
+    List<PsiJavaCodeReferenceElement> result = new ArrayList<>();
     for (PsiClassType type : types) {
       PsiClassType.ClassResolveResult resolveResult = type.resolveGenerics();
       PsiClass resolved = resolveResult.getElement();
@@ -92,7 +90,7 @@ public class GrThrowsClauseImpl extends GrReferenceListImpl implements GrThrowsC
       }
 
       if (element instanceof PsiJavaCodeReferenceElement) {
-        element = GroovyPsiElementFactory.getInstance(getProject()).createCodeReferenceElementFromText(element.getText());
+        element = GroovyPsiElementFactory.getInstance(getProject()).createCodeReference(element.getText());
       }
     }
     return super.add(element);

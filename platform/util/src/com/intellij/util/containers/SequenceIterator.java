@@ -21,16 +21,17 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-public class SequenceIterator<T> implements Iterator<T> {
+class SequenceIterator<T> implements Iterator<T> {
   private final Iterator<T>[] myIterators;
   private int myCurrentIndex;
 
-  public SequenceIterator(@NotNull Iterator<T>... iterators){
+  @SafeVarargs
+  SequenceIterator(Iterator<? extends T> @NotNull ... iterators){
     //noinspection unchecked
     myIterators = new Iterator[iterators.length];
     System.arraycopy(iterators, 0, myIterators, 0, iterators.length);
   }
-  public SequenceIterator(@NotNull Collection<? extends Iterator<? extends T>> iterators) {
+  SequenceIterator(@NotNull Collection<? extends Iterator<? extends T>> iterators) {
     //noinspection unchecked
     this(iterators.toArray(new Iterator[0]));
   }
@@ -38,7 +39,7 @@ public class SequenceIterator<T> implements Iterator<T> {
   @Override
   public boolean hasNext(){
     for (int index = myCurrentIndex; index < myIterators.length; index++) {
-      Iterator iterator = myIterators[index];
+      Iterator<T> iterator = myIterators[index];
       if (iterator != null && iterator.hasNext()) {
         myCurrentIndex = index;
         return true;
@@ -65,12 +66,12 @@ public class SequenceIterator<T> implements Iterator<T> {
 
   @NotNull
   public static <T> SequenceIterator<T> create(@NotNull Iterator<T> first, @NotNull Iterator<T> second) {
-    return new SequenceIterator<T>(first, second);
+    return new SequenceIterator<>(first, second);
   }
 
   @NotNull
   public static <T> SequenceIterator<T> create(@NotNull Iterator<T> first, @NotNull Iterator<T> second, @NotNull Iterator<T> third) {
-    return new SequenceIterator<T>(first, second, third);
+    return new SequenceIterator<>(first, second, third);
   }
 }
 

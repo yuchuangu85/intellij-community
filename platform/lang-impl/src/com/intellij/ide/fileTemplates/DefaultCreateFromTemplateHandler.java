@@ -55,11 +55,10 @@ public class DefaultCreateFromTemplateHandler implements CreateFromTemplateHandl
     FileType type = FileTypeRegistry.getInstance().getFileTypeByFileName(fileName);
     PsiFile file = PsiFileFactory.getInstance(project).createFileFromText(fileName, type, templateText);
 
-    if (template.isReformatCode()) {
-      CodeStyleManager.getInstance(project).reformat(file);
-    }
-
     file = (PsiFile)directory.add(file);
+    if (template.isReformatCode()) {
+      CodeStyleManager.getInstance(project).scheduleReformatWhenSettingsComputed(file);
+    }
     return file;
   }
 
@@ -73,7 +72,7 @@ public class DefaultCreateFromTemplateHandler implements CreateFromTemplateHandl
   }
 
   @Override
-  public boolean canCreate(@NotNull final PsiDirectory[] dirs) {
+  public boolean canCreate(final PsiDirectory @NotNull [] dirs) {
     return true;
   }
 
@@ -86,6 +85,12 @@ public class DefaultCreateFromTemplateHandler implements CreateFromTemplateHandl
   @Override
   public String getErrorMessage() {
     return IdeBundle.message("title.cannot.create.file");
+  }
+
+  @Override
+  public void prepareProperties(@NotNull Map<String, Object> props, String filename, @NotNull FileTemplate template) {
+    String fileName = checkAppendExtension(filename, template);
+    props.put(FileTemplate.ATTRIBUTE_FILE_NAME, fileName);
   }
 
   @Override

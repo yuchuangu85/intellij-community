@@ -16,7 +16,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 
 public abstract class ApplyFilePatchBase<T extends FilePatch> implements ApplyFilePatch {
-  protected final static Logger LOG = Logger.getInstance("#com.intellij.openapi.diff.impl.patch.apply.ApplyFilePatchBase");
+  protected final static Logger LOG = Logger.getInstance(ApplyFilePatchBase.class);
   protected final T myPatch;
 
   public ApplyFilePatchBase(T patch) {
@@ -32,7 +32,7 @@ public abstract class ApplyFilePatchBase<T extends FilePatch> implements ApplyFi
                       final ApplyPatchContext context,
                       final Project project,
                       FilePath pathBeforeRename,
-                      Getter<CharSequence> baseContents,
+                      Getter<? extends CharSequence> baseContents,
                       CommitContext commitContext) throws IOException {
     if (LOG.isDebugEnabled()) {
       LOG.debug("apply patch called for : " + fileToPatch.getPath());
@@ -51,7 +51,7 @@ public abstract class ApplyFilePatchBase<T extends FilePatch> implements ApplyFi
 
   protected abstract void applyCreate(Project project, VirtualFile newFile, CommitContext commitContext) throws IOException;
 
-  protected abstract Result applyChange(Project project, VirtualFile fileToPatch, FilePath pathBeforeRename, Getter<CharSequence> baseContents) throws IOException;
+  protected abstract Result applyChange(Project project, VirtualFile fileToPatch, FilePath pathBeforeRename, Getter<? extends CharSequence> baseContents) throws IOException;
 
   @Nullable
   public static VirtualFile findPatchTarget(final ApplyPatchContext context, final String beforeName, final String afterName)

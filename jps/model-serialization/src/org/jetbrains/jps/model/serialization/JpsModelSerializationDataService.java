@@ -29,12 +29,9 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * @author nik
- */
 public class JpsModelSerializationDataService {
   /**
-   * @deprecated use {@link #computeAllPathVariables(org.jetbrains.jps.model.JpsGlobal)} instead
+   * @deprecated use {@link #computeAllPathVariables(JpsGlobal)} instead
    */
   @Deprecated
   @NotNull

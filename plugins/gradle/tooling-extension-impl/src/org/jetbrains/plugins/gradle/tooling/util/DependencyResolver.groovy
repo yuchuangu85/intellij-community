@@ -25,9 +25,12 @@ import org.jetbrains.plugins.gradle.model.ExternalDependency
 
 /**
  * @author Vladislav.Soroka
- * @since 8/19/2015
  */
 interface DependencyResolver {
+  String COMPILE_SCOPE = "COMPILE"
+  String RUNTIME_SCOPE = "RUNTIME"
+  String PROVIDED_SCOPE = "PROVIDED"
+
   Collection<ExternalDependency> resolveDependencies(@Nullable String configurationName)
 
   Collection<ExternalDependency> resolveDependencies(@Nullable Configuration configuration)

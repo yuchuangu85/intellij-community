@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.util.containers;
 
@@ -19,7 +19,7 @@ import java.util.concurrent.locks.LockSupport;
  * @param <V> the type of mapped values
  * Use {@link ContainerUtil#createConcurrentLongObjectMap()} to create this map
  */
-class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
+final class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
 
     /* ---------------- Constants -------------- */
 
@@ -339,7 +339,6 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
    *                        establishing the initial table size
    * @throws IllegalArgumentException if the initial capacity of
    *                                  elements is negative or the load factor is nonpositive
-   * @since 1.6
    */
   ConcurrentLongObjectHashMap(int initialCapacity, float loadFactor) {
     this(initialCapacity, loadFactor, 1);
@@ -461,7 +460,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
   public boolean containsValue(@NotNull Object value) {
     Node<V>[] t;
     if ((t = table) != null) {
-      Traverser<V> it = new Traverser<V>(t, t.length, 0, t.length);
+      Traverser<V> it = new Traverser<>(t, t.length, 0, t.length);
       for (Node<V> p; (p = it.advance()) != null; ) {
         V v;
         if ((v = p.val) == value || (v != null && value.equals(v))) {
@@ -503,7 +502,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
       }
       else if ((f = tabAt(tab, i = (n - 1) & hash)) == null) {
         if (casTabAt(tab, i, null,
-                     new Node<V>(hash, key, value, null))) {
+                     new Node<>(hash, key, value, null))) {
           break;                   // no lock when adding to empty bin
         }
       }
@@ -526,8 +525,8 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
                 }
                 Node<V> pred = e;
                 if ((e = e.next) == null) {
-                  pred.next = new Node<V>(hash, key,
-                                          value, null);
+                  pred.next = new Node<>(hash, key,
+                                         value, null);
                   break;
                 }
               }
@@ -715,7 +714,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
   @Override
   public Collection<V> values() {
     ValuesView<V> vs;
-    return (vs = values) != null ? vs : (values = new ValuesView<V>(this));
+    return (vs = values) != null ? vs : (values = new ValuesView<>(this));
   }
 
   /**
@@ -735,7 +734,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
    */
   public Set<LongEntry<V>> entrySet() {
     EntrySetView<V> es;
-    return (es = entrySet) != null ? es : (entrySet = new EntrySetView<V>(this));
+    return (es = entrySet) != null ? es : (entrySet = new EntrySetView<>(this));
   }
 
   /**
@@ -750,7 +749,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
     int h = 0;
     Node<V>[] t;
     if ((t = table) != null) {
-      Traverser<V> it = new Traverser<V>(t, t.length, 0, t.length);
+      Traverser<V> it = new Traverser<>(t, t.length, 0, t.length);
       for (Node<V> p; (p = it.advance()) != null; ) {
         h += p.key ^ p.val.hashCode();
       }
@@ -773,7 +772,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
   public String toString() {
     Node<V>[] t;
     int f = (t = table) == null ? 0 : t.length;
-    Traverser<V> it = new Traverser<V>(t, f, 0, f);
+    Traverser<V> it = new Traverser<>(t, f, 0, f);
     StringBuilder sb = new StringBuilder();
     sb.append('{');
     Node<V> p;
@@ -812,7 +811,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
       ConcurrentLongObjectMap<?> m = (ConcurrentLongObjectMap)o;
       Node<V>[] t;
       int f = (t = table) == null ? 0 : t.length;
-      Traverser<V> it = new Traverser<V>(t, f, 0, f);
+      Traverser<V> it = new Traverser<>(t, f, 0, f);
       for (Node<V> p; (p = it.advance()) != null; ) {
         V val = p.val;
         Object v = m.get(p.key);
@@ -916,10 +915,9 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
    *
    * @return an enumeration of the keys in this table
    */
-  @NotNull
   @Override
-  public long[] keys() {
-    Object[] entries = new EntrySetView<V>(this).toArray();
+  public long @NotNull [] keys() {
+    Object[] entries = new EntrySetView<>(this).toArray();
     long[] result = new long[entries.length];
     for (int i = 0; i < entries.length; i++) {
       LongEntry<V> entry = (LongEntry<V>)entries[i];
@@ -939,7 +937,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
   public Enumeration<V> elements() {
     Node<V>[] t;
     int f = (t = table) == null ? 0 : t.length;
-    return new ValueIterator<V>(t, f, 0, f, this);
+    return new ValueIterator<>(t, f, 0, f, this);
   }
 
   // ConcurrentHashMap-only methods
@@ -952,11 +950,10 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
    * there are concurrent insertions or removals.
    *
    * @return the number of mappings
-   * @since 1.8
    */
   public long mappingCount() {
     long n = sumCount();
-    return (n < 0L) ? 0L : n; // ignore transient negative values
+    return Math.max(n, 0L); // ignore transient negative values
   }
 
 
@@ -1139,7 +1136,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
       Node<V>[] tab = table;
       int n;
       if (tab == null || (n = tab.length) == 0) {
-        n = (sc > c) ? sc : c;
+        n = Math.max(sc, c);
         if (U.compareAndSwapInt(this, SIZECTL, sc, -1)) {
           try {
             if (table == tab) {
@@ -1201,7 +1198,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
       transferIndex = n;
     }
     int nextn = nextTab.length;
-    ForwardingNode<V> fwd = new ForwardingNode<V>(nextTab);
+    ForwardingNode<V> fwd = new ForwardingNode<>(nextTab);
     boolean advance = true;
     boolean finishing = false; // to ensure sweep before committing nextTab
     for (int i = 0, bound = 0; ; ) {
@@ -1274,10 +1271,10 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
                 long pk = p.key;
                 V pv = p.val;
                 if ((ph & n) == 0) {
-                  ln = new Node<V>(ph, pk, pv, ln);
+                  ln = new Node<>(ph, pk, pv, ln);
                 }
                 else {
-                  hn = new Node<V>(ph, pk, pv, hn);
+                  hn = new Node<>(ph, pk, pv, hn);
                 }
               }
               setTabAt(nextTab, i, ln);
@@ -1292,7 +1289,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
               int lc = 0, hc = 0;
               for (Node<V> e = t.first; e != null; e = e.next) {
                 int h = e.hash;
-                TreeNode<V> p = new TreeNode<V>
+                TreeNode<V> p = new TreeNode<>
                   (h, e.key, e.val, null, null);
                 if ((h & n) == 0) {
                   if ((p.prev = loTail) == null) {
@@ -1316,9 +1313,9 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
                 }
               }
               ln = (lc <= UNTREEIFY_THRESHOLD) ? untreeify(lo) :
-                   (hc != 0) ? new TreeBin<V>(lo) : t;
+                   (hc != 0) ? new TreeBin<>(lo) : t;
               hn = (hc <= UNTREEIFY_THRESHOLD) ? untreeify(hi) :
-                   (lc != 0) ? new TreeBin<V>(hi) : t;
+                   (lc != 0) ? new TreeBin<>(hi) : t;
               setTabAt(nextTab, i, ln);
               setTabAt(nextTab, i + n, hn);
               setTabAt(tab, i, fwd);
@@ -1463,8 +1460,8 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
             TreeNode<V> hd = null, tl = null;
             for (Node<V> e = b; e != null; e = e.next) {
               TreeNode<V> p =
-                new TreeNode<V>(e.hash, e.key, e.val,
-                                null, null);
+                new TreeNode<>(e.hash, e.key, e.val,
+                               null, null);
               if ((p.prev = tl) == null) {
                 hd = p;
               }
@@ -1473,7 +1470,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
               }
               tl = p;
             }
-            setTabAt(tab, index, new TreeBin<V>(hd));
+            setTabAt(tab, index, new TreeBin<>(hd));
           }
         }
       }
@@ -1486,7 +1483,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
   static <V> Node<V> untreeify(Node<V> b) {
     Node<V> hd = null, tl = null;
     for (Node<V> q = b; q != null; q = q.next) {
-      Node<V> p = new Node<V>(q.hash, q.key, q.val, null);
+      Node<V> p = new Node<>(q.hash, q.key, q.val, null);
       if (tl == null) {
         hd = p;
       }
@@ -1721,7 +1718,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
       for (TreeNode<V> p = root; ; ) {
         int dir, ph;
         if (p == null) {
-          first = root = new TreeNode<V>(h, k, v, null, null);
+          first = root = new TreeNode<>(h, k, v, null, null);
           break;
         }
         else if ((ph = p.hash) > h) {
@@ -1750,7 +1747,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
         TreeNode<V> xp = p;
         if ((p = (dir <= 0) ? p.left : p.right) == null) {
           TreeNode<V> x, f = first;
-          first = x = new TreeNode<V>(h, k, v, f, xp);
+          first = x = new TreeNode<>(h, k, v, f, xp);
           if (f != null) {
             f.prev = x;
           }
@@ -2267,7 +2264,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
         spare = s.next;
       }
       else {
-        s = new TableStack<V>();
+        s = new TableStack<>();
       }
       s.tab = t;
       s.length = n;
@@ -2456,9 +2453,8 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
 
     private static final String oomeMsg = "Required array size too large";
 
-    @NotNull
     @Override
-    public final Object[] toArray() {
+    public final Object @NotNull [] toArray() {
       long sz = map.mappingCount();
       if (sz > MAX_ARRAY_SIZE) {
         throw new OutOfMemoryError(oomeMsg);
@@ -2484,10 +2480,9 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
       return (i == n) ? r : Arrays.copyOf(r, i);
     }
 
-    @NotNull
     @Override
     @SuppressWarnings("unchecked")
-    public final <T> T[] toArray(@NotNull T[] a) {
+    public final <T> T @NotNull [] toArray(T @NotNull [] a) {
       long sz = map.mappingCount();
       if (sz > MAX_ARRAY_SIZE) {
         throw new OutOfMemoryError(oomeMsg);
@@ -2620,7 +2615,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
       ConcurrentLongObjectHashMap<V> m = map;
       Node<V>[] t;
       int f = (t = m.table) == null ? 0 : t.length;
-      return new ValueIterator<V>(t, f, 0, f, m);
+      return new ValueIterator<>(t, f, 0, f, m);
     }
 
     @Override
@@ -2637,7 +2632,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
   @NotNull
   @Override
   public Iterable<LongEntry<V>> entries() {
-    return new EntrySetView<V>(this);
+    return new EntrySetView<>(this);
   }
 
   /**
@@ -2682,7 +2677,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
       ConcurrentLongObjectHashMap<V> m = map;
       Node<V>[] t;
       int f = (t = m.table) == null ? 0 : t.length;
-      return new EntryIterator<V>(t, f, 0, f, m);
+      return new EntryIterator<>(t, f, 0, f, m);
     }
 
     @Override
@@ -2706,7 +2701,7 @@ class ConcurrentLongObjectHashMap<V> implements ConcurrentLongObjectMap<V> {
       int h = 0;
       Node<V>[] t;
       if ((t = map.table) != null) {
-        Traverser<V> it = new Traverser<V>(t, t.length, 0, t.length);
+        Traverser<V> it = new Traverser<>(t, t.length, 0, t.length);
         for (Node<V> p; (p = it.advance()) != null; ) {
           h += p.hashCode();
         }

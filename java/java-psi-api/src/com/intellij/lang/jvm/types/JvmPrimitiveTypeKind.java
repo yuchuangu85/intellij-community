@@ -12,9 +12,6 @@ import java.util.Map;
 
 import static com.intellij.psi.CommonClassNames.*;
 
-/**
- * @since 2018.2
- */
 public final class JvmPrimitiveTypeKind {
 
   public static final JvmPrimitiveTypeKind BOOLEAN = new JvmPrimitiveTypeKind("boolean", JAVA_LANG_BOOLEAN, "Z");
@@ -31,7 +28,7 @@ public final class JvmPrimitiveTypeKind {
   private final String myBoxedFqn;
   private final String myBinaryName;
 
-  private JvmPrimitiveTypeKind(String name, String boxedFqn, String binaryName) {
+  private JvmPrimitiveTypeKind(@NotNull String name, @NotNull String boxedFqn, @NotNull String binaryName) {
     myName = name;
     myBoxedFqn = boxedFqn;
     myBinaryName = binaryName;

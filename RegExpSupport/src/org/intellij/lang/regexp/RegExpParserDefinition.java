@@ -34,17 +34,12 @@ import org.jetbrains.annotations.NotNull;
 import java.util.EnumSet;
 
 public class RegExpParserDefinition implements ParserDefinition {
-    // whitespace to make handling char ranges simple, consider for example the following regex: [\Q[]\E-z]
-    private static final TokenSet WHITE_SPACE_TOKENS = TokenSet.create(RegExpTT.QUOTE_BEGIN, RegExpTT.QUOTE_END, TokenType.WHITE_SPACE);
-    private static final TokenSet COMMENT_TOKENS = TokenSet.create(RegExpTT.COMMENT);
-    private static final EnumSet<RegExpCapability> CAPABILITIES = EnumSet.of(RegExpCapability.NESTED_CHARACTER_CLASSES,
-                                                                             RegExpCapability.ALLOW_HORIZONTAL_WHITESPACE_CLASS,
-                                                                             RegExpCapability.UNICODE_CATEGORY_SHORTHAND,
-                                                                             RegExpCapability.EXTENDED_UNICODE_CHARACTER);
 
-    @NotNull
+  public static final IFileElementType REGEXP_FILE = new RegExpFileElementType();
+
+  @NotNull
     public EnumSet<RegExpCapability> getDefaultCapabilities() {
-        return CAPABILITIES;
+        return RegExpCapability.DEFAULT_CAPABILITIES;
     }
 
     @Override
@@ -70,13 +65,13 @@ public class RegExpParserDefinition implements ParserDefinition {
 
     @Override
     public IFileElementType getFileNodeType() {
-        return RegExpElementTypes.REGEXP_FILE;
+        return REGEXP_FILE;
     }
 
     @Override
     @NotNull
     public TokenSet getWhitespaceTokens() {
-        return WHITE_SPACE_TOKENS;
+        return TokenSet.create(RegExpTT.QUOTE_BEGIN, RegExpTT.QUOTE_END, TokenType.WHITE_SPACE);
     }
 
     @Override
@@ -88,7 +83,7 @@ public class RegExpParserDefinition implements ParserDefinition {
     @Override
     @NotNull
     public TokenSet getCommentTokens() {
-        return COMMENT_TOKENS;
+        return TokenSet.create(RegExpTT.COMMENT);
     }
 
     @Override
@@ -129,8 +124,8 @@ public class RegExpParserDefinition implements ParserDefinition {
             return new RegExpIntersectionImpl(node);
         } else if (type == RegExpElementTypes.NAMED_GROUP_REF) {
             return new RegExpNamedGroupRefImpl(node);
-        } else if (type == RegExpElementTypes.PY_COND_REF) {
-            return new RegExpPyCondRefImpl(node);
+        } else if (type == RegExpElementTypes.CONDITIONAL) {
+            return new RegExpConditionalImpl(node);
         } else if (type == RegExpElementTypes.POSIX_BRACKET_EXPRESSION) {
             return new RegExpPosixBracketExpressionImpl(node);
         } else if (type == RegExpElementTypes.NUMBER) {

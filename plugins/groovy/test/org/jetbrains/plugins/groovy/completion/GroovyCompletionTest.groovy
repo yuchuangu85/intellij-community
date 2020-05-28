@@ -34,6 +34,7 @@ class GroovyCompletionTest extends GroovyCompletionTestBase {
   @Override
   protected void tearDown() {
     CodeInsightSettings.instance.COMPLETION_CASE_SENSITIVE = CodeInsightSettings.FIRST_LETTER
+    CodeInsightSettings.instance.AUTOCOMPLETE_ON_CODE_COMPLETION = true
     super.tearDown()
   }
 
@@ -1159,8 +1160,8 @@ public class KeyVO {
 
     def presentation = LookupElementPresentation.renderElement(myFixture.lookupElements[0])
     assertEquals 'Util.bar', presentation.itemText
-    assertEquals '() (bar)', presentation.tailText
-    assert !presentation.tailGrayed
+    assertEquals '() bar', presentation.tailText
+    assert !presentation.tailFragments.any { it.grayed }
 
     myFixture.type 'f\n'
     myFixture.checkResult '''import foo.Util
@@ -1340,6 +1341,7 @@ def foo(Integer a) {
 }
 ''')
   }
+
 
   void testSuperExtendsInTypeParams() {
     myFixture.configureByText("_.groovy", '''\
@@ -1950,5 +1952,21 @@ class C implements T<String> {
     configure('new U<caret>x')
     myFixture.completeBasic()
     assert myFixture.lookupElements[0].object == uClass
+  }
+
+  void "test after new editing prefix back and forth when sometimes there are expected type suggestions and sometimes not"() {
+    CodeInsightSettings.instance.AUTOCOMPLETE_ON_CODE_COMPLETION = false
+
+    myFixture.addClass("class Super {}")
+    myFixture.addClass("class Sub extends Super {}")
+    myFixture.addClass("package foo; public class SubOther {}")
+    myFixture.configureByText('a.groovy', "Super s = new SubO<caret>")
+
+    myFixture.completeBasic()
+    myFixture.assertPreferredCompletionItems 0, 'SubOther'
+    myFixture.type('\b')
+    myFixture.assertPreferredCompletionItems 0, 'Sub'
+    myFixture.type('O')
+    myFixture.assertPreferredCompletionItems 0, 'SubOther'
   }
 }

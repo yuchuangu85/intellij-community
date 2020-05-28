@@ -1,7 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.ui.panel;
 
 import com.intellij.icons.AllIcons;
+import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.ui.popup.IconButton;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.text.StringUtil;
@@ -9,6 +10,7 @@ import com.intellij.ui.*;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
@@ -16,7 +18,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
 public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
-  private static final Color SEPARATOR_COLOR = new JBColor(Gray.xC9, Gray.x55);
+  private static final Color SEPARATOR_COLOR = JBUI.CurrentTheme.CustomFrameDecorations.separatorForeground();
 
   private final JProgressBar myProgressBar;
   private String initialLabelText;
@@ -32,8 +34,6 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
 
   private boolean commentEnabled = true;
   private boolean topSeparatorEnabled;
-
-  private boolean valid = true;
 
   public ProgressPanelBuilder(JProgressBar progressBar) {
     myProgressBar = progressBar;
@@ -68,7 +68,6 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
      */
   public ProgressPanelBuilder withCancel(@NotNull Runnable cancelAction) {
     this.cancelAction = cancelAction;
-    valid = resumeAction == null && pauseAction == null;
     return this;
   }
 
@@ -103,7 +102,6 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
      */
   public ProgressPanelBuilder withResume(@NotNull Runnable playAction) {
     this.resumeAction = playAction;
-    valid = pauseAction != null && cancelAction == null;
     return this;
   }
 
@@ -115,7 +113,6 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
      */
   public ProgressPanelBuilder withPause(@NotNull Runnable pauseAction) {
     this.pauseAction = pauseAction;
-    valid = resumeAction != null && cancelAction == null;
     return this;
   }
 
@@ -156,17 +153,17 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
     JPanel panel = new JPanel(new GridBagLayout());
     GridBagConstraints gc = new GridBagConstraints(0, 0, 1, 1, 0, 0, GridBagConstraints.LINE_START, GridBagConstraints.HORIZONTAL,
                                                    null, 0, 0);
-    addToPanel(panel, gc);
+    addToPanel(panel, gc, false);
     return panel;
   }
 
   @Override
   public boolean constrainsValid() {
-    return valid;
+    return true;
   }
 
   @Override
-  public void addToPanel(JPanel panel, GridBagConstraints gc) {
+  public void addToPanel(JPanel panel, GridBagConstraints gc, boolean splitColumns) {
     if (constrainsValid()) {
       new LabeledPanelImpl().addToPanel(panel, gc);
     }
@@ -175,7 +172,8 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
   @Override
   public int gridWidth() {
     int width = labelAbove ? 1 : 2;
-    width += (cancelAction != null || resumeAction != null && pauseAction != null) ? 1 : 0;
+    width += (cancelAction != null) ? 1 : 0;
+    width += (resumeAction != null && pauseAction != null) ? 1 : 0;
     return width;
   }
 
@@ -186,20 +184,23 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
     private String myCommentText = emptyComment();
     private boolean myServiceComment = false;
 
-    private InplaceButton button;
     private final IconButton cancelIcon;
     private final IconButton resumeIcon;
     private final IconButton pauseIcon;
+
+    private JButton myCancelButtonAsButton;
+    private InplaceButton myCancelButton;
+    private InplaceButton mySuspendButton;
 
     private final SeparatorComponent mySeparatorComponent = new SeparatorComponent(SEPARATOR_COLOR, SeparatorOrientation.HORIZONTAL);
 
     private State state = State.PLAYING;
 
     private LabeledPanelImpl() {
-      label = new JLabel(StringUtil.isNotEmpty(initialLabelText) ? initialLabelText : "");
+      label = new JLabel(StringUtil.isNotEmpty(initialLabelText) ? initialLabelText : " ");
 
       comment = new JLabel(myCommentText);
-      comment.setForeground(Gray.x78);
+      comment.setForeground(UIUtil.getContextHelpForeground());
       if (SystemInfo.isMac) {
         Font font = comment.getFont();
         float size = font.getSize2D();
@@ -235,7 +236,7 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
 
     @Override
     public void setLabelText(String labelText) {
-      label.setText(StringUtil.isNotEmpty(labelText) ? labelText : "");
+      label.setText(StringUtil.isNotEmpty(labelText) ? labelText : " ");
 
       if (StringUtil.isNotEmpty(labelText)) {
         Dimension size = comment.getPreferredSize();
@@ -257,8 +258,35 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
     }
 
     @Override
+    public void setLabelEnabled(boolean enabled) {
+      label.setEnabled(enabled);
+    }
+
+    @Override
+    public void setCommentEnabled(boolean enabled) {
+      comment.setEnabled(enabled);
+    }
+
+    @Override
     public void setSeparatorEnabled(boolean enabled) {
       mySeparatorComponent.setVisible(enabled);
+    }
+
+    @Override
+    public @Nullable JButton getCancelButtonAsButton() {
+      return myCancelButtonAsButton;
+    }
+
+    @Nullable
+    @Override
+    public InplaceButton getCancelButton() {
+      return myCancelButton;
+    }
+
+    @Nullable
+    @Override
+    public InplaceButton getSuspendButton() {
+      return mySuspendButton;
     }
 
     private void setCommentText(String commentText, boolean serviceComment) {
@@ -266,9 +294,11 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
         myServiceComment = commentText != null;
         comment.setText(commentText == null ? myCommentText : commentText);
       }
-      else if (!myServiceComment) {
+      else {
         myCommentText = StringUtil.isNotEmpty(commentText) ? commentText : emptyComment();
-        comment.setText(myCommentText);
+        if (!myServiceComment) {
+          comment.setText(myCommentText);
+        }
       }
     }
 
@@ -317,45 +347,43 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
 
       if (cancelAction != null) {
         if (cancelAsButton) {
-          JButton cancelButton = new JButton(cancelText);
-          cancelButton.addActionListener((e) -> cancelAction.run());
-          panel.add(cancelButton, gc);
+          myCancelButtonAsButton = new JButton(cancelText);
+          myCancelButtonAsButton.addActionListener((e) -> cancelAction.run());
+          panel.add(myCancelButtonAsButton, gc);
         }
         else {
-          button = new InplaceButton(cancelIcon, a -> {
-            button.setPainting(false);
+          myCancelButton = new InplaceButton(cancelIcon, a -> {
+            myCancelButton.setPainting(false);
             state = State.CANCELLED;
             cancelAction.run();
           }).setFillBg(false);
         }
       }
-      else if (resumeAction != null && pauseAction != null) {
-        button = new InplaceButton(pauseIcon, a -> {
+      if (resumeAction != null && pauseAction != null) {
+        mySuspendButton = new InplaceButton(pauseIcon, a -> {
           if (state == State.PLAYING) {
-            button.setIcons(resumeIcon);
+            mySuspendButton.setIcons(resumeIcon);
             state = State.PAUSED;
-            setCommentText("Paused", true);
+            setCommentText(IdeBundle.message("comment.text.paused"), true);
             pauseAction.run();
           }
           else {
-            button.setIcons(pauseIcon);
+            mySuspendButton.setIcons(pauseIcon);
             state = State.PLAYING;
-            setCommentText("Pause", true);
+            setCommentText(IdeBundle.message("comment.text.pause"), true);
             resumeAction.run();
           }
         }).setFillBg(false);
       }
 
-      if (button != null) {
-        button.setMinimumSize(button.getPreferredSize());
-
-        if (commentEnabled) {
-          button.addMouseListener(new HoverListener());
+      if (mySuspendButton != null) {
+        addButton(panel, gc, mySuspendButton, false);
+      }
+      if (myCancelButton != null) {
+        if (mySuspendButton != null) {
+          gc.gridx++;
         }
-
-        gc.anchor = GridBagConstraints.EAST;
-        gc.fill = GridBagConstraints.NONE;
-        panel.add(button, gc);
+        addButton(panel, gc, myCancelButton, true);
       }
 
       if (commentEnabled) {
@@ -371,23 +399,38 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
       gc.gridy++;
     }
 
+    private void addButton(@NotNull JPanel panel, @NotNull GridBagConstraints gc, @NotNull InplaceButton button, boolean cancel) {
+      button.setMinimumSize(button.getPreferredSize());
+
+      if (commentEnabled) {
+        button.addMouseListener(new HoverListener(cancel));
+      }
+
+      gc.anchor = GridBagConstraints.EAST;
+      gc.fill = GridBagConstraints.NONE;
+      panel.add(button, gc);
+    }
+
     private class HoverListener extends MouseAdapter {
+      private final boolean myCancel;
+
+      private HoverListener(boolean cancel) {
+        myCancel = cancel;
+      }
+
       @Override
       public void mouseEntered(MouseEvent e) {
-        if (cancelAction != null) {
+        if (myCancel) {
           setCommentText(cancelText, true);
         }
-        else if (resumeAction != null && pauseAction != null) {
-          setCommentText(state == State.PLAYING ? "Pause" : "Resume", true);
-        }
         else {
-          setCommentText(null, true);
+          setCommentText(state == State.PLAYING ? IdeBundle.message("comment.text.pause") : IdeBundle.message("comment.text.resume"), true);
         }
       }
 
       @Override
       public void mouseExited(MouseEvent e) {
-        setCommentText(state != State.PAUSED ? null : "Paused", true);
+        setCommentText(state != State.PAUSED ? null : IdeBundle.message("comment.text.paused"), true);
       }
     }
   }

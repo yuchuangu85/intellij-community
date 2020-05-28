@@ -1,104 +1,146 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.project.impl;
 
-import com.intellij.ide.plugins.IdeaPluginDescriptor;
+import com.intellij.configurationStore.StoreUtil;
+import com.intellij.ide.plugins.ContainerDescriptor;
+import com.intellij.ide.plugins.IdeaPluginDescriptorImpl;
+import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.ide.startup.StartupManagerEx;
+import com.intellij.idea.ApplicationLoader;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.ex.ApplicationEx;
+import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.application.ex.ApplicationManagerEx;
-import com.intellij.openapi.application.impl.ApplicationInfoImpl;
 import com.intellij.openapi.application.impl.LaterInvocator;
-import com.intellij.openapi.components.*;
-import com.intellij.openapi.components.impl.PlatformComponentManagerImpl;
-import com.intellij.openapi.components.impl.ProjectPathMacroManager;
+import com.intellij.openapi.components.ServiceManager;
+import com.intellij.openapi.components.StorageScheme;
 import com.intellij.openapi.components.impl.stores.IComponentStore;
 import com.intellij.openapi.components.impl.stores.IProjectStore;
-import com.intellij.openapi.components.impl.stores.StoreUtil;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.extensions.ExtensionPointName;
-import com.intellij.openapi.extensions.Extensions;
-import com.intellij.openapi.fileEditor.FileEditorManager;
-import com.intellij.openapi.fileEditor.impl.EditorsSplitters;
-import com.intellij.openapi.fileEditor.impl.FileEditorManagerImpl;
 import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.module.impl.ModuleManagerImpl;
 import com.intellij.openapi.progress.ProgressIndicator;
-import com.intellij.openapi.progress.ProgressIndicatorProvider;
-import com.intellij.openapi.progress.ProgressManager;
-import com.intellij.openapi.project.DumbAwareRunnable;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.ProjectLoadHelper;
+import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.project.ex.ProjectEx;
 import com.intellij.openapi.project.ex.ProjectManagerEx;
 import com.intellij.openapi.startup.StartupManager;
+import com.intellij.openapi.util.AtomicNotNullLazyValue;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.WindowManager;
 import com.intellij.openapi.wm.impl.FrameTitleBuilder;
-import com.intellij.project.ProjectKt;
+import com.intellij.project.ProjectStoreOwner;
 import com.intellij.psi.impl.DebugUtil;
+import com.intellij.serviceContainer.ComponentManagerImpl;
 import com.intellij.util.PathUtil;
 import com.intellij.util.TimedReference;
-import com.intellij.util.io.storage.HeavyProcessLatch;
-import com.intellij.util.pico.CachingConstructorInjectionComponentAdapter;
+import com.intellij.util.messages.impl.MessageBusEx;
 import org.jetbrains.annotations.*;
-import org.picocontainer.*;
 
 import javax.swing.*;
+import java.nio.file.Path;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
-public class ProjectImpl extends PlatformComponentManagerImpl implements ProjectEx {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.project.impl.ProjectImpl");
+public class ProjectImpl extends ComponentManagerImpl implements ProjectEx, ProjectStoreOwner {
+  private static final Logger LOG = Logger.getInstance(ProjectImpl.class);
 
-  public static final String NAME_FILE = ".name";
   public static final Key<Long> CREATION_TIME = Key.create("ProjectImpl.CREATION_TIME");
+
   public static final Key<String> CREATION_TRACE = Key.create("ProjectImpl.CREATION_TRACE");
+
   @TestOnly
   public static final String LIGHT_PROJECT_NAME = "light_temp";
 
-  private final AtomicBoolean mySavingInProgress = new AtomicBoolean(false);
   private String myName;
   private final boolean myLight;
-  private static boolean ourClassesAreLoaded;
+  static boolean ourClassesAreLoaded;
+  private final String creationTrace;
+  private ProjectStoreFactory myProjectStoreFactory;
 
-  /**
-   * @param filePath System-independent path
-   */
-  protected ProjectImpl(@NotNull String filePath, @Nullable String projectName) {
-    super(ApplicationManager.getApplication(), "Project " + (projectName == null ? filePath : projectName));
+  private final AtomicReference<Disposable> earlyDisposable = new AtomicReference<>(Disposer.newDisposable());
+  private volatile boolean temporarilyDisposed;
+
+  private final AtomicNotNullLazyValue<IComponentStore> myComponentStore = AtomicNotNullLazyValue.createValue(() -> {
+    ProjectStoreFactory factory = myProjectStoreFactory != null ? myProjectStoreFactory : ServiceManager.getService(ProjectStoreFactory.class);
+    return factory.createStore(this);
+  });
+
+  protected ProjectImpl(@NotNull Path filePath, @Nullable String projectName) {
+    super((ComponentManagerImpl)ApplicationManager.getApplication());
+
+    putUserData(CREATION_TIME, System.nanoTime());
+    creationTrace = ApplicationManager.getApplication().isUnitTestMode() ? DebugUtil.currentStackTrace() : null;
+
+    registerServiceInstance(Project.class, this, ComponentManagerImpl.getFakeCorePluginDescriptor());
+
+    myName = projectName;
+    // light project may be changed later during test, so we need to remember its initial state
+    //noinspection TestOnlyProblems
+    myLight = ApplicationManager.getApplication().isUnitTestMode() && filePath.toString().contains(LIGHT_PROJECT_NAME);
+  }
+
+  static final String TEMPLATE_PROJECT_NAME = "Default (Template) Project";
+
+  // default project constructor
+  ProjectImpl() {
+    super((ComponentManagerImpl)ApplicationManager.getApplication());
 
     putUserData(CREATION_TIME, System.nanoTime());
     if (ApplicationManager.getApplication().isUnitTestMode()) {
       putUserData(CREATION_TRACE, DebugUtil.currentStackTrace());
     }
 
-    getPicoContainer().registerComponentInstance(Project.class, this);
+    creationTrace = ApplicationManager.getApplication().isUnitTestMode() ? DebugUtil.currentStackTrace() : null;
 
-    if (!isDefault()) {
-      getStateStore().setPath(filePath);
-    }
-
-    myName = projectName;
-    // light project may be changed later during test, so we need to remember its initial state
-    myLight = ApplicationManager.getApplication().isUnitTestMode() && filePath.contains(LIGHT_PROJECT_NAME);
+    myName = TEMPLATE_PROJECT_NAME;
+    myLight = false;
   }
 
   @Override
-  public boolean isDisposed() {
+  public final boolean isDisposed() {
     return super.isDisposed() || temporarilyDisposed;
   }
 
+  @Override
   @TestOnly
   public boolean isLight() {
     return myLight;
   }
 
-  private volatile boolean temporarilyDisposed;
   @TestOnly
-  void setTemporarilyDisposed(boolean disposed) {
-    temporarilyDisposed = disposed;
+  void setTemporarilyDisposed(boolean value) {
+    if (temporarilyDisposed == value) {
+      return;
+    }
+
+    if (value && super.isDisposed()) {
+      throw new IllegalStateException("Project was already disposed, flag temporarilyDisposed cannot be set to `true`");
+    }
+
+    if (!value) {
+      Disposable newDisposable = Disposer.newDisposable();
+      if (!earlyDisposable.compareAndSet(null, newDisposable)) {
+        throw new IllegalStateException("earlyDisposable must be null on second opening of light project");
+      }
+    }
+
+    // Must be not only on temporarilyDisposed = true, but also on temporarilyDisposed = false,
+    // because events fired for temporarilyDisposed project between project close and project open and it can lead to cache population.
+    // Message bus implementation can be complicated to add owner.isDisposed check before getting subscribers, but as bus is a very important subsystem,
+    // better to not add any non-production logic
+
+    // light project is not disposed, so, subscriber cache contains handlers that will handle events for a temporarily disposed project,
+    // so, we clear subscriber cache. `isDisposed` for project returns `true` if `temporarilyDisposed`, so, handler will be not added.
+    ((MessageBusEx)getMessageBus()).clearAllSubscriberCache();
+
+    temporarilyDisposed = value;
   }
 
   @TestOnly
@@ -106,114 +148,85 @@ public class ProjectImpl extends PlatformComponentManagerImpl implements Project
     return temporarilyDisposed;
   }
 
+  /**
+   * This method is temporary introduced to allow overriding project store class for a specific project. Overriding ProjectStoreFactory
+   * service won't work because a service may be overridden in a single plugin only.
+   */
+  @ApiStatus.Internal
+  public void setProjectStoreFactory(ProjectStoreFactory projectStoreFactory) {
+    myProjectStoreFactory = projectStoreFactory;
+  }
+
   @Override
   public void setProjectName(@NotNull String projectName) {
-    if (!projectName.equals(myName)) {
-      myName = projectName;
+    if (projectName.equals(myName)) {
+      return;
+    }
 
-      StartupManager.getInstance(this).runWhenProjectIsInitialized((DumbAwareRunnable)() -> {
-        if (isDisposed()) return;
+    myName = projectName;
 
-        JFrame frame = WindowManager.getInstance().getFrame(this);
-        String title = FrameTitleBuilder.getInstance().getProjectTitle(this);
-        if (frame != null && title != null) {
-          frame.setTitle(title);
-        }
+    if (!ApplicationManager.getApplication().isUnitTestMode()) {
+      StartupManager.getInstance(this).runAfterOpened(() -> {
+        ApplicationManager.getApplication().invokeLater(() -> {
+          JFrame frame = WindowManager.getInstance().getFrame(this);
+          String title = FrameTitleBuilder.getInstance().getProjectTitle(this);
+          if (frame != null && title != null) {
+            frame.setTitle(title);
+          }
+        }, ModalityState.NON_MODAL, getDisposed());
       });
     }
   }
 
-  @Override
-  protected void bootstrapPicoContainer(@NotNull String name) {
-    Extensions.instantiateArea(ExtensionAreas.IDEA_PROJECT, this, null);
-    super.bootstrapPicoContainer(name);
-    final MutablePicoContainer picoContainer = getPicoContainer();
-
-    final ProjectStoreClassProvider projectStoreClassProvider =
-      (ProjectStoreClassProvider)picoContainer.getComponentInstanceOfType(ProjectStoreClassProvider.class);
-
-    picoContainer.registerComponentImplementation(PathMacroManager.class, ProjectPathMacroManager.class);
-    picoContainer.registerComponent(new ComponentAdapter() {
-      private ComponentAdapter myDelegate;
-
-      @NotNull
-      private ComponentAdapter getDelegate() {
-        if (myDelegate == null) {
-          Class storeClass = projectStoreClassProvider.getProjectStoreClass(isDefault());
-          myDelegate = new CachingConstructorInjectionComponentAdapter(storeClass, storeClass, null, true);
-        }
-        return myDelegate;
-      }
-
-      @Override
-      public Object getComponentKey() {
-        return IComponentStore.class;
-      }
-
-      @Override
-      public Class getComponentImplementation() {
-        return getDelegate().getComponentImplementation();
-      }
-
-      @Override
-      public Object getComponentInstance(final PicoContainer container) throws PicoInitializationException, PicoIntrospectionException {
-        return getDelegate().getComponentInstance(container);
-      }
-
-      @Override
-      public void verify(final PicoContainer container) throws PicoIntrospectionException {
-        getDelegate().verify(container);
-      }
-
-      @Override
-      public void accept(final PicoVisitor visitor) {
-        visitor.visitComponentAdapter(this);
-        getDelegate().accept(visitor);
-      }
-    });
+  // do not call for default project
+  @NotNull
+  public final IProjectStore getStateStore() {
+    return (IProjectStore)getComponentStore();
   }
 
+  @Override
   @NotNull
-  IProjectStore getStateStore() {
-    return ProjectKt.getStateStore(this);
+  public IComponentStore getComponentStore() {
+    return myComponentStore.getValue();
   }
 
   @Override
   public boolean isOpen() {
-    return ProjectManagerEx.getInstanceEx().isProjectOpened(this);
+    ProjectManagerEx projectManager = ProjectManagerEx.getInstanceExIfCreated();
+    return projectManager != null && projectManager.isProjectOpened(this);
   }
 
   @Override
   public boolean isInitialized() {
-    return !isDisposed() && isOpen() && StartupManagerEx.getInstanceEx(this).startupActivityPassed();
+    return getComponentCreated() && !isDisposed() && isOpen() && StartupManagerEx.getInstanceEx(this).startupActivityPassed();
   }
 
   @NotNull
   @Override
-  public List<ComponentConfig> getMyComponentConfigsFromDescriptor(@NotNull IdeaPluginDescriptor plugin) {
-    return plugin.getProjectComponents();
+  protected ContainerDescriptor getContainerDescriptor(@NotNull IdeaPluginDescriptorImpl pluginDescriptor) {
+    return pluginDescriptor.getProject();
   }
 
   @Nullable
   @Override
   public @SystemIndependent String getProjectFilePath() {
-    return isDefault() ? null : getStateStore().getProjectFilePath();
+    return getStateStore().getProjectFilePath();
   }
 
   @Override
   public VirtualFile getProjectFile() {
-    return isDefault() ? null : LocalFileSystem.getInstance().findFileByPath(getStateStore().getProjectFilePath());
+    return LocalFileSystem.getInstance().findFileByPath(getStateStore().getProjectFilePath());
   }
 
   @Override
   public VirtualFile getBaseDir() {
-    return isDefault() ? null : LocalFileSystem.getInstance().findFileByPath(getStateStore().getProjectBasePath());
+    return LocalFileSystem.getInstance().findFileByPath(getStateStore().getProjectBasePath());
   }
 
   @Override
   @Nullable
   public @SystemIndependent String getBasePath() {
-    return isDefault() ? null : getStateStore().getProjectBasePath();
+    return getStateStore().getProjectBasePath();
   }
 
   @NotNull
@@ -227,10 +240,6 @@ public class ProjectImpl extends PlatformComponentManagerImpl implements Project
 
   @Override
   public @SystemDependent String getPresentableUrl() {
-    if (isDefault()) {
-      return null;
-    }
-
     IProjectStore store = getStateStore();
     return PathUtil.toSystemDependentName(store.getStorageScheme() == StorageScheme.DIRECTORY_BASED ? store.getProjectBasePath() : store.getProjectFilePath());
   }
@@ -244,42 +253,42 @@ public class ProjectImpl extends PlatformComponentManagerImpl implements Project
       str = getName();
     }
 
-    final String prefix = !isDefault() && getStateStore().getStorageScheme() == StorageScheme.DIRECTORY_BASED ? "" : getName();
+    final String prefix = getStateStore().getStorageScheme() == StorageScheme.DIRECTORY_BASED ? "" : getName();
     return prefix + Integer.toHexString(str.hashCode());
   }
 
   @Override
   @Nullable
   public VirtualFile getWorkspaceFile() {
-    String workspaceFilePath = isDefault() ? null : getStateStore().getWorkspaceFilePath();
+    String workspaceFilePath = getStateStore().getWorkspaceFilePath();
     return workspaceFilePath == null ? null : LocalFileSystem.getInstance().findFileByPath(workspaceFilePath);
   }
 
-  @Override
-  public void init() {
+  public void init(@Nullable ProgressIndicator indicator) {
     Application application = ApplicationManager.getApplication();
 
-    long start = System.currentTimeMillis();
+    // before components
+    CompletableFuture<?> servicePreloadingFuture;
+    //noinspection rawtypes
+    List plugins = PluginManagerCore.getLoadedPlugins();
+    // for light project preload only services that are essential (await means "project component loading activity is completed only when all such services are completed")
+    //noinspection TestOnlyProblems,unchecked
+    servicePreloadingFuture = ApplicationLoader
+      .preloadServices(plugins, this, /* activityPrefix = */ "project ", /* onlyIfAwait = */ isLight());
 
-    ProgressIndicator progressIndicator = isDefault() ? null : ProgressIndicatorProvider.getGlobalProgressIndicator();
-    init(progressIndicator,
-         () -> application.getMessageBus().syncPublisher(ProjectLifecycleListener.TOPIC).projectComponentsRegistered(this));
+    createComponents(indicator);
 
-    long time = System.currentTimeMillis() - start;
-    String message = getComponentConfigCount() + " project components initialized in " + time + " ms";
-    if (application.isUnitTestMode()) {
-      LOG.debug(message);
-    } else {
-      LOG.info(message);
+    servicePreloadingFuture.join();
+
+    if (indicator != null && !application.isHeadlessEnvironment()) {
+      distributeProgress(indicator);
     }
 
-    if (!isDefault() && !application.isHeadlessEnvironment()) {
-      distributeProgress();
-    }
     if (myName == null) {
       myName = getStateStore().getProjectName();
     }
-    application.getMessageBus().syncPublisher(ProjectLifecycleListener.TOPIC).projectComponentsInitialized(this);
+
+    ProjectLoadHelper.notifyThatComponentCreated(this);
   }
 
   @Override
@@ -287,10 +296,7 @@ public class ProjectImpl extends PlatformComponentManagerImpl implements Project
     indicator.setFraction(getPercentageOfComponentsLoaded() / (ourClassesAreLoaded ? 10 : 2));
   }
 
-  private void distributeProgress() {
-    ProgressIndicator indicator = ProgressManager.getInstance().getProgressIndicator();
-    if (indicator == null) return;
-
+  private void distributeProgress(@NotNull ProgressIndicator indicator) {
     ModuleManager moduleManager = ModuleManager.getInstance(this);
     if (!(moduleManager instanceof ModuleManagerImpl)) {
       return;
@@ -298,28 +304,13 @@ public class ProjectImpl extends PlatformComponentManagerImpl implements Project
 
     double toDistribute = 1 - indicator.getFraction();
     int modulesCount = ((ModuleManagerImpl)moduleManager).getModulePathsCount();
-    EditorsSplitters splitters = ((FileEditorManagerImpl)FileEditorManager.getInstance(this)).getMainSplitters();
-    int editors = splitters.getEditorsCount();
-
-    double modulesPart = ourClassesAreLoaded || editors == 0 ? toDistribute : toDistribute * 0.5;
     if (modulesCount != 0) {
-
-      double step = modulesPart / modulesCount;
-      ((ModuleManagerImpl)moduleManager).setProgressStep(step);
-    }
-
-    if (editors != 0) {
-      splitters.setProgressStep(toDistribute - modulesPart / editors);
+      ((ModuleManagerImpl)moduleManager).setProgressStep(toDistribute / modulesCount);
     }
   }
 
   @Override
   public void save() {
-    save(false);
-  }
-
-  @Override
-  public void save(boolean isForce) {
     if (!ApplicationManagerEx.getApplicationEx().isSaveAllowed()) {
       // no need to save
       return;
@@ -332,55 +323,36 @@ public class ProjectImpl extends PlatformComponentManagerImpl implements Project
       return;
     }
 
-    if (!mySavingInProgress.compareAndSet(false, true)) {
-      return;
-    }
-
-    HeavyProcessLatch.INSTANCE.prioritizeUiActivity();
-
-    try {
-      StoreUtil.save(ServiceKt.getStateStore(this), this, isForce);
-    }
-    finally {
-      mySavingInProgress.set(false);
-      ApplicationManager.getApplication().getMessageBus().syncPublisher(ProjectSaved.TOPIC).saved(this);
-    }
+    StoreUtil.saveSettings(this, false);
   }
 
   @Override
   public synchronized void dispose() {
-    ApplicationEx application = ApplicationManagerEx.getApplicationEx();
-    application.assertWriteAccessAllowed();  // dispose must be under write action
+    Application app = ApplicationManager.getApplication();
+    // dispose must be under write action
+    app.assertWriteAccessAllowed();
+
+    ProjectManagerImpl projectManager = (ProjectManagerImpl)ProjectManager.getInstance();
 
     // can call dispose only via com.intellij.ide.impl.ProjectUtil.closeAndDispose()
-    if (ProjectManagerEx.getInstanceEx().isProjectOpened(this)) {
+    if (projectManager.isProjectOpened(this)) {
       throw new IllegalStateException("Must call .dispose() for a closed project only. See ProjectManager.closeProject() or ProjectUtil.closeAndDispose().");
     }
 
-    // we use super here, because temporarilyDisposed will be true if project closed
-    LOG.assertTrue(!super.isDisposed(), this + " is disposed already");
-    disposeComponents();
-    Extensions.disposeArea(this);
-
     super.dispose();
 
-    if (!application.isDisposed()) {
-      application.getMessageBus().syncPublisher(ProjectLifecycleListener.TOPIC).afterProjectClosed(this);
+    if (myComponentStore.isComputed()) {
+      myComponentStore.getValue().release();
     }
+
+    if (!app.isDisposed()) {
+      //noinspection deprecation
+      app.getMessageBus().syncPublisher(ProjectLifecycleListener.TOPIC).afterProjectClosed(this);
+    }
+    projectManager.updateTheOnlyProjectField();
+
     TimedReference.disposeTimed();
     LaterInvocator.purgeExpiredItems();
-  }
-
-  @NotNull
-  @Override
-  public <T> T[] getExtensions(@NotNull final ExtensionPointName<T> extensionPointName) {
-    return Extensions.getArea(this).getExtensionPoint(extensionPointName).getExtensions();
-  }
-
-  @NotNull
-  @Override
-  protected MutablePicoContainer createPicoContainer() {
-    return Extensions.getArea(this).getPicoContainer();
   }
 
   @Override
@@ -391,15 +363,39 @@ public class ProjectImpl extends PlatformComponentManagerImpl implements Project
   @NonNls
   @Override
   public String toString() {
-    return "Project" +
-           (isDisposed() ? " (Disposed" + (temporarilyDisposed ? " temporarily" : "") + ")"
-                         : isDefault() ? "" : " '" + getPresentableUrl() + "'") +
-           (isDefault() ? " (Default)" : "") +
-           " " + getName();
+    return "Project (name=" + myName + ", containerState=" + getContainerStateName() +
+           ", componentStore=" + (myComponentStore.isComputed() ? getPresentableUrl() : "<not initialized>") + ") " +
+           (temporarilyDisposed ? " (disposed" + " temporarily)" : "");
+  }
+
+  @TestOnly
+  public String getCreationTrace() {
+    return creationTrace;
+  }
+
+  @Nullable
+  @ApiStatus.Internal
+  @Override
+  public String activityNamePrefix() {
+    return "project ";
   }
 
   @Override
-  protected boolean logSlowComponents() {
-    return super.logSlowComponents() || ApplicationInfoImpl.getShadowInstance().isEAP();
+  @NotNull
+  @ApiStatus.Experimental
+  @ApiStatus.Internal
+  public final Disposable getEarlyDisposable() {
+    if (isDisposed()) {
+      throw new IllegalStateException(this + " is disposed already");
+    }
+
+    // maybe null only if disposed, but this condition is checked above
+    return earlyDisposable.get();
+  }
+
+  @ApiStatus.Internal
+  public final void disposeEarlyDisposable() {
+    Disposable earlyDisposable = this.earlyDisposable.getAndSet(null);
+    Disposer.dispose(earlyDisposable);
   }
 }

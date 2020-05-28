@@ -18,6 +18,7 @@ package com.intellij.ide;
 
 import com.intellij.ide.dnd.FileCopyPasteUtil;
 import com.intellij.ide.dnd.LinuxDragAndDropSupport;
+import com.intellij.lang.LangBundle;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.LangDataKeys;
@@ -29,7 +30,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDirectory;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFileSystemItem;
-import com.intellij.psi.PsiManager;
 import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.refactoring.copy.CopyFilesOrDirectoriesHandler;
 import com.intellij.refactoring.move.moveFilesOrDirectories.MoveFilesOrDirectoriesHandler;
@@ -58,19 +58,17 @@ public class FileListPasteProvider implements PasteProvider {
     if (fileList == null) return;
 
     if (DumbService.isDumb(project)) {
-      DumbService.getInstance(project).showDumbModeNotification("Sorry, file copy/paste is not available during indexing");
+      DumbService.getInstance(project).showDumbModeNotification(
+        LangBundle.message("popup.content.sorry.file.copy.paste.available.during.indexing"));
       return;
     }
 
     final List<PsiElement> elements = new ArrayList<>();
     for (File file : fileList) {
       final VirtualFile vFile = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file);
-      if (vFile != null) {
-        final PsiManager instance = PsiManager.getInstance(project);
-        PsiFileSystemItem item = vFile.isDirectory() ? instance.findDirectory(vFile) : instance.findFile(vFile);
-        if (item != null) {
-          elements.add(item);
-        }
+      PsiFileSystemItem item = PsiUtilCore.findFileSystemItem(project, vFile);
+      if (item != null) {
+        elements.add(item);
       }
     }
 

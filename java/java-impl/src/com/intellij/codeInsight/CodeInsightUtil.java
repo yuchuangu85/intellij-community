@@ -1,23 +1,9 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight;
 
 import com.intellij.codeInsight.completion.*;
 import com.intellij.lang.Language;
-import com.intellij.lang.StdLanguages;
+import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.fileEditor.FileEditorManager;
@@ -49,14 +35,14 @@ public class CodeInsightUtil {
 
   @Nullable
   public static PsiExpression findExpressionInRange(PsiFile file, int startOffset, int endOffset) {
-    if (!file.getViewProvider().getLanguages().contains(StdLanguages.JAVA)) return null;
+    if (!file.getViewProvider().getLanguages().contains(JavaLanguage.INSTANCE)) return null;
     PsiExpression expression = findElementInRange(file, startOffset, endOffset, PsiExpression.class);
     if (expression == null && findStatementsInRange(file, startOffset, endOffset).length == 0) {
-      PsiElement element2 = file.getViewProvider().findElementAt(endOffset - 1, StdLanguages.JAVA);
+      PsiElement element2 = file.getViewProvider().findElementAt(endOffset - 1, JavaLanguage.INSTANCE);
       if (element2 instanceof PsiJavaToken) {
         final PsiJavaToken token = (PsiJavaToken)element2;
         final IElementType tokenType = token.getTokenType();
-        if (tokenType.equals(JavaTokenType.SEMICOLON)) {
+        if (tokenType.equals(JavaTokenType.SEMICOLON) || element2.getParent() instanceof PsiErrorElement) {
           expression = findElementInRange(file, startOffset, element2.getTextRange().getStartOffset(), PsiExpression.class);
         }
       }
@@ -78,11 +64,10 @@ public class CodeInsightUtil {
   }
 
   public static <T extends PsiElement> T findElementInRange(PsiFile file, int startOffset, int endOffset, Class<T> klass) {
-    return CodeInsightUtilCore.findElementInRange(file, startOffset, endOffset, klass, StdLanguages.JAVA);
+    return CodeInsightUtilCore.findElementInRange(file, startOffset, endOffset, klass, JavaLanguage.INSTANCE);
   }
 
-  @NotNull
-  public static PsiElement[] findStatementsInRange(@NotNull PsiFile file, int startOffset, int endOffset) {
+  public static PsiElement @NotNull [] findStatementsInRange(@NotNull PsiFile file, int startOffset, int endOffset) {
     Language language = findJavaOrLikeLanguage(file);
     if (language == null) return PsiElement.EMPTY_ARRAY;
     FileViewProvider viewProvider = file.getViewProvider();
@@ -171,8 +156,7 @@ public class CodeInsightUtil {
     return false;
   }
 
-  @NotNull
-  private static PsiElement[] getStatementsInRange(PsiElement[] children, PsiElement element1, PsiElement element2) {
+  private static PsiElement @NotNull [] getStatementsInRange(PsiElement[] children, PsiElement element1, PsiElement element2) {
     ArrayList<PsiElement> array = new ArrayList<>();
     boolean flag = false;
     for (PsiElement child : children) {
@@ -200,10 +184,10 @@ public class CodeInsightUtil {
   public static Language findJavaOrLikeLanguage(@NotNull final PsiFile file) {
     final Set<Language> languages = file.getViewProvider().getLanguages();
     for (final Language language : languages) {
-      if (language == StdLanguages.JAVA) return language;
+      if (language == JavaLanguage.INSTANCE) return language;
     }
     for (final Language language : languages) {
-      if (language.isKindOf(StdLanguages.JAVA)) return language;
+      if (language.isKindOf(JavaLanguage.INSTANCE)) return language;
     }
     return null;
   }
@@ -217,24 +201,25 @@ public class CodeInsightUtil {
   }
 
   public static <T extends PsiMember & PsiDocCommentOwner> Comparator<T> createSortIdenticalNamedMembersComparator(PsiElement place) {
-    final PsiProximityComparator proximityComparator = new PsiProximityComparator(place);
-    return (o1, o2) -> {
-      boolean deprecated1 = JavaCompletionUtil.isEffectivelyDeprecated(o1);
-      boolean deprecated2 = JavaCompletionUtil.isEffectivelyDeprecated(o2);
-      if (deprecated1 && !deprecated2) return 1;
-      if (!deprecated1 && deprecated2) return -1;
-      int compare = proximityComparator.compare(o1, o2);
-      if (compare != 0) return compare;
-
-      String qname1 = o1 instanceof PsiClass ? ((PsiClass)o1).getQualifiedName() : null;
-      String qname2 = o2 instanceof PsiClass ? ((PsiClass)o2).getQualifiedName() : null;
-      if (qname1 == null || qname2 == null) return 0;
-      return qname1.compareToIgnoreCase(qname2);
-    };
+    return Comparator
+      .<T, Boolean>comparing(JavaCompletionUtil::isEffectivelyDeprecated)
+      .thenComparing(CodeInsightUtil::isInnerClass)
+      .thenComparing(new PsiProximityComparator(place))
+      .thenComparing(CodeInsightUtil::compareQualifiedNames);
   }
 
-  @NotNull
-  public static PsiExpression[] findExpressionOccurrences(PsiElement scope, PsiExpression expr) {
+  private static boolean isInnerClass(PsiMember o) {
+    return o instanceof PsiClass && o.getContainingClass() != null;
+  }
+
+  private static int compareQualifiedNames(PsiMember o1, PsiMember o2) {
+    String qname1 = o1 instanceof PsiClass ? ((PsiClass)o1).getQualifiedName() : null;
+    String qname2 = o2 instanceof PsiClass ? ((PsiClass)o2).getQualifiedName() : null;
+    if (qname1 == null || qname2 == null) return 0;
+    return qname1.compareToIgnoreCase(qname2);
+  }
+
+  public static PsiExpression @NotNull [] findExpressionOccurrences(PsiElement scope, PsiExpression expr) {
     List<PsiExpression> array = new ArrayList<>();
     addExpressionOccurrences(RefactoringUtil.unparenthesizeExpression(expr), array, scope);
     if (expr.isPhysical()) {
@@ -263,8 +248,7 @@ public class CodeInsightUtil {
     }
   }
 
-  @NotNull
-  public static PsiExpression[] findReferenceExpressions(PsiElement scope, PsiElement referee) {
+  public static PsiExpression @NotNull [] findReferenceExpressions(PsiElement scope, PsiElement referee) {
     if (scope == null) return PsiExpression.EMPTY_ARRAY;
     List<PsiExpression> array = new ArrayList<>();
     addReferenceExpressions(array, scope, referee);
@@ -298,7 +282,7 @@ public class CodeInsightUtil {
     return FileEditorManager.getInstance(project).openTextEditor(descriptor, true);
   }
 
-  public static boolean preparePsiElementsForWrite(@NotNull PsiElement... elements) {
+  public static boolean preparePsiElementsForWrite(PsiElement @NotNull ... elements) {
     return FileModificationService.getInstance().preparePsiElementsForWrite(Arrays.asList(elements));
   }
 
@@ -340,6 +324,7 @@ public class CodeInsightUtil {
       Query<PsiClass> baseQuery = ClassInheritorsSearch.search(baseClass, scope, true, true, false);
       Query<PsiClass> query = new FilteredQuery<>(baseQuery, psiClass ->
         !(psiClass instanceof PsiTypeParameter) &&
+        psiClass.getName() != null &&
         ContainerUtil.exists(JavaCompletionUtil.getAllLookupStrings(psiClass), matcher::prefixMatches) &&
         !imported.contains(psiClass));
       query.forEach(inheritorsProcessor);
@@ -363,7 +348,7 @@ public class CodeInsightUtil {
   }
 
   private static void addContextTypeArguments(PsiElement context, PsiClassType baseType, Processor<? super PsiClass> inheritorsProcessor) {
-    Set<String> usedNames = ContainerUtil.newHashSet();
+    Set<String> usedNames = new HashSet<>();
     PsiElementFactory factory = JavaPsiFacade.getElementFactory(context.getProject());
     PsiElement each = context;
     while (true) {
@@ -394,6 +379,10 @@ public class CodeInsightUtil {
     return inheritor -> {
       ProgressManager.checkCanceled();
 
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Processing inheritor " + inheritor.getQualifiedName());
+      }
+
       if (!resolveHelper.isAccessible(inheritor, context, null)) {
         return true;
       }
@@ -414,6 +403,9 @@ public class CodeInsightUtil {
                                    : factory.createType(inheritor, typeArgs.toArray(PsiType.EMPTY_ARRAY));
       PsiType toAdd = PsiTypesUtil.createArrayType(inheritorType, arrayDim);
       if (baseType.isAssignableFrom(toAdd)) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Inheritor type " + toAdd.getCanonicalText());
+        }
         result.consume(toAdd);
       }
 

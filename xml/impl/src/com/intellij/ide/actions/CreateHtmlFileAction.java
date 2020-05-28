@@ -22,6 +22,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiDirectory;
 import com.intellij.xml.XmlBundle;
 import org.jetbrains.annotations.NonNls;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * @author Eugene.Kudelevsky
@@ -31,7 +32,7 @@ public class CreateHtmlFileAction extends CreateFileFromTemplateAction implement
   @NonNls private static final String DEFAULT_HTML_TEMPLATE_PROPERTY = "DefaultHtmlFileTemplate";
 
   public CreateHtmlFileAction() {
-    super(XmlBundle.message("new.html.file.action"), XmlBundle.message("new.html.file.action.description"), StdFileTypes.HTML.getIcon());
+    super(XmlBundle.messagePointer("new.html.file.action"), XmlBundle.messagePointer("new.html.file.action.description"), StdFileTypes.HTML.getIcon());
   }
 
   @Override
@@ -49,7 +50,7 @@ public class CreateHtmlFileAction extends CreateFileFromTemplateAction implement
   }
 
   @Override
-  protected String getActionName(PsiDirectory directory, String newName, String templateName) {
+  protected String getActionName(PsiDirectory directory, @NotNull String newName, String templateName) {
     return XmlBundle.message("new.html.file.action");
   }
 

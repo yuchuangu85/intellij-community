@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.projectView;
 
 import com.intellij.icons.AllIcons;
@@ -41,6 +41,11 @@ class TestProjectViewPSIPane extends AbstractProjectViewPSIPane {
       @Override
       public void selectIn(SelectInContext context, boolean requestFocus) {
 
+      }
+
+      @Override
+      public String getMinorViewId() {
+        return getId();
       }
     };
   }
@@ -92,5 +97,10 @@ class TestProjectViewPSIPane extends AbstractProjectViewPSIPane {
   @Override
   public int getWeight() {
     return myWeight;
+  }
+
+  @Override
+  public boolean supportsManualOrder() {
+    return true;
   }
 }

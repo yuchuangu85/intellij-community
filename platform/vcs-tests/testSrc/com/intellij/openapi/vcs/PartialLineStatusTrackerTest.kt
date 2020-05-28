@@ -201,6 +201,7 @@ class PartialLineStatusTrackerTest : BaseLineStatusTrackerTestCase() {
       "G_".insertAfter("N_")
       range(1).moveTo("Test")
       range(3).moveTo("Test")
+      partialTracker.setExcludedFromCommit(false)
 
       assertTextContentIs("A_B1_C_E_F_M_G_N_H_")
       assertBaseTextContentIs("A_B_C_D_E_F_G_H_")
@@ -224,6 +225,7 @@ class PartialLineStatusTrackerTest : BaseLineStatusTrackerTestCase() {
       "G_".insertAfter("N_")
       range(1).moveTo("Test")
       range(3).moveTo("Test")
+      partialTracker.setExcludedFromCommit(false)
 
       assertTextContentIs("A_B1_C_E_F_M_G_N_H_")
       assertBaseTextContentIs("A_B_C_D_E_F_G_H_")
@@ -247,6 +249,7 @@ class PartialLineStatusTrackerTest : BaseLineStatusTrackerTestCase() {
       "G_".insertAfter("N_")
       range(1).moveTo("Test")
       range(3).moveTo("Test")
+      partialTracker.setExcludedFromCommit(false)
 
       assertTextContentIs("A_B1_C_E_F_M_G_N_H_")
       assertBaseTextContentIs("A_B_C_D_E_F_G_H_")
@@ -270,6 +273,7 @@ class PartialLineStatusTrackerTest : BaseLineStatusTrackerTestCase() {
       "G_".insertAfter("N_")
       range(1).moveTo("Test")
       range(3).moveTo("Test")
+      partialTracker.setExcludedFromCommit(false)
 
       assertTextContentIs("A_B1_C_E_F_M_G_N_H_")
       assertBaseTextContentIs("A_B_C_D_E_F_G_H_")
@@ -299,6 +303,7 @@ class PartialLineStatusTrackerTest : BaseLineStatusTrackerTestCase() {
       "G_".insertAfter("N_")
       range(1).moveTo("Test")
       range(3).moveTo("Test")
+      partialTracker.setExcludedFromCommit(false)
 
       assertTextContentIs("A_B1_C_E_F_M_G_N_H_")
       assertBaseTextContentIs("A_B_C_D_E_F_G_H_")
@@ -325,6 +330,56 @@ class PartialLineStatusTrackerTest : BaseLineStatusTrackerTestCase() {
           assertAffectedChangeLists("Test")
         }
       })
+    }
+  }
+
+  fun testPartialCommitWithExcluded() {
+    testPartial("A_B_C_D_E_F_G_H_") {
+      "B".replace("B1")
+      "D_".delete()
+      "F_".insertAfter("M_")
+      "G_".insertAfter("N_")
+      range(1).moveTo("Test")
+      range(3).moveTo("Test")
+      partialTracker.setExcludedFromCommit(false)
+      partialTracker.setExcludedFromCommit(range(3), true)
+
+      assertTextContentIs("A_B1_C_E_F_M_G_N_H_")
+      assertBaseTextContentIs("A_B_C_D_E_F_G_H_")
+      assertAffectedChangeLists(DEFAULT, "Test")
+
+      val helper = handlePartialCommit(Side.LEFT, "Test", true)
+      helper.applyChanges()
+
+      assertHelperContentIs("A_B_C_E_F_G_H_", helper)
+      assertTextContentIs("A_B1_C_E_F_M_G_N_H_")
+      assertBaseTextContentIs("A_B_C_E_F_G_H_")
+      assertAffectedChangeLists(DEFAULT, "Test")
+    }
+  }
+
+  fun testPartialCommitIgnoringExcluded() {
+    testPartial("A_B_C_D_E_F_G_H_") {
+      "B".replace("B1")
+      "D_".delete()
+      "F_".insertAfter("M_")
+      "G_".insertAfter("N_")
+      range(1).moveTo("Test")
+      range(3).moveTo("Test")
+      partialTracker.setExcludedFromCommit(false)
+      partialTracker.setExcludedFromCommit(range(3), true)
+
+      assertTextContentIs("A_B1_C_E_F_M_G_N_H_")
+      assertBaseTextContentIs("A_B_C_D_E_F_G_H_")
+      assertAffectedChangeLists(DEFAULT, "Test")
+
+      val helper = handlePartialCommit(Side.LEFT, "Test", false)
+      helper.applyChanges()
+
+      assertHelperContentIs("A_B_C_E_F_G_N_H_", helper)
+      assertTextContentIs("A_B1_C_E_F_M_G_N_H_")
+      assertBaseTextContentIs("A_B_C_E_F_G_N_H_")
+      assertAffectedChangeLists(DEFAULT)
     }
   }
 

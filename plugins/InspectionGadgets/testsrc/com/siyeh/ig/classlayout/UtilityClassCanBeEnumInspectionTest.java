@@ -2,10 +2,10 @@
 package com.siyeh.ig.classlayout;
 
 import com.intellij.codeInspection.InspectionProfileEntry;
-import com.siyeh.ig.LightInspectionTestCase;
+import com.siyeh.ig.LightJavaInspectionTestCase;
 import org.jetbrains.annotations.Nullable;
 
-public class UtilityClassCanBeEnumInspectionTest extends LightInspectionTestCase {
+public class UtilityClassCanBeEnumInspectionTest extends LightJavaInspectionTestCase {
 
   public void testUtilityClassCanBeEnum() {
     doTest();
@@ -16,7 +16,8 @@ public class UtilityClassCanBeEnumInspectionTest extends LightInspectionTestCase
            "  public static void driveCar() {}\n" +
            "}");
     checkQuickFix("Convert to 'enum'",
-                  "enum Util {;\n" +
+                  "enum Util {\n" +
+                  "    ;\n" +
                   "\n" +
                   "    public static void driveCar() {}\n" +
                   "}");

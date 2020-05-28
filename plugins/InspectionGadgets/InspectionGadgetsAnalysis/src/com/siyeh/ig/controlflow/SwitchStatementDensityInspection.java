@@ -33,12 +33,6 @@ public class SwitchStatementDensityInspection extends BaseInspection {
   public int m_limit = DEFAULT_DENSITY_LIMIT;
 
   @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("switch.statement.density.display.name");
-  }
-
-  @Override
   public JComponent createOptionsPanel() {
     return new SingleIntegerFieldOptionsPanel(InspectionGadgetsBundle.message("switch.statement.density.min.option"), this, "m_limit");
   }
@@ -59,11 +53,20 @@ public class SwitchStatementDensityInspection extends BaseInspection {
 
     @Override
     public void visitSwitchStatement(@NotNull PsiSwitchStatement statement) {
-      final PsiCodeBlock body = statement.getBody();
+      checkSwitchBlock(statement);
+    }
+
+    @Override
+    public void visitSwitchExpression(PsiSwitchExpression expression) {
+      checkSwitchBlock(expression);
+    }
+
+    private void checkSwitchBlock(PsiSwitchBlock block) {
+      final PsiCodeBlock body = block.getBody();
       if (body == null) {
         return;
       }
-      final int branchCount = Math.abs(SwitchUtils.calculateBranchCount(statement));
+      final int branchCount = Math.abs(SwitchUtils.calculateBranchCount(block));
       if (branchCount == 0) {
         return;
       }
@@ -72,7 +75,7 @@ public class SwitchStatementDensityInspection extends BaseInspection {
       if (intDensity > m_limit) {
         return;
       }
-      registerStatementError(statement, Integer.valueOf(intDensity));
+      registerError(block.getFirstChild(), Integer.valueOf(intDensity));
     }
 
     private double calculateDensity(@NotNull PsiCodeBlock body, int branchCount) {
@@ -88,7 +91,7 @@ public class SwitchStatementDensityInspection extends BaseInspection {
     @Override
     public void visitStatement(@NotNull PsiStatement statement) {
       super.visitStatement(statement);
-      if (statement instanceof PsiSwitchLabelStatement || statement instanceof PsiBreakStatement) {
+      if (statement instanceof PsiSwitchLabelStatementBase || statement instanceof PsiBreakStatement || statement instanceof PsiYieldStatement) {
         return;
       }
       statementCount++;

@@ -20,7 +20,6 @@ DONT_TRACE = {
     'dis.py':LIB_FILE,
 
     #things from pydev that we don't want to trace
-    '_pydev_execfile.py':PYDEV_FILE,
     '_pydev_BaseHTTPServer.py': PYDEV_FILE,
     '_pydev_SimpleXMLRPCServer.py': PYDEV_FILE,
     '_pydev_SocketServer.py': PYDEV_FILE,
@@ -37,7 +36,6 @@ DONT_TRACE = {
     '_pydev_saved_modules.py': PYDEV_FILE,
     '_pydev_sys_patch.py': PYDEV_FILE,
     '_pydev_tipper_common.py': PYDEV_FILE,
-    '_pydev_uuid_old.py': PYDEV_FILE,
     '_pydev_xmlrpclib.py': PYDEV_FILE,
     'django_debug.py': PYDEV_FILE,
     'fix_getpass.py': PYDEV_FILE,
@@ -50,6 +48,7 @@ DONT_TRACE = {
     'pydev_console_utils.py': PYDEV_FILE,
     'pydev_import_hook.py': PYDEV_FILE,
     'pydev_imports.py': PYDEV_FILE,
+    'pydev_io.py': PYDEV_FILE,
     'pydev_ipython_code_executor.py': PYDEV_FILE,
     'pydev_ipython_console.py': PYDEV_FILE,
     'pydev_ipython_console_011.py': PYDEV_FILE,
@@ -59,7 +58,11 @@ DONT_TRACE = {
     'pydev_monkey.py': PYDEV_FILE,
     'pydev_monkey_qt.py': PYDEV_FILE,
     'pydev_override.py': PYDEV_FILE,
+    'pydev_protocol.py': PYDEV_FILE,
+    'pydev_rpc.py': PYDEV_FILE,
+    'pydev_server.py': PYDEV_FILE,
     'pydev_stdin.py': PYDEV_FILE,
+    'pydev_transport.py': PYDEV_FILE,
     'pydev_umd.py': PYDEV_FILE,
     'pydev_versioncheck.py': PYDEV_FILE,
     'pydevconsole.py': PYDEV_FILE,
@@ -67,12 +70,17 @@ DONT_TRACE = {
     'pydevd.py': PYDEV_FILE,
     'pydevd_additional_thread_info.py': PYDEV_FILE,
     'pydevd_additional_thread_info_regular.py': PYDEV_FILE,
+    'pydevd_breakpointhook.py': PYDEV_FILE,
     'pydevd_breakpoints.py': PYDEV_FILE,
+    'pydevd_bytecode_utils.py': PYDEV_FILE,
+    'pydevd_collect_try_except_info.py': PYDEV_FILE,
     'pydevd_comm.py': PYDEV_FILE,
+    'pydevd_comm_constants.py': PYDEV_FILE,
     'pydevd_command_line_handling.py': PYDEV_FILE,
     'pydevd_concurrency_logger.py': PYDEV_FILE,
     'pydevd_console.py': PYDEV_FILE,
     'pydevd_console_integration.py': PYDEV_FILE,
+    'pydevd_console_pytest.py': PYDEV_FILE,
     'pydevd_constants.py': PYDEV_FILE,
     'pydevd_custom_frames.py': PYDEV_FILE,
     'pydevd_cython_wrapper.py': PYDEV_FILE,
@@ -94,11 +102,10 @@ DONT_TRACE = {
     'pydevd_kill_all_pydevd_threads.py': PYDEV_FILE,
     'pydevd_modify_bytecode.py': PYDEV_FILE,
     'pydevd_plugin_numpy_types.py': PYDEV_FILE,
-    'pydevd_plugin_test_events.py': PYDEV_FILE,
-    'pydevd_plugin_test_exttype.py': PYDEV_FILE,
     'pydevd_plugin_utils.py': PYDEV_FILE,
     'pydevd_plugins_django_form_str.py': PYDEV_FILE,
     'pydevd_process_net_command.py': PYDEV_FILE,
+    'pydevd_pycharm.py': PYDEV_FILE,
     'pydevd_referrers.py': PYDEV_FILE,
     'pydevd_reload.py': PYDEV_FILE,
     'pydevd_resolver.py': PYDEV_FILE,
@@ -106,6 +113,7 @@ DONT_TRACE = {
     'pydevd_signature.py': PYDEV_FILE,
     'pydevd_stackless.py': PYDEV_FILE,
     'pydevd_thread_wrappers.py': PYDEV_FILE,
+    'pydevd_thrift.py': PYDEV_FILE,
     'pydevd_trace_api.py': PYDEV_FILE,
     'pydevd_trace_dispatch.py': PYDEV_FILE,
     'pydevd_trace_dispatch_regular.py': PYDEV_FILE,
@@ -116,6 +124,9 @@ DONT_TRACE = {
     'pydevd_vm_type.py': PYDEV_FILE,
     'pydevd_xml.py': PYDEV_FILE,
 }
+
+DONT_TRACE['pydev_jupyter_plugin.py'] = PYDEV_FILE
+DONT_TRACE['pydev_jupyter_utils.py'] = PYDEV_FILE
 
 if IS_PY3K:
     # if we try to trace io.py it seems it can get halted (see http://bugs.python.org/issue4716)

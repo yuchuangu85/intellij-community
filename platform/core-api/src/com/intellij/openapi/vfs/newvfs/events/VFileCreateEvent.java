@@ -1,49 +1,43 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vfs.newvfs.events;
 
+import com.intellij.openapi.util.io.FileAttributes;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.VirtualFileSystem;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-/**
- * @author max
- */
 public class VFileCreateEvent extends VFileEvent {
-  @NotNull private final VirtualFile myParent;
+  private final @NotNull VirtualFile myParent;
   private final boolean myDirectory;
-  @NotNull private final String myChildName;
+  private final FileAttributes myAttributes;
+  private final String mySymlinkTarget;
+  private final ChildInfo[] myChildren;
+  private final int myChildNameId;
   private VirtualFile myCreatedFile;
 
   public VFileCreateEvent(Object requestor,
                           @NotNull VirtualFile parent,
                           @NotNull String childName,
-                          final boolean isDirectory,
-                          final boolean isFromRefresh) {
+                          boolean isDirectory,
+                          @Nullable("null means should read from the created file") FileAttributes attributes,
+                          @Nullable String symlinkTarget,
+                          boolean isFromRefresh,
+                          ChildInfo @Nullable("null means children not available (e.g. the created file is not a directory) or unknown") [] children) {
     super(requestor, isFromRefresh);
-    myChildName = childName;
     myParent = parent;
     myDirectory = isDirectory;
+    myAttributes = attributes;
+    mySymlinkTarget = symlinkTarget;
+    myChildren = children;
+    myChildNameId = VirtualFileManager.getInstance().storeName(childName);
   }
 
   @NotNull
   public String getChildName() {
-    return myChildName;
+    return VirtualFileManager.getInstance().getVFileName(myChildNameId).toString();
   }
 
   public boolean isDirectory() {
@@ -55,11 +49,19 @@ public class VFileCreateEvent extends VFileEvent {
     return myParent;
   }
 
-  @NonNls
-  @Override
-  public String toString() {
-    return "VfsEvent[create " + (myDirectory ? "dir " : "file ") +
-           myChildName +  " in " + myParent.getUrl() + "]";
+  @Nullable
+  public FileAttributes getAttributes() {
+    return myAttributes;
+  }
+
+  @Nullable
+  public String getSymlinkTarget() {
+    return mySymlinkTarget;
+  }
+
+  /** @return true if the newly created file is a directory which has no children. */
+  public boolean isEmptyDirectory() {
+    return isDirectory() && myChildren != null && myChildren.length == 0;
   }
 
   @NotNull
@@ -67,13 +69,20 @@ public class VFileCreateEvent extends VFileEvent {
   protected String computePath() {
     String parentPath = myParent.getPath();
     // jar file returns "x.jar!/"
-    return StringUtil.endsWithChar(parentPath, '/') ?  parentPath + myChildName : parentPath + "/" + myChildName;
+    return StringUtil.endsWithChar(parentPath, '/') ?  parentPath + getChildName() : parentPath + "/" + getChildName();
   }
 
   @Override
   public VirtualFile getFile() {
-    if (myCreatedFile != null) return myCreatedFile;
-    return myCreatedFile = myParent.findChild(myChildName);
+    VirtualFile createdFile = myCreatedFile;
+    if (createdFile == null && myParent.isValid()) {
+      myCreatedFile = createdFile = myParent.findChild(getChildName());
+    }
+    return createdFile;
+  }
+
+  public ChildInfo @Nullable("null means children not available (e.g. the created file is not a directory) or unknown") [] getChildren() {
+    return myChildren;
   }
 
   public void resetCache() {
@@ -88,12 +97,7 @@ public class VFileCreateEvent extends VFileEvent {
 
   @Override
   public boolean isValid() {
-    if (myParent.isValid()) {
-      boolean childExists = myParent.findChild(myChildName) != null;
-      return !childExists;
-    }
-
-    return false;
+    return myParent.isValid() && myParent.findChild(getChildName()) == null;
   }
 
   @Override
@@ -103,17 +107,28 @@ public class VFileCreateEvent extends VFileEvent {
 
     final VFileCreateEvent event = (VFileCreateEvent)o;
 
-    if (myDirectory != event.myDirectory) return false;
-    if (!myChildName.equals(event.myChildName)) return false;
-    if (!myParent.equals(event.myParent)) return false;
-    return true;
+    return myDirectory == event.myDirectory && getChildName().equals(event.getChildName()) && myParent.equals(event.myParent);
   }
 
   @Override
   public int hashCode() {
     int result = myParent.hashCode();
     result = 31 * result + (myDirectory ? 1 : 0);
-    result = 31 * result + myChildName.hashCode();
+    result = 31 * result + getChildName().hashCode();
     return result;
+  }
+
+  @Override
+  public String toString() {
+    String kind = myDirectory ? (isEmptyDirectory() ? "(empty) " : "") + "dir " : "file ";
+    return "VfsEvent[create " + kind + "'"+myParent.getUrl() + "/"+ getChildName() +"']"
+           + (myChildren == null ? "" : " with "+myChildren.length+" children");
+  }
+
+  /**
+   * @return the nameId (obtained via FileNameCache.storeName()) of the myChildName or -1 if the nameId wasn't computed.
+   */
+  public int getChildNameId() {
+    return myChildNameId;
   }
 }

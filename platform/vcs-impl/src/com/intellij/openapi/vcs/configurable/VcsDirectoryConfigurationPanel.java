@@ -1,22 +1,27 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.openapi.vcs.configurable;
 
-import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.progress.util.BackgroundTaskUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.ComboBox;
+import com.intellij.openapi.util.Comparing;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.*;
 import com.intellij.openapi.vcs.impl.DefaultVcsRootPolicy;
 import com.intellij.openapi.vcs.impl.VcsDescriptor;
-import com.intellij.openapi.vcs.impl.projectlevelman.NewMappings;
 import com.intellij.openapi.vcs.roots.VcsRootErrorsFinder;
+import com.intellij.openapi.vcs.update.AbstractCommonUpdateAction;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.ui.*;
+import com.intellij.ui.ColoredTableCellRenderer;
+import com.intellij.ui.JBColor;
+import com.intellij.ui.SimpleTextAttributes;
+import com.intellij.ui.ToolbarDecorator;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBLoadingPanel;
 import com.intellij.ui.table.TableView;
@@ -33,8 +38,6 @@ import javax.swing.*;
 import javax.swing.table.TableCellEditor;
 import javax.swing.table.TableCellRenderer;
 import java.awt.*;
-import java.awt.event.ItemEvent;
-import java.awt.event.ItemListener;
 import java.io.File;
 import java.util.List;
 import java.util.*;
@@ -46,6 +49,7 @@ import static com.intellij.openapi.vcs.VcsConfiguration.getInstance;
 import static com.intellij.util.containers.ContainerUtil.map;
 import static com.intellij.util.ui.UIUtil.DEFAULT_HGAP;
 import static com.intellij.util.ui.UIUtil.DEFAULT_VGAP;
+import static java.util.Arrays.asList;
 
 /**
  * @author yole
@@ -54,6 +58,7 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
   private static final int POSTPONE_MAPPINGS_LOADING_PANEL = DEFAULT_PROGRESS_DIALOG_POSTPONE_TIME_MILLIS;
 
   private final Project myProject;
+  private final Disposable myDisposable = Disposer.newDisposable();
   private final String myProjectMessage;
   private final ProjectLevelVcsManager myVcsManager;
   private final TableView<MapInfo> myDirectoryMappingTable;
@@ -74,12 +79,12 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
   private JBLoadingPanel myLoadingPanel;
 
   private static class MapInfo {
-    static final MapInfo SEPARATOR = new MapInfo(new VcsDirectoryMapping("SEPARATOR", "SEP"), Type.SEPARATOR);
+    static final MapInfo SEPARATOR = new MapInfo(new VcsDirectoryMapping("SEPARATOR", "SEP"), Type.SEPARATOR); //NON-NLS
     static final Comparator<MapInfo> COMPARATOR = (o1, o2) -> {
       if (o1.type.isRegistered() && o2.type.isRegistered() || o1.type == Type.UNREGISTERED && o2.type == Type.UNREGISTERED) {
-        return NewMappings.MAPPINGS_COMPARATOR.compare(o1.mapping, o2.mapping);
+        return Comparing.compare(o1.mapping.getDirectory(), o2.mapping.getDirectory());
       }
-      return o1.type.ordinal() - o2.type.ordinal();
+      return o1.type.compareTo(o2.type);
     };
 
     static MapInfo unregistered(@NotNull String path, @NotNull String vcs) {
@@ -102,7 +107,7 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
     }
 
     private final Type type;
-    private final VcsDirectoryMapping mapping;
+    private VcsDirectoryMapping mapping;
 
     private MapInfo(@NotNull VcsDirectoryMapping mapping, @NotNull Type type) {
       this.mapping = mapping;
@@ -133,7 +138,7 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
         }
 
         if (info == MapInfo.SEPARATOR) {
-          append("Unregistered roots:", getAttributes(info));
+          append(VcsBundle.message("unregistered.roots.label"), getAttributes(info));
           return;
         }
 
@@ -200,7 +205,7 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
       @Override
       public void setValue(final MapInfo o, final String aValue) {
         Collection<AbstractVcs> activeVcses = getActiveVcses();
-        o.mapping.setVcs(aValue);
+        o.mapping = new VcsDirectoryMapping(o.mapping.getDirectory(), aValue, o.mapping.getRootSettings());
         checkNotifyListeners(activeVcses);
       }
 
@@ -278,8 +283,8 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
   public VcsDirectoryConfigurationPanel(final Project project) {
     myProject = project;
     myVcsConfiguration = getInstance(myProject);
-    myProjectMessage = XmlStringUtil.wrapInHtml(StringUtil.escapeXml(VcsDirectoryMapping.PROJECT_CONSTANT) + " - " +
-                                                DefaultVcsRootPolicy.getInstance(myProject).getProjectConfigurationMessage(myProject)
+    myProjectMessage = XmlStringUtil.wrapInHtml(StringUtil.escapeXmlEntities(VcsDirectoryMapping.PROJECT_CONSTANT) + " - " +
+                                                DefaultVcsRootPolicy.getInstance(myProject).getProjectConfigurationMessage()
                                                   .replace('\n', ' '));
     myIsDisabled = myProject.isDefault();
     myVcsManager = ProjectLevelVcsManager.getInstance(project);
@@ -316,12 +321,9 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
     initializeModel();
 
     myVcsComboBox.setModel(buildVcsWrappersModel(myProject));
-    myVcsComboBox.addItemListener(new ItemListener() {
-      @Override
-      public void itemStateChanged(final ItemEvent e) {
-        if (myDirectoryMappingTable.isEditing()) {
-          myDirectoryMappingTable.stopEditing();
-        }
+    myVcsComboBox.addItemListener(e -> {
+      if (myDirectoryMappingTable.isEditing()) {
+        myDirectoryMappingTable.stopEditing();
       }
     });
 
@@ -380,10 +382,9 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
   }
 
   private boolean isMappingValid(@NotNull VcsDirectoryMapping mapping) {
-    String vcs = mapping.getVcs();
-    VcsRootChecker checker = myCheckers.get(vcs);
-    return checker == null ||
-           (mapping.isDefaultMapping() ? checker.isRoot(myProject.getBasePath()) : checker.isRoot(mapping.getDirectory()));
+    if (mapping.isDefaultMapping()) return true;
+    VcsRootChecker checker = myCheckers.get(mapping.getVcs());
+    return checker == null || checker.isRoot(mapping.getDirectory());
   }
 
   @NotNull
@@ -397,8 +398,6 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
 
   private void addMapping() {
     VcsMappingConfigurationDialog dlg = new VcsMappingConfigurationDialog(myProject, VcsBundle.message("directory.mapping.add.title"));
-    // due to wonderful UI designer bug
-    dlg.initProjectMessage();
     if (dlg.showAndGet()) {
       addMapping(dlg.getMapping());
     }
@@ -408,7 +407,7 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
     List<MapInfo> items = new ArrayList<>(myModel.getItems());
     items.add(MapInfo.registered(new VcsDirectoryMapping(mapping.getDirectory(), mapping.getVcs(), mapping.getRootSettings()),
                                  isMappingValid(mapping)));
-    Collections.sort(items, MapInfo.COMPARATOR);
+    items.sort(MapInfo.COMPARATOR);
     myModel.setItems(items);
     checkNotifyListeners(getActiveVcses());
   }
@@ -443,7 +442,7 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
     else if (hasUnregistered && !hasSeparator) {
       items.add(MapInfo.SEPARATOR);
     }
-    Collections.sort(items, MapInfo.COMPARATOR);
+    items.sort(MapInfo.COMPARATOR);
   }
 
   private void editMapping() {
@@ -459,7 +458,7 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
   private void setMapping(int row, @NotNull VcsDirectoryMapping mapping) {
     List<MapInfo> items = new ArrayList<>(myModel.getItems());
     items.set(row, MapInfo.registered(mapping, isMappingValid(mapping)));
-    Collections.sort(items, MapInfo.COMPARATOR);
+    items.sort(MapInfo.COMPARATOR);
     myModel.setItems(items);
     checkNotifyListeners(getActiveVcses());
   }
@@ -495,7 +494,8 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
       .setDefaultFill(GridBagConstraints.HORIZONTAL);
 
     JComponent mappingsTable = createMappingsTable();
-    myLoadingPanel = new JBLoadingPanel(new BorderLayout(), myProject, POSTPONE_MAPPINGS_LOADING_PANEL * 2); // don't start loading automatically
+    // don't start loading automatically
+    myLoadingPanel = new JBLoadingPanel(new BorderLayout(), myDisposable, POSTPONE_MAPPINGS_LOADING_PANEL * 2);
     myLoadingPanel.add(mappingsTable);
     panel.add(myLoadingPanel, gb.nextLine().next().fillCell().weighty(1.0));
 
@@ -503,51 +503,37 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
     panel.add(myLimitHistory.createComponent(), gb.nextLine().next());
     panel.add(createShowRecursivelyDirtyOption(), gb.nextLine().next());
     panel.add(createShowChangedOption(), gb.nextLine().next());
-    panel.add(myScopeFilterConfig.createComponent(), gb.nextLine().next());
+    if (!AbstractCommonUpdateAction.showsCustomNotification(asList(myVcsManager.getAllActiveVcss()))) {
+      panel.add(myScopeFilterConfig.createComponent(), gb.nextLine().next());
+    }
     return panel;
   }
 
   private JComponent createMappingsTable() {
     JPanel panelForTable = ToolbarDecorator.createDecorator(myDirectoryMappingTable, null)
-      .setAddAction(new AnActionButtonRunnable() {
-        @Override
-        public void run(AnActionButton button) {
-          if (onlyRegisteredRootsInSelection()) {
-            addMapping();
-          }
-          else {
-            addSelectedUnregisteredMappings(getSelectedUnregisteredRoots());
-          }
-          updateRootCheckers();
+      .setAddActionUpdater(e -> !myIsDisabled && rootsOfOneKindInSelection())
+      .setAddAction(button -> {
+        List<MapInfo> unregisteredRoots = getSelectedUnregisteredRoots();
+        if (unregisteredRoots.isEmpty()) {
+          addMapping();
         }
-      }).setEditAction(new AnActionButtonRunnable() {
-        @Override
-        public void run(AnActionButton button) {
-          editMapping();
-          updateRootCheckers();
+        else {
+          addSelectedUnregisteredMappings(unregisteredRoots);
         }
-      }).setRemoveAction(new AnActionButtonRunnable() {
-        @Override
-        public void run(AnActionButton button) {
-          removeMapping();
-          updateRootCheckers();
-        }
-      }).setAddActionUpdater(new AnActionButtonUpdater() {
-        @Override
-        public boolean isEnabled(@NotNull AnActionEvent e) {
-          return !myIsDisabled && rootsOfOneKindInSelection();
-        }
-      }).setEditActionUpdater(new AnActionButtonUpdater() {
-        @Override
-        public boolean isEnabled(@NotNull AnActionEvent e) {
-          return !myIsDisabled && onlyRegisteredRootsInSelection();
-        }
-      }).setRemoveActionUpdater(new AnActionButtonUpdater() {
-        @Override
-        public boolean isEnabled(@NotNull AnActionEvent e) {
-          return !myIsDisabled && onlyRegisteredRootsInSelection();
-        }
-      }).disableUpDownActions().createPanel();
+        updateRootCheckers();
+      })
+      .setEditActionUpdater(e -> !myIsDisabled && onlyRegisteredRootsInSelection())
+      .setEditAction(button -> {
+        editMapping();
+        updateRootCheckers();
+      })
+      .setRemoveActionUpdater(e -> !myIsDisabled && onlyRegisteredRootsInSelection())
+      .setRemoveAction(button -> {
+        removeMapping();
+        updateRootCheckers();
+      })
+      .disableUpDownActions()
+      .createPanel();
     panelForTable.setPreferredSize(new JBDimension(-1, 200));
     return panelForTable;
   }
@@ -563,7 +549,7 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
       return true;
     }
     if (selection.size() == 1 && selection.iterator().next().type == MapInfo.Type.SEPARATOR) {
-      return false;
+      return true;
     }
     List<MapInfo> selectedRegisteredRoots = getSelectedRegisteredRoots();
     return selectedRegisteredRoots.size() == selection.size() || selectedRegisteredRoots.size() == 0;
@@ -595,7 +581,7 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
   }
 
   private JComponent createShowRecursivelyDirtyOption() {
-    myShowChangedRecursively = new JCheckBox("Show directories with changed descendants", myVcsConfiguration.SHOW_DIRTY_RECURSIVELY);
+    myShowChangedRecursively = new JCheckBox(VcsBundle.message("checkbox.show.dirty.recursively"), myVcsConfiguration.SHOW_DIRTY_RECURSIVELY);
     return myShowChangedRecursively;
   }
 
@@ -669,10 +655,10 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
     return vcses;
   }
 
-  @Override
   @Nls
+  @Override
   public String getDisplayName() {
-    return "Mappings";
+    return VcsBundle.message("configurable.VcsDirectoryConfigurationPanel.display.name");
   }
 
   @Override
@@ -682,6 +668,7 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
 
   @Override
   public void disposeUIResources() {
+    Disposer.dispose(myDisposable);
     myLimitHistory.disposeUIResources();
     myScopeFilterConfig.disposeUIResources();
   }

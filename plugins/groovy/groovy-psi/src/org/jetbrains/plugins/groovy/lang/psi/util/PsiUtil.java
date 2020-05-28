@@ -1,11 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.util;
 
 import com.intellij.lang.ASTNode;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.TextRange;
-import com.intellij.openapi.util.Trinity;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.impl.light.JavaIdentifier;
@@ -25,7 +24,6 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.codeInspection.utils.ControlFlowUtils;
 import org.jetbrains.plugins.groovy.config.GroovyConfigUtils;
 import org.jetbrains.plugins.groovy.extensions.GroovyApplicabilityProvider;
-import org.jetbrains.plugins.groovy.lang.groovydoc.psi.api.GrDocComment;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyLexer;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyTokenTypes;
 import org.jetbrains.plugins.groovy.lang.lexer.TokenSets;
@@ -35,7 +33,6 @@ import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.GrListOrMap;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.GrModifierList;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.annotation.GrAnnotation;
-import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrClosureSignature;
 import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrSignature;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.*;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.arguments.GrArgumentLabel;
@@ -59,12 +56,18 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.path.GrP
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.params.GrParameter;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrAnonymousClassDefinition;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrTypeDefinition;
-import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.*;
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrAccessorMethod;
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrEnumConstant;
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrGdkMethod;
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrMethod;
 import org.jetbrains.plugins.groovy.lang.psi.api.toplevel.imports.GrImportStatement;
 import org.jetbrains.plugins.groovy.lang.psi.api.util.GrNamedArgumentsOwner;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.Instruction;
 import org.jetbrains.plugins.groovy.lang.psi.dataFlow.types.TypeInferenceHelper;
-import org.jetbrains.plugins.groovy.lang.psi.impl.*;
+import org.jetbrains.plugins.groovy.lang.psi.impl.GrMapType;
+import org.jetbrains.plugins.groovy.lang.psi.impl.GrTupleType;
+import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyPsiManager;
+import org.jetbrains.plugins.groovy.lang.psi.impl.PsiImplUtil;
 import org.jetbrains.plugins.groovy.lang.psi.impl.signatures.GrClosureSignatureUtil;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.literals.GrLiteralImpl;
@@ -72,20 +75,27 @@ import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.GrBindingVariable;
 import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.GroovyScriptClass;
 import org.jetbrains.plugins.groovy.lang.psi.typeEnhancers.ClosureParameterEnhancer;
 import org.jetbrains.plugins.groovy.lang.resolve.ResolveUtil;
+import org.jetbrains.plugins.groovy.lang.resolve.api.Applicability;
+import org.jetbrains.plugins.groovy.lang.resolve.api.Argument;
 import org.jetbrains.plugins.groovy.lang.resolve.api.GroovyMethodCallReference;
+import org.jetbrains.plugins.groovy.lang.resolve.impl.AccessibilityKt;
+import org.jetbrains.plugins.groovy.lang.resolve.impl.ArgumentsKt;
 import org.jetbrains.plugins.groovy.lang.resolve.processors.MethodResolverProcessor;
+import org.jetbrains.plugins.groovy.lang.typing.GroovyClosureType;
 
 import java.util.*;
 
 import static com.intellij.psi.CommonClassNames.JAVA_LANG_OBJECT;
 import static com.intellij.psi.GenericsUtil.isTypeArgumentsApplicable;
+import static java.util.Collections.singletonList;
 import static org.jetbrains.plugins.groovy.lang.psi.util.GroovyCommonClassNames.*;
 
 /**
  * @author ven
  */
 public class PsiUtil {
-  public static final Logger LOG = Logger.getInstance("org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil");
+  private static final Logger LOG = Logger.getInstance(PsiUtil.class);
+
   public static final Key<JavaIdentifier> NAME_IDENTIFIER = new Key<>("Java Identifier");
   public static final Set<String> OPERATOR_METHOD_NAMES = ContainerUtil.newHashSet(
     "plus", "minus", "multiply", "power", "div", "mod", "or", "and", "xor", "next", "previous", "getAt", "putAt", "leftShift", "rightShift",
@@ -123,63 +133,34 @@ public class PsiUtil {
     return false;
   }
 
-  public static boolean isLValueOfOperatorAssignment(@NotNull GrReferenceExpression element) {
-    PsiElement parent = PsiTreeUtil.skipParentsOfType(element, GrParenthesizedExpression.class);
-    return parent instanceof GrAssignmentExpression
-           && ((GrAssignmentExpression)parent).isOperatorAssignment()
-           && PsiTreeUtil.isAncestor(((GrAssignmentExpression)parent).getLValue(), element, false);
-  }
-
-  public static boolean isApplicable(@Nullable PsiType[] argumentTypes,
+  public static boolean isApplicable(PsiType @Nullable [] argumentTypes,
                                      @NotNull PsiMethod method,
                                      PsiSubstitutor substitutor,
                                      PsiElement place,
                                      final boolean eraseParameterTypes) {
     return isApplicableConcrete(argumentTypes, method, substitutor, place, eraseParameterTypes) !=
-           GrClosureSignatureUtil.ApplicabilityResult.inapplicable;
+           Applicability.inapplicable;
   }
 
-  public static GrClosureSignatureUtil.ApplicabilityResult isApplicableConcrete(@Nullable PsiType[] argumentTypes,
-                                                                                @NotNull PsiMethod method,
-                                                                                PsiSubstitutor substitutor,
-                                                                                PsiElement place,
-                                                                                final boolean eraseParameterTypes) {
-    if (argumentTypes == null) return GrClosureSignatureUtil.ApplicabilityResult.canBeApplicable;
-    GrClosureSignature signature = GrClosureSignatureUtil.createSignature(method, substitutor, eraseParameterTypes);
+  public static Applicability isApplicableConcrete(PsiType @Nullable [] argumentTypes,
+                                                   @NotNull PsiMethod method,
+                                                   PsiSubstitutor substitutor,
+                                                   PsiElement place,
+                                                   final boolean eraseParameterTypes) {
+    if (argumentTypes == null) return Applicability.canBeApplicable;
+    GrSignature signature = GrClosureSignatureUtil.createSignature(method, substitutor, eraseParameterTypes, place);
 
-    GrClosureSignatureUtil.ApplicabilityResult result =
-      GroovyApplicabilityProvider.checkProviders(argumentTypes, method, substitutor, place, eraseParameterTypes);
+    Applicability result = GroovyApplicabilityProvider.checkProviders(argumentTypes, method);
     if (result != null) return result;
 
-    result = GrClosureSignatureUtil.isSignatureApplicableConcrete(signature, argumentTypes, place);
-    if (result != GrClosureSignatureUtil.ApplicabilityResult.inapplicable &&
-        isTypeArgumentsApplicable(method.getTypeParameters(), substitutor, place)) {
-      return result;
-    }
-
-    if (method instanceof GrBuilderMethod && !((GrBuilderMethod)method).hasObligatoryNamedArguments()) {
-      final PsiParameter[] parameters = method.getParameterList().getParameters();
-      if (parameters.length > 0 && parameters[0].getType() instanceof GrMapType &&
-          (argumentTypes.length == 0 || !(argumentTypes[0] instanceof GrMapType))) {
-        return GrClosureSignatureUtil.isSignatureApplicableConcrete(GrClosureSignatureUtil.removeParam(signature, 0), argumentTypes, place);
+    result = GrClosureSignatureUtil.isSignatureApplicableConcrete(singletonList(signature), argumentTypes, place);
+    if (result != Applicability.inapplicable) {
+      if (eraseParameterTypes || isTypeArgumentsApplicable(method.getTypeParameters(), substitutor, place)) {
+        return result;
       }
     }
-    return GrClosureSignatureUtil.ApplicabilityResult.inapplicable;
-  }
 
-  public static boolean isApplicable(@Nullable PsiType[] argumentTypes,
-                                     GrClosureType type,
-                                     GroovyPsiElement context) {
-    return isApplicableConcrete(argumentTypes, type, context) != GrClosureSignatureUtil.ApplicabilityResult.inapplicable;
-  }
-
-  public static GrClosureSignatureUtil.ApplicabilityResult isApplicableConcrete(@Nullable PsiType[] argumentTypes,
-                                                                                GrClosureType type,
-                                                                                GroovyPsiElement context) {
-    if (argumentTypes == null) return GrClosureSignatureUtil.ApplicabilityResult.canBeApplicable;
-
-    GrSignature signature = type.getSignature();
-    return GrClosureSignatureUtil.isSignatureApplicableConcrete(signature, argumentTypes, context);
+    return Applicability.inapplicable;
   }
 
   @Nullable
@@ -197,15 +178,13 @@ public class PsiUtil {
     return null;
   }
 
-  @Nullable
-  public static PsiType[] getArgumentTypes(@Nullable PsiElement place, boolean nullAsBottom) {
+  public static PsiType @Nullable [] getArgumentTypes(@Nullable PsiElement place, boolean nullAsBottom) {
     return getArgumentTypes(place, nullAsBottom, null);
   }
 
-  @Nullable
-  public static PsiType[] getArgumentTypes(@Nullable PsiElement place,
-                                           boolean nullAsBottom,
-                                           @Nullable GrExpression stopAt) {
+  public static PsiType @Nullable [] getArgumentTypes(@Nullable PsiElement place,
+                                                      boolean nullAsBottom,
+                                                      @Nullable GrExpression stopAt) {
     PsiElement parent = place instanceof GrEnumConstant ? place : place != null ? place.getParent() : null;
 
     if (parent instanceof GrIndexProperty) {
@@ -258,17 +237,15 @@ public class PsiUtil {
     return type != null || acceptNull ? type : TypesUtil.getJavaLangObject(context);
   }
 
-  @Nullable
-  public static PsiType[] getArgumentTypes(GrArgumentList argList) {
+  public static PsiType @Nullable [] getArgumentTypes(GrArgumentList argList) {
     return getArgumentTypes(argList, false, null);
   }
 
-  @Nullable
-  public static PsiType[] getArgumentTypes(@NotNull GrNamedArgument[] namedArgs,
-                                           @NotNull GrExpression[] expressions,
-                                           @NotNull GrClosableBlock[] closures,
-                                           boolean nullAsBottom,
-                                           @Nullable GrExpression stopAt) {
+  public static PsiType @Nullable [] getArgumentTypes(GrNamedArgument @NotNull [] namedArgs,
+                                                      GrExpression @NotNull [] expressions,
+                                                      GrClosableBlock @NotNull [] closures,
+                                                      boolean nullAsBottom,
+                                                      @Nullable GrExpression stopAt) {
     List<PsiType> result = new ArrayList<>();
 
     if (namedArgs.length > 0) {
@@ -335,15 +312,7 @@ public class PsiUtil {
       return true;
     }
 
-    if (place instanceof GrReferenceExpression && ((GrReferenceExpression)place).getQualifierExpression() == null) {
-      if (member.getContainingClass() instanceof GroovyScriptClass) { //calling top level script members from the same script file
-        return true;
-      }
-    }
-
-    if (PsiTreeUtil.getParentOfType(place, GrDocComment.class) != null) return true;
-
-    return com.intellij.psi.util.PsiUtil.isAccessible(member, place, null);
+    return AccessibilityKt.isAccessible(member, place);
   }
 
   public static void reformatCode(final PsiElement element) {
@@ -372,11 +341,11 @@ public class PsiUtil {
       @Override
       public Iterator<PsiClass> iterator() {
         return new Iterator<PsiClass>() {
-          TIntStack indices = new TIntStack();
-          Stack<PsiClassType[]> superTypesStack = new Stack<>();
+          final TIntStack indices = new TIntStack();
+          final Stack<PsiClassType[]> superTypesStack = new Stack<>();
+          final Set<PsiClass> visited = new HashSet<>();
           PsiClass current;
           boolean nextObtained;
-          Set<PsiClass> visited = new HashSet<>();
 
           {
             if (includeSelf) {
@@ -448,8 +417,15 @@ public class PsiUtil {
   }
 
   @Nullable
-  public static PsiClass getContextClass(@Nullable PsiElement context) {
+  public static PsiClass getContextClass(@Nullable PsiElement element) {
+    PsiElement context = element;
     while (context != null) {
+      if (context instanceof GrAnonymousClassDefinition
+          && PsiTreeUtil.isAncestor(((GrAnonymousClassDefinition)context).getArgumentListGroovy(), element, false)) {
+        context = context.getContext();
+        continue;
+      }
+
       if (context instanceof PsiClass && !isInDummyFile(context)) {
         return (PsiClass)context;
       }
@@ -509,17 +485,20 @@ public class PsiUtil {
     if (element == null) return false;
     if (element instanceof PsiMethod) {
       final GrExpression expression = call.getInvokedExpression();
-      final GroovyMethodCallReference reference = call.getCallReference();
-      if (expression instanceof GrReferenceExpression && reference.isRealReference()) {
-        PsiType receiver = reference.getReceiver();
-        if (receiver instanceof GrClosureType) {
-          return isRawClosureCall(call, result, (GrClosureType)receiver);
+      if (expression instanceof GrReferenceExpression) {
+        final GroovyMethodCallReference reference = call.getImplicitCallReference();
+        if (reference != null) {
+          Argument receiver = reference.getReceiverArgument();
+          PsiType receiverType = receiver == null ? null : receiver.getType();
+          if (receiverType instanceof GroovyClosureType) {
+            return isRawClosureCall(call, result, (GroovyClosureType)receiverType);
+          }
         }
       }
       PsiType returnType = getSmartReturnType((PsiMethod)element);
       if (expression instanceof GrReferenceExpression && result.isInvokedOnProperty()) {
-        if (returnType instanceof GrClosureType) {
-          return isRawClosureCall(call, result, (GrClosureType)returnType);
+        if (returnType instanceof GroovyClosureType) {
+          return isRawClosureCall(call, result, (GroovyClosureType)returnType);
         }
       }
       else {
@@ -529,30 +508,18 @@ public class PsiUtil {
     if (element instanceof PsiVariable) {
       GrExpression expression = call.getInvokedExpression();
       final PsiType type = expression.getType();
-      if (type instanceof GrClosureType) {
-        return isRawClosureCall(call, result, (GrClosureType)type);
+      if (type instanceof GroovyClosureType) {
+        return isRawClosureCall(call, result, (GroovyClosureType)type);
       }
     }
 
     return false;
   }
 
-  private static boolean isRawClosureCall(GrMethodCallExpression call, GroovyResolveResult result, GrClosureType returnType) {
-    final GrSignature signature = returnType.getSignature();
-    GrClosureSignature _signature;
-    if (signature instanceof GrClosureSignature) {
-      _signature = (GrClosureSignature)signature;
-    }
-    else {
-      final PsiType[] types = getArgumentTypes(call.getInvokedExpression(), true);
-      final Trinity<GrClosureSignature, GrClosureSignatureUtil.ArgInfo<PsiType>[], GrClosureSignatureUtil.ApplicabilityResult>
-        resultTrinity = types != null ? GrClosureSignatureUtil.getApplicableSignature(signature, types, call) : null;
-      _signature = Trinity.getFirst(resultTrinity);
-    }
-    if (_signature != null) {
-      return isRawType(_signature.getReturnType(), TypesUtil.composeSubstitutors(_signature.getSubstitutor(), result.getSubstitutor()));
-    }
-    return false;
+  private static boolean isRawClosureCall(GrMethodCallExpression call, GroovyResolveResult result, GroovyClosureType closureType) {
+    List<Argument> arguments = ArgumentsKt.getArguments(call);
+    PsiType returnType = closureType.returnType(arguments);
+    return isRawType(returnType, result.getSubstitutor());
   }
 
   public static boolean isRawFieldAccess(GrReferenceExpression ref) {
@@ -825,18 +792,6 @@ public class PsiUtil {
     return false;
   }
 
-  @NotNull
-  public static GroovyResolveResult[] getConstructorCandidates(@NotNull PsiElement place,
-                                                               @NotNull GroovyResolveResult classCandidate,
-                                                               @Nullable PsiType[] argTypes) {
-    final PsiElement element = classCandidate.getElement();
-    if (!(element instanceof PsiClass)) return GroovyResolveResult.EMPTY_ARRAY;
-
-    PsiClass clazz = (PsiClass)element;
-    PsiSubstitutor substitutor = classCandidate.getSubstitutor();
-    return ResolveUtil.getAllClassConstructors(clazz, substitutor, argTypes, place);
-  }
-
   public static boolean isAccessedForReading(GrExpression expr) {
     return !isLValue(expr);
   }
@@ -847,7 +802,11 @@ public class PsiUtil {
 
   public static boolean isUsedInIncOrDec(GrExpression expr) {
     PsiElement parent = PsiTreeUtil.skipParentsOfType(expr, GrParenthesizedExpression.class);
+    return isPlusPlusOrMinusMinus(parent);
+  }
 
+  @Contract("null -> false")
+  public static boolean isPlusPlusOrMinusMinus(@Nullable PsiElement parent) {
     if (parent instanceof GrUnaryExpression) {
       IElementType tokenType = ((GrUnaryExpression)parent).getOperationTokenType();
       return tokenType == GroovyTokenTypes.mINC || tokenType == GroovyTokenTypes.mDEC;
@@ -855,46 +814,30 @@ public class PsiUtil {
     return false;
   }
 
-  public static GrReferenceExpression qualifyMemberReference(GrReferenceExpression refExpr, PsiMember member, String name) {
+  public static void qualifyMemberReference(@NotNull GrReferenceExpression refExpr, @NotNull PsiMember member, String name) {
     assert refExpr.getQualifierExpression() == null;
 
     final PsiClass clazz = member.getContainingClass();
     assert clazz != null;
 
-    final PsiElement replaced;
     if (member.hasModifierProperty(PsiModifier.STATIC)) {
       final GrReferenceExpression newRefExpr = GroovyPsiElementFactory.getInstance(member.getProject())
         .createReferenceExpressionFromText(clazz.getQualifiedName() + "." + name);
-      replaced = refExpr.replace(newRefExpr);
+      refExpr.replace(newRefExpr);
     }
     else {
       final PsiClass containingClass = PsiTreeUtil.getParentOfType(refExpr, PsiClass.class);
       if (member.getManager().areElementsEquivalent(containingClass, clazz)) {
         final GrReferenceExpression newRefExpr = GroovyPsiElementFactory.getInstance(member.getProject())
           .createReferenceExpressionFromText("this." + name);
-        replaced = refExpr.replace(newRefExpr);
+        refExpr.replace(newRefExpr);
       }
       else {
         final GrReferenceExpression newRefExpr = GroovyPsiElementFactory.getInstance(member.getProject())
           .createReferenceExpressionFromText(clazz.getName() + ".this." + name);
-        replaced = refExpr.replace(newRefExpr);
+        refExpr.replace(newRefExpr);
       }
     }
-    return (GrReferenceExpression)replaced;
-  }
-
-  public static GroovyResolveResult[] getConstructorCandidates(PsiClassType classType, PsiType[] argTypes, GroovyPsiElement context) {
-    final PsiClassType.ClassResolveResult resolveResult = classType.resolveGenerics();
-    final PsiClass psiClass = resolveResult.getElement();
-    final PsiSubstitutor substitutor = resolveResult.getSubstitutor();
-    if (psiClass == null) {
-      return GroovyResolveResult.EMPTY_ARRAY;
-    }
-
-    final GroovyResolveResult grResult = resolveResult instanceof GroovyResolveResult
-                                         ? (GroovyResolveResult)resolveResult
-                                         : new GroovyResolveResultImpl(psiClass, context, null, substitutor, true, true);
-    return getConstructorCandidates(context, grResult, argTypes);
   }
 
   @Nullable
@@ -905,14 +848,13 @@ public class PsiUtil {
       while ((parent = element.getParent()) instanceof GrParenthesizedExpression) {
         element = parent;
       }
-      return element;
     }
     else {
       while (element instanceof GrParenthesizedExpression) {
         element = ((GrParenthesizedExpression)element).getOperand();
       }
-      return element;
     }
+    return element;
   }
 
   @NotNull
@@ -959,6 +901,7 @@ public class PsiUtil {
 
   private static final String[] visibilityModifiers = new String[]{PsiModifier.PRIVATE, PsiModifier.PROTECTED, PsiModifier.PUBLIC};
 
+  @SuppressWarnings("Duplicates")
   public static void escalateVisibility(PsiMember owner, PsiElement place) {
     PsiModifierList modifierList = owner.getModifierList();
     LOG.assertTrue(modifierList != null);
@@ -1258,6 +1201,10 @@ public class PsiUtil {
     return oldImports;
   }
 
+  public static boolean isInStaticCompilationContext(@NotNull GrReferenceExpression expression) {
+    return isCompileStatic(expression) || GrStaticChecker.isPropertyAccessInStaticMethod(expression);
+  }
+
   public static boolean isCompileStatic(PsiElement e) {
     PsiMember containingMember = PsiTreeUtil.getParentOfType(e, PsiMember.class, false, GrAnnotation.class);
     return containingMember != null && GroovyPsiManager.getInstance(containingMember.getProject()).isCompileStatic(containingMember);
@@ -1362,13 +1309,14 @@ public class PsiUtil {
   }
 
   public static boolean isVoidMethodCall(@Nullable GrExpression expression) {
-    if (expression instanceof GrMethodCall && PsiType.NULL.equals(expression.getType())) {
-      final GroovyResolveResult resolveResult = ((GrMethodCall)expression).advancedResolve();
-      final PsiType[] args = getArgumentTypes(((GrMethodCall)expression).getInvokedExpression(), true);
-      return PsiType.VOID.equals(ResolveUtil.extractReturnTypeFromCandidate(resolveResult, expression, args));
+    if (!(expression instanceof GrMethodCall)) {
+      return false;
     }
-
-    return false;
+    final PsiElement element = ((GrMethodCall)expression).advancedResolve().getElement();
+    if (!(element instanceof PsiMethod)) {
+      return false;
+    }
+    return PsiType.VOID.equals(((PsiMethod)element).getReturnType());
   }
 
   public static boolean isVoidMethod(@NotNull PsiMethod method) {

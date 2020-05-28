@@ -1,25 +1,10 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.diff;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.LineTokenizer;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.Enumerator;
 import org.jetbrains.annotations.NonNls;
@@ -30,29 +15,28 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 
-/**
- * @author dyoma
- */
-public class Diff {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.util.diff.Diff");
+public final class Diff {
+  private static final Logger LOG = Logger.getInstance(Diff.class);
 
   @Nullable
   public static Change buildChanges(@NotNull CharSequence before, @NotNull CharSequence after) throws FilesTooBigForDiffException {
     return buildChanges(splitLines(before), splitLines(after));
   }
 
-  @NotNull
-  private static String[] splitLines(@NotNull CharSequence s) {
+  private static String @NotNull [] splitLines(@NotNull CharSequence s) {
     return s.length() == 0 ? new String[]{""} : LineTokenizer.tokenize(s, false, false);
   }
 
   @Nullable
-  public static <T> Change buildChanges(@NotNull T[] objects1, @NotNull T[] objects2) throws FilesTooBigForDiffException {
-
+  public static <T> Change buildChanges(T @NotNull [] objects1, T @NotNull [] objects2) throws FilesTooBigForDiffException {
     // Old variant of enumerator worked incorrectly with null values.
     // This check is to ensure that the corrected version does not introduce bugs.
-    for (T anObjects1 : objects1) LOG.assertTrue(anObjects1 != null);
-    for (T anObjects2 : objects2) LOG.assertTrue(anObjects2 != null);
+    for (T anObjects1 : objects1) {
+      LOG.assertTrue(anObjects1 != null);
+    }
+    for (T anObjects2 : objects2) {
+      LOG.assertTrue(anObjects2 != null);
+    }
 
     final int startShift = getStartShift(objects1, objects2);
     final int endCut = getEndCut(objects1, objects2, startShift);
@@ -61,14 +45,14 @@ public class Diff {
     if (changeRef != null) return changeRef.get();
 
     int trimmedLength = objects1.length + objects2.length - 2 * startShift - 2 * endCut;
-    Enumerator<T> enumerator = new Enumerator<T>(trimmedLength, ContainerUtil.<T>canonicalStrategy());
+    Enumerator<T> enumerator = new Enumerator<>(trimmedLength, ContainerUtil.canonicalStrategy());
     int[] ints1 = enumerator.enumerate(objects1, startShift, endCut);
     int[] ints2 = enumerator.enumerate(objects2, startShift, endCut);
     return doBuildChanges(ints1, ints2, new ChangeBuilder(startShift));
   }
 
   @Nullable
-  public static Change buildChanges(@NotNull int[] array1, @NotNull int[] array2) throws FilesTooBigForDiffException {
+  public static Change buildChanges(int @NotNull [] array1, int @NotNull [] array2) throws FilesTooBigForDiffException {
     final int startShift = getStartShift(array1, array2);
     final int endCut = getEndCut(array1, array2, startShift);
 
@@ -89,10 +73,10 @@ public class Diff {
     Change change = trimmedLength1 != 0 || trimmedLength2 != 0 ?
                     new Change(startShift, startShift, trimmedLength1, trimmedLength2, null) :
                     null;
-    return new Ref<Change>(change);
+    return new Ref<>(change);
   }
 
-  private static Change doBuildChanges(@NotNull int[] ints1, @NotNull int[] ints2, @NotNull ChangeBuilder builder)
+  private static Change doBuildChanges(int @NotNull [] ints1, int @NotNull [] ints2, @NotNull ChangeBuilder builder)
     throws FilesTooBigForDiffException {
     Reindexer reindexer = new Reindexer(); // discard unique elements, that have no chance to be matched
     int[][] discarded = reindexer.discardUnique(ints1, ints2);
@@ -127,7 +111,7 @@ public class Diff {
     return builder.getFirstChange();
   }
 
-  private static <T> int getStartShift(@NotNull final T[] o1, @NotNull final T[] o2) {
+  private static <T> int getStartShift(final T @NotNull [] o1, final T @NotNull [] o2) {
     final int size = Math.min(o1.length, o2.length);
     int idx = 0;
     for (int i = 0; i < size; i++) {
@@ -137,7 +121,7 @@ public class Diff {
     return idx;
   }
 
-  private static <T> int getEndCut(@NotNull final T[] o1, @NotNull final T[] o2, int startShift) {
+  private static <T> int getEndCut(final T @NotNull [] o1, final T @NotNull [] o2, int startShift) {
     final int size = Math.min(o1.length, o2.length) - startShift;
     int idx = 0;
 
@@ -148,7 +132,7 @@ public class Diff {
     return idx;
   }
 
-  private static int getStartShift(@NotNull final int[] o1, @NotNull final int[] o2) {
+  private static int getStartShift(final int @NotNull [] o1, final int @NotNull [] o2) {
     final int size = Math.min(o1.length, o2.length);
     int idx = 0;
     for (int i = 0; i < size; i++) {
@@ -158,7 +142,7 @@ public class Diff {
     return idx;
   }
 
-  private static int getEndCut(@NotNull final int[] o1, @NotNull final int[] o2, final int startShift) {
+  private static int getEndCut(final int @NotNull [] o1, final int @NotNull [] o2, final int startShift) {
     final int size = Math.min(o1.length, o2.length) - startShift;
     int idx = 0;
 
@@ -181,14 +165,8 @@ public class Diff {
     return translateLine(change, line, approximate);
   }
 
-  @NotNull
-  private static String[] trim(@NotNull String[] lines) {
-    return ContainerUtil.map2Array(lines, String.class, new Function<String, String>() {
-      @Override
-      public String fun(String s) {
-        return s.trim();
-      }
-    });
+  private static String @NotNull [] trim(String @NotNull [] lines) {
+    return ContainerUtil.map2Array(lines, String.class, String::trim);
   }
 
   /**
@@ -257,7 +235,7 @@ public class Diff {
     }
 
     public ArrayList<Change> toList() {
-      ArrayList<Change> result = new ArrayList<Change>();
+      ArrayList<Change> result = new ArrayList<>();
       Change current = this;
       while (current != null) {
         result.add(current);

@@ -3,20 +3,21 @@ package com.jetbrains.jsonSchema.impl.fixes;
 
 import com.intellij.codeInspection.LocalQuickFix;
 import com.intellij.codeInspection.ProblemDescriptor;
+import com.intellij.json.JsonBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.util.PsiTreeUtil;
-import com.jetbrains.jsonSchema.extension.JsonLikePsiWalker;
+import com.jetbrains.jsonSchema.extension.JsonLikeSyntaxAdapter;
 import com.jetbrains.jsonSchema.impl.JsonValidationError;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
 public class RemoveProhibitedPropertyFix implements LocalQuickFix {
   private final JsonValidationError.ProhibitedPropertyIssueData myData;
-  private final JsonLikePsiWalker.QuickFixAdapter myQuickFixAdapter;
+  private final JsonLikeSyntaxAdapter myQuickFixAdapter;
 
   public RemoveProhibitedPropertyFix(JsonValidationError.ProhibitedPropertyIssueData data,
-                                     JsonLikePsiWalker.QuickFixAdapter quickFixAdapter) {
+                                     JsonLikeSyntaxAdapter quickFixAdapter) {
     myData = data;
     myQuickFixAdapter = quickFixAdapter;
   }
@@ -25,7 +26,7 @@ public class RemoveProhibitedPropertyFix implements LocalQuickFix {
   @NotNull
   @Override
   public String getFamilyName() {
-    return "Remove prohibited property";
+    return JsonBundle.message("remove.prohibited.property");
   }
 
   @Nls(capitalization = Nls.Capitalization.Sentence)

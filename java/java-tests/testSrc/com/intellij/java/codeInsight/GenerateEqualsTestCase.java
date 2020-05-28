@@ -15,17 +15,15 @@
  */
 package com.intellij.java.codeInsight;
 
-import com.intellij.application.options.CodeStyle;
 import com.intellij.codeInsight.generation.EqualsHashCodeTemplatesManager;
 import com.intellij.codeInsight.generation.GenerateEqualsHelper;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiField;
-import com.intellij.psi.codeStyle.CodeStyleSettings;
 import com.intellij.psi.codeStyle.JavaCodeStyleSettings;
 import com.intellij.psi.util.PsiTreeUtil;
-import com.intellij.testFramework.LightCodeInsightTestCase;
+import com.intellij.testFramework.LightJavaCodeInsightTestCase;
 import com.intellij.util.Function;
 
 import java.util.ArrayList;
@@ -33,7 +31,7 @@ import java.util.ArrayList;
 /**
  * @author yole
  */
-public abstract class GenerateEqualsTestCase extends LightCodeInsightTestCase {
+public abstract class GenerateEqualsTestCase extends LightJavaCodeInsightTestCase {
   @Override
   protected void setUp() throws Exception {
     super.setUp();
@@ -63,12 +61,11 @@ public abstract class GenerateEqualsTestCase extends LightCodeInsightTestCase {
     checkResultByFile("/codeInsight/generateEquals/after" + getTestName(false) + ".java");
   }
 
-  private static void performTest(Function<PsiField[], PsiField[]> equals,
+  private void performTest(Function<PsiField[], PsiField[]> equals,
                                   Function<PsiField[], PsiField[]> hashCode,
                                   Function<PsiField[], PsiField[]> nonNull,
                                   boolean insertOverride, 
                                   boolean useAccessors) {
-    CodeStyleSettings settings = CodeStyle.getSettings(getProject()).clone();
     JavaCodeStyleSettings.getInstance(getProject()).GENERATE_FINAL_LOCALS = true;
     JavaCodeStyleSettings.getInstance(getProject()).INSERT_OVERRIDE_ANNOTATION = insertOverride;
     PsiElement element = getFile().findElementAt(getEditor().getCaretModel().getOffset());

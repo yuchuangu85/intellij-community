@@ -17,26 +17,30 @@
 package com.intellij.codeInspection.dataFlow.value;
 
 import com.intellij.codeInsight.Nullability;
-import com.intellij.codeInspection.dataFlow.DfaFactMap;
-import com.intellij.codeInspection.dataFlow.DfaFactType;
 import com.intellij.codeInspection.dataFlow.DfaNullability;
-import com.intellij.openapi.util.Comparing;
+import com.intellij.codeInspection.dataFlow.Mutability;
+import com.intellij.codeInspection.dataFlow.NullabilityUtil;
+import com.intellij.codeInspection.dataFlow.SpecialField;
+import com.intellij.codeInspection.dataFlow.rangeSet.LongRangeSet;
+import com.intellij.codeInspection.dataFlow.types.DfReferenceType;
+import com.intellij.codeInspection.dataFlow.types.DfType;
+import com.intellij.codeInspection.dataFlow.types.DfTypes;
 import com.intellij.openapi.util.Pair;
 import com.intellij.psi.*;
-import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.util.SmartList;
-import com.intellij.util.containers.MultiMap;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public final class DfaVariableValue extends DfaValue {
 
   public static class Factory {
-    private final MultiMap<Pair<String, DfaVariableValue>, DfaVariableValue> myExistingVars = new MultiMap<>();
+    private final Map<Pair<VariableDescriptor, DfaVariableValue>, DfaVariableValue> myExistingVars = new HashMap<>();
     private final DfaValueFactory myFactory;
 
     Factory(DfaValueFactory factory) {
@@ -45,15 +49,11 @@ public final class DfaVariableValue extends DfaValue {
 
     @NotNull
     public DfaVariableValue createVariableValue(PsiVariable variable) {
-      PsiType varType = variable.getType();
-      if (varType instanceof PsiEllipsisType) {
-        varType = ((PsiEllipsisType)varType).toArrayType();
-      }
       DfaVariableValue qualifier = null;
       if (variable instanceof PsiField && !(variable.hasModifierProperty(PsiModifier.STATIC))) {
         qualifier = createThisValue(((PsiField)variable).getContainingClass());
       }
-      return createVariableValue(new DfaExpressionFactory.PlainSource(variable), varType, qualifier);
+      return createVariableValue(new DfaExpressionFactory.PlainDescriptor(variable), qualifier);
     }
 
     /**
@@ -64,68 +64,54 @@ public final class DfaVariableValue extends DfaValue {
     @Contract("null -> null; !null -> !null")
     public DfaVariableValue createThisValue(@Nullable PsiClass aClass) {
       if (aClass == null) return null;
-      PsiClassType type = JavaPsiFacade.getElementFactory(aClass.getProject()).createType(aClass);
-      return createVariableValue(new DfaExpressionFactory.ThisSource(aClass), type);
+      return createVariableValue(new DfaExpressionFactory.ThisDescriptor(aClass));
     }
 
     @NotNull
-    public DfaVariableValue createVariableValue(@NotNull DfaVariableSource source, @Nullable PsiType varType) {
-      return createVariableValue(source, varType, null);
+    public DfaVariableValue createVariableValue(@NotNull VariableDescriptor descriptor) {
+      return createVariableValue(descriptor, null);
     }
 
     @NotNull
-    public DfaVariableValue createVariableValue(@NotNull DfaVariableSource source,
-                                                @Nullable PsiType varType,
-                                                @Nullable DfaVariableValue qualifier) {
-      Pair<String, DfaVariableValue> key = Pair.create(source.toString(), qualifier);
-      for (DfaVariableValue aVar : myExistingVars.get(key)) {
-        if (aVar.hardEquals(source, varType, qualifier)) return aVar;
+    DfaVariableValue createVariableValue(@NotNull VariableDescriptor descriptor, @Nullable DfaVariableValue qualifier) {
+      Pair<VariableDescriptor, DfaVariableValue> key = Pair.create(descriptor, qualifier);
+      DfaVariableValue var = myExistingVars.get(key);
+      if (var == null) {
+        var = new DfaVariableValue(descriptor, myFactory, qualifier);
+        myExistingVars.put(key, var);
+        while (qualifier != null) {
+          qualifier.myDependents.add(var);
+          qualifier = qualifier.getQualifier();
+        }
       }
-
-      DfaVariableValue result = new DfaVariableValue(source, varType, myFactory, qualifier);
-      myExistingVars.putValue(key, result);
-      while (qualifier != null) {
-        qualifier.myDependents.add(result);
-        qualifier = qualifier.getQualifier();
-      }
-      return result;
+      return var;
     }
   }
 
-  @NotNull private final DfaVariableSource mySource;
+  @NotNull private final VariableDescriptor myDescriptor;
   private final PsiType myVarType;
   @Nullable private final DfaVariableValue myQualifier;
-  private DfaFactMap myInherentFacts;
-  private final DfaPsiType myDfaType;
+  private DfType myInherentType;
   private final List<DfaVariableValue> myDependents = new SmartList<>();
 
-  private DfaVariableValue(@NotNull DfaVariableSource source,
-                           @Nullable PsiType varType,
-                           DfaValueFactory factory,
-                           @Nullable DfaVariableValue qualifier) {
+  private DfaVariableValue(@NotNull VariableDescriptor descriptor, @NotNull DfaValueFactory factory, @Nullable DfaVariableValue qualifier) {
     super(factory);
-    mySource = source;
+    myDescriptor = descriptor;
     myQualifier = qualifier;
-    myVarType = varType;
-    myDfaType = varType == null ? null : myFactory.createDfaType(varType);
-    if (varType != null && !varType.isValid()) {
-      PsiUtil.ensureValidType(varType, "Variable: " + source + " of class " + source.getClass());
+    myVarType = descriptor.getType(qualifier);
+    if (myDescriptor instanceof DfaExpressionFactory.AssertionDisabledDescriptor) {
+      myFactory.setAssertionDisabled(this);
     }
-  }
-
-  @Nullable
-  public DfaPsiType getDfaType() {
-    return myDfaType;
   }
 
   @Nullable
   public PsiModifierListOwner getPsiVariable() {
-    return mySource.getPsiElement();
+    return myDescriptor.getPsiElement();
   }
 
   @NotNull
-  public DfaVariableSource getSource() {
-    return mySource;
+  public VariableDescriptor getDescriptor() {
+    return myDescriptor;
   }
 
   @Override
@@ -135,8 +121,8 @@ public final class DfaVariableValue extends DfaValue {
   }
 
   @Override
-  public DfaValue createNegated() {
-    return myFactory.createCondition(this, DfaRelationValue.RelationType.EQ, myFactory.getBoolean(false));
+  public boolean dependsOn(DfaVariableValue other) {
+    return other == this || (myQualifier != null && myQualifier.dependsOn(other));
   }
 
   /**
@@ -160,16 +146,11 @@ public final class DfaVariableValue extends DfaValue {
   @NotNull
   @Contract(pure = true)
   public DfaVariableValue withQualifier(DfaVariableValue newQualifier) {
-    return newQualifier == myQualifier ? this : myFactory.getVarFactory().createVariableValue(mySource, myVarType, newQualifier);
+    return newQualifier == myQualifier ? this : myFactory.getVarFactory().createVariableValue(myDescriptor, newQualifier);
   }
 
   public String toString() {
-    return (myQualifier == null ? "" : myQualifier + ".") + mySource;
-  }
-
-  private boolean hardEquals(DfaVariableSource source, PsiType varType, DfaVariableValue qualifier) {
-    return source.equals(mySource) && qualifier == myQualifier &&
-           Comparing.equal(TypeConversionUtil.erasure(varType), TypeConversionUtil.erasure(myVarType));
+    return (myQualifier == null ? "" : myQualifier + ".") + myDescriptor;
   }
 
   @Nullable
@@ -177,24 +158,48 @@ public final class DfaVariableValue extends DfaValue {
     return myQualifier;
   }
 
-  public DfaFactMap getInherentFacts() {
-    if(myInherentFacts == null) {
-      myInherentFacts = DfaFactMap.calcFromVariable(this);
+  public DfType getInherentType() {
+    if(myInherentType == null) {
+      myInherentType = calcInherentType();
     }
+    return myInherentType;
+  }
 
-    return myInherentFacts;
+  private DfType calcInherentType() {
+    PsiType type = getType();
+    DfType dfType = DfTypes.typedObject(type, Nullability.UNKNOWN);
+    if(myDescriptor instanceof SpecialField) {
+      return dfType.meet(((SpecialField)myDescriptor).getDefaultValue(false));
+    }
+    PsiModifierListOwner psi = getPsiVariable();
+    if (type instanceof PsiPrimitiveType) {
+      if (TypeConversionUtil.isIntegralNumberType(type)) {
+        LongRangeSet fromType = LongRangeSet.fromType(type);
+        if (fromType != null) {
+          LongRangeSet range = LongRangeSet.fromPsiElement(psi).intersect(fromType);
+          return type.equals(PsiType.LONG) ? DfTypes.longRange(range) : DfTypes.intRange(range);
+        }
+      }
+    }
+    if (dfType instanceof DfReferenceType) {
+      if (psi != null) {
+        dfType = dfType.meet(Mutability.getMutability(psi).asDfType());
+      }
+      dfType = dfType.meet(NullabilityUtil.calcCanBeNull(this).asDfType());
+    }
+    return dfType;
   }
 
   @NotNull
   public Nullability getInherentNullability() {
-    return DfaNullability.toNullability(getInherentFacts().get(DfaFactType.NULLABILITY));
+    return DfaNullability.toNullability(DfaNullability.fromDfType(getInherentType()));
   }
 
   public boolean isFlushableByCalls() {
-    return !mySource.isStable() || (myQualifier != null && myQualifier.isFlushableByCalls());
+    return !myDescriptor.isStable() || (myQualifier != null && myQualifier.isFlushableByCalls());
   }
 
   public boolean containsCalls() {
-    return mySource.isCall() || myQualifier != null && myQualifier.containsCalls();
+    return myDescriptor.isCall() || myQualifier != null && myQualifier.containsCalls();
   }
 }

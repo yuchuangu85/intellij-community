@@ -13,7 +13,6 @@ import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
-import com.intellij.openapi.application.TransactionGuard;
 import com.intellij.openapi.command.CommandProcessor;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
@@ -55,7 +54,7 @@ import java.util.List;
  * @author yole
  */
 public class CreateListenerAction extends AbstractGuiEditorAction {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.actions.CreateListenerAction");
+  private static final Logger LOG = Logger.getInstance(CreateListenerAction.class);
 
   @Override
   protected void actionPerformed(final GuiEditor editor, final List<? extends RadComponent> selection, final AnActionEvent e) {
@@ -106,7 +105,7 @@ public class CreateListenerAction extends AbstractGuiEditorAction {
     return true;
   }
 
-  private class MyCreateListenerAction extends AnAction {
+  private static class MyCreateListenerAction extends AnAction {
     private final List<? extends RadComponent> mySelection;
     private final EventSetDescriptor myDescriptor;
     @NonNls private static final String LISTENER_SUFFIX = "Listener";
@@ -230,14 +229,14 @@ public class CreateListenerAction extends AbstractGuiEditorAction {
               if (brace != null) {
                 editor.getCaretModel().moveToOffset(brace.getTextOffset());
               }
-              CommandProcessor.getInstance().executeCommand(myClass.getProject(), () -> TransactionGuard.getInstance().submitTransactionAndWait(() -> {
+              CommandProcessor.getInstance().executeCommand(myClass.getProject(), () -> {
                 if (!OverrideImplementExploreUtil.getMethodSignaturesToImplement(newClass).isEmpty()) {
                   OverrideImplementUtil.chooseAndImplementMethods(newClass.getProject(), editor, newClass);
                 }
                 else {
                   OverrideImplementUtil.chooseAndOverrideMethods(newClass.getProject(), editor, newClass);
                 }
-              }), "", null);
+              }, "", null);
             }
           }
 

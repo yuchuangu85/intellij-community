@@ -19,18 +19,22 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.roots.*;
-import com.intellij.openapi.roots.impl.libraries.ProjectLibraryTable;
 import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.roots.libraries.LibraryTable;
 import com.intellij.openapi.roots.libraries.LibraryTablesRegistrar;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.registry.Registry;
+import com.intellij.openapi.util.registry.RegistryValue;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.idea.maven.MavenCustomRepositoryHelper;
 import org.jetbrains.idea.maven.MavenImportingTestCase;
 import org.jetbrains.idea.maven.model.MavenId;
 import org.jetbrains.idea.maven.project.MavenProject;
+import org.jetbrains.idea.maven.project.MavenWorkspaceSettingsComponent;
 import org.jetbrains.idea.maven.server.MavenServerManager;
+import org.jetbrains.idea.maven.utils.MavenUtil;
 
 import java.io.File;
 import java.util.Arrays;
@@ -394,7 +398,7 @@ public class DependenciesImportingTest extends MavenImportingTestCase {
                           "<artifactId>m2</artifactId>" +
                           "<version>1</version>");
 
-    MavenServerManager.getInstance().setUseMaven2();
+    MavenWorkspaceSettingsComponent.getInstance(myProject).getSettings().generalSettings.setMavenHome(MavenServerManager.BUNDLED_MAVEN_2);
     importProject();
     assertModules("project", "m1", "m2");
 
@@ -403,117 +407,6 @@ public class DependenciesImportingTest extends MavenImportingTestCase {
 
     MavenProject p = myProjectsTree.findProject(new MavenId("test", "m1", "1"));
     assertEquals(new MavenId("test", "m2", "1"), p.getDependencies().get(0).getMavenId());
-  }
-
-  public void testInterModuleDependenciesWithLatestVersionAreBeingSetupForSnapshots() {
-    createProjectPom("<groupId>test</groupId>" +
-                     "<artifactId>project</artifactId>" +
-                     "<packaging>pom</packaging>" +
-                     "<version>1</version>" +
-
-                     "<modules>" +
-                     "  <module>m1</module>" +
-                     "  <module>m2</module>" +
-                     "</modules>");
-
-    createModulePom("m1", "<groupId>test</groupId>" +
-                          "<artifactId>m1</artifactId>" +
-                          "<version>1</version>" +
-
-                          "<dependencies>" +
-                          "  <dependency>" +
-                          "    <groupId>test</groupId>" +
-                          "    <artifactId>m2</artifactId>" +
-                          "    <version>LATEST</version>" +
-                          "  </dependency>" +
-                          "</dependencies>");
-
-    createModulePom("m2", "<groupId>test</groupId>" +
-                          "<artifactId>m2</artifactId>" +
-                          "<version>1-SNAPSHOT</version>");
-
-    MavenServerManager.getInstance().setUseMaven2();
-    importProject();
-    assertModules("project", "m1", "m2");
-
-    assertModuleModuleDeps("m1", "m2");
-    assertModuleLibDeps("m1");
-
-    MavenProject p = myProjectsTree.findProject(new MavenId("test", "m1", "1"));
-    assertEquals(new MavenId("test", "m2", "1-SNAPSHOT"), p.getDependencies().get(0).getMavenId());
-  }
-
-  public void testInterModuleDependenciesWithReleaseVersion() {
-    createProjectPom("<groupId>test</groupId>" +
-                     "<artifactId>project</artifactId>" +
-                     "<packaging>pom</packaging>" +
-                     "<version>1</version>" +
-
-                     "<modules>" +
-                     "  <module>m1</module>" +
-                     "  <module>m2</module>" +
-                     "</modules>");
-
-    createModulePom("m1", "<groupId>test</groupId>" +
-                          "<artifactId>m1</artifactId>" +
-                          "<version>1</version>" +
-
-                          "<dependencies>" +
-                          "  <dependency>" +
-                          "    <groupId>test</groupId>" +
-                          "    <artifactId>m2</artifactId>" +
-                          "    <version>RELEASE</version>" +
-                          "  </dependency>" +
-                          "</dependencies>");
-
-    createModulePom("m2", "<groupId>test</groupId>" +
-                          "<artifactId>m2</artifactId>" +
-                          "<version>1</version>");
-
-    MavenServerManager.getInstance().setUseMaven2();
-    importProject();
-    assertModules("project", "m1", "m2");
-
-    assertModuleModuleDeps("m1", "m2");
-    assertModuleLibDeps("m1");
-
-    MavenProject p = myProjectsTree.findProject(new MavenId("test", "m1", "1"));
-    assertEquals(new MavenId("test", "m2", "1"), p.getDependencies().get(0).getMavenId());
-  }
-
-  public void testInterModuleDependenciesWithReleaseVersionAreNotBeingSetupForSnapshotDependencies() {
-    createProjectPom("<groupId>test</groupId>" +
-                     "<artifactId>project</artifactId>" +
-                     "<packaging>pom</packaging>" +
-                     "<version>1</version>" +
-
-                     "<modules>" +
-                     "  <module>m1</module>" +
-                     "  <module>m2</module>" +
-                     "</modules>");
-
-    createModulePom("m1", "<groupId>test</groupId>" +
-                          "<artifactId>m1</artifactId>" +
-                          "<version>1</version>" +
-
-                          "<dependencies>" +
-                          "  <dependency>" +
-                          "    <groupId>test</groupId>" +
-                          "    <artifactId>m2</artifactId>" +
-                          "    <version>RELEASE</version>" +
-                          "  </dependency>" +
-                          "</dependencies>");
-
-    createModulePom("m2", "<groupId>test</groupId>" +
-                          "<artifactId>m2</artifactId>" +
-                          "<version>1-SNAPSHOT</version>");
-
-    MavenServerManager.getInstance().setUseMaven2();
-    importProject();
-    assertModules("project", "m1", "m2");
-
-    assertModuleModuleDeps("m1");
-    assertModuleLibDeps("m1", "Maven: test:m2:RELEASE");
   }
 
   public void testInterSnapshotModuleDependenciesWithSnapshotVersionRanges() {
@@ -543,7 +436,6 @@ public class DependenciesImportingTest extends MavenImportingTestCase {
                           "<artifactId>m2</artifactId>" +
                           "<version>1-SNAPSHOT</version>");
 
-    MavenServerManager.getInstance().setUseMaven2();
     importProject();
     assertModules("project", "m1", "m2");
 
@@ -577,7 +469,6 @@ public class DependenciesImportingTest extends MavenImportingTestCase {
                           "<artifactId>m2</artifactId>" +
                           "<version>1-SNAPSHOT</version>");
 
-    MavenServerManager.getInstance().setUseMaven2();
     importProject();
     assertModules("project", "m1", "m2");
 
@@ -1047,6 +938,12 @@ public class DependenciesImportingTest extends MavenImportingTestCase {
   }
 
   public void testDependencyWithEnvironmentENVProperty() {
+    if (ignore()) {
+      return;
+    }
+    if (MavenUtil.newModelEnabled(myProject)) {
+      throw new IllegalStateException("This test brokes all subsequent!");
+    }
     String envDir = FileUtil.toSystemIndependentName(System.getenv(getEnvVar()));
     envDir = StringUtil.trimEnd(envDir, "/");
 
@@ -1655,16 +1552,16 @@ public class DependenciesImportingTest extends MavenImportingTestCase {
                           "</dependencies>");
 
     importProject("<groupId>test</groupId>" +
-                     "<artifactId>project</artifactId>" +
-                     "<version>1</version>" +
-                     "<packaging>pom</packaging>" +
+                  "<artifactId>project</artifactId>" +
+                  "<version>1</version>" +
+                  "<packaging>pom</packaging>" +
 
-                     "<modules>" +
-                     "  <module>m1</module>" +
-                     "  <module>m2</module>" +
-                     "</modules>");
+                  "<modules>" +
+                  "  <module>m1</module>" +
+                  "  <module>m2</module>" +
+                  "</modules>");
 
-//    assertProjectLibraries("Maven: xxx:yyy:1");
+    //    assertProjectLibraries("Maven: xxx:yyy:1");
     assertModuleLibDep("m1", "Maven: xxx:yyy:1", "jar://" + getRoot() + "/m1/foo.jar!/");
     assertModuleLibDep("m2", "Maven: xxx:yyy:1", "jar://" + getRoot() + "/m2/foo.jar!/");
   }
@@ -2084,7 +1981,7 @@ public class DependenciesImportingTest extends MavenImportingTestCase {
   }
 
   private Library createProjectLibrary(final String libraryName) {
-    return WriteAction.compute(() -> ProjectLibraryTable.getInstance(myProject).createLibrary(libraryName));
+    return WriteAction.compute(() -> LibraryTablesRegistrar.getInstance().getLibraryTable(myProject).createLibrary(libraryName));
   }
 
   private void createAndAddProjectLibrary(final String moduleName, final String libraryName) {
@@ -2096,7 +1993,7 @@ public class DependenciesImportingTest extends MavenImportingTestCase {
 
   private void clearLibraryRoots(final String libraryName, final OrderRootType... types) {
     ApplicationManager.getApplication().runWriteAction(() -> {
-      Library lib = ProjectLibraryTable.getInstance(myProject).getLibraryByName(libraryName);
+      Library lib = com.intellij.openapi.roots.libraries.LibraryTablesRegistrar.getInstance().getLibraryTable(myProject).getLibraryByName(libraryName);
       Library.ModifiableModel model = lib.getModifiableModel();
       for (OrderRootType eachType : types) {
         for (String each : model.getUrls(eachType)) {
@@ -2109,7 +2006,7 @@ public class DependenciesImportingTest extends MavenImportingTestCase {
 
   private void addLibraryRoot(final String libraryName, final OrderRootType type, final String path) {
     ApplicationManager.getApplication().runWriteAction(() -> {
-      Library lib = ProjectLibraryTable.getInstance(myProject).getLibraryByName(libraryName);
+      Library lib = com.intellij.openapi.roots.libraries.LibraryTablesRegistrar.getInstance().getLibraryTable(myProject).getLibraryByName(libraryName);
       Library.ModifiableModel model = lib.getModifiableModel();
       model.addRoot(path, type);
       model.commit();
@@ -2466,5 +2363,97 @@ public class DependenciesImportingTest extends MavenImportingTestCase {
                        "jar://" + getRepositoryPath() + "/com/google/guava/guava/15.0/guava-15.0.jar!/",
                        "jar://" + getRepositoryPath() + "/com/google/guava/guava/15.0/guava-15.0-sources.jar!/",
                        "jar://" + getRepositoryPath() + "/com/google/guava/guava/15.0/guava-15.0-javadoc.jar!/");
+  }
+
+  public void testReimportingInheritedLibrary() {
+    createProjectPom("<groupId>test</groupId>" +
+                     "<artifactId>project</artifactId>" +
+                     "<packaging>pom</packaging>" +
+                     "<version>1</version>" +
+
+                     "<modules>" +
+                     "  <module>m1</module>" +
+                     "</modules>" +
+                     "<dependencies>" +
+                     "  <dependency>" +
+                     "    <groupId>junit1</groupId><artifactId>junit1</artifactId><version>3.3</version>" +
+                     "  </dependency>" +
+                     "</dependencies>");
+
+    createModulePom("m1", "<parent>" +
+                          "    <groupId>test</groupId>" +
+                          "    <artifactId>project</artifactId>" +
+                          "    " +
+                          "    <version>1</version>" +
+                          "  </parent>" +
+                          "<artifactId>m1</artifactId>");
+
+
+    importProject();
+
+    createProjectPom("<groupId>test</groupId>" +
+                     "<artifactId>project</artifactId>" +
+                     "<packaging>pom</packaging>" +
+                     "<version>1</version>" +
+
+                     "<modules>" +
+                     "  <module>m1</module>" +
+                     "</modules>" +
+                     "<dependencies>" +
+                     "  <dependency>" +
+                     "    <groupId>junit</groupId><artifactId>junit</artifactId><version>4.0</version>" +
+                     "  </dependency>" +
+                     "</dependencies>");
+
+    importProject();
+
+    assertModuleLibDep("project", "Maven: junit:junit:4.0",
+                       "jar://" + getRepositoryPath() + "/junit/junit/4.0/junit-4.0.jar!/",
+                       "jar://" + getRepositoryPath() + "/junit/junit/4.0/junit-4.0-sources.jar!/",
+                       "jar://" + getRepositoryPath() + "/junit/junit/4.0/junit-4.0-javadoc.jar!/");
+
+    assertModuleLibDep("m1", "Maven: junit:junit:4.0",
+                       "jar://" + getRepositoryPath() + "/junit/junit/4.0/junit-4.0.jar!/",
+                       "jar://" + getRepositoryPath() + "/junit/junit/4.0/junit-4.0-sources.jar!/",
+                       "jar://" + getRepositoryPath() + "/junit/junit/4.0/junit-4.0-javadoc.jar!/");
+  }
+
+  public void testRemoveInvalidOrderEntry() {
+    RegistryValue value = Registry.get("maven.always.remove.bad.entries");
+    try {
+      value.setValue(true);
+      createProjectPom("<groupId>test</groupId>" +
+                       "<artifactId>project</artifactId>" +
+                       "<packaging>pom</packaging>" +
+                       "<version>1</version>" +
+                       "<dependencies>" +
+                       "  <dependency>" +
+                       "    <groupId>junit</groupId>" +
+                       "    <artifactId>junit</artifactId>" +
+                       "    <version>4.0</version>" +
+                       "  </dependency>" +
+                       "</dependencies>");
+      importProject();
+
+      WriteAction.runAndWait(() -> {
+        ModifiableRootModel modifiableModel = ModuleRootManager.getInstance(getModule("project")).getModifiableModel();
+        modifiableModel.addInvalidLibrary("SomeLibrary", LibraryTablesRegistrar.PROJECT_LEVEL);
+        modifiableModel
+          .addInvalidLibrary("Maven: AnotherLibrary", LibraryTablesRegistrar.PROJECT_LEVEL);
+        modifiableModel.commit();
+      });
+
+      importProject();
+
+      OrderEntry[] entries = ModuleRootManager.getInstance(getModule("project")).getOrderEntries();
+      List<String> strings = ContainerUtil.map(entries, Object::toString);
+
+      assertContain(strings, "project -> SomeLibrary", "project -> Maven: junit:junit:4.0");
+      assertDoesntContain(strings, "project -> Maven: AnotherLibrary");
+
+    }
+    finally {
+      value.resetToDefault();
+    }
   }
 }

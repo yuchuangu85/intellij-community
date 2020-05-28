@@ -20,6 +20,11 @@ public abstract class WebModuleTypeBase<T extends ModuleBuilder> extends ModuleT
   }
 
   @NotNull
+  public static WebModuleTypeBase<?> getInstance() {
+    return (WebModuleTypeBase<?>)ModuleTypeManager.getInstance().findByID(WEB_MODULE);
+  }
+
+  @NotNull
   @Override
   public String getName() {
     return ProjectBundle.message("module.web.title");
@@ -31,6 +36,7 @@ public abstract class WebModuleTypeBase<T extends ModuleBuilder> extends ModuleT
     return ProjectBundle.message("module.web.description");
   }
 
+  @NotNull
   @Override
   public Icon getNodeIcon(final boolean isOpened) {
     return AllIcons.Nodes.Module;

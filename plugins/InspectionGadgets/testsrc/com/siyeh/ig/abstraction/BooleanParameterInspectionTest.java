@@ -16,12 +16,12 @@
 package com.siyeh.ig.abstraction;
 
 import com.intellij.codeInspection.LocalInspectionTool;
-import com.siyeh.ig.LightInspectionTestCase;
+import com.siyeh.ig.LightJavaInspectionTestCase;
 
 /**
  * @author Bas Leijdekkers
  */
-public class BooleanParameterInspectionTest extends LightInspectionTestCase {
+public class BooleanParameterInspectionTest extends LightJavaInspectionTestCase {
 
   public void testSimple() {
     doTest("class X {" +
@@ -41,6 +41,17 @@ public class BooleanParameterInspectionTest extends LightInspectionTestCase {
   public void testSetter() {
     doTest("class X {" +
            "  public void setMyProperty(final boolean myProperty) {}" +
+           "}");
+  }
+
+  public void testVarargs() {
+    doTest("class Y {" +
+           "    public Y(boolean... b) {}" +
+           "}" +
+           "class X extends Y {" +
+           "    public /*'public' constructor 'X()' with 'boolean' parameter*/X/**/(boolean b) {" +
+           "        super(true, b);" +
+           "    }" +
            "}");
   }
 

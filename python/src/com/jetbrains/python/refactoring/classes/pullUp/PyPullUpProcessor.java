@@ -40,7 +40,7 @@ class PyPullUpProcessor extends PyMembersRefactoringBaseProcessor {
   @NotNull
   @Override
   protected String getCommandName() {
-    return PyPullUpHandler.REFACTORING_NAME;
+    return PyPullUpHandler.getRefactoringName();
   }
 
   @Override
@@ -48,6 +48,7 @@ class PyPullUpProcessor extends PyMembersRefactoringBaseProcessor {
     return PyBundle.message("refactoring.pull.up.dialog.move.members.to.class");
   }
 
+  @NotNull
   @Override
   public String getCodeReferencesText(final int usagesCount, final int filesCount) {
     return PyBundle.message("refactoring.pull.up.dialog.members.to.be.moved");

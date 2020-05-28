@@ -1,21 +1,6 @@
-/*
- * Copyright 2007-2011 Bas Leijdekkers
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.siyeh.ig.threading;
 
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.siyeh.InspectionGadgetsBundle;
@@ -24,36 +9,32 @@ import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.psiutils.TypeUtils;
 import com.siyeh.ig.ui.ExternalizableStringSet;
 import com.siyeh.ig.ui.UiUtils;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import java.util.List;
 
-public class AccessToNonThreadSafeStaticFieldFromInstanceInspection extends
-                                                                    BaseInspection {
+public class AccessToNonThreadSafeStaticFieldFromInstanceInspection extends BaseInspection {
 
   @SuppressWarnings("PublicField")
   public final ExternalizableStringSet nonThreadSafeClasses =
-    new ExternalizableStringSet("java.text.SimpleDateFormat",
-                                "java.text.MessageFormat",
-                                "java.text.DecimalFormat",
-                                "java.text.ChoiceFormat",
-                                "java.util.Calendar");
-  @NonNls
-  @SuppressWarnings({"PublicField"})
-  public String nonThreadSafeTypes = "";
+    new ExternalizableStringSet(
+      "java.text.Format",
+      "java.text.DateFormat",
+      "java.text.SimpleDateFormat",
+      "java.text.MessageFormat",
+      "java.text.DecimalFormat",
+      "java.text.ChoiceFormat",
+      "java.util.Calendar"
+    );
 
-  public AccessToNonThreadSafeStaticFieldFromInstanceInspection() {
-    if (!this.nonThreadSafeTypes.isEmpty()) {
-      this.nonThreadSafeClasses.clear();
-      final List<String> strings = StringUtil.split(this.nonThreadSafeTypes, ",");
-      this.nonThreadSafeClasses.addAll(strings);
-      this.nonThreadSafeTypes = "";
-    }
-  }
+  /**
+   * Don't remove, otherwise user inspection profiles will be modified.
+   */
+  @NonNls
+  @SuppressWarnings({"PublicField", "unused"})
+  public String nonThreadSafeTypes = "";
 
   @Override
   @Nullable
@@ -67,13 +48,6 @@ public class AccessToNonThreadSafeStaticFieldFromInstanceInspection extends
   @Override
   public String getID() {
     return "AccessToNonThreadSafeStaticField";
-  }
-
-  @Override
-  @Nls
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("access.to.non.thread.safe.static.field.from.instance.display.name");
   }
 
   @Override

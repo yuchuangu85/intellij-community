@@ -18,7 +18,6 @@ package com.intellij.xdebugger.impl.ui.tree.nodes;
 import com.intellij.ui.ColoredTextContainer;
 import com.intellij.ui.SimpleColoredText;
 import com.intellij.util.ArrayUtilRt;
-import com.intellij.util.enumeration.EmptyEnumeration;
 import com.intellij.xdebugger.frame.XDebuggerTreeNodeHyperlink;
 import com.intellij.xdebugger.impl.ui.tree.XDebuggerTree;
 import org.jetbrains.annotations.NotNull;
@@ -29,12 +28,9 @@ import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
 import java.util.*;
 
-/**
- * @author nik
- */
 public abstract class XDebuggerTreeNode implements TreeNode {
   protected final XDebuggerTree myTree;
-  private final XDebuggerTreeNode myParent;
+  protected final XDebuggerTreeNode myParent;
   private boolean myLeaf;
   protected final SimpleColoredText myText = new SimpleColoredText();
   private Icon myIcon;
@@ -80,7 +76,7 @@ public abstract class XDebuggerTreeNode implements TreeNode {
   @Override
   public Enumeration children() {
     if (isLeaf()) {
-      return EmptyEnumeration.INSTANCE;
+      return Collections.emptyEnumeration();
     }
     return Collections.enumeration(getChildren());
   }
@@ -109,6 +105,11 @@ public abstract class XDebuggerTreeNode implements TreeNode {
   @Nullable
   public Icon getIcon() {
     return myIcon;
+  }
+
+  @Nullable
+  public Object getIconTag() {
+    return null;
   }
 
   protected void fireNodeChanged() {

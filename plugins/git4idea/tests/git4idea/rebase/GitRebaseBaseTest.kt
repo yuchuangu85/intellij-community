@@ -1,24 +1,11 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.rebase
 
 import com.intellij.dvcs.repo.Repository
 import com.intellij.notification.Notification
 import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.vcs.Executor
 import git4idea.GitUtil
 import git4idea.branch.GitRebaseParams
@@ -28,7 +15,10 @@ import git4idea.test.*
 
 abstract class GitRebaseBaseTest : GitPlatformTest() {
 
-  protected val LOCAL_CHANGES_WARNING : String = "Local changes were stashed before rebase."
+  private val saved = getDefaultSaveChangesPolicy().name.toLowerCase().let { save ->
+    if (save.endsWith("e")) "${save}d" else "${save}ed"
+  }
+  protected val LOCAL_CHANGES_WARNING: String = "Local changes were ${saved} before rebase."
 
   override fun createRepository(rootDir: String) = createRepository(project, rootDir, false)
 
@@ -199,13 +189,20 @@ abstract class GitRebaseBaseTest : GitPlatformTest() {
   }
 
   protected fun `assert error about unstaged file before continue rebase`(file : String) {
-    val fileLine = if (vcs.version.isLaterOrEqual(GitVersion(1, 7, 3, 0))) "$file: needs update" else ""
+    val fileLine = if (vcs.version.isLaterOrEqual(GitVersion(1, 7, 3, 0)) &&
+                       vcs.version.isOlderOrEqual(GitVersion(2, 19, 2, 0))) "$file: needs update" else ""
     assertErrorNotification("Continue Rebase Failed",
           """
           $fileLine
           You must edit all merge conflicts
           and then mark them as resolved using git add
           """)
+  }
+
+  protected fun keepCommitMessageAfterConflict() {
+    dialogManager.onDialog(GitUnstructuredEditor::class.java) {
+      DialogWrapper.OK_EXIT_CODE
+    }
   }
 
   inner class LocalChange(val repository: GitRepository, private val filePath: String, val content: String = "Some content") {

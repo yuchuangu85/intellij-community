@@ -1,12 +1,13 @@
-// Copyright 2000-2017 JetBrains s.r.o.
-// Use of this source code is governed by the Apache 2.0 license that can be
-// found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.util;
 
 import com.intellij.util.Function;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+/**
+ * Generic wrapper around two related values.
+ */
 public class Pair<A, B> {
   public final A first;
   public final B second;
@@ -16,6 +17,7 @@ public class Pair<A, B> {
     //noinspection DontUsePairConstructor
     return new Pair<A, B>(first, second);
   }
+
   @NotNull
   public static <A, B> NonNull<A, B> createNonNull(@NotNull A first, @NotNull B second) {
     return new NonNull<A, B>(first, second);
@@ -30,6 +32,7 @@ public class Pair<A, B> {
   @NotNull
   public static <A, B> Function<A, Pair<A, B>> createFunction(final B value) {
     return new Function<A, Pair<A, B>>() {
+      @Override
       public Pair<A, B> fun(A a) {
         return create(a, value);
       }
@@ -44,13 +47,18 @@ public class Pair<A, B> {
     return pair != null ? pair.second : null;
   }
 
+  @SuppressWarnings("rawtypes")
   private static final Pair EMPTY = create(null, null);
 
-  @SuppressWarnings("unchecked")
+  @NotNull
   public static <A, B> Pair<A, B> empty() {
+    //noinspection unchecked
     return EMPTY;
   }
 
+  /**
+   * @see #create(Object, Object)
+   */
   public Pair(A first, B second) {
     this.first = first;
     this.second = second;
@@ -66,7 +74,7 @@ public class Pair<A, B> {
 
   @Override
   public final boolean equals(Object o) {
-    return o instanceof Pair && Comparing.equal(first, ((Pair)o).first) && Comparing.equal(second, ((Pair)o).second);
+    return o instanceof Pair && Comparing.equal(first, ((Pair<?, ?>)o).first) && Comparing.equal(second, ((Pair<?, ?>)o).second);
   }
 
   @Override
@@ -81,7 +89,7 @@ public class Pair<A, B> {
     return "<" + first + "," + second + ">";
   }
 
-  public static class NonNull<A, B> extends Pair<A,B> {
+  public static class NonNull<A, B> extends Pair<A, B> {
     public NonNull(@NotNull A first, @NotNull B second) {
       super(first, second);
     }

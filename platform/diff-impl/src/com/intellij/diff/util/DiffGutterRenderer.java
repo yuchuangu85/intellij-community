@@ -20,16 +20,19 @@ import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.editor.markup.GutterIconRenderer;
 import com.intellij.openapi.project.DumbAwareAction;
+import com.intellij.util.ObjectUtils;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.awt.event.MouseEvent;
 
 public abstract class DiffGutterRenderer extends GutterIconRenderer implements NonHideableIconGutterMark {
   @NotNull private final Icon myIcon;
   @Nullable private final String myTooltip;
 
-  public DiffGutterRenderer(@NotNull Icon icon, @Nullable String tooltip) {
+  public DiffGutterRenderer(@NotNull Icon icon, @Nullable @Nls String tooltip) {
     myIcon = icon;
     myTooltip = tooltip;
   }
@@ -78,5 +81,13 @@ public abstract class DiffGutterRenderer extends GutterIconRenderer implements N
     return System.identityHashCode(this);
   }
 
-  protected abstract void performAction(@NotNull AnActionEvent e);
+  protected void performAction(@NotNull AnActionEvent e) {
+    MouseEvent mouseEvent = ObjectUtils.tryCast(e.getInputEvent(), MouseEvent.class);
+    if (mouseEvent == null ||
+        mouseEvent.getButton() == MouseEvent.BUTTON1 && mouseEvent.getClickCount() == 1) {
+      handleMouseClick();
+    }
+  }
+
+  protected abstract void handleMouseClick();
 }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.hints;
 
 import com.intellij.codeInsight.daemon.impl.ParameterHintsPresentationManager;
@@ -20,10 +6,7 @@ import com.intellij.openapi.editor.Caret;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.Inlay;
 import com.intellij.openapi.editor.VisualPosition;
-import com.intellij.openapi.editor.ex.DocumentEx;
 import com.intellij.openapi.util.Key;
-import com.intellij.util.DocumentUtil;
-import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.TIntObjectHashMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -37,20 +20,20 @@ public class ParameterHintsUpdater {
 
   private final ParameterHintsPresentationManager myHintsManager = ParameterHintsPresentationManager.getInstance();
   private final TIntObjectHashMap<Caret> myCaretMap;
-  
+
   private final TIntObjectHashMap<List<ParameterHintsPass.HintData>> myNewHints;
   private final TIntObjectHashMap<String> myHintsToPreserve;
   private final boolean myForceImmediateUpdate;
 
   private final Editor myEditor;
-  private final List<Inlay> myEditorInlays;
+  private final @NotNull List<? extends Inlay> myEditorInlays;
   private List<InlayUpdateInfo> myUpdateList;
 
-  public ParameterHintsUpdater(@NotNull Editor editor,
-                               @NotNull List<Inlay> editorInlays,
-                               @NotNull TIntObjectHashMap<List<ParameterHintsPass.HintData>> newHints,
-                               @NotNull TIntObjectHashMap<String> hintsToPreserve, 
-                               boolean forceImmediateUpdate) {
+  ParameterHintsUpdater(@NotNull Editor editor,
+                        @NotNull List<? extends Inlay> editorInlays,
+                        @NotNull TIntObjectHashMap<List<ParameterHintsPass.HintData>> newHints,
+                        @NotNull TIntObjectHashMap<String> hintsToPreserve,
+                        boolean forceImmediateUpdate) {
     myEditor = editor;
     myNewHints = newHints;
     myHintsToPreserve = hintsToPreserve;
@@ -58,16 +41,15 @@ public class ParameterHintsUpdater {
 
     myCaretMap = new TIntObjectHashMap<>();
     List<Caret> allCarets = myEditor.getCaretModel().getAllCarets();
-    allCarets.forEach((caret) -> myCaretMap.put(caret.getOffset(), caret));
+    allCarets.forEach(caret -> myCaretMap.put(caret.getOffset(), caret));
 
     myEditorInlays = editorInlays;
   }
-  
-  
-  private List<InlayUpdateInfo> getInlayUpdates(List<Inlay> editorHints) {
+
+  private @NotNull List<InlayUpdateInfo> getInlayUpdates(@NotNull List<? extends Inlay> editorHints) {
     myEditor.putUserData(HINT_REMOVAL_DELAYED, Boolean.FALSE);
 
-    List<InlayUpdateInfo> updates = ContainerUtil.newArrayList();
+    List<InlayUpdateInfo> updates = new ArrayList<>();
 
     editorHints.forEach(editorHint -> {
       int offset = editorHint.getOffset();
@@ -81,17 +63,17 @@ public class ParameterHintsUpdater {
       updates.add(new InlayUpdateInfo(offset, editorHint, newHint));
     });
 
-    Arrays.stream(myNewHints.keys()).forEach((offset) -> {
+    Arrays.stream(myNewHints.keys()).forEach(offset -> {
       for (ParameterHintsPass.HintData hint : myNewHints.get(offset)) {
         updates.add(new InlayUpdateInfo(offset, null, hint));
       }
     });
 
-    updates.sort(Comparator.comparing((update) -> update.offset));
+    updates.sort(Comparator.comparing(update -> update.offset));
     return updates;
   }
 
-  public static boolean hintRemovalDelayed(@NotNull Editor editor) {
+  static boolean hintRemovalDelayed(@NotNull Editor editor) {
     return editor.getUserData(HINT_REMOVAL_DELAYED) == Boolean.TRUE;
   }
 
@@ -113,7 +95,7 @@ public class ParameterHintsUpdater {
     }
     return newHint;
   }
-  
+
   private boolean isPreserveHint(@NotNull Inlay inlay, @Nullable String newText) {
     if (newText == null) {
       newText = myHintsToPreserve.get(inlay.getOffset());
@@ -121,13 +103,13 @@ public class ParameterHintsUpdater {
     String oldText = myHintsManager.getHintText(inlay);
     return Objects.equals(newText, oldText);
   }
-  
+
 
   public void update() {
     myUpdateList = getInlayUpdates(myEditorInlays);
     boolean firstTime = myEditor.getUserData(REPEATED_PASS) == null;
     boolean isUpdateInBulkMode = myUpdateList.size() > 1000;
-    DocumentUtil.executeInBulk(myEditor.getDocument(), isUpdateInBulkMode, () -> performHintsUpdate(firstTime, isUpdateInBulkMode));
+    myEditor.getInlayModel().execute(isUpdateInBulkMode, () -> performHintsUpdate(firstTime, isUpdateInBulkMode));
     myEditor.putUserData(REPEATED_PASS, Boolean.TRUE);
   }
 
@@ -141,12 +123,12 @@ public class ParameterHintsUpdater {
       if (action == InlayUpdateInfo.Action.ADD) {
         boolean useAnimation = !myForceImmediateUpdate && !firstTime && !isSameHintRemovedNear(newText, infoIndex) && !isInBulkMode;
         Inlay inlay = myHintsManager.addHint(myEditor, info.offset, info.relatesToPrecedingText, newText, info.widthAdjustment, useAnimation);
-        if (inlay != null && !((DocumentEx)myEditor.getDocument()).isInBulkUpdate()) {
+        if (inlay != null && !isInBulkMode) {
           VisualPosition inlayPosition = inlay.getVisualPosition();
-          VisualPosition visualPosition = new VisualPosition(inlayPosition.line, 
+          VisualPosition visualPosition = new VisualPosition(inlayPosition.line,
                                                              inlayPosition.column + (info.relatesToPrecedingText ? 1 : 0));
           Caret caret = myEditor.getCaretModel().getCaretAt(visualPosition);
-          if (caret != null) caret.moveToVisualPosition(new VisualPosition(inlayPosition.line, 
+          if (caret != null) caret.moveToVisualPosition(new VisualPosition(inlayPosition.line,
                                                                            inlayPosition.column + (info.relatesToPrecedingText ? 0 : 1)));
         }
       }
@@ -161,17 +143,17 @@ public class ParameterHintsUpdater {
   }
 
   private boolean isSameHintRemovedNear(@NotNull String text, int index) {
-    return getInfosNear(index).anyMatch((info) -> text.equals(info.oldText));
+    return getInfosNear(index).anyMatch(info -> text.equals(info.oldText));
   }
 
 
   private boolean isSameHintAddedNear(@NotNull String text, int index) {
-    return getInfosNear(index).anyMatch((info) -> text.equals(info.newText));
+    return getInfosNear(index).anyMatch(info -> text.equals(info.newText));
   }
-  
-  
+
+
   private Stream<InlayUpdateInfo> getInfosNear(int index) {
-    List<InlayUpdateInfo> result = ContainerUtil.newArrayList();
+    List<InlayUpdateInfo> result = new ArrayList<>();
     if (index > 0) {
       result.add(myUpdateList.get(index - 1));
     }
@@ -182,7 +164,7 @@ public class ParameterHintsUpdater {
   }
 
 
-  private boolean delayRemoval(Inlay inlay) {
+  private boolean delayRemoval(@NotNull Inlay inlay) {
     int offset = inlay.getOffset();
     Caret caret = myCaretMap.get(offset);
     if (caret == null) return false;
@@ -192,11 +174,10 @@ public class ParameterHintsUpdater {
     if (afterCaret != ',' && afterCaret != ')') return false;
     VisualPosition afterInlayPosition = myEditor.offsetToVisualPosition(offset, true, false);
     // check whether caret is to the right of inlay
-    if (!caret.getVisualPosition().equals(afterInlayPosition)) return false;
-    return true;
+    return caret.getVisualPosition().equals(afterInlayPosition);
   }
 
-  
+
   private static class InlayUpdateInfo {
     public enum Action {
       ADD, DELETE, REPLACE, SKIP

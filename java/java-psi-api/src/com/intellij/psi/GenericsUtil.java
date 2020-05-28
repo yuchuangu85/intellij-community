@@ -39,6 +39,8 @@ public class GenericsUtil {
 
   public static PsiType getGreatestLowerBound(@Nullable PsiType type1, @Nullable PsiType type2) {
     if (type1 == null || type2 == null) return null;
+    if (type1.equalsToText(CommonClassNames.JAVA_LANG_OBJECT)) return type2;
+    if (type2.equalsToText(CommonClassNames.JAVA_LANG_OBJECT)) return type1;
     return PsiIntersectionType.createIntersection(type1, type2);
   }
 
@@ -71,8 +73,8 @@ public class GenericsUtil {
       final PsiType componentType1 = ((PsiArrayType)type1).getComponentType();
       final PsiType componentType2 = ((PsiArrayType)type2).getComponentType();
       final PsiType componentType = getLeastUpperBound(componentType1, componentType2, compared, manager);
-      if (componentType1 instanceof PsiPrimitiveType && 
-          componentType2 instanceof PsiPrimitiveType && 
+      if ((componentType1 instanceof PsiPrimitiveType ||
+           componentType2 instanceof PsiPrimitiveType) &&
           componentType.equalsToText(CommonClassNames.JAVA_LANG_OBJECT)) {
         final PsiElementFactory factory = JavaPsiFacade.getElementFactory(manager.getProject());
         final GlobalSearchScope resolveScope = GlobalSearchScope.allScope(manager.getProject());
@@ -153,7 +155,7 @@ public class GenericsUtil {
 
       return PsiIntersectionType.createIntersection(conjuncts);
     }
-    if (type2 instanceof PsiArrayType && !(type1 instanceof PsiArrayType)) {
+    if (type2 instanceof PsiArrayType) {
       return getLeastUpperBound(type2, type1, compared, manager);
     }
     if (type1 instanceof PsiArrayType) {
@@ -204,8 +206,7 @@ public class GenericsUtil {
     return PsiWildcardType.createExtends(manager, getLeastUpperBound(type1, type2, compared, manager));
   }
 
-  @NotNull
-  public static PsiClass[] getLeastUpperClasses(PsiClass aClass, PsiClass bClass) {
+  public static PsiClass @NotNull [] getLeastUpperClasses(PsiClass aClass, PsiClass bClass) {
     if (InheritanceUtil.isInheritorOrSelf(aClass, bClass, true)) return new PsiClass[]{bClass};
     Set<PsiClass> supers = new LinkedHashSet<>();
     Set<PsiClass> visited = new HashSet<>();
@@ -295,40 +296,41 @@ public class GenericsUtil {
     return type.getInternalCanonicalText().equals(type.getCanonicalText());
   }
 
-  @Contract("null -> null")
+  @Contract("null -> null; !null->!null")
   public static PsiType getVariableTypeByExpressionType(@Nullable PsiType type) {
-    return getVariableTypeByExpressionType(type, true);
+    return type == null ? null : getVariableTypeByExpressionType(type, true);
   }
 
-  @Contract("null, _ -> null")
-  public static PsiType getVariableTypeByExpressionType(@Nullable PsiType type, final boolean openCaptured) {
-    if (type == null) return null;
+  @NotNull
+  public static PsiType getVariableTypeByExpressionType(@NotNull PsiType type, final boolean openCaptured) {
     PsiClass refClass = PsiUtil.resolveClassInType(type);
     if (refClass instanceof PsiAnonymousClass) {
       type = ((PsiAnonymousClass)refClass).getBaseClassType();
     }
-    if (type instanceof PsiCapturedWildcardType) {
-      type = ((PsiCapturedWildcardType)type).getUpperBound();
+    PsiType deepComponentType = type.getDeepComponentType();
+    if (deepComponentType instanceof PsiCapturedWildcardType) {
+      type = PsiTypesUtil.createArrayType(((PsiCapturedWildcardType)deepComponentType).getUpperBound(),
+                                          type.getArrayDimensions());
     }
     PsiType transformed = type.accept(new PsiTypeVisitor<PsiType>() {
       @Override
-      public PsiType visitArrayType(PsiArrayType arrayType) {
+      public PsiType visitArrayType(@NotNull PsiArrayType arrayType) {
         PsiType componentType = arrayType.getComponentType();
         PsiType type = componentType.accept(this);
         if (type == componentType) return arrayType;
         if (type instanceof PsiWildcardType) {
           type = ((PsiWildcardType)type).getBound();
         }
-        return type != null ? type.createArrayType() : arrayType;
+        return type != null ? type.createArrayType().annotate(arrayType.getAnnotationProvider()) : arrayType;
       }
 
       @Override
-      public PsiType visitType(PsiType type) {
+      public PsiType visitType(@NotNull PsiType type) {
         return type;
       }
 
       @Override
-      public PsiType visitWildcardType(final PsiWildcardType wildcardType) {
+      public PsiType visitWildcardType(@NotNull final PsiWildcardType wildcardType) {
         final PsiType bound = wildcardType.getBound();
         PsiManager manager = wildcardType.getManager();
         if (bound != null) {
@@ -352,12 +354,12 @@ public class GenericsUtil {
       }
 
       @Override
-      public PsiType visitCapturedWildcardType(PsiCapturedWildcardType capturedWildcardType) {
+      public PsiType visitCapturedWildcardType(@NotNull PsiCapturedWildcardType capturedWildcardType) {
         return openCaptured ? capturedWildcardType.getWildcard().accept(this) : capturedWildcardType;
       }
 
       @Override
-      public PsiType visitClassType(PsiClassType classType) {
+      public PsiType visitClassType(@NotNull PsiClassType classType) {
         PsiClassType.ClassResolveResult resolveResult = classType.resolveGenerics();
         PsiClass aClass = resolveResult.getElement();
         if (aClass == null) return classType;
@@ -398,7 +400,7 @@ public class GenericsUtil {
       }
     });
 
-    PsiType componentType = transformed != null ? transformed.getDeepComponentType() : null;
+    PsiType componentType = transformed.getDeepComponentType();
     if (componentType instanceof PsiWildcardType) {
       componentType = ((PsiWildcardType)componentType).getExtendsBound();
       return PsiTypesUtil.createArrayType(componentType, transformed.getArrayDimensions());
@@ -457,11 +459,13 @@ public class GenericsUtil {
 
         PsiElementFactory factory = JavaPsiFacade.getElementFactory(manager.getProject());
         PsiSubstitutor substitutor = factory.createSubstitutor(map);
-        type = factory.createType(aClass, substitutor);
+        type = factory.createType(aClass, substitutor).annotate(classType.getAnnotationProvider());
       }
     }
     else if (type instanceof PsiArrayType) {
-      return eliminateWildcards(((PsiArrayType)type).getComponentType(), false).createArrayType();
+      PsiType component = eliminateWildcards(((PsiArrayType)type).getComponentType(), false);
+      PsiType newArray = type instanceof PsiEllipsisType ? new PsiEllipsisType(component) : new PsiArrayType(component);
+      return newArray.annotate(type.getAnnotationProvider());
     }
     else if (type instanceof PsiWildcardType) {
       final PsiType bound = ((PsiWildcardType)type).getBound();
@@ -576,8 +580,8 @@ public class GenericsUtil {
   @NotNull
   public static List<PsiType> getExpectedTypeArguments(PsiElement context,
                                                        PsiClass aClass,
-                                                       Iterable<? extends PsiTypeParameter> typeParams,
-                                                       PsiClassType expectedType) {
+                                                       @NotNull Iterable<? extends PsiTypeParameter> typeParams,
+                                                       @NotNull PsiClassType expectedType) {
     PsiClassType.ClassResolveResult resolve = expectedType.resolveGenerics();
     PsiClass expectedClass = resolve.getElement();
 
@@ -627,9 +631,7 @@ public class GenericsUtil {
     final PsiReferenceParameterList parameterList = referenceElement.getParameterList();
     if (parameterList != null) {
       final PsiTypeElement[] typeParameterElements = parameterList.getTypeParameterElements();
-      if (typeParameterElements.length > 0) {
-        return true;
-      }
+      return typeParameterElements.length > 0;
     }
     return false;
   }

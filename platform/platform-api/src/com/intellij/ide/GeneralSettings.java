@@ -1,13 +1,16 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide;
 
 import com.intellij.ide.ui.UINumericRange;
 import com.intellij.ide.util.PropertiesComponent;
+import com.intellij.openapi.Disposable;
+import com.intellij.openapi.application.Application;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.PersistentStateComponent;
-import com.intellij.openapi.components.ServiceManager;
+import com.intellij.openapi.components.ReportValue;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
-import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.PlatformUtils;
 import com.intellij.util.xmlb.XmlSerializerUtil;
@@ -16,16 +19,15 @@ import com.intellij.util.xmlb.annotations.Transient;
 import org.intellij.lang.annotations.MagicConstant;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.SystemDependent;
 
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 
-@State(
-  name = "GeneralSettings",
-  storages = @Storage("ide.general.xml"),
-  reportStatistic = true
-)
-public class GeneralSettings implements PersistentStateComponent<GeneralSettings> {
+@State(name = "GeneralSettings", storages = @Storage(GeneralSettings.IDE_GENERAL_XML), reportStatistic = true)
+public final class GeneralSettings implements PersistentStateComponent<GeneralSettings> {
+  public static final String IDE_GENERAL_XML = "ide.general.xml";
+
   public static final int OPEN_PROJECT_ASK = -1;
   public static final int OPEN_PROJECT_NEW_WINDOW = 0;
   public static final int OPEN_PROJECT_SAME_WINDOW = 1;
@@ -36,6 +38,7 @@ public class GeneralSettings implements PersistentStateComponent<GeneralSettings
   public static final String PROP_INACTIVE_TIMEOUT = "inactiveTimeout";
   public static final String PROP_SUPPORT_SCREEN_READERS = "supportScreenReaders";
 
+  public static final String SCREEN_READERS_DETECTED_PROPERTY = "ide.support.screenreaders.detected";
   public static final String SUPPORT_SCREEN_READERS = "ide.support.screenreaders.enabled";
   private static final Boolean SUPPORT_SCREEN_READERS_OVERRIDDEN = getSupportScreenReadersOverridden();
 
@@ -44,11 +47,11 @@ public class GeneralSettings implements PersistentStateComponent<GeneralSettings
   private String myBrowserPath = BrowserUtil.getDefaultAlternativeBrowserPath();
   private boolean myShowTipsOnStartup = true;
   private boolean myReopenLastProject = true;
-  private boolean mySupportScreenReaders = ObjectUtils.chooseNotNull(SUPPORT_SCREEN_READERS_OVERRIDDEN, Boolean.FALSE);
+  private boolean mySupportScreenReaders = ObjectUtils.chooseNotNull(SUPPORT_SCREEN_READERS_OVERRIDDEN, Boolean.getBoolean(SCREEN_READERS_DETECTED_PROPERTY));
   private boolean mySyncOnFrameActivation = true;
   private boolean mySaveOnFrameDeactivation = true;
-  private boolean myAutoSaveIfInactive = false;  // If true the IDEA automatically saves files if it is inactive for some seconds
-  private int myInactiveTimeout = 15; // Number of seconds of inactivity after which IDEA automatically saves all files
+  private boolean myAutoSaveIfInactive = false;  // If true the IDE automatically saves files if it is inactive for some seconds
+  private int myInactiveTimeout = 15; // Number of seconds of inactivity after which the IDE automatically saves all files
   private boolean myUseSafeWrite = true;
   private final PropertyChangeSupport myPropertyChangeSupport = new PropertyChangeSupport(this);
   private boolean myUseDefaultBrowser = true;
@@ -59,19 +62,30 @@ public class GeneralSettings implements PersistentStateComponent<GeneralSettings
   private ProcessCloseConfirmation myProcessCloseConfirmation = ProcessCloseConfirmation.ASK;
   private String myDefaultProjectDirectory = "";
 
-  public static GeneralSettings getInstance(){
-    return ServiceManager.getService(GeneralSettings.class);
+  private static final String CONFIGURED_PROPERTY = "GeneralSettings.initiallyConfigured";
+
+  public static GeneralSettings getInstance() {
+    return ApplicationManager.getApplication().getService(GeneralSettings.class);
   }
 
   public GeneralSettings() {
+    Application application = ApplicationManager.getApplication();
+    if (application == null || application.isHeadlessEnvironment()) {
+      return;
+    }
+
+    if (PlatformUtils.isPyCharmEducational() || PlatformUtils.isRubyMine() || PlatformUtils.isWebStorm()) {
+      PropertiesComponent propertyManager = PropertiesComponent.getInstance();
+      if (!propertyManager.isValueSet(CONFIGURED_PROPERTY)) {
+        propertyManager.setValue(CONFIGURED_PROPERTY, true);
+        setShowTipsOnStartup(false);
+      }
+    }
   }
 
-  public void addPropertyChangeListener(PropertyChangeListener listener){
-    myPropertyChangeSupport.addPropertyChangeListener(listener);
-  }
-
-  public void removePropertyChangeListener(PropertyChangeListener listener){
-    myPropertyChangeSupport.removePropertyChangeListener(listener);
+  public void addPropertyChangeListener(@NotNull String propertyName, @NotNull Disposable parentDisposable, @NotNull PropertyChangeListener listener) {
+    myPropertyChangeSupport.addPropertyChangeListener(propertyName, listener);
+    Disposer.register(parentDisposable, () -> myPropertyChangeSupport.removePropertyChangeListener(propertyName, listener));
   }
 
   public String getBrowserPath() {
@@ -86,17 +100,8 @@ public class GeneralSettings implements PersistentStateComponent<GeneralSettings
     return myShowTipsOnStartup;
   }
 
-  public void setShowTipsOnStartup(boolean b) {
-    myShowTipsOnStartup = b;
-  }
-
-  @Transient
-  public int getLastTip() {
-    return StringUtil.parseInt(PropertiesComponent.getInstance().getValue("lastTip"), 0);
-  }
-
-  public void setLastTip(int i) {
-    PropertiesComponent.getInstance().setValue("lastTip", Integer.toString(i), "0");
+  public void setShowTipsOnStartup(boolean value) {
+    myShowTipsOnStartup = value;
   }
 
   public boolean isReopenLastProject() {
@@ -107,13 +112,9 @@ public class GeneralSettings implements PersistentStateComponent<GeneralSettings
     myReopenLastProject = reopenLastProject;
   }
 
-  @Nullable
-  private static Boolean getSupportScreenReadersOverridden() {
+  private static @Nullable Boolean getSupportScreenReadersOverridden() {
     String prop = System.getProperty(SUPPORT_SCREEN_READERS);
-    if (prop != null) {
-      return Boolean.parseBoolean(prop);
-    }
-    return null;
+    return prop != null ? Boolean.parseBoolean(prop) : null;
   }
 
   public static boolean isSupportScreenReadersOverridden() {
@@ -159,7 +160,7 @@ public class GeneralSettings implements PersistentStateComponent<GeneralSettings
   }
 
   /**
-   * @return {@code true} if IDEA saves all files after "idle" timeout.
+   * @return {@code true} if IDE saves all files after "idle" timeout.
    */
   public boolean isAutoSaveIfInactive(){
     return myAutoSaveIfInactive;
@@ -170,7 +171,7 @@ public class GeneralSettings implements PersistentStateComponent<GeneralSettings
   }
 
   /**
-   * @return timeout in seconds after which IDEA saves all files if there was no user activity.
+   * @return timeout in seconds after which IDE saves all files if there was no user activity.
    * The method always return positive (more then zero) value.
    */
   public int getInactiveTimeout(){
@@ -190,11 +191,11 @@ public class GeneralSettings implements PersistentStateComponent<GeneralSettings
     return myUseSafeWrite;
   }
 
-  public void setUseSafeWrite(final boolean useSafeWrite) {
-    myUseSafeWrite = useSafeWrite;
+  public void setUseSafeWrite(boolean value) {
+    myUseSafeWrite = value;
   }
 
-  @Nullable
+  @NotNull
   @Override
   public GeneralSettings getState() {
     return this;
@@ -213,15 +214,20 @@ public class GeneralSettings implements PersistentStateComponent<GeneralSettings
     myUseDefaultBrowser = value;
   }
 
+  /**
+   * @deprecated unused
+   */
   @Transient
   @Deprecated
   public boolean isConfirmExtractFiles() {
     return true;
   }
 
+  /**
+   * @deprecated unused
+   */
   @Deprecated
-  public void setConfirmExtractFiles(boolean value) {
-  }
+  public void setConfirmExtractFiles(@SuppressWarnings("unused") boolean value) { }
 
   public boolean isConfirmExit() {
     return myConfirmExit;
@@ -251,6 +257,7 @@ public class GeneralSettings implements PersistentStateComponent<GeneralSettings
    */
   @OpenNewProjectOption
   @OptionTag("confirmOpenNewProject2")
+  @ReportValue
   public int getConfirmOpenNewProject() {
     return myConfirmOpenNewProject;
   }
@@ -267,11 +274,12 @@ public class GeneralSettings implements PersistentStateComponent<GeneralSettings
     mySearchInBackground = searchInBackground;
   }
 
+  @SystemDependent
   public String getDefaultProjectDirectory() {
     return myDefaultProjectDirectory;
   }
 
-  public void setDefaultProjectDirectory(String defaultProjectDirectory) {
+  public void setDefaultProjectDirectory(@SystemDependent String defaultProjectDirectory) {
     myDefaultProjectDirectory = defaultProjectDirectory;
   }
 }

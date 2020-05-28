@@ -31,12 +31,18 @@ class SelectContentTabStep(val content: TabbedContent) : BaseListPopupStep<Int>(
 
   override fun isSpeedSearchEnabled(): Boolean = true
 
-  override fun getTextFor(value: Int): String = myTabs[value].first
+  override fun getTextFor(value: Int): String {
+    val shortText = myTabs[value].first
+    if (shortText.isBlank()) {
+      return content.id.displayName
+    }
+    return shortText
+  }
 
   override fun onChosen(selectedValue: Int, finalChoice: Boolean): PopupStep<*>? {
     val manager = content.manager ?: return FINAL_CHOICE
     content.selectContent(selectedValue)
-    manager.setSelectedContent(content)
+    manager.setSelectedContent(content, true, true)
     return FINAL_CHOICE
   }
 }

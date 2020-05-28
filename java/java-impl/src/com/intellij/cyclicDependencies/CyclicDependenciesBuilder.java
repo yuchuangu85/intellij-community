@@ -16,10 +16,10 @@
 package com.intellij.cyclicDependencies;
 
 import com.intellij.analysis.AnalysisScope;
-import com.intellij.analysis.AnalysisScopeBundle;
-import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.progress.util.ProgressIndicatorUtils;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.roots.ProjectRootManager;
@@ -32,6 +32,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.*;
 
 public class CyclicDependenciesBuilder{
+  @NotNull
   private final Project myProject;
   private final AnalysisScope myScope;
   private final Map<String, PsiPackage> myPackages = new HashMap<>();
@@ -45,7 +46,7 @@ public class CyclicDependenciesBuilder{
 
   private String myRootNodeNameInUsageView;
 
-  public CyclicDependenciesBuilder(final Project project, final AnalysisScope scope) {
+  public CyclicDependenciesBuilder(@NotNull Project project, @NotNull AnalysisScope scope) {
     myProject = project;
     myScope = scope;
     myForwardBuilder = new ForwardDependenciesBuilder(myProject, myScope){
@@ -56,27 +57,31 @@ public class CyclicDependenciesBuilder{
 
       @Override
       public String getInitialUsagesPosition() {
-        return AnalysisScopeBundle.message("cyclic.dependencies.usage.view.initial.text");
+        return JavaBundle.message("cyclic.dependencies.usage.view.initial.text");
       }
     };
   }
 
-  public String getRootNodeNameInUsageView() {
+  @NotNull
+  private String getRootNodeNameInUsageView() {
     return myRootNodeNameInUsageView;
   }
 
-  public void setRootNodeNameInUsageView(final String rootNodeNameInUsageView) {
+  public void setRootNodeNameInUsageView(@NotNull String rootNodeNameInUsageView) {
     myRootNodeNameInUsageView = rootNodeNameInUsageView;
   }
 
+  @NotNull
   public Project getProject() {
     return myProject;
   }
 
+  @NotNull
   public AnalysisScope getScope() {
     return myScope;
   }
 
+  @NotNull
   public DependenciesBuilder getForwardBuilder() {
     return myForwardBuilder;
   }
@@ -84,7 +89,7 @@ public class CyclicDependenciesBuilder{
   public void analyze() {
     final ProjectFileIndex projectFileIndex = ProjectRootManager.getInstance(getProject()).getFileIndex();
     getScope().accept(new PsiRecursiveElementVisitor() {
-      @Override public void visitFile(PsiFile file) {
+      @Override public void visitFile(@NotNull PsiFile file) {
         if (file instanceof PsiJavaFile) {
           PsiJavaFile psiJavaFile = (PsiJavaFile)file;
           if (getScope().contains(psiJavaFile)) {
@@ -93,7 +98,7 @@ public class CyclicDependenciesBuilder{
               myPackages.put(psiJavaFile.getPackageName(), aPackage);
             }
           }
-          final Set<PsiPackage> packs = getPackageHierarhy(psiJavaFile.getPackageName());
+          final Set<PsiPackage> packs = getPackageHierarchy(psiJavaFile.getPackageName());
           final ForwardDependenciesBuilder builder = new ForwardDependenciesBuilder(getProject(), new AnalysisScope(psiJavaFile));
           builder.setTotalFileCount(getScope().getFileCount());
           builder.setInitialFileCount(++myFileCount);
@@ -101,11 +106,7 @@ public class CyclicDependenciesBuilder{
           final Set<PsiFile> psiFiles = builder.getDependencies().get(psiJavaFile);
           if (psiFiles == null) return;
           for (PsiPackage pack : packs) {
-            Set<PsiPackage> pack2Packages = myPackageDependencies.get(pack);
-            if (pack2Packages == null) {
-              pack2Packages = new HashSet<>();
-              myPackageDependencies.put(pack, pack2Packages);
-            }
+            Set<PsiPackage> pack2Packages = myPackageDependencies.computeIfAbsent(pack, __ -> new HashSet<>());
             for (PsiFile psiFile : psiFiles) {
               if (!(psiFile instanceof PsiJavaFile) ||
                   !projectFileIndex.isInSourceContent(psiFile.getVirtualFile()) ||
@@ -135,10 +136,8 @@ public class CyclicDependenciesBuilder{
     });
     ProgressIndicator indicator = ProgressManager.getInstance().getProgressIndicator();
     if (indicator != null) {
-      if (indicator.isCanceled()) {
-        throw new ProcessCanceledException();
-      }
-      indicator.setText(AnalysisScopeBundle.message("cyclic.dependencies.progress.text"));
+      ProgressIndicatorUtils.checkCancelledEvenWithPCEDisabled(indicator);
+      indicator.setText(JavaBundle.message("cyclic.dependencies.progress.text"));
       indicator.setText2("");
       indicator.setIndeterminate(true);
     }
@@ -202,17 +201,13 @@ public class CyclicDependenciesBuilder{
     return myCyclicDependencies;
   }
 
-  public HashMap<PsiPackage, Set<List<PsiPackage>>> getCycles(Collection<PsiPackage> packages) {
+  public HashMap<PsiPackage, Set<List<PsiPackage>>> getCycles(Collection<? extends PsiPackage> packages) {
     if (myGraph == null){
       myGraph = buildGraph();
     }
     final HashMap<PsiPackage, Set<List<PsiPackage>>> result = new HashMap<>();
     for (PsiPackage psiPackage : packages) {
-      Set<List<PsiPackage>> paths2Pack = result.get(psiPackage);
-      if (paths2Pack == null) {
-        paths2Pack = new HashSet<>();
-        result.put(psiPackage, paths2Pack);
-      }
+      Set<List<PsiPackage>> paths2Pack = result.computeIfAbsent(psiPackage, __ -> new HashSet<>());
       paths2Pack.addAll(GraphAlgorithms.getInstance().findCycles(myGraph, psiPackage));
     }
     return result;
@@ -222,7 +217,7 @@ public class CyclicDependenciesBuilder{
     if (myPackages.isEmpty()) {
       final PsiManager psiManager = PsiManager.getInstance(getProject());
       getScope().accept(new PsiRecursiveElementVisitor() {
-        @Override public void visitFile(PsiFile file) {
+        @Override public void visitFile(@NotNull PsiFile file) {
           if (file instanceof PsiJavaFile) {
             PsiJavaFile psiJavaFile = (PsiJavaFile)file;
             final PsiPackage aPackage = JavaPsiFacade.getInstance(psiManager.getProject()).findPackage(psiJavaFile.getPackageName());
@@ -249,14 +244,15 @@ public class CyclicDependenciesBuilder{
       public Iterator<PsiPackage> getIn(PsiPackage psiPack) {
         final Set<PsiPackage> psiPackages = myPackageDependencies.get(psiPack);
         if (psiPackages == null) {     //for packs without java classes
-          return new HashSet<PsiPackage>().iterator();
+          return Collections.emptyIterator();
         }
         return psiPackages.iterator();
       }
     }));
   }
 
-  public Set<PsiPackage> getPackageHierarhy(String packageName) {
+  @NotNull
+  private Set<PsiPackage> getPackageHierarchy(@NotNull String packageName) {
     final Set<PsiPackage> result = new HashSet<>();
     PsiPackage psiPackage = findPackage(packageName);
     if (psiPackage != null) {
@@ -265,7 +261,7 @@ public class CyclicDependenciesBuilder{
     else {
       return result;
     }
-    while (psiPackage.getParentPackage() != null && psiPackage.getParentPackage().getQualifiedName().length() != 0) {
+    while (psiPackage.getParentPackage() != null && !psiPackage.getParentPackage().getQualifiedName().isEmpty()) {
       final PsiPackage aPackage = findPackage(psiPackage.getParentPackage().getQualifiedName());
       if (aPackage == null) {
         break;
@@ -276,8 +272,7 @@ public class CyclicDependenciesBuilder{
     return result;
   }
 
-  private PsiPackage findPackage(String packName) {
-    final PsiPackage psiPackage = getAllScopePackages().get(packName);
-    return psiPackage;
+  private PsiPackage findPackage(@NotNull String packName) {
+    return getAllScopePackages().get(packName);
   }
 }

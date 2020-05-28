@@ -1,9 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.jsonSchema.impl;
 
 import com.intellij.codeInspection.LocalInspectionToolSession;
 import com.intellij.codeInspection.LocalQuickFix;
 import com.intellij.codeInspection.ProblemsHolder;
+import com.intellij.json.pointer.JsonPointerPosition;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.TextRange;
@@ -16,10 +18,7 @@ import com.jetbrains.jsonSchema.extension.adapters.JsonValueAdapter;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class JsonSchemaComplianceChecker {
   private static final Key<Set<PsiElement>> ANNOTATED_PROPERTIES = Key.create("JsonSchema.Properties.Annotated");
@@ -54,12 +53,15 @@ public class JsonSchemaComplianceChecker {
   }
 
   public void annotate(@NotNull final PsiElement element) {
+    Project project = element.getProject();
     final JsonPropertyAdapter firstProp = myWalker.getParentPropertyAdapter(element);
-    if (firstProp != null && firstProp.getValue() != null) {
-      final List<JsonSchemaVariantsTreeBuilder.Step> position = myWalker.findPosition(firstProp.getDelegate(), true);
+    if (firstProp != null) {
+      final JsonPointerPosition position = myWalker.findPosition(firstProp.getDelegate(), true);
       if (position == null || position.isEmpty()) return;
-      final MatchResult result = new JsonSchemaResolver(myRootSchema, false, position).detailedResolve();
-      createWarnings(JsonSchemaAnnotatorChecker.checkByMatchResult(firstProp.getValue(), result, myOptions));
+      final MatchResult result = new JsonSchemaResolver(project, myRootSchema, position).detailedResolve();
+      for (JsonValueAdapter value : firstProp.getValues()) {
+        createWarnings(JsonSchemaAnnotatorChecker.checkByMatchResult(project, value, result, myOptions));
+      }
     }
     checkRoot(element, firstProp);
   }
@@ -75,16 +77,17 @@ public class JsonSchemaComplianceChecker {
       }
     }
     if (rootToCheck != null) {
-      final MatchResult matchResult = new JsonSchemaResolver(myRootSchema).detailedResolve();
-      createWarnings(JsonSchemaAnnotatorChecker.checkByMatchResult(rootToCheck, matchResult, myOptions));
+      Project project = element.getProject();
+      final MatchResult matchResult = new JsonSchemaResolver(project, myRootSchema).detailedResolve();
+      createWarnings(JsonSchemaAnnotatorChecker.checkByMatchResult(project, rootToCheck, matchResult, myOptions));
     }
   }
 
   private void createWarnings(@Nullable JsonSchemaAnnotatorChecker checker) {
     if (checker == null || checker.isCorrect()) return;
     // compute intersecting ranges - we'll solve warning priorities based on this information
-    List<TextRange> ranges = ContainerUtil.newArrayList();
-    List<List<Map.Entry<PsiElement, JsonValidationError>>> entries = ContainerUtil.newArrayList();
+    List<TextRange> ranges = new ArrayList<>();
+    List<List<Map.Entry<PsiElement, JsonValidationError>>> entries = new ArrayList<>();
     for (Map.Entry<PsiElement, JsonValidationError> entry : checker.getErrors().entrySet()) {
       TextRange range = entry.getKey().getTextRange();
       boolean processed = false;
@@ -123,12 +126,13 @@ public class JsonSchemaComplianceChecker {
     if (checkIfAlreadyProcessed(psiElement)) return;
     String value = validationError.getMessage();
     if (myMessagePrefix != null) value = myMessagePrefix + value;
-    LocalQuickFix[] fix = validationError.createFixes(myWalker.getQuickFixAdapter(myHolder.getProject()));
+    LocalQuickFix[] fix = validationError.createFixes(myWalker.getSyntaxAdapter(myHolder.getProject()));
+    PsiElement element = range.isEmpty() ? psiElement.getContainingFile() : psiElement;
     if (fix.length == 0) {
-      myHolder.registerProblem(psiElement, range, value);
+      myHolder.registerProblem(element, range, value);
     }
     else {
-      myHolder.registerProblem(psiElement, range, value, fix);
+      myHolder.registerProblem(element, range, value, fix);
     }
   }
 
@@ -139,7 +143,7 @@ public class JsonSchemaComplianceChecker {
       if (!isTop) ref.set(el);
       return isTop;
     });
-    return ref.isNull() ? null : walker.createValueAdapter(ref.get());
+    return ref.isNull() ? (walker.acceptsEmptyRoot() ? walker.createValueAdapter(element) : null) : walker.createValueAdapter(ref.get());
   }
 
   private boolean checkIfAlreadyProcessed(@NotNull PsiElement property) {

@@ -1,11 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes.ui;
 
 import com.intellij.diff.DiffDialogHints;
 import com.intellij.diff.DiffManager;
 import com.intellij.diff.chains.DiffRequestChain;
 import com.intellij.diff.util.DiffUserDataKeys;
-import com.intellij.openapi.ListSelection;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.actionSystem.ex.ActionUtil;
 import com.intellij.openapi.project.DumbAwareAction;
@@ -15,6 +14,7 @@ import com.intellij.openapi.vcs.changes.actions.diff.ChangeDiffRequestProducer;
 import com.intellij.ui.IdeBorderFactory;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.SideBorder;
+import com.intellij.util.ListSelection;
 import com.intellij.util.containers.ContainerUtil;
 import org.intellij.lang.annotations.MagicConstant;
 import org.jetbrains.annotations.NotNull;
@@ -26,6 +26,7 @@ import javax.swing.tree.DefaultTreeModel;
 import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 public abstract class ChangesBrowserBase extends JPanel implements DataProvider {
@@ -167,26 +168,21 @@ public abstract class ChangesBrowserBase extends JPanel implements DataProvider 
 
   @NotNull
   protected List<AnAction> createToolbarActions() {
-    return ContainerUtil.list(
-      myShowDiffAction
-    );
+    return Collections.singletonList(myShowDiffAction);
   }
 
   @NotNull
   protected List<AnAction> createPopupMenuActions() {
-    return ContainerUtil.list(
-      myShowDiffAction
-    );
+    return Collections.singletonList(myShowDiffAction);
   }
 
   @NotNull
   protected List<AnAction> createDiffActions() {
-    return ContainerUtil.list(
-    );
+    return Collections.emptyList();
   }
 
   protected void onDoubleClick() {
-    showDiff();
+    if (canShowDiff()) showDiff();
   }
 
   protected void onIncludedChanged() {
@@ -204,6 +200,10 @@ public abstract class ChangesBrowserBase extends JPanel implements DataProvider 
 
   public void addToolbarAction(@NotNull AnAction action) {
     myToolBarGroup.add(action);
+  }
+
+  public void addToolbarSeparator() {
+    myToolBarGroup.addSeparator();
   }
 
 
@@ -265,7 +265,7 @@ public abstract class ChangesBrowserBase extends JPanel implements DataProvider 
     chain.putUserData(DiffUserDataKeys.CONTEXT_ACTIONS, createDiffActions());
   }
 
-  private class MyShowDiffAction extends DumbAwareAction {
+  private class MyShowDiffAction extends DumbAwareAction implements UpdateInBackground {
     MyShowDiffAction() {
       ActionUtil.copyFrom(this, IdeActions.ACTION_SHOW_DIFF_COMMON);
     }
@@ -291,7 +291,7 @@ public abstract class ChangesBrowserBase extends JPanel implements DataProvider 
                                   boolean highlightProblems) {
       super(project, showCheckboxes, highlightProblems);
       myViewer = viewer;
-      setDoubleClickHandler(myViewer::onDoubleClick);
+      setDoubleClickAndEnterKeyHandler(myViewer::onDoubleClick);
       setInclusionListener(myViewer::onIncludedChanged);
     }
 

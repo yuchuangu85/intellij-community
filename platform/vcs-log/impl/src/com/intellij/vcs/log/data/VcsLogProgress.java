@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.vcs.log.data;
 
 import com.intellij.openapi.Disposable;
@@ -7,9 +7,9 @@ import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.util.AbstractProgressIndicatorBase;
-import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.util.containers.ContainerUtil;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -18,14 +18,13 @@ import java.util.function.Consumer;
 
 public class VcsLogProgress implements Disposable {
   @NotNull private final Object myLock = new Object();
-  @NotNull private final List<ProgressListener> myListeners = ContainerUtil.newArrayList();
-  @NotNull private final Set<VcsLogProgressIndicator> myTasksWithVisibleProgress = ContainerUtil.newHashSet();
-  @NotNull private final Set<ProgressIndicator> myTasksWithSilentProgress = ContainerUtil.newHashSet();
+  @NotNull private final List<ProgressListener> myListeners = new ArrayList<>();
+  @NotNull private final Set<VcsLogProgressIndicator> myTasksWithVisibleProgress = new HashSet<>();
+  @NotNull private final Set<ProgressIndicator> myTasksWithSilentProgress = new HashSet<>();
   private boolean myDisposed = false;
 
-  public VcsLogProgress(@NotNull Project project, @NotNull Disposable parent) {
-    Disposer.register(parent, () -> Disposer.dispose(this));
-    Disposer.register(project, this);
+  public VcsLogProgress(@NotNull Disposable parent) {
+    Disposer.register(parent, this);
   }
 
   @NotNull
@@ -117,9 +116,9 @@ public class VcsLogProgress implements Disposable {
     }
   }
 
-  private void fireNotification(@NotNull Consumer<ProgressListener> action) {
+  private void fireNotification(@NotNull Consumer<? super ProgressListener> action) {
     synchronized (myLock) {
-      List<ProgressListener> list = ContainerUtil.newArrayList(myListeners);
+      List<ProgressListener> list = new ArrayList<>(myListeners);
       ApplicationManager.getApplication().invokeLater(() -> list.forEach(action));
     }
   }
@@ -148,15 +147,19 @@ public class VcsLogProgress implements Disposable {
     }
 
     @Override
-    public synchronized void start() {
-      super.start();
-      started(this);
+    public void start() {
+      synchronized (getLock()) {
+        super.start();
+        started(this);
+      }
     }
 
     @Override
-    public synchronized void stop() {
-      super.stop();
-      stopped(this);
+    public void stop() {
+      synchronized (getLock()) {
+        super.stop();
+        stopped(this);
+      }
     }
 
     public void updateKey(@NotNull ProgressKey key) {
@@ -180,9 +183,9 @@ public class VcsLogProgress implements Disposable {
   }
 
   public interface ProgressListener {
-    void progressStarted(@NotNull Collection<ProgressKey> keys);
+    void progressStarted(@NotNull Collection<? extends ProgressKey> keys);
 
-    void progressChanged(@NotNull Collection<ProgressKey> keys);
+    void progressChanged(@NotNull Collection<? extends ProgressKey> keys);
 
     void progressStopped();
   }
@@ -190,7 +193,7 @@ public class VcsLogProgress implements Disposable {
   public static class ProgressKey {
     @NotNull private final String myName;
 
-    public ProgressKey(@NotNull String name) {
+    public ProgressKey(@NonNls @NotNull String name) {
       myName = name;
     }
 

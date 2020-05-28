@@ -15,8 +15,8 @@
  */
 package com.intellij.codeInsight.intention.impl;
 
-import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInsight.intention.PsiElementBaseIntentionAction;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
@@ -24,6 +24,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.ObjectUtils;
+import com.siyeh.ig.psiutils.CommentTracker;
 import com.siyeh.ig.psiutils.ControlFlowUtils;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
@@ -51,8 +52,9 @@ public class UnwrapElseBranchAction extends PsiElementBaseIntentionAction {
           elseBranch = ifStatement.getElseBranch();
           LOG.assertTrue(elseBranch != null);
         }
-        InvertIfConditionAction.addAfter(ifStatement, elseBranch);
-        elseBranch.delete();
+        CommentTracker ct = new CommentTracker();
+        InvertIfConditionAction.addAfter(ifStatement, elseBranch, ct);
+        ct.deleteAndRestoreComments(elseBranch);
       }
     }
   }
@@ -72,10 +74,10 @@ public class UnwrapElseBranchAction extends PsiElementBaseIntentionAction {
               elseCompletesNormally ||
               !nextStatementMayBecomeUnreachable(ifStatement)) {
             if (thenCompletesNormally) {
-              setText(CodeInsightBundle.message("intention.unwrap.else.branch.changes.semantics"));
+              setText(JavaBundle.message("intention.unwrap.else.branch.changes.semantics"));
             }
             else {
-              setText(CodeInsightBundle.message("intention.unwrap.else.branch"));
+              setText(JavaBundle.message("intention.unwrap.else.branch"));
             }
             return true;
           }
@@ -127,6 +129,6 @@ public class UnwrapElseBranchAction extends PsiElementBaseIntentionAction {
   @NotNull
   @Override
   public String getFamilyName() {
-    return CodeInsightBundle.message("intention.unwrap.else.branch");
+    return JavaBundle.message("intention.unwrap.else.branch");
   }
 }

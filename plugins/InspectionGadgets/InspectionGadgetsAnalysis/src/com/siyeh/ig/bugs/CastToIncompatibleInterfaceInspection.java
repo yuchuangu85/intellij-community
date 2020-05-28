@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2013 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2019 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,20 +15,17 @@
  */
 package com.siyeh.ig.bugs;
 
+import com.intellij.codeInspection.dataFlow.CommonDataflow;
+import com.intellij.codeInspection.dataFlow.TypeConstraint;
 import com.intellij.psi.*;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.psiutils.InheritanceUtil;
+import com.siyeh.ig.psiutils.InstanceOfUtils;
 import org.jetbrains.annotations.NotNull;
 
 public class CastToIncompatibleInterfaceInspection extends BaseInspection {
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("casting.to.incompatible.interface.display.name");
-  }
 
   @Override
   @NotNull
@@ -55,6 +52,7 @@ public class CastToIncompatibleInterfaceInspection extends BaseInspection {
         return;
       }
       final PsiClassType castClassType = (PsiClassType)castType;
+
       final PsiExpression operand = expression.getOperand();
       if (operand == null) {
         return;
@@ -64,6 +62,11 @@ public class CastToIncompatibleInterfaceInspection extends BaseInspection {
         return;
       }
       final PsiClassType operandClassType = (PsiClassType)operandType;
+      if (!castClassType.isConvertibleFrom(operandClassType)) {
+        // don't warn on red code
+        return;
+      }
+
       final PsiClass castClass = castClassType.resolve();
       if (castClass == null || !castClass.isInterface()) {
         return;
@@ -75,6 +78,9 @@ public class CastToIncompatibleInterfaceInspection extends BaseInspection {
       if (InheritanceUtil.existsMutualSubclass(operandClass, castClass, isOnTheFly())) {
         return;
       }
+      if (InstanceOfUtils.findPatternCandidate(expression) != null) return;
+      PsiType psiType = TypeConstraint.fromDfType(CommonDataflow.getDfType(operand)).getPsiType(operandClass.getProject());
+      if (psiType != null && castClassType.isAssignableFrom(psiType)) return;
       registerError(castTypeElement);
     }
   }

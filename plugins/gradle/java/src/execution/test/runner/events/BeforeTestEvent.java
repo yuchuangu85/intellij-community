@@ -1,22 +1,9 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.execution.test.runner.events;
 
 import com.intellij.execution.testframework.sm.runner.SMTestProxy;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.gradle.execution.test.runner.GradleSMTestProxy;
@@ -48,34 +35,32 @@ public class BeforeTestEvent extends AbstractTestEvent {
     registerTestProxy(testId, testProxy);
 
     if (StringUtil.isEmpty(parentTestId)) {
-      addToInvokeLater(() -> getResultsViewer().getTestsRootNode().addChild(testProxy));
+      getResultsViewer().getTestsRootNode().addChild(testProxy);
     }
     else {
       final SMTestProxy parentTestProxy = findTestProxy(parentTestId);
       if (parentTestProxy != null) {
-        addToInvokeLater(() -> {
-          final List<GradleSMTestProxy> notYetAddedParents = ContainerUtil.newSmartList();
-          SMTestProxy currentParentTestProxy = parentTestProxy;
-          while (currentParentTestProxy instanceof GradleSMTestProxy) {
-            final String parentId = ((GradleSMTestProxy)currentParentTestProxy).getParentId();
-            if (currentParentTestProxy.getParent() == null && parentId != null) {
-              notYetAddedParents.add((GradleSMTestProxy)currentParentTestProxy);
-            }
-            currentParentTestProxy = findTestProxy(parentId);
+        final List<GradleSMTestProxy> notYetAddedParents = new SmartList<>();
+        SMTestProxy currentParentTestProxy = parentTestProxy;
+        while (currentParentTestProxy instanceof GradleSMTestProxy) {
+          final String parentId = ((GradleSMTestProxy)currentParentTestProxy).getParentId();
+          if (currentParentTestProxy.getParent() == null && parentId != null) {
+            notYetAddedParents.add((GradleSMTestProxy)currentParentTestProxy);
           }
+          currentParentTestProxy = findTestProxy(parentId);
+        }
 
-          for (GradleSMTestProxy gradleSMTestProxy : ContainerUtil.reverse(notYetAddedParents)) {
-            final SMTestProxy parentTestProxy1 = findTestProxy(gradleSMTestProxy.getParentId());
-            if (parentTestProxy1 != null) {
-              parentTestProxy1.addChild(gradleSMTestProxy);
-              getResultsViewer().onSuiteStarted(gradleSMTestProxy);
-            }
+        for (GradleSMTestProxy gradleSMTestProxy : ContainerUtil.reverse(notYetAddedParents)) {
+          final SMTestProxy parentTestProxy1 = findTestProxy(gradleSMTestProxy.getParentId());
+          if (parentTestProxy1 != null) {
+            parentTestProxy1.addChild(gradleSMTestProxy);
+            getResultsViewer().onSuiteStarted(gradleSMTestProxy);
           }
-          parentTestProxy.addChild(testProxy);
-        });
+        }
+        parentTestProxy.addChild(testProxy);
       }
     }
 
-    addToInvokeLater(() -> getResultsViewer().onTestStarted(testProxy));
+    getResultsViewer().onTestStarted(testProxy);
   }
 }

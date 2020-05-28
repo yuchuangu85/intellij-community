@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.scratch;
 
 import com.intellij.lang.Language;
@@ -8,9 +8,11 @@ import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.FileTypeManager;
+import com.intellij.openapi.fileTypes.UnknownFileType;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -27,32 +29,33 @@ public abstract class RootType {
   public static final ExtensionPointName<RootType> ROOT_EP = ExtensionPointName.create("com.intellij.scratch.rootType");
 
   @NotNull
-  public static List<RootType> getAllRootIds() {
+  public static List<RootType> getAllRootTypes() {
     return ROOT_EP.getExtensionList();
   }
 
   @NotNull
   public static RootType findById(@NotNull String id) {
-    for (RootType type : getAllRootIds()) {
+    for (RootType type : getAllRootTypes()) {
       if (id.equals(type.getId())) return type;
     }
     throw new AssertionError(id);
   }
 
   @NotNull
-  public static <T extends RootType> T findByClass(Class<T> aClass) {
+  public static <T extends RootType> T findByClass(@NotNull Class<T> aClass) {
     return ROOT_EP.findExtensionOrFail(aClass);
   }
 
   @Nullable
   public static RootType forFile(@Nullable VirtualFile file) {
-    return ScratchFileService.getInstance().getRootType(file);
+    return ScratchFileService.findRootType(file);
   }
 
   private final String myId;
   private final String myDisplayName;
 
-  protected RootType(@NotNull String id, @Nullable String displayName) {
+  protected RootType(@NotNull String id,
+                     @Nullable @Nls(capitalization = Nls.Capitalization.Title) String displayName) {
     myId = id;
     myDisplayName = displayName;
   }
@@ -63,6 +66,7 @@ public abstract class RootType {
   }
 
   @Nullable
+  @Nls(capitalization = Nls.Capitalization.Title)
   public final String getDisplayName() {
     return myDisplayName;
   }
@@ -72,9 +76,7 @@ public abstract class RootType {
   }
 
   public boolean containsFile(@Nullable VirtualFile file) {
-    if (file == null) return false;
-    ScratchFileService service = ScratchFileService.getInstance();
-    return service != null && service.getRootType(file) == this;
+    return ScratchFileService.findRootType(file) == this;
   }
 
   @Nullable
@@ -91,7 +93,7 @@ public abstract class RootType {
       String extension = file.getExtension();
       fileType = extension == null ? null : FileTypeManager.getInstance().getFileTypeByFileName(file.getNameSequence());
     }
-    return fileType != null ? fileType.getIcon() : null;
+    return fileType != null && fileType != UnknownFileType.INSTANCE ? fileType.getIcon() : null;
   }
 
   @Nullable

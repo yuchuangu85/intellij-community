@@ -1,3 +1,4 @@
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.configurationStore;
 
 import com.intellij.openapi.components.State;
@@ -9,21 +10,21 @@ import java.lang.annotation.Annotation;
 @SuppressWarnings("ClassExplicitlyAnnotation")
 public class StateAnnotation implements State {
   private final String name;
-  @NotNull
-  private final Storage[] storages;
+  private final Storage @NotNull [] storages;
 
   public StateAnnotation(@NotNull String name, @NotNull Storage storage) {
     this.name = name;
     storages = new Storage[]{storage};
   }
 
+  @NotNull
   @Override
   public String name() {
     return name;
   }
 
   @Override
-  public Storage[] storages() {
+  public Storage @NotNull [] storages() {
     return storages;
   }
 
@@ -55,6 +56,16 @@ public class StateAnnotation implements State {
   @Override
   public boolean reportStatistic() {
     return false;
+  }
+
+  @Override
+  public boolean allowLoadInTests() {
+    return false;
+  }
+
+  @Override
+  public boolean useLoadedStateAsExisting() {
+    return true;
   }
 
   @Override

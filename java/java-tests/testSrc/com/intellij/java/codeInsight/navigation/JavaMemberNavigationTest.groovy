@@ -4,12 +4,14 @@
 package com.intellij.java.codeInsight.navigation
 
 import com.intellij.codeInsight.navigation.MethodUpDownUtil
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
+import groovy.transform.CompileStatic
 
 /**
  * @author peter
  */
-class JavaMemberNavigationTest extends LightCodeInsightFixtureTestCase {
+@CompileStatic
+class JavaMemberNavigationTest extends LightJavaCodeInsightFixtureTestCase {
   
   void "test include anonymous and local classes"() {
     def file = myFixture.configureByText('a.java', '''

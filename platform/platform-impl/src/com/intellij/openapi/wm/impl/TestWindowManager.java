@@ -1,24 +1,7 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.wm.impl;
 
-import com.intellij.ide.DataManager;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.actionSystem.ex.ActionManagerEx;
-import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.TaskInfo;
 import com.intellij.openapi.project.Project;
@@ -31,6 +14,7 @@ import com.intellij.openapi.wm.IdeFrame;
 import com.intellij.openapi.wm.StatusBar;
 import com.intellij.openapi.wm.StatusBarWidget;
 import com.intellij.openapi.wm.WindowManagerListener;
+import com.intellij.openapi.wm.ex.IdeFrameEx;
 import com.intellij.openapi.wm.ex.ProgressIndicatorEx;
 import com.intellij.openapi.wm.ex.StatusBarEx;
 import com.intellij.openapi.wm.ex.WindowManagerEx;
@@ -46,10 +30,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * @author Anton Katilin
- * @author Vladimir Kondratyev
- */
 public final class TestWindowManager extends WindowManagerEx {
   private static final Key<StatusBar> STATUS_BAR = Key.create("STATUS_BAR");
   private final DesktopLayout myLayout = new DesktopLayout();
@@ -58,15 +38,12 @@ public final class TestWindowManager extends WindowManagerEx {
   public final void doNotSuggestAsParent(final Window window) { }
 
   @Override
-  public final Window suggestParentWindow(@Nullable final Project project) {
+  public final Window suggestParentWindow(final @Nullable Project project) {
     return null;
   }
 
   @Override
-  public final StatusBar getStatusBar(final Project project) {
-    if (project == null) {
-      return null;
-    }
+  public final StatusBar getStatusBar(@NotNull Project project) {
     synchronized (STATUS_BAR) {
       StatusBar statusBar = project.getUserData(STATUS_BAR);
       if (statusBar == null) {
@@ -82,20 +59,29 @@ public final class TestWindowManager extends WindowManagerEx {
   }
 
   @Override
+  public @Nullable ProjectFrameHelper findFrameHelper(@Nullable Project project) {
+    return null;
+  }
+
+  @Override
+  public @Nullable ProjectFrameHelper getFrameHelper(@Nullable Project project) {
+    return null;
+  }
+
+  @Override
   public Rectangle getScreenBounds(@NotNull Project project) {
     return null;
   }
 
   @Override
-  public void setWindowMask(final Window window, final Shape mask) { }
+  public void setWindowMask(Window window, final Shape mask) { }
 
   @Override
-  public void resetWindow(final Window window) { }
+  public void resetWindow(Window window) { }
 
   @Override
-  @NotNull
-  public IdeFrameImpl[] getAllProjectFrames() {
-    return new IdeFrameImpl[0];
+  public ProjectFrameHelper @NotNull [] getAllProjectFrames() {
+    return new ProjectFrameHelper[0];
   }
 
   @Override
@@ -104,27 +90,17 @@ public final class TestWindowManager extends WindowManagerEx {
   }
 
   @Override
-  public final IdeFrameImpl getFrame(final Project project) {
+  public final @Nullable IdeFrameImpl getFrame(Project project) {
     return null;
   }
 
   @Override
-  public final IdeFrameImpl allocateFrame(@NotNull Project project) {
-    return new IdeFrameImpl(ActionManagerEx.getInstanceEx(), DataManager.getInstance(), ApplicationManager.getApplication());
-  }
-
-  @Override
-  public final void releaseFrame(@NotNull final IdeFrameImpl frame) {
-    frame.dispose();
-  }
-
-  @Override
-  public final Component getFocusedComponent(@NotNull final Window window) {
+  public final Component getFocusedComponent(@NotNull Window window) {
     throw new UnsupportedOperationException();
   }
 
   @Override
-  public final Component getFocusedComponent(final Project project) {
+  public final Component getFocusedComponent(Project project) {
     return null;
   }
 
@@ -138,19 +114,13 @@ public final class TestWindowManager extends WindowManagerEx {
     return null;
   }
 
-  @NotNull
   @Override
-  public final CommandProcessor getCommandProcessor() {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public final DesktopLayout getLayout() {
+  public @NotNull DesktopLayout getLayout() {
     return myLayout;
   }
 
   @Override
-  public final void setLayout(final DesktopLayout layout) {
+  public final void setLayout(@NotNull DesktopLayout layout) {
     throw new UnsupportedOperationException();
   }
 
@@ -160,7 +130,7 @@ public final class TestWindowManager extends WindowManagerEx {
   }
 
   @Override
-  public final Rectangle getScreenBounds() {
+  public final @NotNull Rectangle getScreenBounds() {
     throw new UnsupportedOperationException();
   }
 
@@ -195,15 +165,10 @@ public final class TestWindowManager extends WindowManagerEx {
   }
 
   @Override
-  public void hideDialog(JDialog dialog, Project project) {
-    dialog.dispose();
-  }
+  public void adjustContainerWindow(@NotNull Component c, Dimension oldSize, Dimension newSize) { }
 
   @Override
-  public void adjustContainerWindow(Component c, Dimension oldSize, Dimension newSize) { }
-
-  @Override
-  public void addListener(final WindowManagerListener listener) { }
+  public void addListener(@NotNull WindowManagerListener listener) { }
 
   @Override
   public void removeListener(final WindowManagerListener listener) { }
@@ -217,12 +182,17 @@ public final class TestWindowManager extends WindowManagerEx {
     private final Map<String, StatusBarWidget> myWidgetMap = new HashMap<>();
 
     @Override
+    public @Nullable Project getProject() {
+      return null;
+    }
+
+    @Override
     public Dimension getSize() {
       return new Dimension(0, 0);
     }
 
     @Override
-    public StatusBar createChild() {
+    public @Nullable StatusBar createChild(@NotNull IdeFrame frame) {
       return null;
     }
 
@@ -235,9 +205,6 @@ public final class TestWindowManager extends WindowManagerEx {
     public StatusBar findChild(Component c) {
       return null;
     }
-
-    @Override
-    public void install(IdeFrame frame) { }
 
     @Override
     public void setInfo(@Nullable String s, @Nullable String requestor) { }
@@ -274,17 +241,14 @@ public final class TestWindowManager extends WindowManagerEx {
     @Override
     public void addWidget(@NotNull StatusBarWidget widget, @NotNull Disposable parentDisposable) {
       Disposer.register(parentDisposable, widget);
+      Disposer.register(widget, () -> myWidgetMap.remove(widget.ID()));
       addWidget(widget);
     }
 
     @Override
     public void addWidget(@NotNull StatusBarWidget widget, @NotNull String anchor, @NotNull Disposable parentDisposable) {
-      Disposer.register(parentDisposable, widget);
-      addWidget(widget);
+      addWidget(widget, parentDisposable);
     }
-
-    @Override
-    public void updateWidgets() { }
 
     @Override
     public void dispose() { }
@@ -331,15 +295,8 @@ public final class TestWindowManager extends WindowManagerEx {
     public void setProcessWindowOpen(final boolean open) { }
 
     @Override
-    public void removeCustomIndicationComponents() { }
-
-    @Override
     public BalloonHandler notifyProgressByBalloon(@NotNull MessageType type, @NotNull String htmlBody) {
-      return new BalloonHandler() {
-        @Override
-        public void hide() {
-        }
-      };
+      return () -> { };
     }
 
     @Override
@@ -347,11 +304,22 @@ public final class TestWindowManager extends WindowManagerEx {
                                                   @NotNull String htmlBody,
                                                   @Nullable Icon icon,
                                                   @Nullable HyperlinkListener listener) {
-      return new BalloonHandler() {
-        @Override
-        public void hide() {
-        }
-      };
+      return () -> { };
     }
+  }
+
+  @Override
+  public void releaseFrame(@NotNull ProjectFrameHelper frameHelper) {
+    frameHelper.getFrame().dispose();
+  }
+
+  @Override
+  public @NotNull List<ProjectFrameHelper> getProjectFrameHelpers() {
+    return Collections.emptyList();
+  }
+
+  @Override
+  public @Nullable IdeFrameEx findFirstVisibleFrameHelper() {
+    return null;
   }
 }

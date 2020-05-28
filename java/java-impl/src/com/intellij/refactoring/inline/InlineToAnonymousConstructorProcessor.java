@@ -35,6 +35,7 @@ import com.intellij.refactoring.util.RefactoringUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.ProcessingContext;
 import org.jetbrains.annotations.NonNls;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -46,7 +47,7 @@ import static com.intellij.patterns.PsiJavaPatterns.psiExpressionStatement;
  * @author yole
 */
 class InlineToAnonymousConstructorProcessor {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.inline.InlineToAnonymousConstructorProcessor");
+  private static final Logger LOG = Logger.getInstance(InlineToAnonymousConstructorProcessor.class);
 
   private static final Key<PsiAssignmentExpression> ourAssignmentKey = Key.create("assignment");
   private static final Key<PsiCallExpression> ourCallKey = Key.create("call");
@@ -251,11 +252,11 @@ class InlineToAnonymousConstructorProcessor {
   private PsiVariable generateOuterClassLocal() {
     PsiClass outerClass = myClass.getContainingClass();
     assert outerClass != null;
-    return generateLocal(StringUtil.decapitalize(outerClass.getName()),
+    return generateLocal(StringUtil.decapitalize(StringUtil.notNullize(outerClass.getName())),
                          myElementFactory.createType(outerClass), myNewExpression.getQualifier());
   }
 
-  private PsiVariable generateLocal(final String baseName, final PsiType type, final PsiExpression initializer) {
+  private PsiVariable generateLocal(final String baseName, @NotNull PsiType type, final PsiExpression initializer) {
     final Project project = myClass.getProject();
     final JavaCodeStyleManager codeStyleManager = JavaCodeStyleManager.getInstance(project);
 
@@ -372,7 +373,7 @@ class InlineToAnonymousConstructorProcessor {
   }
 
   private PsiElement replaceParameterReferences(PsiElement argument,
-                                                @Nullable final List<PsiReferenceExpression> localVarRefs,
+                                                @Nullable final List<? super PsiReferenceExpression> localVarRefs,
                                                 final boolean replaceFieldsWithInitializers) throws IncorrectOperationException {
     if (argument instanceof PsiReferenceExpression) {
       PsiElement element = ((PsiReferenceExpression)argument).resolve();

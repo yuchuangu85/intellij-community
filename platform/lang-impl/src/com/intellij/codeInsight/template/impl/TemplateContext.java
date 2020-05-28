@@ -1,11 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.template.impl;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.intellij.codeInsight.template.TemplateContextType;
-import com.intellij.openapi.extensions.ExtensionPointAndAreaListener;
+import com.intellij.openapi.extensions.ExtensionPointAdapter;
 import com.intellij.openapi.extensions.ExtensionsArea;
-import com.intellij.openapi.extensions.PluginDescriptor;
 import com.intellij.openapi.util.ClearableLazyValue;
 import com.intellij.util.JdomKt;
 import com.intellij.util.containers.ContainerUtil;
@@ -20,7 +19,6 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -28,7 +26,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class TemplateContext {
-  private final Map<String, Boolean> myContextStates = ContainerUtil.newTroveMap();
+  private final Map<String, Boolean> myContextStates = new THashMap<>();
 
   private static final ClearableLazyValue<Map<String, String>> INTERN_MAP = new ClearableLazyValue<Map<String, String>>() {
     private final AtomicBoolean isListenerAdded = new AtomicBoolean();
@@ -37,22 +35,17 @@ public class TemplateContext {
     @Override
     protected Map<String, String> compute() {
       if (isListenerAdded.compareAndSet(false, true)) {
-        TemplateManagerImpl.TEMPLATE_CONTEXT_EP.getValue().addExtensionPointListener(new ExtensionPointAndAreaListener<TemplateContextType>() {
+        TemplateManagerImpl.TEMPLATE_CONTEXT_EP.getValue().addExtensionPointListener(new ExtensionPointAdapter<TemplateContextType>() {
           @Override
           public void areaReplaced(@NotNull ExtensionsArea oldArea) {
             drop();
           }
 
           @Override
-          public void extensionAdded(@NotNull TemplateContextType extension, @Nullable PluginDescriptor pluginDescriptor) {
+          public void extensionListChanged() {
             drop();
           }
-
-          @Override
-          public void extensionRemoved(@NotNull TemplateContextType extension, @Nullable PluginDescriptor pluginDescriptor) {
-            drop();
-          }
-        });
+        }, false, null);
       }
 
       return TemplateManagerImpl.getAllContextTypes().stream()
@@ -151,14 +144,14 @@ public class TemplateContext {
 
   @VisibleForTesting
   @Nullable
-  public Element writeTemplateContext(@Nullable TemplateContext defaultContext, @NotNull Lazy<Map<String, TemplateContextType>> idToType) {
+  public Element writeTemplateContext(@Nullable TemplateContext defaultContext, @NotNull Lazy<? extends Map<String, TemplateContextType>> idToType) {
     if (myContextStates.isEmpty()) {
       return null;
     }
 
     Element element = new Element(TemplateSettings.CONTEXT);
     List<Map.Entry<String, Boolean>> entries = new ArrayList<>(myContextStates.entrySet());
-    entries.sort(Comparator.comparing(Map.Entry::getKey));
+    entries.sort(Map.Entry.comparingByKey());
     for (Map.Entry<String, Boolean> entry : entries) {
       Boolean ownValue = entry.getValue();
       if (ownValue == null) {

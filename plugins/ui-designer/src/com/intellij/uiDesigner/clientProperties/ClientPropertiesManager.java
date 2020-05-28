@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.uiDesigner.clientProperties;
 
 import com.intellij.openapi.components.PersistentStateComponent;
@@ -7,7 +7,9 @@ import com.intellij.openapi.components.State;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.AtomicNotNullLazyValue;
+import com.intellij.openapi.util.JDOMUtil;
 import com.intellij.openapi.util.NotNullLazyValue;
+import com.intellij.serviceContainer.NonInjectable;
 import com.intellij.uiDesigner.LoaderFactory;
 import org.jdom.Element;
 import org.jetbrains.annotations.NonNls;
@@ -15,8 +17,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
-
-import static com.intellij.util.JdomKt.loadElement;
 
 @State(name = "ClientPropertiesManager", defaultStateAsResource = true)
 public class ClientPropertiesManager implements PersistentStateComponent<Element> {
@@ -38,7 +38,7 @@ public class ClientPropertiesManager implements PersistentStateComponent<Element
     protected ClientPropertiesManager compute() {
       ClientPropertiesManager result = new ClientPropertiesManager();
       try {
-        result.loadState(loadElement(ClientPropertiesManager.class.getResourceAsStream("/" + COMPONENT_NAME + ".xml")));
+        result.loadState(JDOMUtil.load(ClientPropertiesManager.class.getResourceAsStream("/" + COMPONENT_NAME + ".xml")));
       }
       catch (Exception e) {
         LOG.error(e);
@@ -52,7 +52,8 @@ public class ClientPropertiesManager implements PersistentStateComponent<Element
   public ClientPropertiesManager() {
   }
 
-  private ClientPropertiesManager(final Map<String, List<ClientProperty>> propertyMap) {
+  @NonInjectable
+  private ClientPropertiesManager(@NotNull Map<String, List<ClientProperty>> propertyMap) {
     this();
     myPropertyMap.putAll(propertyMap);
   }
@@ -170,8 +171,8 @@ public class ClientPropertiesManager implements PersistentStateComponent<Element
     }
   }
 
-  public List<Class> getConfiguredClasses(@NotNull Project project) {
-    List<Class> result = new ArrayList<>();
+  public List<Class<?>> getConfiguredClasses(@NotNull Project project) {
+    List<Class<?>> result = new ArrayList<>();
     for(String className: myPropertyMap.keySet()) {
       try {
         result.add(Class.forName(className, true, LoaderFactory.getInstance(project).getProjectClassLoader()));
@@ -189,11 +190,11 @@ public class ClientPropertiesManager implements PersistentStateComponent<Element
     }
   }
 
-  public void removeClientPropertyClass(final Class selectedClass) {
+  public void removeClientPropertyClass(final Class<?> selectedClass) {
     myPropertyMap.remove(selectedClass.getName());
   }
 
-  public List<ClientProperty> getConfiguredProperties(Class componentClass) {
+  public List<ClientProperty> getConfiguredProperties(Class<?> componentClass) {
     List<ClientProperty> list = myPropertyMap.get(componentClass.getName());
     if (list == null) {
       return Collections.emptyList();

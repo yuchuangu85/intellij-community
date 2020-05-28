@@ -1,43 +1,50 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.indexing;
 
 import com.intellij.openapi.fileTypes.FileType;
-import com.intellij.openapi.fileTypes.FileTypeManager;
+import com.intellij.openapi.fileTypes.PlainTextFileType;
 import com.intellij.openapi.fileTypes.ex.FakeFileType;
 import com.intellij.openapi.fileTypes.ex.FileTypeManagerEx;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.search.FileTypeIndex;
 import com.intellij.psi.search.FileTypeIndexImpl;
-import com.intellij.testFramework.fixtures.LightPlatformCodeInsightFixtureTestCase;
+import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.testFramework.fixtures.BasePlatformTestCase;
 import org.jetbrains.annotations.NotNull;
+
+import java.util.Collection;
 
 /**
  * @author Dmitry Avdeev
  */
-public class FileTypeIndexTest extends LightPlatformCodeInsightFixtureTestCase {
+public class FileTypeIndexTest extends BasePlatformTestCase {
 
   public void testAddFileType() {
-    addAndRemoveFileType();
+    FileTypeIndexImpl index = FileBasedIndexExtension.EXTENSION_POINT_NAME.findExtension(FileTypeIndexImpl.class);
+    VirtualFile file = myFixture.configureByText("foo.test", "abc").getVirtualFile();
+    FileTypeIndex.getFiles(PlainTextFileType.INSTANCE, GlobalSearchScope.allScope(getProject()));
+
+    int version = index.getVersion();
+    FileType foo = registerFakeFileType();
+    try {
+      assertEquals(version, index.getVersion());
+      Collection<VirtualFile> files = FileTypeIndex.getFiles(foo, GlobalSearchScope.allScope(getProject()));
+      assertOneElement(files);
+      assertEquals(foo, FileTypeIndex.getIndexedFileType(file, getProject()));
+    }
+    finally {
+      FileTypeManagerEx.getInstanceEx().unregisterFileType(foo);
+    }
+    assertEquals(PlainTextFileType.INSTANCE, FileTypeIndex.getIndexedFileType(file, getProject()));
+    assertEmpty(FileTypeIndex.getFiles(foo, GlobalSearchScope.allScope(getProject())));
   }
 
-  static void addAndRemoveFileType() {
+  @NotNull
+   static FileType registerFakeFileType() {
     FileType foo = new FakeFileType() {
       @Override
       public boolean isMyFileType(@NotNull VirtualFile file) {
-        return true;
+        return file.getName().equals("foo.test");
       }
 
       @NotNull
@@ -52,15 +59,8 @@ public class FileTypeIndexTest extends LightPlatformCodeInsightFixtureTestCase {
         return "";
       }
     };
-    FileTypeIndexImpl index = new FileTypeIndexImpl(FileTypeManager.getInstance());
-    int version = index.getVersion();
 
-    try {
-      FileTypeManagerEx.getInstanceEx().registerFileType(foo);
-      assertNotSame(version, index.getVersion());
-    }
-    finally {
-      FileTypeManagerEx.getInstanceEx().unregisterFileType(foo);
-    }
+    FileTypeManagerEx.getInstanceEx().registerFileType(foo);
+    return foo;
   }
 }

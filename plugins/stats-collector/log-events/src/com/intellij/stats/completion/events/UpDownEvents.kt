@@ -4,18 +4,16 @@ package com.intellij.stats.completion.events
 
 import com.intellij.stats.completion.Action
 import com.intellij.stats.completion.LogEventVisitor
-import com.intellij.stats.completion.LookupEntryInfo
+import com.intellij.stats.completion.LookupState
 
 
 class UpPressedEvent(
         userId: String,
         sessionId: String,
-        completionListIds: List<Int>,
-        newCompletionListItems: List<LookupEntryInfo>,
-        selectedPosition: Int,
+        lookupState: LookupState,
+        bucket: String,
         timestamp: Long)
-    : LookupStateLogData(userId, sessionId, Action.UP, completionListIds,
-        newCompletionListItems, selectedPosition, timestamp) {
+    : LookupStateLogData(userId, sessionId, Action.UP, lookupState, bucket, timestamp) {
 
     override fun accept(visitor: LogEventVisitor) {
         visitor.visit(this)
@@ -26,12 +24,10 @@ class UpPressedEvent(
 class DownPressedEvent(
         userId: String,
         sessionId: String,
-        completionListIds: List<Int>,
-        newCompletionListItems: List<LookupEntryInfo>,
-        selectedPosition: Int,
+        lookupState: LookupState,
+        bucket: String,
         timestamp: Long)
-    : LookupStateLogData(userId, sessionId, Action.DOWN, completionListIds,
-        newCompletionListItems, selectedPosition, timestamp) {
+    : LookupStateLogData(userId, sessionId, Action.DOWN, lookupState, bucket, timestamp) {
 
     override fun accept(visitor: LogEventVisitor) {
         visitor.visit(this)

@@ -29,7 +29,6 @@ import org.jetbrains.annotations.NotNull;
  * <li>from some frameworks: {@code @javax.ejb.EJB private DataStore myInjectedDataStore;}</li> etc
  * </ul>
  * @author yole
- * @since 6.0
  */
 public interface ImplicitUsageProvider {
   ExtensionPointName<ImplicitUsageProvider> EP_NAME = new ExtensionPointName<>("com.intellij.implicitUsageProvider");
@@ -37,17 +36,17 @@ public interface ImplicitUsageProvider {
   /**
    * @return true if element should not be reported as unused
    */
-  boolean isImplicitUsage(PsiElement element);
+  boolean isImplicitUsage(@NotNull PsiElement element);
 
   /**
    * @return true if element should not be reported as "assigned but not used"
    */
-  boolean isImplicitRead(PsiElement element);
+  boolean isImplicitRead(@NotNull PsiElement element);
 
   /**
    * @return true if element should not be reported as "referenced but never assigned"
    */
-  boolean isImplicitWrite(PsiElement element);
+  boolean isImplicitWrite(@NotNull PsiElement element);
 
   /**
    * @return true if the given element is implicitly initialized to a non-null value

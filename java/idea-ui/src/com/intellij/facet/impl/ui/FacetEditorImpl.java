@@ -40,9 +40,6 @@ import java.awt.*;
 import java.util.HashSet;
 import java.util.Set;
 
-/**
- * @author nik
- */
 public class FacetEditorImpl extends UnnamedConfigurableGroup implements UnnamedConfigurable, FacetEditor {
   private final FacetEditorTab[] myEditorTabs;
   private final FacetErrorPanel myErrorPanel;
@@ -135,9 +132,7 @@ public class FacetEditorImpl extends UnnamedConfigurableGroup implements Unnamed
       if (preferredFocusedComponent != null) {
         ApplicationManager.getApplication().invokeLater(() -> {
           if (preferredFocusedComponent.isShowing()) {
-            IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-              IdeFocusManager.getGlobalInstance().requestFocus(preferredFocusedComponent, true);
-            });
+            IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(preferredFocusedComponent, true));
           }
         });
       }

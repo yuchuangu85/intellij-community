@@ -16,23 +16,31 @@
 package git4idea.ui;
 
 import com.intellij.openapi.util.text.StringUtil;
-import git4idea.i18n.GitBundle;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Information about one stash.
  */
 public class StashInfo {
+  @NotNull
   private final String myStash; // stash codename (stash@{1})
   private final String myBranch;
   private final String myMessage;
   private final String myText; // The formatted text representation
 
-  public StashInfo(final String stash, final String branch, final String message) {
+  public StashInfo(@NotNull String stash, @Nullable String branch, @NotNull String message) {
     myStash = stash;
     myBranch = branch;
     myMessage = message;
-    myText =
-      GitBundle.message("unstash.stashes.item", StringUtil.escapeXml(stash), StringUtil.escapeXml(branch), StringUtil.escapeXml(message));
+
+    StringBuilder sb = new StringBuilder();
+    sb.append("<html><b><tt>").append(StringUtil.escapeXmlEntities(stash)).append("</tt></b>: ");
+    if (branch != null) {
+      sb.append("<i>").append(StringUtil.escapeXmlEntities(branch)).append("</i>: ");
+    }
+    sb.append(StringUtil.escapeXmlEntities(message)).append("</html>");
+    myText = sb.toString();
   }
 
   @Override
@@ -40,14 +48,17 @@ public class StashInfo {
     return myText;
   }
 
+  @NotNull
   public String getStash() {
     return myStash;
   }
 
+  @Nullable
   public String getBranch() {
     return myBranch;
   }
 
+  @NotNull
   public String getMessage() {
     return myMessage;
   }

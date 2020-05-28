@@ -1,26 +1,15 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.containers;
 
 import com.intellij.concurrency.ConcurrentCollectionFactory;
+import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.testFramework.LeakHunter;
 import com.intellij.testFramework.RunFirst;
 import com.intellij.testFramework.TestLoggerFactory;
 import com.intellij.testFramework.UsefulTestCase;
 import com.intellij.util.ref.GCUtil;
+import com.intellij.util.ref.GCWatcher;
 import gnu.trove.TObjectHashingStrategy;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
@@ -139,6 +128,36 @@ public class ContainerUtilCollectionsTest extends Assert {
   public void testConcurrentWeakMapTossed() {
     ConcurrentMap<Object, Object> map = ContainerUtil.createConcurrentWeakMap();
     checkKeyTossedEventually(map);
+  }
+
+  @Test(timeout = TIMEOUT)
+  public void testConcurrentWeakMapDoesntRetainOldValueKeyAfterPutWithTheSameKeyButDifferentValue() {
+    checkMapDoesntLeakOldValueAfterPutWithTheSameKeyButDifferentValue(ContainerUtil.createConcurrentWeakMap());
+  }
+  @Test(timeout = TIMEOUT)
+  public void testConcurrentSoftMapDoesntRetainOldValueKeyAfterPutWithTheSameKeyButDifferentValue() {
+    checkMapDoesntLeakOldValueAfterPutWithTheSameKeyButDifferentValue(ContainerUtil.createConcurrentSoftMap());
+  }
+  @Test(timeout = TIMEOUT)
+  public void testConcurrentWKWVMapDoesntRetainOldValueKeyAfterPutWithTheSameKeyButDifferentValue() {
+    checkMapDoesntLeakOldValueAfterPutWithTheSameKeyButDifferentValue(ContainerUtil.createConcurrentWeakKeyWeakValueMap());
+  }
+  @Test(timeout = TIMEOUT)
+  public void testConcurrentWKSVMapDoesntRetainOldValueKeyAfterPutWithTheSameKeyButDifferentValue() {
+    checkMapDoesntLeakOldValueAfterPutWithTheSameKeyButDifferentValue(ContainerUtil.createConcurrentWeakKeySoftValueMap());
+  }
+  @Test(timeout = TIMEOUT)
+  public void testConcurrentSKSVMapDoesntRetainOldValueKeyAfterPutWithTheSameKeyButDifferentValue() {
+    checkMapDoesntLeakOldValueAfterPutWithTheSameKeyButDifferentValue(ContainerUtil.createConcurrentSoftKeySoftValueMap(1,1,1,ContainerUtil.canonicalStrategy()));
+  }
+
+  private void checkMapDoesntLeakOldValueAfterPutWithTheSameKeyButDifferentValue(Map<Object, Object> map) {
+    Object key = new Object();
+    class MyValue {}
+    map.put(key, strong = new MyValue());
+    map.put(key, this);
+    strong = null;
+    LeakHunter.checkLeak(map, MyValue.class);
   }
 
   @Test(timeout = TIMEOUT)
@@ -364,10 +383,10 @@ public class ContainerUtilCollectionsTest extends Assert {
         assertTrue(remove instanceof Integer);
         assertEquals(i - 1, remove);
       }
-      assertEquals(map.size(), 1);
+      assertEquals(1, map.size());
     }
     map.clear();
-    assertEquals(map.size(), 0);
+    assertEquals(0, map.size());
     assertTrue(map.isEmpty());
   }
 
@@ -387,10 +406,10 @@ public class ContainerUtilCollectionsTest extends Assert {
         assertTrue(remove instanceof Integer);
         assertEquals(i - 1, remove);
       }
-      assertEquals(map.size(), 1);
+      assertEquals(1, map.size());
     }
     map.clear();
-    assertEquals(map.size(), 0);
+    assertEquals(0, map.size());
   }
 
   @Test(timeout = TIMEOUT)
@@ -420,15 +439,16 @@ public class ContainerUtilCollectionsTest extends Assert {
   @Test
   public void testConcurrentWeakValueSize() {
     Map<String, Object> map = ContainerUtil.createConcurrentWeakValueMap();
-    strong = new Object();
-    map.put("a", strong);
-    map.put("b", new Object());
+    Ref<Object> ref1 = Ref.create(new Object());
+    Ref<Object> ref2 = Ref.create(new Object());
 
-    GCUtil.tryGcSoftlyReachableObjects();
+    map.put("a", ref1.get());
+    map.put("b", ref2.get());
+
+    GCWatcher.fromClearedRef(ref2).ensureCollected();
     assertEquals(1, map.size());
 
-    strong = null;
-    GCUtil.tryGcSoftlyReachableObjects();
+    GCWatcher.fromClearedRef(ref1).ensureCollected();
     assertTrue(map.toString(), map.isEmpty());
   }
 
@@ -544,18 +564,15 @@ public class ContainerUtilCollectionsTest extends Assert {
 
   private void checkClearsEventuallyAfterGCPressure(Set<Object> set) {
     assertTrue(set.isEmpty());
-    set.add(new Object());
+    Ref<Object> ref = Ref.create(new Object());
+    set.add(ref.get());
 
-    //noinspection SizeReplaceableByIsEmpty
-    do {
-      set.add(this);  // to run processQueues();
-      assertFalse(set.isEmpty());
-      set.remove(this);
+    GCWatcher.fromClearedRef(ref).ensureCollected();
 
-      GCUtil.tryGcSoftlyReachableObjects();
-      System.gc();
-    }
-    while (set.size() != 0);
+    set.add(this);  // to run processQueues();
+    assertFalse(set.isEmpty());
+    set.remove(this);
+
     assertTrue(set.isEmpty());
     assertEquals(0, set.size());
     set.add(this);

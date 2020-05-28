@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang
 
 import com.intellij.codeInsight.lookup.Lookup
@@ -23,12 +9,12 @@ import com.intellij.codeInsight.template.impl.TemplateManagerImpl
 import com.intellij.codeInsight.template.impl.TemplateSettings
 import com.intellij.codeInsight.template.impl.actions.ListTemplatesAction
 import com.intellij.openapi.editor.Editor
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import org.jetbrains.plugins.groovy.util.TestUtils
 /**
  * @author peter
  */
-public class GroovyLiveTemplatesTest extends LightCodeInsightFixtureTestCase {
+class GroovyLiveTemplatesTest extends LightJavaCodeInsightFixtureTestCase {
   @Override
   protected String getBasePath() {
     return TestUtils.getTestDataPath() + "liveTemplates/"
@@ -61,18 +47,18 @@ void usage(int num, boolean someBoolean, List<String> args){
     expandTemplate(myFixture.getEditor())
     myFixture.checkResult '''
 void usage(int num, boolean someBoolean, List<String> args){
-    println "num = [$num], someBoolean = [$someBoolean], args = [$args]"
+    println "num = $num, someBoolean = $someBoolean, args = $args"
 }
 '''
   }
 
-  public static void expandTemplate(final Editor editor) {
+  static void expandTemplate(final Editor editor) {
     new ListTemplatesAction().actionPerformedImpl(editor.getProject(), editor)
     ((LookupImpl)LookupManager.getActiveLookup(editor)).finishLookup(Lookup.NORMAL_SELECT_CHAR)
   }
 
   void testGroovyStatementContext() throws Exception {
-    final TemplateImpl template = TemplateSettings.getInstance().getTemplate("inst", "other")
+    final TemplateImpl template = TemplateSettings.getInstance().getTemplate("inst", "Groovy")
     assertFalse(isApplicable("class Foo {{ if (a <caret>inst) }}", template))
     assertTrue(isApplicable("class Foo {{ <caret>inst }}", template))
     assertTrue(isApplicable("<caret>inst", template))
@@ -83,7 +69,7 @@ void usage(int num, boolean someBoolean, List<String> args){
   }
 
   void testGroovyExpressionContext() throws Exception {
-    final TemplateImpl template = TemplateSettings.getInstance().getTemplate("lst", "other")
+    final TemplateImpl template = TemplateSettings.getInstance().getTemplate("lst", "Groovy")
     assertFalse(isApplicable("class Foo {{ if (a <caret>toar) }}", template))
     assertTrue(isApplicable("class Foo {{ <caret>xxx }}", template))
     assertTrue(isApplicable("<caret>xxx", template))
@@ -92,7 +78,7 @@ void usage(int num, boolean someBoolean, List<String> args){
   }
 
   void testGroovyDeclarationContext() throws Exception {
-    final TemplateImpl template = TemplateSettings.getInstance().getTemplate("psvm", "other")
+    final TemplateImpl template = TemplateSettings.getInstance().getTemplate("psvm", "Groovy")
     assertFalse(isApplicable("class Foo {{ <caret>xxx }}", template))
     assertFalse(isApplicable("class Foo {{ <caret>xxx }}", template))
     assertFalse(isApplicable("class Foo {{ if (a <caret>xxx) }}", template))

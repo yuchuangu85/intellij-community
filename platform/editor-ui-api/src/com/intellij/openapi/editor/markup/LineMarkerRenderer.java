@@ -16,6 +16,7 @@
 package com.intellij.openapi.editor.markup;
 
 import com.intellij.openapi.editor.Editor;
+import org.jetbrains.annotations.NotNull;
 
 import java.awt.*;
 
@@ -24,6 +25,7 @@ import java.awt.*;
  * marker area (over the folding area).
  *
  * @see RangeHighlighter#setLineMarkerRenderer(LineMarkerRenderer)
+ * @see LineMarkerRendererEx
  */
 public interface LineMarkerRenderer {
   /**
@@ -37,5 +39,5 @@ public interface LineMarkerRenderer {
    *               the top of the first line covered by the associated range highlighter
    *               and the bottom of the last line).
    */
-  void paint(Editor editor, Graphics g, Rectangle r);
+  void paint(@NotNull Editor editor, @NotNull Graphics g, @NotNull Rectangle r);
 }

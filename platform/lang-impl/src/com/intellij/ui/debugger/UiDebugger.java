@@ -1,18 +1,18 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.ui.debugger;
 
+import com.intellij.lang.LangBundle;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.wm.ex.WindowManagerEx;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.tabs.JBTabs;
+import com.intellij.ui.tabs.JBTabsFactory;
 import com.intellij.ui.tabs.TabInfo;
 import com.intellij.ui.tabs.UiDecorator;
-import com.intellij.ui.tabs.impl.JBTabsImpl;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
 
@@ -32,7 +32,7 @@ public class UiDebugger extends JPanel implements Disposable {
   public UiDebugger() {
     Disposer.register(Disposer.get("ui"), this);
 
-    myTabs = new JBTabsImpl(null, ActionManager.getInstance(), null, this);
+    myTabs = JBTabsFactory.createTabs(null, this);
     myTabs.getPresentation().setInnerInsets(new Insets(4, 0, 0, 0)).setPaintBorder(1, 0, 0, 0).setActiveTabFillIn(JBColor.GRAY).setUiDecorator(new UiDecorator() {
       @Override
       @NotNull
@@ -93,9 +93,8 @@ public class UiDebugger extends JPanel implements Disposable {
         return result;
       }
 
-      @NotNull
       @Override
-      protected Action[] createActions() {
+      protected Action @NotNull [] createActions() {
         return new Action[] {new AbstractAction("Close") {
           @Override
           public void actionPerformed(ActionEvent e) {
@@ -105,7 +104,7 @@ public class UiDebugger extends JPanel implements Disposable {
       }
     };
     myDialog.setModal(false);
-    myDialog.setTitle("UI Debugger");
+    myDialog.setTitle(LangBundle.message("dialog.title.ui.debugger"));
     myDialog.setResizable(true);
 
     myDialog.show();

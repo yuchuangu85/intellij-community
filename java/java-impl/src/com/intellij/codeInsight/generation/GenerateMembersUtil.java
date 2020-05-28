@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.generation;
 
 import com.intellij.application.options.CodeStyle;
@@ -25,7 +25,9 @@ import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.*;
 import com.intellij.refactoring.util.RefactoringUtil;
 import com.intellij.util.*;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.text.UniqueNameGenerator;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -34,9 +36,10 @@ import org.jetbrains.java.generate.exception.GenerateCodeException;
 import org.jetbrains.java.generate.template.TemplatesManager;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class GenerateMembersUtil {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.generation.GenerateMembersUtil");
+  private static final Logger LOG = Logger.getInstance(GenerateMembersUtil.class);
 
   private GenerateMembersUtil() {
   }
@@ -231,7 +234,7 @@ public class GenerateMembersUtil {
         final PsiClass psiClass = (PsiClass)element;
         if (psiClass.isEnum()) {
           PsiElement lastChild = null;
-          for (PsiElement child : psiClass.getChildren()) {
+          for (PsiElement child = psiClass.getFirstChild(); child != null; child = child.getNextSibling()) {
             if (child instanceof PsiJavaToken && ";".equals(child.getText())) {
               lastChild = child;
               break;
@@ -271,6 +274,12 @@ public class GenerateMembersUtil {
       PsiSubstitutor collisionResolvedSubstitutor =
         substituteTypeParameters(factory, target, sourceMethod.getTypeParameterList(), resultMethod.getTypeParameterList(), substitutor, sourceMethod);
       substituteReturnType(PsiManager.getInstance(project), resultMethod, sourceMethod.getReturnType(), collisionResolvedSubstitutor);
+      PsiTypeElement typeElement = resultMethod.getReturnTypeElement();
+      if (typeElement != null && typeElement.getText().startsWith("@")) {
+        // If return type is annotated, substituteReturnType will add the annotation into type element,
+        // so the method should be reparsed to move it to the modifier list
+        resultMethod = factory.createMethodFromText(resultMethod.getText(), target);
+      }
       substituteParameters(factory, codeStyleManager, sourceMethod.getParameterList(), resultMethod.getParameterList(), collisionResolvedSubstitutor, target);
       copyDocComment(sourceMethod, resultMethod, factory);
       GlobalSearchScope scope = sourceMethod.getResolveScope();
@@ -333,7 +342,7 @@ public class GenerateMembersUtil {
                                                                  @NotNull PsiSubstitutor substitutor) {
     String typeParamName = typeParam.getName();
     for (PsiType type : substitutor.getSubstitutionMap().values()) {
-      if (type != null && Comparing.equal(type.getCanonicalText(), typeParamName)) {
+      if (type != null && Objects.equals(type.getCanonicalText(), typeParamName)) {
         final String newName = suggestUniqueTypeParameterName(typeParamName, sourceTypeParameterList, PsiTreeUtil.getParentOfType(target, PsiClass.class, false));
         final PsiTypeParameter newTypeParameter = factory.createTypeParameter(newName, typeParam.getSuperTypes());
         substitutor.put(typeParam, factory.createType(newTypeParameter));
@@ -359,7 +368,7 @@ public class GenerateMembersUtil {
     if (typeParameterList == null) return true;
 
     for (PsiTypeParameter typeParameter : typeParameterList.getTypeParameters()) {
-      if (Comparing.equal(typeParameter.getName(), baseName)) {
+      if (Objects.equals(typeParameter.getName(), baseName)) {
         return false;
       }
     }
@@ -402,12 +411,11 @@ public class GenerateMembersUtil {
     }
   }
 
-  @NotNull
-  public static PsiParameter[] overriddenParameters(@NotNull PsiParameter[] parameters,
-                                                    @NotNull JVMElementFactory factory,
-                                                    @NotNull JavaCodeStyleManager codeStyleManager,
-                                                    @NotNull PsiSubstitutor substitutor,
-                                                    @Nullable PsiElement target) {
+  public static PsiParameter @NotNull [] overriddenParameters(PsiParameter @NotNull [] parameters,
+                                                              @NotNull JVMElementFactory factory,
+                                                              @NotNull JavaCodeStyleManager codeStyleManager,
+                                                              @NotNull PsiSubstitutor substitutor,
+                                                              @Nullable PsiElement target) {
     PsiParameter[] result = new PsiParameter[parameters.length];
     UniqueNameGenerator generator = new UniqueNameGenerator();
 
@@ -422,8 +430,7 @@ public class GenerateMembersUtil {
         isBaseNameGenerated = false;
       }
 
-      if (paramName == null ||
-          isBaseNameGenerated && !isSubstituted && isBaseNameGenerated(codeStyleManager, parameterType, paramName) ||
+      if (isBaseNameGenerated && !isSubstituted && isBaseNameGenerated(codeStyleManager, parameterType, paramName) ||
           !factory.isValidParameterName(paramName)) {
         String[] names = codeStyleManager.suggestVariableName(VariableKind.PARAMETER, null, null, substituted).names;
         if (names.length > 0) {
@@ -439,7 +446,8 @@ public class GenerateMembersUtil {
       generator.addExistingName(paramName);
       PsiType expressionType = GenericsUtil.getVariableTypeByExpressionType(substituted);
       if (expressionType instanceof PsiArrayType && substituted instanceof PsiEllipsisType) {
-        expressionType = new PsiEllipsisType(((PsiArrayType)expressionType).getComponentType());
+        expressionType = new PsiEllipsisType(((PsiArrayType)expressionType).getComponentType())
+          .annotate(expressionType.getAnnotationProvider());
       }
       result[i] = factory.createParameter(paramName, expressionType, target);
     }
@@ -466,7 +474,7 @@ public class GenerateMembersUtil {
     }
     final PsiParameter[] sourceParameters = source.getParameterList().getParameters();
     final PsiParameterList targetParameterList = target.getParameterList();
-    RefactoringUtil.fixJavadocsForParams(target, new HashSet<>(Arrays.asList(targetParameterList.getParameters())), pair -> {
+    RefactoringUtil.fixJavadocsForParams(target, ContainerUtil.set(targetParameterList.getParameters()), pair -> {
       final int parameterIndex = targetParameterList.getParameterIndex(pair.first);
       if (parameterIndex >= 0 && parameterIndex < sourceParameters.length) {
         return Comparing.strEqual(pair.second, sourceParameters[parameterIndex].getName());
@@ -515,14 +523,7 @@ public class GenerateMembersUtil {
     if (PsiUtil.isRawSubstitutor(owner, substitutor)) {
       return TypeConversionUtil.erasure(type);
     }
-    final PsiType psiType = substitutor.substitute(type);
-    if (psiType != null) {
-      final PsiType deepComponentType = psiType.getDeepComponentType();
-      if (!(deepComponentType instanceof PsiCapturedWildcardType || deepComponentType instanceof PsiWildcardType)){
-        return psiType;
-      }
-    }
-    return TypeConversionUtil.erasure(type);
+    return GenericsUtil.eliminateWildcards(substitutor.substitute(type), false, true);
   }
 
   public static boolean isChildInRange(PsiElement child, PsiElement first, PsiElement last) {
@@ -535,6 +536,9 @@ public class GenerateMembersUtil {
     }
   }
 
+  /**
+   * May add @Override, body according to the override template and align throws list according to the super method
+   */
   public static void setupGeneratedMethod(PsiMethod method) {
     PsiClass containingClass = method.getContainingClass();
     PsiClass base = containingClass == null ? null : containingClass.getSuperClass();
@@ -557,6 +561,21 @@ public class GenerateMembersUtil {
       return;
     }
 
+    PsiSubstitutor classSubstitutor = TypeConversionUtil.getSuperClassSubstitutor(base, containingClass, PsiSubstitutor.EMPTY);
+    PsiElementFactory factory = JavaPsiFacade.getElementFactory(method.getProject());
+    String throwsList =
+      Arrays.stream(overridden.getThrowsList().getReferencedTypes())
+        .map(classSubstitutor::substitute)
+        .filter(Objects::nonNull)
+        .map(type -> type.getCanonicalText())
+        .collect(Collectors.joining(", "));
+    if (throwsList.isEmpty()) {
+      method.getThrowsList().delete();
+    }
+    else {
+      method.getThrowsList().replace(factory.createMethodFromText("void m() throws " + throwsList + ";", method).getThrowsList());
+    }
+
     if (emptyTemplate) {
       OverrideImplementUtil.setupMethodBody(method, overridden, containingClass);
     }
@@ -564,8 +583,9 @@ public class GenerateMembersUtil {
   }
 
   /**
-   * to be deleted in 2017.2
+   * @deprecated use {@link #copyOrReplaceModifierList(PsiModifierListOwner, PsiElement, PsiModifierListOwner)}. to be deleted in 2017.2
    */
+  @ApiStatus.ScheduledForRemoval(inVersion = "2017.2")
   @Deprecated
   public static void copyOrReplaceModifierList(@NotNull PsiModifierListOwner sourceParam, @NotNull PsiModifierListOwner targetParam) {
     copyOrReplaceModifierList(sourceParam, null, targetParam);
@@ -586,11 +606,17 @@ public class GenerateMembersUtil {
 
   public static void copyAnnotations(@NotNull PsiModifierList source, @NotNull PsiModifierList target, String... skipAnnotations) {
     for (PsiAnnotation annotation : source.getAnnotations()) {
-      String qualifiedName = annotation.getQualifiedName();
+      PsiJavaCodeReferenceElement ref = annotation.getNameReferenceElement();
+      if (ref == null) continue;
+      PsiClass oldClass = ObjectUtils.tryCast(ref.resolve(), PsiClass.class);
+      if (oldClass == null) continue;
+      String qualifiedName = oldClass.getQualifiedName();
       if (qualifiedName == null || ArrayUtil.contains(qualifiedName, skipAnnotations) || target.hasAnnotation(qualifiedName)) {
         continue;
       }
-      AddAnnotationPsiFix.addPhysicalAnnotation(qualifiedName, annotation.getParameterList().getAttributes(), target);
+      PsiClass newClass = JavaPsiFacade.getInstance(target.getProject()).findClass(qualifiedName, target.getResolveScope());
+      if (newClass == null || !oldClass.getManager().areElementsEquivalent(oldClass, newClass)) continue;
+      AddAnnotationPsiFix.addPhysicalAnnotationIfAbsent(qualifiedName, annotation.getParameterList().getAttributes(), target);
     }
   }
 
@@ -615,56 +641,71 @@ public class GenerateMembersUtil {
   }
 
   //custom getters/setters
-  public static String suggestGetterName(PsiField field) {
+  public static @NotNull String suggestGetterName(PsiField field) {
     return generateGetterPrototype(field).getName();
   }
 
-  public static String suggestGetterName(String name, PsiType type, Project project) {
+  public static @NotNull String suggestGetterName(String name, PsiType type, Project project) {
     if (type instanceof PsiEllipsisType) {
       type = ((PsiEllipsisType)type).toArrayType();
     }
     return suggestGetterName(JavaPsiFacade.getElementFactory(project).createField(name, type));
   }
 
-  public static String suggestSetterName(PsiField field) {
+  public static @NotNull String suggestSetterName(PsiField field) {
     return generateSetterPrototype(field).getName();
   }
 
-  public static String suggestSetterName(String name, PsiType type, Project project) {
+  public static @NotNull String suggestSetterName(String name, PsiType type, Project project) {
     if (type instanceof PsiEllipsisType) {
       type = ((PsiEllipsisType)type).toArrayType();
     }
     return suggestSetterName(JavaPsiFacade.getElementFactory(project).createField(name, type));
   }
 
-  public static PsiMethod generateGetterPrototype(@NotNull PsiField field) {
+  public static @NotNull PsiMethod generateGetterPrototype(@NotNull PsiField field) {
     return generateGetterPrototype(field, true);
   }
 
-  public static PsiMethod generateSetterPrototype(@NotNull PsiField field) {
+  public static @NotNull PsiMethod generateSetterPrototype(@NotNull PsiField field) {
     return generateSetterPrototype(field, true);
   }
 
-  public static PsiMethod generateSetterPrototype(@NotNull PsiField field, PsiClass aClass) {
+  public static @NotNull PsiMethod generateSetterPrototype(@NotNull PsiField field, PsiClass aClass) {
     return generatePrototype(field, aClass, true, SetterTemplatesManager.getInstance());
   }
 
-  static PsiMethod generateGetterPrototype(@NotNull PsiField field, boolean ignoreInvalidTemplate) {
+  static @NotNull PsiMethod generateGetterPrototype(@NotNull PsiField field, boolean ignoreInvalidTemplate) {
     return generatePrototype(field, field.getContainingClass(), ignoreInvalidTemplate, GetterTemplatesManager.getInstance());
   }
 
-  static PsiMethod generateSetterPrototype(@NotNull PsiField field, boolean ignoreInvalidTemplate) {
+  static @NotNull PsiMethod generateSetterPrototype(@NotNull PsiField field, boolean ignoreInvalidTemplate) {
     return generatePrototype(field, field.getContainingClass(), ignoreInvalidTemplate, SetterTemplatesManager.getInstance());
   }
 
-  private static PsiMethod generatePrototype(@NotNull PsiField field,
-                                             PsiClass psiClass,
-                                             boolean ignoreInvalidTemplate,
-                                             TemplatesManager templatesManager) {
+  private static @NotNull PsiMethod generatePrototype(@NotNull PsiField field,
+                                                      PsiClass psiClass,
+                                                      boolean ignoreInvalidTemplate,
+                                                      @NotNull TemplatesManager templatesManager) {
     Project project = field.getProject();
     PsiElementFactory factory = JavaPsiFacade.getElementFactory(project);
     String template = templatesManager.getDefaultTemplate().getTemplate();
-    String methodText = GenerationUtil.velocityGenerateCode(psiClass, Collections.singletonList(field), new HashMap<>(), template, 0, false);
+    Function<String, String> calculateTemplateText =
+      currentTemplate ->
+        GenerationUtil.velocityGenerateCode(psiClass, Collections.singletonList(field), new HashMap<>(), currentTemplate, 0, false);
+    String methodText;
+    try {
+      methodText = calculateTemplateText.fun(template);
+    }
+    catch (GenerateCodeException e) {
+      if (ignoreInvalidTemplate) {
+        LOG.info(e);
+        methodText = calculateTemplateText.fun(templatesManager.getDefaultTemplates().get(0).getTemplate());
+      }
+      else {
+        throw e;
+      }
+    }
 
     boolean isGetter = templatesManager instanceof GetterTemplatesManager;
     PsiMethod result;

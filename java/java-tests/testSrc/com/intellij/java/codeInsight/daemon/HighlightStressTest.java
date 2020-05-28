@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.java.codeInsight.daemon;
 
@@ -22,6 +8,7 @@ import com.intellij.codeInsight.daemon.LightDaemonAnalyzerTestCase;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInspection.LocalInspectionTool;
 import com.intellij.codeInspection.deadCode.UnusedDeclarationInspection;
+import com.intellij.codeInspection.ex.EntryPointsManagerBase;
 import com.intellij.codeInspection.ex.InspectionToolRegistrar;
 import com.intellij.codeInspection.ex.InspectionToolWrapper;
 import com.intellij.codeInspection.ex.LocalInspectionToolWrapper;
@@ -53,15 +40,16 @@ public class HighlightStressTest extends LightDaemonAnalyzerTestCase {
       enableInspectionTool(new UnusedDeclarationInspection());
       enableInspectionTool(new UnusedImportInspection());
     }
+    // pre-load extensions to avoid "PSI/document/model changes are not allowed during highlighting"
+    EntryPointsManagerBase.getInstance(getProject()).getAdditionalAnnotations();
   }
 
-  @NotNull
   @Override
-  protected LocalInspectionTool[] configureLocalInspectionTools() {
+  protected LocalInspectionTool @NotNull [] configureLocalInspectionTools() {
     if ("RandomEditingForUnused".equals(getTestName(false))) {
       return LocalInspectionTool.EMPTY_ARRAY;
     }
-    List<InspectionToolWrapper> all = InspectionToolRegistrar.getInstance().createTools();
+    List<InspectionToolWrapper<?, ?>> all = InspectionToolRegistrar.getInstance().createTools();
     List<LocalInspectionTool> locals = new ArrayList<>();
     for (InspectionToolWrapper tool : all) {
       if (tool instanceof LocalInspectionToolWrapper) {
@@ -168,13 +156,13 @@ public class HighlightStressTest extends LightDaemonAnalyzerTestCase {
       long start = System.currentTimeMillis();
 
       LOG.debug("i = " + i);
-      String s = myFile.getText();
+      String s = getFile().getText();
       int offset;
       while (true) {
         offset = random.nextInt(s.length());
         if (s.charAt(offset) == ' ') break;
       }
-      myEditor.getCaretModel().moveToOffset(offset);
+      getEditor().getCaretModel().moveToOffset(offset);
       type("/*--*/");
       List<HighlightInfo> infos = doHighlighting();
       if (oldWarningSize != infos.size()) {
@@ -253,7 +241,7 @@ public class HighlightStressTest extends LightDaemonAnalyzerTestCase {
     Random random = new Random();
     int unused = 0;
     for (int i = 0; i < 100; i++) {
-      String s = myFile.getText();
+      String s = getFile().getText();
 
       int offset;
       while (true) {
@@ -263,12 +251,12 @@ public class HighlightStressTest extends LightDaemonAnalyzerTestCase {
 
       char next = offset < s.length()-1 ? s.charAt(offset+1) : 0;
       if (next == '/') {
-        myEditor.getCaretModel().moveToOffset(offset + 1);
+        getEditor().getCaretModel().moveToOffset(offset + 1);
         type("**");
         unused--;
       }
       else if (next == '*') {
-        myEditor.getCaretModel().moveToOffset(offset + 1);
+        getEditor().getCaretModel().moveToOffset(offset + 1);
         delete();
         delete();
         unused++;
@@ -279,7 +267,7 @@ public class HighlightStressTest extends LightDaemonAnalyzerTestCase {
       PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
       getFile().accept(new PsiRecursiveElementVisitor() {
         @Override
-        public void visitElement(PsiElement element) {
+        public void visitElement(@NotNull PsiElement element) {
           assertTrue(element.toString(), element.isValid());
           super.visitElement(element);
         }

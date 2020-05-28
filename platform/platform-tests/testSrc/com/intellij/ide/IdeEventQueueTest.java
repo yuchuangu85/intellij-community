@@ -15,9 +15,14 @@
  */
 package com.intellij.ide;
 
-import com.intellij.testFramework.PlatformTestCase;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ModalityState;
+import com.intellij.testFramework.LightPlatformTestCase;
 import com.intellij.testFramework.PlatformTestUtil;
+import com.intellij.util.Alarm;
 import com.intellij.util.ReflectionUtil;
+import com.intellij.util.TestTimeOut;
+import com.intellij.util.concurrency.EdtExecutorService;
 import com.intellij.util.ui.UIUtil;
 import gnu.trove.THashSet;
 
@@ -28,9 +33,10 @@ import java.awt.event.InputEvent;
 import java.awt.event.InvocationEvent;
 import java.awt.event.KeyEvent;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class IdeEventQueueTest extends PlatformTestCase {
+public class IdeEventQueueTest extends LightPlatformTestCase {
   public void testManyEventsStress() {
     int N = 100000;
     PlatformTestUtil.startPerformanceTest("Event queue dispatch", 10000, () -> {
@@ -113,7 +119,7 @@ public class IdeEventQueueTest extends PlatformTestCase {
     assertEquals(mustBeConsumed, ReflectionUtil.getField(AWTEvent.class, event, boolean.class, "consumed").booleanValue());
     assertTrue(ReflectionUtil.getField(AWTEvent.class, event, boolean.class, "isPosted"));
   }
-  private boolean isConsumed(InputEvent event) {
+  private static boolean isConsumed(InputEvent event) {
     return event.isConsumed();
   }
 
@@ -124,5 +130,50 @@ public class IdeEventQueueTest extends PlatformTestCase {
       LOG.debug("event dispatched in dispatchAll() "+event+"; -"+(event instanceof InvocationEvent ? "continuing" : "returning"));
       if (!(event instanceof InvocationEvent)) return event;
     }
+  }
+
+  private static class MyException extends RuntimeException {
+  }
+  private void throwMyException() {
+    throw new MyException();
+  }
+
+  private static void checkMyExceptionThrownImmediately() {
+    TestTimeOut t = TestTimeOut.setTimeout(10, TimeUnit.SECONDS);
+    while (true) {
+      try {
+        UIUtil.dispatchAllInvocationEvents();
+      }
+      catch (MyException e) {
+        break;
+      }
+      assertFalse(t.timedOut());
+    }
+  }
+
+  public void testExceptionInAlarmMustThrowImmediatelyInTests() {
+    Alarm alarm = new Alarm();
+    alarm.addRequest(()-> throwMyException(), 1);
+    checkMyExceptionThrownImmediately();
+  }
+
+  public void testExceptionInInvokeLateredRunnableMustThrowImmediatelyInTests() {
+    SwingUtilities.invokeLater(() -> throwMyException());
+    checkMyExceptionThrownImmediately();
+  }
+
+  public void testAppInvokeLateredRunnableMustThrowImmediatelyInTests() {
+    SwingUtilities.invokeLater(()->ApplicationManager.getApplication().invokeLater(()->throwMyException()));
+    checkMyExceptionThrownImmediately();
+  }
+
+  public void testEdtExecutorRunnableMustThrowImmediatelyInTests() {
+    EdtExecutorService.getInstance().execute(()->throwMyException(), ModalityState.NON_MODAL);
+    checkMyExceptionThrownImmediately();
+  }
+
+  public void testEdtScheduledExecutorRunnableMustThrowImmediatelyInTests() {
+    EdtExecutorService.getScheduledExecutorInstance().schedule(()->throwMyException(), 1, TimeUnit.MILLISECONDS);
+    checkMyExceptionThrownImmediately();
   }
 }

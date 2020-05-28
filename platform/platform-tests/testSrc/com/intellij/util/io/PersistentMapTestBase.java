@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2018 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package com.intellij.util.io;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.io.FileUtil;
-import junit.framework.TestCase;
+import com.intellij.testFramework.UsefulTestCase;
 
 import java.io.File;
 import java.io.IOException;
@@ -25,7 +25,7 @@ import java.io.IOException;
 /**
  * @author Eugene Zhuravlev
  */
-abstract class PersistentMapTestBase extends TestCase {
+abstract class PersistentMapTestBase extends UsefulTestCase {
   protected static final Logger LOG = Logger.getInstance(PersistentMapTestBase.class);
   protected PersistentHashMap<String, String> myMap;
   protected File myFile;
@@ -38,14 +38,22 @@ abstract class PersistentMapTestBase extends TestCase {
     myFile = new File(directory, "map");
     assertTrue(myFile.createNewFile());
     myDataFile = new File(directory, myFile.getName() + PersistentHashMap.DATA_FILE_EXTENSION);
-    myMap = new PersistentHashMap<>(myFile, EnumeratorStringDescriptor.INSTANCE, EnumeratorStringDescriptor.INSTANCE);
+    myMap = new PersistentHashMap<>(myFile.toPath(), EnumeratorStringDescriptor.INSTANCE, EnumeratorStringDescriptor.INSTANCE);
   }
 
   @Override
   protected void tearDown() throws Exception {
-    clearMap(myFile, myMap);
-    myMap = null;
-    super.tearDown();
+    try {
+      clearMap(myFile, myMap);
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
+    finally {
+      myMap = null;
+
+      super.tearDown();
+    }
   }
 
   static void clearMap(final File file1, PersistentHashMap<?, ?> map) throws IOException {

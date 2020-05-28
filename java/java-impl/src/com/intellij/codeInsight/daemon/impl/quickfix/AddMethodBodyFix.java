@@ -16,17 +16,21 @@
 package com.intellij.codeInsight.daemon.impl.quickfix;
 
 import com.intellij.codeInsight.daemon.QuickFixBundle;
+import com.intellij.codeInsight.intention.FileModifier;
 import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.codeInsight.intention.impl.BaseIntentionAction;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiModifier;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-public class AddMethodBodyFix implements IntentionAction {
+public final class AddMethodBodyFix implements IntentionAction {
   private final PsiMethod myMethod;
 
   public AddMethodBodyFix(@NotNull PsiMethod method) {
@@ -50,7 +54,7 @@ public class AddMethodBodyFix implements IntentionAction {
     return myMethod.isValid() &&
            myMethod.getBody() == null &&
            myMethod.getContainingClass() != null &&
-           myMethod.getManager().isInProject(myMethod);
+           BaseIntentionAction.canModify(myMethod);
   }
 
   @NotNull
@@ -71,4 +75,8 @@ public class AddMethodBodyFix implements IntentionAction {
     return true;
   }
 
+  @Override
+  public @Nullable FileModifier getFileModifierForPreview(@NotNull PsiFile target) {
+    return new AddMethodBodyFix(PsiTreeUtil.findSameElementInCopy(myMethod, target));
+  }
 }

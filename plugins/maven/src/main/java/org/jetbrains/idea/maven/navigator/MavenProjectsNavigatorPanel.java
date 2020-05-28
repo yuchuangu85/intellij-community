@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.navigator;
 
 import com.intellij.execution.Location;
@@ -52,6 +38,8 @@ import java.awt.*;
 import java.io.File;
 import java.util.List;
 import java.util.*;
+
+import static org.jetbrains.idea.maven.navigator.MavenProjectsNavigator.TOOL_WINDOW_PLACE_ID;
 
 public class MavenProjectsNavigatorPanel extends SimpleToolWindowPanel implements DataProvider {
   private final Project myProject;
@@ -103,7 +91,7 @@ public class MavenProjectsNavigatorPanel extends SimpleToolWindowPanel implement
         if (id != null) {
           final ActionGroup actionGroup = (ActionGroup)actionManager.getAction(id);
           if (actionGroup != null) {
-            actionManager.createActionPopupMenu("", actionGroup).getComponent().show(comp, x, y);
+            actionManager.createActionPopupMenu(TOOL_WINDOW_PLACE_ID, actionGroup).getComponent().show(comp, x, y);
           }
         }
       }
@@ -227,7 +215,7 @@ public class MavenProjectsNavigatorPanel extends SimpleToolWindowPanel implement
       for (MavenProjectsStructure.GoalNode node : nodes) {
         goals.add(qualifiedGoals ? node.getGoal() : node.getName());
       }
-      Collections.sort(goals, myGoalOrderComparator);
+      goals.sort(myGoalOrderComparator);
       return goals;
     }
     return null;

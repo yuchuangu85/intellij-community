@@ -20,7 +20,11 @@ import com.intellij.util.io.KeyDescriptor;
 import com.intellij.util.io.PersistentHashMap;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.*;
+import java.io.DataInput;
+import java.io.DataInputStream;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.nio.file.Path;
 
 /**
  * @author Dmitry Avdeev
@@ -29,23 +33,19 @@ class ValueContainerMap<Key, Value> extends PersistentHashMap<Key, UpdatableValu
   @NotNull private final DataExternalizer<Value> myValueExternalizer;
   private final boolean myKeyIsUniqueForIndexedFile;
 
-  ValueContainerMap(@NotNull final File file,
+  ValueContainerMap(@NotNull Path file,
                     @NotNull KeyDescriptor<Key> keyKeyDescriptor,
                     @NotNull DataExternalizer<Value> valueExternalizer,
-                    boolean keyIsUniqueForIndexedFile) throws IOException {
-    super(file, keyKeyDescriptor, new ValueContainerExternalizer<Value>(valueExternalizer));
+                    boolean keyIsUniqueForIndexedFile,
+                    @NotNull ValueContainerInputRemapping inputRemapping) throws IOException {
+    super(file, keyKeyDescriptor, new ValueContainerExternalizer<>(valueExternalizer, inputRemapping));
     myValueExternalizer = valueExternalizer;
     myKeyIsUniqueForIndexedFile = keyIsUniqueForIndexedFile;
   }
 
-  @NotNull
-  Object getDataAccessLock() {
-    return myEnumerator;
-  }
-
   @Override
   protected void doPut(Key key, UpdatableValueContainer<Value> container) throws IOException {
-    synchronized (myEnumerator) {
+    synchronized (getDataAccessLock()) {
       final ChangeTrackingValueContainer<Value> valueContainer = (ChangeTrackingValueContainer<Value>)container;
 
       // try to accumulate index value calculated for particular key to avoid fragmentation: usually keys are scattered across many files
@@ -68,9 +68,11 @@ class ValueContainerMap<Key, Value> extends PersistentHashMap<Key, UpdatableValu
 
   private static final class ValueContainerExternalizer<T> implements DataExternalizer<UpdatableValueContainer<T>> {
     @NotNull private final DataExternalizer<T> myValueExternalizer;
+    @NotNull private final ValueContainerInputRemapping myInputRemapping;
 
-    private ValueContainerExternalizer(@NotNull DataExternalizer<T> valueExternalizer) {
+    private ValueContainerExternalizer(@NotNull DataExternalizer<T> valueExternalizer, @NotNull ValueContainerInputRemapping inputRemapping) {
       myValueExternalizer = valueExternalizer;
+      myInputRemapping = inputRemapping;
     }
 
     @Override
@@ -81,9 +83,9 @@ class ValueContainerMap<Key, Value> extends PersistentHashMap<Key, UpdatableValu
     @NotNull
     @Override
     public UpdatableValueContainer<T> read(@NotNull final DataInput in) throws IOException {
-      final ValueContainerImpl<T> valueContainer = new ValueContainerImpl<T>();
+      final ValueContainerImpl<T> valueContainer = new ValueContainerImpl<>();
 
-      valueContainer.readFrom((DataInputStream)in, myValueExternalizer);
+      valueContainer.readFrom((DataInputStream)in, myValueExternalizer, myInputRemapping);
       return valueContainer;
     }
   }

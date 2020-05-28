@@ -43,11 +43,16 @@ public class HtmlQuotesFormatPreprocessor implements PreFormatProcessor {
     PsiElement psiElement = node.getPsi();
     if (psiElement != null &&
         psiElement.isValid() &&
-        psiElement.getLanguage().is(HTMLLanguage.INSTANCE)) {
-      CodeStyleSettings rootSettings = CodeStyle.getSettings(psiElement.getContainingFile());
+        psiElement.getLanguage().isKindOf(HTMLLanguage.INSTANCE)) {
+      PsiFile file = psiElement.getContainingFile();
+      PsiElement fileContext = file.getContext();
+      String contextQuote = fileContext != null ? Character.toString(fileContext.getText().charAt(0)) : null;
+      CodeStyleSettings rootSettings = CodeStyle.getSettings(file);
       HtmlCodeStyleSettings htmlSettings = rootSettings.getCustomSettings(HtmlCodeStyleSettings.class);
       CodeStyleSettings.QuoteStyle quoteStyle = htmlSettings.HTML_QUOTE_STYLE;
-      if (quoteStyle != CodeStyleSettings.QuoteStyle.None && htmlSettings.HTML_ENFORCE_QUOTES) {
+      if (quoteStyle != CodeStyleSettings.QuoteStyle.None
+          && htmlSettings.HTML_ENFORCE_QUOTES
+          && !StringUtil.equals(quoteStyle.quote, contextQuote)) {
         PostFormatProcessorHelper postFormatProcessorHelper =
           new PostFormatProcessorHelper(rootSettings.getCommonSettings(HTMLLanguage.INSTANCE));
         postFormatProcessorHelper.setResultTextRange(range);
@@ -83,7 +88,7 @@ public class HtmlQuotesFormatPreprocessor implements PreFormatProcessor {
       myDocument = file.getViewProvider().getDocument();
       switch (style) {
         case Single:
-          myNewQuote = "\'";
+          myNewQuote = "'";
           break;
         case Double:
           myNewQuote = "\"";

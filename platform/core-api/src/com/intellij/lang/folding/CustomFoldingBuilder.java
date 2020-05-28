@@ -1,8 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.lang.folding;
 
 import com.intellij.lang.ASTNode;
 import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.PossiblyDumbAware;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.registry.Registry;
@@ -10,11 +11,11 @@ import com.intellij.openapi.util.registry.RegistryValue;
 import com.intellij.psi.PsiComment;
 import com.intellij.psi.PsiElement;
 import com.intellij.util.containers.Stack;
-import com.intellij.util.containers.hash.HashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -28,9 +29,8 @@ public abstract class CustomFoldingBuilder extends FoldingBuilderEx implements P
   private static final RegistryValue myMaxLookupDepth = Registry.get("custom.folding.max.lookup.depth");
   private static final ThreadLocal<Set<ASTNode>> ourCustomRegionElements = new ThreadLocal<>();
 
-  @NotNull
   @Override
-  public final FoldingDescriptor[] buildFoldRegions(@NotNull PsiElement root, @NotNull Document document, boolean quick) {
+  public final FoldingDescriptor @NotNull [] buildFoldRegions(@NotNull PsiElement root, @NotNull Document document, boolean quick) {
     ourCustomRegionElements.set(new HashSet<>());
     List<FoldingDescriptor> descriptors = new ArrayList<>();
     try {
@@ -49,9 +49,8 @@ public abstract class CustomFoldingBuilder extends FoldingBuilderEx implements P
     return descriptors.toArray(FoldingDescriptor.EMPTY);
   }
 
-  @NotNull
   @Override
-  public final FoldingDescriptor[] buildFoldRegions(@NotNull ASTNode node, @NotNull Document document) {
+  public final FoldingDescriptor @NotNull [] buildFoldRegions(@NotNull ASTNode node, @NotNull Document document) {
     return buildFoldRegions(node.getPsi(), document, false);
   }
 
@@ -75,6 +74,8 @@ public abstract class CustomFoldingBuilder extends FoldingBuilderEx implements P
                                                   int currDepth) {
     FoldingStack localFoldingStack = isCustomFoldingRoot(node) ? new FoldingStack(node) : foldingStack;
     for (ASTNode child = node.getFirstChildNode(); child != null; child = child.getTreeNext()) {
+      ProgressManager.checkCanceled();
+      
       if (isCustomRegionStart(child)) {
         localFoldingStack.push(child);
       }
@@ -83,8 +84,7 @@ public abstract class CustomFoldingBuilder extends FoldingBuilderEx implements P
           ASTNode startNode = localFoldingStack.pop();
           int startOffset = startNode.getTextRange().getStartOffset();
           TextRange range = new TextRange(startOffset, child.getTextRange().getEndOffset());
-          startNode.getPsi().putUserData(CompositeFoldingBuilder.FOLDING_BUILDER, this);
-          descriptors.add(new FoldingDescriptor(startNode, range));
+          descriptors.add(new CompositeFoldingBuilder.FoldingDescriptorWrapper(new FoldingDescriptor(startNode, range), this));
           Set<ASTNode> nodeSet = ourCustomRegionElements.get();
           nodeSet.add(startNode);
           nodeSet.add(child);

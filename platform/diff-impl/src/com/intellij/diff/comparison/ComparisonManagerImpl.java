@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.diff.comparison;
 
 import com.intellij.diff.comparison.iterables.DiffIterable;
@@ -21,14 +7,13 @@ import com.intellij.diff.comparison.iterables.FairDiffIterable;
 import com.intellij.diff.fragments.*;
 import com.intellij.diff.tools.util.text.LineOffsets;
 import com.intellij.diff.tools.util.text.LineOffsetsUtil;
-import com.intellij.diff.util.IntPair;
 import com.intellij.diff.util.MergeRange;
 import com.intellij.diff.util.Range;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.Consumer;
+import com.intellij.util.IntPair;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.diff.FilesTooBigForDiffException;
 import com.intellij.util.text.CharSequenceSubSequence;
@@ -43,9 +28,7 @@ import java.util.List;
 import static com.intellij.diff.comparison.iterables.DiffIterableUtil.fair;
 import static java.util.Collections.singletonList;
 
-public class ComparisonManagerImpl extends ComparisonManager {
-  private static final Logger LOG = Logger.getInstance(ComparisonManagerImpl.class);
-
+public final class ComparisonManagerImpl extends ComparisonManager {
   @NotNull
   public static ComparisonManagerImpl getInstanceImpl() {
     return (ComparisonManagerImpl)getInstance();
@@ -154,6 +137,19 @@ public class ComparisonManagerImpl extends ComparisonManager {
                                               @NotNull LineOffsets lineOffsets1,
                                               @NotNull LineOffsets lineOffsets2,
                                               @NotNull ComparisonPolicy policy,
+                                              boolean innerFragments,
+                                              @NotNull ProgressIndicator indicator) throws DiffTooBigException {
+    InnerFragmentsPolicy fragmentsPolicy = innerFragments ? InnerFragmentsPolicy.WORDS : InnerFragmentsPolicy.NONE;
+    return compareLinesInner(range, text1, text2, lineOffsets1, lineOffsets2, policy, fragmentsPolicy, indicator);
+  }
+
+  @NotNull
+  public List<LineFragment> compareLinesInner(@NotNull Range range,
+                                              @NotNull CharSequence text1,
+                                              @NotNull CharSequence text2,
+                                              @NotNull LineOffsets lineOffsets1,
+                                              @NotNull LineOffsets lineOffsets2,
+                                              @NotNull ComparisonPolicy policy,
                                               @NotNull InnerFragmentsPolicy fragmentsPolicy,
                                               @NotNull ProgressIndicator indicator) throws DiffTooBigException {
     List<LineFragment> lineFragments = compareLines(range, text1, text2, lineOffsets1, lineOffsets2, policy, indicator);
@@ -165,7 +161,7 @@ public class ComparisonManagerImpl extends ComparisonManager {
     }
   }
 
-  private static List<LineFragment> createInnerFragments(@NotNull List<LineFragment> lineFragments,
+  private static List<LineFragment> createInnerFragments(@NotNull List<? extends LineFragment> lineFragments,
                                                          @NotNull CharSequence text1,
                                                          @NotNull CharSequence text2,
                                                          @NotNull ComparisonPolicy policy,
@@ -270,19 +266,27 @@ public class ComparisonManagerImpl extends ComparisonManager {
                                                              @NotNull CharSequence subSequence2,
                                                              @NotNull ComparisonPolicy policy,
                                                              @NotNull ProgressIndicator indicator) throws DiffTooBigException {
+    List<DiffFragment> innerChanges = doCompareChars(subSequence1, subSequence2, policy, indicator);
+    return singletonList(new LineFragmentImpl(fragment, innerChanges));
+  }
+
+  @NotNull
+  private static List<DiffFragment> doCompareChars(@NotNull CharSequence text1,
+                                                   @NotNull CharSequence text2,
+                                                   @NotNull ComparisonPolicy policy,
+                                                   @NotNull ProgressIndicator indicator) {
     DiffIterable iterable;
     if (policy == ComparisonPolicy.DEFAULT) {
-      iterable = ByChar.compareTwoStep(subSequence1, subSequence2, indicator);
+      iterable = ByChar.compareTwoStep(text1, text2, indicator);
     }
     else if (policy == ComparisonPolicy.TRIM_WHITESPACES) {
-      iterable = ByChar.compareTrimWhitespaces(subSequence1, subSequence2, indicator);
+      iterable = ByChar.compareTrimWhitespaces(text1, text2, indicator);
     }
     else {
-      iterable = ByChar.compareIgnoreWhitespaces(subSequence1, subSequence2, indicator);
+      iterable = ByChar.compareIgnoreWhitespaces(text1, text2, indicator);
     }
 
-    List<DiffFragment> innerChanges = convertIntoDiffFragments(iterable);
-    return singletonList(new LineFragmentImpl(fragment, innerChanges));
+    return convertIntoDiffFragments(iterable);
   }
 
   @NotNull
@@ -311,14 +315,7 @@ public class ComparisonManagerImpl extends ComparisonManager {
                                          @NotNull CharSequence text2,
                                          @NotNull ComparisonPolicy policy,
                                          @NotNull ProgressIndicator indicator) throws DiffTooBigException {
-    if (policy == ComparisonPolicy.IGNORE_WHITESPACES) {
-      return convertIntoDiffFragments(ByChar.compareIgnoreWhitespaces(text1, text2, indicator));
-    }
-    if (policy == ComparisonPolicy.DEFAULT) {
-      return convertIntoDiffFragments(ByChar.compareTwoStep(text1, text2, indicator));
-    }
-    LOG.warn(policy.toString() + " is not supported by ByChar comparison");
-    return convertIntoDiffFragments(ByChar.compareTwoStep(text1, text2, indicator));
+    return doCompareChars(text1, text2, policy, indicator);
   }
 
   @Override
@@ -355,7 +352,7 @@ public class ComparisonManagerImpl extends ComparisonManager {
       IntPair offsets2 = getOffsets(lineOffsets2, startLine2, endLine2);
 
       fragments.add(new LineFragmentImpl(startLine1, endLine1, startLine2, endLine2,
-                                         offsets1.val1, offsets1.val2, offsets2.val1, offsets2.val2));
+                                         offsets1.first, offsets1.second, offsets2.first, offsets2.second));
     }
     return fragments;
   }
@@ -417,8 +414,8 @@ public class ComparisonManagerImpl extends ComparisonManager {
     return newFragments;
   }
 
-  private static void processAdjoining(@NotNull List<LineFragment> oldFragments,
-                                       @NotNull Consumer<List<LineFragment>> consumer) {
+  private static void processAdjoining(@NotNull List<? extends LineFragment> oldFragments,
+                                       @NotNull Consumer<? super List<? extends LineFragment>> consumer) {
     int startIndex = 0;
     for (int i = 1; i < oldFragments.size(); i++) {
       if (!isAdjoining(oldFragments.get(i - 1), oldFragments.get(i))) {
@@ -432,9 +429,9 @@ public class ComparisonManagerImpl extends ComparisonManager {
   }
 
   @NotNull
-  private static List<LineFragment> processAdjoining(@NotNull List<LineFragment> fragments,
-                                                     @NotNull CharSequence text1, @NotNull CharSequence text2,
-                                                     @NotNull ComparisonPolicy policy, boolean squash, boolean trim) {
+  private static List<? extends LineFragment> processAdjoining(@NotNull List<? extends LineFragment> fragments,
+                                                               @NotNull CharSequence text1, @NotNull CharSequence text2,
+                                                               @NotNull ComparisonPolicy policy, boolean squash, boolean trim) {
     int start = 0;
     int end = fragments.size();
 
@@ -472,7 +469,7 @@ public class ComparisonManagerImpl extends ComparisonManager {
   }
 
   @NotNull
-  private static LineFragment doSquash(@NotNull List<LineFragment> oldFragments) {
+  private static LineFragment doSquash(@NotNull List<? extends LineFragment> oldFragments) {
     assert !oldFragments.isEmpty();
     if (oldFragments.size() == 1) return oldFragments.get(0);
 
@@ -614,9 +611,7 @@ public class ComparisonManagerImpl extends ComparisonManager {
       lineFragments = createInnerFragments(lineFragments, text1, text2, ComparisonPolicy.DEFAULT, fragmentsPolicy, indicator);
     }
 
-    return ContainerUtil.mapNotNull(lineFragments, fragment -> {
-      return trimIgnoredInnerFragments(fragment, ignored1, ignored2);
-    });
+    return ContainerUtil.mapNotNull(lineFragments, fragment -> trimIgnoredInnerFragments(fragment, ignored1, ignored2));
   }
 
   @NotNull
@@ -751,7 +746,7 @@ public class ComparisonManagerImpl extends ComparisonManager {
   @NotNull
   private static TextRange trimIgnoredRange(int start, int end, @NotNull BitSet ignored, int offset) {
     IntPair intPair = TrimUtil.trim(offset + start, offset + end, ignored);
-    return new TextRange(intPair.val1 - offset, intPair.val2 - offset);
+    return new TextRange(intPair.first - offset, intPair.second - offset);
   }
 
   private static boolean isIgnoredRange(@NotNull BitSet ignored, int start, int end) {

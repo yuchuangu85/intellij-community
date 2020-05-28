@@ -1,20 +1,7 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.utils.library;
 
+import com.intellij.ide.JavaUiBundle;
 import com.intellij.jarRepository.JarRepositoryManager;
 import com.intellij.jarRepository.RepositoryLibraryType;
 import com.intellij.notification.Notification;
@@ -42,12 +29,13 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.concurrency.AsyncPromise;
 import org.jetbrains.concurrency.Promise;
+import org.jetbrains.concurrency.Promises;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class RepositoryUtils {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.idea.maven.utils.library.RepositoryUtils");
+  private static final Logger LOG = Logger.getInstance(RepositoryUtils.class);
 
   public static boolean libraryHasSources(@Nullable Library library) {
     return library != null && library.getUrls(OrderRootType.SOURCES).length > 0;
@@ -88,7 +76,7 @@ public class RepositoryUtils {
       final Integer count = counts.get(root);
       counts.put(root, count != null ? count + 1 : 1);
     }
-    return Collections.max(counts.entrySet(), Comparator.comparing(Map.Entry::getValue)).getKey();
+    return Collections.max(counts.entrySet(), Map.Entry.comparingByValue()).getKey();
   }
 
   public static Promise<List<OrderRoot>> loadDependenciesToLibrary(@NotNull final Project project,
@@ -97,7 +85,7 @@ public class RepositoryUtils {
                                                                    boolean downloadJavaDocs,
                                                                    @Nullable String copyTo) {
     if (library.getKind() != RepositoryLibraryType.REPOSITORY_LIBRARY_KIND) {
-      return Promise.resolve(Collections.emptyList());
+      return Promises.resolvedPromise(Collections.emptyList());
     }
     final RepositoryLibraryProperties properties = (RepositoryLibraryProperties)library.getProperties();
     String[] annotationUrls = library.getUrls(AnnotationOrderRootType.getInstance());
@@ -110,7 +98,8 @@ public class RepositoryUtils {
         roots == null || roots.isEmpty() ?
         () -> {
           String message = "No files were downloaded for " + properties.getMavenId();
-          Notifications.Bus.notify(new Notification("Repository", "Repository library synchronization",
+          Notifications.Bus.notify(new Notification("Repository", JavaUiBundle.message(
+            "notification.title.repository.library.synchronization"),
                                                     message, NotificationType.ERROR), project);
           promise.setError(message);
         } :

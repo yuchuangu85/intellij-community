@@ -1,23 +1,14 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.diff;
+
+import static com.intellij.util.ArrayUtilRt.EMPTY_BYTE_ARRAY;
+import static com.intellij.util.ObjectUtils.chooseNotNull;
+import static com.intellij.util.ObjectUtils.notNull;
 
 import com.intellij.diff.contents.DiffContent;
 import com.intellij.diff.contents.DocumentContent;
 import com.intellij.diff.contents.FileContent;
+import com.intellij.diff.merge.MergeCallback;
 import com.intellij.diff.merge.MergeRequest;
 import com.intellij.diff.merge.MergeResult;
 import com.intellij.diff.merge.TextMergeRequest;
@@ -26,26 +17,24 @@ import com.intellij.diff.requests.ContentDiffRequest;
 import com.intellij.diff.requests.SimpleDiffRequest;
 import com.intellij.diff.requests.TextMergeRequestImpl;
 import com.intellij.diff.util.DiffUtil;
+import com.intellij.diff.vcs.DiffVcsFacade;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diff.DiffBundle;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.Consumer;
-import com.intellij.util.containers.ContainerUtil;
-import com.intellij.vcsUtil.VcsUtil;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-
-import static com.intellij.util.ObjectUtils.chooseNotNull;
+import java.util.Objects;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class DiffRequestFactoryImpl extends DiffRequestFactory {
   public static final String DIFF_TITLE_RENAME_SEPARATOR = " -> ";
@@ -111,14 +100,14 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
   @Override
   public String getContentTitle(@Nullable VirtualFile file) {
     if (file == null) return null;
-    return getContentTitle(VcsUtil.getFilePath(file));
+    return getContentTitle(DiffVcsFacade.getInstance().getFilePath(file));
   }
 
   @NotNull
   @Override
   public String getTitle(@Nullable VirtualFile file1, @Nullable VirtualFile file2) {
-    FilePath path1 = file1 != null ? VcsUtil.getFilePath(file1) : null;
-    FilePath path2 = file2 != null ? VcsUtil.getFilePath(file2) : null;
+    FilePath path1 = file1 != null ? DiffVcsFacade.getInstance().getFilePath(file1) : null;
+    FilePath path2 = file2 != null ? DiffVcsFacade.getInstance().getFilePath(file2) : null;
     return getTitle(path1, path2, " vs ");
   }
 
@@ -178,7 +167,7 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
                                         @NotNull String sep) {
     if (path1.equals(path2)) return getContentTitle(name1, path1, parentPath1);
 
-    if (Comparing.equal(parentPath1, parentPath2)) {
+    if (Objects.equals(parentPath1, parentPath2)) {
       if (parentPath1 != null) {
         return name1 + sep + name2 + " (" + parentPath1 + ")";
       }
@@ -218,7 +207,7 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
                                          @NotNull List<String> textContents,
                                          @Nullable String title,
                                          @NotNull List<String> titles,
-                                         @Nullable Consumer<MergeResult> applyCallback) throws InvalidDiffRequestException {
+                                         @Nullable Consumer<? super MergeResult> applyCallback) throws InvalidDiffRequestException {
     if (textContents.size() != 3) throw new IllegalArgumentException();
     if (titles.size() != 3) throw new IllegalArgumentException();
 
@@ -232,7 +221,8 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
       contents.add(myContentFactory.create(project, text, fileType));
     }
 
-    return new TextMergeRequestImpl(project, outputContent, originalContent, contents, title, titles, applyCallback);
+    TextMergeRequestImpl request = new TextMergeRequestImpl(project, outputContent, originalContent, contents, title, titles);
+    return MergeCallback.register(request, applyCallback);
   }
 
   @NotNull
@@ -242,15 +232,23 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
                                          @NotNull List<byte[]> byteContents,
                                          @Nullable String title,
                                          @NotNull List<String> contentTitles,
-                                         @Nullable Consumer<MergeResult> applyCallback) throws InvalidDiffRequestException {
-    if (byteContents.size() != 3) throw new IllegalArgumentException();
-    if (contentTitles.size() != 3) throw new IllegalArgumentException();
+                                         @Nullable Consumer<? super MergeResult> applyCallback) throws InvalidDiffRequestException {
+    MergeRequest request = createMergeRequest(project, output, byteContents, title, contentTitles);
+    return MergeCallback.register(request, applyCallback);
+  }
 
+  @NotNull
+  @Override
+  public MergeRequest createMergeRequest(@Nullable Project project,
+                                         @NotNull VirtualFile output,
+                                         @NotNull List<byte[]> byteContents,
+                                         @Nullable String title,
+                                         @NotNull List<String> contentTitles) throws InvalidDiffRequestException {
     try {
-      return createTextMergeRequest(project, output, byteContents, title, contentTitles, applyCallback);
+      return createTextMergeRequest(project, output, byteContents, title, contentTitles);
     }
     catch (InvalidDiffRequestException e) {
-      return createBinaryMergeRequest(project, output, byteContents, title, contentTitles, applyCallback);
+      return createBinaryMergeRequest(project, output, byteContents, title, contentTitles);
     }
   }
 
@@ -261,11 +259,21 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
                                                  @NotNull List<byte[]> byteContents,
                                                  @Nullable String title,
                                                  @NotNull List<String> contentTitles,
-                                                 @Nullable Consumer<MergeResult> applyCallback) throws InvalidDiffRequestException {
+                                                 @Nullable Consumer<? super MergeResult> applyCallback) throws InvalidDiffRequestException {
+    TextMergeRequest request = createTextMergeRequest(project, output, byteContents, title, contentTitles);
+    return MergeCallback.register(request, applyCallback);
+  }
+
+  @NotNull
+  private TextMergeRequest createTextMergeRequest(@Nullable Project project,
+                                                  @NotNull VirtualFile output,
+                                                  @NotNull List<byte[]> byteContents,
+                                                  @Nullable String title,
+                                                  @NotNull List<String> contentTitles) throws InvalidDiffRequestException {
     if (byteContents.size() != 3) throw new IllegalArgumentException();
     if (contentTitles.size() != 3) throw new IllegalArgumentException();
 
-    final Document outputDocument = FileDocumentManager.getInstance().getDocument(output);
+    final Document outputDocument = ReadAction.compute(() -> FileDocumentManager.getInstance().getDocument(output));
     if (outputDocument == null) throw new InvalidDiffRequestException("Can't get output document: " + output.getPresentableUrl());
     if (!DiffUtil.canMakeWritable(outputDocument)) throw new InvalidDiffRequestException("Output is read only: " + output.getPresentableUrl());
 
@@ -274,10 +282,10 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
 
     List<DocumentContent> contents = new ArrayList<>(3);
     for (byte[] bytes : byteContents) {
-      contents.add(myContentFactory.createDocumentFromBytes(project, bytes, output));
+      contents.add(myContentFactory.createDocumentFromBytes(project, notNull(bytes, EMPTY_BYTE_ARRAY), output));
     }
 
-    return new TextMergeRequestImpl(project, outputContent, originalContent, contents, title, contentTitles, applyCallback);
+    return new TextMergeRequestImpl(project, outputContent, originalContent, contents, title, contentTitles);
   }
 
   @NotNull
@@ -287,21 +295,31 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
                                                @NotNull List<byte[]> byteContents,
                                                @Nullable String title,
                                                @NotNull List<String> contentTitles,
-                                               @Nullable Consumer<MergeResult> applyCallback) throws InvalidDiffRequestException {
+                                               @Nullable Consumer<? super MergeResult> applyCallback) throws InvalidDiffRequestException {
+    MergeRequest request = createBinaryMergeRequest(project, output, byteContents, title, contentTitles);
+    return MergeCallback.register(request, applyCallback);
+  }
+
+  @NotNull
+  private MergeRequest createBinaryMergeRequest(@Nullable Project project,
+                                                @NotNull VirtualFile output,
+                                                @NotNull List<byte[]> byteContents,
+                                                @Nullable String title,
+                                                @NotNull List<String> contentTitles) throws InvalidDiffRequestException {
     if (byteContents.size() != 3) throw new IllegalArgumentException();
     if (contentTitles.size() != 3) throw new IllegalArgumentException();
 
     try {
       FileContent outputContent = myContentFactory.createFile(project, output);
       if (outputContent == null) throw new InvalidDiffRequestException("Can't process file: " + output);
-      byte[] originalContent = output.contentsToByteArray();
+      byte[] originalContent = ReadAction.compute(() -> output.contentsToByteArray());
 
       List<DiffContent> contents = new ArrayList<>(3);
       for (byte[] bytes : byteContents) {
-        contents.add(myContentFactory.createFromBytes(project, bytes, output));
+        contents.add(myContentFactory.createFromBytes(project, notNull(bytes, EMPTY_BYTE_ARRAY), output));
       }
 
-      return new BinaryMergeRequestImpl(project, outputContent, originalContent, contents, byteContents, title, contentTitles, applyCallback);
+      return new BinaryMergeRequestImpl(project, outputContent, originalContent, contents, byteContents, title, contentTitles);
     }
     catch (IOException e) {
       throw new InvalidDiffRequestException("Can't read from file", e);
@@ -312,10 +330,12 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
   @Override
   public MergeRequest createMergeRequestFromFiles(@Nullable Project project,
                                                   @NotNull VirtualFile output,
-                                                  @NotNull List<VirtualFile> fileContents,
-                                                  @Nullable Consumer<MergeResult> applyCallback) throws InvalidDiffRequestException {
-    String title = "Merge " + output.getPresentableUrl();
-    List<String> titles = ContainerUtil.list("Your Version", "Base Version", "Their Version");
+                                                  @NotNull List<? extends VirtualFile> fileContents,
+                                                  @Nullable Consumer<? super MergeResult> applyCallback) throws InvalidDiffRequestException {
+    String title = DiffBundle.message("merge.window.title.file", output.getPresentableUrl());
+    List<String> titles = Arrays.asList(DiffBundle.message("merge.version.title.our"),
+                                        DiffBundle.message("merge.version.title.base"),
+                                        DiffBundle.message("merge.version.title.their"));
     return createMergeRequestFromFiles(project, output, fileContents, title, titles, applyCallback);
   }
 
@@ -323,10 +343,10 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
   @Override
   public MergeRequest createMergeRequestFromFiles(@Nullable Project project,
                                                   @NotNull VirtualFile output,
-                                                  @NotNull List<VirtualFile> fileContents,
+                                                  @NotNull List<? extends VirtualFile> fileContents,
                                                   @Nullable String title,
                                                   @NotNull List<String> contentTitles,
-                                                  @Nullable Consumer<MergeResult> applyCallback) throws InvalidDiffRequestException {
+                                                  @Nullable Consumer<? super MergeResult> applyCallback) throws InvalidDiffRequestException {
     if (fileContents.size() != 3) throw new IllegalArgumentException();
     if (contentTitles.size() != 3) throw new IllegalArgumentException();
 
@@ -342,14 +362,14 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
   @Override
   public TextMergeRequest createTextMergeRequestFromFiles(@Nullable Project project,
                                                           @NotNull VirtualFile output,
-                                                          @NotNull List<VirtualFile> fileContents,
+                                                          @NotNull List<? extends VirtualFile> fileContents,
                                                           @Nullable String title,
                                                           @NotNull List<String> contentTitles,
-                                                          @Nullable Consumer<MergeResult> applyCallback) throws InvalidDiffRequestException {
+                                                          @Nullable Consumer<? super MergeResult> applyCallback) throws InvalidDiffRequestException {
     List<byte[]> byteContents = new ArrayList<>(3);
     for (VirtualFile file : fileContents) {
       try {
-        byteContents.add(file.contentsToByteArray());
+        byteContents.add(ReadAction.compute(() -> file.contentsToByteArray()));
       }
       catch (IOException e) {
         throw new InvalidDiffRequestException("Can't read from file: " + file.getPresentableUrl(), e);
@@ -362,10 +382,10 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
   @NotNull
   public MergeRequest createBinaryMergeRequestFromFiles(@Nullable Project project,
                                                         @NotNull VirtualFile output,
-                                                        @NotNull List<VirtualFile> fileContents,
+                                                        @NotNull List<? extends VirtualFile> fileContents,
                                                         @Nullable String title,
                                                         @NotNull List<String> contentTitles,
-                                                        @Nullable Consumer<MergeResult> applyCallback) throws InvalidDiffRequestException {
+                                                        @Nullable Consumer<? super MergeResult> applyCallback) throws InvalidDiffRequestException {
     if (fileContents.size() != 3) throw new IllegalArgumentException();
     if (contentTitles.size() != 3) throw new IllegalArgumentException();
 
@@ -373,7 +393,7 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
     try {
       FileContent outputContent = myContentFactory.createFile(project, output);
       if (outputContent == null) throw new InvalidDiffRequestException("Can't process file: " + output.getPresentableUrl());
-      byte[] originalContent = output.contentsToByteArray();
+      byte[] originalContent = ReadAction.compute(() -> output.contentsToByteArray());
 
       List<DiffContent> contents = new ArrayList<>(3);
       List<byte[]> byteContents = new ArrayList<>(3);
@@ -381,10 +401,12 @@ public class DiffRequestFactoryImpl extends DiffRequestFactory {
         FileContent content = myContentFactory.createFile(project, file);
         if (content == null) throw new InvalidDiffRequestException("Can't process file: " + file.getPresentableUrl());
         contents.add(content);
-        byteContents.add(file.contentsToByteArray()); // TODO: we can read contents from file when needed
+        byteContents.add(ReadAction.compute(() -> file.contentsToByteArray())); // TODO: we can read contents from file when needed
       }
 
-      return new BinaryMergeRequestImpl(project, outputContent, originalContent, contents, byteContents, title, contentTitles, applyCallback);
+      BinaryMergeRequestImpl request = new BinaryMergeRequestImpl(project, outputContent, originalContent, contents, byteContents,
+                                                                  title, contentTitles);
+      return MergeCallback.register(request, applyCallback);
     }
     catch (IOException e) {
       throw new InvalidDiffRequestException("Can't read from file", e);

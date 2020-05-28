@@ -15,7 +15,10 @@
  */
 package com.intellij.openapi.editor;
 
+import com.intellij.openapi.actionSystem.ActionGroup;
+import com.intellij.openapi.editor.markup.GutterIconRenderer;
 import com.intellij.openapi.editor.markup.TextAttributes;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -26,38 +29,23 @@ import java.awt.*;
  *
  * @see InlayModel#addInlineElement(int, boolean, EditorCustomElementRenderer)
  * @see InlayModel#addBlockElement(int, boolean, boolean, int, EditorCustomElementRenderer)
+ * @see InlayModel#addAfterLineEndElement(int, boolean, EditorCustomElementRenderer)
  * @see Inlay#getRenderer()
- *
- * @since 2016.3
  */
 public interface EditorCustomElementRenderer {
   /**
    * Renderer implementation should override this to define width of custom element (in pixels). Returned value will define the result of
    * {@link Inlay#getWidthInPixels()} and the width of {@code targetRegion} parameter passed to renderer's
-   * {@link #paint(Inlay, Graphics, Rectangle, TextAttributes)} method. For block elements the returned value has no other impact currently.
-   * For inline elements it, obviously, impacts the layout of surrounding text, and should always be a positive value.
-   *
-   * @since 2018.3
+   * {@link #paint(Inlay, Graphics, Rectangle, TextAttributes)} method. For inline and after-line-end elements it should always be
+   * a positive value.
    */
-  default int calcWidthInPixels(@NotNull Inlay inlay) {
-    return calcWidthInPixels(inlay.getEditor());
-  }
-
-  /**
-   * @deprecated Override/use {@link #calcWidthInPixels(Inlay)} instead. This method will be removed.
-   */
-  @Deprecated
-  default int calcWidthInPixels(@NotNull Editor editor) {
-    throw new RuntimeException("Method not implemented");
-  }
+  int calcWidthInPixels(@NotNull Inlay inlay);
 
   /**
    * Block element's renderer implementation can override this method to defines the height of element (in pixels). If not overridden,
    * element's height will be equal to editor's line height. Returned value will define the result of {@link Inlay#getWidthInPixels()} and
    * the height of {@code targetRegion} parameter passed to renderer's {@link #paint(Inlay, Graphics, Rectangle, TextAttributes)} method.
    * Returned value is currently not used for inline elements.
-   *
-   * @since 2018.3
    */
   default int calcHeightInPixels(@NotNull Inlay inlay) {
     return inlay.getEditor().getLineHeight();
@@ -69,39 +57,43 @@ public interface EditorCustomElementRenderer {
    * @param targetRegion region where painting should be performed, location of this rectangle is calculated by editor implementation,
    *                     dimensions of the rectangle match element's width and height (provided by {@link #calcWidthInPixels(Inlay)}
    *                     and {@link #calcHeightInPixels(Inlay)})
-   * @param textAttributes for inline elements - attributes of surrounding text, for block elements - empty attributes
-   *
-   * @since 2018.3
+   * @param textAttributes attributes of surrounding text
    */
-  default void paint(@NotNull Inlay inlay, @NotNull Graphics g, @NotNull Rectangle targetRegion, @NotNull TextAttributes textAttributes) {
-    paint(inlay.getEditor(), g, targetRegion, textAttributes);
-  }
-
-  /**
-   * @deprecated Override/use {@link #paint(Inlay, Graphics, Rectangle, TextAttributes)} instead. This method will be removed.
-   */
-  @Deprecated
-  default void paint(@NotNull Editor editor, @NotNull Graphics g, @NotNull Rectangle targetRegion, @NotNull TextAttributes textAttributes) {
-    throw new RuntimeException("Method not implemented");
-  }
+  void paint(@NotNull Inlay inlay, @NotNull Graphics g, @NotNull Rectangle targetRegion, @NotNull TextAttributes textAttributes);
 
   /**
    * Returns a registered id of action group, which is to be used for displaying context menu for the given custom element.
-   * If {@code null} is returned, standard editor's context menu will be displayed upon corresponding mouse event.
-   *
-   * @since 2018.3
+   * If {@code null} is returned (and {@link #getContextMenuGroup(Inlay)} also returns {@code null}), standard editor's context menu will be
+   * displayed upon corresponding mouse event.
    */
   @Nullable
   default String getContextMenuGroupId(@NotNull Inlay inlay) {
-    //noinspection deprecation
-    return getContextMenuGroupId();
+    return null;
   }
 
   /**
-   * @deprecated Override/use {@link #getContextMenuGroupId(Inlay)} instead. This method will be removed.
+   * Returns an action group, which is to be used for the given custom element's context menu. If {@code null} is returned (and
+   * {@link #getContextMenuGroupId(Inlay)} also returns {@code null}), standard editor's context menu will be displayed upon corresponding
+   * mouse event.
+   * <p>
+   * This method takes preference over {@link #getContextMenuGroupId(Inlay)}, i.e. if it returns a non-null value, the latter method won't
+   * be called.
    */
-  @Deprecated
-  default String getContextMenuGroupId() {
+  @ApiStatus.Experimental
+  @Nullable
+  default ActionGroup getContextMenuGroup(@NotNull Inlay inlay) {
+    return null;
+  }
+
+  /**
+   * Allows to show an icon in gutter and process corresponding mouse events for block custom elements (other types of custom elements are
+   * not supported at the moment). Icon will only be rendered if its height is not larger than the element's height.<p>
+   * Returned provider should have a meaningful implementation of {@code equals} method - {@link Inlay#update()} will update the inlay's
+   * provider (only) if newly returned instance is not equal to the previously defined one.
+   */
+  @ApiStatus.Experimental
+  @Nullable
+  default GutterIconRenderer calcGutterIconRenderer(@NotNull Inlay inlay) {
     return null;
   }
 }

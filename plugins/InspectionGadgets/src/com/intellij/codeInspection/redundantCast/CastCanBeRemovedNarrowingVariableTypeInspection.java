@@ -1,7 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.redundantCast;
 
-import com.intellij.codeInspection.*;
+import com.intellij.codeInspection.AbstractBaseJavaLocalInspectionTool;
+import com.intellij.codeInspection.LocalQuickFix;
+import com.intellij.codeInspection.ProblemDescriptor;
+import com.intellij.codeInspection.ProblemsHolder;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
@@ -12,6 +16,7 @@ import com.intellij.psi.util.RedundantCastUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.siyeh.ig.psiutils.ExpressionUtils;
 import com.siyeh.ig.psiutils.HighlightUtils;
+import com.siyeh.ig.psiutils.VariableAccessUtils;
 import org.jetbrains.annotations.NotNull;
 
 import static com.intellij.util.ObjectUtils.tryCast;
@@ -27,8 +32,7 @@ public class CastCanBeRemovedNarrowingVariableTypeInspection extends AbstractBas
         if (castTypeElement == null || castTypeElement.getAnnotations().length > 0) return;
         PsiType castType = cast.getType();
         if (!(castType instanceof PsiClassType) || ((PsiClassType)castType).isRaw()) return;
-        PsiReferenceExpression ref = tryCast(cast.getOperand(), PsiReferenceExpression.class);
-        PsiLocalVariable variable = ExpressionUtils.resolveLocalVariable(ref);
+        PsiLocalVariable variable = ExpressionUtils.resolveLocalVariable(cast.getOperand());
         if (variable == null) return;
         PsiTypeElement variableTypeElement = variable.getTypeElement();
         if (variableTypeElement.isInferredType() || variableTypeElement.getAnnotations().length > 0) return;
@@ -43,18 +47,12 @@ public class CastCanBeRemovedNarrowingVariableTypeInspection extends AbstractBas
         }
         PsiElement block = PsiUtil.getVariableCodeBlock(variable, null);
         if (block == null) return;
-        boolean redundantCast = PsiTreeUtil.processElements(block, e -> {
-          if (e instanceof PsiReferenceExpression) {
-            PsiReferenceExpression reference = (PsiReferenceExpression)e;
-            return !reference.isReferenceTo(variable) || isVariableTypeChangeSafeForReference(cast, castType, reference);
-          }
-          return true;
-        });
-        if (redundantCast) {
-          String message = InspectionsBundle
-            .message("inspection.cast.can.be.removed.narrowing.variable.type.message", variable.getName(), castType.getPresentableText());
-          holder.registerProblem(castTypeElement, message, new CastCanBeRemovedNarrowingVariableTypeFix(variable, castType, isOnTheFly));
+        for (PsiReferenceExpression reference : VariableAccessUtils.getVariableReferences(variable, block)) {
+          if (!isVariableTypeChangeSafeForReference(cast, castType, reference)) return;
         }
+        String message = JavaBundle
+          .message("inspection.cast.can.be.removed.narrowing.variable.type.message", variable.getName(), castType.getPresentableText());
+        holder.registerProblem(castTypeElement, message, new CastCanBeRemovedNarrowingVariableTypeFix(variable, castType, isOnTheFly));
       }
     };
   }
@@ -119,13 +117,13 @@ public class CastCanBeRemovedNarrowingVariableTypeInspection extends AbstractBas
     @NotNull
     @Override
     public String getName() {
-      return InspectionsBundle.message("inspection.cast.can.be.removed.narrowing.variable.type.fix.name", myVariableName, myType);
+      return JavaBundle.message("inspection.cast.can.be.removed.narrowing.variable.type.fix.name", myVariableName, myType);
     }
 
     @NotNull
     @Override
     public String getFamilyName() {
-      return InspectionsBundle.message("inspection.cast.can.be.removed.narrowing.variable.type.fix.family.name");
+      return JavaBundle.message("inspection.cast.can.be.removed.narrowing.variable.type.fix.family.name");
     }
 
     @Override

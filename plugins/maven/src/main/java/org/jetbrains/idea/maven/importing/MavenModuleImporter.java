@@ -17,6 +17,7 @@ package org.jetbrains.idea.maven.importing;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.intellij.execution.configurations.JavaParameters;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.application.ReadAction;
@@ -40,6 +41,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.maven.model.MavenArtifact;
 import org.jetbrains.idea.maven.model.MavenConstants;
 import org.jetbrains.idea.maven.project.*;
+import org.jetbrains.idea.maven.utils.MavenLog;
 import org.jetbrains.idea.maven.utils.MavenUtil;
 
 import java.util.List;
@@ -95,9 +97,12 @@ public class MavenModuleImporter {
     return myRootModelAdapter.getRootModel();
   }
 
-  public void config(boolean isNewlyCreatedModule) {
-    myRootModelAdapter = new MavenRootModelAdapter(myMavenProject, myModule, myModifiableModelsProvider);
-    myRootModelAdapter.init(isNewlyCreatedModule);
+  void setRootModelAdapter(MavenRootModelAdapter mavenRootModelAdapter) { // need for new worskapce model
+    myRootModelAdapter = mavenRootModelAdapter;
+  }
+
+  public void config(MavenRootModelAdapter mavenRootModelAdapter) {
+    myRootModelAdapter = mavenRootModelAdapter;
 
     configFolders();
     configDependencies();
@@ -111,17 +116,22 @@ public class MavenModuleImporter {
       final ModuleType moduleType = ModuleType.get(myModule);
 
       for (final MavenImporter importer : getSuitableImporters()) {
-        final MavenProjectChanges changes;
-        if (myMavenProjectChanges == null) {
-          if (importer.processChangedModulesOnly()) continue;
-          changes = MavenProjectChanges.NONE;
-        }
-        else {
-          changes = myMavenProjectChanges;
-        }
+        try {
+          final MavenProjectChanges changes;
+          if (myMavenProjectChanges == null) {
+            if (importer.processChangedModulesOnly()) continue;
+            changes = MavenProjectChanges.NONE;
+          }
+          else {
+            changes = myMavenProjectChanges;
+          }
 
-        if (importer.getModuleType() == moduleType) {
-          importer.preProcess(myModule, myMavenProject, changes, myModifiableModelsProvider);
+          if (importer.getModuleType() == moduleType) {
+            importer.preProcess(myModule, myMavenProject, changes, myModifiableModelsProvider);
+          }
+        }
+        catch (Exception e) {
+          MavenLog.LOG.error(e);
         }
       }
     });
@@ -145,14 +155,19 @@ public class MavenModuleImporter {
           }
 
           if (importer.getModuleType() == moduleType) {
-            importer.process(myModifiableModelsProvider,
-                             myModule,
-                             myRootModelAdapter,
-                             myMavenTree,
-                             myMavenProject,
-                             changes,
-                             myMavenProjectToModuleName,
-                             postTasks);
+            try {
+              importer.process(myModifiableModelsProvider,
+                               myModule,
+                               myRootModelAdapter,
+                               myMavenTree,
+                               myMavenProject,
+                               changes,
+                               myMavenProjectToModuleName,
+                               postTasks);
+            }
+            catch (Exception e) {
+              MavenLog.LOG.error(e);
+            }
           }
         }
       });
@@ -166,18 +181,23 @@ public class MavenModuleImporter {
       final ModuleType moduleType = ModuleType.get(myModule);
 
       for (final MavenImporter importer : getSuitableImporters()) {
-        final MavenProjectChanges changes;
-        if (myMavenProjectChanges == null) {
-          if (importer.processChangedModulesOnly()) continue;
-          changes = MavenProjectChanges.NONE;
-        }
-        else {
-          changes = myMavenProjectChanges;
+        try {
+          final MavenProjectChanges changes;
+          if (myMavenProjectChanges == null) {
+            if (importer.processChangedModulesOnly()) continue;
+            changes = MavenProjectChanges.NONE;
+          }
+          else {
+            changes = myMavenProjectChanges;
+          }
+
+          if (importer.getModuleType() == moduleType) {
+            importer.postProcess(myModule, myMavenProject, changes, myModifiableModelsProvider);
+          }
+        } catch(Exception e) {
+          MavenLog.LOG.error(e);
         }
 
-        if (importer.getModuleType() == moduleType) {
-          importer.postProcess(myModule, myMavenProject, changes, myModifiableModelsProvider);
-        }
       }
     });
   }
@@ -309,6 +329,7 @@ public class MavenModuleImporter {
     }
   }
 
+  //TODO: Rewrite
   private void addAttachArtifactDependency(@NotNull Element buildHelperCfg,
                                            @NotNull DependencyScope scope,
                                            @NotNull MavenProject mavenProject,
@@ -376,19 +397,24 @@ public class MavenModuleImporter {
   private void configLanguageLevel() {
     if ("false".equalsIgnoreCase(System.getProperty("idea.maven.configure.language.level"))) return;
 
+    LanguageLevel level = getLanguageLevel(myMavenProject);
+    myRootModelAdapter.setLanguageLevel(level);
+  }
+
+  public static LanguageLevel getLanguageLevel(MavenProject mavenProject) {
     LanguageLevel level = null;
 
-    Element cfg = myMavenProject.getPluginConfiguration("com.googlecode", "maven-idea-plugin");
+    Element cfg = mavenProject.getPluginConfiguration("com.googlecode", "maven-idea-plugin");
     if (cfg != null) {
       level = MAVEN_IDEA_PLUGIN_LEVELS.get(cfg.getChildTextTrim("jdkLevel"));
     }
 
     if (level == null) {
-      String mavenProjectSourceLevel = myMavenProject.getSourceLevel();
-      level = LanguageLevel.parse(mavenProjectSourceLevel);
+      String mavenProjectReleaseLevel = mavenProject.getReleaseLevel();
+      level = LanguageLevel.parse(mavenProjectReleaseLevel);
       if (level == null) {
-        String mavenProjectReleaseLevel = myMavenProject.getReleaseLevel();
-        level = LanguageLevel.parse(mavenProjectReleaseLevel);
+        String mavenProjectSourceLevel = mavenProject.getSourceLevel();
+        level = LanguageLevel.parse(mavenProjectSourceLevel);
         if (level == null && (StringUtil.isNotEmpty(mavenProjectSourceLevel) || StringUtil.isNotEmpty(mavenProjectReleaseLevel))) {
           level = LanguageLevel.HIGHEST;
         }
@@ -400,6 +426,31 @@ public class MavenModuleImporter {
       level = LanguageLevel.JDK_1_5;
     }
 
-    myRootModelAdapter.setLanguageLevel(level);
+    if (level.isAtLeast(LanguageLevel.JDK_11)) {
+      level = adjustPreviewLanguageLevel(mavenProject, level);
+    }
+    return level;
+  }
+
+  private static LanguageLevel adjustPreviewLanguageLevel(MavenProject mavenProject, LanguageLevel level) {
+    Element compilerConfiguration = mavenProject.getPluginConfiguration("org.apache.maven.plugins", "maven-compiler-plugin");
+    if (compilerConfiguration != null) {
+      Element compilerArgs = compilerConfiguration.getChild("compilerArgs");
+      if (compilerArgs != null) {
+        if (isPreviewText(compilerArgs) ||
+            compilerArgs.getChildren("arg").stream().anyMatch(MavenModuleImporter::isPreviewText) ||
+            compilerArgs.getChildren("compilerArg").stream().anyMatch(MavenModuleImporter::isPreviewText)) {
+          try {
+            return LanguageLevel.valueOf(level.name() + "_PREVIEW");
+          }
+          catch (IllegalArgumentException ignored) { }
+        }
+      }
+    }
+    return level;
+  }
+
+  private static boolean isPreviewText(Element child) {
+    return JavaParameters.JAVA_ENABLE_PREVIEW_PROPERTY.equals(child.getTextTrim());
   }
 }

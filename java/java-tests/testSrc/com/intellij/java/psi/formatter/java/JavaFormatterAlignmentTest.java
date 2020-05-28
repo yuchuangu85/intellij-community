@@ -1,21 +1,7 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.psi.formatter.java;
 
-import com.intellij.openapi.fileTypes.StdFileTypes;
+import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings;
 import com.intellij.util.IncorrectOperationException;
@@ -34,7 +20,7 @@ public class JavaFormatterAlignmentTest extends AbstractJavaFormatterTest {
     // Inspired by IDEA-30369
     getSettings().ALIGN_MULTILINE_CHAINED_METHODS = true;
     getSettings().METHOD_CALL_CHAIN_WRAP = CommonCodeStyleSettings.WRAP_AS_NEEDED;
-    getSettings().getRootSettings().getIndentOptions(StdFileTypes.JAVA).CONTINUATION_INDENT_SIZE = 8;
+    getSettings().getRootSettings().getIndentOptions(JavaFileType.INSTANCE).CONTINUATION_INDENT_SIZE = 8;
     doTest();
   }
 
@@ -49,7 +35,7 @@ public class JavaFormatterAlignmentTest extends AbstractJavaFormatterTest {
       "        .foo();"
     );
   }
-  
+
   public void testChainedMethodWithComments() {
     getSettings().ALIGN_MULTILINE_CHAINED_METHODS = true;
     doMethodTest("AAAAA.b()\n" +
@@ -84,10 +70,10 @@ public class JavaFormatterAlignmentTest extends AbstractJavaFormatterTest {
                "    }\n" +
                "}");
   }
-  
+
   public void testMultipleMethodAnnotationsCommentedInTheMiddle() {
     getSettings().BLANK_LINES_AFTER_CLASS_HEADER = 1;
-    getSettings().getRootSettings().getIndentOptions(StdFileTypes.JAVA).INDENT_SIZE = 4;
+    getSettings().getRootSettings().getIndentOptions(JavaFileType.INSTANCE).INDENT_SIZE = 4;
 
     // Inspired by IDEA-53942
     doTextTest(
@@ -120,8 +106,8 @@ public class JavaFormatterAlignmentTest extends AbstractJavaFormatterTest {
   public void testMethodCallArgumentsAndSmartTabs() throws IncorrectOperationException {
     // Inspired by IDEADEV-20144.
     getSettings().ALIGN_MULTILINE_PARAMETERS_IN_CALLS = true;
-    getSettings().getRootSettings().getIndentOptions(StdFileTypes.JAVA).SMART_TABS = true;
-    getSettings().getRootSettings().getIndentOptions(StdFileTypes.JAVA).USE_TAB_CHARACTER = true;
+    getSettings().getRootSettings().getIndentOptions(JavaFileType.INSTANCE).SMART_TABS = true;
+    getSettings().getRootSettings().getIndentOptions(JavaFileType.INSTANCE).USE_TAB_CHARACTER = true;
     doTextTest("class Foo {\n" +
                "    void foo() {\n" +
                "        bar(new Object[] {\n" +
@@ -659,7 +645,7 @@ public class JavaFormatterAlignmentTest extends AbstractJavaFormatterTest {
     doTextTest(
       REFORMAT_WITH_CONTEXT,
       "public class Test {\n" +
-      "  \n" +
+      "\n" +
       "    public void fooooo(String foo,\n" +
       "                    String booo,\n" +
       "                    String kakadoo) {\n" +
@@ -791,7 +777,7 @@ public class JavaFormatterAlignmentTest extends AbstractJavaFormatterTest {
       "}\n"
     );
   }
-  
+
   public void test_AlignComments_BetweenChainedMethodCalls() {
     getSettings().ALIGN_MULTILINE_CHAINED_METHODS = true;
     doMethodTest(
@@ -815,7 +801,7 @@ public class JavaFormatterAlignmentTest extends AbstractJavaFormatterTest {
       "                      .setup(mPullToRefreshLayout);"
     );
   }
-  
+
   public void test_AlignComments_2() {
     getSettings().ALIGN_MULTILINE_CHAINED_METHODS = true;
     doClassTest(
@@ -835,7 +821,7 @@ public class JavaFormatterAlignmentTest extends AbstractJavaFormatterTest {
       "}"
     );
   }
-  
+
   public void test_AlignSubsequentOneLineMethods() {
     getSettings().KEEP_SIMPLE_METHODS_IN_ONE_LINE = true;
     getSettings().ALIGN_SUBSEQUENT_SIMPLE_METHODS = true;
@@ -857,6 +843,115 @@ public class JavaFormatterAlignmentTest extends AbstractJavaFormatterTest {
     );
   }
 
+  public void test_alignAssignments() {
+    getSettings().ALIGN_CONSECUTIVE_ASSIGNMENTS = true;
+    doTextTest(
+      "public class Test {\n" +
+      "  void foo(int a, int xyz) {\n" +
+      "    a = 9999;\n" +
+      "    xyz = 1;\n" +
+      "  }\n" +
+      "}",
+      "public class Test {\n" +
+      "    void foo(int a, int xyz) {\n" +
+      "        a   = 9999;\n" +
+      "        xyz = 1;\n" +
+      "    }\n" +
+      "}"
+    );
+  }
+
+  public void test_alignMultilineAssignments() {
+    getSettings().ALIGN_CONSECUTIVE_ASSIGNMENTS = true;
+    getSettings().ALIGN_MULTILINE_ASSIGNMENT = true;
+    doTextTest(
+      "public class Test {\n" +
+      "  void foo(int a, int xyz) {\n" +
+      "    a = 9999;\n" +
+      "    xyz = a = \n" +
+      "    a = 12;\n" +
+      "  }\n" +
+      "}",
+      "public class Test {\n" +
+      "    void foo(int a, int xyz) {\n" +
+      "        a   = 9999;\n" +
+      "        xyz = a =\n" +
+      "        a   = 12;\n" +
+      "    }\n" +
+      "}"
+    );
+  }
+
+
+  public void test_alignMultilineAssignmentsMixedWithDeclaration() {
+    getSettings().ALIGN_CONSECUTIVE_ASSIGNMENTS = true;
+    getSettings().ALIGN_MULTILINE_ASSIGNMENT = true;
+    getSettings().ALIGN_CONSECUTIVE_VARIABLE_DECLARATIONS = true;
+    doTextTest(
+      "public class Test {\n" +
+      "  void foo(int a, int xyz, int bc) {\n" +
+      "    bc = 9999;\n" +
+      "    a = 9999;\n" +
+      "    int basdf = 1234;\n" +
+      "    int as = 3;\n" +
+      "    xyz = a = \n" +
+      "    a = 12;\n" +
+      "  }\n" +
+      "}",
+      "public class Test {\n" +
+      "    void foo(int a, int xyz, int bc) {\n" +
+      "        bc = 9999;\n" +
+      "        a  = 9999;\n" +
+      "        int basdf = 1234;\n" +
+      "        int as    = 3;\n" +
+      "        xyz = a =\n" +
+      "        a   = 12;\n" +
+      "    }\n" +
+      "}"
+    );
+  }
+
+  public void test_alignAssignmentsFields() {
+    getSettings().ALIGN_CONSECUTIVE_ASSIGNMENTS = true;
+    doTextTest(
+      "public class Test {\n" +
+      "  void foo(A a, int xyz) {\n" +
+      "    a.bar = 9999;\n" +
+      "    xyz = 1;\n" +
+      "  }\n" +
+      "}",
+      "public class Test {\n" +
+      "    void foo(A a, int xyz) {\n" +
+      "        a.bar = 9999;\n" +
+      "        xyz   = 1;\n" +
+      "    }\n" +
+      "}"
+    );
+  }
+
+  public void test_alignMultilineTextBlock() {
+    getJavaSettings().ALIGN_MULTILINE_TEXT_BLOCKS = true;
+    doTextTest(
+      "public class Test {\n" +
+      "    void foo() {\n" +
+      "        String block = \"\"\"\n" +
+      "  text\n" +
+      "  block\n" +
+      " \"\"\";\n" +
+      "    }\n" +
+      "}",
+      "public class Test {\n" +
+      "    void foo() {\n" +
+      "        String block = \"\"\"\n" +
+      "                        text\n" +
+      "                        block\n" +
+      "                       \"\"\";\n" +
+      "    }\n" +
+      "}"
+    );
+  }
+
+  @SuppressWarnings("unused")
   public void _testIdea199677() {
     getSettings().ALIGN_CONSECUTIVE_VARIABLE_DECLARATIONS = true;
     getSettings().CALL_PARAMETERS_WRAP = 2;

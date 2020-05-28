@@ -17,7 +17,7 @@
 package com.intellij.codeInspection.htmlInspections;
 
 import com.intellij.codeInsight.AutoPopupController;
-import com.intellij.codeInsight.daemon.XmlErrorMessages;
+import com.intellij.codeInsight.daemon.XmlErrorBundle;
 import com.intellij.codeInspection.LocalQuickFixAndIntentionActionOnPsiElement;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
@@ -38,7 +38,7 @@ public class AddAttributeValueIntentionFix extends LocalQuickFixAndIntentionActi
   @NotNull
   @Override
   public String getText() {
-    return XmlErrorMessages.message("add.attribute.value.quickfix.text");
+    return XmlErrorBundle.message("add.attribute.value.quickfix.text");
   }
 
   @Override
@@ -50,7 +50,7 @@ public class AddAttributeValueIntentionFix extends LocalQuickFixAndIntentionActi
   @Override
   public void invoke(@NotNull Project project,
                      @NotNull PsiFile file,
-                     @Nullable("is null when called from inspection") final Editor editor,
+                     @Nullable final Editor editor,
                      @NotNull PsiElement startElement,
                      @NotNull PsiElement endElement) {
     final XmlAttribute attribute = PsiTreeUtil.getNonStrictParentOfType(startElement, XmlAttribute.class);

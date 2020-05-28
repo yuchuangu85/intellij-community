@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.StringTokenizer;
 
 /**
- * @by Maxim.Mossienko
+ * @author Maxim.Mossienko
  */
 public class URIReferenceProvider extends PsiReferenceProvider {
 
@@ -57,8 +57,7 @@ public class URIReferenceProvider extends PsiReferenceProvider {
   private static final String NAMESPACE_ATTR_NAME = "namespace";
 
   @Override
-  @NotNull
-  public PsiReference[] getReferencesByElement(@NotNull PsiElement element, @NotNull final ProcessingContext context) {
+  public PsiReference @NotNull [] getReferencesByElement(@NotNull PsiElement element, @NotNull final ProcessingContext context) {
     final String text = element.getText();
     String s = StringUtil.unquoteString(text);
     final PsiElement parent = element.getParent();

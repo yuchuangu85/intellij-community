@@ -15,14 +15,18 @@
  */
 package com.intellij.java.codeInspection
 
+import com.intellij.codeInspection.dataFlow.JavaMethodContractUtil
 import com.intellij.codeInspection.dataFlow.inference.JavaSourceInference
+import com.intellij.openapi.util.RecursionManager
 import com.intellij.psi.impl.source.PsiFileImpl
 import com.intellij.psi.impl.source.PsiMethodImpl
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
+import groovy.transform.CompileStatic
 /**
  * @author peter
  */
-class PurityInferenceFromSourceTest extends LightCodeInsightFixtureTestCase {
+@CompileStatic
+class PurityInferenceFromSourceTest extends LightJavaCodeInsightFixtureTestCase {
 
   void "test getter"() {
     assertPure true, """
@@ -125,27 +129,82 @@ int smthPure2() { return 42; }
 """
   }
 
-  void "test don't analyze void methods"() {
-    assertPure false, """
-void method() {
-  smthPure();
-}
-int smthPure() { return 3; }
-"""
-  }
-
-  void "test don't analyze methods without returns"() {
-    assertPure false, """
-Object method() {
-    smthPure();
-}
-int smthPure() { return 3; }
-"""
-  }
-
-  void "test don't analyze constructors"() {
-    assertPure false, """
+  void "test empty constructor"() {
+    assertPure true, """
 public Foo() {
+}
+"""
+  }
+
+  void "test field writes"() {
+    assertPure true, """
+int x;
+int y;
+
+public Foo() {
+  x = 5;
+  this.y = 10;
+}
+"""
+  }
+  
+  void "test constructor calling"() {
+    // IDEA-192251
+    assertPure true, """
+    private final int i;
+    private final int j;
+    private final Foo a;
+
+    Foo(int i, Foo a) {
+        this.i = i;
+        this.j = getConstant();
+        this.a = a;
+    }
+    
+    private int getConstant() {return 42;}
+"""
+  }
+
+  void "test delegating field writes"() {
+    assertPure true, """
+int x;
+int y;
+
+public Foo() {
+  this(5, 10);
+}
+
+Foo(int x, int y) {
+  this.x = x;
+  this.y = y;
+}
+"""
+  }
+
+  void "test delegating unknown writes"() {
+    assertPure false, """
+int x;
+int y;
+
+public Foo() {
+  this(5, 10);
+}
+
+Foo(int x, int y) {
+  this.x = x;
+  this.z = y;
+}
+"""
+  }
+
+  void "test static field writes"() {
+    assertPure false, """
+int x;
+static int y;
+
+public Foo() {
+  x = 5;
+  this.y = 10;
 }
 """
   }
@@ -186,6 +245,20 @@ public Foo() {
     """
   }
 
+  void "test anonymous class with constructor side effect"() {
+    assertPure false, """
+    Object smth() {
+        return new I(){};
+    }
+    
+    class I {
+      I() {
+        unknown();
+      }
+    }
+    """
+  }
+
   void "test anonymous class with arguments"() {
     assertPure false, """
     Object smth() {
@@ -209,6 +282,60 @@ public Foo() {
       {
         launchMissiles();
       }
+    }
+    """
+  }
+
+  void "test class with impure static initializer creation"() {
+    assertPure true, """
+    Object smth() {
+        return new I(42);
+    }
+    
+    class I {
+      I(int answer) {}
+      static {
+        launchMissiles();
+      }
+    }
+    """
+  }
+
+  void "test class with pure field initializers"() {
+    assertPure true, """
+    Object smth() {
+        return new I(42);
+    }
+    
+    class I {
+      int x = 5;
+      I(int answer) {x+=answer;}
+    }
+    """
+  }
+
+  void "test class with impure field initializers"() {
+    assertPure false, """
+    Object smth() {
+        return new I(42);
+    }
+    
+    class I {
+      int x = launchMissiles();
+      I(int answer) {x+=answer;}
+    }
+    """
+  }
+
+  void "test class with superclass"() {
+    assertPure false, """
+    Object smth() {
+        return new I(42);
+    }
+    
+    class I extends Foo {
+      // cannot determine purity yet as should delegate to super ctor
+      I(int answer) {}
     }
     """
   }
@@ -249,6 +376,53 @@ int get() {
   return x;
 }
 """
+  }
+
+  void "test assertNotNull is pure"() {
+    assertPure true, """
+static void assertNotNull(Object val) {
+  if(val == null) throw new AssertionError();
+}"""
+  }
+
+  void "test recursive factorial"() {
+    assertPure true, """int factorial(int n) { return n == 1 ? 1 : factorial(n - 1) * n;}"""
+  }
+
+  void "test calling static method with the same signature in the subclass"() {
+    RecursionManager.assertOnMissedCache(testRootDisposable)
+    def clazz = myFixture.addClass """
+class Super {
+  static void foo() { Sub.foo(); }
+}
+
+class Sub extends Super {
+  static void foo() {
+    unknown();
+    unknown2();
+  }
+}
+
+"""
+    assert !JavaMethodContractUtil.isPure(clazz.methods[0])
+  }
+
+  void "test super static method does not affect purity"() {
+    RecursionManager.assertOnMissedCache(testRootDisposable)
+    def clazz = myFixture.addClass """
+class Sub extends Super {
+  static void foo() {
+    unknown();
+    unknown2();
+  }
+}
+
+class Super {
+  static void foo() { }
+}
+"""
+    assert !JavaMethodContractUtil.isPure(clazz.methods[0])
+    assert JavaMethodContractUtil.isPure(clazz.superClass.methods[0])
   }
 
   private void assertPure(boolean expected, String classBody) {

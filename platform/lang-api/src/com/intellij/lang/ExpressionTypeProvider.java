@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2019 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package com.intellij.lang;
 
+import com.intellij.openapi.util.NlsContexts.HintText;
 import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 
@@ -28,7 +29,7 @@ import java.util.List;
 public abstract class ExpressionTypeProvider<T extends PsiElement> {
   /**
    * Returns HTML string for type info hint.
-   * @see com.intellij.openapi.util.text.StringUtil#escapeXml(String)
+   * @see com.intellij.openapi.util.text.StringUtil#escapeXmlEntities(String)
    */
   @NotNull
   public abstract String getInformationHint(@NotNull T element);
@@ -37,6 +38,7 @@ public abstract class ExpressionTypeProvider<T extends PsiElement> {
    * Returns HTML string if no target found at position.
    */
   @NotNull
+  @HintText
   public abstract String getErrorHint();
 
   /**

@@ -1,8 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.checkout;
 
 import com.intellij.dvcs.DvcsUtil;
 import com.intellij.dvcs.ui.DvcsBundle;
+import com.intellij.openapi.application.ModalityState;
+import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.Task;
@@ -12,15 +14,16 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.CheckoutProviderEx;
 import com.intellij.openapi.vcs.VcsNotifier;
 import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
+import com.intellij.openapi.vcs.ui.VcsCloneComponent;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import git4idea.GitUtil;
 import git4idea.GitVcs;
-import git4idea.actions.BasicAction;
 import git4idea.commands.Git;
 import git4idea.commands.GitCommandResult;
 import git4idea.commands.GitLineHandlerListener;
 import git4idea.commands.GitStandardProgressAnalyzer;
+import git4idea.ui.GitCloneDialogComponent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -32,11 +35,11 @@ import java.util.stream.Collectors;
  * Checkout provider for the Git
  */
 public class GitCheckoutProvider extends CheckoutProviderEx {
+  public GitCheckoutProvider() {
+  }
 
-  private final Git myGit;
-
-  public GitCheckoutProvider(@NotNull Git git) {
-    myGit = git;
+  @Deprecated
+  public GitCheckoutProvider(@SuppressWarnings("unused") @NotNull Git git) {
   }
 
   @Override
@@ -46,7 +49,7 @@ public class GitCheckoutProvider extends CheckoutProviderEx {
 
   @Override
   public void doCheckout(@NotNull final Project project, @Nullable final Listener listener, @Nullable String predefinedRepositoryUrl) {
-    BasicAction.saveAll();
+    FileDocumentManager.getInstance().saveAllDocuments();
     GitCloneDialog dialog = new GitCloneDialog(project, predefinedRepositoryUrl);
     if (!dialog.showAndGet()) {
       return;
@@ -64,7 +67,7 @@ public class GitCheckoutProvider extends CheckoutProviderEx {
     final String sourceRepositoryURL = dialog.getSourceRepositoryURL();
     final String directoryName = dialog.getDirectoryName();
     final String parentDirectory = dialog.getParentDirectory();
-    clone(project, myGit, listener, destinationParent, sourceRepositoryURL, directoryName, parentDirectory);
+    clone(project, Git.getInstance(), listener, destinationParent, sourceRepositoryURL, directoryName, parentDirectory);
   }
 
   public static void clone(final Project project, @NotNull final Git git, final Listener listener, final VirtualFile destinationParent,
@@ -106,10 +109,12 @@ public class GitCheckoutProvider extends CheckoutProviderEx {
       return true;
     }
     String description = result.getErrorOutput().stream().
-      filter(msg -> !StringUtil.startsWithIgnoreCase(msg, "Cloning into")).
+      filter(msg -> !StringUtil.startsWithIgnoreCase(msg, "Cloning into")
+                    && !StringUtil.startsWithIgnoreCase(msg, "remote:")
+                    && !StringUtil.startsWithIgnoreCase(msg, "submodule")).
       map (msg -> GitUtil.cleanupErrorPrefixes(msg)).
       collect(Collectors.joining("<br/>"));
-    VcsNotifier.getInstance(project).notifyError("Clone failed", description);
+    VcsNotifier.getInstance(project).notifyError("Clone failed", StringUtil.capitalize(description), true);
     return false;
   }
 
@@ -123,5 +128,11 @@ public class GitCheckoutProvider extends CheckoutProviderEx {
   public void doCheckout(@NotNull Project project,
                          @Nullable Listener listener) {
     doCheckout(project, listener, null);
+  }
+
+  @NotNull
+  @Override
+  public VcsCloneComponent buildVcsCloneComponent(@NotNull Project project, @NotNull ModalityState modalityState) {
+    return new GitCloneDialogComponent(project, modalityState);
   }
 }

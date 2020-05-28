@@ -9,8 +9,9 @@ import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.TextFieldWithBrowseButton;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.vcsUtil.VcsUtil;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.zmlx.hg4idea.HgVcsMessages;
+import org.zmlx.hg4idea.HgBundle;
 import org.zmlx.hg4idea.util.HgUtil;
 
 import javax.swing.*;
@@ -48,9 +49,9 @@ public class HgInitDialog extends DialogWrapper {
 
     myFileDescriptor = new FileChooserDescriptor(false, true, false, false, false, false) {
       @Override
-      public void validateSelectedFiles(VirtualFile[] files) throws Exception {
+      public void validateSelectedFiles(VirtualFile @NotNull [] files) throws Exception {
         if (HgUtil.isHgRoot(files[0])) {
-          throw new ConfigurationException(HgVcsMessages.message("hg4idea.init.this.is.hg.root", files[0].getPresentableUrl()));
+          throw new ConfigurationException(HgBundle.message("hg4idea.init.this.is.hg.root", files[0].getPresentableUrl()));
         }
         updateEverything();
       }
@@ -63,7 +64,7 @@ public class HgInitDialog extends DialogWrapper {
   @Override
   protected void init() {
     super.init();
-    setTitle(HgVcsMessages.message("hg4idea.init.dialog.title"));
+    setTitle(HgBundle.message("hg4idea.init.dialog.title"));
     if (myProject != null && (! myProject.isDefault())) {
       mySelectedDir = myProject.getBaseDir();
     }
@@ -89,8 +90,8 @@ public class HgInitDialog extends DialogWrapper {
       }
     });
 
-    myTextFieldBrowser.addBrowseFolderListener(HgVcsMessages.message("hg4idea.init.destination.directory.title"),
-                                               HgVcsMessages.message("hg4idea.init.destination.directory.description"),
+    myTextFieldBrowser.addBrowseFolderListener(HgBundle.message("hg4idea.init.destination.directory.title"),
+                                               HgBundle.message("hg4idea.init.destination.directory.description"),
                                                myProject, myFileDescriptor);
   }
 
@@ -159,7 +160,7 @@ public class HgInitDialog extends DialogWrapper {
   }
 
   private void disableOKAction() {
-    setErrorText(HgVcsMessages.message("hg4idea.init.dialog.incorrect.path"), myTextFieldBrowser);
+    setErrorText(HgBundle.message("hg4idea.init.dialog.incorrect.path"), myTextFieldBrowser);
     setOKActionEnabled(false);
   }
 

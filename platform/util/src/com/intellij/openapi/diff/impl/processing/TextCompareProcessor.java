@@ -40,7 +40,7 @@ import java.util.List;
  */
 @Deprecated
 public class TextCompareProcessor {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.diff.impl.processing.Processor");
+  private static final Logger LOG = Logger.getInstance(TextCompareProcessor.class);
   @NotNull private final ComparisonPolicy myComparisonPolicy;
   @NotNull private final DiffPolicy myDiffPolicy;
   @NotNull private final HighlightMode myHighlightMode;
@@ -83,7 +83,7 @@ public class TextCompareProcessor {
           DiffString subText1 = lineBlock.getText(diffText1, FragmentSide.SIDE1);
           DiffString subText2 = lineBlock.getText(diffText2, FragmentSide.SIDE2);
           ArrayList<LineFragment> subFragments = findSubFragments(subText1, subText2);
-          lineBlock.setChildren(new ArrayList<Fragment>(subFragments));
+          lineBlock.setChildren(new ArrayList<>(subFragments));
           lineBlock.adjustTypeFromChildrenTypes();
         }
         catch (FilesTooBigForDiffException ignore) {

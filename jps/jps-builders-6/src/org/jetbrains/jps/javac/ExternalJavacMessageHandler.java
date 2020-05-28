@@ -23,7 +23,6 @@ import org.jetbrains.jps.incremental.BinaryContent;
 import javax.tools.*;
 import java.io.File;
 import java.net.URI;
-import java.util.Collection;
 import java.util.Locale;
 
 /**
@@ -42,6 +41,10 @@ public class ExternalJavacMessageHandler {
     myDiagnosticSink = diagnosticSink;
     myOutputSink = outputSink;
     myEncodingName = encodingName;
+  }
+
+  public DiagnosticOutputConsumer getDiagnosticSink() {
+    return myDiagnosticSink;
   }
 
   public boolean handleMessage(MessageLite message) {
@@ -88,6 +91,8 @@ public class ExternalJavacMessageHandler {
             fileObjectContent = null;
           }
 
+          final JavaFileManager.Location location = outputObject.hasLocation()? StandardLocation.locationFor(outputObject.getLocation()) : null;
+
           final String sourceUri = outputObject.hasSourceUri()? outputObject.getSourceUri() : null;
           final URI srcUri = sourceUri != null? URI.create(sourceUri) : null;
           final OutputFileObject fileObject = new OutputFileObject(
@@ -98,7 +103,7 @@ public class ExternalJavacMessageHandler {
             convertKind(kind),
             outputObject.hasClassName()? outputObject.getClassName() : null,
             srcUri,
-            myEncodingName, fileObjectContent
+            myEncodingName, fileObjectContent, location
           );
 
           myOutputSink.save(fileObject);
@@ -109,15 +114,6 @@ public class ExternalJavacMessageHandler {
           final JavacRemoteProto.Message.Response.OutputObject outputObject = response.getOutputObject();
           final File file = new File(outputObject.getFilePath());
           myDiagnosticSink.javaFileLoaded(file);
-          return false;
-        }
-
-        if (responseType == JavacRemoteProto.Message.Response.Type.CLASS_DATA) {
-          final JavacRemoteProto.Message.Response.ClassData data = response.getClassData();
-          final String className = data.getClassName();
-          final Collection<String> imports = data.getImportStatementList();
-          final Collection<String> staticImports = data.getStaticImportList();
-          myDiagnosticSink.registerImports(className, imports, staticImports);
           return false;
         }
 

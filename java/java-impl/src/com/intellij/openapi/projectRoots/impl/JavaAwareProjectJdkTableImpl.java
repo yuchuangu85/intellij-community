@@ -1,69 +1,95 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.projectRoots.impl;
 
+import com.intellij.ide.util.PropertiesComponent;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.components.ServiceManager;
-import com.intellij.openapi.project.ProjectBundle;
-import com.intellij.openapi.projectRoots.JavaSdk;
-import com.intellij.openapi.projectRoots.ProjectJdkTable;
-import com.intellij.openapi.projectRoots.Sdk;
-import com.intellij.openapi.projectRoots.SdkTypeId;
-import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.projectRoots.*;
 import com.intellij.util.SystemProperties;
+import com.intellij.util.lang.JavaVersion;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.jps.model.java.JdkVersionDetector;
 
-public class JavaAwareProjectJdkTableImpl extends ProjectJdkTableImpl {
+import java.io.File;
+import java.util.List;
+
+public final class JavaAwareProjectJdkTableImpl extends ProjectJdkTableImpl {
+  private static final String DEFAULT_JDK_CONFIGURED = "defaultJdkConfigured";
+
   public static JavaAwareProjectJdkTableImpl getInstanceEx() {
     return (JavaAwareProjectJdkTableImpl)ServiceManager.getService(ProjectJdkTable.class);
   }
 
-  private final JavaSdk myJavaSdk;
   private Sdk myInternalJdk;
 
-  public JavaAwareProjectJdkTableImpl(@NotNull JavaSdk javaSdk) {
-    myJavaSdk = javaSdk;
+  @Override
+  public void preconfigure() {
+    PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
+    if (propertiesComponent.getBoolean(DEFAULT_JDK_CONFIGURED, false) ||
+        ApplicationManager.getApplication().isUnitTestMode()) {
+      return;
+    }
+
+    JavaSdk javaSdk = JavaSdk.getInstance();
+    List<Sdk> jdks = getSdksOfType(javaSdk);
+    if (jdks.isEmpty()) {
+      String homePath = ServiceManager.getService(DefaultJdkConfigurator.class).guessJavaHome(); 
+      if (homePath != null && javaSdk.isValidSdkHome(homePath)) {
+        String suggestedName = JdkUtil.suggestJdkName(javaSdk.getVersionString(homePath));
+        if (suggestedName != null) {
+          ApplicationManager.getApplication().runWriteAction(
+            () -> addJdk(javaSdk.createJdk(suggestedName, homePath, false))
+          );
+        }
+      }
+    }
+    propertiesComponent.setValue(DEFAULT_JDK_CONFIGURED, true);
   }
 
+  /**
+   * @deprecated Bundled JDK must not be used. See IDEA-225960"
+   */
   @NotNull
+  @Deprecated
   public Sdk getInternalJdk() {
     if (myInternalJdk == null) {
-      final String jdkHome = SystemProperties.getJavaHome();
-      final String versionName = ProjectBundle.message("sdk.java.name.template", SystemInfo.JAVA_VERSION);
-      myInternalJdk = myJavaSdk.createJdk(versionName, jdkHome);
+      File javaHome = new File(SystemProperties.getJavaHome());
+
+      if (JdkUtil.checkForJre(javaHome) && !JdkUtil.checkForJdk(javaHome)) {
+        // handle situation like javaHome="<somewhere>/jdk1.8.0_212/jre" (see IDEA-226353)
+        File javaHomeParent = javaHome.getParentFile();
+        if (javaHomeParent != null && JdkUtil.checkForJre(javaHomeParent) && JdkUtil.checkForJdk(javaHomeParent)) {
+          javaHome = javaHomeParent;
+        }
+      }
+
+      String versionName = JdkVersionDetector.formatVersionString(JavaVersion.current());
+      myInternalJdk = JavaSdk.getInstance().createJdk(versionName, javaHome.getAbsolutePath(), !JdkUtil.checkForJdk(javaHome));
     }
     return myInternalJdk;
   }
 
   @Override
-  public void removeJdk(@NotNull final Sdk jdk) {
+  public void removeJdk(@NotNull Sdk jdk) {
     super.removeJdk(jdk);
     if (jdk.equals(myInternalJdk)) {
       myInternalJdk = null;
     }
   }
 
-  @Override
   @NotNull
+  @Override
   public SdkTypeId getDefaultSdkType() {
-    return myJavaSdk;
+    return JavaSdk.getInstance();
   }
 
   @Override
-  public void loadState(@NotNull final Element element) {
+  public void loadState(@NotNull Element element) {
     myInternalJdk = null;
-    try {
-      super.loadState(element);
-    }
-    finally {
-      getInternalJdk();
-    }
-  }
-
-  @Override
-  protected String getSdkTypeName(final String type) {
-    return type != null ? type : JavaSdk.getInstance().getName();
+    super.loadState(element);
   }
 
   @TestOnly
@@ -75,5 +101,4 @@ public class JavaAwareProjectJdkTableImpl extends ProjectJdkTableImpl {
       }
     });
   }
-
 }

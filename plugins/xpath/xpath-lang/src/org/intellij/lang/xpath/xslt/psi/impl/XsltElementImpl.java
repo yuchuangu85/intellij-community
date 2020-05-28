@@ -30,6 +30,7 @@ import com.intellij.psi.impl.light.LightElement;
 import com.intellij.psi.xml.XmlAttribute;
 import com.intellij.psi.xml.XmlAttributeValue;
 import com.intellij.psi.xml.XmlTag;
+import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
 import org.intellij.lang.xpath.completion.CompletionLists;
 import org.intellij.lang.xpath.context.ContextProvider;
@@ -43,7 +44,10 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import java.lang.reflect.*;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 
 abstract class XsltElementImpl extends LightElement implements Iconable, PsiElementNavigationItem, XsltElement, ItemPresentation {
 
@@ -76,7 +80,7 @@ abstract class XsltElementImpl extends LightElement implements Iconable, PsiElem
     }
 
     @Override
-    @Nullable
+    @NotNull
     public final ItemPresentation getPresentation() {
         return this;
     }
@@ -164,12 +168,8 @@ abstract class XsltElementImpl extends LightElement implements Iconable, PsiElem
 
     @Nullable
     private XmlAttributeValue getNameElement() {
-        final XmlAttribute attribute = getNameAttribute();
-        if (attribute != null) {
-            final XmlAttributeValue valueElement = attribute.getValueElement();
-            return valueElement != null ? valueElement : null;
-        }
-        return null;
+        XmlAttribute attribute = getNameAttribute();
+        return attribute != null ? attribute.getValueElement() : null;
     }
 
     @Override
@@ -255,8 +255,7 @@ abstract class XsltElementImpl extends LightElement implements Iconable, PsiElem
     }
 
     @Override
-    @NotNull
-    public PsiElement[] getChildren() {
+    public PsiElement @NotNull [] getChildren() {
         return myElement.getChildren(); // TODO: return XSLT objects
     }
 
@@ -273,8 +272,7 @@ abstract class XsltElementImpl extends LightElement implements Iconable, PsiElem
     }
 
     @Override
-    @NotNull
-    public char[] textToCharArray() {
+    public char @NotNull [] textToCharArray() {
         final XmlAttributeValue nameElement = getNameElement();
         return nameElement != null ? nameElement.textToCharArray() : myElement.textToCharArray();
     }
@@ -292,8 +290,7 @@ abstract class XsltElementImpl extends LightElement implements Iconable, PsiElem
     }
 
     @Override
-    @NotNull
-    public PsiReference[] getReferences() {
+    public PsiReference @NotNull [] getReferences() {
         final XmlAttributeValue nameElement = getNameElement();
         return nameElement != null ? nameElement.getReferences() : myElement.getReferences();
     }
@@ -322,8 +319,7 @@ abstract class XsltElementImpl extends LightElement implements Iconable, PsiElem
     }
 
     protected static <S, T extends S> T[] convertArray(S[] elements, Class<T> aClass) {
-        //noinspection unchecked
-        final T[] t = (T[])Array.newInstance(aClass, elements.length);
+        final T[] t = ArrayUtil.newArray(aClass, elements.length);
         //noinspection SuspiciousSystemArraycopy
         System.arraycopy(elements, 0, t, 0, elements.length);
         return t;

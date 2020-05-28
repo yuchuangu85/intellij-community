@@ -1,8 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.fileTemplates.impl;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.intellij.codeInsight.template.impl.TemplateColors;
 import com.intellij.ide.IdeBundle;
 import com.intellij.ide.fileTemplates.FileTemplate;
 import com.intellij.ide.fileTemplates.FileTemplateManager;
@@ -16,7 +15,6 @@ import com.intellij.openapi.editor.EditorFactory;
 import com.intellij.openapi.editor.EditorSettings;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
-import com.intellij.openapi.editor.colors.TextAttributesKey;
 import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.editor.ex.EditorEx;
@@ -25,46 +23,57 @@ import com.intellij.openapi.editor.ex.util.LayeredLexerEditorHighlighter;
 import com.intellij.openapi.editor.highlighter.EditorHighlighter;
 import com.intellij.openapi.editor.highlighter.EditorHighlighterFactory;
 import com.intellij.openapi.editor.impl.EditorImpl;
-import com.intellij.openapi.fileTypes.*;
+import com.intellij.openapi.fileTypes.FileType;
+import com.intellij.openapi.fileTypes.FileTypeManager;
+import com.intellij.openapi.fileTypes.FileTypes;
+import com.intellij.openapi.fileTypes.PlainSyntaxHighlighter;
+import com.intellij.openapi.fileTypes.SyntaxHighlighter;
+import com.intellij.openapi.fileTypes.SyntaxHighlighterFactory;
+import com.intellij.openapi.fileTypes.UnknownFileType;
 import com.intellij.openapi.fileTypes.ex.FileTypeChooser;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Splitter;
-import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiFileFactory;
-import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.tree.TokenSet;
 import com.intellij.testFramework.LightVirtualFile;
 import com.intellij.ui.BrowserHyperlinkListener;
 import com.intellij.ui.ScrollPaneFactory;
-import com.intellij.ui.SeparatorFactory;
 import com.intellij.ui.components.panels.HorizontalLayout;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.JBInsets;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.xml.util.XmlStringUtil;
-import org.jetbrains.annotations.NonNls;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
-import javax.swing.*;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.List;
+import java.util.Objects;
+import javax.swing.JCheckBox;
+import javax.swing.JComponent;
+import javax.swing.JEditorPane;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+import org.jetbrains.annotations.NonNls;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class FileTemplateConfigurable implements Configurable, Configurable.NoScroll {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.ide.fileTemplates.impl.FileTemplateConfigurable");
+  private static final Logger LOG = Logger.getInstance(FileTemplateConfigurable.class);
   @NonNls private static final String EMPTY_HTML = "<html></html>";
 
   private JPanel myMainPanel;
@@ -111,10 +120,10 @@ public class FileTemplateConfigurable implements Configurable, Configurable.NoSc
                                             JBUI.insetsRight(2), 0, 0));
       myTopPanel.add(myNameField,
                      new GridBagConstraints(1, 0, 1, 1, 1.0, 0.0, GridBagConstraints.CENTER,
-                                            GridBagConstraints.HORIZONTAL, JBUI.insets(3, 2), 0, 0));
+                                            GridBagConstraints.HORIZONTAL, JBInsets.create(3, 2), 0, 0));
       myTopPanel.add(new JLabel(IdeBundle.message("label.extension")),
                      new GridBagConstraints(2, 0, 1, 1, 0.0, 0.0, GridBagConstraints.CENTER, GridBagConstraints.NONE,
-                                            JBUI.insets(0, 2), 0, 0));
+                                            JBInsets.create(0, 2), 0, 0));
       myTopPanel.add(myExtensionField,
                      new GridBagConstraints(3, 0, 1, 1, .3, 0.0, GridBagConstraints.CENTER,
                                             GridBagConstraints.HORIZONTAL, JBUI.insetsLeft(2), 0, 0));
@@ -157,8 +166,8 @@ public class FileTemplateConfigurable implements Configurable, Configurable.NoSc
     myTopPanel = new JPanel(new GridBagLayout());
 
     JPanel descriptionPanel = new JPanel(new GridBagLayout());
-    descriptionPanel.add(SeparatorFactory.createSeparator(IdeBundle.message("label.description"), null),
-                         new GridBagConstraints(0, 0, 1, 1, 0.0, 0.0, GridBagConstraints.WEST, GridBagConstraints.HORIZONTAL,
+    descriptionPanel.add(new JLabel(IdeBundle.message("label.description")),
+                         new GridBagConstraints(0, 0, 1, 1, 0.0, 0.0, GridBagConstraints.WEST, GridBagConstraints.NONE,
                                                 JBUI.insetsBottom(2), 0, 0));
     descriptionPanel.add(ScrollPaneFactory.createScrollPane(myDescriptionComponent),
                          new GridBagConstraints(0, 1, 1, 1, 1.0, 1.0, GridBagConstraints.CENTER, GridBagConstraints.BOTH,
@@ -263,10 +272,10 @@ public class FileTemplateConfigurable implements Configurable, Configurable.NoSc
     }
     String name = myTemplate == null ? "" : myTemplate.getName();
     String extension = myTemplate == null ? "" : myTemplate.getExtension();
-    if (!Comparing.equal(name, myNameField.getText())) {
+    if (!Objects.equals(name, myNameField.getText())) {
       return true;
     }
-    if (!Comparing.equal(extension, myExtensionField.getText())) {
+    if (!Objects.equals(extension, myExtensionField.getText())) {
       return true;
     }
     if (myTemplate != null) {
@@ -390,33 +399,9 @@ public class FileTemplateConfigurable implements Configurable, Configurable.NoSc
     }
 
     final EditorColorsScheme scheme = EditorColorsManager.getInstance().getGlobalScheme();
-    LayeredLexerEditorHighlighter highlighter = new LayeredLexerEditorHighlighter(new TemplateHighlighter(), scheme);
+    LayeredLexerEditorHighlighter highlighter = new LayeredLexerEditorHighlighter(new FileTemplateHighlighter(), scheme);
     highlighter.registerLayer(FileTemplateTokenType.TEXT, new LayerDescriptor(originalHighlighter, ""));
     return highlighter;
-  }
-
-  private static class TemplateHighlighter extends SyntaxHighlighterBase {
-    private final Lexer myLexer;
-
-    TemplateHighlighter() {
-      myLexer = createDefaultLexer();
-    }
-
-    @NotNull
-    @Override
-    public Lexer getHighlightingLexer() {
-      return myLexer;
-    }
-
-    @Override
-    @NotNull
-    public TextAttributesKey[] getTokenHighlights(IElementType tokenType) {
-      if (tokenType == FileTemplateTokenType.MACRO || tokenType == FileTemplateTokenType.DIRECTIVE) {
-        return pack(TemplateColors.TEMPLATE_VARIABLE_ATTRIBUTES);
-      }
-
-      return EMPTY;
-    }
   }
 
   @NotNull

@@ -1,9 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.intellij.build
 
 import groovy.transform.CompileStatic
+
 /**
- * @author nik
+ * Describes distribution of an IntelliJ-based IDE. Override this class and call {@link BuildTasks#buildProduct} from a build script to build
+ * distribution of your product.
  */
 @CompileStatic
 abstract class ProductProperties {
@@ -14,9 +16,15 @@ abstract class ProductProperties {
 
   /**
    * @deprecated specify product code in 'number' attribute in 'build' tag in *ApplicationInfo.xml file instead (see its schema for details);
-   * if you need to get the product code in the build scripts, use {@link ApplicationInfoProperties#productCode} instead
+   * if you need to get the product code in the build scripts, use {@link ApplicationInfoProperties#productCode} instead;
+   * if you need to override product code value from *ApplicationInfo.xml - {@link org.jetbrains.intellij.build.ProductProperties#customProductCode} can be used.
    */
   String productCode
+
+  /**
+   * This value overrides specified product code in 'number' attribute in 'build' tag in *ApplicationInfo.xml file
+   */
+  String customProductCode
 
   /**
    * Value of 'idea.platform.prefix' property. It's also used as prefix for 'ApplicationInfo.xml' product descriptor.
@@ -73,7 +81,7 @@ abstract class ProductProperties {
 
   /**
    * Now file containing information about third-party libraries is bundled and shown inside IDE.
-   * If {@code true} html file of third-party libraries will be placed alongside with build artifacts.
+   * If {@code true} html & json files of third-party libraries will be placed alongside with build artifacts.
    */
   boolean generateLibrariesLicensesTable = true
 
@@ -99,9 +107,23 @@ abstract class ProductProperties {
   ProductModulesLayout productLayout = new ProductModulesLayout()
 
   /**
-   * If {@code true} cross-platform ZIP archive containing binaries for all OS will be built
+   * If {@code true} cross-platform ZIP archive containing binaries for all OS will be built. The archive will be generated in {@link BuildPaths#artifacts}
+   * directory and have ".portable" suffix by default, override {@link #getCrossPlatformZipFileName} to change the file name.
    */
   boolean buildCrossPlatformDistribution = false
+
+  /**
+   * Specifies name of cross-platform ZIP archive if {@link #buildCrossPlatformDistribution} is set to {@code true}
+   */
+  String getCrossPlatformZipFileName(ApplicationInfoProperties applicationInfo, String buildNumber) {
+    getBaseArtifactName(applicationInfo, buildNumber) + ".portable.zip"
+  }
+
+  /**
+   * A {@link org.jetbrains.intellij.build.impl.ClassVersionChecker class version checker} config map
+   * when .class file version verification inside {@link #buildCrossPlatformDistribution cross-platform distribution} is needed.
+   */
+  Map<String, String> versionCheckerConfig = null
 
   /**
    * Paths to properties files the content of which should be appended to idea.properties file
@@ -133,23 +155,10 @@ abstract class ProductProperties {
    */
   abstract MacDistributionCustomizer createMacCustomizer(String projectHome)
 
-  boolean setPluginAndIDEVersionInPluginXml = true
-
   /**
    * If {@code true} a zip archive containing sources of all modules included into the product will be produced.
    */
   boolean buildSourcesArchive = false
-
-  /**
-   * Path to a directory containing yjpagent*.dll, libyjpagent-linux*.so and libyjpagent.jnilib files, which will be copied to 'bin'
-   * directories of Windows, Linux and macOS distributions. If {@code null} no agent files will be bundled.
-   */
-  String yourkitAgentBinariesDirectoryPath = null
-
-  /**
-   * If {@code true} YourKit agent will be automatically attached when an EAP build of the product starts. It makes sense only if {@link #yourkitAgentBinariesDirectoryPath} is non-null.
-   */
-  boolean enableYourkitAgentInEAP = false
 
   /**
    * Specifies how Maven artifacts for IDE modules should be generated, by default no artifacts are generated.
@@ -176,6 +185,8 @@ abstract class ProductProperties {
    * todo[nik] get rid of this
    */
   List<String> additionalModulesRequiredForScrambling = []
+
+  JetBrainsRuntimeDistribution jbrDistribution = JetBrainsRuntimeDistribution.VANILLA
 
   /**
    * Prefix for names of environment variables used by Windows and Linux distributions to allow users customize location of the product JDK

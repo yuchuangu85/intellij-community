@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.preview;
 
@@ -24,6 +10,10 @@ import com.intellij.psi.PsiFileSystemItem;
 import com.intellij.psi.PsiReference;
 import com.intellij.reference.SoftReference;
 import com.intellij.ui.JBColor;
+import com.intellij.ui.scale.JBUIScale;
+import com.intellij.ui.scale.ScaleContext;
+import com.intellij.util.SVGLoader;
+import com.intellij.util.ui.ImageUtil;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -62,7 +52,7 @@ public class ImagePreviewComponent extends JPanel implements PreviewHintComponen
   private ImagePreviewComponent(@NotNull final BufferedImage image, final long imageFileSize) {
     setLayout(new BorderLayout());
 
-    myImage = image;
+    myImage = (BufferedImage)ImageUtil.ensureHiDPI(image, ScaleContext.create(this));
     add(new ImageComp(), BorderLayout.CENTER);
     add(createLabel(image, imageFileSize), BorderLayout.SOUTH);
 
@@ -98,7 +88,7 @@ public class ImagePreviewComponent extends JPanel implements PreviewHintComponen
     final int i = colorModel.getPixelSize();
     return new JLabel(String.format("%dx%d, %dbpp, %s", width, height, i, StringUtil.formatFileSize(imageFileSize)));
   }
-  
+
   private static boolean refresh(@NotNull VirtualFile file) throws IOException {
     Long loadedTimeStamp = file.getUserData(TIMESTAMP_KEY);
     SoftReference<BufferedImage> imageRef = file.getUserData(BUFFERED_IMAGE_REF_KEY);
@@ -118,7 +108,12 @@ public class ImagePreviewComponent extends JPanel implements PreviewHintComponen
   }
 
   @NotNull
-  public static BufferedImage readImageFromBytes(@NotNull byte[] content) throws IOException {
+  public static BufferedImage readImageFromBytes(byte @NotNull [] content) throws IOException {
+    try {
+      Image image = SVGLoader.load(new ByteArrayInputStream(content), JBUIScale.sysScale());
+      if (image != null) return ImageUtil.toBufferedImage(image);
+    } catch (IOException ignored) {}
+
     InputStream inputStream = new ByteArrayInputStream(content, 0, content.length);
     try (ImageInputStream imageInputStream = ImageIO.createImageInputStream(inputStream)) {
       Iterator<ImageReader> imageReaders = ImageIO.getImageReaders(imageInputStream);
@@ -200,7 +195,7 @@ public class ImagePreviewComponent extends JPanel implements PreviewHintComponen
       final int width = myImage.getWidth();
       final int height = myImage.getHeight();
 
-      g.drawImage(myImage, 0, 0, r.width > width ? width : r.width, r.height > height ? height : r.height, this);
+      UIUtil.drawImage(g, myImage, new Rectangle(0, 0, Math.min(r.width, width), Math.min(r.height, height)), null, this);
     }
 
     @Override

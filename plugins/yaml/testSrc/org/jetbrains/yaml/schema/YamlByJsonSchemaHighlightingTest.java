@@ -10,13 +10,16 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.containers.Predicate;
 import com.jetbrains.jsonSchema.JsonSchemaHighlightingTestBase;
 import org.intellij.lang.annotations.Language;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.yaml.YAMLLanguage;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTestBase {
+  @NotNull
   @Override
   public String getTestDataPath() {
     return PathManagerEx.getCommunityHomePath() + "/plugins/yaml/testSrc/org/jetbrains/yaml/schema/data/highlighting";
@@ -38,13 +41,13 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
       YAMLLanguage.INSTANCE);
   }
 
-  public void testEnum1() throws Exception {
+  public void testEnum1() {
     @Language("JSON") final String schema = "{\"properties\": {\"prop\": {\"enum\": [1,2,3,\"18\"]}}}";
     doTest(schema, "prop: 1");
     doTest(schema, "prop: <warning>foo</warning>");
   }
 
-  public void testMissingProp() throws Exception {
+  public void testMissingProp() {
     @Language("JSON") final String schema = "{\"properties\": {\"prop\": {}, \"flop\": {}}, \"required\": [\"flop\"]}";
 
     doTest(schema, "<warning>prop: 2</warning>");
@@ -52,16 +55,16 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "flop: a");
   }
 
-  public void testNumberMultipleWrong() throws Exception {
+  public void testNumberMultipleWrong() {
     doTest("{ \"properties\": { \"prop\": {\"type\": \"number\", \"multipleOf\": 2}}}",
            "prop: <warning descr=\"Schema validation: Is not multiple of 2\">3</warning>");
   }
 
-  public void testNumberMultipleCorrect() throws Exception {
+  public void testNumberMultipleCorrect() {
     doTest("{ \"properties\": { \"prop\": {\"type\": \"number\", \"multipleOf\": 2}}}", "prop: 4");
   }
 
-  public void testNumberMinMax() throws Exception {
+  public void testNumberMinMax() {
     doTest("{ \"properties\": { \"prop\": {\n" +
            "  \"type\": \"number\",\n" +
            "  \"minimum\": 0,\n" +
@@ -70,14 +73,14 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
            "}}}", "prop: 14");
   }
 
-  public void testEnum() throws Exception {
+  public void testEnum() {
     @Language("JSON") final String schema = "{\"properties\": {\"prop\": {\"enum\": [1,2,3,\"18\"]}}}";
     doTest(schema, "prop: 18");
     doTest(schema, "prop: 2");
     doTest(schema, "prop: <warning descr=\"Schema validation: Value should be one of: 1, 2, 3, \\\"18\\\"\">6</warning>");
   }
 
-  public void testSimpleString() throws Exception {
+  public void testSimpleString() {
     @Language("JSON") final String schema = "{\"properties\": {\"prop\": {\"type\": \"string\", \"minLength\": 2, \"maxLength\": 3}}}";
     doTest(schema, "prop: <warning descr=\"Schema validation: String is shorter than 2\">s</warning>");
     doTest(schema, "prop: sh");
@@ -85,7 +88,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "prop: <warning descr=\"Schema validation: String is longer than 3\">shor</warning>");
   }
 
-  public void testArray() throws Exception {
+  public void testArray() {
     @Language("JSON") final String schema = schema("{\n" +
                                                    "  \"type\": \"array\",\n" +
                                                    "  \"items\": {\n" +
@@ -93,11 +96,11 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
                                                    "  }\n" +
                                                    "}");
     doTest(schema, "prop:\n - 101\n - 102");
-    doTest(schema, "prop:\n - <warning descr=\"Schema validation: Less than a minimum 18.0\">16</warning>");
-    doTest(schema, "prop:\n - <warning descr=\"Schema validation: Type is not allowed. Expected: number.\">test</warning>");
+    doTest(schema, "prop:\n - <warning descr=\"Schema validation: Less than the minimum 18\">16</warning>");
+    doTest(schema, "prop:\n - <warning descr=\"Schema validation: Incompatible types.\n Required: number. Actual: string.\">test</warning>");
   }
 
-  public void testTopLevelArray() throws Exception {
+  public void testTopLevelArray() {
     @Language("JSON") final String schema = "{\n" +
                                             "  \"type\": \"array\",\n" +
                                             "  \"items\": {\n" +
@@ -107,49 +110,51 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "- 101\n- 102");
   }
 
-  public void testTopLevelObjectArray() throws Exception {
+  public void testTopLevelObjectArray() {
     @Language("JSON") final String schema = "{\n" +
                                             "  \"type\": \"array\",\n" +
                                             "  \"items\": {\n" +
                                             "    \"type\": \"object\", \"properties\": {\"a\": {\"type\": \"number\"}}" +
                                             "  }\n" +
                                             "}";
-    doTest(schema, "- a: <warning descr=\"Schema validation: Type is not allowed. Expected: number.\">true</warning>");
+    doTest(schema, "- a: <warning descr=\"Schema validation: Incompatible types.\n Required: number. Actual: boolean.\">true</warning>");
     doTest(schema, "- a: 18");
   }
 
-  public void testArrayTuples1() throws Exception {
+  public void testArrayTuples1() {
     @Language("JSON") final String schema = schema("{\n" +
                                                    "  \"type\": \"array\",\n" +
                                                    "  \"items\": [{\n" +
                                                    "    \"type\": \"number\", \"minimum\": 18" +
                                                    "  }, {\"type\" : \"string\"}]\n" +
                                                    "}");
-    doTest(schema, "prop:\n - 101\n - 102");
+    doTest(schema, "prop:\n - 101\n - <warning descr=\"Schema validation: Incompatible types.\n Required: string. Actual: integer.\">102</warning>");
+  }
 
+  public void testArrayTuples2() {
     @Language("JSON") final String schema2 = schema("{\n" +
                                                     "  \"type\": \"array\",\n" +
                                                     "  \"items\": [{\n" +
                                                     "    \"type\": \"number\", \"minimum\": 18" +
                                                     "  }, {\"type\" : \"string\"}],\n" +
                                                     "\"additionalItems\": false}");
-    doTest(schema2, "prop:\n - 101\n - 102\n - <warning descr=\"Schema validation: Additional items are not allowed\">additional</warning>");
+    doTest(schema2, "prop:\n - 101\n - <warning descr=\"Schema validation: Incompatible types.\n Required: string. Actual: integer.\">102</warning>\n - <warning descr=\"Schema validation: Additional items are not allowed\">additional</warning>");
   }
 
-  public void testArrayLength() throws Exception {
+  public void testArrayLength() {
     @Language("JSON") final String schema = schema("{\"type\": \"array\", \"minItems\": 2, \"maxItems\": 3}");
     doTest(schema, "prop:\n <warning descr=\"Schema validation: Array is shorter than 2\">- 1</warning>");
     doTest(schema, "prop:\n - 1\n - 2");
     doTest(schema, "prop:\n <warning descr=\"Schema validation: Array is longer than 3\">- 1\n - 2\n - 3\n - 4</warning>");
   }
 
-  public void testArrayUnique() throws Exception {
+  public void testArrayUnique() {
     @Language("JSON") final String schema = schema("{\"type\": \"array\", \"uniqueItems\": true}");
     doTest(schema, "prop:\n - 1\n - 2");
     doTest(schema, "prop:\n - <warning descr=\"Schema validation: Item is not unique\">1</warning>\n - 2\n - test\n - <warning descr=\"Schema validation: Item is not unique\">1</warning>");
   }
 
-  public void testMetadataIsOk() throws Exception {
+  public void testMetadataIsOk() {
     @Language("JSON") final String schema = "{\n" +
                                             "  \"title\" : \"Match anything\",\n" +
                                             "  \"description\" : \"This is a schema that matches anything.\",\n" +
@@ -158,55 +163,55 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "anything: 1");
   }
 
-  public void testRequiredField() throws Exception {
+  public void testRequiredField() {
     @Language("JSON") final String schema = "{\"type\": \"object\", \"properties\": {\"a\": {}, \"b\": {}}, \"required\": [\"a\"]}";
     doTest(schema, "a: 11");
     doTest(schema, "a: 1\nb: true");
     doTest(schema, "<warning descr=\"Schema validation: Missing required property 'a'\">b: alarm</warning>");
   }
 
-  public void testInnerRequired() throws Exception {
+  public void testInnerRequired() {
     @Language("JSON") final String schema = schema("{\"type\": \"object\", \"properties\": {\"a\": {}, \"b\": {}}, \"required\": [\"a\"]}");
     doTest(schema, "prop:\n a: 11");
     doTest(schema, "prop:\n a: 1\n b: true");
     doTest(schema, "prop:\n <warning descr=\"Schema validation: Missing required property 'a'\">b: alarm</warning>");
   }
 
-  public void testAdditionalPropertiesAllowed() throws Exception {
+  public void testAdditionalPropertiesAllowed() {
     @Language("JSON") final String schema = schema("{}");
     doTest(schema, "prop:\n q: true\n someStuff: 20");
   }
 
-  public void testAdditionalPropertiesDisabled() throws Exception {
+  public void testAdditionalPropertiesDisabled() {
     @Language("JSON") final String schema = "{\"type\": \"object\", \"properties\": {\"prop\": {}}, \"additionalProperties\": false}";
     // not sure abt inner object
     doTest(schema, "prop:\n q: true\n<warning descr=\"Schema validation: Property 'someStuff' is not allowed\">someStuff: 20</warning>");
   }
 
-  public void testAdditionalPropertiesSchema() throws Exception {
+  public void testAdditionalPropertiesSchema() {
     @Language("JSON") final String schema = "{\"type\": \"object\", \"properties\": {\"a\": {}}," +
                                             "\"additionalProperties\": {\"type\": \"number\"}}";
-    doTest(schema, "a: moo\nb: 5\nc: <warning descr=\"Schema validation: Type is not allowed. Expected: number.\">foo</warning>");
+    doTest(schema, "a: moo\nb: 5\nc: <warning descr=\"Schema validation: Incompatible types.\n Required: number. Actual: string.\">foo</warning>");
   }
 
-  public void testMinMaxProperties() throws Exception {
+  public void testMinMaxProperties() {
     @Language("JSON") final String schema = "{\"type\": \"object\", \"minProperties\": 2, \"maxProperties\": 3}";
     doTest(schema, "<warning descr=\"Schema validation: Number of properties is less than 2\">a: 3</warning>");
     doTest(schema, "a: 1\nb: 5");
     doTest(schema, "<warning descr=\"Schema validation: Number of properties is greater than 3\">a: 1\nb: 22\nc: 333\nd: 4444</warning>");
   }
 
-  public void testOneOf() throws Exception {
+  public void testOneOf() {
     final List<String> subSchemas = new ArrayList<>();
     subSchemas.add("{\"type\": \"number\"}");
     subSchemas.add("{\"type\": \"boolean\"}");
     @Language("JSON") final String schema = schema("{\"oneOf\": [" + StringUtil.join(subSchemas, ", ") + "]}");
     doTest(schema, "prop: 5");
     doTest(schema, "prop: true");
-    doTest(schema, "prop: <warning descr=\"Schema validation: Type is not allowed. Expected one of: boolean, number.\">aaa</warning>");
+    doTest(schema, "prop: <warning descr=\"Schema validation: Incompatible types.\n Required one of: boolean, number. Actual: string.\">aaa</warning>");
   }
 
-  public void testOneOfForTwoMatches() throws Exception {
+  public void testOneOfForTwoMatches() {
     final List<String> subSchemas = new ArrayList<>();
     subSchemas.add("{\"type\": \"string\", \"enum\": [\"a\", \"b\"]}");
     subSchemas.add("{\"type\": \"string\", \"enum\": [\"a\", \"c\"]}");
@@ -216,7 +221,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "prop: <warning descr=\"Schema validation: Validates to more than one variant\">a</warning>");
   }
 
-  public void testOneOfSelectError() throws Exception {
+  public void testOneOfSelectError() {
     final List<String> subSchemas = new ArrayList<>();
     subSchemas.add("{\"type\": \"string\",\n" +
                    "          \"enum\": [\n" +
@@ -229,7 +234,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "prop: <warning descr=\"Schema validation: Value should be one of: \\\"off\\\", \\\"warn\\\", \\\"error\\\"\">wrong</warning>");
   }
 
-  public void testAnyOf() throws Exception {
+  public void testAnyOf() {
     final List<String> subSchemas = new ArrayList<>();
     subSchemas.add("{\"type\": \"string\", \"enum\": [\"a\", \"b\"]}");
     subSchemas.add("{\"type\": \"string\", \"enum\": [\"a\", \"c\"]}");
@@ -240,7 +245,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "prop: <warning descr=\"Schema validation: Value should be one of: \\\"a\\\", \\\"b\\\", \\\"c\\\"\">d</warning>");
   }
 
-  public void testAllOf() throws Exception {
+  public void testAllOf() {
     final List<String> subSchemas = new ArrayList<>();
     subSchemas.add("{\"type\": \"integer\", \"multipleOf\": 2}");
     subSchemas.add("{\"enum\": [1,2,3]}");
@@ -252,7 +257,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
 
   // ----
 
-  public void testObjectInArray() throws Exception {
+  public void testObjectInArray() {
     @Language("JSON") final String schema = schema("{\"type\": \"array\", \"items\": {\"type\": \"object\"," +
                                                    "\"properties\": {" +
                                                    "\"innerType\":{}, \"innerValue\":{}" +
@@ -261,7 +266,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "prop:\n- innerType: aaa\n  <warning descr=\"Schema validation: Property 'alien' is not allowed\">alien: bee</warning>");
   }
 
-  public void testObjectDeeperInArray() throws Exception {
+  public void testObjectDeeperInArray() {
     final String innerTypeSchema = "{\"properties\": {\"only\": {}}, \"additionalProperties\": false}";
     @Language("JSON") final String schema = schema("{\"type\": \"array\", \"items\": {\"type\": \"object\"," +
                                                    "\"properties\": {" +
@@ -272,13 +277,13 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
            "prop:\n- innerType:\n   only: true\n   <warning descr=\"Schema validation: Property 'hidden' is not allowed\">hidden: false</warning>");
   }
 
-  public void testInnerObjectPropValueInArray() throws Exception {
+  public void testInnerObjectPropValueInArray() {
     @Language("JSON") final String schema = "{\"properties\": {\"prop\": {\"type\": \"array\", \"items\": {\"enum\": [1,2,3]}}}}";
     doTest(schema, "prop:\n - 1\n - 3");
     doTest(schema, "prop:\n - <warning descr=\"Schema validation: Value should be one of: 1, 2, 3\">out</warning>");
   }
 
-  public void testAllOfProperties() throws Exception {
+  public void testAllOfProperties() {
     @Language("JSON") final String schema = "{\"allOf\": [{\"type\": \"object\", \"properties\": {\"first\": {}}}," +
                                             " {\"properties\": {\"second\": {\"enum\": [33,44]}}}], \"additionalProperties\": false}";
 //    doTest(schema, "first: true\nsecond: <warning descr=\"Schema validation: Value should be one of: [33, 44]\">null</warning>");
@@ -286,14 +291,14 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "first: true\nsecond: <warning descr=\"Schema validation: Value should be one of: 33, 44\">12</warning>");
   }
 
-  public void testWithWaySelection() throws Exception {
+  public void testWithWaySelection() {
     final String subSchema1 = "{\"enum\": [1,2,3,4,5]}";
     final String subSchema2 = "{\"type\": \"array\", \"items\": {\"properties\": {\"kilo\": {}}, \"additionalProperties\": false}}";
     @Language("JSON") final String schema = "{\"properties\": {\"prop\": {\"oneOf\": [" + subSchema1 + ", " + subSchema2 + "]}}}";
     doTest(schema, "prop:\n - <warning descr=\"Schema validation: Property 'foxtrot' is not allowed\">foxtrot: 15</warning>\n   kilo: 20");
   }
 
-  public void testPatternPropertiesHighlighting() throws Exception {
+  public void testPatternPropertiesHighlighting() {
     @Language("JSON") final String schema = "{\n" +
                                             "  \"patternProperties\": {\n" +
                                             "    \"^A\" : {\n" +
@@ -308,13 +313,13 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
                                             "  }\n" +
                                             "}";
     doTest(schema, "Abezjana: 2\n" +
-                   "Auto: <warning descr=\"Schema validation: Type is not allowed. Expected: number.\">no</warning>\n" +
-                   "BAe: <warning descr=\"Schema validation: Type is not allowed. Expected: boolean.\">22</warning>\n" +
-                   "Boloto: <warning descr=\"Schema validation: Type is not allowed. Expected: boolean.\">2</warning>\n" +
+                   "Auto: <warning descr=\"Schema validation: Incompatible types.\n Required: number. Actual: string.\">no</warning>\n" +
+                   "BAe: <warning descr=\"Schema validation: Incompatible types.\n Required: boolean. Actual: integer.\">22</warning>\n" +
+                   "Boloto: <warning descr=\"Schema validation: Incompatible types.\n Required: boolean. Actual: integer.\">2</warning>\n" +
                    "Cyan: <warning descr=\"Schema validation: Value should be one of: \\\"test\\\", \\\"em\\\"\">me</warning>\n");
   }
 
-  public void testPatternPropertiesFromIssue() throws Exception {
+  public void testPatternPropertiesFromIssue() {
     @Language("JSON") final String schema = "{\n" +
                                             "  \"type\": \"object\",\n" +
                                             "  \"additionalProperties\": false,\n" +
@@ -328,14 +333,14 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
                                             "  }\n" +
                                             "}";
     doTest(schema,
-                   "p1: 1\n" +
-                   "p2: 3\n" +
+                   "p1: <warning descr=\"Schema validation: Incompatible types.\n Required: string. Actual: integer.\">1</warning>\n" +
+                   "p2: <warning descr=\"Schema validation: Incompatible types.\n Required: string. Actual: integer.\">3</warning>\n" +
                    "a2: auto!\n" +
                    "a1: <warning descr=\"Schema validation: Value should be one of: \\\"auto!\\\"\">moto!</warning>\n"
                    );
   }
 
-  public void testPatternForPropertyValue() throws Exception {
+  public void testPatternForPropertyValue() {
     @Language("JSON") final String schema = "{\n" +
                                             "  \"properties\": {\n" +
                                             "    \"withPattern\": {\n" +
@@ -344,12 +349,12 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
                                             "  }\n" +
                                             "}";
     final String correctText = "withPattern: p1";
-    final String wrongText = "withPattern: <warning descr=\"Schema validation: String is violating the pattern: 'p[0-9]'\">wrong</warning>";
+    final String wrongText = "withPattern: <warning descr=\"Schema validation: String violates the pattern: 'p[0-9]'\">wrong</warning>";
     doTest(schema, correctText);
     doTest(schema, wrongText);
   }
 
-  public void testPatternWithSpecialEscapedSymbols() throws Exception {
+  public void testPatternWithSpecialEscapedSymbols() {
     @Language("JSON") final String schema = "{\n" +
                                             "  \"properties\": {\n" +
                                             "    \"withPattern\": {\n" +
@@ -358,7 +363,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
                                             "  }\n" +
                                             "}";
     @Language("yaml") final String correctText = "withPattern: 1234-11-11";
-    final String wrongText = "withPattern: <warning descr=\"Schema validation: String is violating the pattern: '^\\d{4}\\-(0?[1-9]|1[012])\\-(0?[1-9]|[12][0-9]|3[01])$'\">wrong</warning>\n";
+    final String wrongText = "withPattern: <warning descr=\"Schema validation: String violates the pattern: '^\\d{4}\\-(0?[1-9]|1[012])\\-(0?[1-9]|[12][0-9]|3[01])$'\">wrong</warning>\n";
     doTest(schema, correctText);
     doTest(schema, wrongText);
   }
@@ -366,12 +371,12 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
   // ---
 
 
-  public void testRootObjectRedefinedAdditionalPropertiesForbidden() throws Exception {
+  public void testRootObjectRedefinedAdditionalPropertiesForbidden() {
     doTest(rootObjectRedefinedSchema(), "<warning descr=\"Schema validation: Property 'a' is not allowed\">a: true</warning>\n" +
                                         "r1: allowed!");
   }
 
-  public void testNumberOfSameNamedPropertiesCorrectlyChecked() throws Exception {
+  public void testNumberOfSameNamedPropertiesCorrectlyChecked() {
     @Language("JSON") final String schema = "{\n" +
                                             "  \"properties\": {\n" +
                                             "    \"size\": {\n" +
@@ -388,14 +393,14 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
                                             "}";
     doTest(schema,
                    "size: \n" +
-                   " a: <warning descr=\"Schema validation: Type is not allowed. Expected: boolean.\">1</warning>\n" +
+                   " a: <warning descr=\"Schema validation: Incompatible types.\n Required: boolean. Actual: integer.\">1</warning>\n" +
                    " b: 3\n" +
                    " c: 4\n" +
-                   " a: <warning descr=\"Schema validation: Type is not allowed. Expected: boolean.\">5</warning>" +
+                   " a: <warning descr=\"Schema validation: Incompatible types.\n Required: boolean. Actual: integer.\">5</warning>" +
                    "\n");
   }
 
-  public void testManyDuplicatesInArray() throws Exception {
+  public void testManyDuplicatesInArray() {
     @Language("JSON") final String schema = "{\n" +
                                             "  \"properties\": {\n" +
                                             "    \"array\":{\n" +
@@ -418,7 +423,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
 
   // ----
 
-  public void testPropertyValueAlsoHighlightedIfPatternIsInvalid() throws Exception {
+  public void testPropertyValueAlsoHighlightedIfPatternIsInvalid() {
     @Language("JSON") final String schema = "{\n" +
                                             "  \"properties\": {\n" +
                                             "    \"withPattern\": {\n" +
@@ -427,18 +432,18 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
                                             "  }\n" +
                                             "}";
     final String text = "withPattern:" +
-                        " <warning descr=\"Schema validation: Can not check string by pattern because of error: Unclosed character class near index 3\n^[]$\n   ^\">(124)555-4216</warning>";
+                        " <warning descr=\"Schema validation: Cannot check the string by pattern because of an error: Unclosed character class near index 3\n^[]$\n   ^\">(124)555-4216</warning>";
     doTest(schema, text);
   }
 
-  public void testNotSchema() throws Exception {
+  public void testNotSchema() {
     @Language("JSON") final String schema = "{\"properties\": {\n" +
                                             "    \"not_type\": { \"not\": { \"type\": \"string\" } }\n" +
                                             "  }}";
     doTest(schema, "not_type: <warning descr=\"Schema validation: Validates against 'not' schema\">wrong</warning>");
   }
 
-  public void testNotSchemaCombinedWithNormal() throws Exception {
+  public void testNotSchemaCombinedWithNormal() {
     @Language("JSON") final String schema = "{\"properties\": {\n" +
                                             "    \"not_type\": {\n" +
                                             "      \"pattern\": \"^[a-z]*[0-5]*$\",\n" +
@@ -447,10 +452,10 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
                                             "  }}";
     doTest(schema, "not_type: va4");
     doTest(schema, "not_type: <warning descr=\"Schema validation: Validates against 'not' schema\">a4</warning>");
-    doTest(schema, "not_type: <warning descr=\"Schema validation: String is violating the pattern: '^[a-z]*[0-5]*$'\">4a4</warning>");
+    doTest(schema, "not_type: <warning descr=\"Schema validation: String violates the pattern: '^[a-z]*[0-5]*$'\">4a4</warning>");
   }
 
-  public void testDoNotMarkOneOfThatDiffersWithFormat() throws Exception {
+  public void testDoNotMarkOneOfThatDiffersWithFormat() {
     @Language("JSON") final String schema = "{\n" +
                                             "\n" +
                                             "  \"properties\": {\n" +
@@ -470,7 +475,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "withFormat: localhost");
   }
 
-  public void testAcceptSchemaWithoutType() throws Exception {
+  public void testAcceptSchemaWithoutType() {
     @Language("JSON") final String schema = "{\n" +
                                             "\n" +
                                             "  \"properties\": {\n" +
@@ -489,7 +494,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "withFormat: localhost");
   }
 
-  public void testArrayItemReference() throws Exception {
+  public void testArrayItemReference() {
     @Language("JSON") final String schema = "{\n" +
                                             "  \"items\": [\n" +
                                             "    {\n" +
@@ -504,7 +509,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "- 1\n- <warning>foo</warning>");
   }
 
-  public void testValidateAdditionalItems() throws Exception {
+  public void testValidateAdditionalItems() {
     @Language("JSON") final String schema = "{\n" +
                                             "  \"definitions\": {\n" +
                                             "    \"options\": {\n" +
@@ -531,14 +536,15 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "- true\n- true\n- 1\n- <warning>qq</warning>");
   }
 
-
-
-  public void testExclusiveMinMaxV6() throws Exception {
+  public void testExclusiveMinMaxV6_1() {
     @Language("JSON") String exclusiveMinSchema = "{\"properties\": {\"prop\": {\"exclusiveMinimum\": 3}}}";
     doTest(exclusiveMinSchema, "prop: <warning>2</warning>");
     doTest(exclusiveMinSchema, "prop: <warning>3</warning>");
     doTest(exclusiveMinSchema, "prop: 4");
+  }
 
+
+  public void testExclusiveMinMaxV6_2() {
     @Language("JSON") String exclusiveMaxSchema = "{\"properties\": {\"prop\": {\"exclusiveMaximum\": 3}}}";
     doTest(exclusiveMaxSchema, "prop: 2");
     doTest(exclusiveMaxSchema, "prop: <warning>3</warning>");
@@ -546,25 +552,25 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
   }
 
   /*todo later
-  public void testPropertyNamesV6() throws Exception {
+  public void testPropertyNamesV6() {
     doTest("{\"propertyNames\": {\"minLength\": 7}}", "{<warning>\"prop\"</warning>: 2}");
     doTest("{\"properties\": {\"prop\": {\"propertyNames\": {\"minLength\": 7}}}}", "{\"prop\": {<warning>\"qq\"</warning>: 7}}");
   }*/
 
-  public void testContainsV6() throws Exception {
+  public void testContainsV6() {
     @Language("JSON") String schema = "{\"properties\": {\"prop\": {\"type\": \"array\", \"contains\": {\"type\": \"number\"}}}}";
     doTest(schema, "prop:\n <warning>- a\n - true</warning>");
     doTest(schema, "prop:\n - a\n - true\n - 1");
   }
 
-  public void testConstV6() throws Exception {
+  public void testConstV6() {
     @Language("JSON") String schema = "{\"properties\": {\"prop\": {\"type\": \"string\", \"const\": \"foo\"}}}";
     doTest(schema, "prop: <warning>a</warning>");
     doTest(schema, "prop: <warning>5</warning>");
     doTest(schema, "prop: foo");
   }
 
-  public void testIfThenElseV7() throws Exception {
+  public void testIfThenElseV7() {
     @Language("JSON") String schema = "{\n" +
                                       "  \"if\": {\n" +
                                       "    \"properties\": {\n" +
@@ -598,7 +604,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "a: a\nb: 5");
   }
 
-  public void testNestedOneOf() throws Exception {
+  public void testNestedOneOf() {
     @Language("JSON") String schema = "{\"type\":\"object\",\n" +
                                       "  \"oneOf\": [\n" +
                                       "    {\n" +
@@ -636,7 +642,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "type: <warning>ko</warning>");
   }
 
-  public void testArrayRefs() throws Exception {
+  public void testArrayRefs() {
     @Language("JSON") String schema = "{\n" +
                                       "  \"myDefs\": {\n" +
                                       "    \"myArray\": [\n" +
@@ -665,7 +671,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
     doTest(schema, "- 1\n- false");
   }
 
-  public void testWithTags() throws Exception {
+  public void testWithTags() {
     @Language("JSON") String schema = "{\"properties\": { \"platform\": { \"enum\": [\"x86\", \"x64\"] } }}";
     doTest(schema, "platform:\n  !!str x64");
     doTest(schema, "platform:\n  <warning>a x64</warning>");
@@ -680,6 +686,13 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
                    "      ElasticsearchVersion: !FindInMap [ElasticSearchConfig, !Ref AccountType, Version]\n" +
                    "Conditions:\n" +
                    "  IsDev: !Equals [!Ref AccountType, dev]");
+  }
+
+  public void testGitlabSchema() throws Exception {
+    @Language("JSON") String schema = FileUtil.loadFile(new File(getTestDataPath() + "/gitlab-ci.schema.json"));
+    doTest(schema, "a:\n" +
+                   "  extends: .b\n" +
+                   "  script: echo");
   }
 
   @Language("JSON")
@@ -705,18 +718,18 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
                                                  "  }\n" +
                                                  "}\n";
 
-  public void testRefExtends() throws Exception {
+  public void testRefExtends() {
     // no warning about missing required property - it should be discovered in referenced object
     // no warning about extra 'property' with name '<<' with additionalProperties=false
     doTest(SCHEMA_FOR_REFS, "a: &a\n" +
-                            "  a: <warning descr=\"Schema validation: Type is not allowed. Expected: array.\">7</warning>\n" +
+                            "  a: <warning descr=\"Schema validation: Incompatible types.\n Required: array. Actual: integer.\">7</warning>\n" +
                             "\n" +
                             "bar:\n" +
                             "  <<: *a\n" +
                             "  b: 5\n");
   }
 
-  public void testRefRefValid() throws Exception {
+  public void testRefRefValid() {
     // no warnings - &a references &b, which is an array - validation passes
     doTest(SCHEMA_FOR_REFS, "x: &b\n" +
                             "  - x\n" +
@@ -730,8 +743,8 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
                             "  b: 5");
   }
 
-  public void testRefRefInvalid() throws Exception {
-    doTest(SCHEMA_FOR_REFS, "x: &b <warning descr=\"Schema validation: Type is not allowed. Expected: array.\">7</warning>\n" +
+  public void testRefRefInvalid() {
+    doTest(SCHEMA_FOR_REFS, "x: &b <warning descr=\"Schema validation: Incompatible types.\n Required: array. Actual: number.\">7</warning>\n" +
                             "\n" +
                             "a: &a\n" +
                             "  a: *b\n" +
@@ -740,7 +753,7 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
                             "  <<: *a\n" +
                             "  b: 5");
   }
-  public void testRefRefScalarValid() throws Exception {
+  public void testRefRefScalarValid() {
     doTest(SCHEMA_FOR_REFS, "x: &b 7\n" +
                             "\n" +
                             "a: &a\n" +
@@ -748,13 +761,13 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
                             "\n" +
                             "bar:\n" +
                             "  <<: *a\n" +
-                            "  a: <warning descr=\"Schema validation: Type is not allowed. Expected: array.\">5</warning>");
+                            "  a: <warning descr=\"Schema validation: Incompatible types.\n Required: array. Actual: integer.\">5</warning>");
   }
 
-  public void testInlineRef() throws Exception {
+  public void testInlineRef() {
     doTest(SCHEMA_FOR_REFS, "bar:\n" +
                             "  <<: &q\n" +
-                            "    a: <warning descr=\"Schema validation: Type is not allowed. Expected: array.\">5</warning>\n" +
+                            "    a: <warning descr=\"Schema validation: Incompatible types.\n Required: array. Actual: integer.\">5</warning>\n" +
                             "  b: 5");
   }
 
@@ -782,5 +795,153 @@ public class YamlByJsonSchemaHighlightingTest extends JsonSchemaHighlightingTest
            "    }\n" +
            "  }\n" +
            "}\n";
+  }
+
+  public void testTravisPythonVersion() throws Exception {
+    @Language("JSON") String schema = FileUtil.loadFile(new File(getTestDataPath() + "/travis.schema.json"));
+    doTest(schema, "python: 3.5"); // validates as 'number'
+    doTest(schema, "python: 3.50"); // validates as 'number'
+    doTest(schema, "python: 3.50a"); // validates as 'string'
+    doTest(schema, "python: <warning descr=\"Schema validation: Incompatible types.\n Required one of: array, number, string. Actual: null.\">null</warning>");
+  }
+
+  public void testTravisNode() throws Exception {
+    @Language("JSON") String schema = FileUtil.loadFile(new File(getTestDataPath() + "/travis.schema.json"));
+    doTest(schema, "node_js: \n" +
+                   "  - <warning descr=\"Schema validation: Incompatible types.\n Required: string. Actual: number.\">2.10</warning>");
+  }
+
+  public void testTravisMultiDocument() throws Exception {
+    @Language("JSON") String schema = FileUtil.loadFile(new File(getTestDataPath() + "/travis.schema.json"));
+    doTest(schema, "after_script: true\n" +
+                   "sbt_args: <warning>1</warning>\n" +
+                   "---\n" +
+                   "after_script: true\n" +
+                   "sbt_args: <warning>1</warning>\n");
+  }
+
+  public void testExpNumberNotation() {
+    doTest("{\n" +
+           "  \"properties\": {\n" +
+           "    \"x\": {\n" +
+           "      \"type\": \"number\"\n" +
+           "    }\n" +
+           "  }\n" +
+           "}", "x: 2.99792458e8");
+  }
+
+  public void testTreatEmptyValueAsNull_1() {
+    doTest("{\n" +
+           "  \"properties\": {\n" +
+           "    \"x\": {\n" +
+           "      \"type\": \"number\"\n" +
+           "    }\n" +
+           "  }\n" +
+           "}", "x:<warning descr=\"Schema validation: Incompatible types.\n Required: number. Actual: null.\"> </warning>");
+  }
+
+  public void testTreatEmptyValueAsNull_2() {
+    doTest("{\n" +
+           "  \"properties\": {\n" +
+           "    \"x\": {\n" +
+           "      \"type\": \"null\"\n" +
+           "    }\n" +
+           "  }\n" +
+           "}", "x: ");
+  }
+
+  public void testEmptyValueInArray() {
+    doTest("{\n" +
+           "  \"type\": \"object\",\n" +
+           "\n" +
+           "  \"properties\": {\n" +
+           "    \"versionAsStringArray\": {\n" +
+           "      \"type\": \"array\",\n" +
+           "      \"items\": {\n" +
+           "        \"type\": \"string\"\n" +
+           "      }\n" +
+           "    }\n" +
+           "  }\n" +
+           "}", "versionAsStringArray:\n" +
+                "  -<warning descr=\"Schema validation: Incompatible types.\n Required: string. Actual: null.\"> </warning>\n" +
+                "  <warning descr=\"Schema validation: Incompatible types.\n Required: string. Actual: null.\">-</warning>\n" +
+                "  - a");
+  }
+
+  public void testEmptyFile() {
+    doTest("{\n" +
+           "  \"type\": \"object\",\n" +
+           "\n" +
+           "  \"properties\": {\n" +
+           "    \"versionAsStringArray\": {\n" +
+           "      \"type\": \"array\"\n" +
+           "    }\n" +
+           "  },\n" +
+           "  \"required\": [\"versionAsStringArray\"]\n" +
+           "}", "<warning descr=\"Schema validation: Missing required property 'versionAsStringArray'\"></warning>");
+  }
+
+  public void testEmptyValueBetweenProps() {
+    doTest("{\n" +
+           "  \"type\": \"object\",\n" +
+           "\n" +
+           "  \"properties\": {\n" +
+           "    \"versionAsStringArray\": {\n" +
+           "      \"type\": \"object\",\n" +
+           "      \"properties\": {\n" +
+           "        \"xxx\": {\n" +
+           "          \"type\": \"number\"\n" +
+           "        },\n" +
+           "        \"yyy\": {\n" +
+           "          \"type\": \"string\"\n" +
+           "        },\n" +
+           "        \"zzz\": {\n" +
+           "          \"type\": \"number\"\n" +
+           "        }\n" +
+           "      },\n" +
+           "      \"required\": [\"xxx\", \"yyy\", \"zzz\"]\n" +
+           "    }\n" +
+           "  },\n" +
+           "  \"required\": [\"versionAsStringArray\"]\n" +
+           "}", "versionAsStringArray:\n" +
+                "  zzz: 0\n" +
+                "  yyy:<warning descr=\"Schema validation: Incompatible types.\n Required: string. Actual: null.\">  </warning>\n" +
+                "  xxx: 0");
+  }
+
+  public void testDeprecation() {
+    doTest("{\"properties\": {\n" +
+           "    \"myPropertyXxx\": {\n" +
+           "      \"deprecationMessage\": \"Baz\",\n" +
+           "      \"description\": \"Foo bar\"\n" +
+           "    }\n" +
+           "  }}", "<weak_warning descr=\"Key 'myPropertyXxx' is deprecated: Baz\">myPropertyXxx</weak_warning>: a");
+  }
+
+  public void testPropertyNameSchema() {
+    doTest("{\n" +
+           "  \"type\": \"object\",\n" +
+           "  \"patternProperties\": {\n" +
+           "    \".*\": {\n" +
+           "      \"type\": \"boolean\"\n" +
+           "    }\n" +
+           "  },\n" +
+           "  \"propertyNames\": {\n" +
+           "    \"enum\": [\"a\", \"b\"]\n" +
+           "  }\n" +
+           "}", "<warning>r</warning>: true");
+  }
+
+  public void _testTypeVariants() throws IOException {
+    @Language("JSON") String schema = FileUtil.loadFile(new File(getTestDataPath() + "/prometheus.schema.json"));
+    doTest(schema, "alerting:\n" +
+                   "  alertmanagers:\n" +
+                   "  - static_configs:\n" +
+                   "    - targets: <warning>1</warning>  \n" +
+                   "      # - alertmanager:9093  \n" +
+                   "\n" +
+                   "rule_files:\n" +
+                   "  # - \"first_rules.yml\"\n" +
+                   "  # - \"second_rules.yml\"");
   }
 }

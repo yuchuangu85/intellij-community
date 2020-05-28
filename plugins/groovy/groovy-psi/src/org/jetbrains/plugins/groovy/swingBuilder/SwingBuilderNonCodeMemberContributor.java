@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.swingBuilder;
 
 import com.google.common.collect.ImmutableMap;
@@ -52,7 +52,7 @@ public class SwingBuilderNonCodeMemberContributor extends NonCodeMembersContribu
       MANY_OBJECTS = new PsiEllipsisType(type(CommonClassNames.JAVA_LANG_OBJECT));
     }
 
-    public class MyMethodBuilder extends GrLightMethodBuilder {
+    public static class MyMethodBuilder extends GrLightMethodBuilder {
       private String myNavigationClass;
 
       public MyMethodBuilder(PsiManager manager, String name) {
@@ -76,19 +76,8 @@ public class SwingBuilderNonCodeMemberContributor extends NonCodeMembersContribu
         return methods[0];
       }
 
-      //@Override
-      //public MyMethodBuilder addParameter(@NotNull String name, @NotNull String type, boolean isOptional) {
-      //  return (MyMethodBuilder)addParameter(name, type(type), isOptional);
-      //}
-
-      //public MyMethodBuilder addClosureParam() {
-      //  addParameter("closure", GroovyCommonClassNames.GROOVY_LANG_CLOSURE, true);
-      //  return this;
-      //}
-
-      public MyMethodBuilder setNavigationClass(String navigationClass) {
+      public void setNavigationClass(String navigationClass) {
         myNavigationClass = navigationClass;
-        return this;
       }
     }
 
@@ -817,10 +806,11 @@ public class SwingBuilderNonCodeMemberContributor extends NonCodeMembersContribu
 
   @Override
   public void processDynamicElements(@NotNull PsiType qualifierType,
-                                     PsiClass aClass,
+                                     @Nullable PsiClass aClass,
                                      @NotNull PsiScopeProcessor processor,
                                      @NotNull PsiElement place,
                                      @NotNull ResolveState state) {
+    if (aClass == null) return;
     if (!ResolveUtil.shouldProcessMethods(processor.getHint(ElementClassHint.KEY))) return;
 
     MultiMap<String, PsiMethod> methodMap = aClass.getUserData(KEY);

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.editor.impl;
 
 import com.intellij.diagnostic.Dumpable;
@@ -17,6 +17,7 @@ import com.intellij.openapi.editor.impl.softwrap.mapping.SoftWrapApplianceManage
 import com.intellij.openapi.editor.impl.softwrap.mapping.SoftWrapAwareDocumentParsingListenerAdapter;
 import com.intellij.openapi.util.Segment;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.util.DocumentEventUtil;
 import com.intellij.util.DocumentUtil;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
@@ -42,7 +43,7 @@ import java.util.List;
  * @author Denis Zhdanov
  */
 public class SoftWrapModelImpl extends InlayModel.SimpleAdapter
-  implements SoftWrapModelEx, PrioritizedInternalDocumentListener, FoldingListener,
+  implements SoftWrapModelEx, PrioritizedDocumentListener, FoldingListener,
              PropertyChangeListener, Dumpable, Disposable
 {
 
@@ -98,6 +99,8 @@ public class SoftWrapModelImpl extends InlayModel.SimpleAdapter
   private boolean myDirty;
 
   private boolean myForceAdditionalColumns;
+  private boolean myAfterLineEndInlayUpdated;
+  private boolean myInlayChangedInBatchMode;
 
   SoftWrapModelImpl(@NotNull EditorImpl editor) {
     myEditor = editor;
@@ -125,8 +128,7 @@ public class SoftWrapModelImpl extends InlayModel.SimpleAdapter
   }
 
   private boolean areSoftWrapsEnabledInEditor() {
-    return myEditor.getSettings().isUseSoftWraps() && !myEditor.isOneLineMode() &&
-           (!(myEditor.getDocument() instanceof DocumentImpl) || !((DocumentImpl)myEditor.getDocument()).acceptsSlashR());
+    return myEditor.getSettings().isUseSoftWraps() && !myEditor.isOneLineMode();
   }
 
   /**
@@ -238,6 +240,7 @@ public class SoftWrapModelImpl extends InlayModel.SimpleAdapter
    * @return    total number of soft wrap-introduced new visual lines
    */
   int getSoftWrapsIntroducedLinesNumber() {
+    prepareToMapping();
     return myStorage.getSoftWraps().size(); // Assuming that soft wrap has single line feed all the time
   }
 
@@ -343,8 +346,7 @@ public class SoftWrapModelImpl extends InlayModel.SimpleAdapter
     if (!model.isSoftWrappingEnabled()) {
       return false;
     }
-    LogicalPosition logical = myEditor.visualToLogicalPosition(visual);
-    int offset = myEditor.logicalPositionToOffset(logical);
+    int offset = myEditor.visualPositionToOffset(visual);
     if (offset <= 0) {
       // Never expect to be here, just a defensive programming.
       return false;
@@ -397,6 +399,7 @@ public class SoftWrapModelImpl extends InlayModel.SimpleAdapter
 
   @Override
   public void beforeDocumentChange(@NotNull DocumentEvent event) {
+    myAfterLineEndInlayUpdated = false;
     if (myBulkUpdateInProgress) {
       return;
     }
@@ -415,21 +418,18 @@ public class SoftWrapModelImpl extends InlayModel.SimpleAdapter
     }
     myUpdateInProgress = false;
     if (!isSoftWrappingEnabled()) {
-      return;
-    }
-    myApplianceManager.documentChanged(event);
-  }
-
-  @Override
-  public void moveTextHappened(@NotNull Document document, int start, int end, int base) {
-    if (myBulkUpdateInProgress) {
-      return;
-    }
-    if (!isSoftWrappingEnabled()) {
       myDirty = true;
       return;
     }
-    myApplianceManager.recalculate(Arrays.asList(new TextRange(start, end), new TextRange(base, base + end - start)));
+    myApplianceManager.documentChanged(event, myAfterLineEndInlayUpdated);
+    if (DocumentEventUtil.isMoveInsertion(event)) {
+      int dstOffset = event.getOffset();
+      int srcOffset = event.getMoveOffset();
+      int textLength = event.getDocument().getTextLength();
+      // adding +1, as inlays at the end of the moved range stick to the following text (and impact its layout)
+      myApplianceManager.recalculate(Arrays.asList(new TextRange(srcOffset, Math.min(textLength, srcOffset + event.getNewLength() + 1)),
+                                                   new TextRange(dstOffset, Math.min(textLength, dstOffset + event.getNewLength() + 1))));
+    }
   }
 
   void onBulkDocumentUpdateStarted() {
@@ -471,16 +471,41 @@ public class SoftWrapModelImpl extends InlayModel.SimpleAdapter
   }
 
   @Override
-  public void onUpdated(@NotNull Inlay inlay) {
-    if (myEditor.getDocument().isInEventsHandling() || myEditor.getDocument().isInBulkUpdate() ||
-        inlay.getVerticalAlignment() != Inlay.VerticalAlignment.INLINE) return;
+  public void onUpdated(@NotNull Inlay inlay, int changeFlags) {
+    if (myEditor.getDocument().isInBulkUpdate() ||
+        inlay.getPlacement() != Inlay.Placement.INLINE && inlay.getPlacement() != Inlay.Placement.AFTER_LINE_END ||
+        (changeFlags & InlayModel.ChangeFlags.WIDTH_CHANGED) == 0) {
+      return;
+    }
+    if (myEditor.getInlayModel().isInBatchMode()) {
+      myInlayChangedInBatchMode = true;
+      return;
+    }
     if (!isSoftWrappingEnabled()) {
       myDirty = true;
       return;
     }
     if (!myDirty) {
+      if (myEditor.getDocument().isInEventsHandling()) {
+        if (inlay.getPlacement() == Inlay.Placement.AFTER_LINE_END) {
+          myAfterLineEndInlayUpdated = true;
+        }
+        return;
+      }
       int offset = inlay.getOffset();
+      if (inlay.getPlacement() == Inlay.Placement.AFTER_LINE_END) {
+        offset = DocumentUtil.getLineEndOffset(offset, myEditor.getDocument());
+      }
       myApplianceManager.recalculate(Collections.singletonList(new TextRange(offset, offset)));
+    }
+  }
+
+  @Override
+  public void onBatchModeFinish(@NotNull Editor editor) {
+    if (myEditor.getDocument().isInBulkUpdate()) return;
+    if (myInlayChangedInBatchMode) {
+      myInlayChangedInBatchMode = false;
+      recalculate();
     }
   }
 
@@ -498,7 +523,6 @@ public class SoftWrapModelImpl extends InlayModel.SimpleAdapter
 
   @Override
   public void release() {
-    myApplianceManager.release();
     myStorage.removeAll();
     myDeferredFoldRegions.clear();
   }
@@ -522,10 +546,6 @@ public class SoftWrapModelImpl extends InlayModel.SimpleAdapter
   public void setSoftWrapPainter(SoftWrapPainter painter) {
     myPainter = painter;
     myApplianceManager.setSoftWrapPainter(painter);
-  }
-
-  public static EditorTextRepresentationHelper getEditorTextRepresentationHelper(@NotNull Editor editor) {
-    return ((SoftWrapModelEx)editor.getSoftWrapModel()).getEditorTextRepresentationHelper();
   }
 
   @Override
@@ -576,7 +596,8 @@ public class SoftWrapModelImpl extends InlayModel.SimpleAdapter
                      || foldRegion != null, "Soft wrap before line break");
       LOG.assertTrue(softWrapOffset != DocumentUtil.getLineStartOffset(softWrapOffset, document) ||
                      foldingModel.isOffsetCollapsed(softWrapOffset - 1), "Soft wrap after line break");
-      LOG.assertTrue(!DocumentUtil.isInsideSurrogatePair(document, softWrapOffset), "Soft wrap inside a surrogate pair");
+      LOG.assertTrue(!DocumentUtil.isInsideCharacterPair(document, softWrapOffset),
+                     "Soft wrap inside a surrogate pair or inside a line break");
       lastSoftWrapOffset = softWrapOffset;
     }
   }

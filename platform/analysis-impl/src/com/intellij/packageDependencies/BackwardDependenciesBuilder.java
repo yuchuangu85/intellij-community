@@ -16,8 +16,8 @@
 
 package com.intellij.packageDependencies;
 
+import com.intellij.analysis.AnalysisBundle;
 import com.intellij.analysis.AnalysisScope;
-import com.intellij.analysis.AnalysisScopeBundle;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.progress.ProcessCanceledException;
@@ -36,13 +36,15 @@ import java.util.Set;
 
 public class BackwardDependenciesBuilder extends DependenciesBuilder {
   private final AnalysisScope myForwardScope;
+  private final AnalysisScope myScopeOfInterest;
 
   public BackwardDependenciesBuilder(final Project project, final AnalysisScope scope) {
     this(project, scope, null);
   }
 
   public BackwardDependenciesBuilder(final Project project, final AnalysisScope scope, final @Nullable AnalysisScope scopeOfInterest) {
-    super(project, scope, scopeOfInterest);
+    super(project, scope);
+    myScopeOfInterest = scopeOfInterest;
     myForwardScope = scopeOfInterest != null
                      ? scopeOfInterest
                      : ReadAction.compute(() -> getScope().getNarrowedComplementaryScope(getProject()));
@@ -52,12 +54,17 @@ public class BackwardDependenciesBuilder extends DependenciesBuilder {
 
   @Override
   public String getRootNodeNameInUsageView() {
-    return AnalysisScopeBundle.message("backward.dependencies.usage.view.root.node.text");
+    return AnalysisBundle.message("backward.dependencies.usage.view.root.node.text");
   }
 
   @Override
   public String getInitialUsagesPosition() {
-    return AnalysisScopeBundle.message("backward.dependencies.usage.view.initial.text");
+    return AnalysisBundle.message("backward.dependencies.usage.view.initial.text");
+  }
+
+  @Override
+  public AnalysisScope getScopeOfInterest() {
+    return myScopeOfInterest;
   }
 
   @Override
@@ -67,7 +74,7 @@ public class BackwardDependenciesBuilder extends DependenciesBuilder {
 
   @Override
   public void analyze() {
-    final DependenciesBuilder builder = new ForwardDependenciesBuilder(getProject(), myForwardScope, getScopeOfInterest());
+    final DependenciesBuilder builder = new ForwardDependenciesBuilder(getProject(), myForwardScope);
     builder.setTotalFileCount(myTotalFileCount);
     builder.analyze();
 
@@ -86,7 +93,7 @@ public class BackwardDependenciesBuilder extends DependenciesBuilder {
           if (indicator.isCanceled()) {
             throw new ProcessCanceledException();
           }
-          indicator.setText(AnalysisScopeBundle.message("package.dependencies.progress.text"));
+          indicator.setText(AnalysisBundle.message("package.dependencies.progress.text"));
           indicator.setText2(getRelativeToProjectPath(virtualFile));
           if (fileCount > 0) {
             indicator.setFraction(((double)++myFileCount) / myTotalFileCount);

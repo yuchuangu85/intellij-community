@@ -1,28 +1,12 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python;
 
-import com.google.common.collect.Lists;
-import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.projectRoots.Sdk;
-import com.intellij.openapi.projectRoots.SdkModificator;
-import com.intellij.openapi.roots.*;
+import com.intellij.openapi.roots.ContentEntry;
+import com.intellij.openapi.roots.ModuleRootModificationUtil;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.psi.PsiFile;
 import com.intellij.psi.impl.cache.impl.IndexPatternUtil;
 import com.intellij.psi.impl.cache.impl.todo.TodoIndex;
 import com.intellij.psi.impl.cache.impl.todo.TodoIndexEntry;
@@ -31,10 +15,12 @@ import com.intellij.psi.search.IndexPattern;
 import com.intellij.psi.stubs.StubUpdatingIndex;
 import com.intellij.util.indexing.FileBasedIndex;
 import com.jetbrains.python.fixtures.PyTestCase;
+import com.jetbrains.python.psi.search.PySearchUtilBase;
 import com.jetbrains.python.psi.stubs.PyModuleNameIndex;
-import com.jetbrains.python.sdk.PythonSdkType;
+import com.jetbrains.python.sdk.PythonSdkUtil;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -63,7 +49,7 @@ public class PyIndexingTest extends PyTestCase {
 
   private static List<VirtualFile> getTodoFiles(@NotNull Project project) {
     final FileBasedIndex fileBasedIndex = FileBasedIndex.getInstance();
-    List<VirtualFile> files = Lists.newArrayList();
+    List<VirtualFile> files = new ArrayList<>();
     for (IndexPattern indexPattern : IndexPatternUtil.getIndexPatterns()) {
       files.addAll(fileBasedIndex.getContainingFiles(
         TodoIndex.NAME,
@@ -73,73 +59,45 @@ public class PyIndexingTest extends PyTestCase {
   }
 
   public void testTodoIndexInLibs() {
-    Sdk sdk = PythonSdkType.findPythonSdk(myFixture.getModule());
+    final String libraryWithTodoName = "numbers.py";
 
-    PsiFile file = myFixture.addFileToProject("libs/smtpd.py", "# TODO: fix it");
-    VirtualFile root = sdk.getRootProvider().getFiles(OrderRootType.CLASSES)[0];
-    VirtualFile libsRoot = file.getVirtualFile().getParent();
+    runWithAdditionalFileInLibDir(
+      libraryWithTodoName,
+      "# TODO: this should be updated",
+      (__) -> {
+        final List<VirtualFile> indexFiles = getTodoFiles(myFixture.getProject());
 
-    ModifiableRootModel modifiableModel = ModuleRootManager.getInstance(myFixture.getModule()).getModifiableModel();
-    ContentEntry[] entries = modifiableModel.getContentEntries();
+        // project file in the TodoIndex
+        assertTrue(indexFiles.stream().anyMatch((x) -> "a.py".equals(x.getName())));
 
-    modifiableModel.clear();
-    modifiableModel.addContentEntry(myFixture.findFileInTempDir("project"));
+        // no library files in the TodoIndex
+        assertFalse(indexFiles.stream().anyMatch((x) -> libraryWithTodoName.equals(x.getName())));
 
-    SdkModificator sdkModificator = sdk.getSdkModificator();
-    sdkModificator.addRoot(libsRoot, OrderRootType.CLASSES);
+        final Module module = myFixture.getModule();
+        final Sdk sdk = PythonSdkUtil.findPythonSdk(module);
 
-    ApplicationManager.getApplication().runWriteAction(() -> {
-      modifiableModel.commit();
-      sdkModificator.commitChanges();
-    });
+        final VirtualFile libDir = PySearchUtilBase.findLibDir(sdk);
 
-    try {
-      List<VirtualFile> indexFiles = getTodoFiles(myFixture.getProject());
-
-      // project file in the TodoIndex
-      assertTrue(indexFiles.stream().anyMatch((x) -> "a.py".equals(x.getName())));
-
-      // no library files in the TodoIndex
-      assertFalse(indexFiles.stream().anyMatch((x) -> "smtpd.py".equals(x.getName())));
-
-      ModuleRootModificationUtil.addContentRoot(myFixture.getModule(), libsRoot);
-      // mock sdk doesn't fire events
-      FileBasedIndex.getInstance().requestRebuild(TodoIndex.NAME);
-      FileBasedIndex.getInstance().ensureUpToDate(TodoIndex.NAME, myFixture.getProject(), null);
-
-      indexFiles = getTodoFiles(myFixture.getProject());
-
-      // but if it is added as a content root - it should be in the TodoIndex
-      assertTrue(indexFiles.stream().anyMatch((x) -> "smtpd.py".equals(x.getName())));
-    }
-    finally {
-      // revert changes to sdk roots
-      SdkModificator modificator = sdk.getSdkModificator();
-      modificator.removeRoot(libsRoot, OrderRootType.CLASSES);
-      modificator.addRoot(root, OrderRootType.CLASSES);
-
-      ModifiableRootModel m = ModuleRootManager.getInstance(myFixture.getModule()).getModifiableModel();
-
-      m.clear();
-
-      for (ContentEntry e : entries) {
-        final ContentEntry newEntry = m.addContentEntry(e.getFile());
-        for (SourceFolder folder : e.getSourceFolders()) {
-          newEntry.addSourceFolder(folder.getFile(), folder.isTestSource());
+        ModuleRootModificationUtil.addContentRoot(module, libDir);
+        try {
+          // mock sdk doesn't fire events
+          FileBasedIndex.getInstance().requestRebuild(TodoIndex.NAME);
+          FileBasedIndex.getInstance().ensureUpToDate(TodoIndex.NAME, myFixture.getProject(), null);
+          final List<VirtualFile> updatedIndexFiles = getTodoFiles(myFixture.getProject());
+          // but if it is added as a content root - it should be in the TodoIndex
+          assertTrue(updatedIndexFiles.stream().anyMatch((x) -> libraryWithTodoName.equals(x.getName())));
         }
-        for (ExcludeFolder folder : e.getExcludeFolders()) {
-          newEntry.addExcludeFolder(folder.getFile());
-        }
-        for (String pattern : e.getExcludePatterns()) {
-          newEntry.addExcludePattern(pattern);
+        finally {
+          ModuleRootModificationUtil.updateModel(module, model -> {
+            for (ContentEntry entry : model.getContentEntries()) {
+              if (libDir.equals(entry.getFile())) {
+                model.removeContentEntry(entry);
+              }
+            }
+          });
         }
       }
-
-      ApplicationManager.getApplication().runWriteAction(() -> {
-        modificator.commitChanges();
-        m.commit();
-      });
-    }
+    );
   }
 
   // PY-19047

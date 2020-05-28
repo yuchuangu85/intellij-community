@@ -11,17 +11,21 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.FileStatus;
 import com.intellij.openapi.vcs.VcsBundle;
+import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.ContentRevision;
 import com.intellij.openapi.vcs.changes.CurrentBinaryContentRevision;
 import com.intellij.openapi.vcs.changes.TextRevisionNumber;
 import com.intellij.openapi.vcs.history.VcsRevisionNumber;
+import com.intellij.util.ObjectUtils;
 import com.intellij.vcsUtil.VcsUtil;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+
+import static com.intellij.util.ArrayUtil.EMPTY_BYTE_ARRAY;
 
 /**
  * @author yole
@@ -30,8 +34,9 @@ public class ShelvedBinaryFile implements JDOMExternalizable {
   public String BEFORE_PATH;
   public String AFTER_PATH;
   @Nullable public String SHELVED_PATH;         // null if binary file was deleted
+  private Change myChange;
 
-  public ShelvedBinaryFile() {
+  ShelvedBinaryFile() {
   }
 
   public ShelvedBinaryFile(final String beforePath, final String afterPath, @Nullable final String shelvedPath) {
@@ -74,24 +79,33 @@ public class ShelvedBinaryFile implements JDOMExternalizable {
     return FileStatus.MODIFIED;
   }
 
-  public Change createChange(final Project project) {
-    ContentRevision before = null;
-    ContentRevision after = null;
-    final File baseDir = new File(project.getBaseDir().getPath());
-    if (BEFORE_PATH != null) {
-      final FilePath file = VcsUtil.getFilePath(new File(baseDir, BEFORE_PATH), false);
-      before = new CurrentBinaryContentRevision(file) {
-        @NotNull
-        @Override
-        public VcsRevisionNumber getRevisionNumber() {
-          return new TextRevisionNumber(VcsBundle.message("local.version.title"));
-        }
-      };
+  @NotNull
+  public Change createChange(@NotNull final Project project) {
+    if (myChange == null) {
+      ContentRevision before = null;
+      ContentRevision after = null;
+      final File baseDir = new File(project.getBaseDir().getPath());
+      if (BEFORE_PATH != null) {
+        final FilePath file = VcsUtil.getFilePath(new File(baseDir, BEFORE_PATH), false);
+        before = new CurrentBinaryContentRevision(file) {
+          @Override
+          public byte @Nullable [] getBinaryContent() throws VcsException {
+            return ObjectUtils.chooseNotNull(super.getBinaryContent(), EMPTY_BYTE_ARRAY);
+          }
+
+          @NotNull
+          @Override
+          public VcsRevisionNumber getRevisionNumber() {
+            return new TextRevisionNumber(VcsBundle.message("local.version.title"));
+          }
+        };
+      }
+      if (AFTER_PATH != null) {
+        after = createBinaryContentRevision(project);
+      }
+      myChange = new Change(before, after);
     }
-    if (AFTER_PATH != null) {
-      after = createBinaryContentRevision(project);
-    }
-    return new Change(before, after);
+    return myChange;
   }
 
   @NotNull

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.intentions.style.parameterToEntry;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -13,7 +13,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
-import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.searches.MethodReferencesSearch;
 import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.PsiTreeUtil;
@@ -33,7 +32,7 @@ import org.jetbrains.plugins.groovy.lang.psi.GrNamedElement;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFileBase;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElementFactory;
 import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult;
-import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrClosureSignature;
+import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrSignature;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrField;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrParameterListOwner;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariable;
@@ -46,7 +45,6 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrRefere
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.params.GrParameter;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.params.GrParameterList;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrAccessorMethod;
-import org.jetbrains.plugins.groovy.lang.psi.impl.GrMapType;
 import org.jetbrains.plugins.groovy.lang.psi.impl.signatures.GrClosureSignatureUtil;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.typedef.members.GrMethodImpl;
 import org.jetbrains.plugins.groovy.lang.psi.util.GroovyPropertyUtils;
@@ -57,13 +55,16 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 
+import static org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil.createTypeByFQClassName;
+import static org.jetbrains.plugins.groovy.lang.psi.util.GroovyCommonClassNames.JAVA_UTIL_LINKED_HASH_MAP;
+
 /**
  * @author ilyas
  */
 public class ConvertParameterToMapEntryIntention extends Intention {
 
   private static final Logger LOG =
-    Logger.getInstance("#org.jetbrains.plugins.groovy.intentions.style.ConvertParameterToMapEntryIntention");
+    Logger.getInstance(ConvertParameterToMapEntryIntention.class);
   @NonNls private static final String CLOSURE_CAPTION = "closure";
   @NonNls private static final String CLOSURE_CAPTION_CAP = "Closure";
   @NonNls private static final String METHOD_CAPTION = "method";
@@ -211,7 +212,7 @@ public class ConvertParameterToMapEntryIntention extends Intention {
             }
           }
           if (refExpr == null) continue;
-          final GrClosureSignature signature = generateSignature(owner, refExpr);
+          final GrSignature signature = generateSignature(owner, refExpr);
           if (signature == null) continue;
           GrCall call;
           if (isExplicitGetterCall) {
@@ -321,7 +322,7 @@ public class ConvertParameterToMapEntryIntention extends Intention {
   }
 
   @Nullable
-  private static GrClosureSignature generateSignature(GrParameterListOwner owner, GrReferenceExpression refExpr) {
+  private static GrSignature generateSignature(GrParameterListOwner owner, GrReferenceExpression refExpr) {
     if (owner instanceof PsiMethod) {
       final GroovyResolveResult resolveResult = refExpr.advancedResolve();
       final PsiSubstitutor substitutor = resolveResult.getSubstitutor();
@@ -362,9 +363,9 @@ public class ConvertParameterToMapEntryIntention extends Intention {
   private static boolean firstOwnerParameterMustBeMap(final GrParameterListOwner owner) {
     final GrParameter first = getFirstParameter(owner);
     final PsiType type = first.getTypeGroovy();
-    final PsiClassType mapType = GrMapType.create(GlobalSearchScope.allScope(owner.getProject()));
+    if (type == null) return true;
     // First parameter may be used as map
-    return type == null || type.isConvertibleFrom(mapType);
+    return type.isConvertibleFrom(createTypeByFQClassName(JAVA_UTIL_LINKED_HASH_MAP, owner));
   }
 
   @NotNull
@@ -416,7 +417,7 @@ public class ConvertParameterToMapEntryIntention extends Intention {
       .message("find.method.ro.closure.usages.0", owner instanceof GrClosableBlock ? CLOSURE_CAPTION : METHOD_CAPTION), true) {
       @Override
       public void run(@NotNull final ProgressIndicator indicator) {
-        final Collection<PsiReference> references = Collections.synchronizedSet(new HashSet<PsiReference>());
+        final Collection<PsiReference> references = Collections.synchronizedSet(new HashSet<>());
         final Processor<PsiReference> consumer = psiReference -> {
           references.add(psiReference);
           return true;

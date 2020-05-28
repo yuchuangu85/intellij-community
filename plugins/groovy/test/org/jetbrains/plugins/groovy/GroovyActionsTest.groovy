@@ -2,13 +2,13 @@
 package org.jetbrains.plugins.groovy
 
 import com.intellij.openapi.actionSystem.IdeActions
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import org.jetbrains.plugins.groovy.util.TestUtils
 
 /**
  * @author peter
  */
-class GroovyActionsTest extends LightCodeInsightFixtureTestCase {
+class GroovyActionsTest extends LightJavaCodeInsightFixtureTestCase {
 
   final String basePath = TestUtils.testDataPath + 'groovy/actions/'
 
@@ -157,7 +157,7 @@ this.allOptions = [:];
   }
 
   void "test hippie completion in groovydoc"() {
-    myFixture.configureByText 'a.groovy', '''
+    def text = '''
 class A {
 
   /** long<caret>
@@ -166,10 +166,11 @@ class A {
   void example() {}
 }
 '''
+    myFixture.configureByText 'a.groovy', text
     performEditorAction(IdeActions.ACTION_HIPPIE_COMPLETION)
     assert myFixture.editor.document.text.contains('** longName\n')
     performEditorAction(IdeActions.ACTION_HIPPIE_COMPLETION)
-    assert myFixture.editor.document.text.contains('** longName\n')
+    myFixture.checkResult(text)
   }
 
   void "test hippie completion with hyphenated match"() {

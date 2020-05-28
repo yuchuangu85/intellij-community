@@ -71,7 +71,7 @@ public class HtmlPolicy extends XmlFormattingPolicy {
     }
   }
 
-  private PsiElement findFirstNonEmptyChild(final XmlTag parentTag) {
+  protected PsiElement findFirstNonEmptyChild(final XmlTag parentTag) {
     PsiElement result = parentTag.getFirstChild();
     while (result != null && result.getTextLength() == 0) {
       result = result.getNextSibling();
@@ -120,9 +120,15 @@ public class HtmlPolicy extends XmlFormattingPolicy {
   }
 
   protected boolean checkName(XmlTag tag, String option) {
+    return checkName(tag, option, true);
+  }
+
+  protected boolean checkName(XmlTag tag, String option, boolean ignoreCase) {
     if (option == null) return false;
     for (String name : getTagNames(option)) {
-      if (name.trim().equalsIgnoreCase(tag.getName())) return true;
+      String optionName = name.trim();
+      String tagName = tag.getName();
+      if (ignoreCase ? optionName.equalsIgnoreCase(tagName) : optionName.equals(tagName)) return true;
     }
     return false;
   }

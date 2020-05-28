@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.psi.search;
 
 import com.intellij.JavaTestUtil;
@@ -13,14 +13,14 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.PsiSearchHelper;
 import com.intellij.testFramework.IdeaTestUtil;
-import com.intellij.testFramework.PsiTestCase;
+import com.intellij.testFramework.JavaPsiTestCase;
 import com.intellij.testFramework.PsiTestUtil;
-import com.intellij.util.containers.IntArrayList;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class PlainTextUsagesTest extends PsiTestCase {
+public class PlainTextUsagesTest extends JavaPsiTestCase {
   @Override
   protected void setUp() throws Exception {
     super.setUp();
@@ -77,11 +77,11 @@ public class PlainTextUsagesTest extends PsiTestCase {
     }
 
     for (int i = 0; i < starts.length; i++) {
-      assertEquals("starts[" + i + "]", starts[i], startsList.get(i));
+      assertEquals("starts[" + i + "]", starts[i], startsList.getInt(i));
     }
 
     for (int i = 0; i < ends.length; i++) {
-      assertEquals("ends[" + i + "]", ends[i], endsList.get(i));
+      assertEquals("ends[" + i + "]", ends[i], endsList.getInt(i));
     }
   }
 }

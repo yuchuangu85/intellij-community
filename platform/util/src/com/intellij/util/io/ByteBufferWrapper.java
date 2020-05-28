@@ -17,17 +17,17 @@ package com.intellij.util.io;
 
 import org.jetbrains.annotations.Nullable;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Path;
 
 public abstract class ByteBufferWrapper {
-  protected final File myFile;
+  protected final Path myFile;
   protected final long myPosition;
   protected final long myLength;
   protected volatile boolean myDirty;
 
-  protected ByteBufferWrapper(final File file, final long offset, final long length) {
+  protected ByteBufferWrapper(Path file, final long offset, final long length) {
     myFile = file;
     myPosition = offset;
     myLength = length;
@@ -46,32 +46,16 @@ public abstract class ByteBufferWrapper {
 
   public abstract ByteBuffer getBuffer() throws IOException;
 
-  public abstract void unmap();
-
   public abstract void flush();
 
-  public void dispose() {
-    unmap();
-  }
+  public abstract void release();
 
-  public static ByteBufferWrapper readWrite(final File file, final int offset, final int length) {
+  public static ByteBufferWrapper readWriteDirect(Path file, final long offset, final int length) {
     return new ReadWriteDirectBufferWrapper(file, offset, length);
-  }
-
-  public static ByteBufferWrapper readWriteDirect(final File file, final long offset, final int length) {
-    return new ReadWriteDirectBufferWrapper(file, offset, length);
-  }
-
-  public static ByteBufferWrapper readOnly(final File file, final int offset) {
-    return new ReadOnlyMappedBufferWrapper(file, offset);
   }
 
   @Override
   public String toString() {
     return "Buffer for " + myFile + ", offset:" + myPosition + ", size: " + myLength;
-  }
-
-  public int allocationSize() {
-    return (int)myLength;
   }
 }

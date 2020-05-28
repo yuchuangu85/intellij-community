@@ -34,8 +34,8 @@ abstract class TwosideTextDiffProviderBase extends TextDiffProviderBase implemen
   protected TwosideTextDiffProviderBase(@NotNull TextDiffSettings settings,
                                         @NotNull Runnable rediff,
                                         @NotNull Disposable disposable,
-                                        @NotNull IgnorePolicy[] ignorePolicies,
-                                        @NotNull HighlightPolicy[] highlightPolicies) {
+                                        IgnorePolicy @NotNull [] ignorePolicies,
+                                        HighlightPolicy @NotNull [] highlightPolicies) {
     super(settings, rediff, disposable, ignorePolicies, highlightPolicies);
   }
 
@@ -88,10 +88,8 @@ abstract class TwosideTextDiffProviderBase extends TextDiffProviderBase implemen
     boolean trimFragments = ignorePolicy.isShouldTrimChunks();
 
     indicator.checkCanceled();
-    return ContainerUtil.map(fragments, rangeFragments -> {
-      return ComparisonManager.getInstance().processBlocks(rangeFragments, text1, text2,
-                                                           policy, squashFragments, trimFragments);
-    });
+    return ContainerUtil.map(fragments, rangeFragments -> ComparisonManager.getInstance().processBlocks(rangeFragments, text1, text2,
+                                                                                                      policy, squashFragments, trimFragments));
   }
 
   @NotNull
@@ -99,7 +97,7 @@ abstract class TwosideTextDiffProviderBase extends TextDiffProviderBase implemen
                                                         @NotNull CharSequence text2,
                                                         @NotNull LineOffsets lineOffsets1,
                                                         @NotNull LineOffsets lineOffsets2,
-                                                        @Nullable List<Range> linesRanges,
+                                                        @Nullable List<? extends Range> linesRanges,
                                                         @NotNull IgnorePolicy ignorePolicy,
                                                         @NotNull HighlightPolicy highlightPolicy,
                                                         @NotNull ProgressIndicator indicator);

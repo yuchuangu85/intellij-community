@@ -40,14 +40,16 @@ public class SuppressNonInspectionsTest extends LightQuickFixParameterizedTestCa
     enableInspectionTool(new UnusedDeclarationInspection());
   }
 
-  @NotNull
   @Override
-  protected LocalInspectionTool[] configureLocalInspectionTools() {
+  protected LocalInspectionTool @NotNull [] configureLocalInspectionTools() {
+    DeprecationInspection deprecationInspection = new DeprecationInspection();
+    deprecationInspection.IGNORE_IN_SAME_OUTERMOST_CLASS = false;
+
     return new LocalInspectionTool[]{
       new RedundantThrowsDeclarationLocalInspection(),
       new SillyAssignmentInspection(),
       new AccessStaticViaInstance(),
-      new DeprecationInspection(),
+      deprecationInspection,
       new JavaDocReferenceInspection(),
       new UncheckedWarningLocalInspection()
     };

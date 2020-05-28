@@ -16,12 +16,11 @@
 package com.siyeh.ig.numeric;
 
 import com.intellij.codeInsight.Nullability;
+import com.intellij.codeInspection.CommonQuickFixBundle;
 import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.codeInspection.dataFlow.NullabilityUtil;
 import com.intellij.openapi.project.Project;
-import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
-import com.intellij.psi.PsiExpressionStatement;
 import com.intellij.psi.PsiMethodCallExpression;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.siyeh.InspectionGadgetsBundle;
@@ -39,12 +38,6 @@ public class BigDecimalEqualsInspection extends BaseInspection {
 
   @Override
   @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("big.decimal.equals.display.name");
-  }
-
-  @Override
-  @NotNull
   protected String buildErrorString(Object... infos) {
     return InspectionGadgetsBundle.message("big.decimal.equals.problem.descriptor");
   }
@@ -58,7 +51,7 @@ public class BigDecimalEqualsInspection extends BaseInspection {
     @Override
     @NotNull
     public String getFamilyName() {
-      return InspectionGadgetsBundle.message("big.decimal.equals.replace.quickfix");
+      return CommonQuickFixBundle.message("fix.replace.with.x", "compareTo()==0");
     }
 
     @Override
@@ -93,8 +86,7 @@ public class BigDecimalEqualsInspection extends BaseInspection {
       PsiExpression right = check.getRight();
       if (!ExpressionUtils.hasType(left, "java.math.BigDecimal")) return;
       if (!ExpressionUtils.hasType(right, "java.math.BigDecimal")) return;
-      final PsiElement context = expression.getParent();
-      if (context instanceof PsiExpressionStatement) {
+      if (ExpressionUtils.isVoidContext(expression)) {
         //cheesy, but necessary, because otherwise the quickfix will
         // produce uncompilable code (out of merely incorrect code).
         return;

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.jps.cmdline;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -33,18 +19,21 @@ import org.jetbrains.jps.TimingLog;
 import org.jetbrains.jps.api.*;
 import org.jetbrains.jps.builders.*;
 import org.jetbrains.jps.builders.java.JavaModuleBuildTargetType;
-import org.jetbrains.jps.builders.java.dependencyView.Callbacks;
-import org.jetbrains.jps.incremental.*;
+import org.jetbrains.jps.incremental.MessageHandler;
+import org.jetbrains.jps.incremental.RebuildRequestedException;
+import org.jetbrains.jps.incremental.TargetTypeRegistry;
+import org.jetbrains.jps.incremental.Utils;
 import org.jetbrains.jps.incremental.fs.BuildFSState;
 import org.jetbrains.jps.incremental.messages.*;
-import org.jetbrains.jps.incremental.storage.Timestamps;
+import org.jetbrains.jps.incremental.storage.StampsStorage;
 import org.jetbrains.jps.model.module.JpsModule;
 import org.jetbrains.jps.model.serialization.CannotLoadJpsModelException;
+import org.jetbrains.jps.service.JpsServiceManager;
 import org.jetbrains.jps.service.SharedThreadPool;
 
 import java.io.*;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.Executor;
 
 import static org.jetbrains.jps.api.CmdlineRemoteProto.Message.ControllerMessage.ParametersMessage.TargetTypeBuildScope;
 
@@ -52,13 +41,13 @@ import static org.jetbrains.jps.api.CmdlineRemoteProto.Message.ControllerMessage
 * @author Eugene Zhuravlev
 */
 final class BuildSession implements Runnable, CanceledStatus {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.jps.cmdline.BuildSession");
+  private static final Logger LOG = Logger.getInstance(BuildSession.class);
   public static final String FS_STATE_FILE = "fs_state.dat";
   private static final Boolean REPORT_BUILD_STATISTICS = Boolean.valueOf(System.getProperty(GlobalOptions.REPORT_BUILD_STATISTICS, "false"));
-  
+
   private final UUID mySessionId;
   private final Channel myChannel;
-  @Nullable 
+  @Nullable
   private final PreloadedData myPreloadedData;
   private volatile boolean myCanceled;
   private final String myProjectPath;
@@ -68,8 +57,6 @@ final class BuildSession implements Runnable, CanceledStatus {
   private final EventsProcessor myEventsProcessor = new EventsProcessor();
   private volatile long myLastEventOrdinal;
   private volatile ProjectDescriptor myProjectDescriptor;
-  private final Map<Pair<String, String>, ConstantSearchFuture> mySearchTasks = Collections.synchronizedMap(new HashMap<Pair<String, String>, ConstantSearchFuture>());
-  private final ConstantSearch myConstantSearch = new ConstantSearch();
   @NotNull
   private final BuildRunner myBuildRunner;
   private final boolean myForceModelLoading;
@@ -103,6 +90,7 @@ final class BuildSession implements Runnable, CanceledStatus {
         projectDescriptor.release();
         preloaded.setProjectDescriptor(null);
       }
+      JpsServiceManager.getInstance().getExtensions(PreloadedDataExtension.class).forEach(ext-> ext.discardPreloadedData(preloaded));
     }
     else {
       myPreloadedData = preloaded;
@@ -117,6 +105,10 @@ final class BuildSession implements Runnable, CanceledStatus {
     myBuildRunner.setFilePaths(filePaths);
     myBuildRunner.setBuilderParams(builderParams);
     myForceModelLoading =  Boolean.parseBoolean(builderParams.get(BuildParametersKeys.FORCE_MODEL_LOADING));
+
+    if (myPreloadedData != null) {
+      JpsServiceManager.getInstance().getExtensions(PreloadedDataExtension.class).forEach(ext-> ext.buildSessionInitialized(myPreloadedData));
+    }
   }
 
   @Override
@@ -215,7 +207,7 @@ final class BuildSession implements Runnable, CanceledStatus {
       myBuildRunner.setForceCleanCaches(true);
     }
     final ProjectDescriptor preloadedProject = myPreloadedData != null? myPreloadedData.getProjectDescriptor() : null;
-    final DataInputStream fsStateStream = 
+    final DataInputStream fsStateStream =
       storageFilesAbsent || preloadedProject != null || myLoadUnloadedModules || myInitialFSDelta == null /*this will force FS rescan*/? null : createFSDataStream(dataStorageRoot, myInitialFSDelta.getOrdinal());
 
     if (fsStateStream != null || myPreloadedData != null) {
@@ -261,7 +253,7 @@ final class BuildSession implements Runnable, CanceledStatus {
         }
         if (myInitialFSDelta == null || myPreloadedData.getFsEventOrdinal() + 1L != myInitialFSDelta.getOrdinal()) {
           // FS rescan was forced
-          fsState.clearAll(); 
+          fsState.clearAll();
         }
         else {
           // apply events to already loaded state
@@ -291,7 +283,7 @@ final class BuildSession implements Runnable, CanceledStatus {
         }
       }
       myProjectDescriptor = pd;
-      
+
       myLastEventOrdinal = myInitialFSDelta != null? myInitialFSDelta.getOrdinal() : 0L;
 
       // free memory
@@ -299,7 +291,7 @@ final class BuildSession implements Runnable, CanceledStatus {
       // ensure events from controller are processed after FSState initialization
       myEventsProcessor.startProcessing();
 
-      myBuildRunner.runBuild(pd, cs, myConstantSearch, msgHandler, myBuildType, myScopes, false);
+      myBuildRunner.runBuild(pd, cs, null, msgHandler, myBuildType, myScopes, false);
       TimingLog.LOG.debug("Build finished");
     }
     finally {
@@ -364,45 +356,25 @@ final class BuildSession implements Runnable, CanceledStatus {
     });
   }
 
-  public void processConstantSearchResult(CmdlineRemoteProto.Message.ControllerMessage.ConstantSearchResult result) {
-    final ConstantSearchFuture future = mySearchTasks.remove(Pair.create(result.getOwnerClassName(), result.getFieldName()));
-    if (future != null) {
-      if (result.getIsSuccess()) {
-        final List<String> paths = result.getPathList();
-        final List<File> files = new ArrayList<>(paths.size());
-        for (String path : paths) {
-          files.add(new File(path));
-        }
-        future.setResult(files);
-        LOG.debug("Constant search result: " + files.size() + " affected files found");
-      }
-      else {
-        future.setDone();
-        LOG.debug("Constant search failed");
-      }
-    }
-  }
-
   private static void applyFSEvent(ProjectDescriptor pd, @Nullable CmdlineRemoteProto.Message.ControllerMessage.FSEvent event, final boolean saveEventStamp) throws IOException {
     if (event == null) {
       return;
     }
 
-    final Timestamps timestamps = pd.timestamps.getStorage();
+    final StampsStorage<? extends StampsStorage.Stamp> stampsStorage = pd.getProjectStamps().getStampStorage();
     boolean cacheCleared = false;
     for (String deleted : event.getDeletedPathsList()) {
       final File file = new File(deleted);
       Collection<BuildRootDescriptor> descriptor = pd.getBuildRootIndex().findAllParentDescriptors(file, null, null);
       if (!descriptor.isEmpty()) {
         if (!cacheCleared) {
-          pd.getFSCache().clear();
           cacheCleared = true;
         }
         if (LOG.isDebugEnabled()) {
           LOG.debug("Applying deleted path from fs event: " + file.getPath());
         }
         for (BuildRootDescriptor rootDescriptor : descriptor) {
-          pd.fsState.registerDeleted(null, rootDescriptor.getTarget(), file, timestamps);
+          pd.fsState.registerDeleted(null, rootDescriptor.getTarget(), file, stampsStorage);
         }
       }
       else {
@@ -418,23 +390,18 @@ final class BuildSession implements Runnable, CanceledStatus {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Applying dirty path from fs event: " + changed);
         }
-        long fileStamp = -1L;
         for (BuildRootDescriptor descriptor : descriptors) {
           if (!descriptor.isGenerated()) { // ignore generates sources as they are processed at the time of generation
-            if (fileStamp == -1L) {
-              fileStamp = FSOperations.lastModified(file); // lazy init
-            }
-            final long stamp = timestamps.getStamp(file, descriptor.getTarget());
-            if (stamp != fileStamp) {
+            StampsStorage.Stamp stamp = stampsStorage.getPreviousStamp(file, descriptor.getTarget());
+            if (stampsStorage.isDirtyStamp(stamp, file)) {
               if (!cacheCleared) {
-                pd.getFSCache().clear();
                 cacheCleared = true;
               }
-              pd.fsState.markDirty(null, file, descriptor, timestamps, saveEventStamp);
+              pd.fsState.markDirty(null, file, descriptor, stampsStorage, saveEventStamp);
             }
             else {
               if (LOG.isDebugEnabled()) {
-                LOG.debug(descriptor.getTarget() + ": Path considered up-to-date: " + changed + "; timestamp= " + stamp);
+                LOG.debug(descriptor.getTarget() + ": Path considered up-to-date: " + changed + "; stamp= " + stamp);
               }
             }
           }
@@ -509,6 +476,13 @@ final class BuildSession implements Runnable, CanceledStatus {
   }
 
   private static void saveOnDisk(BufferExposingByteArrayOutputStream bytes, final File file) throws IOException {
+    try (FileOutputStream fos = writeOrCreate(file)) {
+      fos.write(bytes.getInternalBuffer(), 0, bytes.size());
+    }
+  }
+
+  @NotNull
+  private static FileOutputStream writeOrCreate(@NotNull File file) throws FileNotFoundException {
     FileOutputStream fos = null;
     try {
       //noinspection IOResourceOpenedButNotSafelyClosed
@@ -521,12 +495,7 @@ final class BuildSession implements Runnable, CanceledStatus {
     if (fos == null) {
       fos = new FileOutputStream(file);
     }
-    try {
-      fos.write(bytes.getInternalBuffer(), 0, bytes.size());
-    }
-    finally {
-      fos.close();
-    }
+    return fos;
   }
 
   @Nullable
@@ -646,65 +615,6 @@ final class BuildSession implements Runnable, CanceledStatus {
 
     public void execute(@NotNull Runnable task) {
       myExecutorService.execute(task);
-    }
-  }
-
-  private class ConstantSearch implements Callbacks.ConstantAffectionResolver {
-
-    private ConstantSearch() {
-    }
-
-    @Nullable @Override
-    public Future<Callbacks.ConstantAffection> request(String ownerClassName, String fieldName, int accessFlags, boolean fieldRemoved, boolean accessChanged) {
-      final CmdlineRemoteProto.Message.BuilderMessage.ConstantSearchTask.Builder task =
-        CmdlineRemoteProto.Message.BuilderMessage.ConstantSearchTask.newBuilder();
-      task.setOwnerClassName(ownerClassName);
-      task.setFieldName(fieldName);
-      task.setAccessFlags(accessFlags);
-      task.setIsAccessChanged(accessChanged);
-      task.setIsFieldRemoved(fieldRemoved);
-      final ConstantSearchFuture future = new ConstantSearchFuture(BuildSession.this);
-      final ConstantSearchFuture prev = mySearchTasks.put(Pair.create(ownerClassName, fieldName), future);
-      if (prev != null) {
-        prev.setDone();
-      }
-      myChannel.writeAndFlush(CmdlineProtoUtil.toMessage(mySessionId, CmdlineRemoteProto.Message.BuilderMessage.newBuilder()
-        .setType(CmdlineRemoteProto.Message.BuilderMessage.Type.CONSTANT_SEARCH_TASK).setConstantSearchTask(task.build()).build()));
-      return future;
-    }
-  }
-
-  private static class ConstantSearchFuture extends BasicFuture<Callbacks.ConstantAffection> {
-    private volatile Callbacks.ConstantAffection myResult = Callbacks.ConstantAffection.EMPTY;
-    private final CanceledStatus myCanceledStatus;
-
-    private ConstantSearchFuture(CanceledStatus canceledStatus) {
-      myCanceledStatus = canceledStatus;
-    }
-
-    public void setResult(final Collection<File> affectedFiles) {
-      myResult = new Callbacks.ConstantAffection(affectedFiles);
-      setDone();
-    }
-
-    @Override
-    public Callbacks.ConstantAffection get() throws InterruptedException, ExecutionException {
-      while (true) {
-        try {
-          return get(300L, TimeUnit.MILLISECONDS);
-        }
-        catch (TimeoutException ignored) {
-        }
-        if (myCanceledStatus.isCanceled()) {
-          return myResult;
-        }
-      }
-    }
-
-    @Override
-    public Callbacks.ConstantAffection get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
-      super.get(timeout, unit);
-      return myResult;
     }
   }
 }

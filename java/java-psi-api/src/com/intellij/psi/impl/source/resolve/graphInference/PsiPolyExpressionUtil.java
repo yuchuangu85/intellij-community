@@ -3,13 +3,13 @@ package com.intellij.psi.impl.source.resolve.graphInference;
 
 import com.intellij.psi.*;
 import com.intellij.psi.infos.MethodCandidateInfo;
+import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.util.PsiTypesUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
-import org.jetbrains.annotations.NotNull;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -18,6 +18,7 @@ public class PsiPolyExpressionUtil {
     return !(expression instanceof PsiFunctionalExpression) &&
            !(expression instanceof PsiParenthesizedExpression) &&
            !(expression instanceof PsiConditionalExpression) &&
+           !(expression instanceof PsiSwitchExpression) &&
            !(expression instanceof PsiCallExpression);
   }
 
@@ -32,17 +33,16 @@ public class PsiPolyExpressionUtil {
       return isInAssignmentOrInvocationContext(expression);
     }
     if (expression instanceof PsiMethodCallExpression) {
-      return isMethodCallPolyExpression(expression, expr -> {
-        final MethodCandidateInfo.CurrentCandidateProperties candidateProperties =
-          MethodCandidateInfo.getCurrentMethod(((PsiMethodCallExpression)expr).getArgumentList());
-        return candidateProperties != null ? candidateProperties.getMethod() : ((PsiMethodCallExpression)expr).resolveMethod();
-      });
+      return isMethodCallPolyExpression(expression, expr -> ((PsiMethodCallExpression)expr).resolveMethod());
     }
     if (expression instanceof PsiConditionalExpression) {
       final ConditionalKind conditionalKind = isBooleanOrNumeric(expression);
       if (conditionalKind == null) {
         return isInAssignmentOrInvocationContext(expression);
       }
+    }
+    if (expression instanceof PsiSwitchExpression) {
+      return isInAssignmentOrInvocationContext(expression);
     }
     return false;
   }
@@ -60,11 +60,11 @@ public class PsiPolyExpressionUtil {
   }
 
   private static boolean isMethodCallTypeDependsOnInference(PsiExpression expression, PsiMethod method) {
-    final Set<PsiTypeParameter> typeParameters = new HashSet<>(Arrays.asList(method.getTypeParameters()));
+    final Set<PsiTypeParameter> typeParameters = ContainerUtil.set(method.getTypeParameters());
     if (!typeParameters.isEmpty()) {
       final PsiType returnType = method.getReturnType();
       if (returnType != null) {
-        return mentionsTypeParameters(returnType, typeParameters);
+        return PsiTypesUtil.mentionsTypeParameters(returnType, typeParameters);
       }
     }
     else if (method.isConstructor() && expression instanceof PsiNewExpression && PsiDiamondType.hasDiamond((PsiNewExpression)expression)) {
@@ -73,54 +73,27 @@ public class PsiPolyExpressionUtil {
     return false;
   }
 
-  public static Boolean mentionsTypeParameters(@Nullable PsiType returnType, final Set<PsiTypeParameter> typeParameters) {
-    if (returnType == null) return false;
-    return returnType.accept(new PsiTypeVisitor<Boolean>() {
-      @NotNull
-      @Override
-      public Boolean visitType(PsiType type) {
-        return false;
-      }
-
-      @Nullable
-      @Override
-      public Boolean visitWildcardType(PsiWildcardType wildcardType) {
-        final PsiType bound = wildcardType.getBound();
-        if (bound != null) {
-          return bound.accept(this);
-        }
-        return false;
-      }
-
-      @NotNull
-      @Override
-      public Boolean visitClassType(PsiClassType classType) {
-        PsiClassType.ClassResolveResult result = classType.resolveGenerics();
-        final PsiClass psiClass = result.getElement();
-        if (psiClass != null) {
-          PsiSubstitutor substitutor = result.getSubstitutor();
-          for (PsiTypeParameter parameter : PsiUtil.typeParametersIterable(psiClass)) {
-            PsiType type = substitutor.substitute(parameter);
-            if (type != null && type.accept(this)) return true;
-          }
-        }
-        return psiClass instanceof PsiTypeParameter && typeParameters.contains(psiClass);
-      }
-
-      @Nullable
-      @Override
-      public Boolean visitArrayType(PsiArrayType arrayType) {
-        return arrayType.getComponentType().accept(this);
-      }
-    });
-  }
-
   private static boolean isInAssignmentOrInvocationContext(PsiExpression expr) {
     final PsiElement context = PsiUtil.skipParenthesizedExprUp(expr.getParent());
     return context instanceof PsiExpressionList ||
            context instanceof PsiArrayInitializerExpression ||
            context instanceof PsiConditionalExpression && (expr instanceof PsiCallExpression || isPolyExpression((PsiExpression)context)) ||
+           isSwitchExpressionAssignmentOrInvocationContext(expr) ||
            isAssignmentContext(expr, context);
+  }
+
+  private static boolean isSwitchExpressionAssignmentOrInvocationContext(PsiExpression expr) {
+    PsiElement parent = PsiUtil.skipParenthesizedExprUp(expr).getParent();
+    if (parent instanceof PsiExpressionStatement && parent.getParent() instanceof PsiSwitchLabeledRuleStatement || 
+        parent instanceof PsiBreakStatement || 
+        parent instanceof PsiYieldStatement ||
+        parent instanceof PsiThrowStatement) {
+      PsiSwitchExpression switchExpression = PsiTreeUtil.getParentOfType(expr, PsiSwitchExpression.class, true, PsiMember.class, PsiLambdaExpression.class);
+      return switchExpression  != null &&
+             PsiUtil.getSwitchResultExpressions(switchExpression).contains(expr) &&
+             isInAssignmentOrInvocationContext(switchExpression);
+    }
+    return false;
   }
 
   private static boolean isAssignmentContext(PsiExpression expr, PsiElement context) {
@@ -159,6 +132,9 @@ public class PsiPolyExpressionUtil {
       final PsiMethod method = ((PsiMethodCallExpression)arg).resolveMethod();
       return method != null && method.getReturnType() instanceof PsiPrimitiveType;
     }
+    else if (arg instanceof PsiSwitchExpression) {
+      return isBooleanOrNumeric(arg) != null;
+    }
     else {
       assert false : arg;
       return false;
@@ -182,9 +158,15 @@ public class PsiPolyExpressionUtil {
       type = expr.getType();
     }
     else if (expr instanceof PsiMethodCallExpression) {
-      final PsiMethod method = ((PsiMethodCallExpression)expr).resolveMethod();
+      final JavaResolveResult result = ((PsiMethodCallExpression)expr).getMethodExpression().advancedResolve(false);
+      final PsiMethod method = (PsiMethod)result.getElement();
       if (method != null) {
         type = method.getReturnType();
+        if (result instanceof MethodCandidateInfo) {
+          // Spec: Note that, for a generic method, this is the type before instantiating the method's type arguments.
+          PsiSubstitutor substitutor = ((MethodCandidateInfo)result).getSubstitutorFromQualifier();
+          type = substitutor.substitute(type);
+        }
       }
     }
 
@@ -201,6 +183,25 @@ public class PsiPolyExpressionUtil {
       if (thenKind == elseKind || elseKind == ConditionalKind.NULL) return thenKind;
       if (thenKind == ConditionalKind.NULL) return elseKind;
     }
+    
+    if (expr instanceof PsiSwitchExpression) {
+      ConditionalKind switchKind = null;
+      for (PsiExpression resultExpression : PsiUtil.getSwitchResultExpressions((PsiSwitchExpression)expr)) {
+        ConditionalKind resultKind = isBooleanOrNumeric(resultExpression);
+        if (resultKind == null) return null;
+        if (switchKind == null) {
+          switchKind = resultKind;
+        }
+        else if (switchKind != resultKind) {
+          if (switchKind == ConditionalKind.NULL) {
+            switchKind = resultKind;
+          }
+          else if (resultKind != ConditionalKind.NULL) {
+            return null;
+          }
+        }
+      }
+    }
     return null;
   }
 
@@ -210,18 +211,8 @@ public class PsiPolyExpressionUtil {
       return ConditionalKind.NULL;
     }
 
-    final PsiClass psiClass = PsiUtil.resolveClassInClassTypeOnly(type);
     if (TypeConversionUtil.isNumericType(type)) return ConditionalKind.NUMERIC;
     if (TypeConversionUtil.isBooleanType(type)) return ConditionalKind.BOOLEAN;
-
-    if (psiClass instanceof PsiTypeParameter) {
-      for (PsiClassType classType : psiClass.getExtendsListTypes()) {
-        final ConditionalKind kind = isBooleanOrNumericType(classType);
-        if (kind != null) {
-          return kind;
-        }
-      }
-    }
     return null;
   }
 }

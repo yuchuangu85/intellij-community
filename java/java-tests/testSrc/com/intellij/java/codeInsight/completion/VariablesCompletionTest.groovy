@@ -19,7 +19,9 @@ import com.intellij.JavaTestUtil
 import com.intellij.codeInsight.completion.LightFixtureCompletionTestCase
 import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.psi.codeStyle.JavaCodeStyleSettings
+import groovy.transform.CompileStatic
 
+@CompileStatic
 class VariablesCompletionTest extends LightFixtureCompletionTestCase {
   public static final String FILE_PREFIX = "/codeInsight/completion/variables/"
 
@@ -186,6 +188,21 @@ class Foo {
     myFixture.assertPreferredCompletionItems 0, 'field'
   }
 
+  void "test suggest fields in their modification inside constructor"() {
+    myFixture.configureByText(JavaFileType.INSTANCE, """
+class Foo {
+  int total;
+
+  Foo() {
+    this.total = 0;
+    this.total += this.to<caret>tal
+  }
+}
+""")
+    complete()
+    myFixture.assertPreferredCompletionItems 0, 'total'
+  }
+
   void testInitializerMatters() throws Exception {
     myFixture.configureByText(JavaFileType.INSTANCE, "class Foo {{ String f<caret>x = getFoo(); }; String getFoo() {}; }")
     complete()
@@ -292,6 +309,57 @@ class FooFoo {
 '''
     myFixture.completeBasic()
     myFixture.assertPreferredCompletionItems 0, 'materialQualities', 'materialQualities1', 'qualities', 'materialQualityIterable', 'qualityIterable', 'iterable'
+  }
+
+  void "test suggest parameter name from javadoc"() {
+    myFixture.configureByText 'a.java', '''
+class FooFoo {
+    /**
+    * @param existing
+    * @param abc
+    * @param def
+    * @param <T>
+    */
+    void set(int existing, int <caret>) {}
+}
+'''
+    myFixture.completeBasic()
+    assert myFixture.lookupElementStrings as Set == ['abc', 'def', 'i'] as Set
+  }
+
+  void "test no name suggestions when the type is unresolved because it is actually a mistyped keyword"() {
+    myFixture.configureByText 'a.java', '''
+class C {
+    { 
+      retur Fi<caret>x
+    }
+    }
+'''
+    assert myFixture.completeBasic()?.size() == 0
+  }
+
+  void "test suggest variable name when the type is unresolved but does not seem a mistyped keyword"() {
+    myFixture.configureByText 'a.java', '''
+class C {
+    { 
+      UndefinedType <caret>
+    }
+    }
+'''
+    myFixture.completeBasic()
+    myFixture.assertPreferredCompletionItems 0, 'undefinedType', 'type'
+  }
+
+  void "test class-based suggestions for exception type"() {
+    myFixture.configureByText 'a.java', '''
+class C {
+    { 
+      try { } catch (java.io.IOException <caret>)
+    }
+}
+'''
+    myFixture.completeBasic()
+    myFixture.assertPreferredCompletionItems 0, 'e', 'ioException', 'exception'
   }
 
 }

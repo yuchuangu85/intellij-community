@@ -1,20 +1,7 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vfs.impl.jar;
 
+import com.intellij.ide.IdeBundle;
 import com.intellij.notification.NotificationGroup;
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.application.ApplicationManager;
@@ -29,36 +16,29 @@ import com.intellij.openapi.util.io.FileAttributes;
 import com.intellij.openapi.util.io.FileSystemUtil;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.JarFileSystem;
-import com.intellij.openapi.vfs.VfsBundle;
 import com.intellij.openapi.vfs.impl.ZipHandler;
 import com.intellij.openapi.vfs.newvfs.persistent.FSRecords;
 import com.intellij.openapi.vfs.newvfs.persistent.FlushingDaemon;
 import com.intellij.util.CommonProcessors;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.util.io.*;
+import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.*;
 import java.io.DataOutputStream;
+import java.io.*;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.attribute.FileTime;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.zip.ZipFile;
 
-import static com.intellij.util.ObjectUtils.assertNotNull;
 import static com.intellij.util.containers.ContainerUtil.newTroveSet;
 
-/**
- * @author max
- */
 public class JarHandler extends ZipHandler {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.vfs.impl.jar.JarHandler");
+  private static final Logger LOG = Logger.getInstance(JarHandler.class);
 
   private static final String JARS_FOLDER = "jars";
   private static final int FS_TIME_RESOLUTION = 2000;
@@ -119,7 +99,7 @@ public class JarHandler extends ZipHandler {
       return originalFile;
     }
 
-    if (FSRecords.weHaveContentHashes) {
+    if (FSRecords.WE_HAVE_CONTENT_HASHES) {
       return getMirrorWithContentHash(originalFile, originalAttributes);
     }
 
@@ -154,7 +134,7 @@ public class JarHandler extends ZipHandler {
 
         try (DataOutputStream os = new DataOutputStream(new FileOutputStream(tempJarFile));
              FileInputStream is = new FileInputStream(originalFile)) {
-          sha1 = MessageDigest.getInstance("SHA1");
+          sha1 = DigestUtil.sha1();
           sha1.update(String.valueOf(originalAttributes.length).getBytes(Charset.defaultCharset()));
           sha1.update((byte)0);
 
@@ -175,10 +155,6 @@ public class JarHandler extends ZipHandler {
         reportIOErrorWithJars(originalFile, target, ex);
         return originalFile;
       }
-      catch (NoSuchAlgorithmException ex) {
-        LOG.error(ex);
-        return originalFile; // should never happen for sha1
-      }
 
       String mirrorName = getSnapshotName(originalFile.getName(), sha1.digest());
       mirrorFile = new File(jarDir, mirrorName);
@@ -187,7 +163,7 @@ public class JarHandler extends ZipHandler {
       if (mirrorFileAttributes == null) {
         try {
           FileUtil.rename(tempJarFile, mirrorFile);
-          FileUtil.setLastModified(mirrorFile, originalAttributes.lastModified);
+          Files.setLastModifiedTime(mirrorFile.toPath(), FileTime.fromMillis(originalAttributes.lastModified));
         }
         catch (IOException ex) {
           reportIOErrorWithJars(originalFile, mirrorFile, ex);
@@ -203,7 +179,6 @@ public class JarHandler extends ZipHandler {
       return mirrorFile;
     }
     catch (IOException ex) {
-      CacheLibraryInfo.ourCachedLibraryInfo.markCorrupted();
       reportIOErrorWithJars(originalFile, mirrorFile != null ? mirrorFile : new File(jarDir, originalFile.getName()), ex);
       return originalFile;
     }
@@ -237,7 +212,7 @@ public class JarHandler extends ZipHandler {
     ProgressIndicator progress = ProgressManager.getInstance().getProgressIndicator();
     if (progress != null) {
       progress.pushState();
-      progress.setText(VfsBundle.message("jar.copy.progress", original.getPath()));
+      progress.setText(IdeBundle.message("jar.copy.progress", original.getPath()));
       progress.setFraction(0);
     }
 
@@ -293,7 +268,7 @@ public class JarHandler extends ZipHandler {
       PersistentHashMap<String, CacheLibraryInfo> info = null;
       for (int i = 0; i < 2; ++i) {
         try {
-          info = new PersistentHashMap<>(snapshotInfoFile, EnumeratorStringDescriptor.INSTANCE, new DataExternalizer<CacheLibraryInfo>() {
+          info = new PersistentHashMap<>(snapshotInfoFile.toPath(), EnumeratorStringDescriptor.INSTANCE, new DataExternalizer<CacheLibraryInfo>() {
             @Override
             public void save(@NotNull DataOutput out, CacheLibraryInfo value) throws IOException {
               IOUtil.writeUTF(out, value.mySnapshotPath);
@@ -355,28 +330,29 @@ public class JarHandler extends ZipHandler {
       // - Collect librarySnapshot -> projectLibraryPaths and existing projectLibraryPath -> librarySnapshot
       // - Remove all projectLibraryPaths that doesn't exist from persistent mapping
       // - Remove jar library snapshots that have no projectLibraryPath
-      Set<String> availableLibrarySnapshots = newTroveSet(assertNotNull(snapshotInfoFile.getParentFile().list(new FilenameFilter() {
-        @Override
-        public boolean accept(File dir, String name) {
-          int lastDotPosition = name.lastIndexOf('.');
-          if (lastDotPosition == -1) return false;
-          String extension = name.substring(lastDotPosition + 1);
-          if (extension.length() != 40 || !consistsOfHexLetters(extension)) return false;
-          return true;
-        }
-
-        private boolean consistsOfHexLetters(String extension) {
-          for (int i = 0; i < extension.length(); ++i) {
-            if (Character.digit(extension.charAt(i), 16) == -1) return false;
+      Set<String> availableLibrarySnapshots = newTroveSet(
+        Objects.requireNonNull(snapshotInfoFile.getParentFile().list(new FilenameFilter() {
+          @Override
+          public boolean accept(File dir, String name) {
+            int lastDotPosition = name.lastIndexOf('.');
+            if (lastDotPosition == -1) return false;
+            String extension = name.substring(lastDotPosition + 1);
+            if (extension.length() != 40 || !consistsOfHexLetters(extension)) return false;
+            return true;
           }
-          return true;
-        }
-      })));
 
-      final List<String> invalidLibraryFilePaths = ContainerUtil.newArrayList();
-      final List<String> allLibraryFilePaths = ContainerUtil.newArrayList();
+          private boolean consistsOfHexLetters(String extension) {
+            for (int i = 0; i < extension.length(); ++i) {
+              if (Character.digit(extension.charAt(i), 16) == -1) return false;
+            }
+            return true;
+          }
+        })));
+
+      final List<String> invalidLibraryFilePaths = new ArrayList<>();
+      final List<String> allLibraryFilePaths = new ArrayList<>();
       MultiMap<String, String> jarSnapshotFileToLibraryFilePaths = new MultiMap<>();
-      Set<String> validLibraryFilePathToJarSnapshotFilePaths = newTroveSet();
+      Set<String> validLibraryFilePathToJarSnapshotFilePaths = new THashSet<>();
 
       info.processKeys(new CommonProcessors.CollectProcessor<>(allLibraryFilePaths));
       for (String filePath:allLibraryFilePaths) {
@@ -458,7 +434,7 @@ public class JarHandler extends ZipHandler {
     @NotNull
     @Override
     protected NotificationGroup compute() {
-      return NotificationGroup.balloonGroup(VfsBundle.message("jar.copy.error.title"));
+      return NotificationGroup.balloonGroup("Error Copying File", IdeBundle.message("jar.copy.error.title"));
     }
   };
 
@@ -468,7 +444,7 @@ public class JarHandler extends ZipHandler {
     String path = original.getPath();
     myFileSystem.setNoCopyJarForPath(path);
 
-    String message = VfsBundle.message("jar.copy.error.message", path, target.getPath(), e.getMessage());
+    String message = IdeBundle.message("jar.copy.error.message", path, target.getPath(), e.getMessage());
     ERROR_COPY_NOTIFICATION.getValue().createNotification(message, NotificationType.ERROR).notify(null);
   }
 }

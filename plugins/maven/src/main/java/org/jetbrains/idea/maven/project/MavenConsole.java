@@ -18,14 +18,39 @@ package org.jetbrains.idea.maven.project;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.ImmutableBiMap;
 import com.intellij.execution.process.ProcessHandler;
+import com.intellij.execution.process.ProcessListener;
+import com.intellij.openapi.application.Application;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.registry.Registry;
+import com.intellij.util.ExceptionUtil;
+import com.intellij.util.SmartList;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.idea.maven.buildtool.BuildViewMavenConsole;
 import org.jetbrains.idea.maven.execution.MavenExecutionOptions;
 import org.jetbrains.idea.maven.execution.RunnerBundle;
 import org.jetbrains.idea.maven.server.MavenServerConsole;
 
 import java.text.MessageFormat;
+import java.util.List;
 
 public abstract class MavenConsole {
   private static final String LINE_SEPARATOR = System.getProperty("line.separator");
+  private final List<ProcessListener> myProcessListeners = new SmartList<>();
+  private final List<AttachProcessListener> myAttachProcessListeners = new SmartList<>();
+
+
+  public static MavenConsole createGuiMavenConsole(@NotNull Project project,
+                                                   @NotNull String title,
+                                                   @NotNull String workingDir,
+                                                   @NotNull String toolWindowId,
+                                                   long executionId) {
+    if (Registry.is("maven.build.tool.window.enabled")) {
+      return new BuildViewMavenConsole(project, title, workingDir, toolWindowId, executionId);
+    } else {
+      return new MavenConsoleImpl(title, project);
+    }
+  }
 
   public enum OutputType {
     NORMAL, SYSTEM, ERROR
@@ -42,6 +67,10 @@ public abstract class MavenConsole {
     "FATAL_ERROR", MavenServerConsole.LEVEL_FATAL
   );
 
+  public interface AttachProcessListener {
+    void beforeProcessAttached(@NotNull ProcessHandler processHandler);
+  }
+
   public MavenConsole(MavenExecutionOptions.LoggingLevel outputLevel, boolean printStackTrace) {
     myOutputLevel = outputLevel.getLevel();
   }
@@ -50,9 +79,18 @@ public abstract class MavenConsole {
     return level < myOutputLevel;
   }
 
+  public void addProcessListener(ProcessListener processListener) {
+    myProcessListeners.add(processListener);
+  }
+
+  public void addAttachProcessListener(AttachProcessListener listener) {
+    myAttachProcessListeners.add(listener);
+  }
+
   public boolean isSuppressed(String line) {
     return isSuppressed(getLevel(line));
   }
+
 
   public abstract boolean canPause();
 
@@ -68,7 +106,14 @@ public abstract class MavenConsole {
     isFinished = true;
   }
 
-  public abstract void attachToProcess(ProcessHandler processHandler);
+  public void attachToProcess(ProcessHandler processHandler) {
+    for (ProcessListener listener : myProcessListeners) {
+      processHandler.addProcessListener(listener);
+    }
+    for (AttachProcessListener listener : myAttachProcessListeners) {
+      listener.beforeProcessAttached(processHandler);
+    }
+  }
 
   public void printException(Throwable throwable) {
     systemMessage(MavenServerConsole.LEVEL_ERROR, RunnerBundle.message("embedded.build.failed"), throwable);
@@ -96,10 +141,12 @@ public abstract class MavenConsole {
     }
 
     if (throwable != null) {
-      String message = throwable.getMessage();
-      if (message != null) {
-        message += LINE_SEPARATOR;
-        doPrint(LINE_SEPARATOR + composeLine(MavenServerConsole.LEVEL_ERROR, message), type);
+      String throwableText = ExceptionUtil.getThrowableText(throwable);
+      if (Registry.is("maven.print.import.stacktraces") || ApplicationManager.getApplication().isUnitTestMode()) {
+        doPrint(LINE_SEPARATOR + composeLine(MavenServerConsole.LEVEL_ERROR, throwableText), type);
+      }
+      else {
+        doPrint(LINE_SEPARATOR + composeLine(MavenServerConsole.LEVEL_ERROR, throwable.getMessage()), type);
       }
     }
   }

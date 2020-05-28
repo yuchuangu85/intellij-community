@@ -1,11 +1,12 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.util.registry;
 
-import com.intellij.util.ConcurrencyUtil;
+import com.intellij.diagnostic.LoadingState;
+import gnu.trove.THashMap;
 import org.jdom.Element;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.PropertyKey;
 
 import java.awt.*;
 import java.lang.ref.Reference;
@@ -16,68 +17,87 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * Provides a UI to configure internal settings of the IDE. Plugins can provide their own registry keys using the
- * {@code <registryKey>} extension point (see com.intellij.openapi.util.registry.RegistryKeyBean for more details).
+ * Provides a UI to configure internal settings of the IDE.
+ * <p>
+ * Plugins can provide their own registry keys using the
+ * {@code com.intellij.registryKey} extension point (see {@link RegistryKeyBean} for more details).
  */
-public class Registry  {
+public final class Registry  {
   private static Reference<ResourceBundle> ourBundle;
 
   @NonNls
   public static final String REGISTRY_BUNDLE = "misc.registry";
 
-  private final Map<String, String> myUserProperties = new LinkedHashMap<String, String>();
-  private final ConcurrentMap<String, RegistryValue> myValues = new ConcurrentHashMap<String, RegistryValue>();
-  private final Map<String, RegistryKeyDescriptor> myContributedKeys = new HashMap<String, RegistryKeyDescriptor>();
+  private final Map<String, String> myUserProperties = new LinkedHashMap<>();
+  private final ConcurrentMap<String, RegistryValue> myValues = new ConcurrentHashMap<>();
+  private final THashMap<String, RegistryKeyDescriptor> myContributedKeys = new THashMap<>();
 
   private static final Registry ourInstance = new Registry();
+  private volatile boolean myLoaded = false;
 
   @NotNull
-  public static RegistryValue get(@PropertyKey(resourceBundle = REGISTRY_BUNDLE) @NotNull String key) {
-    final Registry registry = getInstance();
-
-    RegistryValue value = registry.myValues.get(key);
-    if (value == null) {
-      value = ConcurrencyUtil.cacheOrGet(registry.myValues, key, new RegistryValue(registry, key, registry.myContributedKeys.get(key)));
-    }
-    return value;
+  public static RegistryValue get(@NonNls @NotNull String key) {
+    return getInstance().doGet(key);
   }
 
-  public static boolean is(@PropertyKey(resourceBundle = REGISTRY_BUNDLE) @NotNull String key) throws MissingResourceException {
+  @NotNull
+  private RegistryValue doGet(@NonNls @NotNull String key) {
+    RegistryValue value = myValues.get(key);
+    if (value != null) {
+      return value;
+    }
+
+    value = new RegistryValue(this, key, myContributedKeys.get(key));
+    RegistryValue prev = myValues.putIfAbsent(key, value);
+    return prev == null ? value : prev;
+  }
+
+  public static boolean is(@NonNls @NotNull String key) throws MissingResourceException {
     return get(key).asBoolean();
   }
 
-  public static boolean is(@PropertyKey(resourceBundle = REGISTRY_BUNDLE) @NotNull String key, boolean defaultValue) {
+  public static boolean is(@NonNls @NotNull String key, boolean defaultValue) {
+    if (!LoadingState.COMPONENTS_REGISTERED.isOccurred()) {
+      LoadingState.LAF_INITIALIZED.checkOccurred();
+      return defaultValue;
+    }
+
     try {
       return get(key).asBoolean();
     }
-    catch (MissingResourceException ex) {
+    catch (MissingResourceException ignore) {
       return defaultValue;
     }
   }
 
-  public static int intValue(@PropertyKey(resourceBundle = REGISTRY_BUNDLE) @NotNull String key) throws MissingResourceException {
+  public static int intValue(@NonNls @NotNull String key) throws MissingResourceException {
     return get(key).asInteger();
   }
 
-  public static int intValue(@PropertyKey(resourceBundle = REGISTRY_BUNDLE) @NotNull String key, int defaultValue) {
+  public static int intValue(@NonNls @NotNull String key, int defaultValue) {
+    if (!LoadingState.COMPONENTS_REGISTERED.isOccurred()) {
+      LoadingState.LAF_INITIALIZED.checkOccurred();
+      return defaultValue;
+    }
+
     try {
       return get(key).asInteger();
     }
-    catch (MissingResourceException ex) {
+    catch (MissingResourceException ignore) {
       return defaultValue;
     }
   }
 
-  public static double doubleValue(@PropertyKey(resourceBundle = REGISTRY_BUNDLE) @NotNull String key) throws MissingResourceException {
+  public static double doubleValue(@NonNls @NotNull String key) throws MissingResourceException {
     return get(key).asDouble();
   }
 
   @NotNull
-  public static String stringValue(@PropertyKey(resourceBundle = REGISTRY_BUNDLE) @NotNull String key) throws MissingResourceException {
+  public static String stringValue(@NonNls @NotNull String key) throws MissingResourceException {
     return get(key).asString();
   }
 
-  public static Color getColor(@PropertyKey(resourceBundle = REGISTRY_BUNDLE) @NotNull String key, Color defaultValue) throws MissingResourceException {
+  public static Color getColor(@NonNls @NotNull String key, Color defaultValue) throws MissingResourceException {
     return get(key).asColor(defaultValue);
   }
 
@@ -86,13 +106,12 @@ public class Registry  {
     ResourceBundle bundle = com.intellij.reference.SoftReference.dereference(ourBundle);
     if (bundle == null) {
       bundle = ResourceBundle.getBundle(REGISTRY_BUNDLE);
-      ourBundle = new SoftReference<ResourceBundle>(bundle);
+      ourBundle = new SoftReference<>(bundle);
     }
     return bundle;
   }
 
-
-  public String getBundleValue(@NotNull String key, boolean mustExist) throws MissingResourceException {
+  public String getBundleValue(@NonNls @NotNull String key, boolean mustExist) throws MissingResourceException {
     if (myContributedKeys.containsKey(key)) {
       return myContributedKeys.get(key).getDefaultValue();
     }
@@ -111,6 +130,7 @@ public class Registry  {
 
   @NotNull
   public static Registry getInstance() {
+    LoadingState.COMPONENTS_REGISTERED.checkOccurred();
     return ourInstance;
   }
 
@@ -126,23 +146,35 @@ public class Registry  {
     return state;
   }
 
+  @ApiStatus.Internal
   public void loadState(@NotNull Element state) {
     myUserProperties.clear();
     for (Element eachEntry : state.getChildren("entry")) {
       String key = eachEntry.getAttributeValue("key");
       String value = eachEntry.getAttributeValue("value");
       if (key != null && value != null) {
-        RegistryValue registryValue = get(key);
-        if (registryValue.isChangedFromDefault(value)) {
+        RegistryValue registryValue = doGet(key);
+        if (registryValue.isChangedFromDefault(value, this)) {
           myUserProperties.put(key, value);
           registryValue.resetCache();
         }
       }
     }
+    markAsLoaded();
+  }
+
+  @ApiStatus.Internal
+  public void markAsLoaded() {
+    myLoaded = true;
+  }
+
+  public boolean isLoaded() {
+    return myLoaded;
   }
 
   @NotNull
-  Map<String, String> getUserProperties() {
+  @ApiStatus.Internal
+  public Map<String, String> getUserProperties() {
     return myUserProperties;
   }
 
@@ -151,11 +183,11 @@ public class Registry  {
     final ResourceBundle bundle = getBundle();
     final Enumeration<String> keys = bundle.getKeys();
 
-    List<RegistryValue> result = new ArrayList<RegistryValue>();
+    List<RegistryValue> result = new ArrayList<>();
 
     Map<String, RegistryKeyDescriptor> contributedKeys = getInstance().myContributedKeys;
     while (keys.hasMoreElements()) {
-      final String each = keys.nextElement();
+      @NonNls final String each = keys.nextElement();
       if (each.endsWith(".description") || each.endsWith(".restartRequired") || contributedKeys.containsKey(each)) continue;
       result.add(get(each));
     }
@@ -168,8 +200,7 @@ public class Registry  {
   }
 
   void restoreDefaults() {
-    Map<String, String> old = new HashMap<String, String>();
-    old.putAll(myUserProperties);
+    Map<String, String> old = new HashMap<>(myUserProperties);
     for (String each : old.keySet()) {
       try {
         get(each).resetToDefault();
@@ -185,7 +216,7 @@ public class Registry  {
     return myUserProperties.isEmpty();
   }
 
-  boolean isRestartNeeded() {
+  public boolean isRestartNeeded() {
     return isRestartNeeded(myUserProperties);
   }
 
@@ -198,15 +229,25 @@ public class Registry  {
     return false;
   }
 
-  public static void addKey(@NotNull String key, @NotNull String description, @NotNull String defaultValue, boolean restartRequired) {
-    getInstance().myContributedKeys.put(key, new RegistryKeyDescriptor(key, description, defaultValue, restartRequired));
+  public static synchronized void addKeys(@NotNull List<RegistryKeyDescriptor> descriptors) {
+    // getInstance must be not used here - phase COMPONENT_REGISTERED is not yet completed
+    THashMap<String, RegistryKeyDescriptor> map = ourInstance.myContributedKeys;
+    map.ensureCapacity(descriptors.size());
+    for (RegistryKeyDescriptor descriptor : descriptors) {
+      map.put(descriptor.getName(), descriptor);
+    }
   }
 
-  public static void addKey(@NotNull String key, @NotNull String description, int defaultValue, boolean restartRequired) {
-    addKey(key, description, Integer.toString(defaultValue), restartRequired);
+  public static synchronized void removeKey(@NonNls @NotNull String key) {
+    ourInstance.myContributedKeys.remove(key);
+    ourInstance.myValues.remove(key);
   }
 
-  public static void addKey(@NotNull String key, @NotNull String description, boolean defaultValue, boolean restartRequired) {
-    addKey(key, description, Boolean.toString(defaultValue), restartRequired);
+  /**
+   * @deprecated Use extension point `com.intellij.registryKey`.
+   */
+  @Deprecated
+  public static synchronized void addKey(@NonNls @NotNull String key, @NotNull String description, int defaultValue, boolean restartRequired) {
+    getInstance().myContributedKeys.put(key, new RegistryKeyDescriptor(key, description, Integer.toString(defaultValue), restartRequired, null));
   }
 }

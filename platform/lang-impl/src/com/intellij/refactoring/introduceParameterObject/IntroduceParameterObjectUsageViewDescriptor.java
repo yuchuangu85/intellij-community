@@ -1,13 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.introduceParameterObject;
 
 import com.intellij.psi.PsiElement;
 import com.intellij.refactoring.RefactoringBundle;
-import com.intellij.refactoring.ui.UsageViewDescriptorAdapter;
 import com.intellij.usageView.UsageViewBundle;
+import com.intellij.usageView.UsageViewDescriptor;
 import org.jetbrains.annotations.NotNull;
 
-public class IntroduceParameterObjectUsageViewDescriptor extends UsageViewDescriptorAdapter {
+public class IntroduceParameterObjectUsageViewDescriptor implements UsageViewDescriptor {
 
   private final PsiElement method;
 
@@ -16,8 +16,7 @@ public class IntroduceParameterObjectUsageViewDescriptor extends UsageViewDescri
   }
 
   @Override
-  @NotNull
-  public PsiElement[] getElements() {
+  public PsiElement @NotNull [] getElements() {
     return new PsiElement[]{method};
   }
 
@@ -26,6 +25,7 @@ public class IntroduceParameterObjectUsageViewDescriptor extends UsageViewDescri
     return RefactoringBundle.message("refactoring.introduce.parameter.object.method.whose.parameters.are.to.wrapped");
   }
 
+  @NotNull
   @Override
   public String getCodeReferencesText(int usagesCount, int filesCount) {
     return RefactoringBundle.message("refactoring.introduce.parameter.object.references.to.be.modified") +

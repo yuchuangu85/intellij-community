@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2015 JetBrains s.r.o.
+ * Copyright 2000-2018 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.impl.ResolveScopeManager;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.testFramework.ModuleTestCase;
+import com.intellij.testFramework.JavaModuleTestCase;
 import com.intellij.testFramework.PsiTestUtil;
 import com.intellij.testFramework.fixtures.impl.LightTempDirTestFixtureImpl;
 import com.intellij.util.PathsList;
@@ -39,7 +39,7 @@ import java.util.Collections;
 /**
  * @author yole
  */
-public class ModuleScopesTest extends ModuleTestCase {
+public class ModuleScopesTest extends JavaModuleTestCase {
   private LightTempDirTestFixtureImpl myFixture;
 
   @Override
@@ -51,9 +51,16 @@ public class ModuleScopesTest extends ModuleTestCase {
 
   @Override
   protected void tearDown() throws Exception {
-    myFixture.tearDown();
-    myFixture = null;
-    super.tearDown();
+    try {
+      myFixture.tearDown();
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
+    finally {
+      myFixture = null;
+      super.tearDown();
+    }
   }
 
   public void testBasics() throws Exception {

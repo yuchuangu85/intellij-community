@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.editor.actionSystem;
 
 import com.intellij.lang.injection.InjectedLanguageManager;
@@ -20,7 +6,6 @@ import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.editor.Caret;
-import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiDocumentManager;
@@ -28,14 +13,13 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Interface for actions activated by keystrokes in the editor.
- * Implementations should override
- * {@link #execute(Editor, Caret, DataContext)}
- * .
+ * Interface for actions invoked in the editor.
+ * Implementations should override {@link #doExecute(Editor, Caret, DataContext)}.
  * <p>
  * Two types of handlers are supported: the ones which are executed once, and the ones which are executed for each caret. The latter can be
  * created using {@link EditorActionHandler#EditorActionHandler(boolean)} constructor.
  *
+ * @see EditorWriteActionHandler
  * @see EditorActionManager#setActionHandler(String, EditorActionHandler)
  */
 public abstract class EditorActionHandler {
@@ -93,23 +77,27 @@ public abstract class EditorActionHandler {
     DataContext caretContext = context == null ? null : new CaretSpecificDataContext(context, hostCaret);
     Editor editor = hostCaret.getEditor();
     if (myWorksInInjected && caretContext != null) {
-      Project project = editor.getProject();
-      if (project != null) {
-        Document document = editor.getDocument();
-        if (InjectedLanguageManager.getInstance(project).mightHaveInjectedFragmentAtOffset(document, hostCaret.getOffset())) {
-          PsiDocumentManager.getInstance(project).commitDocument(document);
-          DataContext injectedCaretContext = AnActionEvent.getInjectedDataContext(caretContext);
-          Caret injectedCaret = CommonDataKeys.CARET.getData(injectedCaretContext);
-          if (injectedCaret != null && injectedCaret != hostCaret && isEnabledForCaret(injectedCaret.getEditor(), injectedCaret, injectedCaretContext)) {
-            task.perform(injectedCaret, injectedCaretContext);
-            return;
-          }
-        }
+      DataContext injectedCaretContext = AnActionEvent.getInjectedDataContext(caretContext);
+      Caret injectedCaret = CommonDataKeys.CARET.getData(injectedCaretContext);
+      if (injectedCaret != null && injectedCaret != hostCaret && isEnabledForCaret(injectedCaret.getEditor(), injectedCaret, injectedCaretContext)) {
+        task.perform(injectedCaret, injectedCaretContext);
+        return;
       }
     }
     if (isEnabledForCaret(editor, hostCaret, caretContext)) {
       task.perform(hostCaret, caretContext);
     }
+  }
+
+  static boolean ensureInjectionUpToDate(@NotNull Caret hostCaret) {
+    Editor editor = hostCaret.getEditor();
+    Project project = editor.getProject();
+    if (project != null &&
+        InjectedLanguageManager.getInstance(project).mightHaveInjectedFragmentAtOffset(editor.getDocument(), hostCaret.getOffset())) {
+      PsiDocumentManager.getInstance(project).commitDocument(editor.getDocument());
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -121,7 +109,6 @@ public abstract class EditorActionHandler {
     }
     inCheck = true;
     try {
-      //noinspection deprecation
       return isEnabled(editor, dataContext);
     }
     finally {
@@ -134,7 +121,6 @@ public abstract class EditorActionHandler {
    * if {@code caret} is not {@code null}, checks whether it's enabled for specified caret.
    */
   public final boolean isEnabled(@NotNull Editor editor, @Nullable Caret caret, DataContext dataContext) {
-    //noinspection deprecation
     return caret == null ? isEnabled(editor, dataContext) : isEnabledForCaret(editor, caret, dataContext);
   }
   /**
@@ -171,7 +157,6 @@ public abstract class EditorActionHandler {
     }
     try {
       inExecution = true;
-      //noinspection deprecation
       execute(editor, dataContext);
     }
     finally {
@@ -200,11 +185,15 @@ public abstract class EditorActionHandler {
       hostEditor = editor;
     }
     if (contextCaret == null && runForAllCarets()) {
-      hostEditor.getCaretModel().runForEachCaret(caret -> doIfEnabled(caret, dataContext,
-                                                                      (caret1, dc) -> doExecute(caret1.getEditor(), caret1, dc)));
+      hostEditor.getCaretModel().runForEachCaret(caret -> {
+        if (myWorksInInjected) ensureInjectionUpToDate(caret);
+        doIfEnabled(caret, dataContext,
+                    (caret1, dc) -> doExecute(caret1.getEditor(), caret1, dc));
+      });
     }
     else {
       if (contextCaret == null) {
+        if (myWorksInInjected) ensureInjectionUpToDate(hostEditor.getCaretModel().getCurrentCaret());
         doIfEnabled(hostEditor.getCaretModel().getCurrentCaret(), dataContext,
                     (caret, dc) -> doExecute(caret.getEditor(), null, dc));
       }
@@ -221,6 +210,10 @@ public abstract class EditorActionHandler {
   public DocCommandGroupId getCommandGroupId(@NotNull Editor editor) {
     // by default avoid merging two consequential commands, and, in the same time, pass along the Document
     return DocCommandGroupId.noneGroupId(editor.getDocument());
+  }
+
+  <T> @Nullable T getHandlerOfType(@NotNull Class<T> type) {
+    return type.isInstance(this) ? type.cast(this) : null;
   }
 
   @FunctionalInterface

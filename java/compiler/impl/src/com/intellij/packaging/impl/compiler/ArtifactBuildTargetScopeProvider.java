@@ -25,16 +25,9 @@ import com.intellij.packaging.artifacts.Artifact;
 import com.intellij.packaging.impl.artifacts.ArtifactUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.jps.api.CmdlineRemoteProto.Message.ControllerMessage.ParametersMessage.TargetTypeBuildScope;
-import org.jetbrains.jps.incremental.artifacts.ArtifactBuildTargetType;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
-/**
- * @author nik
- */
 public class ArtifactBuildTargetScopeProvider extends BuildTargetScopeProvider {
   @NotNull
   @Override
@@ -48,14 +41,8 @@ public class ArtifactBuildTargetScopeProvider extends BuildTargetScopeProvider {
         CompileScopeUtil.addScopesForModules(modules, Collections.emptyList(), scopes, forceBuild);
       }
       if (!artifacts.isEmpty()) {
-        TargetTypeBuildScope.Builder builder = TargetTypeBuildScope.newBuilder()
-                                                                   .setTypeId(ArtifactBuildTargetType.INSTANCE.getTypeId())
-                                                                   .setForceBuild(
-                                                                     forceBuild || ArtifactCompileScope.isArtifactRebuildForced(baseScope));
-        for (Artifact artifact : artifacts) {
-          builder.addTargetId(artifact.getName());
-        }
-        scopes.add(builder.build());
+        boolean forceBuildForArtifacts = forceBuild || ArtifactCompileScope.isArtifactRebuildForced(baseScope);
+        scopes.add(CompileScopeUtil.createScopeForArtifacts(artifacts, forceBuildForArtifacts));
       }
     });
 

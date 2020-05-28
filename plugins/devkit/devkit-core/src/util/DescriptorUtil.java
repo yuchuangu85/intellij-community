@@ -1,27 +1,15 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.devkit.util;
 
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.module.Module;
+import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.ReadonlyStatusHandler;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.xml.XmlFile;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.util.IncorrectOperationException;
@@ -29,6 +17,7 @@ import com.intellij.util.ThrowableRunnable;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xml.DomFileElement;
 import com.intellij.util.xml.DomManager;
+import com.intellij.util.xml.DomService;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.devkit.DevKitBundle;
@@ -37,6 +26,7 @@ import org.jetbrains.idea.devkit.dom.IdeaPlugin;
 import org.jetbrains.idea.devkit.module.PluginModuleType;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -71,36 +61,20 @@ public final class DescriptorUtil {
     VirtualFile file = pluginXml.getVirtualFile();
 
     final ReadonlyStatusHandler readonlyStatusHandler = ReadonlyStatusHandler.getInstance(project);
-    final ReadonlyStatusHandler.OperationStatus status = readonlyStatusHandler.ensureFilesWritable(file);
+    final ReadonlyStatusHandler.OperationStatus status = readonlyStatusHandler.ensureFilesWritable(Collections.singletonList(file));
     if (status.hasReadonlyFiles()) {
       throw new IncorrectOperationException(DevKitBundle.message("error.plugin.xml.readonly", status.getReadonlyFiles()[0]));
     }
   }
 
-  @Nullable
-  public static String getPluginId(Module plugin) {
-    assert PluginModuleType.isOfType(plugin);
-
-    final XmlFile pluginXml = PluginModuleType.getPluginXml(plugin);
-    if (pluginXml == null) {
-      return null;
-    }
-    final DomFileElement<IdeaPlugin> ideaPlugin = getIdeaPlugin(pluginXml);
-    if (ideaPlugin == null) {
-      return null;
-    }
-
-    return ideaPlugin.getRootElement().getPluginId();
-  }
-
   public static List<String> getPluginAndOptionalDependenciesIds(Module module) {
     XmlFile xml = PluginModuleType.getPluginXml(module);
     if (xml == null) return Collections.emptyList();
-    DomFileElement<IdeaPlugin> plugin = getIdeaPlugin(xml);
+    IdeaPlugin plugin = getIdeaPlugin(xml);
     if (plugin == null) return Collections.emptyList();
     List<String> result = new ArrayList<>();
-    ContainerUtil.addIfNotNull(result, plugin.getRootElement().getPluginId());
-    for (Dependency dependency : plugin.getRootElement().getDependencies()) {
+    ContainerUtil.addIfNotNull(result, plugin.getPluginId());
+    for (Dependency dependency : plugin.getDependencies()) {
       if (Boolean.TRUE.equals(dependency.getOptional().getValue())) {
         ContainerUtil.addIfNotNull(result, dependency.getRawText());
       }
@@ -110,11 +84,26 @@ public final class DescriptorUtil {
 
   public static boolean isPluginXml(@Nullable PsiFile file) {
     if (!(file instanceof XmlFile)) return false;
-    return getIdeaPlugin((XmlFile)file) != null;
+    return getIdeaPluginFileElement((XmlFile)file) != null;
   }
 
   @Nullable
-  public static DomFileElement<IdeaPlugin> getIdeaPlugin(@NotNull XmlFile file) {
+  public static DomFileElement<IdeaPlugin> getIdeaPluginFileElement(@NotNull XmlFile file) {
     return DomManager.getDomManager(file.getProject()).getFileElement(file, IdeaPlugin.class);
   }
+
+  @Nullable
+  public static IdeaPlugin getIdeaPlugin(@NotNull XmlFile file) {
+    final DomFileElement<IdeaPlugin> plugin = getIdeaPluginFileElement(file);
+    return plugin != null ? plugin.getRootElement() : null;
+  }
+
+  @NotNull
+  public static Collection<IdeaPlugin> getPlugins(Project project, GlobalSearchScope scope) {
+    if (DumbService.isDumb(project)) return Collections.emptyList();
+
+    List<DomFileElement<IdeaPlugin>> files = DomService.getInstance().getFileElements(IdeaPlugin.class, project, scope);
+    return ContainerUtil.map(files, ideaPluginDomFileElement -> ideaPluginDomFileElement.getRootElement());
+  }
+
 }

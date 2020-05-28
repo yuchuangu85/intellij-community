@@ -1,24 +1,12 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.impl;
 
 import com.intellij.CommonBundle;
+import com.intellij.featureStatistics.fusCollectors.LifecycleUsageTriggerCollector;
 import com.intellij.ide.GeneralSettings;
 import com.intellij.ide.IdeBundle;
 import com.intellij.ide.RecentProjectsManager;
+import com.intellij.ide.actions.OpenFileAction;
 import com.intellij.ide.highlighter.ProjectFileType;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.application.ApplicationManager;
@@ -30,55 +18,72 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.project.ex.ProjectManagerEx;
+import com.intellij.openapi.startup.StartupManager;
 import com.intellij.openapi.ui.Messages;
-import com.intellij.openapi.util.InvalidDataException;
+import com.intellij.openapi.util.NullableLazyValue;
+import com.intellij.openapi.util.Ref;
+import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.*;
+import com.intellij.platform.CommandLineProjectOpenProcessor;
+import com.intellij.platform.PlatformProjectOpenProcessor;
 import com.intellij.project.ProjectKt;
 import com.intellij.projectImport.ProjectOpenProcessor;
 import com.intellij.ui.AppIcon;
+import com.intellij.ui.GuiUtils;
 import com.intellij.util.PathUtil;
 import com.intellij.util.PlatformUtils;
+import com.intellij.util.SmartList;
 import com.intellij.util.SystemProperties;
-import org.jdom.JDOMException;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.PropertyKey;
+import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.io.PathKt;
+import com.intellij.util.ui.FocusUtil;
+import org.jetbrains.annotations.*;
 
 import javax.swing.*;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Collections;
+import java.util.List;
 
-/**
- * @author Eugene Belyaev
- */
-public class ProjectUtil {
+public final class ProjectUtil {
   private static final Logger LOG = Logger.getInstance(ProjectUtil.class);
 
-  public static final String MODE_PROPERTY = "OpenOrAttachDialog.OpenMode";
-  public static final String MODE_ATTACH = "attach";
-  public static final String MODE_REPLACE = "replace";
-  public static final String MODE_NEW = "new";
+  private static final String MODE_PROPERTY = "OpenOrAttachDialog.OpenMode";
+  private static final String MODE_ATTACH = "attach";
+  private static final String MODE_REPLACE = "replace";
+  private static final String MODE_NEW = "new";
 
   private ProjectUtil() { }
 
-  public static void updateLastProjectLocation(final String projectFilePath) {
+  public static void updateLastProjectLocation(@NotNull String projectFilePath) {
     File lastProjectLocation = new File(projectFilePath);
     if (lastProjectLocation.isFile()) {
-      lastProjectLocation = lastProjectLocation.getParentFile(); // for directory-based project storage
+      // for directory-based project storage
+      lastProjectLocation = lastProjectLocation.getParentFile();
     }
-    if (lastProjectLocation == null) { // the immediate parent of the ipr file
+
+    if (lastProjectLocation == null) {
+      // the immediate parent of the ipr file
       return;
     }
-    lastProjectLocation = lastProjectLocation.getParentFile(); // the candidate directory to be saved
+
+    // the candidate directory to be saved
+    lastProjectLocation = lastProjectLocation.getParentFile();
     if (lastProjectLocation == null) {
       return;
     }
+
     String path = lastProjectLocation.getPath();
     try {
       path = FileUtil.resolveShortWindowsName(path);
@@ -90,11 +95,12 @@ public class ProjectUtil {
     RecentProjectsManager.getInstance().setLastProjectCreationLocation(PathUtil.toSystemIndependentName(path));
   }
 
-  /**
-   * @param project cannot be null
-   */
-  public static boolean closeAndDispose(@NotNull final Project project) {
+  public static boolean closeAndDispose(@NotNull Project project) {
     return ProjectManagerEx.getInstanceEx().closeAndDispose(project);
+  }
+
+  public static Project openOrImport(@NotNull Path path, Project projectToClose, boolean forceOpenInNewFrame) {
+    return openOrImport(path, new OpenProjectTask(forceOpenInNewFrame, projectToClose));
   }
 
   /**
@@ -102,110 +108,180 @@ public class ProjectUtil {
    * @param projectToClose      currently active project
    * @param forceOpenInNewFrame forces opening in new frame
    * @return project by path if the path was recognized as IDEA project file or one of the project formats supported by
-   *         installed importers (regardless of opening/import result)
-   *         null otherwise
+   * installed importers (regardless of opening/import result)
+   * null otherwise
    */
-  @Nullable
-  public static Project openOrImport(@NotNull String path, Project projectToClose, boolean forceOpenInNewFrame) {
-    VirtualFile virtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(path);
-    if (virtualFile == null) return null;
-    virtualFile.refresh(false, false);
-
-    Project existing = findAndFocusExistingProjectForPath(path);
-    if (existing != null) return existing;
-
-    ProjectOpenProcessor strong = ProjectOpenProcessor.getStrongImportProvider(virtualFile);
-    if (strong != null) {
-      return strong.doOpenProject(virtualFile, projectToClose, forceOpenInNewFrame);
-    }
-
-    if (ProjectKt.isValidProjectPath(path)) {
-      return openProject(path, projectToClose, forceOpenInNewFrame);
-    }
-
-    if (virtualFile.isDirectory()) {
-      for (VirtualFile child : virtualFile.getChildren()) {
-        final String childPath = child.getPath();
-        if (childPath.endsWith(ProjectFileType.DOT_DEFAULT_EXTENSION)) {
-          return openProject(childPath, projectToClose, forceOpenInNewFrame);
-        }
-      }
-    }
-
-    ProjectOpenProcessor provider = ProjectOpenProcessor.getImportProvider(virtualFile);
-    if (provider != null) {
-      final Project project = provider.doOpenProject(virtualFile, projectToClose, forceOpenInNewFrame);
-
-      if (project != null) {
-        ApplicationManager.getApplication().invokeLater(() -> {
-          if (!project.isDisposed()) {
-            final ToolWindow toolWindow = ToolWindowManager.getInstance(project).getToolWindow(ToolWindowId.PROJECT_VIEW);
-            if (toolWindow != null) {
-              toolWindow.activate(null);
-            }
-          }
-        }, ModalityState.NON_MODAL);
-      }
-
-      return project;
-    }
-
-    return null;
+  public static @Nullable Project openOrImport(@NotNull String path, Project projectToClose, boolean forceOpenInNewFrame) {
+    return openOrImport(Paths.get(path), new OpenProjectTask(forceOpenInNewFrame, projectToClose));
   }
 
-  @Nullable
-  public static Project openProject(final String path, @Nullable Project projectToClose, boolean forceOpenInNewFrame) {
-    File file = new File(path);
-    if (!file.exists()) {
-      Messages.showErrorDialog(IdeBundle.message("error.project.file.does.not.exist", path), CommonBundle.getErrorTitle());
+  public static @Nullable Project openOrImport(@NotNull Path file, @NotNull OpenProjectTask options) {
+    Project existing = findAndFocusExistingProjectForPath(file);
+    if (existing != null) {
+      return existing;
+    }
+
+    NullableLazyValue<VirtualFile> lazyVirtualFile = NullableLazyValue.createValue(() -> getFileAndRefresh(file));
+
+    for (ProjectOpenProcessor provider : ProjectOpenProcessor.EXTENSION_POINT_NAME.getIterable()) {
+      if (!provider.isStrongProjectInfoHolder()) {
+        continue;
+      }
+
+      // PlatformProjectOpenProcessor is not a strong project info holder, so, no need implement optimized case for PlatformProjectOpenProcessor  (VFS not required)
+      VirtualFile virtualFile = lazyVirtualFile.getValue();
+      if (virtualFile == null) {
+        return null;
+      }
+
+      if (provider.canOpenProject(virtualFile)) {
+        return chooseProcessorAndOpen(Collections.singletonList(provider), lazyVirtualFile, file, options);
+      }
+    }
+
+    if (isValidProjectPath(file)) {
+      return PlatformProjectOpenProcessor.openExistingProject(file, file, options);
+    }
+
+    if (options.checkDirectoryForFileBasedProjects && Files.isDirectory(file)) {
+      try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(file)) {
+        for (Path child : directoryStream) {
+          String childPath = child.toString();
+          if (childPath.endsWith(ProjectFileType.DOT_DEFAULT_EXTENSION)) {
+            return openProject(childPath, options.projectToClose, options.forceOpenInNewFrame);
+          }
+        }
+      }
+      catch (IOException ignore) {
+      }
+    }
+
+    List<ProjectOpenProcessor> processors = new SmartList<>();
+    ProjectOpenProcessor.EXTENSION_POINT_NAME.forEachExtensionSafe(processor -> {
+      if (processor instanceof PlatformProjectOpenProcessor) {
+        if (Files.isDirectory(file)) {
+          processors.add(processor);
+        }
+      }
+      else {
+        VirtualFile virtualFile = lazyVirtualFile.getValue();
+        if (virtualFile != null && processor.canOpenProject(virtualFile)) {
+          processors.add(processor);
+        }
+      }
+    });
+    if (processors.isEmpty()) {
       return null;
     }
 
-    if (file.isDirectory()) {
-      File dir = new File(file, Project.DIRECTORY_STORE_FOLDER);
-      if (!dir.exists()) {
-        String message = IdeBundle.message("error.project.file.does.not.exist", dir.getPath());
-        Messages.showErrorDialog(message, CommonBundle.getErrorTitle());
+    Project project = chooseProcessorAndOpen(processors, lazyVirtualFile, file, options);
+    if (project == null) {
+      return null;
+    }
+
+    StartupManager.getInstance(project).runAfterOpened(() -> {
+      GuiUtils.invokeLaterIfNeeded(() -> {
+        ToolWindow toolWindow = ToolWindowManager.getInstance(project).getToolWindow(ToolWindowId.PROJECT_VIEW);
+        if (toolWindow != null) {
+          toolWindow.activate(null);
+        }
+      }, ModalityState.NON_MODAL, project.getDisposed());
+    });
+    return project;
+  }
+
+  private static @Nullable Project chooseProcessorAndOpen(@NotNull List<ProjectOpenProcessor> processors,
+                                                          @NotNull NullableLazyValue<VirtualFile> virtualFileRef,
+                                                          @NotNull Path file,
+                                                          @NotNull OpenProjectTask options) {
+    if (processors.size() == 1 && processors.get(0) instanceof PlatformProjectOpenProcessor) {
+      options.isNewProject = !isValidProjectPath(file);
+      Project project = PlatformProjectOpenProcessor.doOpenProject(file, options);
+      if (project != null) {
+        project.putUserData(PlatformProjectOpenProcessor.PROJECT_OPENED_BY_PLATFORM_PROCESSOR, Boolean.TRUE);
+      }
+      return project;
+    }
+
+    VirtualFile virtualFile = virtualFileRef.getValue();
+    if (virtualFile == null) {
+      return null;
+    }
+
+    Ref<Project> result = new Ref<>();
+    ApplicationManager.getApplication().invokeAndWait(() -> {
+      ProjectOpenProcessor processor = selectOpenProcessor(processors, virtualFile);
+      if (processor != null) {
+        Project project = processor.doOpenProject(virtualFile, options.projectToClose, options.forceOpenInNewFrame);
+        if (project != null && processor instanceof PlatformProjectOpenProcessor) {
+          project.putUserData(PlatformProjectOpenProcessor.PROJECT_OPENED_BY_PLATFORM_PROCESSOR, Boolean.TRUE);
+        }
+
+        result.set(project);
+      }
+    });
+    return result.get();
+  }
+
+  @CalledInAwt
+  private static @Nullable ProjectOpenProcessor selectOpenProcessor(@NotNull List<ProjectOpenProcessor> processors, @NotNull VirtualFile file) {
+    if (processors.size() == 1) {
+      return processors.get(0);
+    }
+
+    List<ProjectOpenProcessor> notDefaultProcessors = ContainerUtil.filter(processors, p -> !(p instanceof PlatformProjectOpenProcessor));
+    if (notDefaultProcessors.size() == 1) {
+      return notDefaultProcessors.get(0);
+    }
+    return new SelectProjectOpenProcessorDialog(notDefaultProcessors, file).showAndGetChoice();
+  }
+
+  @ApiStatus.Internal
+  public static @Nullable VirtualFile getFileAndRefresh(@NotNull Path file) {
+    VirtualFile virtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(FileUtil.toSystemIndependentName(file.toString()));
+    if (virtualFile == null || !virtualFile.isValid()) {
+      return null;
+    }
+
+    virtualFile.refresh(false, false);
+    return virtualFile;
+  }
+
+  public static @Nullable Project openProject(@NotNull String path, @Nullable Project projectToClose, boolean forceOpenInNewFrame) {
+    Path file = Paths.get(path);
+    BasicFileAttributes fileAttributes = PathKt.basicAttributesIfExists(file);
+    if (fileAttributes == null) {
+      Messages.showErrorDialog(IdeBundle.message("error.project.file.does.not.exist", file.toString()), CommonBundle.getErrorTitle());
+      return null;
+    }
+
+    Project existing = findAndFocusExistingProjectForPath(file);
+    if (existing != null) {
+      return existing;
+    }
+
+    if (isRemotePath(file.toString()) && !RecentProjectsManager.getInstance().hasPath(FileUtil.toSystemIndependentName(file.toString()))) {
+      if (!confirmLoadingFromRemotePath(file.toString(), "warning.load.project.from.share", "title.load.project.from.share")) {
         return null;
       }
     }
 
-    Project existing = findAndFocusExistingProjectForPath(path);
-    if (existing != null) return existing;
-
-    Project[] openProjects = ProjectManager.getInstance().getOpenProjects();
-    if (!forceOpenInNewFrame && openProjects.length > 0) {
-      int exitCode = confirmOpenNewProject(false);
-      if (exitCode == GeneralSettings.OPEN_PROJECT_SAME_WINDOW) {
-        final Project toClose = projectToClose != null ? projectToClose : openProjects[openProjects.length - 1];
-        if (!closeAndDispose(toClose)) return null;
-      }
-      else if (exitCode != GeneralSettings.OPEN_PROJECT_NEW_WINDOW) {
+    if (fileAttributes.isDirectory()) {
+      Path dir = file.resolve(Project.DIRECTORY_STORE_FOLDER);
+      if (!Files.isDirectory(dir)) {
+        Messages.showErrorDialog(IdeBundle.message("error.project.file.does.not.exist", dir.toString()), CommonBundle.getErrorTitle());
         return null;
       }
     }
 
-    if (isRemotePath(path) && !RecentProjectsManager.getInstance().hasPath(PathUtil.toSystemIndependentName(path))) {
-      if (!confirmLoadingFromRemotePath(path, "warning.load.project.from.share", "title.load.project.from.share")) {
-        return null;
-      }
-    }
-
-    ProjectManagerEx projectManager = ProjectManagerEx.getInstanceEx();
-    Project project = null;
     try {
-      project = projectManager.loadAndOpenProject(path);
+      return PlatformProjectOpenProcessor.openExistingProject(file, file, new OpenProjectTask(forceOpenInNewFrame, projectToClose));
     }
-    catch (IOException e) {
+    catch (Exception e) {
       Messages.showMessageDialog(IdeBundle.message("error.cannot.load.project", e.getMessage()),
                                  IdeBundle.message("title.cannot.load.project"), Messages.getErrorIcon());
     }
-    catch (JDOMException | InvalidDataException e) {
-      LOG.info(e);
-      Messages.showMessageDialog(IdeBundle.message("error.project.file.is.corrupted"), IdeBundle.message("title.cannot.load.project"),
-                                 Messages.getErrorIcon());
-    }
-    return project;
+    return null;
   }
 
   public static boolean confirmLoadingFromRemotePath(@NotNull String path,
@@ -218,13 +294,14 @@ public class ProjectUtil {
     final Window window = getActiveFrameOrWelcomeScreen();
     final Icon icon = Messages.getWarningIcon();
     String title = IdeBundle.message(titleKey);
-    final int answer = window == null ? Messages.showYesNoDialog(message, title, icon) : Messages.showYesNoDialog(window, message, title, icon);
+    final int answer =
+      window == null ? Messages.showYesNoDialog(message, title, icon) : Messages.showYesNoDialog(window, message, title, icon);
     return answer == Messages.YES;
   }
 
   public static Window getActiveFrameOrWelcomeScreen() {
     Window window = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusedWindow();
-    if (window != null)  return window;
+    if (window != null) return window;
 
     for (Frame frame : Frame.getFrames()) {
       if (frame instanceof IdeFrame && frame.isVisible()) {
@@ -239,11 +316,20 @@ public class ProjectUtil {
     return path.contains("://") || path.contains("\\\\");
   }
 
-  @Nullable
-  public static Project findAndFocusExistingProjectForPath(String path) {
-    Project[] openProjects = ProjectManager.getInstance().getOpenProjects();
+  public static @NotNull Project @NotNull [] getOpenProjects() {
+    ProjectManager projectManager = ProjectManager.getInstanceIfCreated();
+    return projectManager == null ? new Project[0] : projectManager.getOpenProjects();
+  }
+
+  public static @Nullable Project findAndFocusExistingProjectForPath(@NotNull Path file) {
+    Project[] openProjects = getOpenProjects();
+    if (openProjects.length == 0) {
+      return null;
+    }
+
+    String path = FileUtil.toSystemIndependentName(file.toString());
     for (Project project : openProjects) {
-      if (!project.isDefault() && isSameProject(path, project)) {
+      if (isSameProject(path, project)) {
         focusProjectWindow(project, false);
         return project;
       }
@@ -253,13 +339,13 @@ public class ProjectUtil {
 
   /**
    * @return {@link GeneralSettings#OPEN_PROJECT_SAME_WINDOW}
-   *         {@link GeneralSettings#OPEN_PROJECT_NEW_WINDOW}
-   *         {@link Messages#CANCEL} - if user canceled the dialog
-   * @param isNewProject
+   * {@link GeneralSettings#OPEN_PROJECT_NEW_WINDOW}
+   * {@link Messages#CANCEL} - if user canceled the dialog
    */
   public static int confirmOpenNewProject(boolean isNewProject) {
     final GeneralSettings settings = GeneralSettings.getInstance();
-    int confirmOpenNewProject = ApplicationManager.getApplication().isUnitTestMode() ? GeneralSettings.OPEN_PROJECT_NEW_WINDOW : settings.getConfirmOpenNewProject();
+    int confirmOpenNewProject =
+      ApplicationManager.getApplication().isUnitTestMode() ? GeneralSettings.OPEN_PROJECT_NEW_WINDOW : settings.getConfirmOpenNewProject();
     if (confirmOpenNewProject == GeneralSettings.OPEN_PROJECT_ASK) {
       if (isNewProject) {
         int exitCode = Messages.showYesNoDialog(IdeBundle.message("prompt.open.project.in.new.frame"),
@@ -268,6 +354,7 @@ public class ProjectUtil {
                                                 IdeBundle.message("button.new.frame"),
                                                 Messages.getQuestionIcon(),
                                                 new ProjectNewWindowDoNotAskOption());
+        LifecycleUsageTriggerCollector.onProjectFrameSelected(exitCode);
         return exitCode == Messages.YES ? GeneralSettings.OPEN_PROJECT_SAME_WINDOW : GeneralSettings.OPEN_PROJECT_NEW_WINDOW;
       }
       else {
@@ -278,6 +365,7 @@ public class ProjectUtil {
                                                       CommonBundle.getCancelButtonText(),
                                                       Messages.getQuestionIcon(),
                                                       new ProjectNewWindowDoNotAskOption());
+        LifecycleUsageTriggerCollector.onProjectFrameSelected(exitCode);
         return exitCode == Messages.YES ? GeneralSettings.OPEN_PROJECT_SAME_WINDOW :
                exitCode == Messages.NO ? GeneralSettings.OPEN_PROJECT_NEW_WINDOW : Messages.CANCEL;
       }
@@ -286,19 +374,29 @@ public class ProjectUtil {
   }
 
   /**
-   * @return  0 == GeneralSettings.OPEN_PROJECT_NEW_WINDOW
-   *          1 == GeneralSettings.OPEN_PROJECT_SAME_WINDOW
-   *          2 == GeneralSettings.OPEN_PROJECT_SAME_WINDOW_ATTACH
-   *         -1 == CANCEL
+   * @return 0 == GeneralSettings.OPEN_PROJECT_NEW_WINDOW
+   * 1 == GeneralSettings.OPEN_PROJECT_SAME_WINDOW
+   * 2 == GeneralSettings.OPEN_PROJECT_SAME_WINDOW_ATTACH
+   * -1 == CANCEL
    */
   public static int confirmOpenOrAttachProject() {
     final String mode = PropertiesComponent.getInstance().getValue(MODE_PROPERTY);
-    int exitCode = Messages.showDialog(IdeBundle.message("prompt.open.project.or.attach"), "Open Project",
-                                       new String[]{"&This Window", "New &Window", "&Attach", CommonBundle.getCancelButtonText()},
-                                       MODE_NEW.equals(mode) ? 1 : MODE_REPLACE.equals(mode) ? 0 : MODE_ATTACH.equals(mode) ? 2 : 0,
-                                       Messages.getQuestionIcon());
-
-    return  exitCode == 0 ? GeneralSettings.OPEN_PROJECT_SAME_WINDOW : exitCode == 1 ? GeneralSettings.OPEN_PROJECT_NEW_WINDOW: exitCode == 2? GeneralSettings.OPEN_PROJECT_SAME_WINDOW_ATTACH : -1;
+    int exitCode = Messages.showDialog(
+      IdeBundle.message("prompt.open.project.or.attach"),
+      IdeBundle.message("prompt.open.project.or.attach.title"),
+      new String[]{
+        IdeBundle.message("prompt.open.project.or.attach.button.this.window"),
+        IdeBundle.message("prompt.open.project.or.attach.button.new.window"),
+        IdeBundle.message("prompt.open.project.or.attach.button.attach"),
+        CommonBundle.getCancelButtonText()
+      },
+      MODE_NEW.equals(mode) ? 1 : MODE_REPLACE.equals(mode) ? 0 : MODE_ATTACH.equals(mode) ? 2 : 0,
+      Messages.getQuestionIcon());
+    LifecycleUsageTriggerCollector.onProjectFrameSelected(exitCode);
+    return exitCode == 0 ? GeneralSettings.OPEN_PROJECT_SAME_WINDOW :
+           exitCode == 1 ? GeneralSettings.OPEN_PROJECT_NEW_WINDOW :
+           exitCode == 2 ? GeneralSettings.OPEN_PROJECT_SAME_WINDOW_ATTACH :
+           -1;
   }
 
   public static boolean isSameProject(@Nullable String projectFilePath, @NotNull Project project) {
@@ -316,26 +414,45 @@ public class ProjectUtil {
     }
 
     File parent = projectFile.getParentFile();
+    if (parent == null) return false;
     if (parent.getName().equals(Project.DIRECTORY_STORE_FOLDER)) {
       parent = parent.getParentFile();
       return parent != null && FileUtil.pathsEqual(parent.getPath(), existingBaseDirPath);
     }
+
     return FileUtil.pathsEqual(parent.getPath(), existingBaseDirPath) &&
            ProjectFileType.DEFAULT_EXTENSION.equals(FileUtilRt.getExtension(projectFile.getName()));
   }
 
-  public static void focusProjectWindow(final Project p, boolean executeIfAppInactive) {
+  public static void focusProjectWindow(@Nullable Project project, boolean executeIfAppInactive) {
+    JFrame frame = WindowManager.getInstance().getFrame(project);
+    if (frame == null) {
+      return;
+    }
 
-    JFrame f = WindowManager.getInstance().getFrame(p);
-
-    if (f != null) {
-      if (executeIfAppInactive) {
-        AppIcon.getInstance().requestFocus((IdeFrame)WindowManager.getInstance().getFrame(p));
-        f.toFront();
-      } else {
-        IdeFocusManager.getInstance(p).requestFocus(f, true);
+    Component mostRecentFocusOwner = frame.getMostRecentFocusOwner();
+    if (executeIfAppInactive) {
+      AppIcon.getInstance().requestFocus((IdeFrame)WindowManager.getInstance().getFrame(project));
+      frame.toFront();
+      if (!SystemInfo.isMac && !frame.isAutoRequestFocus()) {
+        if (mostRecentFocusOwner != null) {
+          IdeFocusManager.getInstance(project).requestFocus(mostRecentFocusOwner, true);
+        }
+        else {
+          LOG.warn("frame.getMostRecentFocusOwner() is null");
+        }
       }
-
+    }
+    else {
+      if (mostRecentFocusOwner != null) {
+        IdeFocusManager.getInstance(project).requestFocusInProject(mostRecentFocusOwner, project);
+      }
+      else {
+        Component defaultFocusComponentInPanel = FocusUtil.getDefaultComponentInPanel(frame.getFocusCycleRootAncestor());
+        if (defaultFocusComponentInPanel != null) {
+          IdeFocusManager.getInstance(project).requestFocusInProject(defaultFocusComponentInPanel, project);
+        }
+      }
     }
   }
 
@@ -350,11 +467,51 @@ public class ProjectUtil {
     }
     final String userHome = SystemProperties.getUserHome();
     String productName = ApplicationNamesInfo.getInstance().getLowercaseProductName();
-    if (PlatformUtils.isCLion()) {
+    if (PlatformUtils.isCLion() || PlatformUtils.isAppCode()) {
       productName = ApplicationNamesInfo.getInstance().getProductName();
     }
-    //noinspection HardCodedStringLiteral
-    return userHome.replace('/', File.separatorChar) + File.separator + productName +
-           "Projects";
+    return userHome.replace('/', File.separatorChar) + File.separator + productName + "Projects";
+  }
+
+  public static @Nullable Project tryOpenFileList(@Nullable Project project, @NotNull List<? extends File> list, String location) {
+    Project result = null;
+
+    for (File file : list) {
+      result = openOrImport(file.toPath().toAbsolutePath(), project, true);
+      if (result != null) {
+        LOG.debug(location + ": load project from ", file);
+        return result;
+      }
+    }
+
+    for (File file : list) {
+      if (!file.exists()) {
+        continue;
+      }
+
+      LOG.debug(location + ": open file ", file);
+      String path = file.getAbsolutePath();
+      if (project != null) {
+        OpenFileAction.openFile(path, project);
+        result = project;
+      }
+      else {
+        CommandLineProjectOpenProcessor processor = CommandLineProjectOpenProcessor.getInstanceIfExists();
+        if (processor != null) {
+          VirtualFile virtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(path);
+          if (virtualFile != null && virtualFile.isValid()) {
+              Project opened = processor.openProjectAndFile(virtualFile, -1, -1, false);
+            if (opened != null && result == null) result = opened;
+          }
+        }
+      }
+    }
+
+    return result;
+  }
+
+  public static boolean isValidProjectPath(@NotNull Path file) {
+    return Files.isDirectory(file.resolve(Project.DIRECTORY_STORE_FOLDER)) ||
+           (StringUtil.endsWith(file.toString(), ProjectFileType.DOT_DEFAULT_EXTENSION) && Files.isRegularFile(file));
   }
 }

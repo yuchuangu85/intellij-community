@@ -1,25 +1,15 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.config;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil;
+import com.intellij.execution.wsl.WSLDistribution;
+import com.intellij.execution.wsl.WSLUtil;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.ThreeState;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -30,28 +20,26 @@ import java.util.regex.Pattern;
 
 /**
  * Tries to detect the path to Git executable.
- *
- * @author Kirill Likhodedov
  */
 public class GitExecutableDetector {
 
   private static final Logger LOG = Logger.getInstance(GitExecutableDetector.class);
   private static final String[] UNIX_PATHS = {
     "/usr/local/bin",
-    "/usr/bin",
     "/opt/local/bin",
+    "/usr/bin",
     "/opt/bin",
     "/usr/local/git/bin"};
 
   private static final String GIT = "git";
   private static final String UNIX_EXECUTABLE = GIT;
 
-  private static final File WIN_ROOT = new File("C:"); // the constant is extracted to be able to create files in "Program Files" in tests
+  private static final File WIN_ROOT = new File("C:\\"); // the constant is extracted to be able to create files in "Program Files" in tests
   private static final String GIT_EXE = "git.exe";
 
   private static final String WIN_EXECUTABLE = GIT_EXE;
 
-  @NotNull
+  @Nullable
   public String detect() {
     File gitExecutableFromPath = PathEnvironmentVariableUtil.findInPath(SystemInfo.isWindows ? GIT_EXE : GIT, getPath(), null);
     if (gitExecutableFromPath != null) return gitExecutableFromPath.getAbsolutePath();
@@ -60,6 +48,11 @@ public class GitExecutableDetector {
   }
 
   @NotNull
+  public static String getDefaultExecutable() {
+    return SystemInfo.isWindows ? WIN_EXECUTABLE : UNIX_EXECUTABLE;
+  }
+
+  @Nullable
   private static String detectForUnix() {
     for (String p : UNIX_PATHS) {
       File f = new File(p, UNIX_EXECUTABLE);
@@ -67,10 +60,10 @@ public class GitExecutableDetector {
         return f.getPath();
       }
     }
-    return UNIX_EXECUTABLE;
+    return null;
   }
 
-  @NotNull
+  @Nullable
   private String detectForWindows() {
     String exec = checkProgramFiles();
     if (exec != null) {
@@ -82,7 +75,12 @@ public class GitExecutableDetector {
       return exec;
     }
 
-    return WIN_EXECUTABLE;
+    exec = checkWsl();
+    if (exec != null) {
+      return exec;
+    }
+
+    return null;
   }
 
   @Nullable
@@ -93,7 +91,7 @@ public class GitExecutableDetector {
     List<File> distrs = new ArrayList<>();
     for (String programFiles : PROGRAM_FILES) {
       File pf = new File(getWinRoot(), programFiles);
-      File[] children = pf.listFiles(pathname -> pathname.isDirectory() && pathname.getName().toLowerCase().startsWith("git"));
+      File[] children = pf.listFiles(pathname -> pathname.isDirectory() && StringUtil.toLowerCase(pathname.getName()).startsWith("git"));
       if (!pf.exists() || children == null) {
         continue;
       }
@@ -101,7 +99,7 @@ public class GitExecutableDetector {
     }
 
     // greater is better => sorting in the descending order to match the best version first, when iterating
-    Collections.sort(distrs, Collections.reverseOrder(new VersionDirsComparator()));
+    distrs.sort(Collections.reverseOrder(new VersionDirsComparator()));
 
     for (File distr : distrs) {
       String exec = checkDistributive(distr);
@@ -119,6 +117,27 @@ public class GitExecutableDetector {
       File file = new File(getWinRoot(), otherPath);
       if (file.exists()) {
         return file.getPath();
+      }
+    }
+    return null;
+  }
+
+  @Nullable
+  private static String checkWsl() {
+    if (!GitExecutableManager.supportWslExecutable()) return null;
+
+    List<WSLDistribution> distributions = WSLUtil.getAvailableDistributions();
+    if (distributions.size() != 1) return null;
+
+    WSLDistribution distribution = distributions.get(0);
+    if (WSLUtil.isWsl1(distribution) != ThreeState.NO) return null;
+
+    File root = distribution.getUNCRoot();
+    for (String p : UNIX_PATHS) {
+      File d = new File(root, p);
+      File f = new File(d, UNIX_EXECUTABLE);
+      if (f.exists()) {
+        return f.getPath();
       }
     }
     return null;
@@ -172,8 +191,8 @@ public class GitExecutableDetector {
 
     @Override
     public int compare(File f1, File f2) {
-      String name1 = f1.getName().toLowerCase();
-      String name2 = f2.getName().toLowerCase();
+      String name1 = StringUtil.toLowerCase(f1.getName());
+      String name2 = StringUtil.toLowerCase(f2.getName());
 
       // C:\Program Files\Git is better candidate for _default_ than C:\Program Files\Git_1.8.0
       if (name1.equals("git")) {
@@ -206,8 +225,8 @@ public class GitExecutableDetector {
       }
 
       // probably some unrecognized format of Git directory naming => just compare lexicographically
-      String name1 = f1.getName().toLowerCase();
-      String name2 = f2.getName().toLowerCase();
+      String name1 = StringUtil.toLowerCase(f1.getName());
+      String name2 = StringUtil.toLowerCase(f2.getName());
       return name1.compareTo(name2);
     }
 

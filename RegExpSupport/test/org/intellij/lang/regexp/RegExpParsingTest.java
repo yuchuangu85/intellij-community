@@ -1,26 +1,9 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.intellij.lang.regexp;
 
 import com.intellij.mock.MockSmartPointerManager;
 import com.intellij.openapi.application.ex.PathManagerEx;
-import com.intellij.psi.PsiComment;
-import com.intellij.psi.SmartPointerManager;
-import com.intellij.psi.SmartPsiElementPointer;
-import com.intellij.psi.SyntaxTraverser;
+import com.intellij.psi.*;
 import com.intellij.psi.impl.source.resolve.FileContextUtil;
 import com.intellij.testFramework.ParsingTestCase;
 
@@ -168,6 +151,7 @@ public class RegExpParsingTest extends ParsingTestCase {
   public void testCharClasses70() throws IOException { doCodeTest("[&&&&a]"); }
   public void testCharClasses71() throws IOException { doCodeTest("[a-\\Qz\\E]"); }
   public void testCharClasses72() throws IOException { doCodeTest("([\\^])"); }
+  public void testCharClasses73() throws IOException { doCodeTest("[i-[:]]*"); }
 
   public void testGroups1() throws IOException { doCodeTest("()ef"); }
   public void testGroups2() throws IOException { doCodeTest("()*"); }
@@ -369,9 +353,10 @@ public class RegExpParsingTest extends ParsingTestCase {
     RegExpCapabilitiesProvider provider = (host, def) -> EnumSet.of(POSIX_BRACKET_EXPRESSIONS);
     try {
       RegExpCapabilitiesProvider.EP.addExplicitExtension(RegExpLanguage.INSTANCE, provider);
-      PsiComment context = SyntaxTraverser.psiTraverser(createPsiFile("c", "(?#xxx)")).filter(PsiComment.class).first();
+      PsiFile file = createPsiFile("c", "(?#xxx)");
+      PsiComment context = SyntaxTraverser.psiTraverser(file).filter(PsiComment.class).first();
       myFile = createPsiFile("a", "[[:blank:]]");
-      SmartPsiElementPointer<PsiComment> pointer = SmartPointerManager.createPointer(context);
+      SmartPsiElementPointer<PsiComment> pointer = SmartPointerManager.getInstance(getProject()).createSmartPsiElementPointer(context, file);
       myFile.putUserData(FileContextUtil.INJECTED_IN_ELEMENT, pointer);
       ensureParsed(myFile);
       checkResult(myFilePrefix + getTestName(), myFile);

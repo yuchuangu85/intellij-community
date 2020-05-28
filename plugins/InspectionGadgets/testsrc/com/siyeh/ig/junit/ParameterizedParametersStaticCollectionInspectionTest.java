@@ -2,14 +2,30 @@
 package com.siyeh.ig.junit;
 
 import com.intellij.testFramework.LightProjectDescriptor;
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
-import com.siyeh.ig.LightInspectionTestCase;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
+import com.siyeh.ig.LightJavaInspectionTestCase;
 import org.jetbrains.annotations.NotNull;
 
-public class ParameterizedParametersStaticCollectionInspectionTest extends LightCodeInsightFixtureTestCase {
+public class ParameterizedParametersStaticCollectionInspectionTest extends LightJavaCodeInsightFixtureTestCase {
   @Override
   protected String getBasePath() {
-    return LightInspectionTestCase.INSPECTION_GADGETS_TEST_DATA_PATH + "com/siyeh/igtest/junit/parameterized";
+    return LightJavaInspectionTestCase.INSPECTION_GADGETS_TEST_DATA_PATH + "com/siyeh/igtest/junit/parameterized";
+  }
+
+
+  @Override
+  protected void setUp() throws Exception {
+    super.setUp();
+    myFixture.addClass("package org.junit.runner;\n" +
+                       "public @interface RunWith {\n" +
+                       "    Class value();\n" +
+                       "}\n");
+    myFixture.addClass("package org.junit.runners;\n" +
+                       "public class Parameterized {" +
+                       "    public @interface Parameters {\n" +
+                       "        String name() default \"{index}\";\n" +
+                       "    }" +
+                       "} ");
   }
 
   @NotNull
@@ -27,8 +43,8 @@ public class ParameterizedParametersStaticCollectionInspectionTest extends Light
     doTest();
   }
 
-  public void testWrongsignature() {
-    doTest();
-  }
+  public void testWrongsignature() { doTest(); }
+  public void testWrongsignature1() { doTest(); }
+  public void testWrongsignature2() { doTest(); }
 
 }

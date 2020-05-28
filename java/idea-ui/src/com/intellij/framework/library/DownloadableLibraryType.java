@@ -15,7 +15,7 @@
  */
 package com.intellij.framework.library;
 
-import com.intellij.ide.plugins.PluginManagerCore;
+import com.intellij.diagnostic.PluginException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.libraries.*;
 import com.intellij.openapi.roots.libraries.ui.LibraryEditorComponent;
@@ -29,9 +29,6 @@ import javax.swing.*;
 import java.net.URL;
 import java.util.List;
 
-/**
- * @author nik
- */
 public abstract class DownloadableLibraryType extends LibraryType<LibraryVersionProperties> {
   private final Icon myIcon;
   private final String myLibraryCategoryName;
@@ -48,7 +45,7 @@ public abstract class DownloadableLibraryType extends LibraryType<LibraryVersion
   protected DownloadableLibraryType(@NotNull String libraryCategoryName,
                                @NotNull String libraryTypeId,
                                @NotNull String groupId,
-                               @NotNull URL... localUrls) {
+                               URL @NotNull ... localUrls) {
     this(libraryCategoryName, libraryTypeId, groupId, null, localUrls);
   }
 
@@ -60,7 +57,7 @@ public abstract class DownloadableLibraryType extends LibraryType<LibraryVersion
                                  @NotNull String libraryTypeId,
                                  @NotNull String groupId,
                                  @Nullable Icon icon,
-                                 @NotNull URL... localUrls) {
+                                 URL @NotNull ... localUrls) {
     super(new PersistentLibraryKind<LibraryVersionProperties>(libraryTypeId) {
       @NotNull
       @Override
@@ -74,7 +71,7 @@ public abstract class DownloadableLibraryType extends LibraryType<LibraryVersion
   }
 
   @Nullable
-  private static LibraryVersionProperties detectVersion(List<VirtualFile> classesRoots, String detectionClass) {
+  private static LibraryVersionProperties detectVersion(List<? extends VirtualFile> classesRoots, String detectionClass) {
     if (!LibraryUtil.isClassAvailableInLibrary(classesRoots, detectionClass)) {
       return null;
     }
@@ -117,7 +114,7 @@ public abstract class DownloadableLibraryType extends LibraryType<LibraryVersion
   @NotNull
   public Icon getLibraryTypeIcon() {
     if (myIcon == null) {
-      throw PluginManagerCore.createPluginException("'DownloadableLibraryType::getLibraryTypeIcon' isn't overriden or returns 'null' in " + getClass().getName(), null, getClass());
+      throw PluginException.createByClass("'DownloadableLibraryType::getLibraryTypeIcon' isn't overriden or returns 'null' in " + getClass().getName(), null, getClass());
     }
     return myIcon;
   }
@@ -128,7 +125,7 @@ public abstract class DownloadableLibraryType extends LibraryType<LibraryVersion
     return getLibraryTypeIcon();
   }
 
-  protected abstract String[] getDetectionClassNames();
+  protected abstract String @NotNull [] getDetectionClassNames();
 
   @Override
   public LibraryVersionProperties detect(@NotNull List<VirtualFile> classesRoots) {

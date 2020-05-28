@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2019 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,11 +21,10 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import java.awt.*;
 
 /**
+ * @deprecated use {@link LookupElementBuilder}
  * @author Dmitry Avdeev
- * Use {@link com.intellij.codeInsight.lookup.LookupElementBuilder}
  */
 @Deprecated
 public class LookupValueFactory {
@@ -67,7 +66,7 @@ public class LookupValueFactory {
     }
 
     public boolean equals(Object a) {
-      return a.getClass() == getClass() && a instanceof PresentableLookupValue && ((PresentableLookupValue)a).getPresentation().equals(getPresentation());
+      return a != null && a.getClass() == getClass() && ((PresentableLookupValue)a).getPresentation().equals(getPresentation());
     }
   }
 
@@ -83,17 +82,6 @@ public class LookupValueFactory {
     @Override
     public String getTypeHint() {
       return myHint;
-    }
-
-    @Override
-    @Nullable
-    public Color getColorHint() {
-      return null;
-    }
-
-    @Override
-    public boolean isBold() {
-      return false;
     }
   }
 }

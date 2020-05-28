@@ -1,24 +1,12 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options.colors.fileStatus;
 
+import com.intellij.application.options.colors.ColorAndFontOptions;
 import com.intellij.openapi.application.ApplicationBundle;
 import com.intellij.openapi.editor.colors.ColorKey;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.editor.colors.impl.AbstractColorsScheme;
+import com.intellij.openapi.editor.colors.impl.EditorColorsManagerImpl;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.vcs.FileStatus;
 import org.jetbrains.annotations.NotNull;
@@ -27,7 +15,6 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.table.AbstractTableModel;
 import java.awt.*;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Function;
@@ -56,12 +43,12 @@ public class FileStatusColorsTableModel extends AbstractTableModel {
     }
   }
 
-  public FileStatusColorsTableModel(@NotNull FileStatus[] fileStatuses, @NotNull EditorColorsScheme scheme) {
+  public FileStatusColorsTableModel(FileStatus @NotNull [] fileStatuses, @NotNull EditorColorsScheme scheme) {
     myScheme = scheme;
     myDescriptors = createDescriptors(fileStatuses, myScheme);
   }
 
-  private static List<FileStatusColorDescriptor> createDescriptors(@NotNull FileStatus[] fileStatuses, @NotNull EditorColorsScheme scheme) {
+  private static List<FileStatusColorDescriptor> createDescriptors(FileStatus @NotNull [] fileStatuses, @NotNull EditorColorsScheme scheme) {
     EditorColorsScheme baseScheme = scheme instanceof AbstractColorsScheme ? ((AbstractColorsScheme)scheme).getParentScheme() : null;
     List<FileStatusColorDescriptor> descriptors = new ArrayList<>();
     for (FileStatus fileStatus : fileStatuses) {
@@ -69,7 +56,7 @@ public class FileStatusColorsTableModel extends AbstractTableModel {
       Color originalColor = baseScheme != null ? baseScheme.getColor(fileStatus.getColorKey()) : null;
       descriptors.add(new FileStatusColorDescriptor(fileStatus, color, originalColor));
     }
-    Collections.sort(descriptors, Comparator.comparing(d -> d.getStatus().getText()));
+    descriptors.sort(Comparator.comparing(d -> d.getStatus().getText()));
     return descriptors;
   }
 
@@ -143,6 +130,9 @@ public class FileStatusColorsTableModel extends AbstractTableModel {
     }
     if (myScheme instanceof AbstractColorsScheme) {
       ((AbstractColorsScheme)myScheme).setSaveNeeded(true);
+    }
+    if (EditorColorsManagerImpl.isTempScheme(myScheme)) {
+      ColorAndFontOptions.writeTempScheme(myScheme);
     }
   }
 

@@ -1,12 +1,16 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.lang.folding;
 
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.Language;
 import com.intellij.lang.LanguageExtension;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.extensions.ExtensionPointName;
+import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.psi.PsiElement;
+import com.intellij.util.KeyedLazyInstance;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -18,10 +22,13 @@ import java.util.List;
  * @author Konstantin Bulenkov
  */
 public class LanguageFolding extends LanguageExtension<FoldingBuilder> {
+  public static final ExtensionPointName<KeyedLazyInstance<FoldingBuilder>> EP_NAME = ExtensionPointName.create("com.intellij.lang.foldingBuilder");
   public static final LanguageFolding INSTANCE = new LanguageFolding();
 
+  private static final Logger LOG = Logger.getInstance(LanguageFolding.class);
+
   private LanguageFolding() {
-    super("com.intellij.lang.foldingBuilder");
+    super(EP_NAME);
   }
 
   /**
@@ -61,20 +68,42 @@ public class LanguageFolding extends LanguageExtension<FoldingBuilder> {
     return Collections.emptyList();
   }
 
-  @NotNull
-  public static FoldingDescriptor[] buildFoldingDescriptors(@Nullable FoldingBuilder builder, @NotNull PsiElement root, @NotNull Document document, boolean quick) {
-    if (!DumbService.isDumbAware(builder) && DumbService.getInstance(root.getProject()).isDumb()) {
+  public static FoldingDescriptor @NotNull [] buildFoldingDescriptors(@Nullable FoldingBuilder builder,
+                                                                      @NotNull PsiElement root,
+                                                                      @NotNull Document document,
+                                                                      boolean quick) {
+    FoldingDescriptor[] descriptors = buildFoldingDescriptorsNoPlaceholderCaching(builder, root, document, quick);
+    for (FoldingDescriptor descriptor : descriptors) {
+      descriptor.setPlaceholderText(descriptor.getPlaceholderText()); // cache placeholder text
+    }
+    return descriptors;
+  }
+
+  static FoldingDescriptor @NotNull [] buildFoldingDescriptorsNoPlaceholderCaching(@Nullable FoldingBuilder builder,
+                                                                                   @NotNull PsiElement root,
+                                                                                   @NotNull Document document,
+                                                                                   boolean quick) {
+    try {
+      if (!DumbService.isDumbAware(builder) && DumbService.getInstance(root.getProject()).isDumb()) {
+        return FoldingDescriptor.EMPTY;
+      }
+
+      if (builder instanceof FoldingBuilderEx) {
+        return ((FoldingBuilderEx)builder).buildFoldRegions(root, document, quick);
+      }
+      final ASTNode astNode = root.getNode();
+      if (astNode == null || builder == null) {
+        return FoldingDescriptor.EMPTY;
+      }
+
+      return builder.buildFoldRegions(astNode, document);
+    }
+    catch (ProcessCanceledException e) {
+      throw e;
+    }
+    catch (Exception e) {
+      LOG.error(e);
       return FoldingDescriptor.EMPTY;
     }
-
-    if (builder instanceof FoldingBuilderEx) {
-      return ((FoldingBuilderEx)builder).buildFoldRegions(root, document, quick);
-    }
-    final ASTNode astNode = root.getNode();
-    if (astNode == null || builder == null) {
-      return FoldingDescriptor.EMPTY;
-    }
-
-    return builder.buildFoldRegions(astNode, document);
   }
 }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.index
 
 import com.intellij.lang.FCTSBackedLighterAST
@@ -31,12 +17,13 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.testFramework.BombedProgressIndicator
 import com.intellij.testFramework.SkipSlowTestLocally
 import com.intellij.testFramework.fixtures.JavaCodeInsightFixtureTestCase
-import com.intellij.util.ref.GCUtil
+import com.intellij.util.ref.GCWatcher
 import groovy.transform.CompileStatic
 import org.jetbrains.annotations.NotNull
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Future
+
 /**
  * @author peter
  */
@@ -108,7 +95,7 @@ class ConcurrentIndexTest extends JavaCodeInsightFixtureTestCase {
       WriteCommandAction.runWriteCommandAction(project) {
         ((PsiJavaFile) file).importList.add(JavaPsiFacade.getElementFactory(project).createImportStatementOnDemand("foo.bar$i"))
       }
-      GCUtil.tryGcSoftlyReachableObjects()
+      GCWatcher.tracking(file.node).ensureCollected()
       assert !file.contentsLoaded
 
       List<Future> futuresToWait = []
@@ -151,7 +138,7 @@ class ConcurrentIndexTest extends JavaCodeInsightFixtureTestCase {
       WriteCommandAction.runWriteCommandAction(project) {
         ((PsiJavaFile) file).importList.add(JavaPsiFacade.getElementFactory(project).createImportStatementOnDemand("foo.bar$i"))
       }
-      GCUtil.tryGcSoftlyReachableObjects()
+      GCWatcher.tracking(file.node).ensureCollected()
       assert !file.contentsLoaded
 
       myFixture.addFileToProject("Foo" + i + ".java", "class Foo" + i + " {" + ("public void foo() {}\n") * 1000 + "}")
@@ -192,7 +179,7 @@ class ConcurrentIndexTest extends JavaCodeInsightFixtureTestCase {
     }
     text = "class Foo {{ " + text * 200 + "}}"
 
-    def file = myFixture.addFileToProject('a.java', text)
+    def file = myFixture.addFileToProject('a.java', text) as PsiFileImpl
     def document = file.viewProvider.document
     for (i in 1..5) {
       WriteCommandAction.runWriteCommandAction project, {
@@ -200,7 +187,8 @@ class ConcurrentIndexTest extends JavaCodeInsightFixtureTestCase {
         document.insertString(document.text.indexOf('(null') + 1, ' ')
         PsiDocumentManager.getInstance(project).commitAllDocuments()
       }
-      GCUtil.tryGcSoftlyReachableObjects()
+      GCWatcher.tracking(file.node).ensureCollected()
+      assert !file.contentsLoaded
 
       assert file.node.lighterAST instanceof FCTSBackedLighterAST
       List<Future> futures = []
@@ -210,6 +198,7 @@ class ConcurrentIndexTest extends JavaCodeInsightFixtureTestCase {
           assert !JavaNullMethodArgumentUtil.hasNullArgument(clazz.methods[0], 0)
         }}
       })
+      def project = project // https://issues.apache.org/jira/browse/GROOVY-9562
       futures << ((CoreProgressManager)ProgressManager.instance).runProcessWithProgressAsynchronously(new Task.Backgroundable(myFixture.project, "findClass") {
         @Override
         void run(@NotNull ProgressIndicator indicator) { ReadAction.run {

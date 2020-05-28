@@ -1,18 +1,20 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.wsl;
 
-import com.intellij.execution.process.ProcessAdapter;
-import com.intellij.execution.process.ProcessEvent;
-import com.intellij.execution.process.ProcessHandler;
-import com.intellij.execution.process.ProcessListener;
+import com.intellij.execution.ExecutionException;
+import com.intellij.execution.process.*;
 import com.intellij.openapi.application.Experiments;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.ThreeState;
 import com.intellij.util.containers.ContainerUtil;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -23,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Class for working with WSL after Fall Creators Update
@@ -31,6 +34,8 @@ import java.util.List;
  * - file system is unavailable form windows (for now at least)
  */
 public class WSLUtil {
+  public static final Logger LOG = Logger.getInstance("#com.intellij.execution.wsl");
+
   /**
    * this listener is a hack for https://github.com/Microsoft/BashOnWindows/issues/2592
    * See RUBY-20358
@@ -86,7 +91,7 @@ public class WSLUtil {
     }
 
     // add legacy WSL if it's available and enabled
-    if (Experiments.isFeatureEnabled("wsl.legacy.distribution")) {
+    if (Experiments.getInstance().isFeatureEnabled("wsl.legacy.distribution")) {
       ContainerUtil.addIfNotNull(result, WSLDistributionLegacy.getInstance());
     }
 
@@ -119,13 +124,33 @@ public class WSLUtil {
   }
 
   /**
+   * @return instance of WSL distribution or null if it's unavailable
+   */
+  @Nullable
+  public static WSLDistribution getDistributionByMsId(@Nullable String name) {
+    if (name == null) {
+      return null;
+    }
+    for (WSLDistribution distribution : getAvailableDistributions()) {
+      if (name.equals(distribution.getMsId())) {
+        return distribution;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Temporary hack method to fix <a href="https://github.com/Microsoft/BashOnWindows/issues/2592">WSL bug</a>
    * Must be invoked just before execution, see RUBY-20358
    */
+  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2020.2")
   @NotNull
   public static <T extends ProcessHandler> T addInputCloseListener(@NotNull T processHandler) {
-    processHandler.removeProcessListener(INPUT_CLOSE_LISTENER);
-    processHandler.addProcessListener(INPUT_CLOSE_LISTENER);
+    if (Experiments.getInstance().isFeatureEnabled("wsl.close.process.input")) {
+      processHandler.removeProcessListener(INPUT_CLOSE_LISTENER);
+      processHandler.addProcessListener(INPUT_CLOSE_LISTENER);
+    }
     return processHandler;
   }
 
@@ -134,15 +159,18 @@ public class WSLUtil {
   }
 
   /**
-   * @return Windows-dependent path for a file, pointed by {@code wslPath} in WSL or null if path is unmappable.
-   *         For example, {@code getWindowsPath("/mnt/c/Users/file.txt") returns "c:\Users\file.txt"}
+   * @param wslPath a path in WSL file system, e.g. "/mnt/c/Users/file.txt" or "/c/Users/file.txt"
+   * @param mntRoot a directory where fixed drives will be mounted. Default is "/mnt/" - {@link WSLDistribution#DEFAULT_WSL_MNT_ROOT}).
+   *               See https://docs.microsoft.com/ru-ru/windows/wsl/wsl-config#configuration-options
+   * @return Windows-dependent path to the file, pointed by {@code wslPath} in WSL or null if the path is unmappable.
+   * For example, {@code getWindowsPath("/mnt/c/Users/file.txt", "/mnt/") returns "C:\Users\file.txt"}
    */
   @Nullable
-  public static String getWindowsPath(@NotNull String wslPath) {
-    if (!wslPath.startsWith(WSLDistribution.WSL_MNT_ROOT)) {
+  public static String getWindowsPath(@NotNull String wslPath, @NotNull String mntRoot) {
+    if (!wslPath.startsWith(mntRoot)) {
       return null;
     }
-    int driveLetterIndex = WSLDistribution.WSL_MNT_ROOT.length();
+    int driveLetterIndex = mntRoot.length();
     if (driveLetterIndex >= wslPath.length() || !Character.isLetter(wslPath.charAt(driveLetterIndex))) {
       return null;
     }
@@ -151,5 +179,33 @@ public class WSLUtil {
       return null;
     }
     return FileUtil.toSystemDependentName(Character.toUpperCase(wslPath.charAt(driveLetterIndex)) + ":" + wslPath.substring(slashIndex));
+  }
+
+  /**
+   * @return list of existing UNC roots for known WSL distributions
+   */
+  @ApiStatus.Experimental
+  @NotNull
+  public static List<File> getExistingUNCRoots() {
+    if (!isSystemCompatible() || !Experiments.getInstance().isFeatureEnabled("wsl.p9.support")) {
+      return Collections.emptyList();
+    }
+    return getAvailableDistributions().stream()
+      .map(WSLDistribution::getUNCRoot)
+      .filter(File::exists)
+      .collect(Collectors.toList());
+  }
+
+  @NotNull
+  public static ThreeState isWsl1(@NotNull WSLDistribution distribution) {
+    try {
+      ProcessOutput output = distribution.executeOnWsl(10_000, "uname", "-v");
+      if (output.getExitCode() != 0) return ThreeState.UNSURE;
+      return ThreeState.fromBoolean(output.getStdout().contains("Microsoft"));
+    }
+    catch (ExecutionException e) {
+      LOG.warn(e);
+      return ThreeState.UNSURE;
+    }
   }
 }

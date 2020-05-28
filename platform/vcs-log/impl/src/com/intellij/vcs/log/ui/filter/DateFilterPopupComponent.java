@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.vcs.log.ui.filter;
 
 import com.intellij.openapi.actionSystem.ActionGroup;
@@ -23,22 +9,26 @@ import com.intellij.openapi.ui.DialogBuilder;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.vcs.versionBrowser.DateFilterComponent;
 import com.intellij.util.text.DateFormatUtil;
+import com.intellij.vcs.log.VcsLogBundle;
 import com.intellij.vcs.log.VcsLogDateFilter;
-import com.intellij.vcs.log.data.VcsLogDateFilterImpl;
+import com.intellij.vcs.log.visible.filters.VcsLogFilterObject;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Calendar;
 import java.util.Date;
+import java.util.function.Supplier;
 
-class DateFilterPopupComponent extends FilterPopupComponent<VcsLogDateFilter> {
+class DateFilterPopupComponent extends FilterPopupComponent<VcsLogDateFilter, FilterModel<VcsLogDateFilter>> {
 
   DateFilterPopupComponent(FilterModel<VcsLogDateFilter> filterModel) {
-    super("Date", filterModel);
+    super(VcsLogBundle.messagePointer("vcs.log.date.filter.label"), filterModel);
   }
 
   @NotNull
   @Override
+  @Nls
   protected String getText(@NotNull VcsLogDateFilter filter) {
     Date after = filter.getAfter();
     Date before = filter.getBefore();
@@ -46,13 +36,13 @@ class DateFilterPopupComponent extends FilterPopupComponent<VcsLogDateFilter> {
       return DateFormatUtil.formatDate(after) + "-" + DateFormatUtil.formatDate(before);
     }
     else if (after != null) {
-      return "Since " + DateFormatUtil.formatDate(after);
+      return VcsLogBundle.message("vcs.log.date.filter.since", DateFormatUtil.formatDate(after));
     }
     else if (before != null) {
-      return "Until " + DateFormatUtil.formatDate(before);
+      return VcsLogBundle.message("vcs.log.date.filter.since", DateFormatUtil.formatDate(before));
     }
     else {
-      return ALL;
+      return ALL.get();
     }
   }
 
@@ -73,29 +63,29 @@ class DateFilterPopupComponent extends FilterPopupComponent<VcsLogDateFilter> {
 
     return new DefaultActionGroup(createAllAction(),
                                   new SelectAction(),
-                                  new DateAction(oneDayBefore, "Last 24 hours"),
-                                  new DateAction(oneWeekBefore, "Last 7 days"));
+                                  new DateAction(oneDayBefore, VcsLogBundle.messagePointer("vcs.log.date.filter.action.last.day")),
+                                  new DateAction(oneWeekBefore, VcsLogBundle.messagePointer("vcs.log.date.filter.action.last.week")));
   }
 
   private class DateAction extends DumbAwareAction {
 
     @NotNull private final Date mySince;
 
-    DateAction(@NotNull Date since, @NotNull String text) {
+    protected DateAction(@NotNull Date since, @NotNull Supplier<String> text) {
       super(text);
       mySince = since;
     }
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
-      myFilterModel.setFilter(new VcsLogDateFilterImpl(mySince, null));
+      myFilterModel.setFilter(VcsLogFilterObject.fromDates(mySince, null));
     }
   }
 
   private class SelectAction extends DumbAwareAction {
 
     SelectAction() {
-      super("Select...");
+      super(VcsLogBundle.messagePointer("vcs.log.filter.action.select"));
     }
 
     @Override
@@ -115,12 +105,9 @@ class DateFilterPopupComponent extends FilterPopupComponent<VcsLogDateFilter> {
       db.addOkAction();
       db.setCenterPanel(dateComponent.getPanel());
       db.setPreferredFocusComponent(dateComponent.getPanel());
-      db.setTitle("Select Period");
+      db.setTitle(VcsLogBundle.message("vcs.log.date.filter.select.period.dialog.title"));
       if (DialogWrapper.OK_EXIT_CODE == db.show()) {
-        long after = dateComponent.getAfter();
-        long before = dateComponent.getBefore();
-        VcsLogDateFilter filter = new VcsLogDateFilterImpl(after > 0 ? new Date(after) : null, before > 0 ? new Date(before) : null);
-        myFilterModel.setFilter(filter);
+        myFilterModel.setFilter(VcsLogFilterObject.fromDates(dateComponent.getAfter(), dateComponent.getBefore()));
       }
     }
   }

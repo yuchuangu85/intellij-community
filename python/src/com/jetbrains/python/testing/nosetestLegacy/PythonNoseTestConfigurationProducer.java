@@ -2,6 +2,8 @@
 package com.jetbrains.python.testing.nosetestLegacy;
 
 import com.intellij.execution.Location;
+import com.intellij.execution.configurations.ConfigurationFactory;
+import com.intellij.openapi.extensions.ExtensionNotApplicableException;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.projectRoots.Sdk;
@@ -9,15 +11,24 @@ import com.intellij.psi.PsiElement;
 import com.intellij.util.ThreeState;
 import com.jetbrains.python.PyNames;
 import com.jetbrains.python.psi.PyFunction;
-import com.jetbrains.python.sdk.PythonSdkType;
+import com.jetbrains.python.sdk.PythonSdkUtil;
 import com.jetbrains.python.testing.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public class PythonNoseTestConfigurationProducer extends
-                                                 PythonTestLegacyConfigurationProducer {
+import static com.jetbrains.python.testing.PyTestLegacyInteropKt.isNewTestsModeEnabled;
+
+public final class PythonNoseTestConfigurationProducer extends PythonTestLegacyConfigurationProducer {
   public PythonNoseTestConfigurationProducer() {
-    super(PythonTestConfigurationType.getInstance().LEGACY_NOSETEST_FACTORY);
+    if (isNewTestsModeEnabled()) {
+      throw ExtensionNotApplicableException.INSTANCE;
+    }
+  }
+
+  @NotNull
+  @Override
+  public ConfigurationFactory getConfigurationFactory() {
+    return PythonTestConfigurationType.getInstance().LEGACY_NOSETEST_FACTORY;
   }
 
   @Override
@@ -29,12 +40,12 @@ public class PythonNoseTestConfigurationProducer extends
       if (modules.length == 0) return false;
       module = modules[0];
     }
-    final Sdk sdk = PythonSdkType.findPythonSdk(module);
+    final Sdk sdk = PythonSdkUtil.findPythonSdk(module);
     return ( PyTestFrameworkService.getSdkReadableNameByFramework(PyNames.NOSE_TEST).equals(TestRunnerService.getInstance(module).getProjectConfiguration()) && sdk != null);
   }
 
   @Override
   protected boolean isTestFunction(@NotNull final PyFunction pyFunction, @Nullable final AbstractPythonLegacyTestRunConfiguration configuration) {
-    return PythonUnitTestUtil.isTestFunction(pyFunction, ThreeState.NO, null);
+    return PythonUnitTestDetectorsBasedOnSettings.isTestFunction(pyFunction, ThreeState.NO, null);
   }
 }

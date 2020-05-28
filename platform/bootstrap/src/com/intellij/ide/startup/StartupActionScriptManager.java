@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.startup;
 
 import com.intellij.openapi.application.PathManager;
@@ -9,6 +9,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -36,7 +39,13 @@ public class StartupActionScriptManager {
   }
 
   public static synchronized void executeActionScript(@NotNull File scriptFile, @NotNull File oldTarget, @NotNull File newTarget) throws IOException {
-    List<ActionCommand> commands = loadActionScript(scriptFile);
+    List<ActionCommand> commands = loadActionScript(scriptFile.toPath());
+    executeActionScriptCommands(commands, oldTarget, newTarget);
+  }
+
+  public static void executeActionScriptCommands(List<ActionCommand> commands,
+                                                 @NotNull File oldTarget,
+                                                 @NotNull File newTarget) throws IOException {
     for (ActionCommand command : commands) {
       ActionCommand toExecute = mapPaths(command, oldTarget, newTarget);
       if (toExecute != null) {
@@ -70,45 +79,49 @@ public class StartupActionScriptManager {
     }
   }
 
-  private static File getActionScriptFile() {
-    return new File(PathManager.getPluginTempPath(), ACTION_SCRIPT_FILE);
+  @NotNull
+  private static Path getActionScriptFile() {
+    return Paths.get(PathManager.getPluginTempPath(), ACTION_SCRIPT_FILE);
   }
 
-  private static List<ActionCommand> loadActionScript(File scriptFile) throws IOException {
-    if (scriptFile.isFile()) {
-      try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(scriptFile))) {
-        Object data = ois.readObject();
-        if (data instanceof ActionCommand[]) {
-          return new ArrayList<>(Arrays.asList((ActionCommand[])data));
-        }
-        else if (data instanceof List && ((List)data).size() == 0) {
-          return new ArrayList<>();
-        }
-        else {
-          throw new IOException("Unexpected object: " + data + "/" + data.getClass());
-        }
-      }
-      catch (ReflectiveOperationException e) {
-        throw (StreamCorruptedException)new StreamCorruptedException("Stream error: " + scriptFile).initCause(e);
-      }
+  @NotNull
+  public static List<ActionCommand> loadActionScript(@NotNull Path scriptFile) throws IOException {
+    if (!Files.isRegularFile(scriptFile)) {
+      return new ArrayList<>();
     }
 
-    return new ArrayList<>();
+    try (ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(scriptFile))) {
+      Object data = ois.readObject();
+      if (data instanceof ActionCommand[]) {
+        return new ArrayList<>(Arrays.asList((ActionCommand[])data));
+      }
+      else if (data instanceof List && ((List<?>)data).size() == 0) {
+        return new ArrayList<>();
+      }
+      else {
+        throw new IOException("An unexpected object: " + data + "/" + data.getClass());
+      }
+    }
+    catch (ReflectiveOperationException e) {
+      throw (StreamCorruptedException)new StreamCorruptedException("Stream error: " + scriptFile).initCause(e);
+    }
   }
 
   private static void saveActionScript(@Nullable List<ActionCommand> commands) throws IOException {
-    File scriptFile = getActionScriptFile();
+    Path scriptFile = getActionScriptFile();
+    saveActionScript(commands, scriptFile);
+  }
+
+  public static void saveActionScript(@Nullable List<ActionCommand> commands, Path scriptFile)
+    throws IOException {
     if (commands != null) {
-      File tempDir = scriptFile.getParentFile();
-      if (!(tempDir.exists() || tempDir.mkdirs())) {
-        throw new IOException("Cannot create directory: " + tempDir);
-      }
-      try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(scriptFile, false))) {
+      Files.createDirectories(scriptFile.getParent());
+      try (ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(scriptFile))) {
         oos.writeObject(commands.toArray(ActionCommand.EMPTY_ARRAY));
       }
     }
-    else if (scriptFile.exists()) {
-      FileUtilRt.delete(scriptFile);
+    else if (Files.exists(scriptFile)) {
+      FileUtilRt.delete(scriptFile.toFile());
     }
   }
 
@@ -175,7 +188,7 @@ public class StartupActionScriptManager {
 
       File destDir = destination.getParentFile();
       if (!(destDir.isDirectory() || destDir.mkdirs())) {
-        throw new IOException("Cannot create directory: " + destDir);
+        throw new IOException("Cannot create a directory: " + destDir);
       }
 
       FileUtilRt.copy(source, destination);
@@ -184,6 +197,10 @@ public class StartupActionScriptManager {
     @Override
     public String toString() {
       return "copy[" + mySource + "," + myDestination + "]";
+    }
+
+    public String getSource() {
+      return mySource;
     }
   }
 
@@ -213,7 +230,7 @@ public class StartupActionScriptManager {
       }
 
       if (!(destination.isDirectory() || destination.mkdirs())) {
-        throw new IOException("Cannot create directory: " + destination);
+        throw new IOException("Cannot create a directory: " + destination);
       }
 
       ZipUtil.extract(source, destination, myFilenameFilter);
@@ -222,6 +239,10 @@ public class StartupActionScriptManager {
     @Override
     public String toString() {
       return "unzip[" + mySource + "," + myDestination + "]";
+    }
+
+    public String getSource() {
+      return mySource;
     }
   }
 

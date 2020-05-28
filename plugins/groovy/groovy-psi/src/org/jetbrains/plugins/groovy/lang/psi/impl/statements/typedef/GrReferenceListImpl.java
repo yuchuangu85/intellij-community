@@ -29,7 +29,7 @@ public abstract class GrReferenceListImpl extends GrStubElementBase<GrReferenceL
   implements StubBasedPsiElement<GrReferenceListStub>, GrReferenceList, PsiListLikeElement {
 
   private static final Logger LOG = Logger.getInstance(GrReferenceListImpl.class);
-  
+
   private PsiClassType[] myCachedTypes;
 
   public GrReferenceListImpl(@NotNull ASTNode node) {
@@ -76,14 +76,13 @@ public abstract class GrReferenceListImpl extends GrStubElementBase<GrReferenceL
   }
 
   @Override
-  @NotNull
-  public GrCodeReferenceElement[] getReferenceElementsGroovy() {
+  public GrCodeReferenceElement @NotNull [] getReferenceElementsGroovy() {
     final GrReferenceListStub stub = getStub();
     if (stub != null) {
       final String[] baseClasses = stub.getBaseClasses();
       final GrCodeReferenceElement[] result = new GrCodeReferenceElement[baseClasses.length];
       for (int i = 0; i < baseClasses.length; i++) {
-        result[i] = GroovyPsiElementFactory.getInstance(getProject()).createReferenceElementFromText(baseClasses[i], this);
+        result[i] = GroovyPsiElementFactory.getInstance(getProject()).createCodeReference(baseClasses[i], this);
       }
       return result;
     }
@@ -91,9 +90,8 @@ public abstract class GrReferenceListImpl extends GrStubElementBase<GrReferenceL
     return findChildrenByClass(GrCodeReferenceElement.class);
   }
 
-  @NotNull
   @Override
-  public PsiClassType[] getReferencedTypes() {
+  public PsiClassType @NotNull [] getReferencedTypes() {
     if (myCachedTypes == null || !isValid()) {
       final ArrayList<PsiClassType> types = new ArrayList<>();
       for (GrCodeReferenceElement ref : getReferenceElementsGroovy()) {

@@ -14,6 +14,7 @@ import com.intellij.openapi.vcs.LineHandlerHelper;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.EventDispatcher;
 import com.intellij.util.io.BaseDataReader;
+import git4idea.config.GitExecutable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -40,10 +41,12 @@ public class GitLineHandler extends GitTextHandler {
    * Remote url which require authentication
    */
   @NotNull private Collection<String> myUrls = Collections.emptyList();
-  private boolean myIgnoreAuthenticationRequest;
+  @NotNull private GitAuthenticationMode myIgnoreAuthenticationRequest = GitAuthenticationMode.FULL;
   @Nullable private GitAuthenticationGate myAuthenticationGate;
 
-  public GitLineHandler(@NotNull Project project, @NotNull File directory, @NotNull GitCommand command) {
+  public GitLineHandler(@Nullable Project project,
+                        @NotNull File directory,
+                        @NotNull GitCommand command) {
     super(project, directory, command);
   }
 
@@ -62,10 +65,10 @@ public class GitLineHandler extends GitTextHandler {
 
   public GitLineHandler(@Nullable Project project,
                         @NotNull File directory,
-                        @NotNull String pathToExecutable,
+                        @NotNull GitExecutable executable,
                         @NotNull GitCommand command,
                         @NotNull List<String> configParameters) {
-    super(project, directory, pathToExecutable, command, configParameters);
+    super(project, directory, executable, command, configParameters);
   }
 
   public void setUrl(@NotNull String url) {
@@ -85,12 +88,13 @@ public class GitLineHandler extends GitTextHandler {
     return !myUrls.isEmpty();
   }
 
-  public boolean isIgnoreAuthenticationRequest() {
+  @NotNull
+  public GitAuthenticationMode getIgnoreAuthenticationMode() {
     return myIgnoreAuthenticationRequest;
   }
 
-  public void setIgnoreAuthenticationRequest(boolean ignoreAuthenticationRequest) {
-    myIgnoreAuthenticationRequest = ignoreAuthenticationRequest;
+  public void setIgnoreAuthenticationMode(@NotNull GitAuthenticationMode authenticationMode) {
+    myIgnoreAuthenticationRequest = authenticationMode;
   }
 
   @Nullable
@@ -144,7 +148,7 @@ public class GitLineHandler extends GitTextHandler {
 
   @Override
   protected OSProcessHandler createProcess(@NotNull GeneralCommandLine commandLine) throws ExecutionException {
-    return new MyOSProcessHandler(commandLine, myWithMediator && Registry.is("git.execute.with.mediator")) {
+    return new MyOSProcessHandler(commandLine, myWithMediator && myExecutable.isLocal() && Registry.is("git.execute.with.mediator")) {
       @NotNull
       @Override
       protected BaseDataReader createOutputDataReader() {
@@ -165,13 +169,19 @@ public class GitLineHandler extends GitTextHandler {
     };
   }
 
+  public void overwriteConfig(String ... params) {
+    for (String param : params) {
+      myCommandLine.getParametersList().prependAll("-c", param);
+    }
+  }
+
   /**
    * Will not react to {@link com.intellij.util.io.BaseOutputReader.Options}
    * other than {@link com.intellij.util.io.BaseOutputReader.Options#policy()} because we do not negotiate with terrorists
    */
   private static class LineReader extends BaseDataReader {
     @NotNull private final Reader myReader;
-    @NotNull private final char[] myInputBuffer = new char[8192];
+    private final char @NotNull [] myInputBuffer = new char[8192];
 
     @NotNull private final BufferingTextSplitter myOutputProcessor;
 

@@ -16,21 +16,18 @@
 
 package com.intellij.stats.personalization
 
-import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.Key
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.service
 
 /**
  * @author Vitaliy.Bibaev
  */
 interface UserFactorsManager {
   companion object {
-    val USER_FACTORS_KEY: Key<Map<String, String?>> = Key.create<Map<String, String?>>("com.intellij.stats.personalization.userFactors")
-    fun getInstance(project: Project): UserFactorsManager = project.getComponent(UserFactorsManager::class.java)
+    val ENABLE_USER_FACTORS = ApplicationManager.getApplication().isEAP
+
+    fun getInstance(): UserFactorsManager = service()
   }
 
-  fun getAllFactorIds(): List<String>
-
   fun getAllFactors(): List<UserFactor>
-
-  fun getFactor(id: String): UserFactor
 }

@@ -11,6 +11,8 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.RangeMarker;
 import com.intellij.openapi.editor.impl.DocumentImpl;
 import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.project.DumbService;
+import com.intellij.openapi.project.Project;
 import com.intellij.util.TimeoutUtil;
 import com.intellij.util.concurrency.SequentialTaskExecutor;
 import org.jetbrains.annotations.NotNull;
@@ -30,22 +32,25 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author peter
  */
 class AsyncFilterRunner {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.execution.impl.FilterRunner");
+  private static final Logger LOG = Logger.getInstance(AsyncFilterRunner.class);
   private static final ExecutorService ourExecutor = SequentialTaskExecutor.createSequentialApplicationPoolExecutor("Console Filters");
   private final EditorHyperlinkSupport myHyperlinks;
   private final Editor myEditor;
   private final Queue<HighlighterJob> myQueue = new ConcurrentLinkedQueue<>();
   @NotNull private List<FilterResult> myResults = new ArrayList<>();
 
-  AsyncFilterRunner(EditorHyperlinkSupport hyperlinks, Editor editor) {
+  AsyncFilterRunner(@NotNull EditorHyperlinkSupport hyperlinks, @NotNull Editor editor) {
     myHyperlinks = hyperlinks;
     myEditor = editor;
   }
 
-  void highlightHyperlinks(final Filter customFilter, final int startLine, final int endLine) {
+  void highlightHyperlinks(@NotNull Project project,
+                           @NotNull Filter customFilter,
+                           final int startLine,
+                           final int endLine) {
     if (endLine < 0) return;
 
-    myQueue.offer(new HighlighterJob(customFilter, startLine, endLine, myEditor.getDocument()));
+    myQueue.offer(new HighlighterJob(project, customFilter, startLine, endLine, myEditor.getDocument()));
     if (ApplicationManager.getApplication().isWriteAccessAllowed()) {
       runTasks();
       highlightAvailableResults();
@@ -56,7 +61,8 @@ class AsyncFilterRunner {
 
     if (isQuick(promise)) {
       highlightAvailableResults();
-    } else {
+    }
+    else {
       promise.onSuccess(__ -> {
         if (hasResults()) {
           ApplicationManager.getApplication().invokeLater(this::highlightAvailableResults, ModalityState.any());
@@ -107,8 +113,7 @@ class AsyncFilterRunner {
     }
   }
 
-  @SuppressWarnings("UnusedReturnValue")
-  public boolean waitForPendingFilters(long timeoutMs) {
+  boolean waitForPendingFilters(long timeoutMs) {
     ApplicationManager.getApplication().assertIsDispatchThread();
     
     long started = System.currentTimeMillis();
@@ -132,10 +137,12 @@ class AsyncFilterRunner {
   }
 
   private void runTasks() {
+    ApplicationManager.getApplication().assertReadAccessAllowed();
     if (myEditor.isDisposed()) return;
 
     while (!myQueue.isEmpty()) {
       HighlighterJob highlighter = myQueue.peek();
+      if (!DumbService.isDumbAware(highlighter.filter) && DumbService.isDumb(highlighter.myProject)) return;
       while (highlighter.hasUnprocessedLines()) {
         ProgressManager.checkCanceled();
         addLineResult(highlighter.analyzeNextLine());
@@ -157,51 +164,82 @@ class AsyncFilterRunner {
     return result;
   }
 
-  private interface FilterResult {
-    void applyHighlights();
+  /**
+   * It's important that FilterResult doesn't reference frozen document from {@link HighlighterJob#snapshot},
+   * as the lifetime of FilterResult is longer (until EDT is free to apply events), and there can be many jobs
+   * holding many document snapshots all together consuming a lot of memory.
+   */
+  private class FilterResult {
+    private final DeltaTracker myDelta;
+    private final Filter.Result myResult;
+
+    FilterResult(DeltaTracker delta, Filter.Result result) {
+      myDelta = delta;
+      myResult = result;
+    }
+
+    void applyHighlights() {
+      if (!myDelta.isOutdated()) {
+        myHyperlinks.highlightHyperlinks(myResult, myDelta.getOffsetDelta());
+      }
+    }
   }
 
   private class HighlighterJob {
+    @NotNull private final Project myProject;
     private final AtomicInteger startLine;
     private final int endLine;
-    private final int initialMarkerOffset;
-    private final RangeMarker endMarker;
+    private final DeltaTracker delta;
+    @NotNull
     private final Filter filter;
+    @NotNull
     private final Document snapshot;
 
-    HighlighterJob(Filter filter, int startLine, int endLine, Document document) {
+    HighlighterJob(@NotNull Project project,
+                   @NotNull Filter filter,
+                   int startLine,
+                   int endLine,
+                   @NotNull Document document) {
+      myProject = project;
       this.startLine = new AtomicInteger(startLine);
       this.endLine = endLine;
       this.filter = filter;
 
-      initialMarkerOffset = document.getLineEndOffset(endLine);
-      endMarker = document.createRangeMarker(initialMarkerOffset, initialMarkerOffset);
+      delta = new DeltaTracker(document, document.getLineEndOffset(endLine));
+
       snapshot = ((DocumentImpl)document).freeze();
     }
 
     boolean hasUnprocessedLines() {
-      return !isOutdated() && startLine.get() <= endLine;
+      return !delta.isOutdated() && startLine.get() <= endLine;
     }
 
     @Nullable
-    AsyncFilterRunner.FilterResult analyzeNextLine() {
+    private AsyncFilterRunner.FilterResult analyzeNextLine() {
       int line = startLine.get();
       Filter.Result result = analyzeLine(line);
       LOG.assertTrue(line == startLine.getAndIncrement());
-      return result == null ? null : () -> {
-        if (!isOutdated()) {
-          myHyperlinks.highlightHyperlinks(result, getOffsetDelta());
-        }
-      };
+      return result == null ? null : new FilterResult(delta, result);
     }
 
-    Filter.Result analyzeLine(int line) {
+    private Filter.Result analyzeLine(int line) {
       int lineStart = snapshot.getLineStartOffset(line);
-      if (lineStart + getOffsetDelta() < 0) return null;
+      if (lineStart + delta.getOffsetDelta() < 0) return null;
 
       String lineText = EditorHyperlinkSupport.getLineText(snapshot, line, true);
       int endOffset = lineStart + lineText.length();
       return checkRange(filter, endOffset, filter.applyFilter(lineText, endOffset));
+    }
+
+  }
+
+  private static class DeltaTracker {
+    private final int initialMarkerOffset;
+    private final RangeMarker endMarker;
+
+    DeltaTracker(Document document, int offset) {
+      initialMarkerOffset = offset;
+      endMarker = document.createRangeMarker(initialMarkerOffset, initialMarkerOffset);
     }
 
     boolean isOutdated() {

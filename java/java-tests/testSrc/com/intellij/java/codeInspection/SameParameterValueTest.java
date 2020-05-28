@@ -18,9 +18,9 @@ package com.intellij.java.codeInspection;
 import com.intellij.JavaTestUtil;
 import com.intellij.codeInspection.sameParameterValue.SameParameterValueInspection;
 import com.intellij.psi.PsiModifier;
-import com.intellij.testFramework.InspectionTestCase;
+import com.intellij.testFramework.JavaInspectionTestCase;
 
-public class SameParameterValueTest extends InspectionTestCase {
+public class SameParameterValueTest extends JavaInspectionTestCase {
   private SameParameterValueInspection myTool = new SameParameterValueInspection();
 
   @Override
@@ -103,6 +103,10 @@ public class SameParameterValueTest extends InspectionTestCase {
   }
 
   public void testOverrideGroovy() {
+    doTest(getTestDir(), myTool, false, true);
+  }
+
+  public void testMethodReferences() {
     doTest(getTestDir(), myTool, false, true);
   }
 }

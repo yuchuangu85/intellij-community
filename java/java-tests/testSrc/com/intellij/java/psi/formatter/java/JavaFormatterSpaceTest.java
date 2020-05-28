@@ -1,10 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.psi.formatter.java;
 
 import com.intellij.JavaTestUtil;
 import com.intellij.openapi.roots.LanguageLevelProjectExtension;
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings;
-import com.intellij.testFramework.LightPlatformTestCase;
 
 /**
  * Is intended to hold specific java formatting tests for 'spacing' settings.
@@ -15,7 +14,7 @@ public class JavaFormatterSpaceTest extends AbstractJavaFormatterTest {
   @Override
   protected void setUp() throws Exception {
     super.setUp();
-    LanguageLevelProjectExtension.getInstance(LightPlatformTestCase.getProject()).setLanguageLevel(JavaTestUtil.getMaxRegisteredLanguageLevel());
+    LanguageLevelProjectExtension.getInstance(getProject()).setLanguageLevel(JavaTestUtil.getMaxRegisteredLanguageLevel());
   }
 
   public void testSpacingBetweenTypeParameters() {
@@ -143,6 +142,7 @@ public class JavaFormatterSpaceTest extends AbstractJavaFormatterTest {
     doTextTest(initial, formatted); // Expect spaces to be inserted after unary operators
   }
 
+  @SuppressWarnings("unused")
   public void _testJavadocMethodParams() {
     // Inspired by IDEA-42167
     // Disabled because the contents of the {@code tag} is not necessarily Java code and
@@ -699,5 +699,89 @@ public class JavaFormatterSpaceTest extends AbstractJavaFormatterTest {
     getJavaSettings().SPACE_INSIDE_ONE_LINE_ENUM_BRACES = true;
     doTextTest("enum E {E1, E2}",
                "enum E { E1, E2 }");
+  }
+
+  public void testSwitchLabelSpacing() {
+    doMethodTest("switch (i) { case\n1\n:break;\ndefault\n:break; }",
+                 "switch (i) {\n" +
+                 "    case 1:\n        break;\n" +
+                 "    default:\n        break;\n" +
+                 "}");
+  }
+
+  public void testSwitchLabeledRuleSpacing() {
+    doMethodTest("switch (i) { case\n1\n->\nfoo();\ncase\n2->{bar()};\ndefault->throw new Exception(); }",
+                 "switch (i) {\n" +
+                 "    case 1 -> foo();\n" +
+                 "    case 2 -> {\n        bar()\n    };\n" +
+                 "    default -> throw new Exception();\n" +
+                 "}");
+  }
+
+  public void testMultiValueLabel() {
+    doMethodTest("switch(i) { case 1,2,  3: break; }",
+                 "switch (i) {\n" +
+                 "    case 1, 2, 3:\n" +
+                 "        break;\n" +
+                 "}");
+  }
+
+  public void testMultiValueLabeledRule() {
+    doMethodTest("switch(i) { case 1,2,  3 -> foo(); }",
+                 "switch (i) {\n" +
+                 "    case 1, 2, 3 -> foo();\n" +
+                 "}");
+  }
+
+  public void testSwitchExpression() {
+    doMethodTest("String s = switch\n(i   ){default -> null;}",
+                 "String s = switch (i) {\n" +
+                 "    default -> null;\n" +
+                 "}");
+  }
+
+  public void testBreakStatementSpacing() {
+    getSettings().CASE_STATEMENT_ON_NEW_LINE = false;
+    doMethodTest("String s = switch (i) {\n" +
+                 "    case 1: break\n        label ;\n" +
+                 "    case 3: break  label ;\n" +
+                 "    case 4: break  ;\n" +
+                 "}",
+                 "String s = switch (i) {\n" +
+                 "    case 1: break label;\n" +
+                 "    case 3: break label;\n" +
+                 "    case 4: break;\n" +
+                 "}");
+  }
+
+  public void testYieldStatementSpacing() {
+    getSettings().CASE_STATEMENT_ON_NEW_LINE = false;
+    doMethodTest("String s = switch (i) {\n" +
+                 "    case 0: yield(foo) ;\n" +
+                 "    case 1: yield\n        42 ;\n" +
+                 "    case 3: yield  label ;\n" +
+                 "    case 4: yield  ;\n" +
+                 "}",
+                 "String s = switch (i) {\n" +
+                 "    case 0: yield (foo);\n" +
+                 "    case 1: yield 42;\n" +
+                 "    case 3: yield label;\n" +
+                 "    case 4: yield ;\n" +
+                 "}");
+  }
+
+  public void testSpaceAfterCommaInRecordHeader() {
+    getSettings().SPACE_AFTER_COMMA = true;
+    doMethodTest("record R(String s,int i){}",
+                 "record R(String s, int i) {\n" +
+                 "}");
+  }
+
+  public void testSpaceBeforeCommaInRecordHeader() {
+    getSettings().SPACE_AFTER_COMMA = false;
+    getSettings().SPACE_BEFORE_COMMA = true;
+    doMethodTest("record R(String s,int i){}",
+                 "record R(String s ,int i) {\n" +
+                 "}");
   }
 }

@@ -15,20 +15,23 @@
  */
 package org.jetbrains.idea.maven.server.embedder;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ExecutorManager {
   private static final ExecutorService myExecutor = new ThreadPoolExecutor(3, Integer.MAX_VALUE, 30 * 60L, TimeUnit.SECONDS,
                                                                            new SynchronousQueue<Runnable>(),new ThreadFactory() {
-      AtomicInteger num = new AtomicInteger();
+      final AtomicInteger num = new AtomicInteger();
       @Override
       public Thread newThread(Runnable r) {
         return new Thread(r, "Maven Embedder "+num.getAndIncrement());
       }
     });
 
-  public static Future<?> execute(Runnable r) {
+  @NotNull
+  public static <T> Future<T> execute(@NotNull Callable<T> r) {
     return myExecutor.submit(r);
   }
 }

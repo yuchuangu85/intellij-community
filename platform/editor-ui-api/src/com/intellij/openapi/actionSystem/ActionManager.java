@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.actionSystem;
 
 import com.intellij.openapi.Disposable;
@@ -25,7 +25,7 @@ public abstract class ActionManager {
    * Fetches the instance of ActionManager implementation.
    */
   public static ActionManager getInstance() {
-    return ApplicationManager.getApplication().getComponent(ActionManager.class);
+    return ApplicationManager.getApplication().getService(ActionManager.class);
   }
 
   /**
@@ -39,7 +39,7 @@ public abstract class ActionManager {
    * @return An instance of {@code ActionPopupMenu}
    */
   @NotNull
-  public abstract ActionPopupMenu createActionPopupMenu(@NonNls String place, @NotNull ActionGroup group);
+  public abstract ActionPopupMenu createActionPopupMenu(@NonNls @NotNull String place, @NotNull ActionGroup group);
 
   /**
    * Factory method that creates an {@code ActionToolbar} from the
@@ -49,7 +49,7 @@ public abstract class ActionManager {
    *                   when an action from the group is either performed or updated.
    *                   See {@link com.intellij.openapi.actionSystem.ActionPlaces}
    * @param group      Group from which the actions for the toolbar are taken.
-   * @param horizontal The orientation of the toolbar (true - horizontal, false - vertical)
+   * @param horizontal The orientation of the toolbar ({@code true} - horizontal, {@code false} - vertical)
    * @return An instance of {@code ActionToolbar}
    */
   @NotNull
@@ -76,7 +76,7 @@ public abstract class ActionManager {
   public abstract String getId(@NotNull AnAction action);
 
   /**
-   * Registers the specified action with the specified id. Note that IDEA's keymaps
+   * Registers the specified action with the specified id. Note that the IDE's keymaps
    * processing deals only with registered actions.
    *
    * @param actionId Id to associate with the action
@@ -95,19 +95,25 @@ public abstract class ActionManager {
   public abstract void registerAction(@NotNull String actionId, @NotNull AnAction action, @Nullable PluginId pluginId);
 
   /**
-   * Unregisters the action with the specified actionId.
+   * Unregisters the action with the specified actionId. <strong>If you're going to register another action with the same ID, use {@link #replaceAction(String, AnAction)}
+   * instead</strong>, otherwise references in action groups may not be replaced.
    *
    * @param actionId Id of the action to be unregistered
    */
   public abstract void unregisterAction(@NotNull String actionId);
 
   /**
+   * Replaces an existing action with ID {@code actionId} by {@code newAction}. Using this method for changing behavior of a platform action
+   * is not recommended, extract an extension point in the action implementation instead.
+   */
+  public abstract void replaceAction(@NotNull String actionId, @NotNull AnAction newAction);
+
+  /**
    * Returns the list of all registered action IDs with the specified prefix.
    *
    * @return all action {@code id}s which have the specified prefix.
-   * @since 5.1
    */
-  public abstract String[] getActionIds(@NotNull String idPrefix);
+  public abstract String @NotNull [] getActionIds(@NotNull String idPrefix);
 
   /**
    * Checks if the specified action ID represents an action group and not an individual action.
@@ -115,8 +121,7 @@ public abstract class ActionManager {
    * to the action ID.
    *
    * @param actionId the ID to check.
-   * @return true if the ID represents an action group, false otherwise.
-   * @since 5.1
+   * @return {@code true} if the ID represents an action group, {@code false} otherwise.
    */
   public abstract boolean isGroup(@NotNull String actionId);
 
@@ -126,27 +131,27 @@ public abstract class ActionManager {
    * @param actionPlace        the place where the panel will be used (see {@link ActionPlaces}).
    * @param messageActionGroup the action group from which the toolbar is created.
    * @return the created panel.
-   * @since 5.1
    */
   @NotNull
-  public abstract JComponent createButtonToolbar(final String actionPlace, @NotNull ActionGroup messageActionGroup);
+  public abstract JComponent createButtonToolbar(@NotNull String actionPlace, @NotNull ActionGroup messageActionGroup);
 
   @Nullable
-  public abstract AnAction getActionOrStub(@NonNls String id);
+  public abstract AnAction getActionOrStub(@NotNull @NonNls String id);
 
-  public abstract void addTimerListener(int delay, TimerListener listener);
+  public abstract void addTimerListener(int delay, @NotNull TimerListener listener);
 
-  public abstract void removeTimerListener(TimerListener listener);
+  public abstract void removeTimerListener(@NotNull TimerListener listener);
 
-  public abstract void addTransparentTimerListener(int delay, TimerListener listener);
+  public abstract void addTransparentTimerListener(int delay, @NotNull TimerListener listener);
 
-  public abstract void removeTransparentTimerListener(TimerListener listener);
+  public abstract void removeTransparentTimerListener(@NotNull TimerListener listener);
 
+  @NotNull
   public abstract ActionCallback tryToExecute(@NotNull AnAction action, @NotNull InputEvent inputEvent, @Nullable Component contextComponent,
                                               @Nullable String place, boolean now);
 
   /**
-   * Use {@link AnActionListener#TOPIC}
+   * @deprecated Use {@link AnActionListener#TOPIC}
    */
   @Deprecated
   public abstract void addAnActionListener(AnActionListener listener);
@@ -159,6 +164,9 @@ public abstract class ActionManager {
     ApplicationManager.getApplication().getMessageBus().connect(parentDisposable).subscribe(AnActionListener.TOPIC, listener);
   }
 
+  /**
+   * @deprecated Use {@link AnActionListener#TOPIC}
+   */
   @Deprecated
   public abstract void removeAnActionListener(AnActionListener listener);
 

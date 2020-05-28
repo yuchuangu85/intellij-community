@@ -1,14 +1,15 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.ui.impl;
 
-import com.intellij.ide.ui.LafManager;
+import com.intellij.ide.ui.LafManagerListener;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.ui.JreHiDpiUtil;
+import com.intellij.ui.scale.JBUIScale;
+import com.intellij.ui.scale.ScaleContext;
+import com.intellij.ui.scale.ScaleContextAware;
+import com.intellij.ui.scale.ScaleContextSupport;
 import com.intellij.util.IconUtil;
 import com.intellij.util.ui.ImageUtil;
-import com.intellij.util.ui.JBUI;
-import com.intellij.util.ui.JBUI.ScaleContext;
-import com.intellij.util.ui.JBUI.ScaleContextAware;
-import com.intellij.util.ui.JBUI.ScaleContextSupport;
-import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
@@ -20,7 +21,7 @@ import java.awt.image.BufferedImage;
 /**
  * @author Konstantin Bulenkov
  */
-public class ShadowPainter extends ScaleContextSupport<ScaleContext> {
+public final class ShadowPainter extends ScaleContextSupport {
   private final Icon myTop;
   private final Icon myTopRight;
   private final Icon myRight;
@@ -39,7 +40,6 @@ public class ShadowPainter extends ScaleContextSupport<ScaleContext> {
   private Color myBorderColor;
 
   public ShadowPainter(Icon top, Icon topRight, Icon right, Icon bottomRight, Icon bottom, Icon bottomLeft, Icon left, Icon topLeft) {
-    super(ScaleContext.create());
     myTop = top;
     myTopRight = topRight;
     myRight = right;
@@ -50,7 +50,7 @@ public class ShadowPainter extends ScaleContextSupport<ScaleContext> {
     myTopLeft = topLeft;
 
     updateIcons(null);
-    LafManager.getInstance().addLafManagerListener(source -> updateIcons(null));
+    ApplicationManager.getApplication().getMessageBus().connect().subscribe(LafManagerListener.TOPIC, source -> updateIcons(null));
   }
 
   public ShadowPainter(Icon top, Icon topRight, Icon right, Icon bottomRight, Icon bottom, Icon bottomLeft, Icon left, Icon topLeft, @Nullable Color borderColor) {
@@ -89,7 +89,7 @@ public class ShadowPainter extends ScaleContextSupport<ScaleContext> {
   }
 
   public void paintShadow(Component c, Graphics2D g, int x, int y, int width, int height) {
-    ScaleContext ctx = ScaleContext.create(c, g);
+    ScaleContext ctx = ScaleContext.create(g);
     if (updateScaleContext(ctx)) {
       updateIcons(ctx);
     }
@@ -142,8 +142,8 @@ public class ShadowPainter extends ScaleContextSupport<ScaleContext> {
   }
 
   private static void fill(Graphics g, Icon pattern, int x, int y, int from, int to, boolean horizontally) {
-    double scale = JBUI.sysScale((Graphics2D)g);
-    if (UIUtil.isJreHiDPIEnabled() && Math.ceil(scale) > scale) {
+    double scale = JBUIScale.sysScale((Graphics2D)g);
+    if (JreHiDpiUtil.isJreHiDPIEnabled() && Math.ceil(scale) > scale) {
       // Direct painting for fractional scale
       BufferedImage img = ImageUtil.toBufferedImage(IconUtil.toImage(pattern));
       int patternSize = horizontally ? img.getWidth() : img.getHeight();

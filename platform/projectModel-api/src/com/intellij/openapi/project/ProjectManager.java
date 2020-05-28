@@ -1,47 +1,40 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.project;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.util.InvalidDataException;
 import com.intellij.util.messages.Topic;
 import org.jdom.JDOMException;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.TestOnly;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 
 /**
  * Provides project management.
  */
+@ApiStatus.NonExtendable
 public abstract class ProjectManager {
-  public static final Topic<ProjectManagerListener> TOPIC = new Topic<>("Project open and close events", ProjectManagerListener.class);
+  @Topic.AppLevel
+  public static final Topic<ProjectManagerListener> TOPIC = new Topic<>(ProjectManagerListener.class);
 
   /**
-   * Gets {@code ProjectManager} instance.
-   *
    * @return {@code ProjectManager} instance
    */
   public static ProjectManager getInstance() {
-    return ApplicationManager.getApplication().getComponent(ProjectManager.class);
+    return ApplicationManager.getApplication().getService(ProjectManager.class);
+  }
+
+  public static @Nullable ProjectManager getInstanceIfCreated() {
+    return ApplicationManager.getApplication().getServiceIfCreated(ProjectManager.class);
   }
 
   /**
-   * @deprecated Use {@link Topic}
+   * @deprecated Use {@link #TOPIC} instead
    */
   @Deprecated
   public abstract void addProjectManagerListener(@NotNull ProjectManagerListener listener);
@@ -49,13 +42,13 @@ public abstract class ProjectManager {
   public abstract void addProjectManagerListener(@NotNull VetoableProjectManagerListener listener);
 
   /**
-   * @deprecated Use {@link Topic}
+   * @deprecated Use {@link #TOPIC} instead
    */
   @Deprecated
   public abstract void addProjectManagerListener(@NotNull ProjectManagerListener listener, @NotNull Disposable parentDisposable);
 
   /**
-   * @deprecated Use {@link Topic}
+   * @deprecated Use {@link #TOPIC} instead
    */
   @Deprecated
   public abstract void removeProjectManagerListener(@NotNull ProjectManagerListener listener);
@@ -80,11 +73,9 @@ public abstract class ProjectManager {
 
   /**
    * Returns the list of currently opened projects.
-   *
-   * @return the array of currently opened projects.
+   * {@link Project#isDisposed()} must be checked for each project before use (if the whole operation is not under read action).
    */
-  @NotNull
-  public abstract Project[] getOpenProjects();
+  public abstract @NotNull Project @NotNull [] getOpenProjects();
 
   /**
    * Returns the project which is used as a template for new projects. The template project
@@ -95,8 +86,7 @@ public abstract class ProjectManager {
    *
    * @return the template project instance.
    */
-  @NotNull
-  public abstract Project getDefaultProject();
+  public abstract @NotNull Project getDefaultProject();
 
   /**
    * Loads and opens a project with the specified path. If the project file is from an older IDEA
@@ -108,10 +98,17 @@ public abstract class ProjectManager {
    *         or because the project is already open.
    * @throws IOException          if the project file was not found or failed to read
    * @throws JDOMException        if the project file contained invalid XML
-   * @throws InvalidDataException if the project file contained invalid data
    */
-  @Nullable
-  public abstract Project loadAndOpenProject(@NotNull String filePath) throws IOException, JDOMException, InvalidDataException;
+  public abstract @Nullable Project loadAndOpenProject(@NotNull String filePath) throws IOException, JDOMException;
+
+  @ApiStatus.Experimental
+  @TestOnly
+  public @Nullable Project loadAndOpenProject(@NotNull File file) throws IOException, JDOMException {
+    return loadAndOpenProject(file.toPath());
+  }
+
+  @ApiStatus.Experimental
+  public abstract @Nullable Project loadAndOpenProject(@NotNull Path file) throws IOException, JDOMException;
 
   /**
    * Closes the specified project, but does not dispose it.
@@ -126,6 +123,7 @@ public abstract class ProjectManager {
    *
    * @param project the project to reload.
    */
+  @SuppressWarnings("unused")
   public abstract void reloadProject(@NotNull Project project);
 
   /**
@@ -136,6 +134,5 @@ public abstract class ProjectManager {
    *
    * @return newly crated project
    */
-  @Nullable
-  public abstract Project createProject(@Nullable String name, @NotNull String path);
+  public abstract @Nullable Project createProject(@Nullable String name, @NotNull String path);
 }

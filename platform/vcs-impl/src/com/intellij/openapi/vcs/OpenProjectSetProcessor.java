@@ -16,7 +16,6 @@
 package com.intellij.openapi.vcs;
 
 import com.intellij.ide.impl.ProjectUtil;
-import com.intellij.openapi.application.TransactionGuard;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.vfs.LocalFileSystem;
@@ -38,14 +37,12 @@ public class OpenProjectSetProcessor extends ProjectSetProcessor {
   }
 
   @Override
-  public void processEntries(@NotNull List<Pair<String, String>> entries, @NotNull final Context context, @NotNull Runnable runNext) {
+  public void processEntries(@NotNull List<? extends Pair<String, String>> entries, @NotNull final Context context, @NotNull Runnable runNext) {
     final String root = context.directory == null || context.directoryName == null ? null : context.directory.getPath() + "/" + context.directoryName;
     for (final Pair<String, String> entry : entries) {
       if ("project".equals(entry.getFirst())) {
-        TransactionGuard.getInstance().submitTransactionAndWait(() -> {
-          String path = root == null ? entry.getSecond() : (root + "/" + entry.getSecond());
-          context.project = ProjectUtil.openProject(path, null, true);
-        });
+        String path = root == null ? entry.getSecond() : (root + "/" + entry.getSecond());
+        context.project = ProjectUtil.openProject(path, null, true);
         if (context.project != null) {
           runNext.run();
         }

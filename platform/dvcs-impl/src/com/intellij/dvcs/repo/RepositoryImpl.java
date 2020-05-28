@@ -20,19 +20,11 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
-/**
- * @author Nadya Zabrodina
- */
 public abstract class RepositoryImpl implements Repository {
 
   @NotNull private final Project myProject;
   @NotNull private final VirtualFile myRootDir;
-
-
-  @NotNull protected volatile State myState;
-  @Nullable protected volatile String myCurrentRevision;
 
   protected RepositoryImpl(@NotNull Project project,
                            @NotNull VirtualFile dir,
@@ -65,17 +57,9 @@ public abstract class RepositoryImpl implements Repository {
     return myProject;
   }
 
-  @NotNull
   @Override
-  public State getState() {
-    return myState;
-  }
-
-
-  @Override
-  @Nullable
-  public String getCurrentRevision() {
-    return myCurrentRevision;
+  public boolean isFresh() {
+    return getCurrentRevision() == null;
   }
 
   @Override

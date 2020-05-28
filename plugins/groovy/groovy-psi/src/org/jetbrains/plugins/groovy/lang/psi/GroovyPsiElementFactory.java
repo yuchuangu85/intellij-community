@@ -1,19 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi;
 
 import com.intellij.openapi.components.ServiceManager;
@@ -26,9 +11,11 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.lang.groovydoc.psi.api.GrDocComment;
 import org.jetbrains.plugins.groovy.lang.groovydoc.psi.api.GrDocMemberReference;
 import org.jetbrains.plugins.groovy.lang.groovydoc.psi.api.GrDocReferenceElement;
+import org.jetbrains.plugins.groovy.lang.psi.api.GrLambdaExpression;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.GrModifierList;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.annotation.GrAnnotation;
-import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrClosureSignature;
+import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.annotation.GrAnnotationNameValuePair;
+import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrSignature;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.*;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.arguments.GrArgumentList;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.arguments.GrNamedArgument;
@@ -64,10 +51,18 @@ public abstract class GroovyPsiElementFactory implements JVMElementFactory {
   public abstract GrCodeReferenceElement createCodeReferenceElementFromClass(@NotNull PsiClass aClass);
 
   @NotNull
-  public abstract GrCodeReferenceElement createCodeReferenceElementFromText(@NotNull String text);
+  public abstract GrReferenceExpression createThisExpression(@Nullable PsiClass psiClass);
 
   @NotNull
-  public abstract GrReferenceExpression createThisExpression(@Nullable PsiClass psiClass);
+  public final GrBlockStatement createBlockStatement(GrStatement... statements) {
+    StringBuilder text = new StringBuilder();
+    text.append("{\n");
+    for (GrStatement statement : statements) {
+      text.append(statement.getText()).append("\n");
+    }
+    text.append("}");
+    return createBlockStatementFromText(text.toString(), null);
+  }
 
   @NotNull
   public abstract GrBlockStatement createBlockStatementFromText(@NotNull String text, @Nullable PsiElement context);
@@ -135,9 +130,6 @@ public abstract class GroovyPsiElementFactory implements JVMElementFactory {
   public abstract GrStatement createStatementFromText(@NotNull CharSequence text, @Nullable PsiElement context);
 
   @NotNull
-  public abstract GrBlockStatement createBlockStatement(GrStatement... statements);
-
-  @NotNull
   public abstract GrMethodCallExpression createMethodCallByAppCall(@NotNull GrApplicationStatement callExpr);
 
   @NotNull
@@ -150,12 +142,12 @@ public abstract class GroovyPsiElementFactory implements JVMElementFactory {
   public abstract GrReferenceExpression createReferenceElementForClass(@NotNull PsiClass clazz);
 
   @NotNull
-  public GrCodeReferenceElement createReferenceElementFromText(@NotNull String refName) {
-    return createReferenceElementFromText(refName, null);
+  public GrCodeReferenceElement createCodeReference(@NotNull String text) {
+    return createCodeReference(text, null);
   }
 
   @NotNull
-  public abstract GrCodeReferenceElement createReferenceElementFromText(@NotNull String refName, @Nullable PsiElement context);
+  public abstract GrCodeReferenceElement createCodeReference(@NotNull String text, @Nullable PsiElement context);
 
   @NotNull
   public GrExpression createExpressionFromText(@NotNull CharSequence exprText) {
@@ -167,16 +159,16 @@ public abstract class GroovyPsiElementFactory implements JVMElementFactory {
   public abstract GrExpression createExpressionFromText(@NotNull String exprText, @Nullable PsiElement context);
 
   @NotNull
-  public abstract GrVariableDeclaration createFieldDeclaration(@NotNull String[] modifiers, @NotNull String identifier, @Nullable GrExpression initializer, @Nullable PsiType type);
+  public abstract GrVariableDeclaration createFieldDeclaration(String @NotNull [] modifiers, @NotNull String identifier, @Nullable GrExpression initializer, @Nullable PsiType type);
 
   @NotNull
   public abstract GrVariableDeclaration createFieldDeclarationFromText(@NotNull String text);
 
   @NotNull
-  public abstract GrVariableDeclaration createVariableDeclaration(@Nullable String[] modifiers, @Nullable GrExpression initializer, @Nullable PsiType type, String... identifiers);
+  public abstract GrVariableDeclaration createVariableDeclaration(String @Nullable [] modifiers, @Nullable GrExpression initializer, @Nullable PsiType type, String... identifiers);
 
   @NotNull
-  public abstract GrVariableDeclaration createVariableDeclaration(@Nullable String[] modifiers, @Nullable String initializer, @Nullable PsiType type, String... identifiers);
+  public abstract GrVariableDeclaration createVariableDeclaration(String @Nullable [] modifiers, @Nullable String initializer, @Nullable PsiType type, String... identifiers);
 
   @NotNull
   public abstract GrEnumConstant createEnumConstantFromText(@NotNull String text);
@@ -205,6 +197,14 @@ public abstract class GroovyPsiElementFactory implements JVMElementFactory {
   }
 
   @NotNull
+  public abstract GrLambdaExpression createLambdaFromText(@NotNull String text, @Nullable PsiElement context);
+
+  @NotNull
+  public GrLambdaExpression createLambdaFromText(@NotNull String text) {
+    return createLambdaFromText(text, null);
+  }
+
+  @NotNull
   public GrParameter createParameter(@NotNull String name, @Nullable String typeText, @Nullable GroovyPsiElement context) throws IncorrectOperationException {
     return createParameter(name, typeText, null, context);
   }
@@ -215,9 +215,6 @@ public abstract class GroovyPsiElementFactory implements JVMElementFactory {
                                               @Nullable String initializer,
                                               @Nullable GroovyPsiElement context,
                                               String... modifiers) throws IncorrectOperationException;
-
-  @NotNull
-  public abstract GrCodeReferenceElement createTypeOrPackageReference(@NotNull String qName);
 
   @NotNull
   public abstract GrTypeDefinition createTypeDefinition(@NotNull String text) throws IncorrectOperationException;
@@ -234,7 +231,7 @@ public abstract class GroovyPsiElementFactory implements JVMElementFactory {
   public abstract GrTypeElement createTypeElement(@NotNull String typeText, @Nullable PsiElement context);
 
   @NotNull
-  public abstract GrParenthesizedExpression createParenthesizedExpr(@NotNull GrExpression expression);
+  public abstract GrParenthesizedExpression createParenthesizedExpr(@NotNull GrExpression expression, @Nullable PsiElement context);
 
   @NotNull
   public abstract PsiElement createStringLiteralForReference(@NotNull String text);
@@ -260,7 +257,10 @@ public abstract class GroovyPsiElementFactory implements JVMElementFactory {
   public abstract GrAnnotation createAnnotationFromText(@NotNull @NonNls String annotationText, @Nullable PsiElement context) throws IncorrectOperationException;
 
   @NotNull
-  public abstract GrMethod createMethodFromSignature(@NotNull String name, @NotNull GrClosureSignature signature);
+  public abstract GrAnnotationNameValuePair createAnnotationAttribute(@NotNull String text, @Nullable PsiElement context);
+
+  @NotNull
+  public abstract GrMethod createMethodFromSignature(@NotNull String name, @NotNull GrSignature signature);
 
   @NotNull
   public GrMethod createMethodFromText(@NotNull CharSequence methodText) {
@@ -274,17 +274,17 @@ public abstract class GroovyPsiElementFactory implements JVMElementFactory {
   public abstract GroovyFile createGroovyFile(@NotNull CharSequence idText, boolean isPhysical, @Nullable PsiElement context);
 
   @NotNull
-  public abstract GrMethod createMethodFromText(@NotNull String modifier, @NotNull String name, @Nullable String type, @NotNull String[] paramTypes, @Nullable PsiElement context);
+  public abstract GrMethod createMethodFromText(@NotNull String modifier, @NotNull String name, @Nullable String type, String @NotNull [] paramTypes, @Nullable PsiElement context);
 
   @NotNull
   public abstract GrMethod createConstructorFromText(@NotNull String constructorName,
-                                                     @NotNull String[] paramTypes,
-                                                     @NotNull String[] paramNames,
+                                                     String @NotNull [] paramTypes,
+                                                     String @NotNull [] paramNames,
                                                      @Nullable String body,
                                                      @Nullable PsiElement context);
 
   @NotNull
-  public GrMethod createConstructorFromText(@NotNull String constructorName, @NotNull String[] paramTypes, @NotNull String[] paramNames, @Nullable String body) {
+  public GrMethod createConstructorFromText(@NotNull String constructorName, String @NotNull [] paramTypes, String @NotNull [] paramNames, @Nullable String body) {
     return createConstructorFromText(constructorName, paramTypes, paramNames, body, null);
   }
 
@@ -302,7 +302,7 @@ public abstract class GroovyPsiElementFactory implements JVMElementFactory {
   public abstract GrConstructorInvocation createConstructorInvocation(@NotNull String text, @Nullable PsiElement context);
 
   @NotNull
-  public abstract PsiReferenceList createThrownList(@NotNull PsiClassType[] exceptionTypes);
+  public abstract PsiReferenceList createThrownList(PsiClassType @NotNull [] exceptionTypes);
 
   @NotNull
   public abstract GrCatchClause createCatchClause(@NotNull PsiClassType type, @NotNull String parameterName);

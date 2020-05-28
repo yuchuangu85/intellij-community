@@ -32,7 +32,6 @@ import com.intellij.ui.table.TableView;
 import com.intellij.ui.treeStructure.Tree;
 import com.intellij.util.Alarm;
 import com.intellij.util.Consumer;
-import com.intellij.util.IJSwingUtilities;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.table.JBListTable;
@@ -137,7 +136,7 @@ public abstract class ChangeSignatureDialogBase<ParamInfo extends ParameterInfo,
     });
   }
 
-  public void setParameterInfos(List<ParamInfo> parameterInfos) {
+  public void setParameterInfos(@NotNull List<? extends ParamInfo> parameterInfos) {
     myParametersTableModel.setParameterInfos(parameterInfos);
     updateSignature();
   }
@@ -225,15 +224,14 @@ public abstract class ChangeSignatureDialogBase<ParamInfo extends ParameterInfo,
       myNameField.setPreferredWidth(200);
     }
     myNamePanel.add(nameLabel, BorderLayout.NORTH);
-    IJSwingUtilities.adjustComponentsOnMac(nameLabel, myNameField);
     myNamePanel.add(myNameField, BorderLayout.SOUTH);
 
-    createVisibilityPanel();
+    JPanel visibilityPanel = createVisibilityPanel();
 
     if (myMethod.canChangeVisibility() && myVisibilityPanel instanceof ComboBoxVisibilityPanel) {
       ((ComboBoxVisibilityPanel)myVisibilityPanel).registerUpDownActionsFor(myNameField);
-      myVisibilityPanel.setBorder(new EmptyBorder(0, 0, 0, 8));
-      panel.add(myVisibilityPanel, gbc);
+      visibilityPanel.setBorder(new EmptyBorder(0, 0, 0, 8));
+      panel.add(visibilityPanel, gbc);
       gbc.gridx++;
     }
 
@@ -258,7 +256,6 @@ public abstract class ChangeSignatureDialogBase<ParamInfo extends ParameterInfo,
       }
 
       typePanel.add(typeLabel, BorderLayout.NORTH);
-      IJSwingUtilities.adjustComponentsOnMac(typeLabel, myReturnTypeField);
       typePanel.add(myReturnTypeField, BorderLayout.SOUTH);
       if (placeReturnTypeBeforeName()) {
         panel.add(typePanel, gbc);
@@ -650,7 +647,7 @@ public abstract class ChangeSignatureDialogBase<ParamInfo extends ParameterInfo,
     return "refactoring.changeSignature";
   }
 
-  class UpdateSignatureListener implements ChangeListener, DocumentListener, TableModelListener {
+  protected class UpdateSignatureListener implements ChangeListener, DocumentListener, TableModelListener {
     private void update() {
       updateSignature();
     }

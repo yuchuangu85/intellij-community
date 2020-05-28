@@ -1,6 +1,7 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection;
 
+import com.intellij.codeInspection.util.InspectionMessage;
 import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.util.ArrayFactory;
 import org.jetbrains.annotations.NotNull;
@@ -12,7 +13,6 @@ import java.util.Comparator;
  * Base class for problems returned by local and global inspection tools.
  *
  * @author anna
- * @since 6.0
  * @see InspectionManager#createProblemDescriptor(String, QuickFix[])
  */
 public interface CommonProblemDescriptor {
@@ -35,18 +35,18 @@ public interface CommonProblemDescriptor {
   ArrayFactory<CommonProblemDescriptor> ARRAY_FACTORY = count -> count == 0 ? EMPTY_ARRAY : new CommonProblemDescriptor[count];
 
   /**
-   * Returns the template (text or html) from which the problem description is built.
+   * Returns the template (text or HTML) from which the problem description is built.
+   * <p>
    * The template may contain special markers:
-   *
-   * 1. {@code #ref} is replaced with the text of the element in which the problem has been found;
-   *
-   * 2. {@code #loc} is replaced with the filename and line number in exported inspection results and ignored when viewing within IDEA;
-   *
-   * 3. {@code #treeend} is used as cut-symbol for template when it's shown inside inspection result tree.
-   * So any content after this marker is not visible in the tree node.
-   *
+   * <ul>
+   * <li>{@code #ref} is replaced with the text of the element in which the problem has been found</li>
+   * <li>{@code #loc} is replaced with the filename and line number in exported inspection results and ignored when viewing within IDE</li>
+   * <li>{@code #treeend} is used as cut-symbol for template when it's shown inside inspection result tree.
+   * So any content after this marker is not visible in the tree node.</li>
+   * </ul>
    * @return the template for the problem description.
    */
+  @InspectionMessage
   @NotNull
   String getDescriptionTemplate();
 
@@ -55,6 +55,5 @@ public interface CommonProblemDescriptor {
    *
    * @return the list of quickfixes registered for the problem.
    */
-  @Nullable
-  QuickFix[] getFixes();
+  QuickFix @Nullable [] getFixes();
 }

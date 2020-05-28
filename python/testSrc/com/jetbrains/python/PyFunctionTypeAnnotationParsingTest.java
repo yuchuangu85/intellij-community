@@ -8,9 +8,9 @@ import com.jetbrains.python.codeInsight.functionTypeComments.PyFunctionTypeAnnot
 import com.jetbrains.python.codeInsight.functionTypeComments.psi.PyFunctionTypeAnnotation;
 import com.jetbrains.python.codeInsight.functionTypeComments.psi.PyFunctionTypeAnnotationFile;
 import com.jetbrains.python.documentation.doctest.PyDocstringTokenSetContributor;
-import com.jetbrains.python.inspections.PythonVisitorFilter;
 import com.jetbrains.python.psi.PyExpression;
 import com.jetbrains.python.psi.PyNoneLiteralExpression;
+import com.jetbrains.python.psi.PythonVisitorFilter;
 import com.jetbrains.python.psi.impl.PythonASTFactory;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -33,15 +33,21 @@ public class PyFunctionTypeAnnotationParsingTest extends ParsingTestCase {
     registerExtension(PythonDialectsTokenSetContributor.EP_NAME, new PythonTokenSetContributor());
     registerExtension(PythonDialectsTokenSetContributor.EP_NAME, new PyDocstringTokenSetContributor());
     addExplicitExtension(LanguageASTFactory.INSTANCE, PythonLanguage.getInstance(), new PythonASTFactory());
-    PythonDialectsTokenSetProvider.reset();
   }
 
   @Override
   protected void tearDown() throws Exception {
     // clear cached extensions
-    PythonVisitorFilter.INSTANCE.removeExplicitExtension(PythonLanguage.INSTANCE, (visitorClass, file) -> false);
-    PythonVisitorFilter.INSTANCE.removeExplicitExtension(PyFunctionTypeAnnotationDialect.INSTANCE, (visitorClass, file) -> false);
-    super.tearDown();
+    try {
+      PythonVisitorFilter.INSTANCE.removeExplicitExtension(PythonLanguage.INSTANCE, (visitorClass, file) -> false);
+      PythonVisitorFilter.INSTANCE.removeExplicitExtension(PyFunctionTypeAnnotationDialect.INSTANCE, (visitorClass, file) -> false);
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
+    finally {
+      super.tearDown();
+    }
   }
 
   @Override

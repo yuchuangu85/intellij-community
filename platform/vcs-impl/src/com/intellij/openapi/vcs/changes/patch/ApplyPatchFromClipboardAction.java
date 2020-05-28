@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes.patch;
 
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -8,14 +8,13 @@ import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.VcsApplicationSettings;
+import com.intellij.openapi.vcs.VcsBundle;
 import com.intellij.openapi.vcs.changes.ChangeListManager;
 import com.intellij.testFramework.LightVirtualFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.util.Collections;
 
@@ -32,7 +31,7 @@ public class ApplyPatchFromClipboardAction extends DumbAwareAction {
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
     final Project project = e.getRequiredData(CommonDataKeys.PROJECT);
-    if (ChangeListManager.getInstance(project).isFreezedWithNotification("Can not apply patch now")) return;
+    if (ChangeListManager.getInstance(project).isFreezedWithNotification(VcsBundle.message("patch.apply.cannot.apply.now"))) return;
     FileDocumentManager.getInstance().saveAllDocuments();
 
     String clipboardText = ClipboardUtil.getTextInClipboard();
@@ -44,7 +43,7 @@ public class ApplyPatchFromClipboardAction extends DumbAwareAction {
 
     public MyApplyPatchFromClipboardDialog(@NotNull Project project, @NotNull String clipboardText) {
       super(project, new ApplyPatchDefaultExecutor(project), Collections.emptyList(), ApplyPatchMode.APPLY_PATCH_IN_MEMORY,
-            new LightVirtualFile("clipboardPatchFile", clipboardText), null, null,
+            new LightVirtualFile("clipboardPatchFile", clipboardText), null, null, //NON-NLS
             null, null, null, false);
     }
 
@@ -56,15 +55,11 @@ public class ApplyPatchFromClipboardAction extends DumbAwareAction {
 
     @NotNull
     private static JCheckBox createAnalyzeOnTheFlyOptionPanel() {
-      final JCheckBox removeOptionCheckBox = new JCheckBox("Analyze and Apply Patch from Clipboard on the Fly");
+      final JCheckBox removeOptionCheckBox = new JCheckBox(VcsBundle.message("patch.apply.analyze.from.clipboard.on.the.fly.checkbox"));
       removeOptionCheckBox.setMnemonic(KeyEvent.VK_L);
       removeOptionCheckBox.setSelected(VcsApplicationSettings.getInstance().DETECT_PATCH_ON_THE_FLY);
-      removeOptionCheckBox.addActionListener(new ActionListener() {
-        @Override
-        public void actionPerformed(ActionEvent e) {
-          VcsApplicationSettings.getInstance().DETECT_PATCH_ON_THE_FLY = removeOptionCheckBox.isSelected();
-        }
-      });
+      removeOptionCheckBox.addActionListener(
+        e -> VcsApplicationSettings.getInstance().DETECT_PATCH_ON_THE_FLY = removeOptionCheckBox.isSelected());
       return removeOptionCheckBox;
     }
   }

@@ -25,7 +25,6 @@ import java.util.List;
  * Data structure which allows efficient retrieval of super methods for a Java method.
  *
  * @author ven
- * @since 5.1
  */
 public abstract class HierarchicalMethodSignature extends MethodSignatureBackedByPsiMethod {
   public HierarchicalMethodSignature(@NotNull MethodSignatureBackedByPsiMethod signature) {
@@ -33,8 +32,7 @@ public abstract class HierarchicalMethodSignature extends MethodSignatureBackedB
           getParameterTypes(signature.getMethod()), signature.getTypeParameters());
   }
 
-  @NotNull
-  private static PsiType[] getParameterTypes(PsiMethod method) {
+  private static PsiType @NotNull [] getParameterTypes(PsiMethod method) {
     final PsiParameter[] parameters = method.getParameterList().getParameters();
     final PsiType[] paramTypes = PsiType.createArray(parameters.length);
     for (int i = 0; i < paramTypes.length; i++) {

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl;
 
 import com.intellij.codeInsight.AnnotationTargetUtil;
@@ -8,7 +8,6 @@ import com.intellij.lang.FileASTNode;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -37,26 +36,25 @@ import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.PairFunction;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.SmartList;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 
 public class PsiImplUtil {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.psi.impl.PsiImplUtil");
+  private static final Logger LOG = Logger.getInstance(PsiImplUtil.class);
 
   private PsiImplUtil() { }
 
-  @NotNull
-  public static PsiMethod[] getConstructors(@NotNull PsiClass aClass) {
+  public static PsiMethod @NotNull [] getConstructors(@NotNull PsiClass aClass) {
     List<PsiMethod> result = null;
     for (PsiMethod method : aClass.getMethods()) {
       if (method.isConstructor() && method.getName().equals(aClass.getName())) {
-        if (result == null) result = ContainerUtil.newSmartList();
+        if (result == null) result = new SmartList<>();
         result.add(method);
       }
     }
@@ -90,8 +88,7 @@ public class PsiImplUtil {
     return null;
   }
 
-  @NotNull
-  public static PsiTypeParameter[] getTypeParameters(@NotNull PsiTypeParameterListOwner owner) {
+  public static PsiTypeParameter @NotNull [] getTypeParameters(@NotNull PsiTypeParameterListOwner owner) {
     final PsiTypeParameterList typeParameterList = owner.getTypeParameterList();
     if (typeParameterList != null) {
       return typeParameterList.getTypeParameters();
@@ -99,8 +96,7 @@ public class PsiImplUtil {
     return PsiTypeParameter.EMPTY_ARRAY;
   }
 
-  @NotNull
-  public static PsiJavaCodeReferenceElement[] namesToPackageReferences(@NotNull PsiManager manager, @NotNull String[] names) {
+  public static PsiJavaCodeReferenceElement @NotNull [] namesToPackageReferences(@NotNull PsiManager manager, String @NotNull [] names) {
     PsiJavaCodeReferenceElement[] refs = new PsiJavaCodeReferenceElement[names.length];
     for (int i = 0; i < names.length; i++) {
       String name = names[i];
@@ -127,7 +123,7 @@ public class PsiImplUtil {
     int i;
     for (i = parameters.length - 1; i >= 0; i--) {
       PsiParameter paramInList = parameters[i];
-      if (Comparing.equal(name, paramInList.getName())) {
+      if (Objects.equals(name, paramInList.getName())) {
         suspect = paramInList;
         break;
       }
@@ -157,8 +153,7 @@ public class PsiImplUtil {
     return -1;
   }
 
-  @NotNull
-  public static Object[] getReferenceVariantsByFilter(@NotNull PsiJavaCodeReferenceElement reference, @NotNull ElementFilter filter) {
+  public static Object @NotNull [] getReferenceVariantsByFilter(@NotNull PsiJavaCodeReferenceElement reference, @NotNull ElementFilter filter) {
     FilterScopeProcessor processor = new FilterScopeProcessor(filter);
     PsiScopesUtil.resolveAndWalk(processor, reference, null, true);
     return processor.getResults().toArray();
@@ -180,7 +175,14 @@ public class PsiImplUtil {
                                                     @NotNull final ResolveState state,
                                                     final PsiElement lastParent,
                                                     @NotNull final PsiElement place) {
-    final boolean fromBody = lastParent != null && lastParent == lambda.getBody();
+    boolean fromBody;
+    if (lastParent instanceof DummyHolder) {
+      PsiElement firstChild = lastParent.getFirstChild();
+      fromBody = firstChild instanceof PsiExpression || firstChild instanceof PsiCodeBlock;
+    }
+    else {
+      fromBody = lastParent != null && lastParent == lambda.getBody();
+    }
     return processDeclarationsInMethodLike(lambda, processor, state, place, fromBody, null);
   }
 
@@ -229,15 +231,13 @@ public class PsiImplUtil {
     return typeParameterList != null && typeParameterList.getTypeParameters().length != 0;
   }
 
-  @NotNull
-  public static PsiType[] typesByReferenceParameterList(@NotNull PsiReferenceParameterList parameterList) {
+  public static PsiType @NotNull [] typesByReferenceParameterList(@NotNull PsiReferenceParameterList parameterList) {
     PsiTypeElement[] typeElements = parameterList.getTypeParameterElements();
 
     return typesByTypeElements(typeElements);
   }
 
-  @NotNull
-  public static PsiType[] typesByTypeElements(@NotNull PsiTypeElement[] typeElements) {
+  public static PsiType @NotNull [] typesByTypeElements(PsiTypeElement @NotNull [] typeElements) {
     PsiType[] types = PsiType.createArray(typeElements.length);
     for (int i = 0; i < types.length; i++) {
       types[i] = typeElements[i].getType();
@@ -302,20 +302,19 @@ public class PsiImplUtil {
 
   /** @deprecated use {@link AnnotationTargetUtil#findAnnotationTarget(PsiAnnotation, PsiAnnotation.TargetType...)} (to be removed ion IDEA 17) */
   @Deprecated
-  public static PsiAnnotation.TargetType findApplicableTarget(@NotNull PsiAnnotation annotation, @NotNull PsiAnnotation.TargetType... types) {
+  public static PsiAnnotation.TargetType findApplicableTarget(@NotNull PsiAnnotation annotation, PsiAnnotation.TargetType @NotNull ... types) {
     return AnnotationTargetUtil.findAnnotationTarget(annotation, types);
   }
 
   /** @deprecated use {@link AnnotationTargetUtil#findAnnotationTarget(PsiClass, PsiAnnotation.TargetType...)} (to be removed ion IDEA 17) */
   @Deprecated
-  public static PsiAnnotation.TargetType findApplicableTarget(@NotNull PsiClass annotationType, @NotNull PsiAnnotation.TargetType... types) {
+  public static PsiAnnotation.TargetType findApplicableTarget(@NotNull PsiClass annotationType, PsiAnnotation.TargetType @NotNull ... types) {
     return AnnotationTargetUtil.findAnnotationTarget(annotationType, types);
   }
 
   /** @deprecated use {@link AnnotationTargetUtil#getTargetsForLocation(PsiAnnotationOwner)} (to be removed ion IDEA 17) */
   @Deprecated
-  @NotNull
-  public static PsiAnnotation.TargetType[] getTargetsForLocation(@Nullable PsiAnnotationOwner owner) {
+  public static PsiAnnotation.TargetType @NotNull [] getTargetsForLocation(@Nullable PsiAnnotationOwner owner) {
     return AnnotationTargetUtil.getTargetsForLocation(owner);
   }
 
@@ -330,7 +329,7 @@ public class PsiImplUtil {
   }
 
   /**
-   * Types should be proceed by the callers themselves
+   * @deprecated types should be proceed by the callers themselves
    */
   @Deprecated
   public static PsiType normalizeWildcardTypeByPosition(@NotNull PsiType type, @NotNull PsiExpression expression) {
@@ -452,6 +451,25 @@ public class PsiImplUtil {
     return docComment != null && docComment.findTagByName("deprecated") != null;
   }
 
+  /**
+   * Checks if the given PSI element is deprecated with annotation or JavaDoc tag.
+   * <br>
+   * It is suitable for elements other than {@link PsiDocCommentOwner}.
+   */
+  public static boolean isDeprecated(@NotNull PsiElement psiElement) {
+    if (psiElement instanceof PsiDocCommentOwner) {
+      return ((PsiDocCommentOwner)psiElement).isDeprecated();
+    }
+    if (psiElement instanceof PsiModifierListOwner && isDeprecatedByAnnotation((PsiModifierListOwner) psiElement)) {
+      return true;
+    }
+    if (psiElement instanceof PsiJavaDocumentedElement) {
+      return isDeprecatedByDocTag((PsiJavaDocumentedElement)psiElement);
+    }
+    return false;
+  }
+
+
   @Nullable
   public static PsiJavaDocumentedElement findDocCommentOwner(@NotNull PsiDocComment comment) {
     PsiElement parent = comment.getParent();
@@ -551,8 +569,7 @@ public class PsiImplUtil {
     return null;
   }
 
-  @NotNull
-  public static PsiStatement[] getChildStatements(@NotNull CompositeElement psiCodeBlock) {
+  public static PsiStatement @NotNull [] getChildStatements(@NotNull CompositeElement psiCodeBlock) {
     ApplicationManager.getApplication().assertReadAccessAllowed();
     // no lock is needed because all chameleons are expanded already
     int count = 0;
@@ -632,6 +649,71 @@ public class PsiImplUtil {
     }
   }
 
+  @Nullable
+  public static PsiLoopStatement findEnclosingLoop(@NotNull PsiElement start) {
+    for (PsiElement e = start; !isCodeBoundary(e); e = e.getParent()) {
+      if (e instanceof PsiLoopStatement) return (PsiLoopStatement)e;
+    }
+    return null;
+  }
+
+  @Nullable
+  public static PsiStatement findEnclosingSwitchOrLoop(@NotNull PsiElement start) {
+    for (PsiElement e = start; !isCodeBoundary(e); e = e.getParent()) {
+      if (e instanceof PsiSwitchStatement || e instanceof PsiLoopStatement) return (PsiStatement)e;
+    }
+    return null;
+  }
+
+  @Nullable
+  public static PsiSwitchExpression findEnclosingSwitchExpression(@NotNull PsiElement start) {
+    for (PsiElement e = start; !isCodeBoundary(e); e = e.getParent()) {
+      if (e instanceof PsiSwitchExpression) return (PsiSwitchExpression)e;
+    }
+    return null;
+  }
+
+  @Nullable
+  public static PsiLabeledStatement findEnclosingLabeledStatement(@NotNull PsiElement start, @NotNull String label) {
+    for (PsiElement e = start; !isCodeBoundary(e); e = e.getParent()) {
+      if (e instanceof PsiLabeledStatement && label.equals(((PsiLabeledStatement)e).getName())) return (PsiLabeledStatement)e;
+    }
+    return null;
+  }
+
+  @NotNull
+  public static List<String> findAllEnclosingLabels(@NotNull PsiElement start) {
+    List<String> result = new SmartList<>();
+    for (PsiElement context = start; !isCodeBoundary(context); context = context.getContext()) {
+      if (context instanceof PsiLabeledStatement) {
+        result.add(((PsiLabeledStatement)context).getName());
+      }
+    }
+    return result;
+  }
+
+  private static boolean isCodeBoundary(@Nullable PsiElement e) {
+    return e == null || e instanceof PsiMethod || e instanceof PsiClassInitializer || e instanceof PsiLambdaExpression;
+  }
+
+  /**
+   * Returns enclosing label statement for given label expression
+   *
+   * @param expression switch label expression
+   * @return enclosing label statement or null if given expression is not a label statement expression
+   */
+  @Nullable
+  public static PsiSwitchLabelStatementBase getSwitchLabel(@NotNull PsiExpression expression) {
+    PsiElement parent = PsiUtil.skipParenthesizedExprUp(expression.getParent());
+    if (parent instanceof PsiExpressionList) {
+      PsiElement grand = parent.getParent();
+      if (grand instanceof PsiSwitchLabelStatementBase) {
+        return (PsiSwitchLabelStatementBase)grand;
+      }
+    }
+    return null;
+  }
+
   public static boolean isLeafElementOfType(@Nullable PsiElement element, @NotNull IElementType type) {
     return element instanceof LeafElement && ((LeafElement)element).getElementType() == type;
   }
@@ -671,10 +753,9 @@ public class PsiImplUtil {
     return resultType;
   }
 
-  @NotNull
-  public static <T extends PsiJavaCodeReferenceElement> JavaResolveResult[] multiResolveImpl(@NotNull T element,
-                                                                                             boolean incompleteCode,
-                                                                                             @NotNull ResolveCache.PolyVariantContextResolver<? super T> resolver) {
+  public static <T extends PsiJavaCodeReferenceElement> JavaResolveResult @NotNull [] multiResolveImpl(@NotNull T element,
+                                                                                                       boolean incompleteCode,
+                                                                                                       @NotNull ResolveCache.PolyVariantContextResolver<? super T> resolver) {
     FileASTNode fileElement = SharedImplUtil.findFileElement(element.getNode());
     if (fileElement == null) {
       PsiUtilCore.ensureValid(element);
@@ -696,8 +777,7 @@ public class PsiImplUtil {
     }
     if (element instanceof PsiMethodReferenceExpression) {
       // method refs: do not cache results during parent conflict resolving, acceptable checks, etc
-      final Map<PsiElement, PsiType> map = LambdaUtil.ourFunctionTypes.get();
-      if (map != null && map.containsKey(element)) {
+      if (ThreadLocalTypes.hasBindingFor(element)) {
         return (JavaResolveResult[])resolver.resolve(element, psiFile, incompleteCode);
       }
     }
@@ -705,12 +785,11 @@ public class PsiImplUtil {
     return multiResolveImpl(manager.getProject(), psiFile, element, incompleteCode, resolver);
   }
 
-  @NotNull
-  public static <T extends PsiJavaCodeReferenceElement> JavaResolveResult[] multiResolveImpl(@NotNull Project project,
-                                                                                             @NotNull PsiFile psiFile,
-                                                                                             @NotNull T element,
-                                                                                             boolean incompleteCode,
-                                                                                             @NotNull ResolveCache.PolyVariantContextResolver<? super T> resolver) {
+  public static <T extends PsiJavaCodeReferenceElement> JavaResolveResult @NotNull [] multiResolveImpl(@NotNull Project project,
+                                                                                                       @NotNull PsiFile psiFile,
+                                                                                                       @NotNull T element,
+                                                                                                       boolean incompleteCode,
+                                                                                                       @NotNull ResolveCache.PolyVariantContextResolver<? super T> resolver) {
     ResolveResult[] results = ResolveCache.getInstance(project).resolveWithCaching(element, resolver, true, incompleteCode, psiFile);
     return results.length == 0 ? JavaResolveResult.EMPTY_ARRAY : (JavaResolveResult[])results;
   }

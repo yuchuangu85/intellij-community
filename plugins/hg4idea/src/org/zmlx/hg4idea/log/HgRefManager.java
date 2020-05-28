@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.zmlx.hg4idea.log;
 
 import com.intellij.dvcs.repo.RepositoryManager;
@@ -26,6 +12,7 @@ import com.intellij.vcs.log.impl.SimpleRefGroup;
 import com.intellij.vcs.log.impl.SimpleRefType;
 import com.intellij.vcs.log.impl.SingletonRefGroup;
 import com.intellij.vcs.log.util.VcsLogUtil;
+import org.jetbrains.annotations.CalledInAny;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.zmlx.hg4idea.branch.HgBranchManager;
@@ -43,16 +30,16 @@ import static com.intellij.ui.JBColor.namedColor;
 import static com.intellij.util.containers.ContainerUtil.getFirstItem;
 
 public class HgRefManager implements VcsLogRefManager {
-  private static final JBColor TIP_COLOR = namedColor("Hg.Log.Ref.Tip", VcsLogStandardColors.Refs.TIP);
-  private static final JBColor HEAD_COLOR = namedColor("Hg.Log.Ref.Head", VcsLogStandardColors.Refs.LEAF);
-  private static final JBColor BRANCH_COLOR = namedColor("Hg.Log.Ref.Branch", VcsLogStandardColors.Refs.BRANCH);
-  private static final JBColor CLOSED_BRANCH_COLOR = namedColor("Hg.Log.Ref.ClosedBranch",
+  private static final JBColor TIP_COLOR = namedColor("VersionControl.HgLog.tipIconColor", VcsLogStandardColors.Refs.TIP);
+  private static final JBColor HEAD_COLOR = namedColor("VersionControl.HgLog.headIconColor", VcsLogStandardColors.Refs.LEAF);
+  private static final JBColor BRANCH_COLOR = namedColor("VersionControl.HgLog.branchIconColor", VcsLogStandardColors.Refs.BRANCH);
+  private static final JBColor CLOSED_BRANCH_COLOR = namedColor("VersionControl.HgLog.closedBranchIconColor",
                                                                 new JBColor(new Color(0x823139), new Color(0xff5f6f)));
-  private static final JBColor BOOKMARK_COLOR = namedColor("Hg.Log.Ref.Bookmark", VcsLogStandardColors.Refs.BRANCH_REF);
-  private static final JBColor TAG_COLOR = namedColor("Hg.Log.Ref.Tag", VcsLogStandardColors.Refs.TAG);
-  private static final JBColor LOCAL_TAG_COLOR = namedColor("Hg.Log.Ref.LocalTag",
+  private static final JBColor BOOKMARK_COLOR = namedColor("VersionControl.HgLog.bookmarkIconColor", VcsLogStandardColors.Refs.BRANCH_REF);
+  private static final JBColor TAG_COLOR = namedColor("VersionControl.HgLog.tagIconColor", VcsLogStandardColors.Refs.TAG);
+  private static final JBColor LOCAL_TAG_COLOR = namedColor("VersionControl.HgLog.localTagIconColor",
                                                             new JBColor(new Color(0x009090), new Color(0x00f3f3)));
-  private static final JBColor MQ_TAG_COLOR = namedColor("Hg.Log.Ref.MqTag",
+  private static final JBColor MQ_TAG_COLOR = namedColor("VersionControl.HgLog.mqTagIconColor",
                                                          new JBColor(new Color(0x002f90), new Color(0x0055ff)));
 
   public static final VcsRefType TIP = new SimpleRefType("TIP", true, TIP_COLOR);
@@ -122,13 +109,13 @@ public class HgRefManager implements VcsLogRefManager {
 
   @NotNull
   @Override
-  public List<RefGroup> groupForBranchFilter(@NotNull Collection<VcsRef> refs) {
+  public List<RefGroup> groupForBranchFilter(@NotNull Collection<? extends VcsRef> refs) {
     List<VcsRef> sortedRefs = sort(refs);
     MultiMap<VcsRefType, VcsRef> groupedRefs = ContainerUtil.groupBy(sortedRefs, VcsRef::getType);
 
-    List<RefGroup> result = ContainerUtil.newArrayList();
-    List<VcsRef> branches = ContainerUtil.newArrayList();
-    List<VcsRef> bookmarks = ContainerUtil.newArrayList();
+    List<RefGroup> result = new ArrayList<>();
+    List<VcsRef> branches = new ArrayList<>();
+    List<VcsRef> bookmarks = new ArrayList<>();
     for (Map.Entry<VcsRefType, Collection<VcsRef>> entry : groupedRefs.entrySet()) {
       if (entry.getKey().equals(TIP) || entry.getKey().equals(HEAD)) {
         for (VcsRef ref : entry.getValue()) {
@@ -151,10 +138,10 @@ public class HgRefManager implements VcsLogRefManager {
 
   @NotNull
   @Override
-  public List<RefGroup> groupForTable(@NotNull Collection<VcsRef> references, boolean compact, boolean showTagNames) {
+  public List<RefGroup> groupForTable(@NotNull Collection<? extends VcsRef> references, boolean compact, boolean showTagNames) {
     List<VcsRef> sortedReferences = sort(references);
 
-    List<VcsRef> headAndTip = ContainerUtil.newArrayList();
+    List<VcsRef> headAndTip = new ArrayList<>();
     MultiMap<VcsRefType, VcsRef> groupedRefs = MultiMap.createLinked();
     for (VcsRef ref : sortedReferences) {
       if (ref.getType().equals(HEAD) || ref.getType().equals(TIP)) {
@@ -165,7 +152,7 @@ public class HgRefManager implements VcsLogRefManager {
       }
     }
 
-    List<RefGroup> result = ContainerUtil.newArrayList();
+    List<RefGroup> result = new ArrayList<>();
     SimpleRefGroup.buildGroups(groupedRefs, compact, showTagNames, result);
     RefGroup firstGroup = getFirstItem(result);
     if (firstGroup != null) {
@@ -197,8 +184,9 @@ public class HgRefManager implements VcsLogRefManager {
   }
 
   @Nullable
+  @CalledInAny
   private HgRepository getRepository(@NotNull VcsRef reference) {
-    return myRepositoryManager.getRepositoryForRoot(reference.getRoot());
+    return myRepositoryManager.getRepositoryForRootQuick(reference.getRoot());
   }
 
   @Override
@@ -221,7 +209,7 @@ public class HgRefManager implements VcsLogRefManager {
   }
 
   @NotNull
-  private List<VcsRef> sort(@NotNull Collection<VcsRef> refs) {
+  private List<VcsRef> sort(@NotNull Collection<? extends VcsRef> refs) {
     return ContainerUtil.sorted(refs, getLabelsOrderComparator());
   }
 }

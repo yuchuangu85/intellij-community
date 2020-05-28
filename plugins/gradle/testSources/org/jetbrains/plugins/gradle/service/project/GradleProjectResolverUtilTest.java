@@ -16,6 +16,7 @@
 package org.jetbrains.plugins.gradle.service.project;
 
 import com.intellij.openapi.externalSystem.ExternalSystemModulePropertyManager;
+import com.intellij.openapi.externalSystem.ExternalSystemModulePropertyManagerImpl;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ExternalProjectSystemRegistry;
@@ -27,7 +28,6 @@ import org.picocontainer.PicoContainer;
 import static org.jetbrains.plugins.gradle.util.GradleConstants.GRADLE_SOURCE_SET_MODULE_TYPE_KEY;
 import static org.jetbrains.plugins.gradle.util.GradleConstants.SYSTEM_ID;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -38,8 +38,6 @@ public class GradleProjectResolverUtilTest {
 
   @Test
   public void testGetGradlePath() {
-    assertNull(GradleProjectResolverUtil.getGradlePath(null));
-
     final Module rootModule = createModuleMock("rootModule");
     assertEquals(":", GradleProjectResolverUtil.getGradlePath(rootModule));
 
@@ -70,7 +68,7 @@ public class GradleProjectResolverUtilTest {
     when(module.getPicoContainer()).thenReturn(container);
     when(module.getProject()).thenReturn(project);
     when(project.getPicoContainer()).thenReturn(container);
-    ExternalSystemModulePropertyManager modulePropertyManager = new ExternalSystemModulePropertyManager(module);
+    ExternalSystemModulePropertyManager modulePropertyManager = new ExternalSystemModulePropertyManagerImpl(module);
     when(container.getComponentInstance(ExternalSystemModulePropertyManager.class.getName())).thenReturn(modulePropertyManager);
 
     when(module.getOptionValue(ExternalProjectSystemRegistry.EXTERNAL_SYSTEM_ID_KEY)).thenReturn(SYSTEM_ID.getId());

@@ -1,33 +1,18 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.turnRefsToSuper;
 
+import com.intellij.java.refactoring.JavaRefactoringBundle;
 import com.intellij.lang.findUsages.DescriptiveNameUtil;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Ref;
-import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PsiUtil;
-import com.intellij.refactoring.RefactoringBundle;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.usageView.UsageViewDescriptor;
 import com.intellij.usageView.UsageViewUtil;
@@ -39,7 +24,7 @@ import java.util.Collection;
 import java.util.Collections;
 
 public class TurnRefsToSuperProcessor extends TurnRefsToSuperProcessorBase {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.turnRefsToSuper.TurnRefsToSuperProcessor");
+  private static final Logger LOG = Logger.getInstance(TurnRefsToSuperProcessor.class);
 
   private PsiClass mySuper;
   public TurnRefsToSuperProcessor(Project project,
@@ -54,13 +39,13 @@ public class TurnRefsToSuperProcessor extends TurnRefsToSuperProcessorBase {
   @Override
   @NotNull
   protected String getCommandName() {
-    return RefactoringBundle.message("turn.refs.to.super.command",
+    return JavaRefactoringBundle.message("turn.refs.to.super.command",
                                      DescriptiveNameUtil.getDescriptiveName(myClass), DescriptiveNameUtil.getDescriptiveName(mySuper));
   }
 
   @Override
   @NotNull
-  protected UsageViewDescriptor createUsageViewDescriptor(@NotNull UsageInfo[] usages) {
+  protected UsageViewDescriptor createUsageViewDescriptor(UsageInfo @NotNull [] usages) {
     return new RefsToSuperViewDescriptor(myClass, mySuper);
   }
 
@@ -70,8 +55,7 @@ public class TurnRefsToSuperProcessor extends TurnRefsToSuperProcessorBase {
   }
 
   @Override
-  @NotNull
-  protected UsageInfo[] findUsages() {
+  protected UsageInfo @NotNull [] findUsages() {
     final PsiReference[] refs = ReferencesSearch.search(myClass, GlobalSearchScope.projectScope(myProject), false).toArray(
       PsiReference.EMPTY_ARRAY);
 
@@ -82,7 +66,7 @@ public class TurnRefsToSuperProcessor extends TurnRefsToSuperProcessorBase {
   }
 
   @Override
-  protected void refreshElements(@NotNull final PsiElement[] elements) {
+  protected void refreshElements(final PsiElement @NotNull [] elements) {
     LOG.assertTrue(elements.length == 2 && elements[0] instanceof PsiClass && elements[1] instanceof PsiClass);
     setClasses ((PsiClass) elements[0], (PsiClass) elements[1]);
   }
@@ -90,8 +74,8 @@ public class TurnRefsToSuperProcessor extends TurnRefsToSuperProcessorBase {
   @Override
   protected boolean preprocessUsages(@NotNull Ref<UsageInfo[]> refUsages) {
     if (!ApplicationManager.getApplication().isUnitTestMode() && refUsages.get().length == 0) {
-      String message = RefactoringBundle.message("no.usages.can.be.replaced", myClass.getQualifiedName(), mySuper.getQualifiedName());
-      Messages.showInfoMessage(myProject, message, TurnRefsToSuperHandler.REFACTORING_NAME);
+      String message = JavaRefactoringBundle.message("no.usages.can.be.replaced", myClass.getQualifiedName(), mySuper.getQualifiedName());
+      Messages.showInfoMessage(myProject, message, TurnRefsToSuperHandler.getRefactoringName());
       return false;
     }
 
@@ -105,7 +89,7 @@ public class TurnRefsToSuperProcessor extends TurnRefsToSuperProcessorBase {
   }
 
   @Override
-  protected void performRefactoring(@NotNull UsageInfo[] usages) {
+  protected void performRefactoring(UsageInfo @NotNull [] usages) {
     try {
       final PsiClass aSuper = mySuper;
       processTurnToSuperRefs(usages, aSuper);
@@ -120,13 +104,11 @@ public class TurnRefsToSuperProcessor extends TurnRefsToSuperProcessorBase {
   @Override
   protected boolean isInSuper(PsiElement member) {
     if (!(member instanceof PsiMember)) return false;
-    final PsiManager manager = member.getManager();
     if (InheritanceUtil.isInheritorOrSelf(mySuper, ((PsiMember)member).getContainingClass(), true)) return true;
 
     if (member instanceof PsiField) {
       final PsiClass containingClass = ((PsiField) member).getContainingClass();
-      LanguageLevel languageLevel = PsiUtil.getLanguageLevel(member);
-      if (manager.areElementsEquivalent(containingClass, JavaPsiFacade.getElementFactory(manager.getProject()).getArrayClass(languageLevel))) {
+      if (PsiUtil.isArrayClass(containingClass)) {
         return true;
       }
     } else if (member instanceof PsiMethod) {

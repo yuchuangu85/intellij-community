@@ -27,6 +27,7 @@ import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileVisitor;
 import com.intellij.patterns.ElementPattern;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.util.indexing.FileContent;
 import com.intellij.util.indexing.FileContentImpl;
@@ -39,11 +40,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * @author nik
- */
 public class FrameworkDetectionProcessor {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.framework.detection.impl.FrameworkDetectionProcessor");
+
+  public static final Set<String> SKIPPED_DIRECTORIES = ContainerUtil.newHashSet("node_modules");
+
+  private static final Logger LOG = Logger.getInstance(FrameworkDetectionProcessor.class);
   private final ProgressIndicator myProgressIndicator;
   private final MultiMap<FileType, FrameworkDetectorData> myDetectorsByFileType;
   private Set<VirtualFile> myProcessedFiles;
@@ -60,7 +61,7 @@ public class FrameworkDetectionProcessor {
     myContext = context;
   }
 
-  public List<? extends DetectedFrameworkDescription> processRoots(List<File> roots) {
+  public List<? extends DetectedFrameworkDescription> processRoots(List<? extends File> roots) {
     myProcessedFiles = new HashSet<>();
     for (File root : roots) {
       VirtualFile virtualFile = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(root);
@@ -76,21 +77,24 @@ public class FrameworkDetectionProcessor {
 
   private void collectSuitableFiles(@NotNull VirtualFile file) {
     try {
-      VfsUtilCore.visitChildrenRecursively(file, new VirtualFileVisitor() {
+      VfsUtilCore.visitChildrenRecursively(file, new VirtualFileVisitor<Void>() {
         @Override
         public boolean visitFile(@NotNull VirtualFile file) {
           // Since this code is invoked from New Project Wizard it's very possible that VFS isn't loaded to memory yet, so we need to do it
           // manually, otherwise refresh will do nothing
           myProgressIndicator.checkCanceled();
-          return true;
+          return !(file.isDirectory() && SKIPPED_DIRECTORIES.contains(file.getName()));
         }
       });
       file.refresh(false, true);
 
-      VfsUtilCore.visitChildrenRecursively(file, new VirtualFileVisitor() {
+      VfsUtilCore.visitChildrenRecursively(file, new VirtualFileVisitor<Void>() {
         @Override
         public boolean visitFile(@NotNull VirtualFile file) {
           myProgressIndicator.checkCanceled();
+          if (file.isDirectory() && SKIPPED_DIRECTORIES.contains(file.getName())) {
+            return false;
+          }
           if (!myProcessedFiles.add(file)) {
             return false;
           }

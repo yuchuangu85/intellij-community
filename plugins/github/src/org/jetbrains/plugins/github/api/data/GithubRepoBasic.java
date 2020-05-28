@@ -1,28 +1,26 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.github.api.data;
 
-import com.google.gson.annotations.SerializedName;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.intellij.openapi.util.text.StringUtil;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.io.mandatory.Mandatory;
-import org.jetbrains.io.mandatory.RestModel;
-import org.jetbrains.plugins.github.api.GithubFullPath;
+import org.jetbrains.plugins.github.api.GHRepositoryPath;
 
-//example/GithubRepoBasic.json
-@RestModel
+import java.util.Objects;
+
 @SuppressWarnings("UnusedDeclaration")
 public class GithubRepoBasic {
   private Long id;
   //private String nodeId;
-  @Mandatory private String name;
+  private String name;
   private String fullName;
-  @Mandatory private GithubUser owner;
-  @SerializedName("private")
-  @Mandatory private Boolean isPrivate;
-  @Mandatory private String htmlUrl;
+  private GithubUser owner;
+  @JsonProperty("private")
+  private Boolean isPrivate;
+  private String htmlUrl;
   private String description;
-  @SerializedName("fork")
-  @Mandatory private Boolean isFork;
+  @JsonProperty("fork")
+  private Boolean isFork;
 
   private String url;
   //urls
@@ -43,6 +41,11 @@ public class GithubRepoBasic {
 
   public boolean isFork() {
     return isFork;
+  }
+
+  @NotNull
+  public String getUrl() {
+    return url;
   }
 
   @NotNull
@@ -67,7 +70,28 @@ public class GithubRepoBasic {
   }
 
   @NotNull
-  public GithubFullPath getFullPath() {
-    return new GithubFullPath(getUserName(), getName());
+  public GHRepositoryPath getFullPath() {
+    return new GHRepositoryPath(getUserName(), getName());
+  }
+
+  @Override
+  public String toString() {
+    return "GithubRepo{" +
+           "id=" + id +
+           ", name='" + name + '\'' +
+           '}';
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (!(o instanceof GithubRepoBasic)) return false;
+    GithubRepoBasic basic = (GithubRepoBasic)o;
+    return id.equals(basic.id);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(id);
   }
 }

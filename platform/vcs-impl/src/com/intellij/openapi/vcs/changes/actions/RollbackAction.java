@@ -1,11 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.openapi.vcs.changes.actions;
 
-import com.intellij.openapi.actionSystem.ActionPlaces;
-import com.intellij.openapi.actionSystem.AnAction;
-import com.intellij.openapi.actionSystem.AnActionEvent;
-import com.intellij.openapi.actionSystem.CommonDataKeys;
+import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
@@ -26,7 +23,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.util.ThreeState;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.ui.UIUtil;
 import com.intellij.vcsUtil.RollbackUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -35,9 +31,11 @@ import java.util.*;
 
 import static com.intellij.openapi.ui.Messages.getQuestionIcon;
 import static com.intellij.openapi.ui.Messages.showYesNoDialog;
+import static com.intellij.openapi.util.text.StringUtil.removeEllipsisSuffix;
 import static com.intellij.util.containers.UtilKt.notNullize;
+import static com.intellij.util.ui.UIUtil.removeMnemonic;
 
-public class RollbackAction extends AnAction implements DumbAware {
+public class RollbackAction extends AnAction implements DumbAware, UpdateInBackground {
   @Override
   public void update(@NotNull AnActionEvent e) {
     Project project = e.getData(CommonDataKeys.PROJECT);
@@ -56,13 +54,13 @@ public class RollbackAction extends AnAction implements DumbAware {
     String operationName = RollbackUtil.getRollbackOperationName(project);
     e.getPresentation().setText(operationName + "...");
     if (isEnabled) {
-      e.getPresentation().setDescription(UIUtil.removeMnemonic(operationName) + " selected changes");
+      e.getPresentation().setDescription(VcsBundle.message("action.message.use.selected.changes.description", removeMnemonic(operationName)));
     }
   }
 
   private static boolean hasReversibleFiles(@NotNull AnActionEvent e) {
     ChangeListManager manager = ChangeListManager.getInstance(e.getRequiredData(CommonDataKeys.PROJECT));
-    Set<VirtualFile> modifiedWithoutEditing = ContainerUtil.newHashSet(manager.getModifiedWithoutEditing());
+    Set<VirtualFile> modifiedWithoutEditing = new HashSet<>(manager.getModifiedWithoutEditing());
 
     return notNullize(e.getData(VcsDataKeys.VIRTUAL_FILE_STREAM)).anyMatch(
       file -> manager.haveChangesUnder(file) != ThreeState.NO || manager.isFileAffected(file) || modifiedWithoutEditing.contains(file));
@@ -71,7 +69,7 @@ public class RollbackAction extends AnAction implements DumbAware {
   private static boolean currentChangelistNotEmpty(Project project) {
     ChangeListManager clManager = ChangeListManager.getInstance(project);
     ChangeList list = clManager.getDefaultChangeList();
-    return list != null && !list.getChanges().isEmpty();
+    return !list.getChanges().isEmpty();
   }
 
   @Override
@@ -82,7 +80,8 @@ public class RollbackAction extends AnAction implements DumbAware {
     }
     final String title = ActionPlaces.CHANGES_VIEW_TOOLBAR.equals(e.getPlace())
                          ? null
-                         : "Can not " + UIUtil.removeMnemonic(RollbackUtil.getRollbackOperationName(project)) + " now";
+                         : VcsBundle.message("error.cant.perform.operation.now",
+                                             removeEllipsisSuffix(removeMnemonic(RollbackUtil.getRollbackOperationName(project))));
     if (ChangeListManager.getInstance(project).isFreezedWithNotification(title)) return;
 
     List<FilePath> missingFiles = e.getData(ChangesListView.MISSING_FILES_DATA_KEY);
@@ -155,7 +154,7 @@ public class RollbackAction extends AnAction implements DumbAware {
   }
 
   private static void rollbackModifiedWithoutEditing(final Project project, final LinkedHashSet<VirtualFile> modifiedWithoutEditing) {
-    final String operationName = StringUtil.decapitalize(UIUtil.removeMnemonic(RollbackUtil.getRollbackOperationName(project)));
+    final String operationName = StringUtil.decapitalize(removeMnemonic(RollbackUtil.getRollbackOperationName(project)));
     String message = (modifiedWithoutEditing.size() == 1)
                      ? VcsBundle.message("rollback.modified.without.editing.confirm.single",
                                          operationName, modifiedWithoutEditing.iterator().next().getPresentableUrl())
@@ -175,8 +174,8 @@ public class RollbackAction extends AnAction implements DumbAware {
           final RollbackEnvironment rollbackEnvironment = vcs.getRollbackEnvironment();
           if (rollbackEnvironment != null) {
             if (indicator != null) {
-              indicator.setText(vcs.getDisplayName() +
-                                ": performing " + UIUtil.removeMnemonic(rollbackEnvironment.getRollbackOperationName()).toLowerCase() + "...");
+              indicator.setText(VcsBundle.message("progress.text.performing", vcs.getDisplayName(),
+                                                  StringUtil.toLowerCase(removeMnemonic(rollbackEnvironment.getRollbackOperationName()))));
               indicator.setIndeterminate(false);
             }
             rollbackEnvironment

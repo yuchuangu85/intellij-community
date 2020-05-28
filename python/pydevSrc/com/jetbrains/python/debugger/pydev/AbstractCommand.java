@@ -1,8 +1,11 @@
 package com.jetbrains.python.debugger.pydev;
 
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.diagnostic.Logger;
 import com.jetbrains.python.debugger.PyDebuggerException;
 import org.jetbrains.annotations.NotNull;
+
+import java.lang.invoke.MethodHandles;
 
 
 public abstract class AbstractCommand<T> {
@@ -56,8 +59,16 @@ public abstract class AbstractCommand<T> {
   public static final int INPUT_REQUESTED = 147;
 
   public static final int PROCESS_CREATED = 149;
-  public static final int SHOW_CYTHON_WARNING = 150;
+  public static final int SHOW_WARNING = 150;
   public static final int LOAD_FULL_VALUE = 151;
+
+  public static final int CMD_GET_SMART_STEP_INTO_VARIANTS = 160;
+
+  /**
+   * The code of the message that means that IDE received
+   * {@link #PROCESS_CREATED} message from the Python debugger script.
+   */
+  public static final int PROCESS_CREATED_MSG_RECEIVED = 159;
 
   public static final int ERROR = 901;
 
@@ -71,6 +82,7 @@ public abstract class AbstractCommand<T> {
 
   private final ResponseProcessor<T> myResponseProcessor;
 
+  public static final Logger LOG = Logger.getInstance(MethodHandles.lookup().lookupClass());
 
   protected AbstractCommand(@NotNull final RemoteDebugger debugger, final int commandCode) {
     myDebugger = debugger;
@@ -129,15 +141,18 @@ public abstract class AbstractCommand<T> {
     if (processor == null && !isResponseExpected()) return;
 
     if (!frameSent) {
-      throw new PyDebuggerException("Couldn't send frame " + myCommandCode);
+      LOG.error("Couldn't send frame " + myCommandCode);
+      return;
     }
 
-    frame = myDebugger.waitForResponse(sequence);
+    frame = myDebugger.waitForResponse(sequence, getResponseTimeout());
     if (frame == null) {
+      String errorMessage = "Timeout waiting for response on " + myCommandCode;
       if (!myDebugger.isConnected()) {
-        throw new PyDebuggerException("No connection (command:  " + myCommandCode + " )");
+        errorMessage = "No connection (command:  " + myCommandCode + " )";
       }
-      throw new PyDebuggerException("Timeout waiting for response on " + myCommandCode);
+      LOG.error(errorMessage);
+      return;
     }
     if (processor != null) {
       processor.processResponse(frame);
@@ -173,7 +188,7 @@ public abstract class AbstractCommand<T> {
 
     ApplicationManager.getApplication().executeOnPooledThread(() -> {
       try {
-        ProtocolFrame frame = myDebugger.waitForResponse(sequence);
+        ProtocolFrame frame = myDebugger.waitForResponse(sequence, getResponseTimeout());
         if (frame == null) {
           if (!myDebugger.isConnected()) {
             throw new PyDebuggerException("No connection (command:  " + myCommandCode + " )");
@@ -188,6 +203,18 @@ public abstract class AbstractCommand<T> {
     });
   }
 
+  /**
+   * Returns the timeout for waiting for the response after sending the
+   * command.
+   * <p>
+   * Please note that the timeout has no meaning when
+   * {@link #isResponseExpected()} is {@code false}.
+   *
+   * @return the response timeout
+   */
+  protected long getResponseTimeout() {
+    return RemoteDebugger.RESPONSE_TIMEOUT;
+  }
 
   protected void processResponse(@NotNull final ProtocolFrame response) throws PyDebuggerException {
     if (response.getCommand() >= 900 && response.getCommand() < 1000) {
@@ -224,7 +251,7 @@ public abstract class AbstractCommand<T> {
   }
 
   public static boolean isShowWarningCommand(final int command) {
-    return command == SHOW_CYTHON_WARNING;
+    return command == SHOW_WARNING;
   }
 
   public static boolean isExitEvent(final int command) {

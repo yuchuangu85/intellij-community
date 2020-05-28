@@ -1,9 +1,10 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.testing.pytestLegacy;
 
-import com.google.common.collect.Lists;
 import com.intellij.execution.Location;
 import com.intellij.execution.actions.ConfigurationContext;
+import com.intellij.execution.configurations.ConfigurationFactory;
+import com.intellij.openapi.extensions.ExtensionNotApplicableException;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.projectRoots.Sdk;
@@ -16,33 +17,43 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiFileSystemItem;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.jetbrains.python.PyNames;
+import com.jetbrains.python.PyPsiPackageUtil;
 import com.jetbrains.python.packaging.PyPackage;
 import com.jetbrains.python.packaging.PyPackageManager;
-import com.jetbrains.python.packaging.PyPackageUtil;
 import com.jetbrains.python.packaging.PyPackageVersionComparator;
 import com.jetbrains.python.psi.PyClass;
 import com.jetbrains.python.psi.PyFile;
 import com.jetbrains.python.psi.PyFunction;
 import com.jetbrains.python.psi.PyStatement;
 import com.jetbrains.python.psi.types.TypeEvalContext;
-import com.jetbrains.python.sdk.PythonSdkType;
+import com.jetbrains.python.sdk.PythonSdkUtil;
 import com.jetbrains.python.testing.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
-public class PyTestConfigurationProducer extends PythonTestLegacyConfigurationProducer<PyTestRunConfiguration> {
+import static com.jetbrains.python.testing.PyTestLegacyInteropKt.isNewTestsModeEnabled;
 
+public final class PyTestConfigurationProducer extends PythonTestLegacyConfigurationProducer<PyTestRunConfiguration> {
   public PyTestConfigurationProducer() {
-    super(PythonTestConfigurationType.getInstance().LEGACY_PYTEST_FACTORY);
+    if (isNewTestsModeEnabled()) {
+      throw ExtensionNotApplicableException.INSTANCE;
+    }
+  }
+
+  @NotNull
+  @Override
+  public ConfigurationFactory getConfigurationFactory() {
+    return PythonTestConfigurationType.getInstance().LEGACY_PYTEST_FACTORY;
   }
 
   @Override
-  protected boolean setupConfigurationFromContext(AbstractPythonLegacyTestRunConfiguration<PyTestRunConfiguration> configuration,
-                                                  ConfigurationContext context,
-                                                  Ref<PsiElement> sourceElement) {
+  protected boolean setupConfigurationFromContext(@NotNull AbstractPythonLegacyTestRunConfiguration<PyTestRunConfiguration> configuration,
+                                                  @NotNull ConfigurationContext context,
+                                                  @NotNull Ref<PsiElement> sourceElement) {
     final PsiElement element = sourceElement.get();
     final Module module = ModuleUtilCore.findModuleForPsiElement(element);
     if (!(configuration instanceof PyTestRunConfiguration)) {
@@ -76,7 +87,7 @@ public class PyTestConfigurationProducer extends PythonTestLegacyConfigurationPr
       return false;
     }
 
-    final Sdk sdk = PythonSdkType.findPythonSdk(context.getModule());
+    final Sdk sdk = PythonSdkUtil.findPythonSdk(context.getModule());
     if (sdk == null) {
       return false;
     }
@@ -106,7 +117,7 @@ public class PyTestConfigurationProducer extends PythonTestLegacyConfigurationPr
       keywords = pyFunction.getName();
       if (pyClass != null) {
         final List<PyPackage> packages = PyPackageManager.getInstance(sdk).getPackages();
-        final PyPackage pytestPackage = packages != null ? PyPackageUtil.findPackage(packages, "pytest") : null;
+        final PyPackage pytestPackage = packages != null ? PyPsiPackageUtil.findPackage(packages, "pytest") : null;
         if (pytestPackage != null && PyPackageVersionComparator.getSTR_COMPARATOR().compare(pytestPackage.getVersion(), "2.3.3") >= 0) {
           keywords = pyClass.getName() + " and " + keywords;
         }
@@ -134,7 +145,8 @@ public class PyTestConfigurationProducer extends PythonTestLegacyConfigurationPr
   }
 
   @Override
-  public boolean isConfigurationFromContext(AbstractPythonLegacyTestRunConfiguration configuration, ConfigurationContext context) {
+  public boolean isConfigurationFromContext(@NotNull AbstractPythonLegacyTestRunConfiguration configuration,
+                                            @NotNull ConfigurationContext context) {
     final Location location = context.getLocation();
     if (location == null) return false;
     if (!(configuration instanceof PyTestRunConfiguration)) return false;
@@ -154,7 +166,7 @@ public class PyTestConfigurationProducer extends PythonTestLegacyConfigurationPr
       return false;
     }
 
-    final Sdk sdk = PythonSdkType.findPythonSdk(context.getModule());
+    final Sdk sdk = PythonSdkUtil.findPythonSdk(context.getModule());
     if (sdk == null) return false;
     final String keywords = getKeywords(element, sdk);
     final String scriptName = ((PyTestRunConfiguration)configuration).getTestToRun();
@@ -169,7 +181,7 @@ public class PyTestConfigurationProducer extends PythonTestLegacyConfigurationPr
   }
 
   public static List<PyStatement> getPyTestCasesFromFile(PsiFileSystemItem file, @NotNull final TypeEvalContext context) {
-    List<PyStatement> result = Lists.newArrayList();
+    List<PyStatement> result = new ArrayList<>();
     if (file instanceof PyFile) {
       result = getResult((PyFile)file, context);
     }
@@ -184,15 +196,15 @@ public class PyTestConfigurationProducer extends PythonTestLegacyConfigurationPr
   }
 
   private static List<PyStatement> getResult(PyFile file, @NotNull final TypeEvalContext context) {
-    List<PyStatement> result = Lists.newArrayList();
+    List<PyStatement> result = new ArrayList<>();
     for (PyClass cls : file.getTopLevelClasses()) {
-      if (com.jetbrains.python.testing.pytest.PyTestUtil.isPyTestClass(cls, context)) {
+      if (PythonUnitTestDetectorsKt.isTestClass(cls, context)) {
         result.add(cls);
       }
     }
-    for (PyFunction cls : file.getTopLevelFunctions()) {
-      if (com.jetbrains.python.testing.pytest.PyTestUtil.isPyTestFunction(cls)) {
-        result.add(cls);
+    for (PyFunction function : file.getTopLevelFunctions()) {
+      if (PythonUnitTestDetectorsKt.isTestFunction(function)) {
+        result.add(function);
       }
     }
     return result;

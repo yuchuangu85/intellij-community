@@ -5,7 +5,7 @@ import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInspection.sameParameterValue.SameParameterValueInspection;
 import com.intellij.testFramework.EdtTestUtil;
 import com.intellij.testFramework.TestRunnerUtil;
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -14,7 +14,7 @@ import org.junit.runners.Parameterized;
 
 
 @RunWith(Parameterized.class)
-public class SameParameterValueSlashesTest extends LightCodeInsightFixtureTestCase {
+public class SameParameterValueSlashesTest extends LightJavaCodeInsightFixtureTestCase {
 
   private SameParameterValueInspection myInspection = new SameParameterValueInspection();
 
@@ -31,6 +31,9 @@ public class SameParameterValueSlashesTest extends LightCodeInsightFixtureTestCa
     try {
       myFixture.disableInspections(myInspection);
     }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
     finally {
       myInspection = null;
       super.tearDown();
@@ -39,7 +42,7 @@ public class SameParameterValueSlashesTest extends LightCodeInsightFixtureTestCa
 
   @Parameterized.Parameters(name = "\\{0}")
   public static Object[] data() {
-    return new Object[] { "n", "r", "b", "t", "f", "\"", "\'", "\\", "1"};
+    return new Object[] { "n", "r", "b", "t", "f", "\"", "'", "\\", "1"};
   }
 
   @Parameterized.Parameter

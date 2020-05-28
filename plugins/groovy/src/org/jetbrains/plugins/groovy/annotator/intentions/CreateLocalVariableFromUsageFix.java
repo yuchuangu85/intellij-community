@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.annotator.intentions;
 
 import com.intellij.codeInsight.CodeInsightUtilCore;
@@ -27,7 +13,7 @@ import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -58,14 +44,14 @@ public class CreateLocalVariableFromUsageFix extends Intention {
 
   @Override
   @NotNull
-  public String getText() {
-    return GroovyBundle.message("create.variable.from.usage", myRefExpression.getReferenceName());
+  public String getFamilyName() {
+    return GroovyBundle.message("create.variable.from.usage.family.name");
   }
 
   @Override
   @NotNull
-  public String getFamilyName() {
-    return GroovyBundle.message("create.from.usage.family.name");
+  public String getText() {
+    return GroovyBundle.message("create.variable.from.usage", myRefExpression.getReferenceName());
   }
 
   @Override
@@ -88,7 +74,7 @@ public class CreateLocalVariableFromUsageFix extends Intention {
   protected void processIntention(@NotNull PsiElement element, @NotNull Project project, Editor editor) throws IncorrectOperationException {
     final PsiFile file = element.getContainingFile();
     PsiClassType type = JavaPsiFacade.getInstance(project).getElementFactory().createTypeByFQClassName("Object", GlobalSearchScope.allScope(project));
-    GrVariableDeclaration decl = GroovyPsiElementFactory.getInstance(project).createVariableDeclaration(ArrayUtil.EMPTY_STRING_ARRAY, "", type, myRefExpression.getReferenceName());
+    GrVariableDeclaration decl = GroovyPsiElementFactory.getInstance(project).createVariableDeclaration(ArrayUtilRt.EMPTY_STRING_ARRAY, "", type, myRefExpression.getReferenceName());
     int offset = myRefExpression.getTextRange().getStartOffset();
     GrStatement anchor = findAnchor(file, offset);
 

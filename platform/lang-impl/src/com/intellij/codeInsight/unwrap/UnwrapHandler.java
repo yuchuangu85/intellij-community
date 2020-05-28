@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.unwrap;
 
@@ -31,8 +17,8 @@ import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.markup.HighlighterLayer;
 import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.ui.popup.JBPopupAdapter;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
+import com.intellij.openapi.ui.popup.JBPopupListener;
 import com.intellij.openapi.ui.popup.LightweightWindowEvent;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Pair;
@@ -42,6 +28,7 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.impl.source.tree.RecursiveTreeElementWalkingVisitor;
 import com.intellij.psi.impl.source.tree.TreeElement;
 import com.intellij.util.IncorrectOperationException;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.NotNullList;
 import org.jetbrains.annotations.NotNull;
 
@@ -49,7 +36,6 @@ import javax.swing.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 public class UnwrapHandler implements CodeInsightActionHandler {
   public static final int HIGHLIGHTER_LEVEL = HighlighterLayer.SELECTION + 1;
@@ -92,7 +78,7 @@ public class UnwrapHandler implements CodeInsightActionHandler {
     return new MyUnwrapAction(p, ed, u, el);
   }
 
-  protected void selectOption(List<MyUnwrapAction> options, Editor editor, PsiFile file) {
+  protected void selectOption(List<? extends MyUnwrapAction> options, Editor editor, PsiFile file) {
     if (options.isEmpty()) return;
 
     if (!getUnwrapDescription(file).showOptionsDialog() ||
@@ -108,7 +94,7 @@ public class UnwrapHandler implements CodeInsightActionHandler {
   private static void showPopup(final List<? extends AnAction> options, Editor editor) {
     final ScopeHighlighter highlighter = new ScopeHighlighter(editor);
 
-    List<MyItem> model = options.stream().map(a -> new MyItem(((MyUnwrapAction)a).getName(), options.indexOf(a))).collect(Collectors.toList());
+    List<MyItem> model = ContainerUtil.map(options, a -> new MyItem(((MyUnwrapAction)a).getName(), options.indexOf(a)));
     Function<MyItem, MyUnwrapAction> optionByName = item -> (MyUnwrapAction)options.get(item.index);
 
     JBPopupFactory.getInstance()
@@ -128,7 +114,7 @@ public class UnwrapHandler implements CodeInsightActionHandler {
           highlighter.highlight(wholeRange, toExtract);
         }
       })
-      .addListener(new JBPopupAdapter() {
+      .addListener(new JBPopupListener() {
         @Override
         public void onClosed(@NotNull LightweightWindowEvent event) {
           highlighter.dropHighlight();
@@ -151,6 +137,11 @@ public class UnwrapHandler implements CodeInsightActionHandler {
     }
   }
 
+  /**
+   * @deprecated operate with
+   * {@link EditorColors#SEARCH_RESULT_ATTRIBUTES} directly
+   */
+  @Deprecated
   public static TextAttributes getTestAttributesForExtract() {
     EditorColorsManager manager = EditorColorsManager.getInstance();
     return manager.getGlobalScheme().getAttributes(EditorColors.SEARCH_RESULT_ATTRIBUTES);
@@ -234,7 +225,7 @@ public class UnwrapHandler implements CodeInsightActionHandler {
             myEditor,
             textRange.getStartOffset(),
             textRange.getEndOffset(),
-            getTestAttributesForExtract(),
+            EditorColors.SEARCH_RESULT_ATTRIBUTES,
             false,
             true,
             null);

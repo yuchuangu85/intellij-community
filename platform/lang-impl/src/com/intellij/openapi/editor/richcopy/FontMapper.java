@@ -16,10 +16,13 @@
 package com.intellij.openapi.editor.richcopy;
 
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.editor.colors.FontPreferences;
+import com.intellij.openapi.editor.impl.FontInfo;
 import com.intellij.util.ReflectionUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.awt.*;
+import java.awt.font.FontRenderContext;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Locale;
@@ -34,16 +37,11 @@ public class FontMapper {
 
   private static final String[] logicalFontsToMap = {Font.DIALOG, Font.DIALOG_INPUT, Font.MONOSPACED, Font.SERIF, Font.SANS_SERIF};
   private static final Map<String, String> logicalToPhysicalMapping = new HashMap<>();
+  private static final Map<String, Boolean> monospacedMapping = new HashMap<>();
 
   static {
     try {
-      Object fontManager = null;
-      try {
-        fontManager = Class.forName("sun.font.FontManagerFactory").getMethod("getInstance").invoke(null);
-      }
-      catch (ClassNotFoundException e) {
-        // expected for JRE 1.6. FontManager.findFont2D method is static there, so leaving fontManager value as null will work
-      }
+      Object fontManager = Class.forName("sun.font.FontManagerFactory").getMethod("getInstance").invoke(null);
       Method findFontMethod = Class.forName("sun.font.FontManager").getMethod("findFont2D", String.class, int.class, int.class);
       for (String logicalFont : logicalFontsToMap) {
         Object font2D = findFontMethod.invoke(fontManager, logicalFont, Font.PLAIN, 0);
@@ -65,7 +63,7 @@ public class FontMapper {
       }
     }
     catch (Throwable e) {
-      LOG.warn("Failed to determine logical to physical font mappings");
+      LOG.warn("Failed to determine logical to physical font mappings", e);
     }
   }
 
@@ -74,5 +72,16 @@ public class FontMapper {
   String getPhysicalFontName(@NotNull String logicalFontName) {
     String mapped = logicalToPhysicalMapping.get(logicalFontName);
     return mapped == null ? logicalFontName : mapped;
+  }
+
+  public static boolean isMonospaced(@NotNull String fontName) {
+    Boolean result = monospacedMapping.get(fontName);
+    if (result == null) {
+      FontMetrics metrics = FontInfo.getFontMetrics(new Font(fontName, Font.PLAIN, FontPreferences.DEFAULT_FONT_SIZE),
+                                                    new FontRenderContext(null, false, false));
+      result = metrics.charWidth('l') == metrics.charWidth('W');
+      monospacedMapping.put(fontName, result);
+    }
+    return result;
   }
 }

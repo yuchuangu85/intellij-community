@@ -2,6 +2,7 @@
 package com.jetbrains.python.console;
 
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ex.ApplicationUtil;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.progress.ProcessCanceledException;
@@ -20,7 +21,7 @@ import com.intellij.xdebugger.XSourcePosition;
 import com.intellij.xdebugger.frame.XCompositeNode;
 import com.intellij.xdebugger.frame.XValueChildrenList;
 import com.intellij.xdebugger.frame.XValueNode;
-import com.jetbrains.python.console.parsing.PythonConsoleData;
+import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.console.protocol.*;
 import com.jetbrains.python.console.pydev.AbstractConsoleCommunication;
 import com.jetbrains.python.console.pydev.InterpreterResponse;
@@ -28,6 +29,8 @@ import com.jetbrains.python.console.pydev.PydevCompletionVariant;
 import com.jetbrains.python.debugger.*;
 import com.jetbrains.python.debugger.containerview.PyViewNumericContainerAction;
 import com.jetbrains.python.debugger.pydev.GetVariableCommand;
+import com.jetbrains.python.debugger.settings.PyDebuggerSettings;
+import com.jetbrains.python.parsing.console.PythonConsoleData;
 import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -52,6 +55,7 @@ import static com.jetbrains.python.console.PydevConsoleCommunicationUtil.*;
 public abstract class PydevConsoleCommunication extends AbstractConsoleCommunication implements PyFrameAccessor {
   private static final Logger LOG = Logger.getInstance(PydevConsoleCommunication.class);
 
+  protected volatile boolean keyboardInterruption;
   /**
    * Input that should be sent to the server (waiting for raw_input)
    */
@@ -136,7 +140,7 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
     PyDebugValueExecutionService.getInstance(myProject).sessionStopped(this);
     myCallbackHashMap.clear();
 
-    new Task.Backgroundable(myProject, "Close Console Communication", true) {
+    new Task.Backgroundable(myProject, PyBundle.message("console.close.console.communication"), true) {
       @Override
       public void run(@NotNull ProgressIndicator indicator) {
         try {
@@ -183,7 +187,7 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
 
   protected abstract boolean isCommunicationClosed();
 
-  /**
+  /*
    * Variables that control when we're expecting to give some input to the server or when we're
    * adding some line to be executed
    */
@@ -204,9 +208,7 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
   private boolean execIPythonEditor(String path) {
     final VirtualFile file = StringUtil.isEmpty(path) ? null : LocalFileSystem.getInstance().findFileByPath(path);
     if (file != null) {
-      ApplicationManager.getApplication().invokeLater(() -> {
-        FileEditorManager.getInstance(myProject).openFile(file, true);
-      });
+      ApplicationManager.getApplication().invokeLater(() -> FileEditorManager.getInstance(myProject).openFile(file, true));
 
       return true;
     }
@@ -224,9 +226,10 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
     myExecuting = executing;
   }
 
-  private Object execRequestInput() {
+  private Object execRequestInput() throws KeyboardInterruptException {
     waitingForInput = true;
     inputReceived = null;
+    keyboardInterruption = false;
     boolean needInput = true;
 
     //let the busy loop from execInterpreter free and enter a busy loop
@@ -237,6 +240,11 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
 
     //busy loop until we have an input
     while (inputReceived == null) {
+      if (keyboardInterruption) {
+        waitingForInput = false;
+
+        throw new KeyboardInterruptException();
+      }
       synchronized (lock) {
         try {
           lock.wait(10);
@@ -284,16 +292,27 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
   @Override
   @NotNull
   public List<PydevCompletionVariant> getCompletions(String text, String actTok) throws Exception {
-    if (myDebugCommunication != null && myDebugCommunication.isSuspended()) {
-      return myDebugCommunication.getCompletions(text, actTok);
-    }
-
-    if (waitingForInput) {
+    if (waitingForInput || isExecuting()) {
       return Collections.emptyList();
     }
-    List<CompletionOption> fromServer = getPythonConsoleBackendClient().getCompletions(text, actTok);
-
-    return fromServer.stream().map(option -> toPydevCompletionVariant(option)).collect(Collectors.toList());
+    return ApplicationUtil.runWithCheckCanceled(
+      () ->
+      {
+        try {
+          if (myDebugCommunication != null && myDebugCommunication.isSuspended()) {
+            return myDebugCommunication.getCompletions(text, actTok);
+          }
+          else {
+            List<CompletionOption> fromServer = getPythonConsoleBackendClient().getCompletions(text, actTok);
+            return ContainerUtil.map(fromServer, option -> toPydevCompletionVariant(option));
+          }
+        }
+        catch (PythonUnhandledException e) {
+          LOG.warn("Completion error in Python Console: " + e.traceback);
+          return Collections.emptyList();
+        }
+      },
+      ProgressManager.getInstance().getProgressIndicator());
   }
 
   @NotNull
@@ -316,7 +335,7 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
 
     ThrowableComputable<String, Exception> doGetDesc = () -> getPythonConsoleBackendClient().getDescription(text);
     if (ApplicationManager.getApplication().isDispatchThread()) {
-      return ProgressManager.getInstance().runProcessWithProgressSynchronously(doGetDesc, "Getting Description", true, myProject);
+      return ProgressManager.getInstance().runProcessWithProgressSynchronously(doGetDesc, PyBundle.message("console.getting.description"), true, myProject);
     }
     else {
       // note that the thread would still wait for the response after the timeout occurs
@@ -343,7 +362,7 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
     }
     else {
       //create a thread that'll keep locked until an answer is received from the server.
-      new Task.Backgroundable(myProject, "REPL Communication", true) {
+      new Task.Backgroundable(myProject, PyBundle.message("console.repl.communication"), true) {
 
         @Override
         public void run(@NotNull ProgressIndicator indicator) {
@@ -372,7 +391,7 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
               // This string always works,
               // because it is hard-coded in
               // the XML-RPC library)
-              if (executed.first != null && executed.first.indexOf(refusedConnPattern) != -1) {
+              if (executed.first != null && executed.first.contains(refusedConnPattern)) {
                 if (firstCommWorked) {
                   break;
                 }
@@ -410,11 +429,11 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
         }
       }.queue();
 
-      ProgressManager.getInstance().run(new Task.Backgroundable(myProject, "Waiting for REPL Response") {
+      ProgressManager.getInstance().run(new Task.Backgroundable(myProject, PyBundle.message("console.waiting.for.repl.response")) {
         @Override
         public void run(@NotNull ProgressIndicator indicator) {
           final ProgressIndicator progressIndicator = ProgressManager.getInstance().getProgressIndicator();
-          progressIndicator.setText("Waiting for REPL response with " + (int)(TIMEOUT / 10e8) + "s timeout");
+          progressIndicator.setText(PyBundle.message("console.waiting.for.repl.response.with.timeout", (int)(TIMEOUT / 10e8)));
           progressIndicator.setIndeterminate(false);
           final long startTime = System.nanoTime();
           while (nextResponse == null) {
@@ -450,6 +469,12 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
 
   @Override
   public void interrupt() {
+    if (waitingForInput) {
+      // we do not want to forcibly `interrupt()` the `requestInput()` on the
+      // Python side otherwise the message queue to the IDE will be broken
+      keyboardInterruption = true;
+      return;
+    }
     try {
       getPythonConsoleBackendClient().interrupt();
     }
@@ -472,7 +497,7 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
   public PyDebugValue evaluate(String expression, boolean execute, boolean doTrunc) throws PyDebuggerException {
     if (!isCommunicationClosed()) {
       try {
-        List<DebugValue> debugValues = getPythonConsoleBackendClient().evaluate(expression);
+        List<DebugValue> debugValues = getPythonConsoleBackendClient().evaluate(expression, doTrunc);
         return createPyDebugValue(debugValues.iterator().next(), this);
       }
       catch (Exception e) {
@@ -538,7 +563,9 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
   public XValueChildrenList loadVariable(PyDebugValue var) throws PyDebuggerException {
     if (!isCommunicationClosed()) {
       try {
-        List<DebugValue> ret = getPythonConsoleBackendClient().getVariable(GetVariableCommand.composeName(var));
+        final String name = var.getOffset() == 0 ? GetVariableCommand.composeName(var)
+                                                 : var.getOffset() + "\t" + GetVariableCommand.composeName(var);
+        List<DebugValue> ret = getPythonConsoleBackendClient().getVariable(name);
         return parseVars(ret, var, this);
       }
       catch (CommunicationClosedException | PyConsoleProcessFinishedException e) {
@@ -554,6 +581,11 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
   @Override
   public void setCurrentRootNode(@NotNull XCompositeNode node) {
     myCurrentRootNode = node;
+  }
+
+  @Override
+  public boolean isSimplifiedView() {
+    return PyDebuggerSettings.getInstance().isSimplifiedView();
   }
 
   @Override
@@ -590,6 +622,12 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
         GetArrayResponse ret = getPythonConsoleBackendClient().getArray(var.getName(), rowOffset, colOffset, rows, cols, format);
         return createArrayChunk(ret, this);
       }
+      catch (UnsupportedArrayTypeException e) {
+        throw new IllegalArgumentException(var.getType() + " is not supported", e);
+      }
+      catch (ExceedingArrayDimensionsException e) {
+        throw new IllegalArgumentException(var.getName() + " has more than two dimensions", e);
+      }
       catch (Exception e) {
         throw new PyDebuggerException("Evaluate in console failed", e);
       }
@@ -617,14 +655,14 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
    * @param extraEnvs
    * @throws Exception if connection fails
    */
-  public void connectToDebugger(int localPort, @NotNull Map<String, Boolean> dbgOpts, @NotNull Map<String, String> extraEnvs)
+  public void connectToDebugger(int localPort, @Nullable String debuggerHost, @NotNull Map<String, Boolean> dbgOpts, @NotNull Map<String, String> extraEnvs)
     throws Exception {
     if (waitingForInput) {
       throw new Exception("Can't connect debugger now, waiting for input");
     }
     try {
       // though `connectToDebugger` returns "connect complete" string, let us just ignore it
-      getPythonConsoleBackendClient().connectToDebugger(localPort, dbgOpts, extraEnvs);
+      getPythonConsoleBackendClient().connectToDebugger(localPort, debuggerHost, dbgOpts, extraEnvs);
     }
     catch (CommunicationClosedException | PyConsoleProcessFinishedException | TException e) {
       throw new PyDebuggerException("pydevconsole failed to execute connectToDebugger", e);
@@ -675,7 +713,7 @@ public abstract class PydevConsoleCommunication extends AbstractConsoleCommunica
     }
 
     @Override
-    public String requestInput(String path) {
+    public String requestInput(String path) throws KeyboardInterruptException {
       return (String)execRequestInput();
     }
 

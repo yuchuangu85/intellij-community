@@ -1,13 +1,14 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.projectRoots;
 
 import com.intellij.openapi.Disposable;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.WriteAction;
-import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.util.messages.Topic;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
@@ -15,31 +16,28 @@ import org.jetbrains.annotations.TestOnly;
 import java.util.EventListener;
 import java.util.List;
 
+@ApiStatus.NonExtendable
 public abstract class ProjectJdkTable {
   public static ProjectJdkTable getInstance() {
-    return ServiceManager.getService(ProjectJdkTable.class);
+    return ApplicationManager.getApplication().getService(ProjectJdkTable.class);
   }
 
-  @Nullable
-  public abstract Sdk findJdk(String name);
+  public abstract @Nullable Sdk findJdk(@NotNull String name);
 
-  @Nullable
-  public abstract Sdk findJdk(String name, String type);
+  public abstract @Nullable Sdk findJdk(@NotNull String name, @NotNull String type);
 
-  @NotNull
-  public abstract Sdk[] getAllJdks();
+  public abstract Sdk @NotNull [] getAllJdks();
 
-  @NotNull
-  public abstract List<Sdk> getSdksOfType(@NotNull SdkTypeId type);
+  public abstract @NotNull List<Sdk> getSdksOfType(@NotNull SdkTypeId type);
 
-  @Nullable
-  public Sdk findMostRecentSdkOfType(@NotNull SdkTypeId type) {
+  public @Nullable Sdk findMostRecentSdkOfType(@NotNull SdkTypeId type) {
     return getSdksOfType(type).stream().max(type.versionComparator()).orElse(null);
   }
 
-  /** @deprecated comparing version strings across SDK types makes no sense; use {@link #findMostRecentSdkOfType} (to be removed in IDEA 2019) */
+  /** @deprecated comparing version strings across SDK types makes no sense; use {@link #findMostRecentSdkOfType} */
   @Deprecated
-  public Sdk findMostRecentSdk(@NotNull Condition<Sdk> condition) {
+  @ApiStatus.ScheduledForRemoval(inVersion = "2020.3")
+  public Sdk findMostRecentSdk(@NotNull Condition<? super Sdk> condition) {
     Sdk found = null;
     for (Sdk each : getAllJdks()) {
       if (condition.value(each) &&
@@ -63,37 +61,34 @@ public abstract class ProjectJdkTable {
   public abstract void updateJdk(@NotNull Sdk originalJdk, @NotNull Sdk modifiedJdk);
 
   public interface Listener extends EventListener {
-    void jdkAdded(@NotNull Sdk jdk);
-    void jdkRemoved(@NotNull Sdk jdk);
-    void jdkNameChanged(@NotNull Sdk jdk, @NotNull String previousName);
+    default void jdkAdded(@NotNull Sdk jdk) {
+    }
+
+    default void jdkRemoved(@NotNull Sdk jdk) {
+    }
+
+    default void jdkNameChanged(@NotNull Sdk jdk, @NotNull String previousName) {
+    }
   }
 
+  /**
+   * @deprecated Use {@link Listener} directly.
+   */
+  @Deprecated
   public static class Adapter implements Listener {
-    @Override public void jdkAdded(@NotNull Sdk jdk) { }
-    @Override public void jdkRemoved(@NotNull Sdk jdk) { }
-    @Override public void jdkNameChanged(@NotNull Sdk jdk, @NotNull String previousName) { }
   }
 
-  /**
-   * @deprecated use {@link ProjectJdkTable#JDK_TABLE_TOPIC} instead
-   */
-  @Deprecated
-  public abstract void addListener(@NotNull Listener listener);
+  public abstract @NotNull SdkTypeId getDefaultSdkType();
+
+  public abstract @NotNull SdkTypeId getSdkTypeByName(@NotNull String name);
+
+  public abstract @NotNull Sdk createSdk(@NotNull String name, @NotNull SdkTypeId sdkType);
 
   /**
-   * @deprecated use {@link ProjectJdkTable#JDK_TABLE_TOPIC} instead
+   * This method may automatically detect Sdk if none are configured.
    */
-  @Deprecated
-  public abstract void removeListener(@NotNull Listener listener);
+  public void preconfigure() {
+  }
 
-  @NotNull
-  public abstract SdkTypeId getDefaultSdkType();
-
-  @NotNull
-  public abstract SdkTypeId getSdkTypeByName(@NotNull String name);
-
-  @NotNull
-  public abstract Sdk createSdk(@NotNull String name, @NotNull SdkTypeId sdkType);
-
-  public static final Topic<Listener> JDK_TABLE_TOPIC = Topic.create("Project JDK table", Listener.class);
+  public static final Topic<Listener> JDK_TABLE_TOPIC = new Topic<>(Listener.class, Topic.BroadcastDirection.TO_DIRECT_CHILDREN);
 }

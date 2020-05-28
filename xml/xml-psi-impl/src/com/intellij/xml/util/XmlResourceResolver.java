@@ -1,7 +1,6 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xml.util;
 
-import com.intellij.codeInsight.daemon.XmlErrorMessages;
 import com.intellij.javaee.ExternalResourceManager;
 import com.intellij.javaee.ExternalResourceManagerEx;
 import com.intellij.javaee.UriUtil;
@@ -22,10 +21,11 @@ import com.intellij.psi.xml.XmlAttribute;
 import com.intellij.psi.xml.XmlAttributeValue;
 import com.intellij.psi.xml.XmlFile;
 import com.intellij.psi.xml.XmlTag;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.xml.actions.validate.ErrorReporter;
 import com.intellij.xml.actions.validate.ValidateXmlActionHandler;
 import com.intellij.xml.index.XmlNamespaceIndex;
+import com.intellij.xml.psi.XmlPsiBundle;
 import org.apache.xerces.xni.XMLResourceIdentifier;
 import org.apache.xerces.xni.XNIException;
 import org.apache.xerces.xni.parser.XMLEntityResolver;
@@ -40,6 +40,7 @@ import java.io.StringReader;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -47,7 +48,7 @@ import java.util.Map;
  * @author Maxim.Mossienko
  */
 public class XmlResourceResolver implements XMLEntityResolver {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.xml.util.XmlResourceResolver");
+  private static final Logger LOG = Logger.getInstance(XmlResourceResolver.class);
   private final XmlFile myFile;
   private final Project myProject;
   private final Map<String,String> myExternalResourcesMap = new HashMap<>(1);
@@ -67,7 +68,7 @@ public class XmlResourceResolver implements XMLEntityResolver {
   }
 
   public String[] getResourcePaths() {
-    return ArrayUtil.toStringArray(myExternalResourcesMap.values());
+    return ArrayUtilRt.toStringArray(myExternalResourcesMap.values());
   }
 
   @Nullable
@@ -145,6 +146,15 @@ public class XmlResourceResolver implements XMLEntityResolver {
           relativePath = systemId.substring(systemId.lastIndexOf('/') + 1);
         }
 
+        String res = myExternalResourcesMap.get(relativePath);
+        if (res != null) {
+          VirtualFile file = VirtualFileManager.getInstance().findFileByUrl(res);
+          if (file != null) {
+            psiFile = PsiManager.getInstance(myProject).findFile(file);
+            if (psiFile != null) return psiFile;
+          }
+        }
+
         if (LOG.isDebugEnabled()) {
           LOG.debug("next to relative file checking:"+relativePath+","+myExternalResourcesMap.size()+")");
         }
@@ -198,7 +208,10 @@ public class XmlResourceResolver implements XMLEntityResolver {
     // Find relative to myFile
     File workingFile = new File("");
     String workingDir = workingFile.getAbsoluteFile().getAbsolutePath().replace(File.separatorChar, '/');
-    String id = StringUtil.replace(baseSystemId, workingDir, myFile.getVirtualFile().getParent().getPath());
+    VirtualFile parent = myFile.getVirtualFile().getParent();
+    if (parent == null)
+      return null;
+    String id = StringUtil.replace(baseSystemId, workingDir, parent.getPath());
     VirtualFile vFile = UriUtil.findRelative(id, myFile);
 
     if (vFile == null) {
@@ -225,21 +238,16 @@ public class XmlResourceResolver implements XMLEntityResolver {
                   xmlResourceIdentifier.getLiteralSystemId():
                   xmlResourceIdentifier.getNamespace();
 
-    if (publicId != null) {
+    if (publicId != null && publicId.startsWith("file:")) {
+      Path basePath = new File(URI.create(xmlResourceIdentifier.getBaseSystemId())).getParentFile().toPath();
       try {
-        String userDir = new File(System.getProperty("user.dir")).toURI().getPath();
-        String publicIdPath = new URI(publicId).getPath();
-        if (publicIdPath.startsWith(userDir)) {
-          publicId = publicIdPath.substring(publicIdPath.indexOf(userDir) + userDir.length());
-        }
+        Path publicIdPath = new File(URI.create(publicId)).toPath();
+        publicId = basePath.relativize(publicIdPath).toString().replace(File.separatorChar, '/');
       }
-      catch (Exception e) {
+      catch (Exception ignore) {
       }
     }
     PsiFile psiFile = resolve(xmlResourceIdentifier.getBaseSystemId(), publicId);
-    if (psiFile == null && xmlResourceIdentifier.getBaseSystemId() != null) {
-        psiFile = ExternalResourceManager.getInstance().getResourceLocation(xmlResourceIdentifier.getBaseSystemId(), myFile, null);
-    }
     if (psiFile==null && xmlResourceIdentifier.getLiteralSystemId()!=null && xmlResourceIdentifier.getNamespace()!=null) {
       psiFile = resolve(
         xmlResourceIdentifier.getBaseSystemId(),
@@ -251,7 +259,7 @@ public class XmlResourceResolver implements XMLEntityResolver {
       if (publicId != null && publicId.contains(":/")) {
         try {
           myErrorReporter.processError(
-            new SAXParseException(XmlErrorMessages.message("xml.validate.external.resource.is.not.registered", publicId), publicId, null, 0,0), ValidateXmlActionHandler.ProblemType.ERROR);
+            new SAXParseException(XmlPsiBundle.message("xml.validate.external.resource.is.not.registered", publicId), publicId, null, 0, 0), ValidateXmlActionHandler.ProblemType.ERROR);
         }
         catch (SAXException ignore) {
 
@@ -274,6 +282,7 @@ public class XmlResourceResolver implements XMLEntityResolver {
       }
     }
     source.setPublicId(publicId);
+    source.setBaseSystemId(null);
     source.setCharacterStream(new StringReader(psiFile.getText()));
 
     return source;

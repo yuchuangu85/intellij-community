@@ -1,6 +1,7 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.projectRoots.impl;
 
+import com.intellij.openapi.project.ProjectBundle;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.projectRoots.SdkModel;
 import com.intellij.openapi.projectRoots.SdkType;
@@ -19,19 +20,20 @@ import java.util.Arrays;
  */
 public abstract class DependentSdkType extends SdkType {
 
-  public DependentSdkType(@NonNls String name) {
+  public DependentSdkType(@NonNls @NotNull String name) {
     super(name);
   }
 
   /**
    * Checks if dependencies satisfied.
    */
-  protected boolean checkDependency(SdkModel sdkModel) {
+  protected boolean checkDependency(@NotNull SdkModel sdkModel) {
     return ContainerUtil.find(sdkModel.getSdks(), sdk -> isValidDependency(sdk)) != null;
   }
 
-  protected abstract boolean isValidDependency(Sdk sdk);
+  protected abstract boolean isValidDependency(@NotNull Sdk sdk);
 
+  @NotNull
   public abstract String getUnsatisfiedDependencyMessage();
 
   @Override
@@ -42,7 +44,8 @@ public abstract class DependentSdkType extends SdkType {
   @Override
   public void showCustomCreateUI(@NotNull final SdkModel sdkModel, @NotNull JComponent parentComponent, @NotNull final Consumer<Sdk> sdkCreatedCallback) {
     if (!checkDependency(sdkModel)) {
-      if (Messages.showOkCancelDialog(parentComponent, getUnsatisfiedDependencyMessage(), "Cannot Create SDK", Messages.getWarningIcon()) != Messages.OK) {
+      if (Messages.showOkCancelDialog(parentComponent, getUnsatisfiedDependencyMessage(),
+                                      ProjectBundle.message("dialog.title.cannot.create.sdk"), Messages.getWarningIcon()) != Messages.OK) {
         return;
       }
       if (fixDependency(sdkModel, sdkCreatedCallback) == null) {
@@ -54,20 +57,19 @@ public abstract class DependentSdkType extends SdkType {
   }
 
   @Override
+  @NotNull
   public abstract SdkType getDependencyType();
 
-  protected Sdk fixDependency(SdkModel sdkModel, Consumer<Sdk> sdkCreatedCallback) {
+  protected Sdk fixDependency(@NotNull SdkModel sdkModel, @NotNull Consumer<? super Sdk> sdkCreatedCallback) {
     return createSdkOfType(sdkModel, getDependencyType(), sdkCreatedCallback);
   }
 
-  protected static Sdk createSdkOfType(final SdkModel sdkModel,
-                                  final SdkType sdkType,
-                                  final Consumer<? super Sdk> sdkCreatedCallback) {
+  protected static Sdk createSdkOfType(@NotNull SdkModel sdkModel,
+                                       @NotNull SdkType sdkType,
+                                       @NotNull Consumer<? super Sdk> sdkCreatedCallback) {
     final Ref<Sdk> result = new Ref<>(null);
     SdkConfigurationUtil.selectSdkHome(sdkType, home -> {
-      String newSdkName = SdkConfigurationUtil.createUniqueSdkName(sdkType, home, Arrays.asList(sdkModel.getSdks()));
-      final ProjectJdkImpl newJdk = new ProjectJdkImpl(newSdkName, sdkType);
-      newJdk.setHomePath(home);
+      final ProjectJdkImpl newJdk = SdkConfigurationUtil.createSdk(Arrays.asList(sdkModel.getSdks()), home, sdkType, null, null);
 
       sdkCreatedCallback.consume(newJdk);
       result.set(newJdk);

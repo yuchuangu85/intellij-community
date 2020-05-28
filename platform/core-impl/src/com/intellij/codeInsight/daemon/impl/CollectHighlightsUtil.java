@@ -19,9 +19,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CollectHighlightsUtil {
-  public static final ExtensionPointName<Condition<PsiElement>> EP_NAME = ExtensionPointName.create("com.intellij.elementsToHighlightFilter");
+  static final ExtensionPointName<Condition<PsiElement>> EP_NAME = ExtensionPointName.create("com.intellij.elementsToHighlightFilter");
 
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.daemon.impl.CollectHighlightsUtil");
+  private static final Logger LOG = Logger.getInstance(CollectHighlightsUtil.class);
 
   private CollectHighlightsUtil() { }
 
@@ -55,10 +55,7 @@ public class CollectHighlightsUtil {
   @NotNull
   private static List<PsiElement> getElementsToHighlight(@NotNull PsiElement parent, final int startOffset, final int endOffset) {
     final List<PsiElement> result = new ArrayList<>();
-    final int currentOffset = parent.getTextRange().getStartOffset();
-    final List<Condition<PsiElement>> filters = EP_NAME.getExtensionList();
-
-    int offset = currentOffset;
+    int offset = parent.getTextRange().getStartOffset();
 
     final TIntStack starts = new TIntStack(STARTING_TREE_HEIGHT);
     final Stack<PsiElement> elements = new Stack<>(STARTING_TREE_HEIGHT);
@@ -69,7 +66,7 @@ public class CollectHighlightsUtil {
     while (true) {
       ProgressIndicatorProvider.checkCanceled();
 
-      for (Condition<PsiElement> filter : filters) {
+      for (Condition<PsiElement> filter : EP_NAME.getExtensionList()) {
         if (!filter.value(element)) {
           assert child == PsiUtilCore.NULL_PSI_ELEMENT;
           child = null; // do not want to process children

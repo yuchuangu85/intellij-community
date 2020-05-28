@@ -19,7 +19,6 @@ package com.intellij.openapi.roots.ui.configuration.projectRoot;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectModelExternalSource;
 import com.intellij.openapi.roots.impl.libraries.LibraryImpl;
-import com.intellij.openapi.roots.impl.libraries.LibraryTableBase;
 import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.roots.libraries.LibraryTable;
 import com.intellij.openapi.roots.libraries.PersistentLibraryKind;
@@ -35,7 +34,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 
 
-public class LibrariesModifiableModel implements LibraryTableBase.ModifiableModel {
+public class LibrariesModifiableModel implements LibraryTable.ModifiableModel {
   //todo[nik] remove LibraryImpl#equals method instead of using identity maps
   private final Map<Library, ExistingLibraryEditor> myLibrary2EditorMap =
     ContainerUtil.newIdentityTroveMap();
@@ -60,13 +59,13 @@ public class LibrariesModifiableModel implements LibraryTableBase.ModifiableMode
 
   @NotNull
   @Override
-  public Library createLibrary(String name, @Nullable PersistentLibraryKind type) {
+  public Library createLibrary(String name, @Nullable PersistentLibraryKind<?> type) {
     return createLibrary(name, type, null);
   }
 
   @NotNull
   @Override
-  public Library createLibrary(String name, @Nullable PersistentLibraryKind type, @Nullable ProjectModelExternalSource externalSource) {
+  public Library createLibrary(String name, @Nullable PersistentLibraryKind<?> type, @Nullable ProjectModelExternalSource externalSource) {
     final Library library = getLibrariesModifiableModel().createLibrary(name, type, externalSource);
     final BaseLibrariesConfigurable configurable = ProjectStructureConfigurable.getInstance(myProject).getConfigurableFor(library);
     configurable.createLibraryNode(library);
@@ -86,9 +85,6 @@ public class LibrariesModifiableModel implements LibraryTableBase.ModifiableMode
 
     if (existingLibrary == library) {
       myRemovedLibraries.add(library);
-    } else {
-      // dispose uncommitted library
-      Disposer.dispose(library);
     }
   }
 
@@ -109,8 +105,7 @@ public class LibrariesModifiableModel implements LibraryTableBase.ModifiableMode
   }
 
   @Override
-  @NotNull
-  public Library[] getLibraries() {
+  public Library @NotNull [] getLibraries() {
     return getLibrariesModifiableModel().getLibraries();
   }
 

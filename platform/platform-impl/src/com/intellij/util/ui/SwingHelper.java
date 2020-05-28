@@ -1,11 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.ui;
 
 import com.intellij.ide.BrowserUtil;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.IdeEventQueue;
 import com.intellij.ide.ui.UISettings;
 import com.intellij.openapi.actionSystem.ActionManager;
-import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.application.ApplicationManager;
@@ -15,6 +15,7 @@ import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.options.ex.SingleConfigurableEditor;
 import com.intellij.openapi.options.newEditor.SettingsDialog;
+import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.*;
 import com.intellij.openapi.util.SystemInfo;
@@ -24,6 +25,7 @@ import com.intellij.ui.TextFieldWithHistory;
 import com.intellij.ui.TextFieldWithHistoryWithBrowseButton;
 import com.intellij.ui.components.ComponentsKt;
 import com.intellij.ui.components.panels.NonOpaquePanel;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.Consumer;
 import com.intellij.util.NotNullProducer;
 import com.intellij.util.ObjectUtils;
@@ -139,12 +141,12 @@ public class SwingHelper {
   }
 
   public static void setPreferredWidthToFitText(@NotNull TextFieldWithHistoryWithBrowseButton component) {
-    int childWidth = calcWidthToFitText(component.getChildComponent().getTextEditor(), JBUI.scale(32));
+    int childWidth = calcWidthToFitText(component.getChildComponent().getTextEditor(), JBUIScale.scale(32));
     setPreferredWidthForComponentWithBrowseButton(component, childWidth);
   }
 
   public static void setPreferredWidthToFitText(@NotNull TextFieldWithBrowseButton component) {
-    int childWidth = calcWidthToFitText(component.getChildComponent(), JBUI.scale(20));
+    int childWidth = calcWidthToFitText(component.getChildComponent(), JBUIScale.scale(20));
     setPreferredWidthForComponentWithBrowseButton(component, childWidth);
   }
 
@@ -155,7 +157,7 @@ public class SwingHelper {
   }
 
   public static void setPreferredWidthToFitText(@NotNull JTextField textField) {
-    setPreferredWidthToFitText(textField, JBUI.scale(15));
+    setPreferredWidthToFitText(textField, JBUIScale.scale(15));
   }
 
   public static void setPreferredWidthToFitText(@NotNull JTextField textField, int additionalWidth) {
@@ -163,7 +165,7 @@ public class SwingHelper {
   }
 
   public static void setPreferredWidthToFitText(@NotNull JTextField textField, @NotNull String text) {
-    setPreferredSizeToFitText(textField, text, JBUI.scale(15));
+    setPreferredSizeToFitText(textField, text, JBUIScale.scale(15));
   }
 
   private static void setPreferredSizeToFitText(@NotNull JTextField textField, @NotNull String text, int additionalWidth) {
@@ -200,7 +202,7 @@ public class SwingHelper {
     LOG.debug("DialogWrapper '" + dialogWrapper.getTitle() + "' has been re-sized (added width: " + dw + ", added height: " + dh + ")");
   }
 
-  public static void resizeDialogToFitTextFor(@NotNull final JComponent... components) {
+  public static void resizeDialogToFitTextFor(final JComponent @NotNull ... components) {
     if (components.length == 0) return;
     doWithDialogWrapper(components[0], dialogWrapper -> {
       if (dialogWrapper instanceof SettingsDialog || dialogWrapper instanceof SingleConfigurableEditor) {
@@ -339,9 +341,9 @@ public class SwingHelper {
   public static void setHistory(@NotNull TextFieldWithHistory textFieldWithHistory,
                                 @NotNull List<String> history,
                                 boolean mergeWithPrevHistory) {
-    Set<String> newHistorySet = ContainerUtil.newHashSet(history);
+    Set<String> newHistorySet = new HashSet<>(history);
     List<String> prevHistory = textFieldWithHistory.getHistory();
-    List<String> mergedHistory = ContainerUtil.newArrayListWithCapacity(history.size());
+    List<String> mergedHistory = new ArrayList<>(history.size());
     if (mergeWithPrevHistory) {
       for (String item : prevHistory) {
         if (!newHistorySet.contains(item)) {
@@ -365,7 +367,7 @@ public class SwingHelper {
     }
   }
 
-  public static void setLongestAsPrototype(@NotNull JComboBox comboBox, @NotNull List<String> variants) {
+  private static void setLongestAsPrototype(@NotNull JComboBox comboBox, @NotNull List<String> variants) {
     Object prototypeDisplayValue = comboBox.getPrototypeDisplayValue();
     String prototypeDisplayValueStr = null;
     if (prototypeDisplayValue instanceof String) {
@@ -480,7 +482,7 @@ public class SwingHelper {
   }
 
   private static void getAllElements(Element root, List<? super Element> list, List<String> toCheck) {
-    if (toCheck.contains(root.getName().toLowerCase(Locale.US))) {
+    if (toCheck.contains(StringUtil.toLowerCase(root.getName()))) {
       list.add(root);
     }
     for (int i = 0; i < root.getElementCount(); i++) {
@@ -647,12 +649,12 @@ public class SwingHelper {
     return comp;
   }
 
-  private static class CopyLinkAction extends AnAction {
+  private static class CopyLinkAction extends DumbAwareAction {
 
     private final String myUrl;
 
     private CopyLinkAction(@NotNull String url) {
-      super("Copy Link Address", null, PlatformIcons.COPY_ICON);
+      super(IdeBundle.message("action.text.copy.link.address"), null, PlatformIcons.COPY_ICON);
       myUrl = url;
     }
 
@@ -668,12 +670,12 @@ public class SwingHelper {
     }
   }
 
-  private static class OpenLinkInBrowser extends AnAction {
+  private static class OpenLinkInBrowser extends DumbAwareAction {
 
     private final String myUrl;
 
     private OpenLinkInBrowser(@NotNull String url) {
-      super("Open Link in Browser", null, PlatformIcons.WEB_ICON);
+      super(IdeBundle.message("action.text.open.link.in.browser"), null, PlatformIcons.WEB_ICON);
       myUrl = url;
     }
 
@@ -722,15 +724,14 @@ public class SwingHelper {
     final String currentSubstring = text.substring(0, currentLen);
     int realWidth = fm.stringWidth(currentSubstring);
 
+    int delta = 0;
     if (realWidth >= availableWidth) {
-      int delta = 0;
       for (int i = currentLen - 1; i >= 0; i--) {
         if ((realWidth - delta) < availableWidth) return text.substring(0, i) + ELLIPSIS;
         delta += fm.charWidth(currentSubstring.charAt(i));
       }
-      return text.substring(0, 1) + ELLIPSIS;
+      return text.charAt(0) + ELLIPSIS;
     } else {
-      int delta = 0;
       for (int i = currentLen; i < text.length(); i++) {
         if ((realWidth + delta) >= availableWidth) return text.substring(0, i) + ELLIPSIS;
         delta += fm.charWidth(text.charAt(i));

@@ -15,6 +15,12 @@
  */
 package com.intellij.util.containers;
 
+import org.jetbrains.annotations.NotNull;
+
+/**
+ * Please use {@link java.util.function.Function} instead
+ */
+@FunctionalInterface
 public interface Convertor<Src, Dst> {
   IntoSelf SELF = new IntoSelf();
 
@@ -26,4 +32,10 @@ public interface Convertor<Src, Dst> {
   }
 
   Dst convert(Src o);
+
+  @NotNull
+  static <T> Convertor<T,T> self() {
+    //noinspection unchecked
+    return SELF;
+  }
 }

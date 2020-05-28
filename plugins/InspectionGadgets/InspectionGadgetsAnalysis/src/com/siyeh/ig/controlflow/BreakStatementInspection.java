@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2007 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2018 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,19 +16,12 @@
 package com.siyeh.ig.controlflow;
 
 import com.intellij.psi.*;
-import com.intellij.psi.util.PsiTreeUtil;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
 import org.jetbrains.annotations.NotNull;
 
 public class BreakStatementInspection extends BaseInspection {
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("break.statement.display.name");
-  }
 
   @Override
   @NotNull
@@ -42,40 +35,15 @@ public class BreakStatementInspection extends BaseInspection {
     return new BreakStatementVisitor();
   }
 
-  private static class BreakStatementVisitor
-    extends BaseInspectionVisitor {
+  private static class BreakStatementVisitor extends BaseInspectionVisitor {
 
     @Override
     public void visitBreakStatement(@NotNull PsiBreakStatement statement) {
       super.visitBreakStatement(statement);
-      final PsiSwitchStatement switchStatement =
-        PsiTreeUtil.getParentOfType(statement,
-                                    PsiSwitchStatement.class);
-      if (switchStatement != null && isTopLevelBreakInSwitch(statement)) {
+      if (statement.findExitedStatement() instanceof PsiSwitchStatement) {
         return;
       }
       registerStatementError(statement);
-    }
-
-    private static boolean isTopLevelBreakInSwitch(
-      PsiBreakStatement statement) {
-      final PsiElement parent = statement.getParent();
-      if (!(parent instanceof PsiCodeBlock)) {
-        return false;
-      }
-      final PsiElement parentsParent = parent.getParent();
-      if (parentsParent instanceof PsiSwitchStatement) {
-        return true;
-      }
-      if (!(parentsParent instanceof PsiBlockStatement)) {
-        return false;
-      }
-      final PsiElement blocksParent = parentsParent.getParent();
-      if (!(blocksParent instanceof PsiCodeBlock)) {
-        return false;
-      }
-      final PsiElement blocksParentsParent = blocksParent.getParent();
-      return blocksParentsParent instanceof PsiSwitchStatement;
     }
   }
 }

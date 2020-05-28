@@ -6,7 +6,6 @@ import com.intellij.ide.ui.search.SearchUtil;
 import com.intellij.ui.ColorUtil;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBTabbedPane;
-import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
@@ -22,6 +21,8 @@ public class GlassPanel extends JComponent {
   private final Set<JComponent> myLightComponents = new HashSet<>();
   private final JComponent myPanel;
   private static final Insets EMPTY_INSETS = new Insets(0, 0, 0, 0);
+  private static final JBColor SPOTLIGHT_BORDER_COLOR = JBColor.namedColor("Settings.Spotlight.borderColor",
+                                                                                   ColorUtil.toAlpha(JBColor.ORANGE, 100));
 
 
   public GlassPanel(JComponent containingPanel) {
@@ -76,7 +77,7 @@ public class GlassPanel extends JComponent {
         g2.fill(mask);
 
         g2.setStroke(new BasicStroke(stroke));
-        g2.setColor(ColorUtil.toAlpha(JBColor.ORANGE, 100));
+        g2.setColor(SPOTLIGHT_BORDER_COLOR);
         g2.draw(mask);
       }
       finally {
@@ -97,7 +98,7 @@ public class GlassPanel extends JComponent {
     final boolean isWithBorder = Boolean.TRUE.equals(lightComponent.getClientProperty(SearchUtil.HIGHLIGHT_WITH_BORDER));
     final boolean isLabelFromTabbedPane = Boolean.TRUE.equals(lightComponent.getClientProperty(JBTabbedPane.LABEL_FROM_TABBED_PANE));
 
-    if ((insetsToIgnore == null || (UIUtil.isUnderAquaLookAndFeel() && lightComponent instanceof JButton)) || isWithBorder) {
+    if (insetsToIgnore == null || isWithBorder) {
       insetsToIgnore = EMPTY_INSETS;
     }
 

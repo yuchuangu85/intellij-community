@@ -19,8 +19,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.lang.model.element.*;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.*;
+import javax.lang.model.util.SimpleTypeVisitor6;
 import java.util.Set;
 
 public interface JavacRef {
@@ -34,15 +34,47 @@ public interface JavacRef {
   @NotNull
   String getOwnerName();
 
+  /**
+   * @return non-null import descriptor object, if the reference comes from import list
+   */
+  @Nullable
+  ImportProperties getImportProperties();
+
+  abstract class ImportProperties {
+    public abstract boolean isStatic();
+    public abstract boolean isOnDemand();
+
+    public static ImportProperties create(final boolean isStatic, final boolean isOnDemand) {
+      return new ImportProperties() {
+        @Override
+        public boolean isStatic() {
+          return isStatic;
+        }
+
+        @Override
+        public boolean isOnDemand() {
+          return isOnDemand;
+        }
+      };
+    }
+  }
+
   interface JavacClass extends JavacRef {
     boolean isAnonymous();
+    boolean isPackageInfo();
   }
 
   interface JavacMethod extends JavacRef {
     byte getParamCount();
+    @Nullable
+    String getContainingClass();
   }
 
   interface JavacField extends JavacRef {
+    @Nullable
+    String getDescriptor();
+    @Nullable
+    String getContainingClass();
   }
 
   abstract class JavacRefBase implements JavacRef {
@@ -64,6 +96,12 @@ public interface JavacRef {
     public final Set<Modifier> getModifiers() {
       return myModifiers;
     }
+
+    @Nullable
+    @Override
+    public ImportProperties getImportProperties() {
+      return null;
+    }
   }
 
   class JavacClassImpl extends JavacRefBase implements JavacClass {
@@ -84,16 +122,31 @@ public interface JavacRef {
     public boolean isAnonymous() {
       return myAnonymous;
     }
+
+    @Override
+    public boolean isPackageInfo() {
+      final String name = getName();
+      return name.endsWith(".package-info") || "package-info".equals(name);
+    }
   }
 
   class JavacMethodImpl extends JavacRefBase implements JavacMethod {
+    @Nullable
+    private final String myContainingClass;
     private final String myOwnerName;
     private final byte myParamCount;
 
-    public JavacMethodImpl(String ownerName, byte paramCount, Set<Modifier> modifiers, String name) {
+    public JavacMethodImpl(@Nullable String containingClass, String ownerName, byte paramCount, Set<Modifier> modifiers, String name) {
       super(name, modifiers);
+      myContainingClass = containingClass != null && !containingClass.isEmpty()? containingClass : null;
       myOwnerName = ownerName;
       myParamCount = paramCount;
+    }
+
+    @Override
+    @Nullable
+    public String getContainingClass() {
+      return myContainingClass;
     }
 
     @Override
@@ -109,17 +162,34 @@ public interface JavacRef {
   }
 
   class JavacFieldImpl extends JavacRefBase implements JavacField {
+    @Nullable
+    private final String myContainingClass;
     private final String myOwnerName;
+    private final String myDescriptor;
 
-    public JavacFieldImpl(String ownerName, Set<Modifier> modifiers, String name) {
+    public JavacFieldImpl(@Nullable String containingClass, String ownerName, Set<Modifier> modifiers, String name, String descriptor) {
       super(name, modifiers);
+      myContainingClass = containingClass != null && !containingClass.isEmpty()? containingClass : null;
       myOwnerName = ownerName;
+      myDescriptor = descriptor != null && !descriptor.isEmpty()? descriptor : null;
     }
 
-    @NotNull
     @Override
+    @Nullable
+    public String getContainingClass() {
+      return myContainingClass;
+    }
+
+    @Override
+    @NotNull
     public String getOwnerName() {
       return myOwnerName;
+    }
+
+    @Override
+    @Nullable
+    public String getDescriptor() {
+      return myDescriptor;
     }
   }
 
@@ -127,11 +197,13 @@ public interface JavacRef {
     protected final @NotNull Element myOriginalElement;
     @Nullable private final Element myQualifier;
     protected final JavacNameTable myNameTableCache;
+    private final ImportProperties myImportProps;
 
-    protected JavacElementRefBase(@NotNull Element element, @Nullable Element qualifier, JavacNameTable nameTableCache) {
+    protected JavacElementRefBase(@NotNull Element element, @Nullable Element qualifier, JavacNameTable nameTableCache, ImportProperties importProps) {
       myOriginalElement = element;
       myQualifier = qualifier;
       myNameTableCache = nameTableCache;
+      myImportProps = importProps;
     }
 
     @NotNull
@@ -152,7 +224,18 @@ public interface JavacRef {
     }
 
     @Nullable
-    public static JavacElementRefBase fromElement(Element element, Element qualifier, JavacNameTable nameTableCache) {
+    @Override
+    public ImportProperties getImportProperties() {
+      return myImportProps;
+    }
+
+    @Nullable
+    public static JavacElementRefBase fromElement(@Nullable String containingClass, Element element, Element qualifier, JavacNameTable nameTableCache) {
+      return fromElement(containingClass, element, qualifier, nameTableCache, null);
+    }
+    
+    @Nullable
+    public static JavacElementRefBase fromElement(@Nullable String containigClass, Element element, Element qualifier, JavacNameTable nameTableCache, @Nullable ImportProperties importProps) {
       if (qualifier != null) {
         TypeMirror type = qualifier.asType();
         if (!isValidType(type)) {
@@ -160,15 +243,15 @@ public interface JavacRef {
         }
       }
       if (element instanceof TypeElement) {
-        return new JavacElementClassImpl(element, qualifier, nameTableCache);
+        return new JavacElementClassImpl(element, qualifier, nameTableCache, importProps);
       }
       else if (element instanceof VariableElement) {
         if (qualifier == null && !checkEnclosingElement(element)) return null;
-        return new JavacElementFieldImpl(element, qualifier, nameTableCache);
+        return new JavacElementFieldImpl(containigClass, element, qualifier, nameTableCache, importProps);
       }
       else if (element instanceof ExecutableElement) {
         if (qualifier == null && !checkEnclosingElement(element)) return null;
-        return new JavacElementMethodImpl(element, qualifier, nameTableCache);
+        return new JavacElementMethodImpl(containigClass, element, qualifier, nameTableCache, importProps);
       }
       else if (element == null || element.getKind() == ElementKind.OTHER || element.getKind() == ElementKind.TYPE_PARAMETER) {
         // javac reserved symbol kind (e.g: com.sun.tools.javac.comp.Resolve.ResolveError)
@@ -212,8 +295,8 @@ public interface JavacRef {
   }
 
   class JavacElementClassImpl extends JavacElementRefBase implements JavacClass {
-   public JavacElementClassImpl(@NotNull Element element, @Nullable Element qualifier, JavacNameTable nameTableCache) {
-      super(element, qualifier, nameTableCache);
+   public JavacElementClassImpl(@NotNull Element element, @Nullable Element qualifier, JavacNameTable nameTableCache, final ImportProperties importProps) {
+      super(element, qualifier, nameTableCache, importProps);
     }
 
     @NotNull
@@ -226,11 +309,26 @@ public interface JavacRef {
     public boolean isAnonymous() {
       return myNameTableCache.parseName(myOriginalElement.getSimpleName()).isEmpty();
     }
+
+    @Override
+    public boolean isPackageInfo() {
+      return false;
+    }
   }
 
   class JavacElementMethodImpl extends JavacElementRefBase implements JavacMethod {
-    public JavacElementMethodImpl(@NotNull Element element, @Nullable Element qualifier, JavacNameTable nameTableCache) {
-      super(element, qualifier, nameTableCache);
+    @Nullable
+    private final String myContainingClass;
+
+    public JavacElementMethodImpl(@Nullable String containingClass, @NotNull Element element, @Nullable Element qualifier, JavacNameTable nameTableCache, final ImportProperties importProps) {
+      super(element, qualifier, nameTableCache, importProps);
+      myContainingClass = containingClass != null && !containingClass.isEmpty()? containingClass : null;
+    }
+
+    @Override
+    @Nullable
+    public String getContainingClass() {
+      return myContainingClass;
     }
 
     @Override
@@ -240,8 +338,58 @@ public interface JavacRef {
   }
 
   class JavacElementFieldImpl extends JavacElementRefBase implements JavacField {
-    public JavacElementFieldImpl(@NotNull Element element, @Nullable Element qualifier, JavacNameTable nameTableCache) {
-      super(element, qualifier, nameTableCache);
+    @Nullable
+    private final String myContainingClass;
+
+    public JavacElementFieldImpl(@Nullable String containingClass, @NotNull Element element, @Nullable Element qualifier, JavacNameTable nameTableCache, final ImportProperties importProps) {
+      super(element, qualifier, nameTableCache, importProps);
+      myContainingClass = containingClass != null && !containingClass.isEmpty()? containingClass : null;
+    }
+
+    @Override
+    @Nullable
+    public String getContainingClass() {
+      return myContainingClass;
+    }
+
+    @Override
+    @Nullable
+    public String getDescriptor() {
+      return calcDescriptor(myOriginalElement.asType());
+    }
+
+    private String calcDescriptor(TypeMirror type) {
+      return new SimpleTypeVisitor6<String, Void>(null) {
+        @Override
+        public String visitPrimitive(PrimitiveType t, Void aVoid) {
+          switch(t.getKind()) {
+            case BYTE: return "B";
+            case CHAR: return "C";
+            case DOUBLE: return "D";
+            case FLOAT: return "F";
+            case INT: return "I";
+            case LONG:return "J";
+            case SHORT: return "S";
+            case BOOLEAN: return "Z";
+          }
+          return null;
+        }
+
+        @Override
+        public String visitArray(ArrayType t, Void aVoid) {
+          return "[" + visit(t.getComponentType());
+        }
+
+        @Override
+        public String visitDeclared(DeclaredType t, Void aVoid) {
+          return "L" + myNameTableCache.parseBinaryName(t.asElement()).replace('.', '/') + ";";
+        }
+
+        @Override
+        public String visitUnknown(TypeMirror t, Void param) {
+          return null;
+        }
+      }.visit(type);
     }
   }
 }

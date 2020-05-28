@@ -1,23 +1,14 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.sdk.flavors;
 
 import com.google.common.collect.ImmutableMap;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.module.Module;
+import com.intellij.openapi.util.ClearableLazyValue;
+import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.util.UserDataHolder;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -29,28 +20,38 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.util.*;
 
+import static com.jetbrains.python.sdk.flavors.WinAppxToolsKt.*;
+
 /**
  * This class knows how to find python in Windows Registry according to
  * <a href="https://www.python.org/dev/peps/pep-0514/">PEP 514</a>
  *
  * @author yole
  */
-public final class WinPythonSdkFlavor extends CPythonSdkFlavor {
+public class WinPythonSdkFlavor extends CPythonSdkFlavor {
+  @NotNull
+  private static final String NOTHING = "";
   private static final String[] REG_ROOTS = {"HKEY_LOCAL_MACHINE", "HKEY_CURRENT_USER"};
   private static final Map<String, String> REGISTRY_MAP =
     ImmutableMap.of("Python", "python.exe",
                     "IronPython", "ipy.exe");
 
-  private static volatile Set<String> ourRegistryCache;
   @NotNull
-  private final WinRegistryService myWinRegService;
+  private final ClearableLazyValue<Set<String>> myRegistryCache =
+    ClearableLazyValue.createAtomic(() -> findInRegistry(getWinRegistryService()));
 
-  WinPythonSdkFlavor(@NotNull final WinRegistryService winRegistryService) {
-    myWinRegService = winRegistryService;
+  public static WinPythonSdkFlavor getInstance() {
+    return PythonSdkFlavor.EP_NAME.findExtension(WinPythonSdkFlavor.class);
   }
 
   @Override
-  public Collection<String> suggestHomePaths(@Nullable Module module) {
+  public boolean isApplicable() {
+    return SystemInfo.isWindows;
+  }
+
+  @NotNull
+  @Override
+  public Collection<String> suggestHomePaths(@Nullable final Module module, @Nullable final UserDataHolder context) {
     Set<String> candidates = new TreeSet<>();
     findInCandidatePaths(candidates, "python.exe", "jython.bat", "pypy.exe");
     findInstallations(candidates, "python.exe", PythonHelpersLocator.getHelpersRoot().getParent());
@@ -61,20 +62,43 @@ public final class WinPythonSdkFlavor extends CPythonSdkFlavor {
     for (String name : exe_names) {
       findInstallations(candidates, name, "C:\\", "C:\\Program Files\\");
       findInPath(candidates, name);
-
-
-      findInRegistry(candidates);
     }
+
+    findInRegistry(candidates);
+
+    getAppXAppsInstalled((dir, name) -> name.equals("python.exe")).stream()
+      .findFirst()
+      .ifPresent(python -> candidates.add(python.getAbsolutePath()));
   }
 
+  @Override
+  public boolean isValidSdkHome(@NotNull final String path) {
+    if (super.isValidSdkHome(path)) {
+      return true;
+    }
+
+    final File file = new File(path);
+    return mayBeAppXReparsePoint(file) && isValidSdkPath(file);
+  }
+
+  @Override
+  public void dropCaches() {
+    myRegistryCache.drop();
+  }
+
+
   void findInRegistry(@NotNull final Collection<String> candidates) {
-    fillRegistryCache(myWinRegService);
-    candidates.addAll(ourRegistryCache);
+    candidates.addAll(myRegistryCache.getValue());
+  }
+
+  @NotNull
+  protected WinRegistryService getWinRegistryService() {
+    return ApplicationManager.getApplication().getService(WinRegistryService.class);
   }
 
   private static void findInstallations(Set<String> candidates, String exe_name, String... roots) {
     for (String root : roots) {
-      findSubdirInstallations(candidates, root, FileUtil.getNameWithoutExtension(exe_name), exe_name);
+      findSubdirInstallations(candidates, root, FileUtilRt.getNameWithoutExtension(exe_name), exe_name);
     }
   }
 
@@ -93,11 +117,9 @@ public final class WinPythonSdkFlavor extends CPythonSdkFlavor {
     }
   }
 
-  private static void fillRegistryCache(@NotNull final WinRegistryService registryService) {
-    if (ourRegistryCache != null) {
-      return;
-    }
-    ourRegistryCache = new HashSet<>();
+  @NotNull
+  private static Set<String> findInRegistry(@NotNull WinRegistryService registryService) {
+    final Set<String> result = new HashSet<>();
 
     /*
      Check https://www.python.org/dev/peps/pep-0514/ for windows registry layout to understand
@@ -120,7 +142,7 @@ public final class WinPythonSdkFlavor extends CPythonSdkFlavor {
               if (folder != null) {
                 final File interpreter = new File(folder, exePath);
                 if (interpreter.exists()) {
-                  ourRegistryCache.add(FileUtil.toSystemDependentName(interpreter.getPath()));
+                  result.add(FileUtil.toSystemDependentName(interpreter.getPath()));
                 }
               }
             }
@@ -128,7 +150,10 @@ public final class WinPythonSdkFlavor extends CPythonSdkFlavor {
         }
       }
     }
+
+    return result;
   }
+
 
   private static void findSubdirInstallations(Collection<String> candidates, String rootDir, String dir_prefix, String exe_name) {
     VirtualFile rootVDir = LocalFileSystem.getInstance().findFileByPath(rootDir);
@@ -138,7 +163,7 @@ public final class WinPythonSdkFlavor extends CPythonSdkFlavor {
       }
       rootVDir.refresh(true, false);
       for (VirtualFile dir : rootVDir.getChildren()) {
-        if (dir.isDirectory() && dir.getName().toLowerCase().startsWith(dir_prefix)) {
+        if (dir.isDirectory() && StringUtil.toLowerCase(dir.getName()).startsWith(dir_prefix)) {
           VirtualFile python_exe = dir.findChild(exe_name);
           if (python_exe != null) candidates.add(FileUtil.toSystemDependentName(python_exe.getPath()));
         }

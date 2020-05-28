@@ -10,9 +10,6 @@ import org.jetbrains.jps.model.JpsElementTypeWithDefaultProperties;
 import org.jetbrains.jps.model.library.sdk.JpsSdk;
 import org.jetbrains.jps.model.library.sdk.JpsSdkType;
 
-/**
- * @author nik
- */
 public class JpsJavaSdkType extends JpsSdkType<JpsDummyElement> implements JpsElementTypeWithDefaultProperties<JpsDummyElement> {
   public static final JpsJavaSdkType INSTANCE = new JpsJavaSdkType();
 
@@ -20,6 +17,11 @@ public class JpsJavaSdkType extends JpsSdkType<JpsDummyElement> implements JpsEl
   @Override
   public JpsDummyElement createDefaultProperties() {
     return JpsElementFactory.getInstance().createDummyElement();
+  }
+
+  @Override
+  public String getPresentableName() {
+    return "JDK";
   }
 
   public static String getJavaExecutable(JpsSdk<?> sdk) {

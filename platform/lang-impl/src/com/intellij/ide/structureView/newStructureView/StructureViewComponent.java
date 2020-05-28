@@ -1,5 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
-
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.structureView.newStructureView;
 
 import com.intellij.ide.CopyPasteDelegator;
@@ -10,13 +9,17 @@ import com.intellij.ide.structureView.*;
 import com.intellij.ide.structureView.customRegions.CustomRegionTreeElement;
 import com.intellij.ide.structureView.impl.StructureViewFactoryImpl;
 import com.intellij.ide.structureView.impl.common.PsiTreeElementBase;
+import com.intellij.ide.ui.UISettingsListener;
 import com.intellij.ide.ui.customization.CustomizationUtil;
 import com.intellij.ide.util.FileStructurePopup;
 import com.intellij.ide.util.treeView.*;
 import com.intellij.ide.util.treeView.smartTree.*;
+import com.intellij.lang.LangBundle;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ModalityState;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileEditor.FileEditor;
 import com.intellij.openapi.fileEditor.FileEditorManager;
@@ -42,10 +45,9 @@ import com.intellij.ui.tree.AsyncTreeModel;
 import com.intellij.ui.tree.StructureTreeModel;
 import com.intellij.ui.tree.TreeVisitor;
 import com.intellij.ui.treeStructure.Tree;
-import com.intellij.ui.treeStructure.actions.CollapseAllAction;
-import com.intellij.ui.treeStructure.actions.ExpandAllAction;
 import com.intellij.ui.treeStructure.filtered.FilteringTreeStructure;
 import com.intellij.util.*;
+import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.containers.JBIterable;
 import com.intellij.util.containers.JBTreeTraverser;
 import com.intellij.util.ui.UIUtil;
@@ -55,6 +57,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 import org.jetbrains.concurrency.AsyncPromise;
+import org.jetbrains.concurrency.CancellablePromise;
 import org.jetbrains.concurrency.Promise;
 import org.jetbrains.concurrency.Promises;
 
@@ -69,12 +72,13 @@ import java.awt.event.MouseEvent;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class StructureViewComponent extends SimpleToolWindowPanel implements TreeActionsOwner, DataProvider, StructureView.Scrollable {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.ide.structureView.newStructureView.StructureViewComponent");
+  private static final Logger LOG = Logger.getInstance(StructureViewComponent.class);
 
   private static final Key<TreeState> STRUCTURE_VIEW_STATE_KEY = Key.create("STRUCTURE_VIEW_STATE");
   private static final Key<Boolean> STRUCTURE_VIEW_STATE_RESTORED_KEY = Key.create("STRUCTURE_VIEW_STATE_RESTORED_KEY");
@@ -89,20 +93,26 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
   private final Tree myTree;
   private final SmartTreeStructure myTreeStructure;
 
-  private final StructureTreeModel myStructureTreeModel;
+  private final StructureTreeModel<SmartTreeStructure> myStructureTreeModel;
   private final AsyncTreeModel myAsyncTreeModel;
   private final SingleAlarm myUpdateAlarm;
 
   private volatile AsyncPromise<TreePath> myCurrentFocusPromise;
 
   private boolean myAutoscrollFeedback;
-  private boolean myDisposed;
+  private volatile boolean myDisposed;
+  private boolean myStoreStateDisabled;
 
   private final Alarm myAutoscrollAlarm = new Alarm(this);
 
   private final CopyPasteDelegator myCopyPasteDelegator;
   private final MyAutoScrollToSourceHandler myAutoScrollToSourceHandler;
   private final AutoScrollFromSourceHandler myAutoScrollFromSourceHandler;
+
+  // read from different threads
+  // written from EDT only
+  @Nullable
+  private volatile CancellablePromise<?> myLastAutoscrollPromise;
 
 
   public StructureViewComponent(@Nullable FileEditor editor,
@@ -141,7 +151,7 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
       }
     };
 
-    myStructureTreeModel = new StructureTreeModel(myTreeStructure);
+    myStructureTreeModel = new StructureTreeModel<>(myTreeStructure, this);
     myAsyncTreeModel = new AsyncTreeModel(myStructureTreeModel, this);
     myAsyncTreeModel.setRootImmediately(myStructureTreeModel.getRootImmediately());
     myTree = new MyTree(myAsyncTreeModel);
@@ -152,7 +162,7 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
 
     myUpdateAlarm = new SingleAlarm(this::rebuild, 200, this);
     myTree.setRootVisible(showRootNode);
-    myTree.getEmptyText().setText("Structure is empty");
+    myTree.getEmptyText().setText(LangBundle.message("status.text.structure.empty"));
 
     final ModelListener modelListener = () -> queueUpdate();
     myTreeModelWrapper.addModelListener(modelListener);
@@ -204,9 +214,12 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
     myTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
     myTree.setShowsRootHandles(true);
     registerPsiListener(myProject, this, this::queueUpdate);
+    myProject.getMessageBus().connect(this).subscribe(UISettingsListener.TOPIC, o -> rebuild());
 
-    myAutoScrollToSourceHandler.install(myTree);
-    myAutoScrollFromSourceHandler.install();
+    if (showScrollToFromSourceActions()) {
+      myAutoScrollToSourceHandler.install(myTree);
+      myAutoScrollFromSourceHandler.install();
+    }
 
     TreeUtil.installActions(getTree());
 
@@ -241,8 +254,8 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
   }
 
   public void rebuild() {
-    myStructureTreeModel.getInvoker().runOrInvokeLater(() -> {
-      UIUtil.putClientProperty(myTree, STRUCTURE_VIEW_STATE_RESTORED_KEY, null);
+    myStructureTreeModel.getInvoker().invoke(() -> {
+      ComponentUtil.putClientProperty(myTree, STRUCTURE_VIEW_STATE_RESTORED_KEY, null);
       myTreeStructure.rebuildTree();
       myStructureTreeModel.invalidate();
     });
@@ -295,26 +308,31 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
 
   @Override
   public void storeState() {
-    if (isDisposed()) return;
+    if (isDisposed() || !myProject.isOpen() || myStoreStateDisabled) return;
     Object root = myTree.getModel().getRoot();
     if (root == null) return;
     TreeState state = TreeState.createOn(myTree, new TreePath(root));
     if (myFileEditor != null) {
       myFileEditor.putUserData(STRUCTURE_VIEW_STATE_KEY, state);
     }
-    UIUtil.putClientProperty(myTree, STRUCTURE_VIEW_STATE_RESTORED_KEY, null);
+    ComponentUtil.putClientProperty(myTree, STRUCTURE_VIEW_STATE_RESTORED_KEY, null);
+  }
+
+  @Override
+  public void disableStoreState() {
+    myStoreStateDisabled = true;
   }
 
   @Override
   public void restoreState() {
     TreeState state = myFileEditor == null ? null : myFileEditor.getUserData(STRUCTURE_VIEW_STATE_KEY);
     if (state == null) {
-      if (!Boolean.TRUE.equals(UIUtil.getClientProperty(myTree, STRUCTURE_VIEW_STATE_RESTORED_KEY))) {
-        TreeUtil.expand(getTree(), 2);
+      if (!Boolean.TRUE.equals(ComponentUtil.getClientProperty(myTree, STRUCTURE_VIEW_STATE_RESTORED_KEY))) {
+        TreeUtil.expand(getTree(), getMinimumExpandDepth(myTreeModel));
       }
     }
     else {
-      UIUtil.putClientProperty(myTree, STRUCTURE_VIEW_STATE_RESTORED_KEY, true);
+      ComponentUtil.putClientProperty(myTree, STRUCTURE_VIEW_STATE_RESTORED_KEY, true);
       state.applyTo(myTree);
       if (myFileEditor != null) {
         myFileEditor.putUserData(STRUCTURE_VIEW_STATE_KEY, null);
@@ -348,9 +366,6 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
       }
     }
 
-    result.add(new ExpandAllAction(getTree()));
-    result.add(new CollapseAllAction(getTree()));
-
     if (showScrollToFromSourceActions()) {
       result.addSeparator();
 
@@ -367,7 +382,7 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
     }
   }
 
-  public Promise<AbstractTreeNode> expandPathToElement(Object element) {
+  public Promise<AbstractTreeNode<?>> expandPathToElement(Object element) {
     return expandSelectFocusInner(element, false, false)
       .then(p -> TreeUtil.getLastUserObject(AbstractTreeNode.class, p));
   }
@@ -454,26 +469,45 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
       return;
     }
 
+    cancelScrollToSelectedElement();
     myAutoscrollAlarm.cancelAllRequests();
-    myAutoscrollAlarm.addRequest(
-      () -> {
-        if (isDisposed()) return;
-        if (UIUtil.isFocusAncestor(this)) return;
-        scrollToSelectedElementInner();
-      }, 1000);
+    myAutoscrollAlarm.addRequest(this::scrollToSelectedElementLater, 1000);
   }
 
-  private void scrollToSelectedElementInner() {
-    PsiDocumentManager.getInstance(myProject).performWhenAllCommitted(() -> {
-      try {
-        final Object currentEditorElement = myTreeModel.getCurrentEditorElement();
-        if (currentEditorElement != null) {
-          select(currentEditorElement, false);
-        }
-      }
-      catch (IndexNotReadyException ignore) {
-      }
-    });
+  private void cancelScrollToSelectedElement() {
+    final CancellablePromise<?> lastPromise = myLastAutoscrollPromise;
+    if (lastPromise != null && !lastPromise.isCancelled()) {
+      lastPromise.cancel();
+    }
+  }
+
+  private void scrollToSelectedElementLater() {
+    ApplicationManager.getApplication().assertIsDispatchThread();
+
+    cancelScrollToSelectedElement();
+    if (isDisposed()) return;
+
+    myLastAutoscrollPromise = ReadAction.nonBlocking(this::doFindSelectedElement)
+      .withDocumentsCommitted(myProject)
+      .expireWith(this)
+      .finishOnUiThread(ModalityState.current(), this::doScrollToSelectedElement)
+      .submit(AppExecutorUtil.getAppExecutorService());
+  }
+
+  @Nullable
+  private Object doFindSelectedElement() {
+    try {
+      return myTreeModel.getCurrentEditorElement();
+    }
+    catch (IndexNotReadyException ignore) {
+    }
+    return null;
+  }
+
+  private void doScrollToSelectedElement(@Nullable Object currentEditorElement) {
+    if (currentEditorElement == null) return;
+    if (UIUtil.isFocusAncestor(this)) return;
+    select(currentEditorElement, false);
   }
 
   @Override
@@ -509,7 +543,7 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
     }
     else {
       rebuild();
-      TreeUtil.expand(getTree(), 2);
+      TreeUtil.expand(getTree(), getMinimumExpandDepth(myTreeModel));
     }
   }
 
@@ -517,7 +551,7 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
   private void waitForRebuildAndExpand() {
     wait(rebuildAndUpdate());
     UIUtil.dispatchAllInvocationEvents();
-    wait(TreeUtil.promiseExpand(getTree(), 2));
+    wait(TreeUtil.promiseExpand(getTree(), getMinimumExpandDepth(myTreeModel)));
   }
 
   private static void wait(Promise<?> originPromise) {
@@ -537,6 +571,12 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
   @Override
   public boolean isActionActive(String name) {
     return !myProject.isDisposed() && StructureViewFactoryEx.getInstanceEx(myProject).isActionActive(name);
+  }
+
+  public static void clearStructureViewState(Project project) {
+    for (FileEditor editor : FileEditorManager.getInstance(project).getAllEditors()) {
+      editor.putUserData(STRUCTURE_VIEW_STATE_KEY, null);
+    }
   }
 
   private final class MyAutoScrollToSourceHandler extends AutoScrollToSourceHandler {
@@ -569,11 +609,13 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
     }
   }
 
-  private class MyAutoScrollFromSourceHandler extends AutoScrollFromSourceHandler {
+  private final class MyAutoScrollFromSourceHandler extends AutoScrollFromSourceHandler implements Disposable {
     private FileEditorPositionListener myFileEditorPositionListener;
 
-    private MyAutoScrollFromSourceHandler(Project project, Disposable parentDisposable) {
+    private MyAutoScrollFromSourceHandler(Project project, @NotNull Disposable parentDisposable) {
       super(project, getTree(), parentDisposable);
+
+      Disposer.register(parentDisposable, this);
     }
 
     @Override
@@ -587,8 +629,9 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
 
     @Override
     public void dispose() {
-      super.dispose();
-      myTreeModel.removeEditorPositionListener(myFileEditorPositionListener);
+      if (myFileEditorPositionListener != null) {
+        myTreeModel.removeEditorPositionListener(myFileEditorPositionListener);
+      }
     }
 
     private void addEditorCaretListener() {
@@ -611,7 +654,7 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
       getSettings().AUTOSCROLL_FROM_SOURCE = state;
       final FileEditor[] selectedEditors = FileEditorManager.getInstance(myProject).getSelectedEditors();
       if (selectedEditors.length > 0 && state) {
-        scrollToSelectedElementInner();
+        scrollToSelectedElementLater();
       }
     }
   }
@@ -711,6 +754,13 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
   //  tree.repaint();
   //}
 
+  private static int getMinimumExpandDepth(@NotNull StructureViewModel structureViewModel) {
+    final StructureViewModel.ExpandInfoProvider provider =
+      ObjectUtils.tryCast(structureViewModel, StructureViewModel.ExpandInfoProvider.class);
+
+    return provider == null ? 2 : provider.getMinimumAutoExpandDepth();
+  }
+
   private static class MyNodeWrapper extends TreeElementWrapper
     implements NodeDescriptorProvidingKey, ValidateableNode {
 
@@ -732,7 +782,7 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
 
     @Override
     @NotNull
-    public Collection<AbstractTreeNode> getChildren() {
+    public Collection<AbstractTreeNode<?>> getChildren() {
       if (ourSettingsModificationCount.get() != modificationCountForChildren) {
         resetChildren();
         modificationCountForChildren = ourSettingsModificationCount.get();
@@ -755,12 +805,7 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
         resetChildren();
         childrenStamp = currentStamp;
       }
-      try {
-        return super.getChildren();
-      }
-      catch (IndexNotReadyException ignore) {
-        return Collections.emptyList();
-      }
+      return super.getChildren();
     }
 
     @Override
@@ -969,7 +1014,7 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
     @Override
     public void treeNodesInserted(TreeModelEvent e) {
       TreePath parentPath = e.getTreePath();
-      if (Boolean.TRUE.equals(UIUtil.getClientProperty(tree, STRUCTURE_VIEW_STATE_RESTORED_KEY))) return;
+      if (Boolean.TRUE.equals(ComponentUtil.getClientProperty(tree, STRUCTURE_VIEW_STATE_RESTORED_KEY))) return;
       if (parentPath == null || parentPath.getPathCount() > autoExpandDepth.asInteger() - 1) return;
       Object[] children = e.getChildren();
       if (smartExpand && children.length == 1) {
@@ -1002,7 +1047,7 @@ public class StructureViewComponent extends SimpleToolWindowPanel implements Tre
           return provider.isAutoExpand((StructureViewTreeElement)value);
         }
         else if (value instanceof GroupWrapper) {
-          Group group = ObjectUtils.notNull(((GroupWrapper)value).getValue());
+          Group group = Objects.requireNonNull(((GroupWrapper)value).getValue());
           for (TreeElement treeElement : group.getChildren()) {
             if (treeElement instanceof StructureViewTreeElement && !provider.isAutoExpand((StructureViewTreeElement)treeElement)) {
               return false;

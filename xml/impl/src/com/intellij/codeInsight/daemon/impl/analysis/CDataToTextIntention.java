@@ -11,6 +11,7 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.xml.XmlElementType;
 import com.intellij.psi.xml.XmlTokenType;
 import com.intellij.util.IncorrectOperationException;
+import com.intellij.xml.XmlBundle;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
@@ -29,7 +30,7 @@ public class CDataToTextIntention implements IntentionAction {
   @NotNull
   @Override
   public String getFamilyName() {
-    return "Convert CDATA to text";
+    return XmlBundle.message("convert.cdata.to.text");
   }
 
   @Override
@@ -58,7 +59,7 @@ public class CDataToTextIntention implements IntentionAction {
     StringBuilder text = new StringBuilder();
     for (ASTNode astNode : cdatas) {
       ASTNode textNode = astNode.getFirstChildNode().getTreeNext();
-      if (textNode != null && textNode.getElementType() != XmlTokenType.XML_CDATA_END) text.append(StringUtil.escapeXml(textNode.getText()));
+      if (textNode != null && textNode.getElementType() != XmlTokenType.XML_CDATA_END) text.append(StringUtil.escapeXmlEntities(textNode.getText()));
     }
 
     editor.getDocument().replaceString(cdatas.get(0).getStartOffset(),

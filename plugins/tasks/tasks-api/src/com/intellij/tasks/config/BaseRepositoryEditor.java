@@ -148,19 +148,21 @@ public class BaseRepositoryEditor<T extends BaseRepository> extends TaskReposito
   }
 
   private void setupPlaceholdersComment() {
-    StringBuilder comment = new StringBuilder(myRepository.getComment());
-
+    StringBuilder comment = new StringBuilder();
     for (CommitPlaceholderProvider extension : CommitPlaceholderProvider.EXTENSION_POINT_NAME.getExtensionList()) {
       String[] placeholders = extension.getPlaceholders(myRepository);
       for (String placeholder : placeholders) {
-        comment.append(", {").append(placeholder).append("}");
+        if (comment.length() > 0) {
+          comment.append(", ");
+        }
+        comment.append("{").append(placeholder).append("}");
         String description = extension.getPlaceholderDescription(placeholder);
         if (description != null) {
           comment.append(" (").append(description).append(")");
         }
       }
     }
-    myComment.setText("Available placeholders: " + comment);
+    myComment.setText("<html>Available placeholders: " + comment + "</html>");
   }
 
 
@@ -243,6 +245,7 @@ public class BaseRepositoryEditor<T extends BaseRepository> extends TaskReposito
       try {
         myApplying = true;
         apply();
+        myChangeListener.consume(myRepository);
         enableEditor();
       }
       finally {
@@ -278,6 +281,7 @@ public class BaseRepositoryEditor<T extends BaseRepository> extends TaskReposito
     myRepository.setUsername(myUserNameText.getText().trim());
     //noinspection deprecation
     myRepository.setPassword(myPasswordText.getText());
+    myRepository.storeCredentials();
     myRepository.setShared(myShareUrlCheckBox.isSelected());
     myRepository.setUseProxy(myUseProxy.isSelected());
     myRepository.setUseHttpAuthentication(myUseHttpAuthenticationCheckBox.isSelected());
@@ -285,8 +289,6 @@ public class BaseRepositoryEditor<T extends BaseRepository> extends TaskReposito
 
     myRepository.setShouldFormatCommitMessage(myAddCommitMessage.isSelected());
     myRepository.setCommitMessageFormat(myDocument.getText());
-
-    myChangeListener.consume(myRepository);
   }
 
   @Override

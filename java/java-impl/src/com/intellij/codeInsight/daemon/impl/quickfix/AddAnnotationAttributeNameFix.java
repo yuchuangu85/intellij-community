@@ -15,6 +15,7 @@
  */
 package com.intellij.codeInsight.daemon.impl.quickfix;
 
+import com.intellij.codeInsight.daemon.QuickFixBundle;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInspection.LocalQuickFixAndIntentionActionOnPsiElement;
 import com.intellij.openapi.editor.Editor;
@@ -43,20 +44,20 @@ public class AddAnnotationAttributeNameFix extends LocalQuickFixAndIntentionActi
   @NotNull
   @Override
   public String getText() {
-    return "Add '" + myName + "='";
+    return QuickFixBundle.message("add.annotation.attribute.name", myName);
   }
 
   @Nls
   @NotNull
   @Override
   public String getFamilyName() {
-    return "Add annotation attribute name";
+    return QuickFixBundle.message("add.annotation.attribute.name.family.name");
   }
 
   @Override
   public void invoke(@NotNull Project project,
                      @NotNull PsiFile file,
-                     @Nullable("is null when called from inspection") Editor editor,
+                     @Nullable Editor editor,
                      @NotNull PsiElement startElement,
                      @NotNull PsiElement endElement) {
     doFix((PsiNameValuePair)startElement, myName);

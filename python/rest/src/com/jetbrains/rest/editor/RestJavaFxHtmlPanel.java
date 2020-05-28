@@ -2,10 +2,6 @@
 package com.jetbrains.rest.editor;
 
 import com.intellij.ide.BrowserUtil;
-import com.intellij.ide.ui.LafManager;
-import com.intellij.ide.ui.LafManagerListener;
-import com.intellij.ide.ui.laf.darcula.DarculaLookAndFeelInfo;
-import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.ui.javafx.JavaFxHtmlPanel;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
@@ -29,14 +25,11 @@ public class RestJavaFxHtmlPanel extends JavaFxHtmlPanel implements RestPreviewP
 
   public RestJavaFxHtmlPanel() {
     super();
-    LafManager.getInstance().addLafManagerListener(new RestLafManagerListener());
 
     runInPlatformWhenAvailable(() -> {
       final WebView webView = getWebViewGuaranteed();
-      webView.fontSmoothingTypeProperty().setValue(FontSmoothingType.LCD);
 
       webView.getEngine().getLoadWorker().stateProperty().addListener(new HyperlinkRedirectListener(webView));
-      updateLaf(LafManager.getInstance().getCurrentLookAndFeel() instanceof DarculaLookAndFeelInfo);
 
       webView.getEngine().getLoadWorker().stateProperty().addListener((ov, oldState, newState) -> {
         if (newState == Worker.State.SUCCEEDED) {
@@ -46,24 +39,9 @@ public class RestJavaFxHtmlPanel extends JavaFxHtmlPanel implements RestPreviewP
     });
   }
 
-  private class RestLafManagerListener implements LafManagerListener {
-    @Override
-    public void lookAndFeelChanged(@NotNull LafManager manager) {
-      updateLaf(manager.getCurrentLookAndFeel() instanceof DarculaLookAndFeelInfo);
-    }
-  }
-
-  private URL getStyle(boolean isDarcula) {
+  @Override
+  protected URL getStyle(boolean isDarcula) {
     return getClass().getResource(isDarcula ? "/styles/darcula.css" : "/styles/default.css");
-  }
-
-  private void updateLaf(boolean isDarcula) {
-    ApplicationManager.getApplication().invokeLater(() ->
-      runInPlatformWhenAvailable(() -> {
-        final WebView webView = getWebViewGuaranteed();
-        webView.getEngine().setUserStyleSheetLocation(getStyle(isDarcula).toExternalForm());
-      }
-    ));
   }
 
   private static class HyperlinkRedirectListener implements ChangeListener<Worker.State>{

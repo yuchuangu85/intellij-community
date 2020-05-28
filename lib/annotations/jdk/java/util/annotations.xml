@@ -1,5 +1,5 @@
 <root>
-  <item name='java.util.UUID java.util.UUID fromString(java.lang.String)'>
+  <item name='java.util.Objects T requireNonNull(T)'>
     <annotation name='org.jetbrains.annotations.NotNull'/>
   </item>
 </root>

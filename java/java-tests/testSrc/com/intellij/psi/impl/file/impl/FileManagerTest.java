@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.file.impl;
 
+import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.CommandProcessor;
 import com.intellij.openapi.command.WriteCommandAction;
@@ -8,29 +9,32 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileTypes.ExtensionFileNameMatcher;
 import com.intellij.openapi.fileTypes.FileTypeManager;
 import com.intellij.openapi.fileTypes.FileTypes;
-import com.intellij.openapi.fileTypes.StdFileTypes;
 import com.intellij.openapi.fileTypes.impl.FileTypeManagerImpl;
 import com.intellij.openapi.roots.ModuleRootModificationUtil;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.SystemInfo;
-import com.intellij.openapi.vfs.*;
+import com.intellij.openapi.vfs.JarFileSystem;
+import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.impl.source.PostprocessReformattingAspect;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.testFramework.PsiTestCase;
+import com.intellij.testFramework.JavaPsiTestCase;
 import com.intellij.testFramework.PsiTestUtil;
 import com.intellij.util.ui.UIUtil;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
 
-public class FileManagerTest extends PsiTestCase {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.psi.impl.file.impl.FileManagerTest");
+public class FileManagerTest extends JavaPsiTestCase {
+  private static final Logger LOG = Logger.getInstance(FileManagerTest.class);
 
   private VirtualFile myPrjDir1;
   private VirtualFile myPrjDir2;
@@ -246,13 +250,13 @@ public class FileManagerTest extends PsiTestCase {
         fileManager.findFile(file);
 
         ftManager.removeAssociation(FileTypes.PLAIN_TEXT, new ExtensionFileNameMatcher("txt"), false);
-        ftManager.associate(StdFileTypes.JAVA, new ExtensionFileNameMatcher("txt"), true);
+        ftManager.associate(JavaFileType.INSTANCE, new ExtensionFileNameMatcher("txt"), true);
 
         fileManager.checkConsistency();
       }
       finally {
         ftManager.associate(FileTypes.PLAIN_TEXT, new ExtensionFileNameMatcher("txt"), false);
-        ftManager.removeAssociation(StdFileTypes.JAVA, new ExtensionFileNameMatcher("txt"), true);
+        ftManager.removeAssociation(JavaFileType.INSTANCE, new ExtensionFileNameMatcher("txt"), true);
       }
     });
   }
@@ -299,7 +303,7 @@ public class FileManagerTest extends PsiTestCase {
     String jarPath = myPrjDir1.getPath().replace('/', File.separatorChar) + File.separatorChar + "test.jar";
     try (JarOutputStream out = new JarOutputStream(new FileOutputStream(jarPath))) {
       out.putNextEntry(new ZipEntry("Test.java"));
-      out.write("class Text{}".getBytes(CharsetToolkit.UTF8_CHARSET));
+      out.write("class Text{}".getBytes(StandardCharsets.UTF_8));
     }
     LocalFileSystem.getInstance().refreshAndFindFileByPath(jarPath);
 
@@ -322,7 +326,7 @@ public class FileManagerTest extends PsiTestCase {
 
     try (JarOutputStream out = new JarOutputStream(new FileOutputStream(jarPath))) {
       out.putNextEntry(new ZipEntry("Test1.java"));
-      out.write("class Test1{}".getBytes(CharsetToolkit.UTF8_CHARSET));
+      out.write("class Test1{}".getBytes(StandardCharsets.UTF_8));
     }
     final long newTimestamp = new File(jarPath).lastModified();
 
@@ -346,7 +350,7 @@ public class FileManagerTest extends PsiTestCase {
     if (!(file1 instanceof PsiJavaFile)) {
       System.err.println("Wrong file: " + file1);
       System.err.println("Java ext file type " + FileTypeManager.getInstance().getFileTypeByExtension("java"));
-      System.err.println("Java assocs:" + FileTypeManager.getInstance().getAssociations(StdFileTypes.JAVA));
+      System.err.println("Java assocs:" + FileTypeManager.getInstance().getAssociations(JavaFileType.INSTANCE));
       System.err.println("Plain text assocs" + FileTypeManager.getInstance().getAssociations(FileTypes.PLAIN_TEXT));
       System.err.println("File path: " + file1.getVirtualFile().getPresentableUrl());
       fail();
@@ -359,7 +363,7 @@ public class FileManagerTest extends PsiTestCase {
   public void testReloadFromDisk() {
     VirtualFile file = createChildData(mySrcDir1, "file.java");
     final String DISK_CONTENT = "class A{}";
-    setBinaryContent(file, DISK_CONTENT.getBytes(CharsetToolkit.UTF8_CHARSET));
+    setBinaryContent(file, DISK_CONTENT.getBytes(StandardCharsets.UTF_8));
 
     final PsiFile psiFile = myPsiManager.findFile(file);
 
@@ -367,7 +371,7 @@ public class FileManagerTest extends PsiTestCase {
       try {
         ApplicationManager.getApplication().runWriteAction(() -> {
           CodeStyleManager.getInstance(myProject).reformat(psiFile);
-          getProject().getComponent(PostprocessReformattingAspect.class).doPostponedFormatting();
+          PostprocessReformattingAspect.getInstance(getProject()).doPostponedFormatting();
           myPsiManager.reloadFromDisk(psiFile);
         });
       }

@@ -1,22 +1,7 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.project;
 
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
@@ -55,7 +40,7 @@ public class MavenProjectReader {
   private final Project myProject;
   private SettingsProfilesCache mySettingsProfilesCache;
 
-  public MavenProjectReader(Project project) {
+  public MavenProjectReader(@NotNull Project project) {
     myProject = project;
   }
 
@@ -67,7 +52,7 @@ public class MavenProjectReader {
       doReadProjectModel(generalSettings, file, explicitProfiles, new THashSet<>(), locator);
 
     File basedir = getBaseDir(file);
-    MavenModel model = MavenServerManager.getInstance().interpolateAndAlignModel(readResult.first.model, basedir);
+    MavenModel model = MavenServerManager.getInstance().getConnector(myProject).interpolateAndAlignModel(readResult.first.model, basedir);
 
     Map<String, String> modelMap = new HashMap<>();
     modelMap.put("groupId", model.getMavenId().getGroupId());
@@ -372,7 +357,7 @@ public class MavenProjectReader {
 
   private boolean addProfileIfDoesNotExist(MavenProfile profile, List<MavenProfile> result) {
     for (MavenProfile each : result) {
-      if (Comparing.equal(each.getId(), profile.getId())) return false;
+      if (Objects.equals(each.getId(), profile.getId())) return false;
     }
     result.add(profile);
     return true;
@@ -392,11 +377,11 @@ public class MavenProjectReader {
     }
   }
 
-  private static ProfileApplicationResult applyProfiles(MavenModel model,
-                                                        File basedir,
-                                                        MavenExplicitProfiles explicitProfiles,
-                                                        Collection<String> alwaysOnProfiles) {
-    return MavenServerManager.getInstance().applyProfiles(model, basedir, explicitProfiles, alwaysOnProfiles);
+  private ProfileApplicationResult applyProfiles(MavenModel model,
+                                                 File basedir,
+                                                 MavenExplicitProfiles explicitProfiles,
+                                                 Collection<String> alwaysOnProfiles) {
+    return MavenServerManager.getInstance().getConnector(myProject).applyProfiles(model, basedir, explicitProfiles, alwaysOnProfiles);
   }
 
   private MavenModel resolveInheritance(final MavenGeneralSettings generalSettings,
@@ -407,7 +392,7 @@ public class MavenProjectReader {
                                         final MavenProjectReaderProjectLocator locator,
                                         Collection<MavenProjectProblem> problems) {
     if (recursionGuard.contains(file)) {
-      problems.add(MavenProjectProblem.createProblem(file.getPath(), ProjectBundle.message("maven.project.problem.recursiveInheritance"),
+      problems.add(MavenProjectProblem.createProblem(file.getPath(), MavenProjectBundle.message("maven.project.problem.recursiveInheritance"),
                                                      MavenProjectProblem.ProblemType.PARENT));
       return model;
     }
@@ -418,7 +403,7 @@ public class MavenProjectReader {
       MavenParent parent = model.getParent();
       if (parent != null) {
         if (model.getMavenId().equals(parent.getMavenId())) {
-          problems.add(MavenProjectProblem.createProblem(file.getPath(), ProjectBundle.message("maven.project.problem.selfInheritance"),
+          problems.add(MavenProjectProblem.createProblem(file.getPath(), MavenProjectBundle.message("maven.project.problem.selfInheritance"),
                                                          MavenProjectProblem.ProblemType.PARENT));
           return model;
         }
@@ -460,12 +445,12 @@ public class MavenProjectReader {
       MavenModel parentModel = parentModelWithProblems.second.model;
       if (!parentModelWithProblems.second.problems.isEmpty()) {
         problems.add(MavenProjectProblem.createProblem(parentModelWithProblems.first.getPath(),
-                                                       ProjectBundle.message("maven.project.problem.parentHasProblems",
-                                                                             parentModel.getMavenId()),
+                                                       MavenProjectBundle.message("maven.project.problem.parentHasProblems",
+                                                                                  parentModel.getMavenId()),
                                                        MavenProjectProblem.ProblemType.PARENT));
       }
 
-      model = MavenServerManager.getInstance().assembleInheritance(model, parentModel);
+      model = MavenServerManager.getInstance().getConnector(myProject).assembleInheritance(model, parentModel);
 
       // todo: it is a quick-hack here - we add inherited dummy profiles to correctly collect activated profiles in 'applyProfiles'.
       List<MavenProfile> profiles = model.getProfiles();
@@ -492,10 +477,10 @@ public class MavenProjectReader {
     try {
       Collection<MavenServerExecutionResult> executionResults =
         embedder.resolveProject(files, explicitProfiles.getEnabledProfiles(), explicitProfiles.getDisabledProfiles());
-      Map<String, VirtualFile> filesMap = ContainerUtil.newTroveMap(FileUtil.PATH_HASHING_STRATEGY);
+      Map<String, VirtualFile> filesMap = new THashMap<>(FileUtil.PATH_HASHING_STRATEGY);
       filesMap.putAll(files.stream().collect(toMap(VirtualFile::getPath, Function.identity())));
 
-      Collection<MavenProjectReaderResult> readerResults = ContainerUtil.newArrayList();
+      Collection<MavenProjectReaderResult> readerResults = new ArrayList<>();
       for (MavenServerExecutionResult result : executionResults) {
         MavenServerExecutionResult.ProjectData projectData = result.projectData;
         if (projectData == null) {

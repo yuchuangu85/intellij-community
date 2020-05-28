@@ -70,7 +70,7 @@ public class GitCrlfProblemsDetector {
     myRepositoryManager = GitUtil.getRepositoryManager(project);
     myGit = git;
 
-    Map<VirtualFile, List<VirtualFile>> filesByRoots = sortFilesByRoots(files);
+    Map<VirtualFile, List<VirtualFile>> filesByRoots = GitUtil.sortFilesByGitRootIgnoringMissing(project, files);
 
     boolean shouldWarn = false;
     Collection<VirtualFile> rootsWithIncorrectAutoCrlf = getRootsWithIncorrectAutoCrlf(filesByRoots);
@@ -98,7 +98,7 @@ public class GitCrlfProblemsDetector {
   }
 
   @NotNull
-  private Collection<VirtualFile> findFilesWithoutAttrs(@NotNull VirtualFile root, @NotNull Collection<VirtualFile> files) {
+  private Collection<VirtualFile> findFilesWithoutAttrs(@NotNull VirtualFile root, @NotNull Collection<? extends VirtualFile> files) {
     GitRepository repository = myRepositoryManager.getRepositoryForRoot(root);
     if (repository == null) {
       LOG.warn("Repository is null for " + root);
@@ -142,7 +142,7 @@ public class GitCrlfProblemsDetector {
   }
 
   @NotNull
-  private static Collection<VirtualFile> findFilesWithCrlf(@NotNull Collection<VirtualFile> files) {
+  private static Collection<VirtualFile> findFilesWithCrlf(@NotNull Collection<? extends VirtualFile> files) {
     Collection<VirtualFile> filesWithCrlf = new ArrayList<>();
     for (VirtualFile file : files) {
       ProgressIndicatorProvider.checkCanceled();
@@ -176,11 +176,6 @@ public class GitCrlfProblemsDetector {
     GitCommandResult result = myGit.config(repository, GitConfigUtil.CORE_AUTOCRLF);
     String value = result.getOutputAsJoinedString();
     return value.equalsIgnoreCase("true") || value.equalsIgnoreCase("input");
-  }
-
-  @NotNull
-  private static Map<VirtualFile, List<VirtualFile>> sortFilesByRoots(@NotNull Collection<VirtualFile> files) {
-    return GitUtil.sortFilesByGitRootsIgnoringOthers(files);
   }
 
   public boolean shouldWarn() {

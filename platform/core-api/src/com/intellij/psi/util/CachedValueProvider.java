@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.util;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -23,7 +9,9 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Collection;
 
 /**
- * A computation (typically an anonymous class) to used in {@link CachedValue} to cache some computation result.
+ * A computation (typically a lambda) used by {@link CachedValue} to calculate a result and cache it.
+ * The provider should not have side effects and shouldn't depend on variables that change during CachedValue lifetime. See
+ * {@link CachedValue} documentation for examples.<p></p>
  * @param <T> the type of the cached value
  */
 @FunctionalInterface
@@ -40,7 +28,7 @@ public interface CachedValueProvider<T> {
    * @param <T> the type of the cached value
    */
   class Result<T> {
-    private static final Logger LOG = Logger.getInstance("#com.intellij.psi.util.CachedValueProvider.Result");
+    private static final Logger LOG = Logger.getInstance(Result.class);
     private final T myValue;
     private final Object[] myDependencyItems;
 
@@ -48,7 +36,7 @@ public interface CachedValueProvider<T> {
      * Constructor
      * @see #getDependencyItems()
      */
-    public Result(@Nullable T value, @NotNull Object... dependencyItems) {
+    public Result(@Nullable T value, Object @NotNull ... dependencyItems) {
       myValue = value;
       myDependencyItems = dependencyItems;
 
@@ -60,6 +48,10 @@ public interface CachedValueProvider<T> {
         if (dependencyItems[i] == null) {
           LOG.error("Null dependencies are not allowed, index=" + i);
         }
+      }
+
+      if (CachedValueProfiler.canProfile()) {
+        CachedValueProfiler.getInstance().createInfo(this);
       }
     }
 
@@ -85,8 +77,7 @@ public interface CachedValueProvider<T> {
      * @see PsiModificationTracker
      * @see com.intellij.openapi.roots.ProjectRootModificationTracker
      */
-    @NotNull
-    public Object[] getDependencyItems() {
+    public Object @NotNull [] getDependencyItems() {
       return myDependencyItems;
     }
 
@@ -104,7 +95,7 @@ public interface CachedValueProvider<T> {
      * @see #getDependencyItems()
      */
     @NotNull
-    public static <T> Result<T> create(@Nullable T value, @NotNull Object... dependencies) {
+    public static <T> Result<T> create(@Nullable T value, Object @NotNull ... dependencies) {
       return new Result<>(value, dependencies);
     }
 

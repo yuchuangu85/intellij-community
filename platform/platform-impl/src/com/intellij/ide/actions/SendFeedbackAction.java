@@ -1,71 +1,82 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.actions;
 
 import com.intellij.ide.BrowserUtil;
+import com.intellij.ide.FeedbackDescriptionProvider;
+import com.intellij.idea.ActionsBundle;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ex.ApplicationInfoEx;
+import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.ui.LicensingFacade;
+import com.intellij.util.io.URLUtil;
 import com.intellij.util.ui.UIUtil;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class SendFeedbackAction extends AnAction implements DumbAware {
   @Override
   public void update(@NotNull AnActionEvent e) {
     ApplicationInfoEx info = ApplicationInfoEx.getInstanceEx();
-    e.getPresentation().setEnabledAndVisible(info != null && info.getFeedbackUrl() != null);
+    boolean isSupportedOS = SystemInfo.isMac || SystemInfo.isLinux || SystemInfo.isWindows;
+    if (info != null && info.getFeedbackUrl() != null && isSupportedOS) {
+      String feedbackSite = getFeedbackHost(info.getFeedbackUrl(), info.getCompanyName());
+      e.getPresentation().setDescription(ActionsBundle.messagePointer("action.SendFeedback.detailed.description", feedbackSite));
+      e.getPresentation().setEnabledAndVisible(true);
+    }
+    else {
+      e.getPresentation().setEnabledAndVisible(false);
+    }
+  }
+
+  private static String getFeedbackHost(String feedbackUrl, String companyName) {
+    Pattern uriPattern = Pattern.compile("[^:/?#]+://(?:www\\.)?([^/?#]*).*", Pattern.DOTALL);
+    Matcher matcher = uriPattern.matcher(feedbackUrl);
+    return matcher.matches() ? matcher.group(1) : companyName;
   }
 
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
-    doPerformAction(e.getProject());
+    submit(e.getProject());
   }
 
-  public static void doPerformAction(@Nullable Project project) {
-    doPerformActionImpl(project, ApplicationInfoEx.getInstanceEx().getFeedbackUrl(), getDescription());
+  public static void submit(@Nullable Project project) {
+    submit(project, ApplicationInfoEx.getInstanceEx().getFeedbackUrl(), getDescription(project));
   }
 
-  public static void doPerformAction(@Nullable Project project, @NotNull String description) {
-    doPerformActionImpl(project, ApplicationInfoEx.getInstanceEx().getFeedbackUrl(), description);
+  public static void submit(@Nullable Project project, @NotNull String description) {
+    submit(project, ApplicationInfoEx.getInstanceEx().getFeedbackUrl(), description);
   }
 
-  static void doPerformActionImpl(@Nullable Project project,
-                                  @NotNull String urlTemplate,
-                                  @NotNull String description) {
+  static void submit(@Nullable Project project, @NotNull String urlTemplate, @NotNull String description) {
     ApplicationInfoEx appInfo = ApplicationInfoEx.getInstanceEx();
     boolean eap = appInfo.isEAP();
     LicensingFacade la = LicensingFacade.getInstance();
     String url = urlTemplate
-      .replace("$BUILD", eap ? appInfo.getBuild().asStringWithoutProductCode() : appInfo.getBuild().asString())
-      .replace("$TIMEZONE", System.getProperty("user.timezone"))
-      .replace("$EVAL", la != null && la.isEvaluationLicense() ? "true" : "false")
-      .replace("$DESCR", description);
+      .replace("$BUILD", URLUtil.encodeURIComponent(eap ? appInfo.getBuild().asStringWithoutProductCode() : appInfo.getBuild().asString()))
+      .replace("$TIMEZONE", URLUtil.encodeURIComponent(System.getProperty("user.timezone", "")))
+      .replace("$VERSION", URLUtil.encodeURIComponent(appInfo.getFullVersion()))
+      .replace("$EVAL", URLUtil.encodeURIComponent(la != null && la.isEvaluationLicense() ? "true" : "false"))
+      .replace("$DESCR", URLUtil.encodeURIComponent(description));
     BrowserUtil.browse(url, project);
   }
 
-  @NotNull
-  public static String getDescription() {
+  /** @deprecated use {@link #getDescription(Project)} instead */
+  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.1")
+  public static @NotNull String getDescription() {
+    return getDescription(null);
+  }
+
+  public static @NotNull String getDescription(@Nullable Project project) {
     StringBuilder sb = new StringBuilder("\n\n");
     sb.append(ApplicationInfoEx.getInstanceEx().getBuild().asString()).append(", ");
     String javaVersion = System.getProperty("java.runtime.version", System.getProperty("java.version", "unknown"));
@@ -106,6 +117,14 @@ public class SendFeedbackAction extends AnAction implements DumbAware {
         sb.append(SystemInfo.isMac ? "; Retina" : "; HiDPI");
       }
     }
+    for (FeedbackDescriptionProvider ext : EP_NAME.getExtensions()) {
+      String pluginDescription = ext.getDescription(project);
+      if (pluginDescription != null && pluginDescription.length() > 0) {
+        sb.append("\n").append(pluginDescription);
+      }
+    }
     return sb.toString();
   }
+
+  private static final ExtensionPointName<FeedbackDescriptionProvider> EP_NAME = new ExtensionPointName<>("com.intellij.feedbackDescriptionProvider");
 }

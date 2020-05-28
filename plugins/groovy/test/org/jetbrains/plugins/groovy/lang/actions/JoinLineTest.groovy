@@ -15,6 +15,7 @@
  */
 package org.jetbrains.plugins.groovy.lang.actions
 
+import com.intellij.application.options.CodeStyle
 import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings
 import org.jetbrains.plugins.groovy.GroovyFileType
@@ -105,6 +106,27 @@ print 2; <caret>print 2
 ''')
   }
 
+  void testJoinStatements3() {
+    doTest('''\
+prin<caret>t 2
+
+print 2
+''', '''\
+print 2<caret>
+print 2
+''')
+  }
+
+  void testJoinStatements4() {
+    doTest('''\
+<selection>print 2
+
+print 2</selection>
+''', '''\
+<selection>print 2; print 2</selection>
+''')
+  }
+
   void testFor() {
     doTest('''\
 for (;a<caret>;) {
@@ -114,7 +136,7 @@ for (;a;) <caret>print 2''')
   }
 
   void testIfWithForceBraces() {
-    def settings = getCurrentCodeStyleSettings(getProject()).getCommonSettings(GroovyLanguage.INSTANCE)
+    def settings = CodeStyle.getSettings(getProject()).getCommonSettings(GroovyLanguage.INSTANCE)
       settings.IF_BRACE_FORCE = CommonCodeStyleSettings.FORCE_BRACES_ALWAYS
       doTest('''\
 if (a)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2019 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,13 +20,16 @@ import com.intellij.openapi.localVcs.UpToDateLineNumberProvider;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.vcs.*;
+import com.intellij.openapi.vcs.diff.DiffProvider;
 import com.intellij.openapi.vcs.history.VcsFileRevision;
 import com.intellij.openapi.vcs.history.VcsRevisionNumber;
 import com.intellij.openapi.vcs.versionBrowser.CommittedChangeList;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.Consumer;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.text.JBDateFormat;
 import com.intellij.vcsUtil.VcsUtil;
+import com.intellij.xml.util.XmlStringUtil;
 import org.jetbrains.annotations.CalledInAwt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -64,7 +67,7 @@ public abstract class FileAnnotation {
    * @return annotated file
    * <p>
    * If annotations are called on a local file, it can be this file.
-   * If annotations are called on a specific revision, it can be corresponding {@link VcsVirtualFile}.
+   * If annotations are called on a specific revision, it can be corresponding {@link com.intellij.openapi.vcs.vfs.VcsVirtualFile}.
    * Note: file content might differ from content in annotated revision {@link #getAnnotatedContent}.
    */
   @Nullable
@@ -92,7 +95,7 @@ public abstract class FileAnnotation {
   public abstract VcsRevisionNumber getCurrentRevision();
 
   /**
-   * @param number current revision number {@link DiffProvider#getCurrentRevision}
+   * @param number current revision number {@link DiffProvider#getCurrentRevision(VirtualFile)}
    * @return whether annotations should be updated
    */
   public boolean isBaseRevisionChanged(@NotNull VcsRevisionNumber number) {
@@ -112,8 +115,7 @@ public abstract class FileAnnotation {
    * The typical aspects are revision number, date, author.
    * The aspects are displayed each in own column in the returned order.
    */
-  @NotNull
-  public abstract LineAnnotationAspect[] getAspects();
+  public abstract LineAnnotationAspect @NotNull [] getAspects();
 
 
   /**
@@ -127,6 +129,12 @@ public abstract class FileAnnotation {
    */
   @Nullable
   public abstract String getToolTip(int lineNumber);
+
+  @Nullable
+  public String getHtmlToolTip(int lineNumber) {
+    String toolTip = getToolTip(lineNumber);
+    return XmlStringUtil.escapeString(toolTip);
+  }
 
   /**
    * @return last revision that modified this line.
@@ -220,7 +228,9 @@ public abstract class FileAnnotation {
     myReloader = reloader;
   }
 
-
+  /**
+   * @deprecated does nothing
+   */
   @Deprecated
   public boolean revisionsNotEmpty() {
     return true;
@@ -281,6 +291,11 @@ public abstract class FileAnnotation {
     Pair<? extends CommittedChangeList, FilePath> getChangesIn(int lineNumber) throws VcsException;
   }
 
+
+  @NotNull
+  public static String formatDate(@NotNull Date date) {
+    return JBDateFormat.getFormatter().formatPrettyDate(date);
+  }
 
   @Nullable
   private static CurrentFileRevisionProvider createDefaultCurrentFileRevisionProvider(@NotNull FileAnnotation annotation) {
@@ -358,9 +373,7 @@ public abstract class FileAnnotation {
     List<VcsFileRevision> revisions = annotation.getRevisions();
     if (revisions == null) return null;
 
-    List<List<VcsRevisionNumber>> orderedRevisions = ContainerUtil.map(revisions, (revision) -> {
-      return Collections.singletonList(revision.getRevisionNumber());
-    });
+    List<List<VcsRevisionNumber>> orderedRevisions = ContainerUtil.map(revisions, (revision) -> Collections.singletonList(revision.getRevisionNumber()));
 
     return () -> orderedRevisions;
   }

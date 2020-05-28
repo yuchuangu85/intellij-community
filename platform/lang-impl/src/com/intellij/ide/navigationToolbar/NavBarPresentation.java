@@ -1,9 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.navigationToolbar;
 
 import com.intellij.icons.AllIcons;
-import com.intellij.ide.IdeBundle;
 import com.intellij.ide.projectView.impl.ProjectRootsUtil;
+import com.intellij.ide.structureView.StructureViewBundle;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
@@ -11,6 +11,7 @@ import com.intellij.openapi.module.ModuleType;
 import com.intellij.openapi.module.ModuleUtil;
 import com.intellij.openapi.project.IndexNotReadyException;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.projectRoots.SdkType;
 import com.intellij.openapi.projectRoots.SdkTypeId;
 import com.intellij.openapi.roots.JdkOrderEntry;
@@ -72,7 +73,10 @@ public class NavBarPresentation {
       return null;
     }
     if (object instanceof JdkOrderEntry) {
-      final SdkTypeId sdkType = ((JdkOrderEntry)object).getJdk().getSdkType();
+      Sdk jdk = ((JdkOrderEntry)object).getJdk();
+      if (jdk == null) return null;
+
+      final SdkTypeId sdkType = jdk.getSdkType();
       return ((SdkType) sdkType).getIcon();
     }
     if (object instanceof LibraryOrderEntry) return AllIcons.Nodes.PpLibFolder;
@@ -81,15 +85,19 @@ public class NavBarPresentation {
   }
 
   @NotNull
-  protected String getPresentableText(final Object object) {
+  protected String getPresentableText(Object object, boolean forPopup) {
+    String text = calcPresentableText(object, forPopup);
+    return text.length() > 50 ? text.substring(0, 47) + "..." : text;
+  }
+
+  @NotNull
+  public static String calcPresentableText(Object object, boolean forPopup) {
     if (!NavBarModel.isValid(object)) {
-      return IdeBundle.message("node.structureview.invalid");
+      return StructureViewBundle.message("node.structureview.invalid");
     }
     for (NavBarModelExtension modelExtension : NavBarModelExtension.EP_NAME.getExtensionList()) {
-      String text = modelExtension.getPresentableText(object);
-      if (text != null) {
-        return text.length() > 50 ? text.substring(0, 47) + "..." : text;
-      }
+      String text = modelExtension.getPresentableText(object, forPopup);
+      if (text != null) return text;
     }
     return object.toString();
   }

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.application.impl
 
 import com.intellij.ide.IdeEventQueue
@@ -7,95 +7,120 @@ import com.intellij.openapi.application.AppUIExecutor
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.TransactionGuard
-import com.intellij.openapi.application.impl.AsyncExecution.ExpirableContextConstraint
-import com.intellij.openapi.application.impl.AsyncExecution.SimpleContextConstraint
+import com.intellij.openapi.application.constraints.ConstrainedExecution.ContextConstraint
+import com.intellij.openapi.application.constraints.Expiration
 import com.intellij.openapi.command.CommandProcessor
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDocumentManager
-import kotlinx.coroutines.experimental.CoroutineDispatcher
-import kotlinx.coroutines.experimental.Runnable
-import kotlin.coroutines.experimental.CoroutineContext
+import com.intellij.psi.impl.PsiDocumentManagerBase
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.concurrent.Executor
+import java.util.function.BooleanSupplier
+import kotlin.coroutines.ContinuationInterceptor
+import kotlin.coroutines.CoroutineContext
 
 /**
  * @author peter
  * @author eldar
  */
-internal class AppUIExecutorImpl private constructor(private val myModality: ModalityState,
-                                                     override val disposables: Set<Disposable>,
-                                                     override val dispatcher: CoroutineDispatcher) : AsyncExecutionSupport<AppUIExecutorEx>(),
-                                                                                                     AppUIExecutorEx {
-  constructor(modality: ModalityState) : this(modality, emptySet<Disposable>(), /* fallback */ object : CoroutineDispatcher() {
-    override fun isDispatchNeeded(context: CoroutineContext): Boolean =
-      !ApplicationManager.getApplication().isDispatchThread || ModalityState.current().dominates(modality)
+internal class AppUIExecutorImpl private constructor(private val modality: ModalityState,
+                                                     private val thread: ExecutionThread,
+                                                     constraints: Array<ContextConstraint>,
+                                                     cancellationConditions: Array<BooleanSupplier>,
+                                                     expirableHandles: Set<Expiration>)
+  : AppUIExecutor,
+    BaseExpirableExecutorMixinImpl<AppUIExecutorImpl>(constraints, cancellationConditions, expirableHandles,
+                                                      getExecutorForThread(thread, modality)) {
 
-    override fun dispatch(context: CoroutineContext, block: Runnable) =
-      ApplicationManager.getApplication().invokeLater(block, modality)
+  constructor(modality: ModalityState, thread: ExecutionThread) : this(modality, thread, emptyArray(), emptyArray(), emptySet())
 
-    override fun toString() = "onUiThread($modality)"
-  })
+  companion object {
+    private fun getExecutorForThread(thread: ExecutionThread,
+                                     modality: ModalityState) =
+      when (thread) {
+        ExecutionThread.EDT -> MyEdtExecutor(modality)
+        ExecutionThread.WT -> MyWtExecutor(modality)
+      }
+  }
 
-  override fun cloneWith(disposables: Set<Disposable>, dispatcher: CoroutineDispatcher): AppUIExecutorImpl =
-    AppUIExecutorImpl(myModality, disposables, dispatcher)
+  private class MyWtExecutor(private val modality: ModalityState) : Executor {
+    override fun execute(command: Runnable) {
+      if (ApplicationManager.getApplication().isWriteThread
+          && (ApplicationImpl.USE_SEPARATE_WRITE_THREAD
+              || !TransactionGuard.getInstance().isWriteSafeModality(modality)
+              || TransactionGuard.getInstance().isWritingAllowed)
+          && !ModalityState.current().dominates(modality)) {
+        command.run()
+      }
+      else {
+        ApplicationManager.getApplication().invokeLaterOnWriteThread(command, modality)
+      }
+    }
 
-  override fun later(): AppUIExecutor {
-    val edtEventCount = if (ApplicationManager.getApplication().isDispatchThread) IdeEventQueue.getInstance().eventCount else null
-    return withConstraint(object : SimpleContextConstraint {
+  }
+  private class MyEdtExecutor(private val modality: ModalityState) : Executor {
+    override fun execute(command: Runnable) {
+      if (ApplicationManager.getApplication().isDispatchThread
+          && (!TransactionGuard.getInstance().isWriteSafeModality(modality)
+              || TransactionGuard.getInstance().isWritingAllowed)
+          && !ModalityState.current().dominates(modality)) {
+        command.run()
+      }
+      else {
+        ApplicationManager.getApplication().invokeLater(command, modality)
+      }
+    }
+  }
+
+  override fun cloneWith(constraints: Array<ContextConstraint>,
+                         cancellationConditions: Array<BooleanSupplier>,
+                         expirationSet: Set<Expiration>): AppUIExecutorImpl =
+    AppUIExecutorImpl(modality, thread, constraints, cancellationConditions, expirationSet)
+
+  override fun dispatchLaterUnconstrained(runnable: Runnable) =
+    when (thread) {
+      ExecutionThread.EDT -> ApplicationManager.getApplication().invokeLater(runnable, modality)
+      ExecutionThread.WT -> ApplicationManager.getApplication().invokeLaterOnWriteThread(runnable, modality)
+    }
+
+  override fun later(): AppUIExecutorImpl {
+    val edtEventCount = if (ApplicationManager.getApplication().isDispatchThread) IdeEventQueue.getInstance().eventCount else -1
+    return withConstraint(object : ContextConstraint {
       @Volatile
       var usedOnce: Boolean = false
 
-      override val isCorrectContext: Boolean
-        get() = if (edtEventCount == null)
-          ApplicationManager.getApplication().isDispatchThread
-        else
-          edtEventCount != IdeEventQueue.getInstance().eventCount || usedOnce
+      override fun isCorrectContext(): Boolean =
+        when (thread) {
+          ExecutionThread.EDT -> when (edtEventCount) {
+            -1 -> ApplicationManager.getApplication().isDispatchThread
+            else -> usedOnce || edtEventCount != IdeEventQueue.getInstance().eventCount
+          }
+          ExecutionThread.WT -> usedOnce
+        }
 
       override fun schedule(runnable: Runnable) {
-        ApplicationManager.getApplication().invokeLater({
-                                                          usedOnce = true
-                                                          runnable.run()
-                                                        }, myModality)
+        dispatchLaterUnconstrained(Runnable {
+                                     usedOnce = true
+                                     runnable.run()
+                                   })
       }
 
       override fun toString() = "later"
     })
   }
 
-  override fun withDocumentsCommitted(project: Project): AppUIExecutor {
-    return withConstraint(object : ExpirableContextConstraint {
-      override val expirable = project
-
-      override val isCorrectContext: Boolean
-        get() = !PsiDocumentManager.getInstance(project).hasUncommitedDocuments()
-
-      override fun scheduleExpirable(runnable: Runnable) {
-        PsiDocumentManager.getInstance(project).performLaterWhenAllCommitted(runnable, myModality)
-      }
-
-      override fun toString() = "withDocumentsCommitted"
-    })
+  override fun withDocumentsCommitted(project: Project): AppUIExecutorImpl {
+    return withConstraint(WithDocumentsCommitted(project, modality), project)
   }
 
-  override fun inSmartMode(project: Project): AppUIExecutor {
-    return withConstraint(object : ExpirableContextConstraint {
-      override val expirable = project
-
-      override val isCorrectContext: Boolean
-        get() = !DumbService.getInstance(project).isDumb
-
-      override fun scheduleExpirable(runnable: Runnable) {
-        DumbService.getInstance(project).runWhenSmart(runnable)
-      }
-
-      override fun toString() = "inSmartMode"
-    })
-  }
-
-  override fun inTransaction(parentDisposable: Disposable): AppUIExecutor {
+  override fun inTransaction(parentDisposable: Disposable): AppUIExecutorImpl {
     val id = TransactionGuard.getInstance().contextTransaction
-    return withConstraint(object : SimpleContextConstraint {
-      override val isCorrectContext: Boolean
-        get() = TransactionGuard.getInstance().contextTransaction != null
+    return withConstraint(object : ContextConstraint {
+      override fun isCorrectContext(): Boolean =
+        TransactionGuard.getInstance().contextTransaction != null
 
       override fun schedule(runnable: Runnable) {
         // The Application instance is passed as a disposable here to ensure the runnable is always invoked,
@@ -108,10 +133,12 @@ internal class AppUIExecutorImpl private constructor(private val myModality: Mod
     }).expireWith(parentDisposable)
   }
 
-  override fun inUndoTransparentAction(): AppUIExecutor {
-    return withConstraint(object : SimpleContextConstraint {
-      override val isCorrectContext: Boolean
-        get() = CommandProcessor.getInstance().isUndoTransparentActionInProgress
+  @Deprecated("Beware, context might be infectious, if coroutine resumes other waiting coroutines. " +
+              "Use runUndoTransparentWriteAction instead.", ReplaceWith("this"))
+  fun inUndoTransparentAction(): AppUIExecutorImpl {
+    return withConstraint(object : ContextConstraint {
+      override fun isCorrectContext(): Boolean =
+        CommandProcessor.getInstance().isUndoTransparentActionInProgress
 
       override fun schedule(runnable: Runnable) {
         CommandProcessor.getInstance().runUndoTransparentAction(runnable)
@@ -121,10 +148,12 @@ internal class AppUIExecutorImpl private constructor(private val myModality: Mod
     })
   }
 
-  override fun inWriteAction(): AppUIExecutor {
-    return withConstraint(object : SimpleContextConstraint {
-      override val isCorrectContext: Boolean
-        get() = ApplicationManager.getApplication().isWriteAccessAllowed
+  @Deprecated("Beware, context might be infectious, if coroutine resumes other waiting coroutines. " +
+              "Use runWriteAction instead.", ReplaceWith("this"))
+  fun inWriteAction(): AppUIExecutorImpl {
+    return withConstraint(object : ContextConstraint {
+      override fun isCorrectContext(): Boolean =
+        ApplicationManager.getApplication().isWriteAccessAllowed
 
       override fun schedule(runnable: Runnable) {
         ApplicationManager.getApplication().runWriteAction(runnable)
@@ -133,4 +162,68 @@ internal class AppUIExecutorImpl private constructor(private val myModality: Mod
       override fun toString() = "inWriteAction"
     })
   }
+  override fun inSmartMode(project: Project): AppUIExecutorImpl {
+    return withConstraint(InSmartMode(project), project)
+  }
+
+}
+
+@Deprecated("Beware, context might be infectious, if coroutine resumes other waiting coroutines. " +
+            "Use runUndoTransparentWriteAction instead.", ReplaceWith("this"))
+fun AppUIExecutor.inUndoTransparentAction(): AppUIExecutor =
+  (this as AppUIExecutorImpl).inUndoTransparentAction()
+
+@Deprecated("Beware, context might be infectious, if coroutine resumes other waiting coroutines. " +
+            "Use runWriteAction instead.", ReplaceWith("this"))
+fun AppUIExecutor.inWriteAction():AppUIExecutor =
+  (this as AppUIExecutorImpl).inWriteAction()
+
+fun AppUIExecutor.withConstraint(constraint: ContextConstraint): AppUIExecutor =
+  (this as AppUIExecutorImpl).withConstraint(constraint)
+fun AppUIExecutor.withConstraint(constraint: ContextConstraint, parentDisposable: Disposable): AppUIExecutor =
+  (this as AppUIExecutorImpl).withConstraint(constraint, parentDisposable)
+
+/**
+ * A [context][CoroutineContext] to be used with the standard [launch], [async], [withContext] coroutine builders.
+ * Contains: [ContinuationInterceptor].
+ */
+fun AppUIExecutor.coroutineDispatchingContext(): ContinuationInterceptor =
+  (this as AppUIExecutorImpl).asCoroutineDispatcher()
+
+
+internal class WithDocumentsCommitted(private val project: Project, private val modality: ModalityState) : ContextConstraint {
+  override fun isCorrectContext(): Boolean {
+    val manager = PsiDocumentManager.getInstance(project) as PsiDocumentManagerBase
+    return !manager.isCommitInProgress && !manager.hasEventSystemEnabledUncommittedDocuments()
+  }
+
+  override fun schedule(runnable: Runnable) {
+    PsiDocumentManager.getInstance(project).performLaterWhenAllCommitted(runnable, modality)
+  }
+
+  override fun toString(): String {
+    val isCorrectContext = isCorrectContext()
+    val details = if (!isCorrectContext) {
+      val manager = PsiDocumentManager.getInstance(project) as PsiDocumentManagerBase
+      ", isCommitInProgress()=${manager.isCommitInProgress}" +
+      ", hasEventSystemEnabledUncommittedDocuments()=${manager.hasEventSystemEnabledUncommittedDocuments()}"
+    }
+    else ""
+    return "withDocumentsCommitted {isCorrectContext()=$isCorrectContext$details}"
+  }
+}
+
+internal class InSmartMode(private val project: Project) : ContextConstraint {
+  override fun isCorrectContext(): Boolean =
+    !DumbService.getInstance(project).isDumb
+
+  override fun schedule(runnable: Runnable) {
+    DumbService.getInstance(project).runWhenSmart(runnable)
+  }
+
+  override fun toString() = "inSmartMode"
+}
+
+internal enum class ExecutionThread {
+  EDT, WT
 }

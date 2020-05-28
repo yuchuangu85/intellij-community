@@ -16,13 +16,15 @@
 package com.siyeh.ig.bugs;
 
 import com.intellij.codeInspection.InspectionProfileEntry;
-import com.siyeh.ig.LightInspectionTestCase;
+import com.intellij.testFramework.LightProjectDescriptor;
+import com.siyeh.ig.LightJavaInspectionTestCase;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
  * @author Bas Leijdekkers
  */
-public class ResultOfObjectAllocationIgnoredInspectionTest extends LightInspectionTestCase {
+public class ResultOfObjectAllocationIgnoredInspectionTest extends LightJavaInspectionTestCase {
 
   public void testResultOfObjectAllocationIgnored() {
     doTest();
@@ -32,7 +34,13 @@ public class ResultOfObjectAllocationIgnoredInspectionTest extends LightInspecti
   @Override
   protected InspectionProfileEntry getInspection() {
     final ResultOfObjectAllocationIgnoredInspection inspection = new ResultOfObjectAllocationIgnoredInspection();
-    inspection.ignoredClasses.add("javax.swing.JFrame");
+    inspection.ignoredClasses.add("java.util.ArrayList");
     return inspection;
+  }
+
+  @NotNull
+  @Override
+  protected LightProjectDescriptor getProjectDescriptor() {
+    return JAVA_13;
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.remote;
 
 import com.intellij.remote.ext.CredentialsManager;
@@ -7,11 +7,6 @@ import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
-
-/**
- * @author traff
- */
 public class RemoteSdkCredentialsHolder extends RemoteCredentialsHolder implements RemoteSdkCredentials {
 
   @NotNull
@@ -22,7 +17,14 @@ public class RemoteSdkCredentialsHolder extends RemoteCredentialsHolder implemen
   }
 
   public static String constructSshCredentialsSdkFullPath(@NotNull RemoteSdkCredentials cred) {
-    return getCredentialsString(cred) + cred.getInterpreterPath();
+    StringBuilder builder = new StringBuilder();
+    if (cred.isRunAsRootViaSudo()) {
+      builder.append("sudo+");
+    }
+    return builder
+      .append(getCredentialsString(cred))
+      .append(cred.getInterpreterPath())
+      .toString();
   }
 
   /**
@@ -81,26 +83,6 @@ public class RemoteSdkCredentialsHolder extends RemoteCredentialsHolder implemen
     return myRemoteSdkProperties.getDefaultHelpersName();
   }
 
-  @Override
-  public void addRemoteRoot(String remoteRoot) {
-    myRemoteSdkProperties.addRemoteRoot(remoteRoot);
-  }
-
-  @Override
-  public void clearRemoteRoots() {
-    myRemoteSdkProperties.clearRemoteRoots();
-  }
-
-  @Override
-  public List<String> getRemoteRoots() {
-    return myRemoteSdkProperties.getRemoteRoots();
-  }
-
-  @Override
-  public void setRemoteRoots(List<String> remoteRoots) {
-    myRemoteSdkProperties.setRemoteRoots(remoteRoots);
-  }
-
   @NotNull
   @Override
   public PathMappingSettings getPathMappings() {
@@ -157,6 +139,16 @@ public class RemoteSdkCredentialsHolder extends RemoteCredentialsHolder implemen
     myRemoteSdkProperties.setValid(valid);
   }
 
+  @Override
+  public boolean isRunAsRootViaSudo() {
+    return myRemoteSdkProperties.isRunAsRootViaSudo();
+  }
+
+  @Override
+  public void setRunAsRootViaSudo(boolean runAsRootViaSudo) {
+    myRemoteSdkProperties.setRunAsRootViaSudo(runAsRootViaSudo);
+  }
+
   public static boolean isRemoteSdk(@Nullable String path) {
     if (path != null) {
       for (CredentialsType type : CredentialsManager.getInstance().getAllTypes()) {
@@ -191,14 +183,14 @@ public class RemoteSdkCredentialsHolder extends RemoteCredentialsHolder implemen
 
     RemoteSdkCredentialsHolder holder = (RemoteSdkCredentialsHolder)o;
 
-    if (getLiteralPort() != null ? !getLiteralPort().equals(holder.getLiteralPort()) : holder.getLiteralPort() != null) return false;
+    if (!getLiteralPort().equals(holder.getLiteralPort())) return false;
     if (isStorePassphrase() != holder.isStorePassphrase()) return false;
     if (isStorePassword() != holder.isStorePassword()) return false;
     if (getAuthType() != holder.getAuthType()) return false;
-    if (getHost() != null ? !getHost().equals(holder.getHost()) : holder.getHost() != null) return false;
+    if (!getHost().equals(holder.getHost())) return false;
     if (getPassphrase() != null ? !getPassphrase().equals(holder.getPassphrase()) : holder.getPassphrase() != null) return false;
     if (getPassword() != null ? !getPassword().equals(holder.getPassword()) : holder.getPassword() != null) return false;
-    if (getPrivateKeyFile() != null ? !getPrivateKeyFile().equals(holder.getPrivateKeyFile()) : holder.getPrivateKeyFile() != null) {
+    if (!getPrivateKeyFile().equals(holder.getPrivateKeyFile())) {
       return false;
     }
     if (getUserName() != null ? !getUserName().equals(holder.getUserName()) : holder.getUserName() != null) return false;
@@ -212,12 +204,12 @@ public class RemoteSdkCredentialsHolder extends RemoteCredentialsHolder implemen
 
   @Override
   public int hashCode() {
-    int result = getHost() != null ? getHost().hashCode() : 0;
-    result = 31 * result + (getLiteralPort() != null ? getLiteralPort().hashCode() : 0);
+    int result = getHost().hashCode();
+    result = 31 * result + getLiteralPort().hashCode();
     result = 31 * result + (getUserName() != null ? getUserName().hashCode() : 0);
     result = 31 * result + (getPassword() != null ? getPassword().hashCode() : 0);
     result = 31 * result + getAuthType().hashCode();
-    result = 31 * result + (getPrivateKeyFile() != null ? getPrivateKeyFile().hashCode() : 0);
+    result = 31 * result + getPrivateKeyFile().hashCode();
     result = 31 * result + (getPassphrase() != null ? getPassphrase().hashCode() : 0);
     result = 31 * result + (isStorePassword() ? 1 : 0);
     result = 31 * result + (isStorePassphrase() ? 1 : 0);
@@ -239,6 +231,8 @@ public class RemoteSdkCredentialsHolder extends RemoteCredentialsHolder implemen
            ", myInterpreterPath='" +
            getInterpreterPath() +
            '\'' +
+           ", isRunAsRootViaSudo=" +
+           isRunAsRootViaSudo() +
            ", myHelpersPath='" +
            getHelpersPath() +
            '\'' +

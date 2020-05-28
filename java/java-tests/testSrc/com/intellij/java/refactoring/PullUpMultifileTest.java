@@ -18,39 +18,31 @@ package com.intellij.java.refactoring;
 
 import com.intellij.JavaTestUtil;
 import com.intellij.psi.*;
-import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.refactoring.MultiFileTestCase;
+import com.intellij.refactoring.LightMultiFileTestCase;
 import com.intellij.refactoring.memberPullUp.PullUpConflictsUtil;
 import com.intellij.refactoring.memberPullUp.PullUpProcessor;
 import com.intellij.refactoring.util.DocCommentPolicy;
 import com.intellij.refactoring.util.classMembers.MemberInfo;
 import com.intellij.util.containers.MultiMap;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.Arrays;
 import java.util.HashSet;
 
 //pull first method from class a.A to class b.B
-public class PullUpMultifileTest extends MultiFileTestCase {
-  @NotNull
-  @Override
-  protected String getTestRoot() {
-    return "/refactoring/pullUp/";
-  }
-
+public class PullUpMultifileTest extends LightMultiFileTestCase {
   @Override
   protected String getTestDataPath() {
-    return JavaTestUtil.getJavaTestDataPath();
+    return JavaTestUtil.getJavaTestDataPath() + "/refactoring/pullUp/";
   }
 
   private void doTest(final String... conflicts) {
     final MultiMap<PsiElement, String> conflictsMap = new MultiMap<>();
-    doTest((rootDir, rootAfter) -> {
-      final PsiClass srcClass = myJavaFacade.findClass("a.A", GlobalSearchScope.allScope(myProject));
-      assertTrue("Source class not found", srcClass != null);
+    doTest(() -> {
+      final PsiClass srcClass = myFixture.findClass("a.A");
+      assertNotNull("Source class not found", srcClass);
 
-      final PsiClass targetClass = myJavaFacade.findClass("b.B", GlobalSearchScope.allScope(myProject));
-      assertTrue("Target class not found", targetClass != null);
+      final PsiClass targetClass = myFixture.findClass("b.B");
+      assertNotNull("Target class not found", targetClass);
 
       final PsiMethod[] methods = srcClass.getMethods();
       assertTrue("No methods found", methods.length > 0);
@@ -65,7 +57,7 @@ public class PullUpMultifileTest extends MultiFileTestCase {
         PullUpConflictsUtil.checkConflicts(membersToMove, srcClass, targetClass, targetPackage, targetDirectory,
                                            psiMethod -> PullUpProcessor.checkedInterfacesContain(Arrays.asList(membersToMove), psiMethod)));
 
-      new PullUpProcessor(srcClass, targetClass, membersToMove, new DocCommentPolicy(DocCommentPolicy.ASIS)).run();
+      new PullUpProcessor(srcClass, targetClass, membersToMove, new DocCommentPolicy<>(DocCommentPolicy.ASIS)).run();
     });
 
     if (conflicts.length != 0 && conflictsMap.isEmpty()) {
@@ -102,12 +94,12 @@ public class PullUpMultifileTest extends MultiFileTestCase {
   }
 
   public void testClassPackageConflict() {
-    doTest((rootDir, rootAfter) -> {
-      final PsiClass srcClass = myJavaFacade.findClass("a.a", GlobalSearchScope.allScope(myProject));
-      assertTrue("Source class not found", srcClass != null);
+    doTest(() -> {
+      final PsiClass srcClass = myFixture.findClass("a.a");
+      assertNotNull("Source class not found", srcClass);
 
-      final PsiClass targetClass = myJavaFacade.findClass("a.B", GlobalSearchScope.allScope(myProject));
-      assertTrue("Target class not found", targetClass != null);
+      final PsiClass targetClass = myFixture.findClass("a.B");
+      assertNotNull("Target class not found", targetClass);
 
       final PsiMethod[] methods = srcClass.getMethods();
       assertTrue("No methods found", methods.length > 0);
@@ -115,7 +107,7 @@ public class PullUpMultifileTest extends MultiFileTestCase {
       final MemberInfo memberInfo = new MemberInfo(methods[0]);
       memberInfo.setChecked(true);
       membersToMove[0] = memberInfo;
-      new PullUpProcessor(srcClass, targetClass, membersToMove, new DocCommentPolicy(DocCommentPolicy.ASIS)).run();
+      new PullUpProcessor(srcClass, targetClass, membersToMove, new DocCommentPolicy<>(DocCommentPolicy.ASIS)).run();
     });
   }
 }

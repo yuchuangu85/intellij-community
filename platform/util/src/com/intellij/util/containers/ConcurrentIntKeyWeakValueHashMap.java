@@ -50,7 +50,8 @@ class ConcurrentIntKeyWeakValueHashMap<V> extends ConcurrentIntKeyRefValueHashMa
       if (!(obj instanceof MyRef)) {
         return false;
       }
-      MyRef other = (MyRef)obj;
+      //noinspection unchecked
+      MyRef<V> other = (MyRef<V>)obj;
       return other.hash == hash && key == other.getKey() && Comparing.equal(v, other.get());
     }
 
@@ -63,6 +64,6 @@ class ConcurrentIntKeyWeakValueHashMap<V> extends ConcurrentIntKeyRefValueHashMa
   @NotNull
   @Override
   protected IntReference<V> createReference(int key, @NotNull V value, @NotNull ReferenceQueue<V> queue) {
-    return new MyRef<V>(key, value, queue);
+    return new MyRef<>(key, value, queue);
   }
 }

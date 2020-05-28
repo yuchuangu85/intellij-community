@@ -1,20 +1,15 @@
-/*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij;
 
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.psi.codeStyle.NameUtil;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.text.NameUtilCore;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 
 public class ClassFinder {
   private final List<String> classNameList = new ArrayList<>();
@@ -37,18 +32,21 @@ public class ClassFinder {
       }
     }
     else {
-      String className = file.getName();
-      if (className.endsWith(".class")) {
-        int dollar = className.lastIndexOf("$");
-        if (dollar != -1) {
-          className = className.substring(dollar + 1);
-          // most likely something like RecursionManagerTest$_testMayCache_closure5 or other anonymous class
-          // may cause https://issues.apache.org/jira/browse/GROOVY-5351
-          if (!Character.isUpperCase(className.charAt(0))) return null;
-        }
+      String nestedClassName = file.getName();
+      if (!nestedClassName.endsWith(".class")) {
+        return null;
+      }
+      nestedClassName = StringUtil.trimEnd(nestedClassName, ".class");
+
+      List<String> names = Arrays.asList(nestedClassName.split("\\$"));
+      Collections.reverse(names);
+      for (String className : names) {
+        // most likely something like RecursionManagerTest$_testMayCache_closure5 or other anonymous class
+        // may cause https://issues.apache.org/jira/browse/GROOVY-5351
+        if (!Character.isUpperCase(className.charAt(0))) return null;
 
         // A test may be named Test*, *Test, *Tests*, *TestCase, *TestSuite, *Suite, etc
-        List<String> words = Arrays.asList(NameUtil.nameToWords(className));
+        List<String> words = Arrays.asList(NameUtilCore.nameToWords(className));
 
         if (words.contains("Test") || words.contains("Tests") || words.contains("Suite")) {
           String fqn = StringUtil.trimEnd(absPath.substring(startPackageName), ".class").replace(File.separatorChar, '.');

@@ -1,29 +1,13 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.tools;
 
-import com.intellij.CommonBundle;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.options.CompoundScheme;
 import com.intellij.openapi.ui.Messages;
-import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.*;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.PlatformIcons;
 import com.intellij.util.ui.tree.TreeUtil;
 import org.jetbrains.annotations.NotNull;
@@ -36,6 +20,7 @@ import javax.swing.tree.*;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
   enum Direction {
@@ -81,32 +66,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
 
   protected BaseToolsPanel() {
     myTree = new CheckboxTree(
-      new CheckboxTree.CheckboxTreeCellRenderer() {
-        @Override
-        public void customizeRenderer(final JTree tree,
-                                      final Object value,
-                                      final boolean selected,
-                                      final boolean expanded,
-                                      final boolean leaf,
-                                      final int row,
-                                      final boolean hasFocus) {
-          if (!(value instanceof CheckedTreeNode)) return;
-          Object object = ((CheckedTreeNode)value).getUserObject();
-
-          if (object instanceof ToolsGroup) {
-            final String groupName = ((ToolsGroup)object).getName();
-            if (groupName != null) {
-              getTextRenderer().append(groupName, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
-            }
-            else {
-              getTextRenderer().append("[unnamed group]", SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
-            }
-          }
-          else if (object instanceof Tool) {
-            getTextRenderer().append(((Tool)object).getName(), SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
-          }
-        }
-      },
+      getTreeCellRenderer(),
       new CheckedTreeNode(null)) {
       @Override
       protected void onDoubleClick(final CheckedTreeNode node) {
@@ -129,7 +89,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
       @Override
       public void run(AnActionButton button) {
         ToolEditorDialog dlg = createToolEditorDialog(ToolsBundle.message("tools.add.title"));
-        Tool tool = new Tool();
+        Tool tool = dlg.createTool();
         tool.setUseConsole(true);
         tool.setFilesSynchronizedAfterRun(true);
         tool.setShownInMainMenu(true);
@@ -141,9 +101,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
         if (dlg.showAndGet()) {
           insertNewTool(dlg.getData(), true);
         }
-        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-          IdeFocusManager.getGlobalInstance().requestFocus(myTree, true);
-        });
+        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(myTree, true));
       }
     }).setRemoveAction(new AnActionButtonRunnable() {
       @Override
@@ -154,9 +112,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
       @Override
       public void run(AnActionButton button) {
         editSelected();
-        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-          IdeFocusManager.getGlobalInstance().requestFocus(myTree, true);
-        });
+        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(myTree, true));
       }
     }).setMoveUpAction(new AnActionButtonRunnable() {
       @Override
@@ -177,15 +133,13 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
 
         if (originalTool != null) {
           ToolEditorDialog dlg = createToolEditorDialog(ToolsBundle.message("tools.copy.title"));
-          Tool toolCopy = new Tool();
+          Tool toolCopy = dlg.createTool();
           toolCopy.copyFrom(originalTool);
           dlg.setData(toolCopy, getGroups());
           if (dlg.showAndGet()) {
             insertNewTool(dlg.getData(), true);
           }
-          IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-            IdeFocusManager.getGlobalInstance().requestFocus(myTree, true);
-          });
+          IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(myTree, true));
         }
       }
     }).createPanel(), BorderLayout.CENTER);
@@ -210,7 +164,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
   public void reset() {
     mutatorHelper.clear();
     for (ToolsGroup<T> group : getToolManager().getGroups()) {
-      insertNewGroup(mutatorHelper.copy(group));
+      addGroupNode(mutatorHelper.copy(group));
     }
 
     if ((getTreeRoot()).getChildCount() > 0) {
@@ -230,20 +184,51 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
 
   protected abstract BaseToolManager<T> getToolManager();
 
+  protected CheckboxTree.CheckboxTreeCellRenderer getTreeCellRenderer() {
+    return new MyCheckboxTreeCellRenderer();
+  }
+
+  protected static class MyCheckboxTreeCellRenderer extends CheckboxTree.CheckboxTreeCellRenderer {
+    @Override
+    public void customizeRenderer(final JTree tree,
+                                  final Object value,
+                                  final boolean selected,
+                                  final boolean expanded,
+                                  final boolean leaf,
+                                  final int row,
+                                  final boolean hasFocus) {
+      if (!(value instanceof CheckedTreeNode)) return;
+      Object object = ((CheckedTreeNode)value).getUserObject();
+
+      if (object instanceof ToolsGroup) {
+        final String groupName = ((ToolsGroup)object).getName();
+        if (groupName != null) {
+          getTextRenderer().append(groupName, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
+        }
+        else {
+          getTextRenderer().append("[unnamed group]", SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
+        }
+      }
+      else if (object instanceof Tool) {
+        getTextRenderer().append(((Tool)object).getName(), SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
+      }
+    }
+  }
+
+
   @NotNull
-  private CheckedTreeNode insertNewGroup(@NotNull ToolsGroup<T> groupCopy) {
-    CheckedTreeNode groupNode = new CheckedTreeNode(groupCopy);
+  private CheckedTreeNode addGroupNode(@NotNull ToolsGroup<T> group) {
+    CheckedTreeNode groupNode = new CheckedTreeNode(group);
     getTreeRoot().add(groupNode);
-    for (T tool : groupCopy.getElements()) {
-      insertNewTool(groupNode, tool);
+    for (T tool : group.getElements()) {
+      addToolNode(groupNode, tool);
     }
     return groupNode;
   }
 
-  private CheckedTreeNode insertNewTool(@NotNull CheckedTreeNode groupNode, @NotNull Tool toolCopy) {
-    CheckedTreeNode toolNode = new CheckedTreeNode(toolCopy);
-    toolNode.setChecked(toolCopy.isEnabled());
-    ((ToolsGroup)groupNode.getUserObject()).addElement(toolCopy);
+  private CheckedTreeNode addToolNode(@NotNull CheckedTreeNode groupNode, @NotNull Tool tool) {
+    CheckedTreeNode toolNode = new CheckedTreeNode(tool);
+    toolNode.setChecked(tool.isEnabled());
     groupNode.add(toolNode);
     nodeWasInserted(toolNode);
     return toolNode;
@@ -292,9 +277,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
         TreePath path = new TreePath(node.getPath());
         myTree.getSelectionModel().setSelectionPath(path);
         myTree.expandPath(path);
-        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-          IdeFocusManager.getGlobalInstance().requestFocus(myTree, true);
-        });
+        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(myTree, true));
       }
     }
   }
@@ -325,13 +308,21 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
 
   private void insertNewTool(@NotNull Tool newTool, boolean setSelection) {
     CheckedTreeNode groupNode = findGroupNode(newTool.getGroup());
+    ToolsGroup group;
     if (groupNode == null) {
-      groupNode = insertNewGroup(new ToolsGroup(newTool.getGroup()));
+      group = new ToolsGroup<>(newTool.getGroup());
+      groupNode = addGroupNode(group);
       nodeWasInserted(groupNode);
+    } else {
+      //noinspection unchecked
+      group = (ToolsGroup<T>)groupNode.getUserObject();
     }
-    CheckedTreeNode tool = insertNewTool(groupNode, newTool);
+
+    CheckedTreeNode toolNode = addToolNode(groupNode, newTool);
+    group.addElement(newTool);
+
     if (setSelection) {
-      TreePath treePath = new TreePath(tool.getPath());
+      TreePath treePath = new TreePath(toolNode.getPath());
       myTree.expandPath(treePath);
       myTree.getSelectionModel().setSelectionPath(treePath);
     }
@@ -350,14 +341,14 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
     for (int i = 0; i < getTreeRoot().getChildCount(); i++) {
       CheckedTreeNode node = (CheckedTreeNode)getTreeRoot().getChildAt(i);
       ToolsGroup g = (ToolsGroup)node.getUserObject();
-      if (Comparing.equal(group, g.getName())) return node;
+      if (Objects.equals(group, g.getName())) return node;
     }
 
     return null;
   }
 
   @Nullable
-  private Tool getSelectedTool() {
+  public Tool getSelectedTool() {
     CheckedTreeNode node = getSelectedToolNode();
     if (node == null) return null;
     return node.getUserObject() instanceof Tool ? (Tool)node.getUserObject() : null;
@@ -411,7 +402,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
       int result = Messages.showYesNoDialog(
         this,
         ToolsBundle.message("tools.delete.confirmation"),
-        CommonBundle.getWarningTitle(),
+        ToolsBundle.message("dialog.title.delete.tool"),
         Messages.getWarningIcon()
       );
       if (result != Messages.YES) {
@@ -431,9 +422,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
         removeNodeFromParent(node);
       }
       update();
-      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-        IdeFocusManager.getGlobalInstance().requestFocus(myTree, true);
-      });
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(myTree, true));
     }
   }
 
@@ -449,7 +438,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
   private void editSelected() {
     CheckedTreeNode node = getSelectedToolNode();
     if (node != null && node.getUserObject() instanceof Tool) {
-      Tool selected = (Tool)node.getUserObject();
+      T selected = (T)node.getUserObject();
       if (selected != null) {
         String oldGroupName = selected.getGroup();
         ToolEditorDialog dlg = createToolEditorDialog(ToolsBundle.message("tools.edit.title"));
@@ -457,10 +446,10 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
         if (dlg.showAndGet()) {
           selected.copyFrom(dlg.getData());
           String newGroupName = selected.getGroup();
-          if (!Comparing.equal(oldGroupName, newGroupName)) {
+          if (!Objects.equals(oldGroupName, newGroupName)) {
             CheckedTreeNode oldGroupNode = (CheckedTreeNode)node.getParent();
             removeNodeFromParent(node);
-            ((ToolsGroup)oldGroupNode.getUserObject()).removeElement(selected);
+            ((ToolsGroup<T>)oldGroupNode.getUserObject()).removeElement(selected);
             if (oldGroupNode.getChildCount() == 0) {
               removeNodeFromParent(oldGroupNode);
             }
@@ -502,7 +491,7 @@ public abstract class BaseToolsPanel<T extends Tool> extends JPanel {
     for (ToolsGroup group : getGroupList()) {
       result.add(group.getName());
     }
-    return ArrayUtil.toStringArray(result);
+    return ArrayUtilRt.toStringArray(result);
   }
 
   void addSelectionListener(TreeSelectionListener listener) {

@@ -190,16 +190,6 @@ public class PyArgumentListInspectionTest extends PyInspectionTestCase {
     doTest();
   }
 
-  // PY-19716
-  public void testMethodsForLoggingExceptions() {
-    doMultiFileTest("b.py");
-  }
-
-  // PY-19522
-  public void testCsvRegisterDialect() {
-    doMultiFileTest("b.py");
-  }
-
   // PY-21083
   public void testFloatFromhex() {
     doTest();
@@ -275,6 +265,20 @@ public class PyArgumentListInspectionTest extends PyInspectionTestCase {
     doTest();
   }
 
+  // PY-26007
+  public void testInitializingCollectionsNamedTupleInheritor() {
+    doTestByText("from collections import namedtuple\n" +
+                 "\n" +
+                 "nt = namedtuple(\"nt\", \"f1 f2\")\n" +
+                 "\n" +
+                 "class mynt(nt):\n" +
+                 "    def __new__(cls, p1):\n" +
+                 "        # expected: explicit namedtuple's __init__ and __new__ are not supported yet\n" +
+                 "        return nt.__new__(cls, p1, <warning descr=\"Unexpected argument\">10</warning>)\n" +
+                 "\n" +
+                 "mynt(1)");
+  }
+
   // PY-22971
   public void testOverloadsAndImplementationInClass() {
     runWithLanguageLevel(LanguageLevel.PYTHON35, this::doTest);
@@ -343,6 +347,11 @@ public class PyArgumentListInspectionTest extends PyInspectionTestCase {
     runWithLanguageLevel(LanguageLevel.PYTHON37, this::doMultiFileTest);
   }
 
+  // PY-29929
+  public void testInitializingImportedDataclass() {
+    runWithLanguageLevel(LanguageLevel.PYTHON37, this::doMultiFileTest);
+  }
+
   // PY-25497
   public void testObjectMethodInPossiblyInheritanceChain() {
     doTest();
@@ -351,5 +360,97 @@ public class PyArgumentListInspectionTest extends PyInspectionTestCase {
   // PY-28127
   public void testInitializingTypeVar() {
     doTest();
+  }
+
+  // PY-30182
+  public void testAnotherMethodIsWrappedIntoStatic() {
+    doMultiFileTest();
+  }
+
+  // PY-35512
+  public void testPositionalOnlyParameters() {
+    runWithLanguageLevel(LanguageLevel.PYTHON38, this::doTest);
+  }
+
+  // PY-36008
+  public void testTypedDict() {
+    runWithLanguageLevel(LanguageLevel.PYTHON38, this::doTest);
+  }
+
+  // PY-36008
+  public void testTypedDictKeywordArguments() {
+    runWithLanguageLevel(LanguageLevel.PYTHON38, this::doTest);
+  }
+
+  // PY-36008
+  public void testTypedDictMethods() {
+    runWithLanguageLevel(LanguageLevel.PYTHON38, this::doTest);
+  }
+
+  // PY-36008
+  public void testTypedDictWithTotal() {
+    runWithLanguageLevel(LanguageLevel.PYTHON38, this::doTest);
+  }
+
+  // PY-36008
+  public void testTypedDictWithInheritance() {
+    runWithLanguageLevel(LanguageLevel.PYTHON38, this::doTest);
+  }
+
+  // PY-36008
+  public void testTypedDictAlternativeSyntaxDefinition() {
+    runWithLanguageLevel(LanguageLevel.PYTHON38, this::doTest);
+  }
+
+  // PY-36008
+  public void testTypedDictAlternativeSyntaxUsage() {
+    runWithLanguageLevel(LanguageLevel.PYTHON38, this::doTest);
+  }
+
+  // PY-39404
+  public void testImportedTypedDict() {
+    runWithLanguageLevel(LanguageLevel.PYTHON38, this::doMultiFileTest);
+  }
+
+  // PY-17877
+  public void testMetaclassHavingDunderCall() {
+    runWithLanguageLevel(
+      LanguageLevel.getLatest(),
+      () -> doTestByText("class MetaFoo(type):\n" +
+                         "  def __call__(cls, p3, p4):\n" +
+                         "    print(f'MetaFoo.__call__: {cls}, {p3}, {p4}')\n" +
+                         "\n" +
+                         "class Foo(metaclass=MetaFoo):\n" +
+                         "  pass\n" +
+                         "\n" +
+                         "class SubFoo(Foo):\n" +
+                         "  def __new__(self, p1, p2):\n" +
+                         "    # This never gets called\n" +
+                         "    print(f'SubFoo.__new__: {p1}, {p2}')\n" +
+                         "\n" +
+                         "sub = SubFoo(1<warning descr=\"Parameter(s) unfilledPossible callees:SubFoo.__new__(self: SubFoo, p1, p2)MetaFoo.__call__(cls: MetaFoo, p3, p4)\">)</warning>\n" +
+                         "foo = Foo(3<warning descr=\"Parameter 'p4' unfilled\">)</warning>")
+    );
+  }
+
+  // PY-17877, PY-41380
+  public void testNotMetaclassHavingSelfArgsKwargsDunderCall() {
+    runWithLanguageLevel(
+      LanguageLevel.getLatest(),
+      () -> doTestByText("class MetaFoo(type):\n" +
+                         "  def __call__(cls, *args, **kwargs):\n" +
+                         "    print(f'MetaFoo.__call__: {cls}, {args}, {kwargs}')\n" +
+                         "    return super(MetaFoo, cls).__call__(*args, **kwargs)\n" +
+                         "\n" +
+                         "class Foo(metaclass=MetaFoo):\n" +
+                         "  pass\n" +
+                         "\n" +
+                         "class SubFoo(Foo):\n" +
+                         "  def __init__(self, p1, p2):\n" +
+                         "    print(f'SubFoo.__init__: {p1}, {p2}')\n" +
+                         "\n" +
+                         "foo = Foo()\n" +
+                         "sub = SubFoo(1<warning descr=\"Parameter 'p2' unfilled\">)</warning>")
+    );
   }
 }

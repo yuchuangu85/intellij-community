@@ -1,23 +1,10 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.psi;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ex.PathManagerEx;
 import com.intellij.openapi.util.Comparing;
+import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
@@ -25,6 +12,7 @@ import com.intellij.psi.impl.JavaPsiFacadeEx;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.testFramework.PsiTestUtil;
+import com.intellij.util.ref.GCWatcher;
 
 import java.io.File;
 
@@ -453,5 +441,22 @@ public class TypesTest extends GenericsTestCase {
     final PsiStatement declaration = factory.createStatementFromText("Byte b = 1;", null);
     final PsiExpression plusPlusPostfix = factory.createExpressionFromText("b++", declaration);
     assertEquals(PsiType.BYTE.getBoxedType(declaration), plusPlusPostfix.getType());
+  }
+
+  public void testVariableTypeInvalidation() {
+    PsiElementFactory factory = myJavaFacade.getElementFactory();
+    PsiStatement statement = factory.createStatementFromText("String s;", null);
+    PsiLocalVariable var = (PsiLocalVariable)((PsiDeclarationStatement)statement).getDeclaredElements()[0];
+    PsiType type = var.getType();
+    assertTrue(type.isValid());
+
+    Ref<PsiTypeElement> ref = Ref.create(var.getTypeElement());
+    ref.get().replace(factory.createTypeElement(PsiType.INT));
+
+    assertFalse(type.isValid());
+
+    GCWatcher.fromClearedRef(ref).ensureCollected();
+
+    assertFalse(type.isValid()); // shouldn't throw
   }
 }

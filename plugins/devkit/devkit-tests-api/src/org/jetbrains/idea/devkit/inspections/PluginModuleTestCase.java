@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o.
+ * Copyright 2000-2019 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,24 +15,23 @@
  */
 package org.jetbrains.idea.devkit.inspections;
 
-import com.intellij.openapi.module.ModuleType;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.testFramework.LightProjectDescriptor;
 import com.intellij.testFramework.TestDataFile;
 import com.intellij.testFramework.fixtures.DefaultLightProjectDescriptor;
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.idea.devkit.build.PluginBuildConfiguration;
 import org.jetbrains.idea.devkit.module.PluginModuleType;
 
-public abstract class PluginModuleTestCase extends LightCodeInsightFixtureTestCase {
+public abstract class PluginModuleTestCase extends LightJavaCodeInsightFixtureTestCase {
 
   private static final DefaultLightProjectDescriptor ourProjectDescriptor = new DefaultLightProjectDescriptor() {
 
     @NotNull
     @Override
-    public ModuleType getModuleType() {
-      return PluginModuleType.getInstance();
+    public String getModuleTypeId() {
+      return PluginModuleType.ID;
     }
   };
 
@@ -42,10 +41,29 @@ public abstract class PluginModuleTestCase extends LightCodeInsightFixtureTestCa
     return ourProjectDescriptor;
   }
 
+  @Override
+  protected void tearDown() throws Exception {
+    try {
+      getPluginBuildConfiguration().cleanupForNextTest();
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
+    finally {
+      super.tearDown();
+    }
+  }
+
   protected void setPluginXml(@TestDataFile String pluginXml) {
     final VirtualFile file = myFixture.copyFileToProject(pluginXml, "META-INF/plugin.xml");
-    final PluginBuildConfiguration pluginBuildConfiguration = PluginBuildConfiguration.getInstance(myModule);
-    assertNotNull(pluginBuildConfiguration);
+    final PluginBuildConfiguration pluginBuildConfiguration = getPluginBuildConfiguration();
     pluginBuildConfiguration.setPluginXmlFromVirtualFile(file);
+  }
+
+  @NotNull
+  private PluginBuildConfiguration getPluginBuildConfiguration() {
+    final PluginBuildConfiguration pluginBuildConfiguration = PluginBuildConfiguration.getInstance(getModule());
+    assertNotNull(pluginBuildConfiguration);
+    return pluginBuildConfiguration;
   }
 }

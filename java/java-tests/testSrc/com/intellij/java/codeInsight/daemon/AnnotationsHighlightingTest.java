@@ -32,6 +32,7 @@ public class AnnotationsHighlightingTest extends LightDaemonAnalyzerTestCase {
   public void testIncompatibleType3() { doTest(); }
   public void testIncompatibleType4() { doTest(); }
   public void testIncompatibleType5() { doTest(); }
+  public void testIncompatibleWithUnresolvedAttribute() { doTest(); }
   public void testMissingAttribute() { doTest(); }
   public void testDuplicateAnnotation() { setLanguageLevel(LanguageLevel.JDK_1_7); doTest(); }
   public void testNonConstantInitializer() { doTest(); }
@@ -46,6 +47,7 @@ public class AnnotationsHighlightingTest extends LightDaemonAnalyzerTestCase {
   public void testInvalidPackageAnnotationTarget() { doTest(BASE_PATH + "/package-info.java", false, false); }
   public void testPackageAnnotationNotInPackageInfo() { doTest(); }
   public void testTypeAnnotations() { doTest(); }
+  public void testTypeAnnotationsWithCStyleArrays() { doTest(); }
   public void testRepeatable() { doTest(); }
   public void testEnumValues() { doTest(); }
   public void testReceiverParameters() { doTest(); }

@@ -1,4 +1,4 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn.annotate;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -109,7 +109,7 @@ public class SvnAnnotationProvider implements AnnotationProvider, VcsCacheableAn
           exception[0] = new SvnBindException("File '" + ioFile + "' is not under version control");
           return;
         }
-        Url url = info.getURL();
+        Url url = info.getUrl();
         Revision endRevision = revisionNumber.getRevision();
         if (Revision.WORKING.equals(endRevision)) {
           endRevision = info.getRevision();
@@ -170,8 +170,8 @@ public class SvnAnnotationProvider implements AnnotationProvider, VcsCacheableAn
                                   @NotNull SvnBindException e,
                                   @NotNull VirtualFile file,
                                   @NotNull SvnRevisionNumber revisionNumber,
-                                  @NotNull FileAnnotation[] annotation,
-                                  @NotNull VcsException[] exception) {
+                                  FileAnnotation @NotNull [] annotation,
+                                  VcsException @NotNull [] exception) {
     // TODO: Check how this scenario could be reproduced by user and what changes needs to be done for command line client
     if (e.contains(ErrorCode.FS_NOT_FOUND)) {
       final CommittedChangesProvider<SvnChangeList, ChangeBrowserSettings> provider = myVcs.getCommittedChangesProvider();
@@ -239,10 +239,10 @@ public class SvnAnnotationProvider implements AnnotationProvider, VcsCacheableAn
     }
 
     Info wcRootInfo = myVcs.getInfo(root);
-    if (wcRootInfo == null || wcRootInfo.getURL() == null) {
+    if (wcRootInfo == null || wcRootInfo.getUrl() == null) {
       throw new VcsException("Can not find relative path for " + wasFile.getPath() + "@" + revisionNumber.asString());
     }
-    Url wasUrl = wcRootInfo.getURL();
+    Url wasUrl = wcRootInfo.getUrl();
     final String[] strings = relativePath.replace('\\', '/').split("/");
     for (String string : strings) {
       wasUrl = append(wasUrl, string, true);
@@ -270,7 +270,7 @@ public class SvnAnnotationProvider implements AnnotationProvider, VcsCacheableAn
         progress.checkCanceled();
       }
 
-      result.setLineInfo(lineNumber, info, mergeInfo != null && info.getRevision() > mergeInfo.getRevision() ? mergeInfo : null);
+      result.setLineInfo(lineNumber, info, mergeInfo != null && info.getRevisionNumber() > mergeInfo.getRevisionNumber() ? mergeInfo : null);
     };
   }
 

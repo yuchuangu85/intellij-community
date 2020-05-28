@@ -1,38 +1,52 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.openapi.actionSystem.ex;
 
 import com.intellij.ide.DataManager;
 import com.intellij.openapi.actionSystem.*;
+import com.intellij.openapi.util.NlsContexts;
+import com.intellij.ui.ComponentUtil;
+import com.intellij.ui.components.JBCheckBox;
 import com.intellij.util.ui.JBUI;
-import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import java.util.function.Supplier;
 
-/**
- * @author max
- */
 public abstract class CheckboxAction extends ToggleAction implements CustomComponentAction {
 
   protected CheckboxAction() {}
 
-  protected CheckboxAction(final String text) {
+  protected CheckboxAction(@NlsContexts.Checkbox String text) {
     super(text);
   }
 
-  protected CheckboxAction(final String text, final String description, final Icon icon) {
+  protected CheckboxAction(@NotNull Supplier<String> dynamicText) {
+    super(dynamicText);
+  }
+
+  protected CheckboxAction(@NlsContexts.Checkbox String text,
+                           @NlsContexts.Tooltip String description,
+                           final Icon icon) {
     super(text, description, icon);
+  }
+
+  protected CheckboxAction(@NotNull Supplier<String> dynamicText, @NotNull Supplier<String> dynamicDescription, final Icon icon) {
+    super(dynamicText, dynamicDescription, icon);
   }
 
   @NotNull
   @Override
-  public JComponent createCustomComponent(@NotNull Presentation presentation) {
-    JCheckBox checkBox = new JCheckBox();
+  public JComponent createCustomComponent(@NotNull Presentation presentation, @NotNull String place) {
+    JBCheckBox checkBox = new JBCheckBox();
+    checkBox.setFocusable(false);
     updateCustomComponent(checkBox, presentation);
-    return createCheckboxComponent(checkBox, this);
+    return createCheckboxComponent(checkBox, this, place);
   }
 
   @Override
@@ -49,7 +63,7 @@ public abstract class CheckboxAction extends ToggleAction implements CustomCompo
 
   protected void updateCustomComponent(JCheckBox checkBox, Presentation presentation) {
     updateCheckboxPresentation(checkBox, presentation);
-    checkBox.setSelected(Boolean.TRUE.equals(presentation.getClientProperty(SELECTED_PROPERTY)));
+    checkBox.setSelected(Toggleable.isSelected(presentation));
   }
 
   static void updateCheckboxPresentation(JCheckBox checkBox, Presentation presentation) {
@@ -62,7 +76,7 @@ public abstract class CheckboxAction extends ToggleAction implements CustomCompo
   }
 
   @NotNull
-  static JComponent createCheckboxComponent(@NotNull JCheckBox checkBox, @NotNull AnAction action) {
+  static JComponent createCheckboxComponent(@NotNull JCheckBox checkBox, @NotNull AnAction action, @NotNull String place) {
     // this component cannot be stored right in AnAction because of action system architecture:
     // one action can be shown on multiple toolbars simultaneously
     checkBox.setOpaque(false);
@@ -72,10 +86,13 @@ public abstract class CheckboxAction extends ToggleAction implements CustomCompo
       @Override
       public void actionPerformed(ActionEvent e) {
         JCheckBox checkBox = (JCheckBox)e.getSource();
-        ActionToolbar actionToolbar = UIUtil.getParentOfType(ActionToolbar.class, checkBox);
+        ActionToolbar actionToolbar =
+          ComponentUtil.getParentOfType((Class<? extends ActionToolbar>)ActionToolbar.class, (Component)checkBox);
         DataContext dataContext =
           actionToolbar != null ? actionToolbar.getToolbarDataContext() : DataManager.getInstance().getDataContext(checkBox);
-        action.actionPerformed(AnActionEvent.createFromAnAction(action, null, ActionPlaces.UNKNOWN, dataContext));
+        InputEvent inputEvent = new KeyEvent(checkBox, KeyEvent.KEY_PRESSED, System.currentTimeMillis(), 0, KeyEvent.VK_SPACE, ' ');
+        AnActionEvent event = AnActionEvent.createFromAnAction(action, inputEvent, place, dataContext);
+        ActionUtil.performActionDumbAwareWithCallbacks(action, event, dataContext);
       }
     });
 

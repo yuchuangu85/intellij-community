@@ -207,11 +207,27 @@ public class MemberChangeTest extends IncrementalTestCase {
     doTest();
   }
 
+  public void testAddOverloadingMethod() {
+    doTest();
+  }
+
+  public void testAddOverridingMethodAndChangeReturnType() {
+    doTest();
+  }
+
+  public void testAddOverloadingConstructor() {
+    doTest();
+  }
+
   public void testAddVarargMethod() {
     doTest();
   }
 
   public void testReplaceMethodWithBridge() {
+    doTest();
+  }
+
+  public void testPushFieldDown() {
     doTest();
   }
 }

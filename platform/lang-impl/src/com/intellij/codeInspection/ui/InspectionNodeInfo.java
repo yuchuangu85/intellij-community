@@ -1,23 +1,24 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.ui;
 
+import com.intellij.codeInspection.InspectionEP;
 import com.intellij.codeInspection.InspectionsBundle;
 import com.intellij.codeInspection.actions.RunInspectionAction;
 import com.intellij.codeInspection.ex.InspectionProfileImpl;
 import com.intellij.codeInspection.ex.InspectionToolWrapper;
+import com.intellij.diagnostic.PluginException;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.profile.codeInspection.InspectionProjectProfileManager;
 import com.intellij.profile.codeInspection.ui.SingleInspectionProfilePanel;
-import com.intellij.profile.codeInspection.ui.inspectionsTree.InspectionsConfigTreeTable;
-import com.intellij.ui.BrowserHyperlinkListener;
 import com.intellij.ui.ClickListener;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBLabelDecorator;
 import com.intellij.ui.components.panels.StatelessCardLayout;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.ui.JBInsets;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
@@ -47,13 +48,13 @@ public class InspectionNodeInfo extends JPanel {
     JPanel titlePanel = new JPanel();
     titlePanel.setLayout(new BoxLayout(titlePanel, BoxLayout.LINE_AXIS));
     JBLabelDecorator label = JBLabelDecorator.createJBLabelDecorator().setBold(true);
-    label.setText(toolWrapper.getDisplayName() + " inspection");
+    label.setText(InspectionsBundle.message("inspection.node.text", toolWrapper.getDisplayName()));
     titlePanel.add(label);
-    titlePanel.add(Box.createHorizontalStrut(JBUI.scale(16)));
+    titlePanel.add(Box.createHorizontalStrut(JBUIScale.scale(16)));
     if (!enabled) {
       JBLabel enabledLabel = new JBLabel();
       enabledLabel.setForeground(JBColor.GRAY);
-      enabledLabel.setText("Disabled");
+      enabledLabel.setText(InspectionsBundle.message("inspection.node.disabled.state"));
       titlePanel.add(enabledLabel);
     }
 
@@ -66,9 +67,12 @@ public class InspectionNodeInfo extends JPanel {
     description.setEditable(false);
     description.setOpaque(false);
     description.setBackground(UIUtil.getLabelBackground());
-    description.addHyperlinkListener(BrowserHyperlinkListener.INSTANCE);
+    description.addHyperlinkListener(SingleInspectionProfilePanel.createSettingsHyperlinkListener(project));
     String descriptionText = toolWrapper.loadDescription();
-    LOG.assertTrue(descriptionText != null, "Inspection #" + toolWrapper.getShortName() + " has no description");
+    if (descriptionText == null) {
+      InspectionEP extension = toolWrapper.getExtension();
+      LOG.error(new PluginException("Inspection #" + toolWrapper.getShortName() + " has no description", extension != null ? extension.getPluginDescriptor().getPluginId() : null));
+    }
     final String toolDescription =
       stripUIRefsFromInspectionDescription(StringUtil.notNullize(descriptionText));
     SingleInspectionProfilePanel.readHTML(description, SingleInspectionProfilePanel.toHTML(description, toolDescription == null ? "" : toolDescription, false));
@@ -80,15 +84,24 @@ public class InspectionNodeInfo extends JPanel {
     add(StatelessCardLayout.wrap(pane),
         new GridBagConstraints(0, 1, 1, 1, 1.0, 1.0, GridBagConstraints.NORTHWEST, GridBagConstraints.BOTH,
                                new JBInsets(0, 10, 0, 0), 0, 0));
-    JButton enableButton = new JButton((enabled ? "Disable" : "Enable") + " inspection");
-    new ClickListener() {
-      @Override
-      public boolean onClick(@NotNull MouseEvent event, int clickCount) {
-        InspectionsConfigTreeTable.setToolEnabled(!enabled, currentProfile, toolWrapper.getShortName(), project);
-        tree.getContext().getView().profileChanged();
-        return true;
+
+    JButton enableButton = null;
+    if (currentProfile.getSingleTool() != null) {
+      if (enabled) {
+        enableButton = new JButton(InspectionsBundle.message("disable.inspection.btn.text"));
       }
-    }.installOn(enableButton);
+      else {
+        enableButton = new JButton(InspectionsBundle.message("enable.inspection.btn.text"));
+      }
+      new ClickListener() {
+        @Override
+        public boolean onClick(@NotNull MouseEvent event, int clickCount) {
+          InspectionProfileImpl.setToolEnabled(!enabled, currentProfile, toolWrapper.getShortName(), project);
+          tree.getContext().getView().profileChanged();
+          return true;
+        }
+      }.installOn(enableButton);
+    }
 
     JButton runInspectionOnButton = new JButton(InspectionsBundle.message("run.inspection.on.file.intention.text"));
     new ClickListener() {
@@ -101,8 +114,10 @@ public class InspectionNodeInfo extends JPanel {
 
     JPanel buttons = new JPanel();
     buttons.setLayout(new BoxLayout(buttons, BoxLayout.LINE_AXIS));
-    buttons.add(enableButton);
-    buttons.add(Box.createHorizontalStrut(JBUI.scale(3)));
+    if (enableButton != null) {
+      buttons.add(enableButton);
+    }
+    buttons.add(Box.createHorizontalStrut(JBUIScale.scale(3)));
     buttons.add(runInspectionOnButton);
 
     add(buttons,

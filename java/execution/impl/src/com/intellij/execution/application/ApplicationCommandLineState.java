@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.application;
 
 import com.intellij.codeInsight.daemon.impl.analysis.JavaModuleGraphUtil;
@@ -6,18 +6,15 @@ import com.intellij.debugger.settings.DebuggerSettings;
 import com.intellij.execution.CommonJavaRunConfigurationParameters;
 import com.intellij.execution.ConfigurationWithCommandLineShortener;
 import com.intellij.execution.ExecutionException;
-import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.execution.configurations.JavaParameters;
 import com.intellij.execution.configurations.JavaRunConfigurationModule;
 import com.intellij.execution.configurations.ModuleBasedConfiguration;
-import com.intellij.execution.filters.ArgumentFileFilter;
 import com.intellij.execution.process.KillableProcessHandler;
 import com.intellij.execution.process.OSProcessHandler;
 import com.intellij.execution.runners.ExecutionEnvironment;
 import com.intellij.execution.util.JavaParametersUtil;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.projectRoots.JavaSdkVersion;
-import com.intellij.openapi.projectRoots.JdkUtil;
 import com.intellij.openapi.projectRoots.ex.JavaSdkUtil;
 import com.intellij.psi.PsiCompiledElement;
 import com.intellij.psi.PsiJavaModule;
@@ -25,8 +22,6 @@ import com.intellij.psi.impl.light.LightJavaModule;
 import com.intellij.util.PathsList;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
-
-import java.util.Map;
 
 public abstract class ApplicationCommandLineState<T extends
   ModuleBasedConfiguration<JavaRunConfigurationModule, Element> &
@@ -41,7 +36,6 @@ public abstract class ApplicationCommandLineState<T extends
   protected JavaParameters createJavaParameters() throws ExecutionException {
     final JavaParameters params = new JavaParameters();
     T configuration = getConfiguration();
-    params.setShortenCommandLine(configuration.getShortenCommandLine(), configuration.getProject());
 
     params.setMainClass(myConfiguration.getRunClass());
     setupJavaParameters(params);
@@ -61,17 +55,9 @@ public abstract class ApplicationCommandLineState<T extends
 
     setupModulePath(params, module);
 
-    return params;
-  }
+    params.setShortenCommandLine(configuration.getShortenCommandLine(), configuration.getProject());
 
-  @Override
-  protected GeneralCommandLine createCommandLine() throws ExecutionException {
-    GeneralCommandLine line = super.createCommandLine();
-    Map<String, String> content = line.getUserData(JdkUtil.COMMAND_LINE_CONTENT);
-    if (content != null) {
-      content.forEach((key, value) -> addConsoleFilters(new ArgumentFileFilter(key, value)));
-    }
-    return line;
+    return params;
   }
 
   @NotNull

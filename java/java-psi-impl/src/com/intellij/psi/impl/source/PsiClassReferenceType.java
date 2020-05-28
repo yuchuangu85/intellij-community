@@ -1,63 +1,48 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.source;
 
-import com.intellij.openapi.util.Comparing;
-import com.intellij.openapi.util.Computable;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
+import com.intellij.psi.augment.PsiAugmentProvider;
 import com.intellij.psi.impl.light.LightClassReference;
+import com.intellij.psi.impl.light.LightClassTypeReference;
 import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
-import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.util.ArrayUtil;
-import com.intellij.util.ObjectUtils;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 
-/**
- * @author max
- */
+import static com.intellij.util.ObjectUtils.notNull;
+
 public class PsiClassReferenceType extends PsiClassType.Stub {
-  private final Computable<? extends PsiJavaCodeReferenceElement> myReference;
+  private final ClassReferencePointer myReference;
 
   public PsiClassReferenceType(@NotNull PsiJavaCodeReferenceElement reference, LanguageLevel level) {
     this(reference, level, collectAnnotations(reference));
   }
 
-  public PsiClassReferenceType(@NotNull PsiJavaCodeReferenceElement reference, LanguageLevel level, @NotNull PsiAnnotation[] annotations) {
+  public PsiClassReferenceType(@NotNull PsiJavaCodeReferenceElement reference, LanguageLevel level, PsiAnnotation @NotNull [] annotations) {
     super(level, annotations);
-    myReference = new Computable.PredefinedValueComputable<>(reference);
+    myReference = ClassReferencePointer.constant(reference);
   }
 
   public PsiClassReferenceType(@NotNull PsiJavaCodeReferenceElement reference, LanguageLevel level, @NotNull TypeAnnotationProvider provider) {
-    this(new Computable.PredefinedValueComputable<>(reference), level, provider);
+    this(ClassReferencePointer.constant(reference), level, provider);
   }
 
-  public PsiClassReferenceType(@NotNull Computable<? extends PsiJavaCodeReferenceElement> reference, LanguageLevel level, @NotNull TypeAnnotationProvider provider) {
+  PsiClassReferenceType(@NotNull ClassReferencePointer reference, LanguageLevel level, @NotNull TypeAnnotationProvider provider) {
     super(level, provider);
     myReference = reference;
   }
 
-  @NotNull
-  private static PsiAnnotation[] collectAnnotations(PsiJavaCodeReferenceElement reference) {
+  private static PsiAnnotation @NotNull [] collectAnnotations(PsiJavaCodeReferenceElement reference) {
     List<PsiAnnotation> result = null;
     for (PsiElement child = reference.getFirstChild(); child != null; child = child.getNextSibling()) {
       if (child instanceof PsiAnnotation) {
@@ -70,7 +55,7 @@ public class PsiClassReferenceType extends PsiClassType.Stub {
 
   @Override
   public boolean isValid() {
-    PsiJavaCodeReferenceElement reference = myReference.compute();
+    PsiJavaCodeReferenceElement reference = myReference.retrieveReference();
     if (reference != null && reference.isValid()) {
       for (PsiAnnotation annotation : getAnnotations(false)) {
         if (!annotation.isValid()) return false;
@@ -82,18 +67,18 @@ public class PsiClassReferenceType extends PsiClassType.Stub {
 
   @Override
   public boolean equalsToText(@NotNull String text) {
-    return Comparing.equal(text, getCanonicalText());
+    PsiJavaCodeReferenceElement reference = getReference();
+    String name = reference.getReferenceName();
+    return (name == null || text.contains(name)) && Objects.equals(text, getCanonicalText());
   }
 
   @Override
-  @NotNull
-  public GlobalSearchScope getResolveScope() {
+  public @NotNull GlobalSearchScope getResolveScope() {
     return getReference().getResolveScope();
   }
 
-  @NotNull
   @Override
-  public PsiAnnotation[] getAnnotations() {
+  public PsiAnnotation @NotNull [] getAnnotations() {
     return getAnnotations(true);
   }
 
@@ -101,11 +86,11 @@ public class PsiClassReferenceType extends PsiClassType.Stub {
     PsiAnnotation[] annotations = super.getAnnotations();
 
     if (merge) {
-      PsiJavaCodeReferenceElement reference = myReference.compute();
+      PsiJavaCodeReferenceElement reference = myReference.retrieveReference();
       if (reference != null && reference.isValid() && reference.isQualified()) {
         PsiAnnotation[] embedded = collectAnnotations(reference);
         if (annotations.length > 0 && embedded.length > 0) {
-          LinkedHashSet<PsiAnnotation> set = ContainerUtil.newLinkedHashSet();
+          LinkedHashSet<PsiAnnotation> set = new LinkedHashSet<>();
           ContainerUtil.addAll(set, annotations);
           ContainerUtil.addAll(set, embedded);
           annotations = set.toArray(PsiAnnotation.EMPTY_ARRAY);
@@ -120,15 +105,13 @@ public class PsiClassReferenceType extends PsiClassType.Stub {
   }
 
   @Override
-  @NotNull
-  public LanguageLevel getLanguageLevel() {
+  public @NotNull LanguageLevel getLanguageLevel() {
     if (myLanguageLevel != null) return myLanguageLevel;
     return PsiUtil.getLanguageLevel(getReference());
   }
 
-  @NotNull
   @Override
-  public PsiClassType setLanguageLevel(@NotNull final LanguageLevel languageLevel) {
+  public @NotNull PsiClassType setLanguageLevel(final @NotNull LanguageLevel languageLevel) {
     if (languageLevel.equals(myLanguageLevel)) return this;
     return new PsiClassReferenceType(getReference(), languageLevel, getAnnotationProvider());
   }
@@ -145,9 +128,8 @@ public class PsiClassReferenceType extends PsiClassType.Stub {
       myDelegate = delegate;
     }
 
-    @NotNull
     @Override
-    public PsiSubstitutor getSubstitutor() {
+    public @NotNull PsiSubstitutor getSubstitutor() {
       return myDelegate.getSubstitutor();
     }
 
@@ -184,17 +166,20 @@ public class PsiClassReferenceType extends PsiClassType.Stub {
   }
 
   @Override
-  @NotNull
-  public ClassResolveResult resolveGenerics() {
+  public @NotNull ClassResolveResult resolveGenerics() {
     PsiJavaCodeReferenceElement reference = getReference();
-    PsiUtilCore.ensureValid(reference);
+    if (!reference.isValid()) {
+      if (reference instanceof LightClassTypeReference) {
+        PsiUtil.ensureValidType(((LightClassTypeReference)reference).getType());
+      }
+      throw new PsiInvalidElementAccessException(reference, myReference.toString() + "; augmenters=" + PsiAugmentProvider.EP_NAME.getExtensionList());
+    }
     final JavaResolveResult result = reference.advancedResolve(false);
     return result.getElement() == null ? ClassResolveResult.EMPTY : new DelegatingClassResolveResult(result);
   }
 
   @Override
-  @NotNull
-  public PsiClassType rawType() {
+  public @NotNull PsiClassType rawType() {
     PsiJavaCodeReferenceElement reference = getReference();
     PsiElement resolved = reference.resolve();
     if (resolved instanceof PsiClass) {
@@ -218,34 +203,33 @@ public class PsiClassReferenceType extends PsiClassType.Stub {
   }
 
   @Override
-  @NotNull
-  public PsiType[] getParameters() {
+  public PsiType @NotNull [] getParameters() {
     return getReference().getTypeParameters();
   }
 
-  @NotNull
   @Override
-  public String getPresentableText(boolean annotated) {
-    String presentableText = PsiNameHelper.getPresentableText(getReference());
+  public @NotNull String getPresentableText(boolean annotated) {
+    PsiJavaCodeReferenceElement ref = getReference();
+    if (!annotated) return PsiNameHelper.getPresentableText(ref);
+    PsiAnnotation[] annotations;
+    if (ref.getQualifier() != null) {
+      // like java.lang.@Anno String
+      annotations = notNull(PsiTreeUtil.getChildrenOfType(ref, PsiAnnotation.class), PsiAnnotation.EMPTY_ARRAY);
+    }
+    else {
+      annotations = getAnnotations(false);
+    }
 
-    PsiAnnotation[] annotations = annotated ? getAnnotations(false) : PsiAnnotation.EMPTY_ARRAY;
-    if (annotations.length == 0) return presentableText;
-
-    StringBuilder sb = new StringBuilder();
-    PsiNameHelper.appendAnnotations(sb, annotations, false);
-    sb.append(presentableText);
-    return sb.toString();
+    return PsiNameHelper.getPresentableText(ref.getReferenceName(), annotations, ref.getTypeParameters());
   }
 
-  @NotNull
   @Override
-  public String getCanonicalText(boolean annotated) {
+  public @NotNull String getCanonicalText(boolean annotated) {
     return getText(annotated);
   }
 
-  @NotNull
   @Override
-  public String getInternalCanonicalText() {
+  public @NotNull String getInternalCanonicalText() {
     return getCanonicalText(true);
   }
 
@@ -259,8 +243,12 @@ public class PsiClassReferenceType extends PsiClassType.Stub {
     return reference.getCanonicalText();
   }
 
-  @NotNull
-  public PsiJavaCodeReferenceElement getReference() {
-    return ObjectUtils.assertNotNull(myReference.compute());
+  public @NotNull PsiJavaCodeReferenceElement getReference() {
+    return myReference.retrieveNonNullReference();
+  }
+
+  @Override
+  public @Nullable PsiElement getPsiContext() {
+    return myReference.retrieveReference();
   }
 }

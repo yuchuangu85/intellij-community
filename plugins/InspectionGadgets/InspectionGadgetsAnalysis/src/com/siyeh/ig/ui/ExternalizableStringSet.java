@@ -18,7 +18,7 @@ package com.siyeh.ig.ui;
 import com.intellij.openapi.util.InvalidDataException;
 import com.intellij.openapi.util.JDOMExternalizable;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.containers.OrderedSet;
 import org.jdom.Element;
 import org.jetbrains.annotations.NonNls;
@@ -48,7 +48,7 @@ public class ExternalizableStringSet extends OrderedSet<String>
    * note: when it's not empty, a reference to the defaultValues array is retained by this set!
    */
   public ExternalizableStringSet(@NonNls String... defaultValues) {
-    this.defaultValues = defaultValues.length == 0 ? ArrayUtil.EMPTY_STRING_ARRAY : defaultValues;
+    this.defaultValues = defaultValues.length == 0 ? ArrayUtilRt.EMPTY_STRING_ARRAY : defaultValues;
     Collections.addAll(this, defaultValues);
   }
 
@@ -72,7 +72,8 @@ public class ExternalizableStringSet extends OrderedSet<String>
         clear(); // remove default values
         dataFound = true;
       }
-      add(StringUtil.unescapeXml(item.getAttributeValue(VALUE)));
+      String value = item.getAttributeValue(VALUE);
+      add(value == null ? null : StringUtil.unescapeXmlEntities(value));
     }
   }
 
@@ -85,7 +86,7 @@ public class ExternalizableStringSet extends OrderedSet<String>
     for (String value : this) {
       if (value != null) {
         final Element item = new Element(ITEM);
-        item.setAttribute(VALUE, StringUtil.escapeXml(value));
+        item.setAttribute(VALUE, StringUtil.escapeXmlEntities(value));
         element.addContent(item);
       }
     }

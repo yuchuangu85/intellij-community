@@ -1,9 +1,11 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.profile.codeInspection.ui;
 
+import com.intellij.codeInspection.InspectionsBundle;
 import com.intellij.codeInspection.ex.Descriptor;
 import com.intellij.codeInspection.ex.InspectionProfileImpl;
 import com.intellij.codeInspection.ex.InspectionToolWrapper;
+import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.actionSystem.ex.ComboBoxAction;
@@ -30,20 +32,21 @@ public abstract class ScopesChooser extends ComboBoxAction implements DumbAware 
   public static final String TITLE = "Select a Scope to Change Its Settings";
 
   private final List<Descriptor> myDefaultDescriptors;
+  @NotNull
   private final InspectionProfileImpl myInspectionProfile;
   private final Project myProject;
   private final Set<String> myExcludedScopeNames;
 
   public ScopesChooser(final List<Descriptor> defaultDescriptors,
-                       final InspectionProfileImpl inspectionProfile,
-                       final Project project,
+                       @NotNull InspectionProfileImpl inspectionProfile,
+                       @NotNull Project project,
                        final String[] excludedScopeNames) {
     myDefaultDescriptors = defaultDescriptors;
     myInspectionProfile = inspectionProfile;
     myProject = project;
     myExcludedScopeNames = excludedScopeNames == null ? Collections.emptySet() : ContainerUtil.newHashSet(excludedScopeNames);
     setPopupTitle(TITLE);
-    getTemplatePresentation().setText("In All Scopes");
+    getTemplatePresentation().setText(InspectionsBundle.messagePointer("action.presentation.ScopesChooser.text"));
   }
 
   @NotNull
@@ -70,7 +73,7 @@ public abstract class ScopesChooser extends ComboBoxAction implements DumbAware 
     fillActionGroup(group, customScopes, myDefaultDescriptors, myInspectionProfile, myExcludedScopeNames);
 
     group.addSeparator();
-    group.add(new DumbAwareAction("Edit Scopes Order...") {
+    group.add(new DumbAwareAction(IdeBundle.messagePointer("action.Anonymous.text.edit.scopes.order")) {
       @Override
       public void actionPerformed(@NotNull final AnActionEvent e) {
         final ScopesOrderDialog dlg = new ScopesOrderDialog(component, myInspectionProfile, myProject);

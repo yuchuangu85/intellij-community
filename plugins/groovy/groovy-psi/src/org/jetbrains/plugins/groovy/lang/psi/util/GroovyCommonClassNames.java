@@ -42,7 +42,6 @@ public interface GroovyCommonClassNames {
   String GROOVY_TRANSFORM_TYPE_CHECKED = "groovy.transform.TypeChecked";
   String GROOVY_TRANSFORM_TYPE_CHECKING_MODE = "groovy.transform.TypeCheckingMode";
   String GROOVY_TRANSFORM_INHERIT_CONSTRUCTORS = "groovy.transform.InheritConstructors";
-  String GROOVY_TRANSFORM_AUTOIMPLEMENT = "groovy.transform.AutoImplement";
   String GROOVY_LANG_IMMUTABLE = "groovy.lang.Immutable";
   String GROOVY_LANG_META_CLASS = "groovy.lang.MetaClass";
   String GROOVY_LANG_GROOVY_CALLABLE = "groovy.lang.GroovyCallable";
@@ -52,6 +51,10 @@ public interface GroovyCommonClassNames {
   String GROOVY_LANG_DELEGATES_TO_TARGET = "groovy.lang.DelegatesTo.Target";
   String GROOVY_TRANSFORM_COMPILE_DYNAMIC = "groovy.transform.CompileDynamic";
   String GROOVY_TRANSFORM_STC_CLOSURE_PARAMS = "groovy.transform.stc.ClosureParams";
+  String GROOVY_TRANSFORM_STC_SIMPLE_TYPE = "groovy.transform.stc.SimpleType";
+  String GROOVY_TRANSFORM_STC_FROM_STRING = "groovy.transform.stc.FromString";
+  String GROOVY_TRANSFORM_STC_FROM_ABSTRACT_TYPE_METHODS = "groovy.transform.stc.FromAbstractTypeMethods";
+  String GROOVY_TRANSFORM_STC_MAP_ENTRY_OR_KEY_VALUE = "groovy.transform.stc.MapEntryOrKeyValue";
   String GROOVY_TRANSFORM_BASE_SCRIPT = "groovy.transform.BaseScript";
   String GROOVY_TRAIT = "groovy.transform.Trait";
   String GROOVY_TRAIT_IMPLEMENTED = "org.codehaus.groovy.transform.trait.Traits.Implemented";

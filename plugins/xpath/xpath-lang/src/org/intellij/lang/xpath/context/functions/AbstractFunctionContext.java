@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.intellij.lang.xpath.context.functions;
 
 import com.intellij.openapi.util.Factory;
@@ -12,9 +12,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public abstract class AbstractFunctionContext implements FunctionContext {
-  private static final Map<ContextType, FunctionContext> ourInstances = new HashMap<>();
+  private static final Map<ContextType, FunctionContext> ourInstances = new ConcurrentHashMap<>();
 
   private final Map<Pair<QName, Integer>, Function> myFunctions;
   private final Map<QName, Function> myDefaultMap = new HashMap<>();
@@ -38,7 +39,6 @@ public abstract class AbstractFunctionContext implements FunctionContext {
         myDefaultMap.put(entry.getKey().first, function);
       }
     }
-    ourInstances.put(contextType, this);
   }
 
   protected abstract Map<Pair<QName, Integer>, Function> createFunctionMap(ContextType contextType);
@@ -52,7 +52,7 @@ public abstract class AbstractFunctionContext implements FunctionContext {
     return Collections.unmodifiableMap(map);
   }
 
-  protected static synchronized FunctionContext getInstance(ContextType contextType, Factory<? extends FunctionContext> factory) {
+  protected static FunctionContext getInstance(ContextType contextType, Factory<? extends FunctionContext> factory) {
     return ourInstances.computeIfAbsent(contextType, k -> factory.create());
   }
 
@@ -61,9 +61,8 @@ public abstract class AbstractFunctionContext implements FunctionContext {
     return myFunctions;
   }
 
-  @Nullable
   @Override
-  public Function resolve(QName name, int argCount) {
+  public @Nullable Function resolve(QName name, int argCount) {
     if (!myDefaultMap.containsKey(name)) return null;
 
     final Function function = getFunctions().get(Pair.create(name, argCount));

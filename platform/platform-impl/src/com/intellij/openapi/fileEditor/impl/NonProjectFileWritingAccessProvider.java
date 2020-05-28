@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.fileEditor.impl;
 
+import com.intellij.ide.lightEdit.LightEdit;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
@@ -26,14 +27,9 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
 import java.io.File;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class NonProjectFileWritingAccessProvider extends WritingAccessProvider {
   private static final Key<Boolean> ENABLE_IN_TESTS = Key.create("NON_PROJECT_FILE_ACCESS_ENABLE_IN_TESTS");
@@ -60,18 +56,20 @@ public class NonProjectFileWritingAccessProvider extends WritingAccessProvider {
     }
   }
 
-  @Override
-  public boolean isPotentiallyWritable(@NotNull VirtualFile file) {
-    return true;
-  }
-
   @NotNull
   @Override
-  public Collection<VirtualFile> requestWriting(VirtualFile... files) {
+  public Collection<VirtualFile> requestWriting(@NotNull Collection<? extends VirtualFile> files) {
     if (isAllAccessAllowed()) return Collections.emptyList();
 
-    List<VirtualFile> deniedFiles = Stream.of(files).filter(o -> !isWriteAccessAllowed(o, myProject)).collect(Collectors.toList());
-    if (deniedFiles.isEmpty()) return Collections.emptyList();
+    List<VirtualFile> deniedFiles = new ArrayList<>();
+    for (VirtualFile o : files) {
+      if (!isWriteAccessAllowed(o, myProject)) {
+        deniedFiles.add(o);
+      }
+    }
+    if (deniedFiles.isEmpty()) {
+      return Collections.emptyList();
+    }
 
     UnlockOption unlockOption = askToUnlock(deniedFiles);
 
@@ -102,6 +100,7 @@ public class NonProjectFileWritingAccessProvider extends WritingAccessProvider {
   }
 
   public static boolean isWriteAccessAllowed(@NotNull VirtualFile file, @NotNull Project project) {
+    if (LightEdit.owns(project)) return true;
     if (isAllAccessAllowed()) return true;
     if (file.isDirectory()) return true;
 
@@ -156,6 +155,10 @@ public class NonProjectFileWritingAccessProvider extends WritingAccessProvider {
     return false;
   }
 
+  /**
+   * @deprecated use {@link #allowWriting(Iterable)}
+   */
+  @Deprecated
   public static void allowWriting(VirtualFile... allowedFiles) {
     allowWriting(Arrays.asList(allowedFiles));
   }
@@ -223,7 +226,7 @@ public class NonProjectFileWritingAccessProvider extends WritingAccessProvider {
     }
 
     private static void unlock(@NotNull VirtualFileEvent event) {
-      if (!event.isFromRefresh() && !event.getFile().isDirectory()) allowWriting(event.getFile());
+      if (!event.isFromRefresh() && !event.getFile().isDirectory()) allowWriting(Collections.singletonList(event.getFile()));
     }
   }
 }

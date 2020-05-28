@@ -17,11 +17,12 @@
 package com.intellij.packageDependencies.actions;
 
 import com.intellij.analysis.AnalysisScope;
-import com.intellij.analysis.AnalysisScopeBundle;
+import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.packageDependencies.BackwardDependenciesBuilder;
 import com.intellij.packageDependencies.DependenciesBuilder;
 import com.intellij.psi.PsiFile;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
@@ -32,23 +33,23 @@ import java.util.Set;
 public class BackwardDependenciesHandler extends DependenciesHandlerBase {
   private final AnalysisScope myScopeOfInterest;
 
-  public BackwardDependenciesHandler(Project project, AnalysisScope scope, final AnalysisScope selectedScope) {
+  public BackwardDependenciesHandler(@NotNull Project project, AnalysisScope scope, final AnalysisScope selectedScope) {
     this(project, Collections.singletonList(scope), selectedScope, new HashSet<>());
   }
 
-  public BackwardDependenciesHandler(final Project project, final List<? extends AnalysisScope> scopes, final @Nullable AnalysisScope scopeOfInterest, Set<PsiFile> excluded) {
+  public BackwardDependenciesHandler(@NotNull Project project, final List<? extends AnalysisScope> scopes, @Nullable final AnalysisScope scopeOfInterest, Set<PsiFile> excluded) {
     super(project, scopes, excluded);
     myScopeOfInterest = scopeOfInterest;
   }
 
   @Override
   protected String getProgressTitle() {
-    return AnalysisScopeBundle.message("backward.dependencies.progress.text");
+    return CodeInsightBundle.message("backward.dependencies.progress.text");
   }
 
   @Override
   protected String getPanelDisplayName(final AnalysisScope scope) {
-    return AnalysisScopeBundle.message("backward.dependencies.toolwindow.title", scope.getDisplayName());
+    return CodeInsightBundle.message("backward.dependencies.toolwindow.title", scope.getDisplayName());
   }
 
   @Override

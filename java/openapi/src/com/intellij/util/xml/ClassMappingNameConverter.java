@@ -16,7 +16,6 @@
 package com.intellij.util.xml;
 
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.util.Condition;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiType;
@@ -34,7 +33,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * @see com.intellij.util.xml.MappingClass
+ * @see MappingClass
  * @author Dmitry Avdeev
  */
 public class ClassMappingNameConverter extends ResolvingConverter.StringConverter {

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.psi.impl.file.impl;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -21,14 +21,12 @@ import com.intellij.psi.impl.PsiTreeChangePreprocessor;
 import com.intellij.psi.impl.file.impl.FileManager;
 import com.intellij.psi.impl.file.impl.FileManagerImpl;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.testFramework.LeakHunter;
-import com.intellij.testFramework.PsiTestCase;
+import com.intellij.testFramework.JavaPsiTestCase;
 import com.intellij.testFramework.PsiTestUtil;
 import com.intellij.testFramework.SkipSlowTestLocally;
-import com.intellij.util.MemoryDumpHelper;
 import com.intellij.util.WaitFor;
 import com.intellij.util.io.ReadOnlyAttributeUtil;
-import com.intellij.util.ref.GCUtil;
+import com.intellij.util.ref.GCWatcher;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
@@ -36,7 +34,7 @@ import java.io.IOException;
 
 @SuppressWarnings("ConstantConditions")
 @SkipSlowTestLocally
-public class PsiEventsTest extends PsiTestCase {
+public class PsiEventsTest extends JavaPsiTestCase {
   private VirtualFile myPrjDir1;
   private VirtualFile myPrjDir2;
   private VirtualFile mySrcDir1;
@@ -164,27 +162,12 @@ public class PsiEventsTest extends PsiTestCase {
     assertEquals(psiFile.getName(), expected, string);
   }
 
-  public void testRenameFileWithoutDir() throws Exception {
+  public void testRenameFileWithoutDir() {
     FileManager fileManager = myPsiManager.getFileManager();
     VirtualFile file = createChildData(myPrjDir1, "a.txt");
     PsiFile psiFile = fileManager.findFile(file);
 
-    GCUtil.tryGcSoftlyReachableObjects();
-
-
-    if (((FileManagerImpl)fileManager).getCachedDirectory(myPrjDir1) != null) {
-      LeakHunter.checkLeak(LeakHunter.allRoots(), PsiDirectory.class,
-                           directory -> directory.getVirtualFile().equals(myPrjDir1));
-
-      String dumpPath = FileUtil.createTempFile(
-        new File(System.getProperty("teamcity.build.tempDir", System.getProperty("java.io.tmpdir"))), "testRenameFileWithoutDir", ".hprof.zip",
-                 false, false).getPath();
-      MemoryDumpHelper.captureMemoryDumpZipped(dumpPath);
-      System.out.println(dumpPath);
-
-      assertNull(((FileManagerImpl)fileManager).getCachedDirectory(myPrjDir1));
-      fail("directory just died");
-    }
+    GCWatcher.tracking(((FileManagerImpl)fileManager).getCachedDirectory(myPrjDir1)).ensureCollected();
 
     EventsTestListener listener = new EventsTestListener();
     myPsiManager.addPsiTreeChangeListener(listener,getTestRootDisposable());
@@ -271,7 +254,7 @@ public class PsiEventsTest extends PsiTestCase {
     FileManager fileManager = myPsiManager.getFileManager();
     VirtualFile file = createChildDirectory(myPrjDir1, "dir1");
 
-    GCUtil.tryGcSoftlyReachableObjects();
+    GCWatcher.tracking(((FileManagerImpl)fileManager).getCachedDirectory(file)).ensureCollected();
 
     assertNull(((FileManagerImpl)fileManager).getCachedDirectory(file));
 
@@ -694,93 +677,6 @@ public class PsiEventsTest extends PsiTestCase {
     finally {
       getPsiManager().removePsiTreeChangeListener(listener);
     }
-  }
-
-  public void testPsiEventsComeWhenDocumentAlreadyCommitted() throws Exception {
-    myFile = createFile("A.java", "class A { int i; }");
-    getPsiManager().addPsiTreeChangeListener(new PsiTreeChangeListener() {
-      @Override
-      public void beforeChildAddition(@NotNull PsiTreeChangeEvent event) {
-        // did not decide whether the doc should be committed at this point
-        //checkCommitted(false, event);
-      }
-
-      @Override
-      public void beforeChildRemoval(@NotNull PsiTreeChangeEvent event) {
-        // did not decide whether the doc should be committed at this point
-        //checkCommitted(false, event);
-      }
-
-      @Override
-      public void beforeChildReplacement(@NotNull PsiTreeChangeEvent event) {
-        // did not decide whether the doc should be committed at this point
-        //checkCommitted(false, event);
-      }
-
-      @Override
-      public void beforeChildMovement(@NotNull PsiTreeChangeEvent event) {
-        // did not decide whether the doc should be committed at this point
-        //checkCommitted(false, event);
-      }
-
-      @Override
-      public void beforeChildrenChange(@NotNull PsiTreeChangeEvent event) {
-        // did not decide whether the doc should be committed at this point
-        //checkCommitted(false, event);
-      }
-
-      @Override
-      public void beforePropertyChange(@NotNull PsiTreeChangeEvent event) {
-        // did not decide whether the doc should be committed at this point
-        //checkCommitted(false, event);
-      }
-
-      @Override
-      public void childAdded(@NotNull PsiTreeChangeEvent event) {
-        checkCommitted(event);
-      }
-
-      @Override
-      public void childRemoved(@NotNull PsiTreeChangeEvent event) {
-        checkCommitted(event);
-      }
-
-      @Override
-      public void childReplaced(@NotNull PsiTreeChangeEvent event) {
-        checkCommitted(event);
-      }
-
-      @Override
-      public void childrenChanged(@NotNull PsiTreeChangeEvent event) {
-        checkCommitted(event);
-      }
-
-      @Override
-      public void childMoved(@NotNull PsiTreeChangeEvent event) {
-        checkCommitted(event);
-      }
-
-      @Override
-      public void propertyChanged(@NotNull PsiTreeChangeEvent event) {
-        checkCommitted(event);
-      }
-    }, getTestRootDisposable());
-
-    PsiDocumentManager documentManager = PsiDocumentManager.getInstance(getProject());
-    Document document = documentManager.getDocument(getFile());
-    assertTrue(documentManager.isCommitted(document));
-
-    ApplicationManager.getApplication().runWriteAction(() -> document.setText(""));
-
-    documentManager.commitAllDocuments();
-    assertTrue(documentManager.isCommitted(document));
-  }
-
-  private static void checkCommitted(PsiTreeChangeEvent event) {
-    PsiFile file = event.getFile();
-    PsiDocumentManager documentManager = PsiDocumentManager.getInstance(file.getProject());
-    Document document = documentManager.getDocument(file);
-    assertTrue(documentManager.isCommitted(document));
   }
 
   public void testCopyFile() throws Exception {

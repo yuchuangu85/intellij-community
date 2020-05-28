@@ -15,20 +15,19 @@
  */
 package com.intellij.execution.filters;
 
+import com.intellij.execution.ExecutionBundle;
 import com.intellij.ide.IdeBundle;
+import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.vfs.VfsUtil;
-import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.util.io.URLUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -50,11 +49,11 @@ public class UrlFilter implements Filter, DumbAware {
 
   @Nullable
   @Override
-  public Result applyFilter(String line, int entireLength) {
+  public Result applyFilter(@NotNull String line, int entireLength) {
     if (!URLUtil.canContainUrl(line)) return null;
 
     int textStartOffset = entireLength - line.length();
-    Pattern pattern = line.contains(URLUtil.FILE_PROTOCOL + URLUtil.SCHEME_SEPARATOR) ? URLUtil.FILE_URL_PATTERN : URLUtil.URL_PATTERN;
+    Pattern pattern = line.contains(LocalFileSystem.PROTOCOL_PREFIX) ? URLUtil.FILE_URL_PATTERN : URLUtil.URL_PATTERN;
     Matcher m = pattern.matcher(line);
     ResultItem item = null;
     List<ResultItem> items = null;
@@ -82,20 +81,37 @@ public class UrlFilter implements Filter, DumbAware {
 
   @Nullable
   private HyperlinkInfo buildFileHyperlinkInfo(@NotNull String url) {
-    if (myProject != null && url.startsWith("file://")) {
-      try {
-        VirtualFile file = VfsUtil.findFileByURL(new URL(url));
-        if (file != null && file.isValid()) {
-          return new OpenFileHyperlinkInfo(myProject, file, -1);
+    if (myProject != null && url.startsWith(LocalFileSystem.PROTOCOL_PREFIX)) {
+      int documentLine = 0, documentColumn = 0;
+      int filePathEndIndex = url.length();
+      final int lastColonInd = url.lastIndexOf(':');
+      if (lastColonInd > LocalFileSystem.PROTOCOL_PREFIX.length() && lastColonInd < url.length() - 1) {
+        int lastValue = StringUtil.parseInt(url.substring(lastColonInd + 1), Integer.MIN_VALUE);
+        if (lastValue != Integer.MIN_VALUE) {
+          documentLine = lastValue - 1;
+          filePathEndIndex = lastColonInd;
+          int preLastColonInd = url.lastIndexOf(':', lastColonInd - 1);
+          if (preLastColonInd > LocalFileSystem.PROTOCOL_PREFIX.length()) {
+            int preLastValue = StringUtil.parseInt(url.substring(preLastColonInd + 1, lastColonInd), Integer.MIN_VALUE);
+            if (preLastValue != Integer.MIN_VALUE) {
+              documentLine = preLastValue - 1;
+              documentColumn = lastValue - 1;
+              filePathEndIndex = preLastColonInd;
+            }
+          }
         }
       }
-      catch (MalformedURLException ignored) {
-      }
-      return new HyperlinkInfo() {
+      String filePath = url.substring(LocalFileSystem.PROTOCOL_PREFIX.length(), filePathEndIndex);
+      return new LazyFileHyperlinkInfo(myProject, filePath, documentLine, documentColumn) {
+        @Nullable
         @Override
-        public void navigate(Project project) {
-          Messages.showErrorDialog(project, "Cannot find file " + StringUtil.trimMiddle(url, 150),
-                                   IdeBundle.message("title.cannot.open.file"));
+        public OpenFileDescriptor getDescriptor() {
+          OpenFileDescriptor descriptor = super.getDescriptor();
+          if (descriptor == null) {
+            Messages.showErrorDialog(myProject, ExecutionBundle.message("message.cannot.find.file.0", StringUtil.trimMiddle(url, 150)),
+                                     IdeBundle.message("title.cannot.open.file"));
+          }
+          return descriptor;
         }
       };
     }
@@ -104,13 +120,12 @@ public class UrlFilter implements Filter, DumbAware {
 
   public static class UrlFilterProvider implements ConsoleFilterProviderEx {
     @Override
-    public Filter[] getDefaultFilters(@NotNull Project project, @NotNull GlobalSearchScope scope) {
+    public Filter @NotNull [] getDefaultFilters(@NotNull Project project, @NotNull GlobalSearchScope scope) {
       return new Filter[]{new UrlFilter(project)};
     }
 
-    @NotNull
     @Override
-    public Filter[] getDefaultFilters(@NotNull Project project) {
+    public Filter @NotNull [] getDefaultFilters(@NotNull Project project) {
       return getDefaultFilters(project, GlobalSearchScope.allScope(project));
     }
   }

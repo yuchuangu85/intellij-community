@@ -17,6 +17,7 @@ package com.intellij.openapi.externalSystem.util;
 
 import com.intellij.ide.util.projectWizard.WizardContext;
 import com.intellij.openapi.options.ConfigurationException;
+import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -46,6 +47,13 @@ public interface ExternalSystemSettingsControl<S> {
    * Asks current control to reset its state to the initial one.
    */
   void reset();
+
+  /**
+   * Asks current control to reset its state to the initial one.
+   */
+  default void reset(@Nullable Project project) {
+    reset();
+  }
 
   /**
    * Asks current control to reset its state to the initial one.
@@ -81,4 +89,9 @@ public interface ExternalSystemSettingsControl<S> {
    * @param show  flag which indicates if current control' components should be visible
    */
   void showUi(boolean show);
+
+  @Nullable
+  default String getHelpId() {
+    return null;
+  }
 }

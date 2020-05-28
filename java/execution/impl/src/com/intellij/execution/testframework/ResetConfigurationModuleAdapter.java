@@ -9,6 +9,7 @@ import com.intellij.execution.configurations.ModuleBasedConfiguration;
 import com.intellij.execution.executors.DefaultDebugExecutor;
 import com.intellij.execution.executors.DefaultRunExecutor;
 import com.intellij.execution.runners.ExecutionEnvironmentBuilder;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
@@ -24,15 +25,15 @@ import com.intellij.psi.PsiDirectory;
 import com.intellij.psi.PsiPackage;
 import com.intellij.ui.HyperlinkAdapter;
 import com.intellij.util.Function;
-import org.jdom.Element;
 import com.intellij.util.ui.UIUtil;
+import org.jdom.Element;
 
 import javax.swing.event.HyperlinkEvent;
 import java.util.HashSet;
 import java.util.Set;
 
 public class ResetConfigurationModuleAdapter extends HyperlinkAdapter {
-  private static final Logger LOG = Logger.getInstance("#" + ResetConfigurationModuleAdapter.class);
+  private static final Logger LOG = Logger.getInstance(ResetConfigurationModuleAdapter.class);
   private final Project myProject;
   private final boolean myIsDebug;
   private final ToolWindowManager myToolWindowManager;
@@ -60,7 +61,7 @@ public class ResetConfigurationModuleAdapter extends HyperlinkAdapter {
     final Module module = configuration.getConfigurationModule().getModule();
     if (module == null) return false;
     final Set<Module> modulesWithPackage = new HashSet<>();
-    final PsiDirectory[] directories = aPackage.getDirectories();
+    final PsiDirectory[] directories = ReadAction.compute(() -> aPackage.getDirectories());
     for (PsiDirectory directory : directories) {
       final Module currentModule = ModuleUtilCore.findModuleForFile(directory.getVirtualFile(), project);
       if (module != currentModule && currentModule != null) {

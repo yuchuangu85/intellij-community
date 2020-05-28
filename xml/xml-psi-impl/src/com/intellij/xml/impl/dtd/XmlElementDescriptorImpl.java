@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xml.impl.dtd;
 
 import com.intellij.javaee.ExternalResourceManager;
@@ -29,6 +15,7 @@ import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.xml.*;
+import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
@@ -46,9 +33,6 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 
-/**
- * @author Mike
- */
 public class XmlElementDescriptorImpl extends BaseXmlElementDescriptorImpl implements PsiWritableMetaData {
   protected XmlElementDecl myElementDecl;
   private String myName;
@@ -66,8 +50,10 @@ public class XmlElementDescriptorImpl extends BaseXmlElementDescriptorImpl imple
   private static final UserDataCache<CachedValue<XmlAttlistDecl[]>,XmlElement, Object> myAttlistDeclCache = new UserDataCache<CachedValue<XmlAttlistDecl[]>,XmlElement, Object>() {
     @Override
     protected final CachedValue<XmlAttlistDecl[]> compute(final XmlElement owner, Object o) {
-      return CachedValuesManager.getManager(owner.getProject()).createCachedValue(
-        () -> new CachedValueProvider.Result<>(doCollectAttlistDeclarations(owner), owner));
+      return CachedValuesManager.getManager(owner.getProject()).createCachedValue(() -> {
+        XmlAttlistDecl[] decls = doCollectAttlistDeclarations(owner);
+        return new CachedValueProvider.Result<>(decls, (Object[])ArrayUtil.append(decls, owner, XmlElement.class));
+      });
     }
   };
 
@@ -92,9 +78,8 @@ public class XmlElementDescriptorImpl extends BaseXmlElementDescriptorImpl imple
     myElementDecl = (XmlElementDecl) element;
   }
 
-  @NotNull
   @Override
-  public Object[] getDependencies(){
+  public Object @NotNull [] getDependencies(){
     return new Object[]{myElementDecl, ExternalResourceManager.getInstance()};
   }
 
@@ -122,7 +107,7 @@ public class XmlElementDescriptorImpl extends BaseXmlElementDescriptorImpl imple
     final XmlElementContentSpec contentSpecElement = myElementDecl.getContentSpecElement();
     final XmlNSDescriptor nsDescriptor = getNSDescriptor();
     final XmlNSDescriptor NSDescriptor = nsDescriptor != null? nsDescriptor:getNsDescriptorFrom(context);
-    
+
     XmlUtil.processXmlElements(contentSpecElement, new PsiElementProcessor(){
       @Override
       public boolean execute(@NotNull PsiElement child){
@@ -219,7 +204,7 @@ public class XmlElementDescriptorImpl extends BaseXmlElementDescriptorImpl imple
     return getCachedAttributeDeclarations((XmlElement)getDeclaration());
   }
 
-  public static @NotNull XmlAttlistDecl[] getCachedAttributeDeclarations(@Nullable XmlElement owner) {
+  public static XmlAttlistDecl @NotNull [] getCachedAttributeDeclarations(@Nullable XmlElement owner) {
     if (owner == null) return XmlAttlistDecl.EMPTY_ARRAY;
     owner = (XmlElement)PsiTreeUtil.getParentOfType(owner, ourParentClassesToScanAttributes);
     if (owner == null) return XmlAttlistDecl.EMPTY_ARRAY;

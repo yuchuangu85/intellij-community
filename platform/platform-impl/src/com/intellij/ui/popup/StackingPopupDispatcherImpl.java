@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.ui.popup;
 
@@ -20,8 +6,9 @@ import com.intellij.ide.IdeEventQueue;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.ui.popup.StackingPopupDispatcher;
+import com.intellij.ui.ComponentUtil;
+import com.intellij.util.containers.Stack;
 import com.intellij.util.containers.WeakList;
-import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -31,7 +18,6 @@ import java.awt.event.AWTEventListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.util.Collection;
-import java.util.Stack;
 import java.util.stream.Stream;
 
 public class StackingPopupDispatcherImpl extends StackingPopupDispatcher implements AWTEventListener, KeyEventDispatcher {
@@ -114,7 +100,7 @@ public class StackingPopupDispatcherImpl extends StackingPopupDispatcher impleme
 
     while (true) {
       if (popup != null && !popup.isDisposed()) {
-        Window window = UIUtil.getWindow(mouseEvent.getComponent());
+        Window window = ComponentUtil.getWindow(mouseEvent.getComponent());
         if (window != null && window != popup.getPopupWindow() && SwingUtilities.isDescendingFrom(window, popup.getPopupWindow())) {
           return false;
         }
@@ -154,14 +140,12 @@ public class StackingPopupDispatcherImpl extends StackingPopupDispatcher impleme
 
   @Nullable
   private JBPopup findPopup() {
-    while(true) {
-      if (myStack.isEmpty()) break;
+    while (!myStack.isEmpty()) {
       final AbstractPopup each = (AbstractPopup)myStack.peek();
-      if (each == null || each.isDisposed()) {
-        myStack.pop();
-      } else {
+      if (each != null && !each.isDisposed()) {
         return each;
       }
+      myStack.pop();
     }
 
     return null;
@@ -172,14 +156,20 @@ public class StackingPopupDispatcherImpl extends StackingPopupDispatcher impleme
     final boolean closeRequest = AbstractPopup.isCloseRequest(e);
 
     JBPopup popup = closeRequest ? findPopup() : getFocusedPopup();
-    return popup != null && popup.dispatchKeyEvent(e);
-  }
+    if (popup == null) return false;
 
+    Window window = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusedWindow();
+    if (window instanceof Dialog && ((Dialog)window).isModal()) {
+      if (!SwingUtilities.isDescendingFrom(popup.getContent(), window)) return false;
+    }
+
+    return popup.dispatchKeyEvent(e);
+  }
 
   @Override
   @Nullable
   public Component getComponent() {
-    return myStack.isEmpty() ? null : myStack.peek().getContent();
+    return myStack.isEmpty() || myStack.peek().isDisposed() ? null : myStack.peek().getContent();
   }
 
   @NotNull
@@ -207,9 +197,15 @@ public class StackingPopupDispatcherImpl extends StackingPopupDispatcher impleme
   @Override
   public boolean close() {
     if (!closeActivePopup()) return false;
-    // try to close other popups in the stack
+
+    int size = myStack.size();
     while (closeActivePopup()) {
-      // close all popups one by one
+      int next = myStack.size();
+      if (size == next) {
+        // no popup was actually closed, break
+        break;
+      }
+      size = next;
     }
     return true; // at least one popup was closed
   }
@@ -233,7 +229,8 @@ public class StackingPopupDispatcherImpl extends StackingPopupDispatcher impleme
     final AbstractPopup popup = (AbstractPopup)myStack.peek();
     if (popup != null && popup.isVisible() && popup.isCancelOnWindowDeactivation() && popup.canClose()) {
       popup.cancel();
-      return true;
+      // setCancelCallback(..) can override cancel()
+      return !popup.isVisible();
     }
     return false;
   }

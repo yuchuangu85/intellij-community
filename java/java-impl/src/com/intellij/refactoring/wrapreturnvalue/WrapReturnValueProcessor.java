@@ -55,10 +55,11 @@ import java.util.List;
 import java.util.Set;
 
 public class WrapReturnValueProcessor extends FixableUsagesRefactoringProcessor {
-  private static final Logger LOG = Logger.getInstance("com.siyeh.rpp.wrapreturnvalue.WrapReturnValueProcessor");
+  private static final Logger LOG = Logger.getInstance(WrapReturnValueProcessor.class);
 
   private final MoveDestination myMoveDestination;
   private final PsiMethod myMethod;
+  @NotNull
   private final String myClassName;
   private final String myPackageName;
   private final boolean myCreateInnerClass;
@@ -68,7 +69,7 @@ public class WrapReturnValueProcessor extends FixableUsagesRefactoringProcessor 
   private final List<PsiTypeParameter> myTypeParameters;
   private final String myUnwrapMethodName;
 
-  public WrapReturnValueProcessor(String className,
+  public WrapReturnValueProcessor(@NotNull String className,
                                   String packageName,
                                   MoveDestination moveDestination,
                                   PsiMethod method,
@@ -117,7 +118,7 @@ public class WrapReturnValueProcessor extends FixableUsagesRefactoringProcessor 
 
   @NotNull
   @Override
-  protected UsageViewDescriptor createUsageViewDescriptor(@NotNull UsageInfo[] usageInfos) {
+  protected UsageViewDescriptor createUsageViewDescriptor(UsageInfo @NotNull [] usageInfos) {
     return new WrapReturnValueUsageViewDescriptor(myMethod, usageInfos);
   }
 
@@ -129,7 +130,7 @@ public class WrapReturnValueProcessor extends FixableUsagesRefactoringProcessor 
     }
   }
 
-  private void findUsagesForMethod(PsiMethod psiMethod, List<FixableUsageInfo> usages) {
+  private void findUsagesForMethod(PsiMethod psiMethod, List<? super FixableUsageInfo> usages) {
     for (PsiReference reference : ReferencesSearch.search(psiMethod, psiMethod.getUseScope())) {
       final PsiElement referenceElement = reference.getElement();
       final PsiElement parent = referenceElement.getParent();
@@ -272,7 +273,7 @@ public class WrapReturnValueProcessor extends FixableUsagesRefactoringProcessor 
   }
 
   @Override
-  protected void performRefactoring(@NotNull UsageInfo[] usageInfos) {
+  protected void performRefactoring(UsageInfo @NotNull [] usageInfos) {
     if (!myUseExistingClass && !buildClass()) return;
     super.performRefactoring(usageInfos);
   }

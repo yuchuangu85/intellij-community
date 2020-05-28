@@ -43,9 +43,10 @@ public class AssociateFileTypeAction extends AnAction {
     }
     else {
       // the action should also be available for files which have been auto-detected as text or as a particular language (IDEA-79574)
-      haveSmthToDo = FileTypeManager.getInstance().getFileTypeByFileName(file.getName()) == FileTypes.UNKNOWN &&
+      haveSmthToDo = FileTypeManager.getInstance().getFileTypeByFileName(file.getNameSequence()) == FileTypes.UNKNOWN &&
                      !(file.getFileSystem() instanceof NonPhysicalFileSystem) &&
                      !ScratchRootType.getInstance().containsFile(file);
+      haveSmthToDo |= ActionPlaces.isMainMenuOrActionSearch(e.getPlace());
     }
     presentation.setVisible(haveSmthToDo || ActionPlaces.isMainMenuOrActionSearch(e.getPlace()));
     presentation.setEnabled(haveSmthToDo);

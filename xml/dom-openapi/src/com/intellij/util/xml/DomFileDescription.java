@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.xml;
 
 import com.intellij.openapi.extensions.ExtensionPointName;
@@ -22,12 +8,11 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.xml.XmlDocument;
 import com.intellij.psi.xml.XmlFile;
 import com.intellij.psi.xml.XmlTag;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.ConstantFunction;
 import com.intellij.util.NotNullFunction;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ConcurrentInstanceMap;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xml.highlighting.DomElementsAnnotator;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -36,13 +21,20 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.lang.reflect.Type;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * @author peter
+ * Use {@code com.intellij.dom.fileMetaData} to register.
  *
- * @see com.intellij.util.xml.MergingFileDescription
+ * @author peter
+ * @see MergingFileDescription
  */
 public class DomFileDescription<T> {
+
+  /**
+   * @deprecated use {@code com.intellij.dom.fileMetaData} extension instead
+   */
+  @Deprecated
   public static final ExtensionPointName<DomFileDescription> EP_NAME = ExtensionPointName.create("com.intellij.dom.fileDescription");
 
   private final Map<Class<? extends ScopeProvider>, ScopeProvider> myScopeProviders = ConcurrentInstanceMap.create();
@@ -54,39 +46,40 @@ public class DomFileDescription<T> {
   private final TypeChooserManager myTypeChooserManager = new TypeChooserManager();
   private final List<DomReferenceInjector> myInjectors = new SmartList<>();
   private final Map<String, NotNullFunction<XmlTag, List<String>>> myNamespacePolicies =
-    ContainerUtil.newConcurrentMap();
+    new ConcurrentHashMap<>();
 
-  public DomFileDescription(final Class<T> rootElementClass, @NonNls final String rootTagName, @NonNls @NotNull String... allPossibleRootTagNamespaces) {
+  public DomFileDescription(final Class<T> rootElementClass, @NonNls final String rootTagName, @NonNls String @NotNull ... allPossibleRootTagNamespaces) {
     myRootElementClass = rootElementClass;
     myRootTagName = rootTagName;
-    myAllPossibleRootTagNamespaces = allPossibleRootTagNamespaces.length == 0 ? ArrayUtil.EMPTY_STRING_ARRAY : allPossibleRootTagNamespaces;
+    myAllPossibleRootTagNamespaces = allPossibleRootTagNamespaces.length == 0 ? ArrayUtilRt.EMPTY_STRING_ARRAY
+                                                                              : allPossibleRootTagNamespaces;
   }
 
-  public String[] getAllPossibleRootTagNamespaces() {
+  public String @NotNull [] getAllPossibleRootTagNamespaces() {
     return myAllPossibleRootTagNamespaces;
   }
 
   /**
    * Register an implementation class to provide additional functionality for DOM elements.
    *
-   * @param domElementClass interface class.
+   * @param domElementClass     interface class.
    * @param implementationClass abstract implementation class.
-   *
-   * @deprecated use dom.implementation extension point instead
    * @see #initializeFileDescription()
+   * @deprecated use dom.implementation extension point instead
    */
   @Deprecated
-  public final <T extends DomElement> void registerImplementation(Class<T> domElementClass, Class<? extends T> implementationClass) {
+  public final <Dom extends DomElement> void registerImplementation(Class<Dom> domElementClass, Class<? extends Dom> implementationClass) {
     myImplementations.put(domElementClass, implementationClass);
   }
 
   /**
    * @param namespaceKey namespace identifier
-   * @see com.intellij.util.xml.Namespace
+   * @see Namespace
    * @param policy function that takes XML file root tag and returns (maybe empty) list of possible namespace URLs or DTD public ids. This
    * function shouldn't use DOM since it may be not initialized for the file at the moment
-   * @deprecated use {@link #registerNamespacePolicy(String, String...)} or override {@link #getAllowedNamespaces(String, com.intellij.psi.xml.XmlFile)} instead
+   * @deprecated use {@link #registerNamespacePolicy(String, String...)} or override {@link #getAllowedNamespaces(String, XmlFile)} instead
    */
+  @SuppressWarnings("DeprecatedIsStillUsed")
   @Deprecated
   protected final void registerNamespacePolicy(String namespaceKey, NotNullFunction<XmlTag,List<String>> policy) {
     myNamespacePolicies.put(namespaceKey, policy);
@@ -94,7 +87,7 @@ public class DomFileDescription<T> {
 
   /**
    * @param namespaceKey namespace identifier
-   * @see com.intellij.util.xml.Namespace
+   * @see Namespace
    * @param namespaces XML namespace or DTD public or system id value for the given namespaceKey
    */
   public final void registerNamespacePolicy(String namespaceKey, final String... namespaces) {
@@ -102,10 +95,9 @@ public class DomFileDescription<T> {
   }
 
   /**
-   * Consider using {@link DomService#getXmlFileHeader(com.intellij.psi.xml.XmlFile)} when implementing this.
+   * Consider using {@link DomService#getXmlFileHeader(XmlFile)} when implementing this.
    */
-  @NotNull
-  public List<String> getAllowedNamespaces(@NotNull String namespaceKey, @NotNull XmlFile file) {
+  public @NotNull List<String> getAllowedNamespaces(@NotNull String namespaceKey, @NotNull XmlFile file) {
     final NotNullFunction<XmlTag, List<String>> function = myNamespacePolicies.get(namespaceKey);
     if (function instanceof ConstantFunction) {
       return function.fun(null);
@@ -128,9 +120,11 @@ public class DomFileDescription<T> {
   /**
    * @return some version. Override and change (e.g. {@code super.getVersion()+1}) when after some changes some files stopped being
    * described by this description or vice versa, so that the
-   * {@link com.intellij.util.xml.DomService#getDomFileCandidates(Class, com.intellij.openapi.project.Project, com.intellij.psi.search.GlobalSearchScope)}
+   * {@link DomService#getDomFileCandidates(Class, com.intellij.openapi.project.Project, com.intellij.psi.search.GlobalSearchScope)}
    * index is rebuilt correctly.
+   * @deprecated use "domVersion" attribute of {@code com.intellij.dom.fileMetaData} extension instead
    */
+  @Deprecated
   public int getVersion() {
     return myRootTagName.hashCode();
   }
@@ -155,8 +149,7 @@ public class DomFileDescription<T> {
     return true;
   }
 
-  @Nullable
-  public Icon getFileIcon(@Iconable.IconFlags int flags) {
+  public @Nullable Icon getFileIcon(@Iconable.IconFlags int flags) {
     return null;
   }
 
@@ -164,7 +157,7 @@ public class DomFileDescription<T> {
    * The right place to call
    * <ul>
    * <li>{@link #registerNamespacePolicy(String, String...)}</li>
-   * <li>{@link #registerTypeChooser(java.lang.reflect.Type, TypeChooser)}</li>
+   * <li>{@link #registerTypeChooser(Type, TypeChooser)}</li>
    * <li>{@link #registerReferenceInjector(DomReferenceInjector)}</li>
    * </ul>
    */
@@ -176,8 +169,7 @@ public class DomFileDescription<T> {
    * {@link com.intellij.util.xml.highlighting.BasicDomElementsInspection} instance.
    * @return Annotator or null
    */
-  @Nullable
-  public DomElementsAnnotator createAnnotator() {
+  public @Nullable DomElementsAnnotator createAnnotator() {
     return null;
   }
 
@@ -189,8 +181,7 @@ public class DomFileDescription<T> {
     return myImplementations;
   }
 
-  @NotNull
-  public final Class<T> getRootElementClass() {
+  public final @NotNull Class<T> getRootElementClass() {
     return myRootElementClass;
   }
 
@@ -198,7 +189,7 @@ public class DomFileDescription<T> {
     return myRootTagName;
   }
 
-  public boolean isMyFile(@NotNull XmlFile file, @Nullable final Module module) {
+  public boolean isMyFile(@NotNull XmlFile file, final @Nullable Module module) {
     final Namespace namespace = DomReflectionUtil.findAnnotationDFS(myRootElementClass, Namespace.class);
     if (namespace != null) {
       final String key = namespace.value();
@@ -220,13 +211,13 @@ public class DomFileDescription<T> {
 
   /**
    * Get dependency items (the same, as in {@link com.intellij.psi.util.CachedValue}) for file. On any dependency item change, the
-   * {@link #isMyFile(com.intellij.psi.xml.XmlFile, Module)} method will be invoked once more to ensure that the file description still
-   * accepts this file 
+   * {@link #isMyFile(XmlFile, Module)} method will be invoked once more to ensure that the file description still
+   * accepts this file.
+   *
    * @param file XML file to get dependencies of
-   * @return dependency item set 
+   * @return dependency item set
    */
-  @NotNull
-  public Set<?> getDependencyItems(XmlFile file) {
+  public @NotNull Set<?> getDependencyItems(XmlFile file) {
     return Collections.emptySet();
   }
 
@@ -234,8 +225,7 @@ public class DomFileDescription<T> {
    * @param reference DOM reference
    * @return element, whose all children will be searched for declaration
    */
-  @NotNull
-  public DomElement getResolveScope(GenericDomValue<?> reference) {
+  public @NotNull DomElement getResolveScope(GenericDomValue<?> reference) {
     final DomElement annotation = getScopeFromAnnotation(reference);
     if (annotation != null) return annotation;
 
@@ -246,16 +236,14 @@ public class DomFileDescription<T> {
    * @param element DOM element
    * @return element, whose direct children names will be compared by name. Basically it's parameter element's parent (see {@link ParentScopeProvider}).
    */
-  @NotNull
-  public DomElement getIdentityScope(DomElement element) {
+  public @NotNull DomElement getIdentityScope(DomElement element) {
     final DomElement annotation = getScopeFromAnnotation(element);
     if (annotation != null) return annotation;
 
     return element.getParent();
   }
 
-  @Nullable
-  protected final DomElement getScopeFromAnnotation(final DomElement element) {
+  protected final @Nullable DomElement getScopeFromAnnotation(final DomElement element) {
     final Scope scope = element.getAnnotation(Scope.class);
     if (scope != null) {
       return myScopeProviders.get(scope.value()).getScope(element);
@@ -265,14 +253,20 @@ public class DomFileDescription<T> {
 
   /**
    * @see Stubbed
-   * @return false
+   * @deprecated define "stubVersion" of {@code com.intellij.dom.fileMetaData} extension instead
    */
+  @Deprecated
   public boolean hasStubs() {
     return false;
   }
 
+  /**
+   * @see Stubbed
+   * @deprecated define "stubVersion" of {@code com.intellij.dom.fileMetaData} extension instead
+   */
+  @Deprecated
   public int getStubVersion() {
-    return 0;
+    throw new UnsupportedOperationException("define \"stubVersion\" of \"com.intellij.dom.fileMetaData\" extension instead");
   }
 
   @Override

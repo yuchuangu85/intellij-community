@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.internal.psiView;
 
+import com.intellij.ide.highlighter.ArchiveFileType;
 import com.intellij.lang.Language;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.FileTypeManager;
@@ -12,10 +13,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.*;
 
 class PsiViewerSourceWrapper implements Comparable<PsiViewerSourceWrapper> {
 
@@ -49,15 +47,13 @@ class PsiViewerSourceWrapper implements Comparable<PsiViewerSourceWrapper> {
 
   @NotNull
   public static List<PsiViewerSourceWrapper> getExtensionBasedWrappers() {
-    return PsiViewerExtension.EP_NAME.getExtensionList().stream()
-      .map(el -> new PsiViewerSourceWrapper(el))
-      .collect(Collectors.toList());
+    return ContainerUtil.map(PsiViewerExtension.EP_NAME.getExtensionList(), el -> new PsiViewerSourceWrapper(el));
   }
 
   @NotNull
   public static List<PsiViewerSourceWrapper> getFileTypeBasedWrappers() {
-    Set<FileType> allFileTypes = ContainerUtil.newHashSet();
-    List<PsiViewerSourceWrapper> sourceWrappers = ContainerUtil.newArrayList();
+    Set<FileType> allFileTypes = new HashSet<>();
+    List<PsiViewerSourceWrapper> sourceWrappers = new ArrayList<>();
     Collections.addAll(allFileTypes, FileTypeManager.getInstance().getRegisteredFileTypes());
     for (Language language : Language.getRegisteredLanguages()) {
       FileType fileType = language.getAssociatedFileType();
@@ -80,7 +76,7 @@ class PsiViewerSourceWrapper implements Comparable<PsiViewerSourceWrapper> {
            fileType != StdFileTypes.IDEA_MODULE &&
            fileType != StdFileTypes.IDEA_PROJECT &&
            fileType != StdFileTypes.IDEA_WORKSPACE &&
-           fileType != FileTypes.ARCHIVE &&
+           fileType != ArchiveFileType.INSTANCE &&
            fileType != FileTypes.UNKNOWN &&
            fileType != FileTypes.PLAIN_TEXT &&
            !(fileType instanceof AbstractFileType) &&

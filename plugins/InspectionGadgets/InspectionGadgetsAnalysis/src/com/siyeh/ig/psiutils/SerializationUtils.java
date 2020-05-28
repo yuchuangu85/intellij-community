@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2019 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,14 +37,9 @@ public class SerializationUtils {
     if (implementsList == null) {
       return false;
     }
-    final PsiJavaCodeReferenceElement[] interfaces = implementsList.getReferenceElements();
-    for (PsiJavaCodeReferenceElement aInterfaces : interfaces) {
-      final PsiClass implemented = (PsiClass)aInterfaces.resolve();
-      if (implemented == null) {
-        continue;
-      }
-      final String name = implemented.getQualifiedName();
-      if (CommonClassNames.JAVA_IO_SERIALIZABLE.equals(name)) {
+    for (PsiJavaCodeReferenceElement aInterfaces : implementsList.getReferenceElements()) {
+      PsiElement implemented = aInterfaces.resolve();
+      if (implemented instanceof PsiClass && CommonClassNames.JAVA_IO_SERIALIZABLE.equals(((PsiClass)implemented).getQualifiedName())) {
         return true;
       }
     }
@@ -124,7 +119,7 @@ public class SerializationUtils {
     if (type instanceof PsiClassType) {
       final PsiClassType classType = (PsiClassType)type;
       final PsiClass psiClass = classType.resolve();
-      if (psiClass == null || psiClass.isInterface() || psiClass.hasModifierProperty(PsiModifier.ABSTRACT)) {
+      if (psiClass == null || psiClass.hasModifierProperty(PsiModifier.ABSTRACT)) {
         // to avoid false positives
         return true;
       }

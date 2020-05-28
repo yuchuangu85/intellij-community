@@ -18,7 +18,6 @@ package com.intellij.openapi.vcs.changes.actions.diff;
 import com.intellij.diff.DiffManager;
 import com.intellij.diff.chains.DiffRequestChain;
 import com.intellij.diff.util.DiffUserDataKeys;
-import com.intellij.openapi.ListSelection;
 import com.intellij.openapi.actionSystem.ActionPlaces;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.AnActionExtensionProvider;
@@ -29,6 +28,7 @@ import com.intellij.openapi.util.Key;
 import com.intellij.openapi.vcs.VcsDataKeys;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.ui.ChangeDiffRequestChain;
+import com.intellij.util.ListSelection;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -40,7 +40,7 @@ import java.util.Map;
 public class ShowDiffAction implements AnActionExtensionProvider {
   @Override
   public boolean isActive(@NotNull AnActionEvent e) {
-    return true;
+    return true; // order="last"
   }
 
   @Override
@@ -55,7 +55,7 @@ public class ShowDiffAction implements AnActionExtensionProvider {
     }
   }
 
-  public static boolean canShowDiff(@Nullable Project project, @Nullable Change[] changes) {
+  public static boolean canShowDiff(@Nullable Project project, Change @Nullable [] changes) {
     return changes != null && canShowDiff(project, Arrays.asList(changes));
   }
 
@@ -113,9 +113,7 @@ public class ShowDiffAction implements AnActionExtensionProvider {
   public static void showDiffForChange(@Nullable Project project,
                                        @NotNull ListSelection<? extends Change> changes,
                                        @NotNull ShowDiffContext context) {
-    ListSelection<ChangeDiffRequestProducer> presentables = changes.map(change -> {
-      return ChangeDiffRequestProducer.create(project, change, context.getChangeContext(change));
-    });
+    ListSelection<ChangeDiffRequestProducer> presentables = changes.map(change -> ChangeDiffRequestProducer.create(project, change, context.getChangeContext(change)));
     if (presentables.isEmpty()) return;
 
     DiffRequestChain chain = new ChangeDiffRequestChain(presentables.getList(), presentables.getSelectedIndex());

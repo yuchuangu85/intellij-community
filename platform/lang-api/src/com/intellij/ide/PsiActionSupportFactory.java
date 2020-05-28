@@ -31,9 +31,8 @@ public abstract class PsiActionSupportFactory {
     return ServiceManager.getService(PsiActionSupportFactory.class);
   }
 
-  public static interface PsiElementSelector {
-    @NotNull
-    PsiElement[] getSelectedElements();
+  public interface PsiElementSelector {
+    PsiElement @NotNull [] getSelectedElements();
   }
 
   public abstract CopyPasteSupport createPsiBasedCopyPasteSupport(Project project, JComponent keyReceiver, PsiElementSelector dataSelector);

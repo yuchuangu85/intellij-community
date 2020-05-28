@@ -45,7 +45,7 @@ public class HoverHyperlinkLabel extends JLabel {
       @Override
       public void mouseExited(MouseEvent e) {
         HoverHyperlinkLabel.super.setText(myOriginalText);
-        setCursor(Cursor.getDefaultCursor());
+        setCursor(null);
       }
     });
 
@@ -73,7 +73,7 @@ public class HoverHyperlinkLabel extends JLabel {
   }
 
   @NonNls private static String underlineTextInHtml(final String text) {
-    return "<html><u>" + StringUtil.escapeXml(text) + "</u></html>";
+    return "<html><u>" + StringUtil.escapeXmlEntities(text) + "</u></html>";
   }
 
   public String getOriginalText() {

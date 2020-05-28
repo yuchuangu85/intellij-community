@@ -21,11 +21,9 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-/**
- * @author nik
- */
 public class ProjectStructureProblemDescription {
   public enum ProblemLevel {PROJECT, GLOBAL}
+  @NotNull
   private final String myMessage;
   private final String myDescription;
   private final PlaceInProjectStructure myPlace;
@@ -61,6 +59,7 @@ public class ProjectStructureProblemDescription {
     return myProblemLevel;
   }
 
+  @NotNull
   public String getMessage(final boolean includePlace) {
     if (includePlace && myCanShowPlace) {
       return myPlace.getContainingElement().getPresentableText() + ": " + StringUtil.decapitalize(myMessage);

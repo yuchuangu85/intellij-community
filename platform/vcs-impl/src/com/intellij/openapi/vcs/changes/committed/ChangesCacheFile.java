@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes.committed;
 
 import com.google.common.base.Stopwatch;
@@ -45,7 +45,7 @@ public class ChangesCacheFile {
   private final CachingCommittedChangesProvider myChangesProvider;
   private final ProjectLevelVcsManager myVcsManager;
   private final FilePath myRootPath;
-  private final RepositoryLocation myLocation;
+  @NotNull private final RepositoryLocation myLocation;
   private Date myFirstCachedDate;
   private Date myLastCachedDate;
   private long myFirstCachedChangelist;
@@ -57,14 +57,14 @@ public class ChangesCacheFile {
   private static final int INDEX_ENTRY_SIZE = 3*8+2;
   private static final int HEADER_SIZE = 46;
 
-  public ChangesCacheFile(Project project, File path, AbstractVcs vcs, VirtualFile root, RepositoryLocation location) {
+  public ChangesCacheFile(Project project, File path, AbstractVcs vcs, VirtualFile root, @NotNull RepositoryLocation location) {
     reset();
 
     myProject = project;
     myPath = path;
     myIndexPath = new File(myPath.toString() + INDEX_EXTENSION);
     myVcs = vcs;
-    myChangesProvider = (CachingCommittedChangesProvider) vcs.getCommittedChangesProvider();
+    myChangesProvider = (CachingCommittedChangesProvider)vcs.getCommittedChangesProvider();
     myVcsManager = ProjectLevelVcsManager.getInstance(project);
     myRootPath = VcsUtil.getFilePath(root);
     myLocation = location;
@@ -72,7 +72,7 @@ public class ChangesCacheFile {
 
   private void reset() {
     final Calendar date = Calendar.getInstance();
-    date.set(2020, Calendar.FEBRUARY, 2);
+    date.setTime(new Date(Long.MAX_VALUE));
     myFirstCachedDate = date.getTime();
     date.set(1970, Calendar.FEBRUARY, 2);
     myLastCachedDate = date.getTime();
@@ -83,6 +83,7 @@ public class ChangesCacheFile {
     myHeaderLoaded = false;
   }
 
+  @NotNull
   public RepositoryLocation getLocation() {
     return myLocation;
   }
@@ -118,13 +119,13 @@ public class ChangesCacheFile {
     }
   }
 
-  public List<CommittedChangeList> writeChanges(final List<CommittedChangeList> changes) throws IOException {
+  public List<CommittedChangeList> writeChanges(final List<? extends CommittedChangeList> changes) throws IOException {
     // the list and index are sorted in direct chronological order
-    Collections.sort(changes, CommittedChangeListByDateComparator.ASCENDING);
+    changes.sort(CommittedChangeListByDateComparator.ASCENDING);
     return writeChanges(changes, null);
   }
 
-  public List<CommittedChangeList> writeChanges(final List<CommittedChangeList> changes, @Nullable final List<Boolean> present) throws IOException {
+  public List<CommittedChangeList> writeChanges(final List<? extends CommittedChangeList> changes, @Nullable final List<Boolean> present) throws IOException {
     assert present == null || present.size() == changes.size();
 
     List<CommittedChangeList> result = new ArrayList<>(changes.size());
@@ -262,7 +263,7 @@ public class ChangesCacheFile {
     if (count == 0) {
       return NO_ENTRIES;
     }
-    myIndexStream.seek(myIndexStream.length() - INDEX_ENTRY_SIZE * (count + offset));
+    myIndexStream.seek(myIndexStream.length() - INDEX_ENTRY_SIZE * ((long)count + offset));
     IndexEntry[] result = new IndexEntry[count];
     for(int i=0; i<count; i++) {
       result [i] = new IndexEntry();
@@ -300,8 +301,7 @@ public class ChangesCacheFile {
 
   private void loadHeader() throws IOException {
     if (!myHeaderLoaded) {
-      RandomAccessFile stream = new RandomAccessFile(myPath, "r");
-      try {
+      try (RandomAccessFile stream = new RandomAccessFile(myPath, "r")) {
         int version = stream.readInt();
         if (version != VERSION) {
           throw new VersionMismatchException();
@@ -318,9 +318,6 @@ public class ChangesCacheFile {
         myIncomingCount = stream.readInt();
         assert stream.getFilePointer() == HEADER_SIZE;
       }
-      finally {
-        stream.close();
-      }
       myHeaderLoaded = true;
     }
   }
@@ -329,7 +326,7 @@ public class ChangesCacheFile {
     return new BackIterator(bunchSize);
   }
 
-  private List<Boolean> loadAllData(final List<CommittedChangeList> lists) throws IOException {
+  private List<Boolean> loadAllData(final List<? super CommittedChangeList> lists) throws IOException {
     List<Boolean> idx = new ArrayList<>();
     openStreams();
 
@@ -338,7 +335,7 @@ public class ChangesCacheFile {
       final long length = myIndexStream.length();
       long totalCount = length / INDEX_ENTRY_SIZE;
       for(int i=0; i<totalCount; i++) {
-        final long indexOffset = length - (i + 1) * INDEX_ENTRY_SIZE;
+        final long indexOffset = length - (i + 1L) * INDEX_ENTRY_SIZE;
         myIndexStream.seek(indexOffset);
         IndexEntry e = new IndexEntry();
         readIndexEntry(e);
@@ -437,6 +434,7 @@ public class ChangesCacheFile {
     }
   }
 
+  @NotNull
   public List<CommittedChangeList> readChanges(final ChangeBrowserSettings settings, final int maxCount) throws IOException {
     final List<CommittedChangeList> result = new ArrayList<>();
     final ChangeBrowserSettings.Filter filter = settings.createFilter();
@@ -542,7 +540,7 @@ public class ChangesCacheFile {
     return myChangesProvider.readChangeList(myLocation, myStream);
   }
 
-  public boolean processUpdatedFiles(UpdatedFiles updatedFiles, Collection<CommittedChangeList> receivedChanges) throws IOException {
+  public boolean processUpdatedFiles(UpdatedFiles updatedFiles, Collection<? super CommittedChangeList> receivedChanges) throws IOException {
     boolean haveUnaccountedUpdatedFiles = false;
     openStreams();
     loadHeader();
@@ -576,7 +574,7 @@ public class ChangesCacheFile {
     }
   }
 
-  private boolean processGroup(final FileGroup group, final List<IncomingChangeListData> incomingData,
+  private boolean processGroup(final FileGroup group, final List<? extends IncomingChangeListData> incomingData,
                                final ReceivedChangeListTracker tracker) {
     boolean haveUnaccountedUpdatedFiles = false;
     final List<Pair<String,VcsRevisionNumber>> list = group.getFilesAndRevisions(myVcsManager);
@@ -601,7 +599,7 @@ public class ChangesCacheFile {
 
   private static boolean processFile(final FilePath path,
                                      final VcsRevisionNumber number,
-                                     final List<IncomingChangeListData> incomingData,
+                                     final List<? extends IncomingChangeListData> incomingData,
                                      final ReceivedChangeListTracker tracker) {
     boolean foundRevision = false;
     debug("Processing updated file " + path + ", revision " + number);
@@ -625,7 +623,7 @@ public class ChangesCacheFile {
   }
 
   private static boolean processDeletedFile(final FilePath path,
-                                            final List<IncomingChangeListData> incomingData,
+                                            final List<? extends IncomingChangeListData> incomingData,
                                             final ReceivedChangeListTracker tracker) {
     boolean foundRevision = false;
     for(IncomingChangeListData data: incomingData) {
@@ -648,7 +646,7 @@ public class ChangesCacheFile {
     long totalCount = length / INDEX_ENTRY_SIZE;
     List<IncomingChangeListData> incomingData = new ArrayList<>();
     for(int i=0; i<totalCount; i++) {
-      final long indexOffset = length - (i + 1) * INDEX_ENTRY_SIZE;
+      final long indexOffset = length - (i + 1L) * INDEX_ENTRY_SIZE;
       myIndexStream.seek(indexOffset);
       IndexEntry e = new IndexEntry();
       readIndexEntry(e);
@@ -679,10 +677,9 @@ public class ChangesCacheFile {
       partialFile.delete();
     }
     else if (accounted > 0) {
-      RandomAccessFile file = new RandomAccessFile(partialFile, "rw");
-      try {
+      try (RandomAccessFile file = new RandomAccessFile(partialFile, "rw")) {
         file.writeInt(accounted);
-        for(Change c: data.accountedChanges) {
+        for (Change c : data.accountedChanges) {
           boolean isAfterRevision = true;
           ContentRevision revision = c.getAfterRevision();
           if (revision == null) {
@@ -694,9 +691,6 @@ public class ChangesCacheFile {
           file.writeUTF(revision.getFile().getIOFile().toString());
         }
       }
-      finally {
-        file.close();
-      }
     }
   }
 
@@ -705,8 +699,7 @@ public class ChangesCacheFile {
     try {
       File partialFile = getPartialPath(data.indexEntry.offset);
       if (partialFile.exists()) {
-        RandomAccessFile file = new RandomAccessFile(partialFile, "r");
-        try {
+        try (RandomAccessFile file = new RandomAccessFile(partialFile, "r")) {
           int count = file.readInt();
           if (count > 0) {
             final Collection<Change> changes = data.changeList.getChanges();
@@ -720,14 +713,15 @@ public class ChangesCacheFile {
                 afterPaths.put(FilePathsHelper.convertPath(change.getAfterRevision().getFile()), change);
               }
             }
-            for(int i=0; i<count; i++) {
+            for (int i = 0; i < count; i++) {
               boolean isAfterRevision = (file.readByte() != 0);
               String path = file.readUTF();
               final String converted = FilePathsHelper.convertPath(path);
               final Change change;
               if (isAfterRevision) {
                 change = afterPaths.get(converted);
-              } else {
+              }
+              else {
                 change = beforePaths.get(converted);
               }
               if (change != null) {
@@ -735,9 +729,6 @@ public class ChangesCacheFile {
               }
             }
           }
-        }
-        finally {
-          file.close();
         }
       }
     }
@@ -791,7 +782,7 @@ public class ChangesCacheFile {
 
     public boolean invoke() throws VcsException, IOException {
       myChangesCacheFile.myLocation.onBeforeBatch();
-      final Collection<FilePath> incomingFiles = myChangesCacheFile.myChangesProvider.getIncomingFiles(myChangesCacheFile.myLocation);
+      Collection<FilePath> incomingFiles = myChangesCacheFile.myChangesProvider.getIncomingFiles(myChangesCacheFile.myLocation);
 
       myAnyChanges = false;
       myChangesCacheFile.openStreams();
@@ -825,12 +816,12 @@ public class ChangesCacheFile {
       return myAnyChanges;
     }
 
-    private boolean refreshIncomingInFile(Collection<FilePath> incomingFiles, List<IncomingChangeListData> list) throws IOException {
+    private boolean refreshIncomingInFile(Collection<FilePath> incomingFiles, List<? extends IncomingChangeListData> list) throws IOException {
       // the incoming changelist pointers are actually sorted in reverse chronological order,
       // so we process file delete changes before changes made to deleted files before they were deleted
 
-      Map<Pair<IncomingChangeListData, Change>, VirtualFile> revisionDependentFiles = ContainerUtil.newHashMap();
-      Map<Pair<IncomingChangeListData, Change>, ProcessingResult> results = ContainerUtil.newHashMap();
+      Map<Pair<IncomingChangeListData, Change>, VirtualFile> revisionDependentFiles = new HashMap<>();
+      Map<Pair<IncomingChangeListData, Change>, ProcessingResult> results = new HashMap<>();
 
       myIndexStreamCachedLength = myChangesCacheFile.myIndexStream.length();
       // try to process changelists in a light way, remember which files need revisions
@@ -853,7 +844,7 @@ public class ChangesCacheFile {
 
       if (!revisionDependentFiles.isEmpty()) {
         // lots of same files could be collected - make set of unique files
-        HashSet<VirtualFile> uniqueFiles = ContainerUtil.newHashSet(revisionDependentFiles.values());
+        HashSet<VirtualFile> uniqueFiles = new HashSet<>(revisionDependentFiles.values());
         // bulk-get all needed revisions at once
         Map<VirtualFile, VcsRevisionNumber> revisions = myDiffProvider instanceof DiffProviderEx
                                                         ? ((DiffProviderEx)myDiffProvider).getCurrentRevisions(uniqueFiles)
@@ -916,9 +907,9 @@ public class ChangesCacheFile {
       }
     }
 
-    private ProcessingResult processIncomingChange(final Change change,
-                                          final IncomingChangeListData changeListData,
-                                          @Nullable final Collection<FilePath> incomingFiles) {
+    private ProcessingResult processIncomingChange(@NotNull Change change,
+                                                   @NotNull IncomingChangeListData changeListData,
+                                                   @Nullable Collection<FilePath> incomingFiles) {
       final CommittedChangeList changeList = changeListData.changeList;
       final ContentRevision afterRevision = change.getAfterRevision();
       if (afterRevision != null) {

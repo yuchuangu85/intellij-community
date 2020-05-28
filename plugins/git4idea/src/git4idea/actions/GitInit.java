@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.actions;
 
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -16,7 +16,6 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.ProjectLevelVcsManager;
 import com.intellij.openapi.vcs.VcsNotifier;
 import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
-import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.vcsUtil.VcsUtil;
 import git4idea.GitUtil;
@@ -50,33 +49,33 @@ public class GitInit extends DumbAwareAction {
     FileChooser.chooseFile(fcd, project, baseDir, root -> {
       if (GitUtil.isUnderGit(root) && Messages.showYesNoDialog(project,
                                                                GitBundle.message("init.warning.already.under.git",
-                                                                                 StringUtil.escapeXml(root.getPresentableUrl())),
+                                                                                 StringUtil.escapeXmlEntities(root.getPresentableUrl())),
                                                                GitBundle.getString("init.warning.title"),
                                                                Messages.getWarningIcon()) != Messages.YES) {
         return;
       }
 
-      GitCommandResult result = Git.getInstance().init(project, root);
-      if (!result.success()) {
-        VcsNotifier.getInstance(project).notifyError("Git Init Failed", result.getErrorOutputAsHtmlString());
-        return;
-      }
-
-      if (project.isDefault()) {
-        return;
-      }
-      GitVcs.runInBackground(new Task.Backgroundable(project, GitBundle.getString("common.refreshing")) {
+      new Task.Backgroundable(project, GitBundle.getString("common.refreshing")) {
         @Override
         public void run(@NotNull ProgressIndicator indicator) {
+          GitCommandResult result = Git.getInstance().init(project, root);
+          if (!result.success()) {
+            VcsNotifier.getInstance(project).notifyError("Git Init Failed", result.getErrorOutputAsHtmlString(), true);
+            return;
+          }
+
+          if (project.isDefault()) {
+            return;
+          }
+
           refreshAndConfigureVcsMappings(project, root, root.getPath());
-          GitUtil.generateGitignoreFileIfNeeded(project, root);
         }
-      });
+      }.queue();
     });
   }
 
   public static void refreshAndConfigureVcsMappings(@NotNull Project project, @NotNull VirtualFile root, @NotNull String path) {
-    VfsUtil.markDirtyAndRefresh(false, true, false, root);
+    GitUtil.refreshVfsInRoot(root);
     ProjectLevelVcsManager manager = ProjectLevelVcsManager.getInstance(project);
     manager.setDirectoryMappings(VcsUtil.addMapping(manager.getDirectoryMappings(), path, GitVcs.NAME));
     VcsDirtyScopeManager.getInstance(project).dirDirtyRecursively(root);

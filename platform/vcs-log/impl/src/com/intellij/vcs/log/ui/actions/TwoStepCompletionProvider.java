@@ -37,18 +37,16 @@ public abstract class TwoStepCompletionProvider<T> extends ValuesCompletionProvi
                                      @NotNull CompletionResultSet result) {
     addValues(result, sortVariants(collectSync(result)));
 
-    Future<List<? extends T>> future = ApplicationManager.getApplication().executeOnPooledThread(() -> {
-      return sortVariants(collectAsync(result));
-    });
+    Future<List<? extends T>> future = ApplicationManager.getApplication().executeOnPooledThread(() -> sortVariants(collectAsync(result)));
 
     while (true) {
       try {
+        ProgressManager.checkCanceled();
         List<? extends T> moreValues = future.get(TIMEOUT, TimeUnit.MILLISECONDS);
         if (moreValues != null) {
           addValues(result, moreValues);
           break;
         }
-        ProgressManager.checkCanceled();
       }
       catch (InterruptedException | CancellationException e) {
         break;

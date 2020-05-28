@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.codeInsight.completion
 
 import com.intellij.JavaTestUtil
@@ -21,10 +7,7 @@ import com.intellij.codeInsight.completion.CompletionParameters
 import com.intellij.codeInsight.completion.CompletionResultSet
 import com.intellij.codeInsight.completion.CompletionType
 import com.intellij.codeInsight.generation.OverrideImplementExploreUtil
-import com.intellij.codeInsight.lookup.LookupElement
 import com.intellij.codeInsight.lookup.LookupElementPresentation
-import com.intellij.codeInsight.lookup.LookupManager
-import com.intellij.codeInsight.lookup.impl.LookupImpl
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.extensions.LoadingOrder
 import com.intellij.openapi.module.StdModuleTypes
@@ -45,10 +28,12 @@ import com.intellij.testFramework.IdeaTestUtil
 import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.JavaCodeInsightFixtureTestCase
 import com.intellij.ui.JBColor
+import groovy.transform.CompileStatic
 import org.jetbrains.annotations.NotNull
 /**
  * @author peter
  */
+@CompileStatic
 class HeavyCompletionTest extends JavaCodeInsightFixtureTestCase {
 
   @Override
@@ -105,13 +90,9 @@ class HeavyCompletionTest extends JavaCodeInsightFixtureTestCase {
 
     myFixture.configureByFile("/codeInsight/completion/normal/" + getTestName(false) + ".java")
     myFixture.complete(CompletionType.BASIC, 2)
-    LookupImpl lookup = (LookupImpl)LookupManager.getActiveLookup(myFixture.getEditor())
-    LookupElement[] myItems = lookup.getItems().toArray(LookupElement.EMPTY_ARRAY)
-    assertEquals(2, myItems.length)
-    assertEquals("AxBxCxDxEx", myItems[1].getLookupString())
-    assertEquals("AyByCyDyEy", myItems[0].getLookupString())
+    assert myFixture.lookupElementStrings == ["AyByCyDyEy", "AxBxCxDxEx"]
   }
-  
+
   static class CacheVerifyingContributor extends CompletionContributor {
     @Override
     void fillCompletionVariants(@NotNull CompletionParameters parameters, @NotNull CompletionResultSet result) {
@@ -146,7 +127,7 @@ class HeavyCompletionTest extends JavaCodeInsightFixtureTestCase {
 
   void testPreferOwnMethods() {
     def nanoUrls = IntelliJProjectConfiguration.getProjectLibraryClassesRootUrls("NanoXML")
-    ModuleRootModificationUtil.addModuleLibrary(myModule, 'nano1', nanoUrls, [])
+    ModuleRootModificationUtil.addModuleLibrary(module, 'nano1', nanoUrls, [])
 
     assert JavaPsiFacade.getInstance(project).findClass('net.n3.nanoxml.StdXMLParser', GlobalSearchScope.allScope(project))
 
@@ -181,14 +162,14 @@ public class Test {
     PsiDocumentManager.getInstance(project).commitAllDocuments()
     assert oldCount != tracker.javaStructureModificationCount
     oldCount = tracker.javaStructureModificationCount
-    
+
     assert !myFixture.completeBasic()
     assert !myFixture.completeBasic()
     assert oldCount == tracker.javaStructureModificationCount
   }
 
   void testForbiddenApiVariants() {
-    IdeaTestUtil.setModuleLanguageLevel(myModule, LanguageLevel.JDK_1_4)
+    IdeaTestUtil.setModuleLanguageLevel(module, LanguageLevel.JDK_1_4)
     myFixture.addClass("""\
 package java.nio.channels;
 public class SocketChannel {
@@ -217,7 +198,7 @@ public class SocketChannel {
   }
 
   void "test seemingly scrambled subclass"() {
-    PsiTestUtil.addLibrary(myModule, JavaTestUtil.getJavaTestDataPath() + "/codeInsight/completion/normal/seemsScrambled.jar")
+    PsiTestUtil.addLibrary(module, JavaTestUtil.getJavaTestDataPath() + "/codeInsight/completion/normal/seemsScrambled.jar")
     myFixture.configureByText 'a.java', '''import test.Books;
 
 class Foo {{ Books.Test.v<caret> }}

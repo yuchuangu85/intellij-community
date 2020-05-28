@@ -1,18 +1,23 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui;
 
 import com.intellij.ide.DataManager;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.ui.popup.JBPopup;
+import com.intellij.openapi.util.Disposer;
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.ui.awt.RelativePoint;
 import com.intellij.util.containers.SmartHashSet;
-import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * @author Konstantin Bulenkov
@@ -23,17 +28,34 @@ public abstract class AnActionButton extends AnAction implements ShortcutProvide
   private ShortcutSet myShortcut;
   private JComponent myContextComponent;
   private Set<AnActionButtonUpdater> myUpdaters;
+  private final List<ActionButtonListener> myListeners = new ArrayList<>();
 
-  public AnActionButton(String text) {
-    super(text);
+  public AnActionButton(@NlsContexts.Button String text) {
+    super(() -> text);
   }
 
-  public AnActionButton(String text, String description, @Nullable Icon icon) {
+  public AnActionButton(@NotNull Supplier<String> dynamicText) {
+    super(dynamicText);
+  }
+
+  public AnActionButton(@NlsContexts.Button String text,
+                        @NlsContexts.Tooltip String description,
+                        @Nullable Icon icon) {
     super(text, description, icon);
   }
 
-  public AnActionButton(String text, Icon icon) {
+  public AnActionButton(@NotNull Supplier<String> dynamicText,
+                        @NotNull Supplier<String> dynamicDescription,
+                        @Nullable Icon icon) {
+    super(dynamicText, dynamicDescription, icon);
+  }
+
+  public AnActionButton(@NlsContexts.Button String text, Icon icon) {
     this(text, null, icon);
+  }
+
+  public AnActionButton(@NotNull Supplier<String> dynamicText, Icon icon) {
+    this(dynamicText, Presentation.NULL_STRING, icon);
   }
 
   public AnActionButton() {
@@ -52,7 +74,10 @@ public abstract class AnActionButton extends AnAction implements ShortcutProvide
   }
 
   public void setEnabled(boolean enabled) {
-    myEnabled = enabled;
+    if (myEnabled != enabled) {
+      myEnabled = enabled;
+      myListeners.forEach(l -> l.isEnabledChanged(enabled));
+    }
   }
 
   public boolean isVisible() {
@@ -60,7 +85,10 @@ public abstract class AnActionButton extends AnAction implements ShortcutProvide
   }
 
   public void setVisible(boolean visible) {
-    myVisible = visible;
+    if (myVisible != visible) {
+      myVisible = visible;
+      myListeners.forEach(l -> l.isVisibleChanged(visible));
+    }
   }
 
   @Override
@@ -118,7 +146,8 @@ public abstract class AnActionButton extends AnAction implements ShortcutProvide
 
   private boolean isContextComponentOk() {
     return myContextComponent == null
-           || (myContextComponent.isVisible() && UIUtil.getParentOfType(JLayeredPane.class, myContextComponent) != null);
+           || (myContextComponent.isVisible() && ComponentUtil.getParentOfType((Class<? extends JLayeredPane>)JLayeredPane.class,
+                                                                               (Component)myContextComponent) != null);
   }
 
   @Nullable
@@ -145,24 +174,25 @@ public abstract class AnActionButton extends AnAction implements ShortcutProvide
     return null;
   }
 
+  public void addActionButtonListener(ActionButtonListener l, Disposable parentDisposable) {
+    myListeners.add(l);
+    Disposer.register(parentDisposable, () -> myListeners.remove(l));
+  }
+
+  public boolean removeActionButtonListener(ActionButtonListener l) {
+    return myListeners.remove(l);
+  }
+
   public static class CheckedAnActionButton extends AnActionButtonWrapper implements CheckedActionGroup {
-    private final AnAction myDelegate;
-
-    public CheckedAnActionButton(Presentation presentation, AnAction action) {
+    public CheckedAnActionButton(Presentation presentation, @NotNull AnAction action) {
       super(presentation, action);
-      myDelegate = action;
-    }
-
-    public AnAction getDelegate() {
-      return myDelegate;
     }
   }
 
-  public static class AnActionButtonWrapper extends AnActionButton {
-
+  public static class AnActionButtonWrapper extends AnActionButton implements ActionWithDelegate<AnAction> {
     private final AnAction myAction;
 
-    public AnActionButtonWrapper(Presentation presentation, AnAction action) {
+    public AnActionButtonWrapper(Presentation presentation, @NotNull AnAction action) {
       super(presentation.getText(), presentation.getDescription(), presentation.getIcon());
       myAction = action;
     }
@@ -186,6 +216,12 @@ public abstract class AnActionButton extends AnAction implements ShortcutProvide
     public boolean isDumbAware() {
       return myAction.isDumbAware();
     }
+
+    @NotNull
+    @Override
+    public AnAction getDelegate() {
+      return myAction;
+    }
   }
 
   public static class AnActionEventWrapper extends AnActionEvent {
@@ -198,6 +234,16 @@ public abstract class AnActionButton extends AnAction implements ShortcutProvide
 
     public void showPopup(JBPopup popup) {
       popup.show(myPeer.getPreferredPopupPoint());
+    }
+  }
+
+  public interface ActionButtonListener {
+    default void isVisibleChanged(boolean newValue) {
+      // Nothing
+    }
+
+    default void isEnabledChanged(boolean newValue) {
+      // Nothing
     }
   }
 }

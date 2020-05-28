@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.debugger;
 
 import com.google.common.collect.Lists;
@@ -13,9 +13,6 @@ import org.jetbrains.annotations.NotNull;
 import java.util.List;
 import java.util.Map;
 
-/**
- * @author traff
- */
 public class AbstractLineBreakpointHandler extends XBreakpointHandler<XLineBreakpoint<XBreakpointProperties>> {
   protected final PyDebugProcess myDebugProcess;
   private final Map<XLineBreakpoint<XBreakpointProperties>, XSourcePosition> myBreakPointPositions = Maps.newHashMap();
@@ -38,7 +35,7 @@ public class AbstractLineBreakpointHandler extends XBreakpointHandler<XLineBreak
   @Override
   public void registerBreakpoint(@NotNull final XLineBreakpoint<XBreakpointProperties> breakpoint) {
     final XSourcePosition position = breakpoint.getSourcePosition();
-    if (position != null) {
+    if (position != null && position.getFile().isValid()) {
       myDebugProcess.addBreakpoint(myDebugProcess.getPositionConverter().convertToPython(position), breakpoint);
       myBreakPointPositions.put(breakpoint, position);
     }
@@ -47,7 +44,7 @@ public class AbstractLineBreakpointHandler extends XBreakpointHandler<XLineBreak
   @Override
   public void unregisterBreakpoint(@NotNull final XLineBreakpoint<XBreakpointProperties> breakpoint, final boolean temporary) {
     final XSourcePosition position = myBreakPointPositions.get(breakpoint);
-    if (position != null) {
+    if (position != null && position.getFile().isValid()) {
       myDebugProcess.removeBreakpoint(myDebugProcess.getPositionConverter().convertToPython(position));
       myBreakPointPositions.remove(breakpoint);
     }

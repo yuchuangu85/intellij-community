@@ -8,6 +8,7 @@ import com.intellij.execution.BeforeRunTask;
 import com.intellij.execution.ExecutionTarget;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.runners.ProgramRunner;
+import com.intellij.execution.ui.FragmentedSettings;
 import com.intellij.openapi.components.BaseState;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.project.Project;
@@ -27,11 +28,13 @@ import javax.swing.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Standard base class for run configuration implementations.
  */
-public abstract class RunConfigurationBase<T> extends UserDataHolderBase implements RunConfiguration, TargetAwareRunProfile, ConfigurationCreationListener {
+public abstract class RunConfigurationBase<T> extends UserDataHolderBase implements RunConfiguration, TargetAwareRunProfile,
+                                                                                    ConfigurationCreationListener, FragmentedSettings {
   private static final String SHOW_CONSOLE_ON_STD_OUT = "show_console_on_std_out";
   private static final String SHOW_CONSOLE_ON_STD_ERR = "show_console_on_std_err";
 
@@ -42,6 +45,7 @@ public abstract class RunConfigurationBase<T> extends UserDataHolderBase impleme
 
   private RunConfigurationOptions myOptions;
 
+  @NotNull
   private List<BeforeRunTask<?>> myBeforeRunTasks = Collections.emptyList();
 
   protected RunConfigurationBase(@NotNull Project project, @Nullable ConfigurationFactory factory, @Nullable String name) {
@@ -106,6 +110,7 @@ public abstract class RunConfigurationBase<T> extends UserDataHolderBase impleme
     return StringUtilRt.notNullize(myName);
   }
 
+  @Override
   public final int hashCode() {
     return super.hashCode();
   }
@@ -123,6 +128,7 @@ public abstract class RunConfigurationBase<T> extends UserDataHolderBase impleme
     return true;
   }
 
+  @Override
   public final boolean equals(final Object obj) {
     return super.equals(obj);
   }
@@ -139,6 +145,7 @@ public abstract class RunConfigurationBase<T> extends UserDataHolderBase impleme
   void doCopyOptionsFrom(@NotNull RunConfigurationBase<T> template) {
     myOptions.copyFrom(template.myOptions);
     myOptions.resetModificationCount();
+    myOptions.setAllowRunningInParallel(template.isAllowRunningInParallel());
     myBeforeRunTasks = ContainerUtil.copyList(template.myBeforeRunTasks);
   }
 
@@ -215,13 +222,26 @@ public abstract class RunConfigurationBase<T> extends UserDataHolderBase impleme
 
   @Override
   public void readExternal(@NotNull Element element) throws InvalidDataException {
+    boolean isAllowRunningInParallel = myOptions.isAllowRunningInParallel();
     //noinspection unchecked
     loadState((T)element);
+    // load state sets myOptions but we need to preserve transient isAllowRunningInParallel
+    myOptions.setAllowRunningInParallel(isAllowRunningInParallel);
   }
 
   @Override
   public void writeExternal(@NotNull Element element) {
     XmlSerializer.serializeObjectInto(myOptions, element);
+  }
+
+  @Override
+  public @NotNull Set<String> getSelectedOptions() {
+    return myOptions.getSelectedOptions();
+  }
+
+  @Override
+  public void setSelectedOptions(@NotNull Set<String> fragmentIds) {
+    myOptions.setSelectedOptions(fragmentIds);
   }
 
   @ApiStatus.Experimental
@@ -298,7 +318,6 @@ public abstract class RunConfigurationBase<T> extends UserDataHolderBase impleme
 
   /**
    * @deprecated Use {@link RunProfileWithCompileBeforeLaunchOption#isExcludeCompileBeforeLaunchOption()}
-   * @return
    */
   @Deprecated
   public boolean excludeCompileBeforeLaunchOption() {

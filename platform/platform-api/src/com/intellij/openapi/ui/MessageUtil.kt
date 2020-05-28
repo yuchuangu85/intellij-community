@@ -1,44 +1,38 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 @file:JvmName("MessageUtil")
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.intellij.openapi.ui
 
 import com.intellij.openapi.project.Project
-import org.jetbrains.annotations.Nls
+import com.intellij.openapi.util.NlsContexts.Button
+import com.intellij.openapi.util.NlsContexts.DialogMessage
+import com.intellij.openapi.util.NlsContexts.DialogTitle
 import javax.swing.Icon
 
-fun showYesNoDialog(@Nls(capitalization = Nls.Capitalization.Title) title: String, message: String, project: Project?, yesText: String = Messages.YES_BUTTON, noText: String = Messages.NO_BUTTON, icon: Icon? = null): Boolean {
+fun showYesNoDialog(title: @DialogTitle String,
+                    message: @DialogMessage String,
+                    project: Project?,
+                    yesText: @Button String = Messages.getYesButton(),
+                    noText: @Button String = Messages.getNoButton(),
+                    icon: Icon? = null): Boolean {
   return Messages.showYesNoDialog(project, message, title, yesText, noText, icon) == Messages.YES
 }
 
-fun showOkNoDialog(@Nls(capitalization = Nls.Capitalization.Title) title: String, message: String, project: Project?, yesText: String = Messages.OK_BUTTON, noText: String = Messages.NO_BUTTON, icon: Icon? = null): Boolean {
-  return Messages.showYesNoDialog(project, message, title, yesText, noText, icon) == Messages.YES
+fun showOkNoDialog(title: @DialogTitle String,
+                   message: @DialogMessage String,
+                   project: Project?,
+                   okText: @Button String = Messages.getOkButton(),
+                   noText: @Button String = Messages.getNoButton(),
+                   icon: Icon? = null): Boolean {
+  return Messages.showYesNoDialog(project, message, title, okText, noText, icon) == Messages.YES
+}
+
+@Messages.OkCancelResult
+fun showOkCancelDialog(title: @DialogTitle String,
+                       message: @DialogMessage String,
+                       okText: @Button String,
+                       cancelText: @Button String = Messages.getCancelButton(),
+                       icon: Icon? = null,
+                       doNotAskOption: DialogWrapper.DoNotAskOption? = null,
+                       project: Project? = null): Int {
+  return Messages.showOkCancelDialog(project, message, title, okText, cancelText, icon, doNotAskOption)
 }

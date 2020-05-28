@@ -10,12 +10,16 @@ import com.intellij.openapi.projectRoots.ProjectJdkTable
 import com.intellij.openapi.projectRoots.Sdk
 import com.intellij.openapi.projectRoots.SdkType
 import com.intellij.openapi.roots.ModuleRootModificationUtil
+import com.intellij.openapi.roots.NativeLibraryOrderRootType
 import com.intellij.openapi.roots.OrderRootType
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.io.FileUtilRt
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.testFramework.PsiTestUtil
 import com.intellij.util.SmartList
-import com.intellij.util.io.TestFileSystemBuilder.fs
+import com.intellij.util.io.assertMatches
+import com.intellij.util.io.directoryContent
+import com.intellij.util.io.zipFile
 import org.assertj.core.api.Assertions.assertThat
 import org.jetbrains.idea.devkit.module.PluginModuleType
 import org.jetbrains.idea.devkit.projectRoots.IdeaJdk
@@ -23,9 +27,6 @@ import org.jetbrains.idea.devkit.projectRoots.Sandbox
 import java.io.File
 import java.util.*
 
-/**
- * @author nik
- */
 class PluginModuleCompilationTest : BaseCompilerTestCase() {
   override fun setUpJdk() {
     super.setUpJdk()
@@ -46,17 +47,28 @@ class PluginModuleCompilationTest : BaseCompilerTestCase() {
   fun testMakeSimpleModule() {
     val module = setupSimplePluginProject()
     make(module)
-    BaseCompilerTestCase.assertOutput(module, fs().dir("xxx").file("MyAction.class"))
+    assertOutput(module, directoryContent {
+      dir("xxx") {
+        file("MyAction.class")
+      }
+    })
+
 
     val sandbox = File(getSandboxPath())
-    assertThat(sandbox).isDirectory()
-    fs()
-      .dir("plugins")
-        .dir("pluginProject")
-          .dir("META-INF").file("plugin.xml").end()
-          .dir("classes")
-            .dir("xxx").file("MyAction.class")
-      .build().assertDirectoryEqual(sandbox)
+    sandbox.assertMatches(directoryContent {
+      dir("plugins") {
+        dir("pluginProject") {
+          dir("META-INF") {
+            file("plugin.xml")
+          }
+          dir("classes") {
+            dir("xxx") {
+              file("MyAction.class")
+            }
+          }
+        }
+      }
+    })
   }
 
   fun testRebuildSimpleProject() {
@@ -71,12 +83,45 @@ class PluginModuleCompilationTest : BaseCompilerTestCase() {
     prepareForDeployment(module)
 
     val outputFile = File("$projectBasePath/pluginProject.jar")
-    assertThat(outputFile).isFile()
-    fs()
-      .archive("pluginProject.jar")
-        .dir("META-INF").file("plugin.xml").file("MANIFEST.MF").end()
-        .dir("xxx").file("MyAction.class")
-      .build().assertFileEqual(outputFile)
+    outputFile.assertMatches(zipFile {
+      dir("META-INF") {
+        file("plugin.xml")
+        file("MANIFEST.MF")
+      }
+      dir("xxx") {
+        file("MyAction.class")
+      }
+    })
+  }
+
+  fun testNativeLibraries() {
+    val module = setupSimplePluginProject()
+    ModuleRootModificationUtil.updateModel(module) { model ->
+      val library = model.moduleLibraryTable.createLibrary()
+      val libModel = library.modifiableModel
+      libModel.addRoot(createFile("lib/a.so"), NativeLibraryOrderRootType.getInstance())
+      libModel.commit()
+    }
+    rebuild()
+    prepareForDeployment(module)
+
+    val outputFile = File("$projectBasePath/pluginProject.zip")
+    outputFile.assertMatches(zipFile {
+      dir("pluginProject") {
+        dir("lib") {
+          zip("pluginProject.jar") {
+            dir("META-INF") {
+              file("plugin.xml")
+              file("MANIFEST.MF")
+            }
+            dir("xxx") {
+              file("MyAction.class")
+            }
+          }
+          file("a.so")
+        }
+      }
+    })
   }
 
   fun testBuildProjectWithJpsModule() {
@@ -85,18 +130,24 @@ class PluginModuleCompilationTest : BaseCompilerTestCase() {
     prepareForDeployment(module)
 
     val outputFile = File("$projectBasePath/pluginProject.zip")
-    assertThat(outputFile).isFile()
-    fs()
-      .archive("pluginProject.zip")
-        .dir("pluginProject")
-          .dir("lib")
-            .archive("pluginProject.jar")
-              .dir("META-INF").file("plugin.xml").file("MANIFEST.MF").end()
-              .dir("xxx").file("MyAction.class").end()
-              .end()
-            .dir("jps")
-              .archive("jps-plugin.jar").file("Builder.class")
-      .build().assertFileEqual(outputFile)
+    outputFile.assertMatches(zipFile {
+      dir("pluginProject") {
+        dir("lib") {
+          zip("pluginProject.jar") {
+            dir("META-INF") {
+              file("plugin.xml")
+              file("MANIFEST.MF")
+            }
+            dir("xxx") {
+              file("MyAction.class")
+            }
+          }
+          dir("jps") {
+            zip("jps-plugin.jar") { file("Builder.class") }
+          }
+        }
+      }
+    })
   }
 
   private fun prepareForDeployment(module: Module) {

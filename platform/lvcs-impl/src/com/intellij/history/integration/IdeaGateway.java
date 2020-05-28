@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.history.integration;
 
 import com.intellij.history.core.LocalHistoryFacade;
@@ -22,7 +22,10 @@ import com.intellij.openapi.util.Clock;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.vfs.*;
+import com.intellij.openapi.vfs.CharsetToolkit;
+import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.vfs.ReadonlyStatusHandler;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.encoding.EncodingRegistry;
 import com.intellij.openapi.vfs.ex.temp.TempFileSystem;
 import com.intellij.openapi.vfs.newvfs.ManagingFS;
@@ -59,21 +62,34 @@ public class IdeaGateway {
         return false;
       }
     }
-    
+
     VersionedFilterData versionedFilterData = getVersionedFilterData();
 
-    boolean isInContent = false;
     int numberOfOpenProjects = versionedFilterData.myOpenedProjects.size();
+
+    // optimisation: FileTypeManager.isFileIgnored(f) will be checked inside ProjectFileIndex.isUnderIgnored()
+    if (numberOfOpenProjects == 0) {
+      if (shouldBeInContent) return false; // there is no project, so the file can't be in content
+      if (FileTypeManager.getInstance().isFileIgnored(f)) return false;
+
+      return true;
+    }
+
+    boolean isExcludedFromAll = true;
+    boolean isInContent = false;
+
     for (int i = 0; i < numberOfOpenProjects; ++i) {
       ProjectFileIndex index = versionedFilterData.myProjectFileIndices.get(i);
 
-      if (index.isExcluded(f)) return false;
+      if (index.isUnderIgnored(f)) return false;
       isInContent |= index.isInContent(f);
+      isExcludedFromAll &= index.isExcluded(f);
     }
+
+    if (isExcludedFromAll) return false;
     if (shouldBeInContent && !isInContent) return false;
 
-    // optimisation: FileTypeManager.isFileIgnored(f) already checked inside ProjectFileIndex.isIgnored()
-    return numberOfOpenProjects != 0 || !FileTypeManager.getInstance().isFileIgnored(f);
+    return true;
   }
 
   @NotNull
@@ -142,16 +158,16 @@ public class IdeaGateway {
 
   public boolean areContentChangesVersioned(@NotNull VirtualFile f) {
     return isVersioned(f) && !f.isDirectory() &&
-           (areContentChangesVersioned(f.getName()) || ScratchFileService.isInScratchRoot(f));
+           (areContentChangesVersioned(f.getName()) || ScratchFileService.findRootType(f) != null);
   }
 
   public boolean areContentChangesVersioned(@NotNull String fileName) {
     return !FileTypeManager.getInstance().getFileTypeByFileName(fileName).isBinary();
   }
 
-  public boolean ensureFilesAreWritable(@NotNull Project p, @NotNull List<VirtualFile> ff) {
+  public boolean ensureFilesAreWritable(@NotNull Project p, @NotNull List<? extends VirtualFile> ff) {
     ReadonlyStatusHandler h = ReadonlyStatusHandler.getInstance(p);
-    return !h.ensureFilesWritable(VfsUtilCore.toVirtualFileArray(ff)).hasReadonlyFiles();
+    return !h.ensureFilesWritable(ff).hasReadonlyFiles();
   }
 
   @Nullable
@@ -250,7 +266,7 @@ public class IdeaGateway {
 
   private void doCreateChildrenForPathOnly(@NotNull DirectoryEntry parent,
                                            @NotNull String path,
-                                           @NotNull Iterable<VirtualFile> children) {
+                                           @NotNull Iterable<? extends VirtualFile> children) {
     for (VirtualFile child : children) {
       String name = StringUtil.trimStart(child.getName(), "/"); // on Mac FS root name is "/"
       if (!path.startsWith(name)) continue;
@@ -333,7 +349,7 @@ public class IdeaGateway {
     return new FileEntry(file.getName(), contentAndStamps.first, contentAndStamps.second, !file.isWritable());
   }
 
-  private void doCreateChildren(@NotNull DirectoryEntry parent, Iterable<VirtualFile> children, final boolean forDeletion) {
+  private void doCreateChildren(@NotNull DirectoryEntry parent, Iterable<? extends VirtualFile> children, final boolean forDeletion) {
     List<Entry> entries = ContainerUtil.mapNotNull(children, (NullableFunction<VirtualFile, Entry>)each -> doCreateEntry(each, forDeletion));
     parent.addChildren(entries);
   }
@@ -431,7 +447,7 @@ public class IdeaGateway {
     return d.getText().getBytes(charset);
   }
 
-  public String stringFromBytes(@NotNull byte[] bytes, @NotNull String path) {
+  public String stringFromBytes(byte @NotNull [] bytes, @NotNull String path) {
     VirtualFile file = findVirtualFile(path);
     Charset charset = file != null ? file.getCharset() : EncodingRegistry.getInstance().getDefaultCharset();
     return CharsetToolkit.bytesToString(bytes, charset);

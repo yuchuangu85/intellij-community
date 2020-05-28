@@ -1,6 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.intellij.build.impl
 
 import com.intellij.openapi.util.io.FileUtil
@@ -25,11 +23,15 @@ class CompatibilityWithJdkChecker {
   private final CompilationContext context
   private final String tempDir
   private final String mavenCentralUrl
+  /** map from a module name to names of its classpath entries which should be checked together with module sources because they are patched
+   * by classes in the module */
+  private final Map<String, List<String>> patchedDependencies
 
-  CompatibilityWithJdkChecker(CompilationContext context) {
+  CompatibilityWithJdkChecker(CompilationContext context, Map<String, List<String>> patchedDependencies) {
     this.context = context
+    this.patchedDependencies = patchedDependencies
     tempDir = "$context.paths.temp/compatibility-with-jdk-check"
-    mavenCentralUrl = System.getProperty("intellij.build.maven.central.url", "http://repo1.maven.org/maven2")
+    mavenCentralUrl = System.getProperty("intellij.build.maven.central.url", "https://repo1.maven.org/maven2")
     FileUtil.createDirectory(new File(tempDir))
   }
 
@@ -44,7 +46,7 @@ class CompatibilityWithJdkChecker {
       context.messages.error("Failed to check compatibility with JDK $targetJavaVersion: $jdkHome does not exist")
     }
 
-    context.messages.block("Checking compatibility with JDK $targetJavaVersion.complianceOption") {
+    context.messages.block("Checking compatibility with JDK ${targetJavaVersion.toJavaVersion()}") {
       downloadProguard()
       modulesToCheck.each {
         runProguard(it, jdkHome, targetJavaVersion)
@@ -55,11 +57,13 @@ class CompatibilityWithJdkChecker {
   @SuppressWarnings("GrUnresolvedAccess")
   @CompileDynamic
   void runProguard(JpsModule module, String jdkHome, LanguageLevel targetJavaVersion) {
-    context.messages.progress("Checking compatibility with JDK $targetJavaVersion.complianceOption for '$module.name' module")
-    def classpath = JpsJavaExtensionService.dependencies(module).withoutSdk().recursively().productionOnly().classes().withoutSelfModuleOutput().roots
+    context.messages.progress("Checking compatibility with JDK ${targetJavaVersion.toJavaVersion()} for '$module.name' module")
+    def classpath = JpsJavaExtensionService.dependencies(module).withoutSdk().recursivelyExportedOnly().productionOnly().classes().withoutSelfModuleOutput().roots
     def moduleOutput = context.getModuleOutputPath(module)
-    context.ant.proguard(target: targetJavaVersion.complianceOption, shrink: false, optimize: false, obfuscate: false, skipnonpubliclibraryclasses: false,
-                         skipnonpubliclibraryclassmembers: false) {
+    def includeInModule = (patchedDependencies[module.name] ?: []) as Set<String>
+    context.ant.proguard(target: JpsJavaSdkType.complianceOption(targetJavaVersion.toJavaVersion()),
+                         shrink: false, optimize: false, obfuscate: false,
+                         skipnonpubliclibraryclasses: false, skipnonpubliclibraryclassmembers: false) {
       dontnote(filter: '**')
 
       //todo[nik]
@@ -68,7 +72,10 @@ class CompatibilityWithJdkChecker {
       dontwarn(filter: 'org.jetbrains.plugins.gradle.tooling.builder.CopySpecWalker')
 
       injar(path: moduleOutput)
-      classpath.each {libraryjar(path: it.path)}
+      classpath.findAll { includeInModule.contains(it.name) }.each { injar(path: it.path) }
+      classpath.findAll { !includeInModule.contains(it.name) }.each {
+        libraryjar(path: it.path, filter: "!module-info.class")
+      }
       libraryjar(path: "$jdkHome/jre/lib/rt.jar")
     }
   }
@@ -82,8 +89,8 @@ class CompatibilityWithJdkChecker {
     context.ant.taskdef(resource: "proguard/ant/task.properties", classpath: "$tempDir/proguard-base-${PROGUARD_VERSION}.jar:$tempDir/proguard-anttask-${PROGUARD_VERSION}.jar")
   }
 
-  static void run(CompilationContext context) {
-    def checker = new CompatibilityWithJdkChecker(context)
+  static void run(CompilationContext context, Map<String, List<String>> patchedDependencies) {
+    def checker = new CompatibilityWithJdkChecker(context, patchedDependencies)
     checker.checkCompatibility(LanguageLevel.JDK_1_6, {
       def sdk = context.projectModel.global.libraryCollection.findLibrary("IDEA jdk")
       if (sdk == null) {

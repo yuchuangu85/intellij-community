@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 /*
  * Class ValueLookupManager
@@ -37,12 +37,10 @@ public class ValueLookupManager implements EditorMouseMotionListener, EditorMous
   private final Project myProject;
   private final Alarm myAlarm;
   private AbstractValueHint myRequest = null;
-  private final DebuggerSupport[] mySupports;
   private boolean myListening;
 
   public ValueLookupManager(@NotNull Project project) {
     myProject = project;
-    mySupports = DebuggerSupport.getDebuggerSupports();
     myAlarm = new Alarm(project);
   }
 
@@ -52,10 +50,6 @@ public class ValueLookupManager implements EditorMouseMotionListener, EditorMous
       EditorFactory.getInstance().getEventMulticaster().addEditorMouseMotionListener(this, myProject);
       EditorFactory.getInstance().getEventMulticaster().addEditorMouseListener(this, myProject);
     }
-  }
-
-  @Override
-  public void mouseDragged(@NotNull EditorMouseEvent e) {
   }
 
   @Override
@@ -96,7 +90,7 @@ public class ValueLookupManager implements EditorMouseMotionListener, EditorMous
       }
     }
 
-    for (DebuggerSupport support : mySupports) {
+    for (DebuggerSupport support : DebuggerSupport.getDebuggerSupports()) {
       QuickEvaluateHandler handler = support.getQuickEvaluateHandler();
       if (handler.isEnabled(myProject)) {
         requestHint(handler, editor, point, type);

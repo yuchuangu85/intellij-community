@@ -15,8 +15,8 @@
  */
 package com.intellij.openapi.vcs.changes;
 
+import com.intellij.ide.util.treeView.FileNameComparator;
 import com.intellij.openapi.util.SystemInfo;
-import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.FilePath;
 import org.jetbrains.annotations.NotNull;
@@ -28,9 +28,17 @@ import java.util.Comparator;
  * (like in default sorting method of most file managers).
  */
 public class HierarchicalFilePathComparator implements Comparator<FilePath> {
+  public static final HierarchicalFilePathComparator CASE_SENSITIVE = new HierarchicalFilePathComparator(false);
+  public static final HierarchicalFilePathComparator CASE_INSENSITIVE = new HierarchicalFilePathComparator(true);
+  public static final HierarchicalFilePathComparator SYSTEM_CASE_SENSITIVE = SystemInfo.isFileSystemCaseSensitive ? CASE_SENSITIVE
+                                                                                                                  : CASE_INSENSITIVE;
 
-  public static final HierarchicalFilePathComparator IGNORE_CASE = new HierarchicalFilePathComparator(true);
-  public static final HierarchicalFilePathComparator SYSTEM_CASE_SENSITIVE = new HierarchicalFilePathComparator(!SystemInfo.isFileSystemCaseSensitive);
+  public static final HierarchicalFilePathComparator NATURAL = new HierarchicalFilePathComparator(true) {
+    @Override
+    protected int compareFileNames(@NotNull String name1, @NotNull String name2) {
+      return FileNameComparator.INSTANCE.compare(name1, name2);
+    }
+  };
 
   private final boolean myIgnoreCase;
 
@@ -40,8 +48,8 @@ public class HierarchicalFilePathComparator implements Comparator<FilePath> {
 
   @Override
   public int compare(@NotNull FilePath filePath1, @NotNull FilePath filePath2) {
-    String path1 = FileUtilRt.toSystemIndependentName(filePath1.getPath());
-    String path2 = FileUtilRt.toSystemIndependentName(filePath2.getPath());
+    String path1 = filePath1.getPath();
+    String path2 = filePath2.getPath();
 
     int commonPrefix = StringUtil.commonPrefixLength(path1, path2, myIgnoreCase);
 
@@ -73,7 +81,14 @@ public class HierarchicalFilePathComparator implements Comparator<FilePath> {
         return isDirectory1 ? -1 : 1;
       }
 
-      return StringUtil.compare(name1, name2, myIgnoreCase);
+      return compareFileNames(name1, name2);
     }
+  }
+
+  /**
+   * NB: Overriding methods should not return 0, if base method does not.
+   */
+  protected int compareFileNames(@NotNull String name1, @NotNull String name2) {
+    return StringUtil.compare(name1, name2, myIgnoreCase);
   }
 }

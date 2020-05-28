@@ -40,7 +40,7 @@ class ImportsAreUsedVisitor extends JavaRecursiveElementWalkingVisitor {
     } else {
       final PsiImportStatementBase[] importStatements = importList.getAllImportStatements();
       this.importStatements = new ArrayList<>(Arrays.asList(importStatements));
-      Collections.sort(this.importStatements, ImportStatementComparator.getInstance());
+      this.importStatements.sort(ImportStatementComparator.getInstance());
     }
   }
 
@@ -50,7 +50,7 @@ class ImportsAreUsedVisitor extends JavaRecursiveElementWalkingVisitor {
   }
 
   @Override
-  public void visitElement(PsiElement element) {
+  public void visitElement(@NotNull PsiElement element) {
     if (importStatements.isEmpty()) {
       return;
     }
@@ -71,7 +71,13 @@ class ImportsAreUsedVisitor extends JavaRecursiveElementWalkingVisitor {
     }
     // during typing there can be incomplete code
     final JavaResolveResult resolveResult = reference.advancedResolve(true);
-    final PsiElement element = resolveResult.getElement();
+    PsiElement element = resolveResult.getElement();
+    if (element == null) {
+      JavaResolveResult[] results = reference.multiResolve(false);
+      if (results.length > 0) {
+        element = results[0].getElement();
+      }
+    }
     if (!(element instanceof PsiMember)) {
       return;
     }
@@ -86,7 +92,7 @@ class ImportsAreUsedVisitor extends JavaRecursiveElementWalkingVisitor {
     }
   }
 
-  private PsiImportStatementBase findImport(PsiMember member, List<PsiImportStatementBase> importStatements) {
+  private PsiImportStatementBase findImport(PsiMember member, List<? extends PsiImportStatementBase> importStatements) {
     final String qualifiedName;
     final String packageName;
     final PsiClass containingClass = member.getContainingClass();
@@ -147,8 +153,7 @@ class ImportsAreUsedVisitor extends JavaRecursiveElementWalkingVisitor {
     return null;
   }
 
-  @NotNull
-  PsiImportStatementBase[] getUnusedImportStatements() {
+  PsiImportStatementBase @NotNull [] getUnusedImportStatements() {
     if (importStatements.isEmpty()) {
       return PsiImportStatementBase.EMPTY_ARRAY;
     }

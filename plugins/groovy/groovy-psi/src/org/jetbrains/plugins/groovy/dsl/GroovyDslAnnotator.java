@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2018 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,9 @@ package org.jetbrains.plugins.groovy.dsl;
 
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.codeInsight.intention.IntentionAction;
-import com.intellij.lang.annotation.Annotation;
-import com.intellij.lang.annotation.AnnotationHolder;
-import com.intellij.lang.annotation.Annotator;
+import com.intellij.lang.annotation.*;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
-import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
@@ -38,7 +35,7 @@ import static org.jetbrains.plugins.groovy.dsl.DslActivationStatus.Status.*;
 /**
  * @author peter
  */
-public class GroovyDslAnnotator implements Annotator, DumbAware {
+public class GroovyDslAnnotator implements Annotator {
 
   @Override
   public void annotate(@NotNull PsiElement psiElement, @NotNull AnnotationHolder holder) {
@@ -57,15 +54,16 @@ public class GroovyDslAnnotator implements Annotator, DumbAware {
                            ? "DSL descriptor file has been changed and isn't currently executed."
                            : "DSL descriptor file has been disabled due to a processing error.";
 
-    final Annotation annotation = holder.createWarningAnnotation(psiElement, message);
-    annotation.setFileLevelAnnotation(true);
+    AnnotationBuilder builder = holder.newAnnotation(HighlightSeverity.WARNING, message)
+      .fileLevel()
+      .withFix(new ActivateFix(vfile));
     if (status == ERROR) {
       final String error = GroovyDslFileIndex.getError(vfile);
       if (error != null) {
-        annotation.registerFix(GroovyQuickFixFactory.getInstance().createInvestigateFix(error));
+        builder = builder.withFix(GroovyQuickFixFactory.getInstance().createInvestigateFix(error));
       }
     }
-    annotation.registerFix(new ActivateFix(vfile));
+    builder.create();
   }
 
   private static class ActivateFix implements IntentionAction {

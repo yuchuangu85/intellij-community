@@ -1,13 +1,10 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn;
 
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.components.*;
 import com.intellij.openapi.progress.util.BackgroundTaskUtil;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Comparing;
-import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.changes.VcsAnnotationRefresher;
@@ -25,20 +22,15 @@ import org.jetbrains.idea.svn.update.UpdateRootInfo;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TreeSet;
+import java.util.*;
 
-import static com.intellij.util.containers.ContainerUtil.newHashMap;
-import static com.intellij.util.containers.ContainerUtil.newTreeSet;
 import static org.jetbrains.idea.svn.IdeaSVNConfigFile.CONFIG_FILE_NAME;
 import static org.jetbrains.idea.svn.IdeaSVNConfigFile.SERVERS_FILE_NAME;
 import static org.jetbrains.idea.svn.SvnUtil.SYSTEM_CONFIGURATION_PATH;
 import static org.jetbrains.idea.svn.SvnUtil.USER_CONFIGURATION_PATH;
 
-@State(name = "SvnConfiguration", storages = {@Storage(StoragePathMacros.WORKSPACE_FILE)})
-public class SvnConfiguration implements PersistentStateComponent<SvnConfigurationState> {
+@State(name = "SvnConfiguration", storages = @Storage(StoragePathMacros.WORKSPACE_FILE))
+public class SvnConfiguration implements PersistentStateComponent<SvnConfigurationState>, Disposable {
   public final static int ourMaxAnnotateRevisionsDefault = 500;
 
   private final static long UPGRADE_TO_15_VERSION_ASKED = 123;
@@ -60,11 +52,6 @@ public class SvnConfiguration implements PersistentStateComponent<SvnConfigurati
   private SvnInteractiveAuthenticationProvider myInteractiveProvider;
   private IdeaSVNConfigFile myServersFile;
   private IdeaSVNConfigFile myConfigFile;
-
-  @Deprecated // Required for compatibility with external plugins.
-  public boolean isCommandLine() {
-    return true;
-  }
 
   @NotNull
   @Override
@@ -278,7 +265,7 @@ public class SvnConfiguration implements PersistentStateComponent<SvnConfigurati
   }
 
   public String getConfigurationDirectory() {
-    if (myState.directory.path == null || isUseDefaultConfiguation()) {
+    if (myState.directory.path == null || isUseDefaultConfiguration()) {
       myState.directory.path = USER_CONFIGURATION_PATH.getValue().toString();
     }
     return myState.directory.path;
@@ -289,32 +276,37 @@ public class SvnConfiguration implements PersistentStateComponent<SvnConfigurati
     return Paths.get(getConfigurationDirectory());
   }
 
-  public boolean isUseDefaultConfiguation() {
+  public boolean isUseDefaultConfiguration() {
     return myState.directory.useDefault;
   }
 
   public void setConfigurationDirParameters(final boolean newUseDefault, final String newConfigurationDirectory) {
     final String defaultPath = USER_CONFIGURATION_PATH.getValue().toString();
-    final String oldEffectivePath = isUseDefaultConfiguation() ? defaultPath : getConfigurationDirectory();
+    final String oldEffectivePath = isUseDefaultConfiguration() ? defaultPath : getConfigurationDirectory();
     final String newEffectivePath = newUseDefault ? defaultPath : newConfigurationDirectory;
 
-    boolean directoryChanged = !Comparing.equal(getConfigurationDirectory(), newConfigurationDirectory);
+    boolean directoryChanged = !Objects.equals(getConfigurationDirectory(), newConfigurationDirectory);
     if (directoryChanged) {
       myState.directory.path = newConfigurationDirectory;
     }
-    boolean usageChanged = isUseDefaultConfiguation() != newUseDefault;
+    boolean usageChanged = isUseDefaultConfiguration() != newUseDefault;
     if (usageChanged) {
-      setUseDefaultConfiguation(newUseDefault);
+      setUseDefaultConfiguration(newUseDefault);
     }
 
     if (directoryChanged || usageChanged) {
-      if (! Comparing.equal(oldEffectivePath, newEffectivePath)) {
+      if (!Objects.equals(oldEffectivePath, newEffectivePath)) {
         clear();
       }
     }
   }
 
-  public void clear() {
+  @Override
+  public void dispose() {
+    clear();
+  }
+
+  private void clear() {
     myAuthManager = null;
     myPassiveAuthManager = null;
     myInteractiveManager = null;
@@ -322,25 +314,24 @@ public class SvnConfiguration implements PersistentStateComponent<SvnConfigurati
     RUNTIME_AUTH_CACHE.clear();
   }
 
-  private void setUseDefaultConfiguation(boolean useDefault) {
+  private void setUseDefaultConfiguration(boolean useDefault) {
     myState.directory.useDefault = useDefault;
   }
 
-  public SvnAuthenticationManager getAuthenticationManager(@NotNull SvnVcs svnVcs) {
+  public SvnAuthenticationManager getAuthenticationManager(@NotNull SvnVcs vcs) {
     if (myAuthManager == null) {
       // reloaded when configuration directory changes
-      myAuthManager = new SvnAuthenticationManager(svnVcs, getConfigurationPath());
-      Disposer.register(svnVcs.getProject(), () -> myAuthManager = null);
-      getInteractiveManager(svnVcs);
+      myAuthManager = new SvnAuthenticationManager(vcs.getProject(), getConfigurationPath());
+      getInteractiveManager(vcs);
       // to init
-      myAuthManager.setAuthenticationProvider(new SvnAuthenticationProvider(svnVcs, myInteractiveProvider, myAuthManager));
+      myAuthManager.setAuthenticationProvider(new SvnAuthenticationProvider(vcs, myInteractiveProvider, myAuthManager));
     }
     return myAuthManager;
   }
 
-  public SvnAuthenticationManager getPassiveAuthenticationManager(@NotNull SvnVcs svnVcs) {
+  public SvnAuthenticationManager getPassiveAuthenticationManager(@NotNull SvnVcs vcs) {
     if (myPassiveAuthManager == null) {
-      myPassiveAuthManager = new SvnAuthenticationManager(svnVcs, getConfigurationPath());
+      myPassiveAuthManager = new SvnAuthenticationManager(vcs.getProject(), getConfigurationPath());
       myPassiveAuthManager.setAuthenticationProvider(new AuthenticationProvider() {
         @Override
         public AuthenticationData requestClientAuthentication(String kind, Url url, String realm, boolean canCache) {
@@ -356,10 +347,10 @@ public class SvnConfiguration implements PersistentStateComponent<SvnConfigurati
     return myPassiveAuthManager;
   }
 
-  public SvnAuthenticationManager getInteractiveManager(@NotNull SvnVcs svnVcs) {
+  public SvnAuthenticationManager getInteractiveManager(@NotNull SvnVcs vcs) {
     if (myInteractiveManager == null) {
-      myInteractiveManager = new SvnAuthenticationManager(svnVcs, getConfigurationPath());
-      myInteractiveProvider = new SvnInteractiveAuthenticationProvider(svnVcs, myInteractiveManager);
+      myInteractiveManager = new SvnAuthenticationManager(vcs.getProject(), getConfigurationPath());
+      myInteractiveProvider = new SvnInteractiveAuthenticationProvider(vcs, myInteractiveManager);
       myInteractiveManager.setAuthenticationProvider(myInteractiveProvider);
     }
     return myInteractiveManager;
@@ -386,19 +377,19 @@ public class SvnConfiguration implements PersistentStateComponent<SvnConfigurati
     myState.keepLocks = keepLocks;
   }
 
-  public boolean isIsUseDefaultProxy() {
+  public boolean isUseDefaultProxy() {
     return myState.useDefaultProxy;
   }
 
-  public void setIsUseDefaultProxy(final boolean isUseDefaultProxy) {
+  public void setUseDefaultProxy(final boolean isUseDefaultProxy) {
     myState.useDefaultProxy = isUseDefaultProxy;
   }
 
   // TODO: Rewrite AutoStorage to use MemoryPasswordSafe at least
   public static class AuthStorage {
 
-    @NotNull private final TreeSet<String> myKeys = newTreeSet();
-    @NotNull private final Map<String, Object> myStorage = newHashMap();
+    @NotNull private final TreeSet<String> myKeys = new TreeSet<>();
+    @NotNull private final Map<String, Object> myStorage = new HashMap<>();
 
     @NotNull
     public static String getKey(@NotNull String type, @NotNull String realm) {

@@ -1,9 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.problems;
 
 import com.intellij.codeInsight.daemon.impl.*;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightInfoHolder;
+import com.intellij.ide.plugins.DynamicPluginListener;
+import com.intellij.ide.plugins.IdeaPluginDescriptor;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ReadAction;
@@ -36,7 +38,7 @@ import com.intellij.problems.Problem;
 import com.intellij.problems.WolfTheProblemSolver;
 import com.intellij.psi.*;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.messages.MessageBus;
+import com.intellij.util.messages.MessageBusConnection;
 import gnu.trove.THashMap;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
@@ -49,53 +51,14 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * @author cdr
  */
-public class WolfTheProblemSolverImpl extends WolfTheProblemSolver {
+public final class WolfTheProblemSolverImpl extends WolfTheProblemSolver {
   private final Map<VirtualFile, ProblemFileInfo> myProblems = new THashMap<>(); // guarded by myProblems
+  private final Map<VirtualFile, Set<Object>> myProblemsFromExternalSources = new THashMap<>(); // guarded by myProblemsFromExternalSources
   private final Collection<VirtualFile> myCheckingQueue = new THashSet<>(10);
 
   private final Project myProject;
-  private final List<Condition<VirtualFile>> myFilters = ContainerUtil.createLockFreeCopyOnWriteList();
-  private boolean myFiltersLoaded;
 
-  private void doRemove(@NotNull VirtualFile problemFile) {
-    ProblemFileInfo old;
-    synchronized (myProblems) {
-      old = myProblems.remove(problemFile);
-    }
-    synchronized (myCheckingQueue) {
-      myCheckingQueue.remove(problemFile);
-    }
-    if (old != null) {
-      // firing outside lock
-      myProject.getMessageBus().syncPublisher(com.intellij.problems.ProblemListener.TOPIC).problemsDisappeared(problemFile);
-    }
-  }
-
-  private static class ProblemFileInfo {
-    private final Collection<Problem> problems = new THashSet<>();
-    private boolean hasSyntaxErrors;
-
-    @Override
-    public boolean equals(@Nullable final Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
-
-      final ProblemFileInfo that = (ProblemFileInfo)o;
-
-      return hasSyntaxErrors == that.hasSyntaxErrors && problems.equals(that.problems);
-    }
-
-    @Override
-    public int hashCode() {
-      int result = problems.hashCode();
-      result = 31 * result + (hasSyntaxErrors ? 1 : 0);
-      return result;
-    }
-  }
-
-  WolfTheProblemSolverImpl(@NotNull Project project,
-                           @NotNull PsiManager psiManager,
-                           @NotNull MessageBus messageBus) {
+  protected WolfTheProblemSolverImpl(@NotNull Project project) {
     myProject = project;
     PsiTreeChangeListener changeListener = new PsiTreeChangeAdapter() {
       @Override
@@ -128,8 +91,9 @@ public class WolfTheProblemSolverImpl extends WolfTheProblemSolver {
         clearSyntaxErrorFlag(event);
       }
     };
-    psiManager.addPsiTreeChangeListener(changeListener);
-    messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
+    PsiManager.getInstance(myProject).addPsiTreeChangeListener(changeListener);
+    MessageBusConnection busConnection = project.getMessageBus().connect();
+    busConnection.subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
       @Override
       public void after(@NotNull List<? extends VFileEvent> events) {
         boolean dirChanged = false;
@@ -167,12 +131,69 @@ public class WolfTheProblemSolverImpl extends WolfTheProblemSolver {
         }
       });
     }
+
+    busConnection.subscribe(DynamicPluginListener.TOPIC, new DynamicPluginListener() {
+      @Override
+      public void beforePluginUnload(@NotNull IdeaPluginDescriptor pluginDescriptor, boolean isUpdate) {
+        // Ensure we don't have any leftover problems referring to classes from plugin being unloaded
+        Set<VirtualFile> allFiles = new HashSet<>(myProblems.keySet());
+        for (VirtualFile file : allFiles) {
+          doRemove(file);
+        }
+      }
+    });
+  }
+
+  private void doRemove(@NotNull VirtualFile problemFile) {
+    ProblemFileInfo old;
+    synchronized (myProblems) {
+      old = myProblems.remove(problemFile);
+    }
+    synchronized (myCheckingQueue) {
+      myCheckingQueue.remove(problemFile);
+    }
+    if (old != null) {
+      // firing outside lock
+      if (hasProblemsFromExternalSources(problemFile)) {
+        fireProblemsChanged(problemFile);
+      }
+      else {
+        fireProblemsDisappeared(problemFile);
+      }
+    }
+  }
+
+  private static class ProblemFileInfo {
+    private final Collection<Problem> problems = new THashSet<>();
+    private boolean hasSyntaxErrors;
+
+    @Override
+    public boolean equals(@Nullable final Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      final ProblemFileInfo that = (ProblemFileInfo)o;
+
+      return hasSyntaxErrors == that.hasSyntaxErrors && problems.equals(that.problems);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = problems.hashCode();
+      result = 31 * result + (hasSyntaxErrors ? 1 : 0);
+      return result;
+    }
   }
 
   private void clearInvalidFiles() {
+    clearInvalidFilesFrom(myProblems);
+    clearInvalidFilesFrom(myProblemsFromExternalSources);
+  }
+
+  private void clearInvalidFilesFrom(Map<VirtualFile, ?> problems) {
     VirtualFile[] files;
-    synchronized (myProblems) {
-      files = VfsUtilCore.toVirtualFileArray(myProblems.keySet());
+    synchronized (problems) {
+      files = VfsUtilCore.toVirtualFileArray(problems.keySet());
     }
     for (VirtualFile problemFile : files) {
       if (!problemFile.isValid() || !isToBeHighlighted(problemFile)) {
@@ -241,6 +262,7 @@ public class WolfTheProblemSolverImpl extends WolfTheProblemSolver {
     try {
       GeneralHighlightingPass pass = new GeneralHighlightingPass(myProject, psiFile, document, 0, document.getTextLength(),
                                                                  false, new ProperTextRange(0, document.getTextLength()), null, HighlightInfoProcessor.getEmpty()) {
+        @NotNull
         @Override
         protected HighlightInfoHolder createInfoHolder(@NotNull final PsiFile file) {
           return new HighlightInfoHolder(file) {
@@ -291,11 +313,17 @@ public class WolfTheProblemSolverImpl extends WolfTheProblemSolver {
   }
 
   @Override
-  public boolean hasProblemFilesBeneath(@NotNull Condition<VirtualFile> condition) {
+  public boolean hasProblemFilesBeneath(@NotNull Condition<? super VirtualFile> condition) {
     if (!myProject.isOpen()) return false;
-    synchronized (myProblems) {
-      if (!myProblems.isEmpty()) {
-        for (VirtualFile problemFile : myProblems.keySet()) {
+    return checkProblemFilesInMap(condition, myProblems) ||
+           checkProblemFilesInMap(condition, myProblemsFromExternalSources);
+  }
+
+  private static boolean checkProblemFilesInMap(@NotNull Condition<? super VirtualFile> condition,
+                                                Map<VirtualFile, ?> map) {
+    synchronized (map) {
+      if (!map.isEmpty()) {
+        for (VirtualFile problemFile : map.keySet()) {
           if (problemFile.isValid() && condition.value(problemFile)) return true;
         }
       }
@@ -327,21 +355,27 @@ public class WolfTheProblemSolverImpl extends WolfTheProblemSolver {
 
   @Override
   public boolean isProblemFile(VirtualFile virtualFile) {
+    return hasRegularProblems(virtualFile) || hasProblemsFromExternalSources(virtualFile);
+  }
+
+  private boolean hasRegularProblems(VirtualFile virtualFile) {
     synchronized (myProblems) {
-      return myProblems.containsKey(virtualFile);
+      if (myProblems.containsKey(virtualFile)) return true;
     }
+    return false;
+  }
+
+  private boolean hasProblemsFromExternalSources(VirtualFile virtualFile) {
+    synchronized (myProblemsFromExternalSources) {
+      if (myProblemsFromExternalSources.containsKey(virtualFile)) return true;
+    }
+    return false;
   }
 
   private boolean isToBeHighlighted(@Nullable VirtualFile virtualFile) {
     if (virtualFile == null) return false;
 
-    synchronized (myFilters) {
-      if (!myFiltersLoaded) {
-        myFiltersLoaded = true;
-        myFilters.addAll(Arrays.asList(FILTER_EP_NAME.getExtensions(myProject)));
-      }
-    }
-    for (final Condition<VirtualFile> filter : myFilters) {
+    for (final Condition<VirtualFile> filter : FILTER_EP_NAME.getExtensions(myProject)) {
       ProgressManager.checkCanceled();
       if (filter.value(virtualFile)) {
         return true;
@@ -352,14 +386,14 @@ public class WolfTheProblemSolverImpl extends WolfTheProblemSolver {
   }
 
   @Override
-  public void weHaveGotProblems(@NotNull final VirtualFile virtualFile, @NotNull List<Problem> problems) {
+  public void weHaveGotProblems(@NotNull final VirtualFile virtualFile, @NotNull List<? extends Problem> problems) {
     if (problems.isEmpty()) return;
     if (!isToBeHighlighted(virtualFile)) return;
     weHaveGotNonIgnorableProblems(virtualFile, problems);
   }
 
   @Override
-  public void weHaveGotNonIgnorableProblems(@NotNull VirtualFile virtualFile, @NotNull List<Problem> problems) {
+  public void weHaveGotNonIgnorableProblems(@NotNull VirtualFile virtualFile, @NotNull List<? extends Problem> problems) {
     if (problems.isEmpty()) return;
     boolean fireListener = false;
     synchronized (myProblems) {
@@ -374,8 +408,25 @@ public class WolfTheProblemSolverImpl extends WolfTheProblemSolver {
     }
     doQueue(virtualFile);
     if (fireListener) {
-      myProject.getMessageBus().syncPublisher(com.intellij.problems.ProblemListener.TOPIC).problemsAppeared(virtualFile);
+      if (hasProblemsFromExternalSources(virtualFile)) {
+        fireProblemsChanged(virtualFile);
+      }
+      else {
+        fireProblemsAppeared(virtualFile);
+      }
     }
+  }
+
+  private void fireProblemsAppeared(@NotNull VirtualFile file) {
+    myProject.getMessageBus().syncPublisher(com.intellij.problems.ProblemListener.TOPIC).problemsAppeared(file);
+  }
+
+  private void fireProblemsChanged(@NotNull VirtualFile virtualFile) {
+    myProject.getMessageBus().syncPublisher(com.intellij.problems.ProblemListener.TOPIC).problemsChanged(virtualFile);
+  }
+
+  private void fireProblemsDisappeared(@NotNull VirtualFile problemFile) {
+    myProject.getMessageBus().syncPublisher(com.intellij.problems.ProblemListener.TOPIC).problemsDisappeared(problemFile);
   }
 
   @Override
@@ -387,7 +438,7 @@ public class WolfTheProblemSolverImpl extends WolfTheProblemSolver {
   public Problem convertToProblem(@Nullable final VirtualFile virtualFile,
                                   final int line,
                                   final int column,
-                                  @NotNull final String[] message) {
+                                  final String @NotNull [] message) {
     if (virtualFile == null || virtualFile.isDirectory() || virtualFile.getFileType().isBinary()) return null;
     HighlightInfo info = ReadAction.compute(() -> {
       TextRange textRange = getTextRange(virtualFile, line, column);
@@ -399,7 +450,7 @@ public class WolfTheProblemSolverImpl extends WolfTheProblemSolver {
   }
 
   @Override
-  public void reportProblems(@NotNull final VirtualFile file, @NotNull Collection<Problem> problems) {
+  public void reportProblems(@NotNull final VirtualFile file, @NotNull Collection<? extends Problem> problems) {
     if (problems.isEmpty()) {
       clearProblems(file);
       return;
@@ -419,11 +470,65 @@ public class WolfTheProblemSolverImpl extends WolfTheProblemSolver {
       fireChanged = hasProblemsBefore && !oldInfo.equals(newInfo);
     }
     doQueue(file);
-    if (!hasProblemsBefore) {
-      myProject.getMessageBus().syncPublisher(com.intellij.problems.ProblemListener.TOPIC).problemsAppeared(file);
+    boolean hasExternal = hasProblemsFromExternalSources(file);
+    if (!hasProblemsBefore && !hasExternal) {
+      fireProblemsAppeared(file);
     }
-    else if (fireChanged) {
-      myProject.getMessageBus().syncPublisher(com.intellij.problems.ProblemListener.TOPIC).problemsChanged(file);
+    else if (fireChanged || hasExternal) {
+      fireProblemsChanged(file);
+    }
+  }
+
+  @Override
+  public void reportProblemsFromExternalSource(@NotNull VirtualFile file, @NotNull Object source) {
+    if (!isToBeHighlighted(file)) return;
+
+    boolean isNewFileForExternalSource;
+    synchronized (myProblemsFromExternalSources) {
+      if (myProblemsFromExternalSources.containsKey(file)) {
+        isNewFileForExternalSource = false;
+        myProblemsFromExternalSources.get(file).add(source);
+      }
+      else {
+        myProblemsFromExternalSources.put(file, ContainerUtil.newHashSet(source));
+        isNewFileForExternalSource = true;
+      }
+    }
+
+    boolean hasRegularProblems;
+    synchronized (myProblems) {
+      hasRegularProblems = myProblems.containsKey(file);
+    }
+
+    if (isNewFileForExternalSource && !hasRegularProblems(file)) {
+      fireProblemsAppeared(file);
+    }
+    else {
+      fireProblemsChanged(file);
+    }
+  }
+
+
+  @Override
+  public void clearProblemsFromExternalSource(@NotNull VirtualFile file, @NotNull Object source) {
+    boolean isLastExternalSource = false;
+    synchronized (myProblemsFromExternalSources) {
+      Set<Object> sources = myProblemsFromExternalSources.get(file);
+      if (sources == null) return;
+
+      sources.remove(source);
+      if (sources.isEmpty()) {
+        isLastExternalSource = true;
+        myProblemsFromExternalSources.remove(file);
+      }
+    }
+
+
+    if (isLastExternalSource && !hasRegularProblems(file)) {
+      fireProblemsDisappeared(file);
+    }
+    else {
+      fireProblemsChanged(file);
     }
   }
 

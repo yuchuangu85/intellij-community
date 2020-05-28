@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.psi.impl.source.tree.injected;
 
@@ -19,8 +19,8 @@ import com.intellij.openapi.editor.ex.RangeMarkerEx;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.util.*;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.psi.PsiFile;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiLanguageInjectionHost;
 import com.intellij.psi.impl.PsiManagerEx;
 import com.intellij.util.ObjectUtils;
@@ -35,7 +35,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 class DocumentWindowImpl extends UserDataHolderBase implements Disposable, DocumentWindow, DocumentEx {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.injected.editor.DocumentWindowImpl");
+  private static final Logger LOG = Logger.getInstance(DocumentWindowImpl.class);
   private final DocumentEx myDelegate;
   private final boolean myOneLine;
   private Place myShreds; // guarded by myLock
@@ -86,7 +86,7 @@ class DocumentWindowImpl extends UserDataHolderBase implements Disposable, Docum
     return null;
   }
 
-  private static class CachedText {
+  private static final class CachedText {
     private final String text;
     private final long modificationStamp;
 
@@ -244,7 +244,7 @@ class DocumentWindowImpl extends UserDataHolderBase implements Disposable, Docum
       }
     }
     lineNumber = getLineCount() - 1;
-    return lineNumber < 0 ? 0 : lineNumber;
+    return Math.max(lineNumber, 0);
   }
 
   @Override
@@ -364,11 +364,6 @@ class DocumentWindowImpl extends UserDataHolderBase implements Disposable, Docum
       myDelegate.replaceString(hostRange.getStartOffset() + delta, hostRange.getEndOffset() + delta, replace);
       delta -= hostRange.getLength() - replace.length();
     }
-  }
-
-  @Override
-  public void moveText(int srcStart, int srcEnd, int dstOffset) {
-    throw new UnsupportedOperationException();
   }
 
   @Override
@@ -513,8 +508,7 @@ class DocumentWindowImpl extends UserDataHolderBase implements Disposable, Docum
   }
 
   @Override
-  @NotNull
-  public Segment[] getHostRanges() {
+  public Segment @NotNull [] getHostRanges() {
     synchronized (myLock) {
       List<Segment> markers = new ArrayList<>(myShreds.size());
       for (PsiLanguageInjectionHost.Shred shred : myShreds) {
@@ -588,7 +582,7 @@ class DocumentWindowImpl extends UserDataHolderBase implements Disposable, Docum
 
   @Override
   public boolean removeRangeMarker(@NotNull RangeMarkerEx rangeMarker) {
-    return myDelegate.removeRangeMarker(((RangeMarkerWindow)rangeMarker).getDelegate()); 
+    return myDelegate.removeRangeMarker(((RangeMarkerWindow)rangeMarker).getDelegate());
   }
 
   @Override
@@ -631,13 +625,12 @@ class DocumentWindowImpl extends UserDataHolderBase implements Disposable, Docum
 
   @Override
   public int injectedToHost(int offset) {
-    int offsetInLeftFragment = injectedToHost(offset, true);
-    int offsetInRightFragment = injectedToHost(offset, false);
+    int offsetInLeftFragment = injectedToHost(offset, true, false);
+    int offsetInRightFragment = injectedToHost(offset, false, false);
     if (offsetInLeftFragment == offsetInRightFragment) return offsetInLeftFragment;
 
     // heuristics: return offset closest to the caret
-    Editor[] editors = EditorFactory.getInstance().getEditors(getDelegate());
-    Editor editor  = editors.length == 0 ? null : editors[0];
+    Editor editor =  EditorFactory.getInstance().editors(getDelegate()).findFirst().orElse(null);
     if (editor != null) {
       if (editor instanceof EditorWindow) editor = ((EditorWindow)editor).getDelegate();
       int caret = editor.getCaretModel().getOffset();
@@ -646,7 +639,12 @@ class DocumentWindowImpl extends UserDataHolderBase implements Disposable, Docum
     return offsetInLeftFragment;
   }
 
-  private int injectedToHost(int offset, boolean preferLeftFragment) {
+  @Override
+  public int injectedToHost(int injectedOffset, boolean minHostOffset) {
+    return injectedToHost(injectedOffset, minHostOffset, true);
+  }
+
+  private int injectedToHost(int offset, boolean preferLeftFragment, boolean skipEmptyShreds) {
     synchronized (myLock) {
       if (offset < myShreds.get(0).getPrefix().length()) {
         Segment hostRangeMarker = myShreds.get(0).getHostRangeMarker();
@@ -654,22 +652,29 @@ class DocumentWindowImpl extends UserDataHolderBase implements Disposable, Docum
       }
       int prevEnd = 0;
       for (int i = 0; i < myShreds.size(); i++) {
-        Segment currentRange = myShreds.get(i).getHostRangeMarker();
+        PsiLanguageInjectionHost.Shred shred = myShreds.get(i);
+        Segment currentRange = shred.getHostRangeMarker();
         if (currentRange == null) continue;
-        offset -= myShreds.get(i).getPrefix().length();
-        int length = currentRange.getEndOffset() - currentRange.getStartOffset();
+        int currentStart = currentRange.getStartOffset();
+        int currentEnd = currentRange.getEndOffset();
+        if (skipEmptyShreds && !preferLeftFragment &&
+            currentStart == currentEnd && shred.getPrefix().isEmpty() && shred.getSuffix().isEmpty()) {
+          continue;
+        }
+        offset -= shred.getPrefix().length();
         if (offset < 0) {
-          return preferLeftFragment ? prevEnd : currentRange.getStartOffset() - 1;
+          return preferLeftFragment ? prevEnd : currentStart - 1;
         }
         if (offset == 0) {
-          return preferLeftFragment && i != 0 ? prevEnd : currentRange.getStartOffset();
+          return preferLeftFragment && i != 0 ? prevEnd : currentStart;
         }
+        int length = currentEnd - currentStart;
         if (offset < length || offset == length && preferLeftFragment) {
-          return currentRange.getStartOffset() + offset;
+          return currentStart + offset;
         }
         offset -= length;
-        offset -= myShreds.get(i).getSuffix().length();
-        prevEnd = currentRange.getEndOffset();
+        offset -= shred.getSuffix().length();
+        prevEnd = currentEnd;
       }
       Segment hostRangeMarker = myShreds.get(myShreds.size() - 1).getHostRangeMarker();
       return hostRangeMarker == null ? 0 : hostRangeMarker.getEndOffset();
@@ -679,10 +684,10 @@ class DocumentWindowImpl extends UserDataHolderBase implements Disposable, Docum
   @Override
   @NotNull
   public ProperTextRange injectedToHost(@NotNull TextRange injected) {
-    int start = injectedToHost(injected.getStartOffset(), false);
-    int end = injectedToHost(injected.getEndOffset(), true);
+    int start = injectedToHost(injected.getStartOffset(), false, true);
+    int end = injectedToHost(injected.getEndOffset(), true, true);
     if (end < start) {
-      end = injectedToHost(injected.getEndOffset(), false);
+      end = injectedToHost(injected.getEndOffset(), false, true);
     }
     return new ProperTextRange(start, end);
   }
@@ -753,8 +758,7 @@ class DocumentWindowImpl extends UserDataHolderBase implements Disposable, Docum
   // result[i] == null means no change
   // result[i] == "" means delete
   // result[i] == string means replace
-  @NotNull
-  String[] calculateMinEditSequence(String newText) {
+  String @NotNull [] calculateMinEditSequence(String newText) {
     synchronized (myLock) {
       String[] result = new String[myShreds.size()];
       String hostText = myDelegate.getText();

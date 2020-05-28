@@ -2,6 +2,8 @@
 package com.intellij.codeInspection.dataFlow.inliner;
 
 import com.intellij.codeInspection.dataFlow.CFGBuilder;
+import com.intellij.codeInspection.dataFlow.NullabilityProblemKind;
+import com.intellij.codeInspection.dataFlow.types.DfTypes;
 import com.intellij.codeInspection.dataFlow.value.DfaVariableValue;
 import com.intellij.psi.*;
 import com.siyeh.ig.callMatcher.CallMatcher;
@@ -31,14 +33,14 @@ public class AssertAllInliner implements CallInliner {
     for (int i = 0; i < args.length; i++) {
       PsiExpression arg = args[i];
       if (i == 0 && TypeUtils.isJavaLangString(arg.getType())) {
-        builder.pushExpression(arg).pop();
+        builder.pushExpression(arg, NullabilityProblemKind.noProblem).pop();
       }
       else {
         builder.evaluateFunction(arg);
       }
     }
     DfaVariableValue result = builder.createTempVariable(PsiType.BOOLEAN);
-    builder.assignAndPop(result, builder.getFactory().getBoolean(false));
+    builder.assignAndPop(result, DfTypes.FALSE);
     for (int i = 0; i < args.length; i++) {
       PsiExpression arg = args[i];
       if (i == 0 && TypeUtils.isJavaLangString(arg.getType())) continue;
@@ -46,7 +48,7 @@ public class AssertAllInliner implements CallInliner {
         .doTry(call)
         .invokeFunction(0, arg)
         .catchAll()
-        .assignAndPop(result, builder.getFactory().getBoolean(true))
+        .assignAndPop(result, DfTypes.TRUE)
         .end();
     }
     PsiType throwable = JavaPsiFacade.getElementFactory(call.getProject())
@@ -54,7 +56,8 @@ public class AssertAllInliner implements CallInliner {
     builder.push(result)
            .ifConditionIs(true)
            .doThrow(throwable)
-           .end();
+           .end()
+           .pushUnknown(); // void method result
     return true;
   }
 }

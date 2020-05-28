@@ -2,17 +2,19 @@
 package com.intellij.psi.search.scope.packageSet;
 
 import com.intellij.icons.AllIcons;
-import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import javax.swing.Icon;
+import javax.swing.*;
 
 public class NamedScope {
+  public static final NamedScope[] EMPTY_ARRAY = new NamedScope[0];
   private final String myName;
   private final Icon myIcon;
   private final PackageSet myValue;
 
-  public NamedScope(@NotNull String name, @Nullable PackageSet value) {
+  public NamedScope(@NotNull @Nls String name, @Nullable PackageSet value) {
     this(name, AllIcons.Ide.LocalScope, value);
   }
 
@@ -40,6 +42,11 @@ public class NamedScope {
   @NotNull
   public NamedScope createCopy() {
     return new NamedScope(myName, myIcon, myValue == null ? null : myValue.createCopy());
+  }
+
+  @Nullable
+  public String getDefaultColorName() {
+    return null;
   }
 
   public static class UnnamedScope extends NamedScope {

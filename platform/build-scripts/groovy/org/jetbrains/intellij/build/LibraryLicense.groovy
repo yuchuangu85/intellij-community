@@ -1,33 +1,22 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.intellij.build
 
 import com.intellij.util.containers.ContainerUtil
+import groovy.transform.CompileStatic
 import groovy.transform.Immutable
 
 /**
- * @author nik
+ * Describes a library which is included into distribution of an IntelliJ-based IDE. This information is used to show list of Third-party
+ * software in About popup and on the product download page.
  */
+@CompileStatic
 @Immutable
 class LibraryLicense {
   private static final Map<String, String> PREDEFINED_LICENSE_URLS = ["Apache 2.0": "http://www.apache.org/licenses/LICENSE-2.0"]
   public static final String JETBRAINS_OWN = "JetBrains"
 
   /**
-   * Presentable full name of the library
+   * Presentable full name of the library. If {@code null} {@link #libraryName} will be used instead.
    */
   final String name
 
@@ -37,7 +26,8 @@ class LibraryLicense {
   final String url
 
   /**
-   * Version of the library
+   * Version of the library. If {@link #libraryName} points to a Maven library version is taken from the library configuration so it must
+   * not be specified explicitly.
    */
   final String version
 
@@ -63,24 +53,38 @@ class LibraryLicense {
   final String attachedTo
 
   /**
+   * Set to {@code true} if this entry describes license for a transitive dependency included into the library specified by {@link #libraryName}
+   */
+  final boolean transitiveDependency
+
+  /**
    * Type of a license (e.g. {@code 'Apache 2.0'})
    */
   final String license
 
   /**
-   * URL of a page on the library site (or a generic site) containing the license text, may be {@code null} if there is no such page.
+   * URL of a page on the library site (or a generic site) containing the license text, may be {@code null} for standard licenses
+   * (see {@link #PREDEFINED_LICENSE_URLS}) or if there is no such page.
    */
   final String licenseUrl
 
-  public static jetbrainsLibrary(String libraryName) {
-    new LibraryLicense(name: libraryName, license: JETBRAINS_OWN)
+  /**
+   * Use this method only for JetBrains's own libraries which are available as part of IntelliJ-based IDEs only so there is no way to
+   * give link to their sites. For other libraries please fill all necessary fields of {@link LibraryLicense} instead of using this method.
+   */
+  static jetbrainsLibrary(String libraryName) {
+    new LibraryLicense(libraryName: libraryName, license: JETBRAINS_OWN)
   }
 
-  public List<String> getLibraryNames() {
-    return ContainerUtil.createMaybeSingletonList(libraryName ?: name) + (additionalLibraryNames ?: [])
+  List<String> getLibraryNames() {
+    return ContainerUtil.createMaybeSingletonList(libraryName) + (additionalLibraryNames ?: [] as List<String>)
   }
 
-  public String getLibraryLicenseUrl() {
+  String getPresentableName() {
+    name ?: libraryName
+  }
+
+  String getLibraryLicenseUrl() {
     licenseUrl ?: PREDEFINED_LICENSE_URLS[license]
   }
 }

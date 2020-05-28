@@ -55,7 +55,7 @@ public class PsiCapturedWildcardType extends PsiType.Stub {
     myUpperBound = PsiType.getJavaLangObject(myContext.getManager(), getResolveScope());
   }
 
-  private static final RecursionGuard guard = RecursionManager.createGuard("captureGuard");
+  private static final RecursionGuard<Object> guard = RecursionManager.createGuard("captureGuard");
 
   public static boolean isCapture() {
     return guard.currentStack().isEmpty();
@@ -77,6 +77,18 @@ public class PsiCapturedWildcardType extends PsiType.Stub {
           !substitutedBoundType.isAssignableFrom(originalBound)) {
         continue;
       }
+      if (substitutedBoundType instanceof PsiCapturedWildcardType) {
+        PsiType capturedWildcard = captureSubstitutor.substitute(typeParameter);
+        if (capturedWildcard instanceof PsiCapturedWildcardType) {
+          PsiType captureUpperBound = substitutedBoundType;
+          while (captureUpperBound instanceof PsiCapturedWildcardType) {
+            if (captureUpperBound == capturedWildcard) {
+              return null;
+            }
+            captureUpperBound = ((PsiCapturedWildcardType)captureUpperBound).getUpperBound();
+          }
+        }
+      }
 
       if (glb == null) {
         glb = substitutedBoundType;
@@ -89,7 +101,7 @@ public class PsiCapturedWildcardType extends PsiType.Stub {
     return glb;
   }
 
-  private static PsiType getGreatestLowerBound(PsiType glb, PsiType bound, Object guardObject) {
+  private static PsiType getGreatestLowerBound(PsiType glb, PsiType bound, PsiWildcardType guardObject) {
     return guard.doPreventingRecursion(guardObject, true, () -> GenericsUtil.getGreatestLowerBound(glb, bound));
   }
 
@@ -109,7 +121,7 @@ public class PsiCapturedWildcardType extends PsiType.Stub {
       return false;
     }
 
-    if ((myContext instanceof PsiReferenceExpression || myContext instanceof PsiMethodCallExpression) && 
+    if (!(myContext instanceof PsiTypeParameter) && 
         !manager.areElementsEquivalent(myParameter, captured.myParameter)) {
       return false;
     }
@@ -170,8 +182,7 @@ public class PsiCapturedWildcardType extends PsiType.Stub {
   }
 
   @Override
-  @NotNull
-  public PsiType[] getSuperTypes() {
+  public PsiType @NotNull [] getSuperTypes() {
     return myExistential.getSuperTypes();
   }
 

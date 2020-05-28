@@ -1,5 +1,8 @@
 package org.jetbrains.plugins.cucumber.java.run;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
@@ -14,6 +17,8 @@ public class CucumberJvmSMFormatterUtil {
     TEAMCITY_PREFIX + "[testStarted timestamp = '%s' locationHint = '%s' captureStandardOutput = 'true' name = '%s']";
   public static final String TEMPLATE_TEST_FAILED =
     TEAMCITY_PREFIX + "[testFailed timestamp = '%s' details = '%s' message = '%s' name = '%s' %s]";
+  public static final String TEMPLATE_COMPARISON_TEST_FAILED =
+    TEAMCITY_PREFIX + "[testFailed timestamp = '%s' details = '%s' message = '%s' expected='%s' actual='%s' name = '%s' %s]";
   public static final String TEMPLATE_SCENARIO_FAILED = TEAMCITY_PREFIX + "[customProgressStatus timestamp='%s' type='testFailed']";
   public static final String TEMPLATE_TEST_PENDING =
     TEAMCITY_PREFIX + "[testIgnored name = '%s' message = 'Skipped step' timestamp = '%s']";
@@ -39,11 +44,23 @@ public class CucumberJvmSMFormatterUtil {
     return DATE_FORMAT.format(new Date());
   }
 
-  public static String escape(String source) {
+  private static String escape(String source) {
     if (source == null) {
       return "";
     }
-    return source.replace("|", "||").replace("\n", "|n").replace("\r", "|r").replace("'", "|'").replace("[", "|[").replace("]", "|]");
+    return source.replace("|", "||").replace("\n", "|n").replace("\r", "|r").replace("'", "|'").replace("]", "|]");
+  }
+
+  /**
+   * escapes symbols: "|", "'" and new line so that not to tear SM messages
+   */
+  public static String escapeCommand(String command, String... parameters) {
+    String[] escapedParameters = new String[parameters.length];
+    for (int i = 0; i < escapedParameters.length; i++) {
+      escapedParameters[i] = escape(parameters[i]);
+    }
+
+    return String.format(command, (Object[])escapedParameters);
   }
 
   /**
@@ -75,5 +92,35 @@ public class CucumberJvmSMFormatterUtil {
       return line;
     }
     return featureHeader;
+  }
+
+  public static String getStepKeyword(String filePath, int lineNumber) throws IOException {
+    String line = readLineWithNumber(filePath, lineNumber);
+    if (line != null) {
+      return line.trim().split(" ", 2)[0];
+    }
+    return null;
+  }
+
+  private static String readLineWithNumber(String filePath, int lineNumber) throws IOException {
+    int currentLineNumber = 0;
+    FileReader fileStream = null;
+    try {
+      fileStream = new FileReader(filePath);
+      BufferedReader bufferedReader = new BufferedReader(fileStream);
+      String line;
+      while ((line = bufferedReader.readLine()) != null) {
+        currentLineNumber++;
+        if (currentLineNumber == lineNumber) {
+          return line;
+        }
+      }
+    }
+    finally {
+      if (fileStream != null) {
+        fileStream.close();
+      }
+    }
+    return null;
   }
 }

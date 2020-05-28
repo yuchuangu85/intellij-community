@@ -1,0 +1,8 @@
+$ ('$')
+{ ('{')
+param_separator ('#')
+word ('array_var')
+[ ('[')
+word ('@')
+] (']')
+} ('}')

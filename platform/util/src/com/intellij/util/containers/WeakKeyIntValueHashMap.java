@@ -13,9 +13,7 @@
 // limitations under the License.
 package com.intellij.util.containers;
 
-import com.intellij.openapi.util.Condition;
 import com.intellij.reference.SoftReference;
-import com.intellij.util.Function;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.ObjectUtils;
 import gnu.trove.THashSet;
@@ -29,8 +27,8 @@ import java.util.Iterator;
 import java.util.Set;
 
 class WeakKeyIntValueHashMap<K> implements ObjectIntMap<K> {
-  private final TObjectIntHashMap<MyReference<K>> myMap = new TObjectIntHashMap<MyReference<K>>();
-  private final ReferenceQueue<K> myQueue = new ReferenceQueue<K>();
+  private final TObjectIntHashMap<MyReference<K>> myMap = new TObjectIntHashMap<>();
+  private final ReferenceQueue<K> myQueue = new ReferenceQueue<>();
 
   private static class MyReference<T> extends WeakReference<T> {
     private final int myHashCode;
@@ -68,21 +66,21 @@ class WeakKeyIntValueHashMap<K> implements ObjectIntMap<K> {
 
   @Override
   public final int get(@NotNull K key) {
-    MyReference<K> ref = new MyReference<K>(key, null);
+    MyReference<K> ref = new MyReference<>(key, null);
     return myMap.get(ref);
   }
 
   @Override
   public final int put(@NotNull K key, int value) {
     processQueue();
-    MyReference<K> ref = new MyReference<K>(key, myQueue);
+    MyReference<K> ref = new MyReference<>(key, myQueue);
     return myMap.put(ref, value);
   }
 
   @Override
   public final int remove(@NotNull K key) {
     processQueue();
-    MyReference<K> ref = new MyReference<K>(key, myQueue);
+    MyReference<K> ref = new MyReference<>(key, myQueue);
     return myMap.remove(ref);
   }
 
@@ -104,25 +102,19 @@ class WeakKeyIntValueHashMap<K> implements ObjectIntMap<K> {
 
   @Override
   public final boolean containsKey(@NotNull K key) {
-    MyReference<K> ref = new MyReference<K>(key, null);
+    MyReference<K> ref = new MyReference<>(key, null);
     return myMap.containsKey(ref);
   }
 
   @Override
-  @NotNull
-  public final int[] values() {
+  public final int @NotNull [] values() {
     throw new IncorrectOperationException("values() makes no sense for weak/soft key map because GC can clear the key any moment now");
   }
 
   @NotNull
   @Override
   public Set<K> keySet() {
-    return new THashSet<K>(ContainerUtil.map(myMap.keys(), new Function<Object, K>() {
-      @Override
-      public K fun(Object ref) {
-        return SoftReference.dereference((MyReference<K>)ref);
-      }
-    }));
+    return new THashSet<>(ContainerUtil.map(myMap.keys(), ref -> SoftReference.dereference((MyReference<K>)ref)));
   }
 
   @Override
@@ -168,12 +160,7 @@ class WeakKeyIntValueHashMap<K> implements ObjectIntMap<K> {
               }
             };
           }
-        }, new Condition<Entry<K>>() {
-          @Override
-          public boolean value(Entry<K> o) {
-            return o.getKey() != GCED;
-          }
-        });
+        }, o -> o.getKey() != GCED);
       }
     };
   }

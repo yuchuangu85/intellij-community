@@ -61,4 +61,23 @@ public class FoldingRegionWindow extends RangeMarkerWindow implements FoldRegion
   public FoldRegionImpl getDelegate() {
     return (FoldRegionImpl)myHostRegion;
   }
+
+  @Override
+  public void setGutterMarkEnabledForSingleLine(boolean value) {
+    myHostRegion.setGutterMarkEnabledForSingleLine(value);
+  }
+
+  @Override
+  public boolean isGutterMarkEnabledForSingleLine() {
+    return myHostRegion.isGutterMarkEnabledForSingleLine();
+  }
+
+  @Override
+  public void setPlaceholderText(@NotNull String text) {
+    myHostRegion.setPlaceholderText(text);
+  }
+
+  public static FoldingRegionWindow getInjectedRegion(@NotNull FoldRegion hostRegion) {
+    return hostRegion.getUserData(FoldingModelWindow.FOLD_REGION_WINDOW);
+  }
 }

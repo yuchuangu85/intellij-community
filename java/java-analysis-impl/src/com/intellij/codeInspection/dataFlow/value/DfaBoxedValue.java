@@ -15,22 +15,21 @@
  */
 package com.intellij.codeInspection.dataFlow.value;
 
+import com.intellij.codeInsight.Nullability;
 import com.intellij.codeInspection.dataFlow.SpecialField;
-import com.intellij.psi.PsiPrimitiveType;
+import com.intellij.codeInspection.dataFlow.types.DfType;
+import com.intellij.codeInspection.dataFlow.types.DfTypes;
 import com.intellij.psi.PsiType;
-import com.intellij.psi.util.TypeConversionUtil;
+import gnu.trove.TIntObjectHashMap;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class DfaBoxedValue extends DfaValue {
-  private final DfaValue myWrappedValue;
+  private final @NotNull DfaVariableValue myWrappedValue;
   private final @Nullable PsiType myType;
 
-  private DfaBoxedValue(DfaValue valueToWrap, DfaValueFactory factory, @Nullable PsiType type) {
+  private DfaBoxedValue(@NotNull DfaVariableValue valueToWrap, @NotNull DfaValueFactory factory, @Nullable PsiType type) {
     super(factory);
     myWrappedValue = valueToWrap;
     myType = type;
@@ -41,7 +40,8 @@ public class DfaBoxedValue extends DfaValue {
     return "Boxed "+myWrappedValue.toString();
   }
 
-  public DfaValue getWrappedValue() {
+  @NotNull
+  public DfaVariableValue getWrappedValue() {
     return myWrappedValue;
   }
 
@@ -51,8 +51,14 @@ public class DfaBoxedValue extends DfaValue {
     return myType;
   }
 
+  @NotNull
+  @Override
+  public DfType getDfType() {
+    return DfTypes.typedObject(myType, Nullability.NOT_NULL);
+  }
+
   public static class Factory {
-    private final Map<Object, DfaBoxedValue> cachedValues = new HashMap<>();
+    private final TIntObjectHashMap<DfaBoxedValue> cachedValues = new TIntObjectHashMap<>();
 
     private final DfaValueFactory myFactory;
 
@@ -60,39 +66,27 @@ public class DfaBoxedValue extends DfaValue {
       myFactory = factory;
     }
 
-    public DfaValue getBoxedIfExists(DfaVariableValue variable) {
-      return cachedValues.get(variable);
-    }
-
     @Nullable
     public DfaValue createBoxed(DfaValue valueToWrap, @Nullable PsiType type) {
-      if (valueToWrap instanceof DfaVariableValue && ((DfaVariableValue)valueToWrap).getSource() == SpecialField.UNBOX) {
-        return ((DfaVariableValue)valueToWrap).getQualifier();
+      if (valueToWrap instanceof DfaVariableValue && ((DfaVariableValue)valueToWrap).getDescriptor() == SpecialField.UNBOX) {
+        DfaVariableValue qualifier = ((DfaVariableValue)valueToWrap).getQualifier();
+        if (qualifier != null && (type == null || type.equals(qualifier.getType()))) {
+          return qualifier;
+        }
       }
-      Object o = valueToWrap instanceof DfaConstValue
-                 ? ((DfaConstValue)valueToWrap).getValue()
-                 : valueToWrap instanceof DfaVariableValue ? valueToWrap : null;
-      if (o == null) return null;
-      DfaBoxedValue boxedValue = cachedValues.get(o);
-      if (boxedValue == null) {
-        cachedValues.put(o, boxedValue = new DfaBoxedValue(valueToWrap, myFactory, type));
+      if (valueToWrap instanceof DfaTypeValue) {
+        DfType dfType = SpecialField.UNBOX.asDfType(valueToWrap.getDfType(), type);
+        return myFactory.fromDfType(dfType);
       }
-      return boxedValue;
+      if (valueToWrap instanceof DfaVariableValue) {
+        int id = valueToWrap.getID();
+        DfaBoxedValue boxedValue = cachedValues.get(id);
+        if (boxedValue == null) {
+          cachedValues.put(id, boxedValue = new DfaBoxedValue((DfaVariableValue)valueToWrap, myFactory, type));
+        }
+        return boxedValue;
+      }
+      return null;
     }
-
-    @NotNull
-    public DfaValue createUnboxed(DfaValue value, PsiPrimitiveType targetType) {
-      if (value instanceof DfaBoxedValue) {
-        return ((DfaBoxedValue)value).getWrappedValue();
-      }
-      if (value instanceof DfaConstValue) {
-        return TypeConversionUtil.isPrimitiveAndNotNull(((DfaConstValue)value).getType()) ? value : DfaUnknownValue.getInstance();
-      }
-      if (value instanceof DfaVariableValue) {
-        return SpecialField.UNBOX.createValue(myFactory, value, targetType);
-      }
-      return DfaUnknownValue.getInstance();
-    }
-
   }
 }

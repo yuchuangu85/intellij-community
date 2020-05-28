@@ -22,8 +22,8 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.impl.PsiFileEx;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
@@ -33,20 +33,13 @@ import java.util.*;
 public abstract class DependenciesBuilder {
   private final Project myProject;
   private final AnalysisScope myScope;
-  private final AnalysisScope myScopeOfInterest;
   private final Map<PsiFile, Set<PsiFile>> myDependencies = new HashMap<>();
   protected int myTotalFileCount;
   protected int myFileCount = 0;
-  protected int myTransitive = 0;
 
   protected DependenciesBuilder(@NotNull final Project project, @NotNull final AnalysisScope scope) {
-    this(project, scope, null);
-  }
-
-  public DependenciesBuilder(final Project project, final AnalysisScope scope, @Nullable final AnalysisScope scopeOfInterest) {
     myProject = project;
     myScope = scope;
-    myScopeOfInterest = scopeOfInterest;
     myTotalFileCount = scope.getFileCount();
   }
 
@@ -58,33 +51,37 @@ public abstract class DependenciesBuilder {
     myTotalFileCount = totalFileCount;
   }
 
-  public int getTotalFileCount() {
-    return myTotalFileCount;
-  }
-
+  @NotNull
   public Map<PsiFile, Set<PsiFile>> getDependencies() {
     return myDependencies;
   }
 
+  @NotNull
   public Map<PsiFile, Set<PsiFile>> getDirectDependencies() {
     return getDependencies();
   }
 
+  @NotNull
   public AnalysisScope getScope() {
     return myScope;
   }
 
+  /**
+   * @deprecated use {@link BackwardDependenciesBuilder#getScopeOfInterest()} instead
+   */
+  @Deprecated
   public AnalysisScope getScopeOfInterest() {
-    return myScopeOfInterest;
+    return null;
   }
 
+  @NotNull
   public Project getProject() {
     return myProject;
   }
 
-  public abstract String getRootNodeNameInUsageView();
+  public abstract @Nls String getRootNodeNameInUsageView();
 
-  public abstract String getInitialUsagesPosition();
+  public abstract @Nls String getInitialUsagesPosition();
 
   public abstract boolean isBackward();
 
@@ -144,15 +141,23 @@ public abstract class DependenciesBuilder {
     return result;
   }
 
+  /**
+   * @deprecated use {@link ForwardDependenciesBuilder#isTransitive()} instead
+   */
+  @Deprecated
   public boolean isTransitive() {
-    return myTransitive > 0;
+    return false;
   }
 
+  /**
+   * @deprecated use {@link ForwardDependenciesBuilder#getTransitiveBorder()} instead
+   */
+  @Deprecated
   public int getTransitiveBorder() {
-    return myTransitive;
+    return 0;
   }
 
-  public String getRelativeToProjectPath(@NotNull VirtualFile virtualFile) {
+  String getRelativeToProjectPath(@NotNull VirtualFile virtualFile) {
     return ProjectUtilCore.displayUrlRelativeToProject(virtualFile, virtualFile.getPresentableUrl(), getProject(), true, false);
   }
 
@@ -163,12 +168,18 @@ public abstract class DependenciesBuilder {
   public static void analyzeFileDependencies(@NotNull PsiFile file,
                                              @NotNull DependencyProcessor processor,
                                              @NotNull DependencyVisitorFactory.VisitorOptions options) {
+    Boolean prev = file.getUserData(PsiFileEx.BATCH_REFERENCE_PROCESSING);
     file.putUserData(PsiFileEx.BATCH_REFERENCE_PROCESSING, Boolean.TRUE);
-    file.accept(DependencyVisitorFactory.createVisitor(file, processor, options));
-    file.putUserData(PsiFileEx.BATCH_REFERENCE_PROCESSING, null);
+    try {
+      file.accept(DependencyVisitorFactory.createVisitor(file, processor, options));
+    }
+    finally {
+      file.putUserData(PsiFileEx.BATCH_REFERENCE_PROCESSING, prev);
+    }
   }
 
+  @FunctionalInterface
   public interface DependencyProcessor {
-    void process(PsiElement place, PsiElement dependency);
+    void process(@NotNull PsiElement place, @NotNull PsiElement dependency);
   }
 }

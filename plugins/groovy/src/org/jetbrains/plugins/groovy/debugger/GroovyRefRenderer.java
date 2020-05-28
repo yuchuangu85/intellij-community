@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.debugger;
 
 import com.intellij.debugger.DebuggerContext;
@@ -8,6 +8,7 @@ import com.intellij.debugger.engine.DebuggerUtils;
 import com.intellij.debugger.engine.evaluation.EvaluateException;
 import com.intellij.debugger.engine.evaluation.EvaluationContext;
 import com.intellij.debugger.engine.evaluation.EvaluationContextImpl;
+import com.intellij.debugger.impl.DebuggerUtilsAsync;
 import com.intellij.debugger.ui.impl.watch.ValueDescriptorImpl;
 import com.intellij.debugger.ui.tree.DebuggerTreeNode;
 import com.intellij.debugger.ui.tree.NodeDescriptor;
@@ -24,6 +25,8 @@ import com.sun.jdi.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.lang.psi.util.GroovyCommonClassNames;
+
+import java.util.concurrent.CompletableFuture;
 
 /**
  * @author peter
@@ -44,6 +47,14 @@ public class GroovyRefRenderer extends NodeRendererImpl {
   }
 
   @Override
+  public CompletableFuture<Boolean> isApplicableAsync(Type type) {
+    if (type instanceof ReferenceType) {
+      return DebuggerUtilsAsync.instanceOf(type, GroovyCommonClassNames.GROOVY_LANG_REFERENCE);
+    }
+    return CompletableFuture.completedFuture(false);
+  }
+
+  @Override
   public void buildChildren(Value value, ChildrenBuilder builder, EvaluationContext evaluationContext) {
     ValueDescriptor fieldDescriptor = getWrappedDescriptor(value, evaluationContext.getProject());
     getDelegateRenderer(evaluationContext.getDebugProcess(), fieldDescriptor).buildChildren(fieldDescriptor.getValue(), builder, evaluationContext);
@@ -56,11 +67,12 @@ public class GroovyRefRenderer extends NodeRendererImpl {
     return getDelegateRenderer(context.getDebugProcess(), fieldDescriptor).getChildValueExpression(node, context);
   }
 
+  // TODO: make truly async
   @Override
-  public boolean isExpandable(Value value, EvaluationContext evaluationContext, NodeDescriptor parentDescriptor) {
+  public CompletableFuture<Boolean> isExpandableAsync(Value value, EvaluationContext evaluationContext, NodeDescriptor parentDescriptor) {
     ValueDescriptor fieldDescriptor = getWrappedDescriptor(value, evaluationContext.getProject());
-    return getDelegateRenderer(evaluationContext.getDebugProcess(), fieldDescriptor).isExpandable(fieldDescriptor.getValue(),
-                                                                                                  evaluationContext, fieldDescriptor);
+    return getDelegateRenderer(evaluationContext.getDebugProcess(), fieldDescriptor)
+      .isExpandableAsync(fieldDescriptor.getValue(), evaluationContext, fieldDescriptor);
   }
 
   @Override
@@ -107,10 +119,10 @@ public class GroovyRefRenderer extends NodeRendererImpl {
     };
   }
 
-  @Nullable
+  // TODO: make truly async
   @Override
-  public String getIdLabel(Value value, DebugProcess process) {
-    ValueDescriptor fieldDescriptor = getWrappedDescriptor(value, process.getProject());
-    return ((NodeRendererImpl)getDelegateRenderer(process, fieldDescriptor)).getIdLabel(fieldDescriptor.getValue(), process);
+  public @Nullable String calcIdLabel(ValueDescriptor descriptor, DebugProcess process, DescriptorLabelListener labelListener) {
+    ValueDescriptor fieldDescriptor = getWrappedDescriptor(descriptor.getValue(), process.getProject());
+    return ((NodeRendererImpl)getDelegateRenderer(process, fieldDescriptor)).calcIdLabel(fieldDescriptor, process, labelListener);
   }
 }

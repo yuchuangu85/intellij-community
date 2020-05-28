@@ -1,22 +1,9 @@
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.coverage;
 
-import com.intellij.openapi.extensions.ExtensionPointName;
+import com.intellij.openapi.extensions.ProjectExtensionPointName;
+import com.intellij.openapi.options.UnnamedConfigurable;
 
-import javax.swing.*;
-
-/**
- * @author traff
- */
-public abstract class CoverageOptions {
-  public static final ExtensionPointName<CoverageOptions> EP_NAME = ExtensionPointName.create("com.intellij.coverageOptions");
-
-  public abstract JComponent getComponent();
-
-  public abstract boolean isModified();
-
-  public abstract void apply();
-
-  public abstract void reset();
-
-  public abstract void disposeUIResources();
+public abstract class CoverageOptions implements UnnamedConfigurable {
+  public static final ProjectExtensionPointName<CoverageOptions> EP_NAME = new ProjectExtensionPointName<>("com.intellij.coverageOptions");
 }

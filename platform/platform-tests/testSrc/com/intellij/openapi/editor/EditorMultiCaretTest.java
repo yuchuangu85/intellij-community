@@ -46,6 +46,9 @@ public class EditorMultiCaretTest extends AbstractEditorTest {
     try {
       EditorSettingsExternalizable.getInstance().setVirtualSpace(myStoredVirtualSpaceSetting);
     }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
     finally {
       super.tearDown();
     }
@@ -285,10 +288,10 @@ public class EditorMultiCaretTest extends AbstractEditorTest {
              "<selection>three<caret></selection>\n" +
              "<selection>four<caret></selection>");
     copy();
-    myEditor.getCaretModel().setCaretsAndSelections(Arrays.asList(new CaretState(new LogicalPosition(0, 0),
-                                                                                 new LogicalPosition(0, 0),
-                                                                                 new LogicalPosition(0, 0)),
-                                                                  new CaretState(new LogicalPosition(1, 0),
+    getEditor().getCaretModel().setCaretsAndSelections(Arrays.asList(new CaretState(new LogicalPosition(0, 0),
+                                                                                    new LogicalPosition(0, 0),
+                                                                                    new LogicalPosition(0, 0)),
+                                                                     new CaretState(new LogicalPosition(1, 0),
                                                                                  new LogicalPosition(1, 0),
                                                                                  new LogicalPosition(1, 0))));
     paste();
@@ -365,7 +368,7 @@ public class EditorMultiCaretTest extends AbstractEditorTest {
     initText("\n" +
              "<selection><caret>word</selection>\n" +
              "some long prefix <selection><caret>word</selection>-suffix");
-    EditorTestUtil.configureSoftWraps(myEditor, 17); // wrapping right before 'word-suffix'
+    EditorTestUtil.configureSoftWraps(getEditor(), 17); // wrapping right before 'word-suffix'
 
     delete();
 
@@ -419,7 +422,7 @@ public class EditorMultiCaretTest extends AbstractEditorTest {
   public void testAddingMultipleSelectionsUsingMouseInColumnSelectionMode() {
     initText("s<selection>om<caret></selection>e text\nother text");
     setEditorVisibleSize(1000, 1000);
-    ((EditorEx)myEditor).setColumnMode(true);
+    ((EditorEx)getEditor()).setColumnMode(true);
     mouse().alt().shift().pressAt(0, 5).dragTo(1, 2).release();
     checkResultByText("s<selection>om<caret></selection>e <selection>text\not<caret></selection>her text");
   }
@@ -452,14 +455,14 @@ public class EditorMultiCaretTest extends AbstractEditorTest {
     initText("word\n" +
              "<caret>word word\n" +
              "");
-    myEditor.getCaretModel().addCaret(new VisualPosition(0, 0));
-    myEditor.getCaretModel().addCaret(new VisualPosition(1, 5));
-    assertEquals(new VisualPosition(1, 5), myEditor.getCaretModel().getPrimaryCaret().getVisualPosition());
+    getEditor().getCaretModel().addCaret(new VisualPosition(0, 0));
+    getEditor().getCaretModel().addCaret(new VisualPosition(1, 5));
+    assertEquals(new VisualPosition(1, 5), getEditor().getCaretModel().getPrimaryCaret().getVisualPosition());
     down();
     checkResultByText("word\n" +
                       "<caret>word word\n" +
                       "<caret>");
-    assertEquals(new VisualPosition(2, 0), myEditor.getCaretModel().getPrimaryCaret().getVisualPosition());
+    assertEquals(new VisualPosition(2, 0), getEditor().getCaretModel().getPrimaryCaret().getVisualPosition());
   }
 
   private static void doWithAltClickShortcut(ThrowableRunnable runnable) throws Throwable {
@@ -480,5 +483,32 @@ public class EditorMultiCaretTest extends AbstractEditorTest {
     rightWithSelection();
     type(' ');
     checkResultByText(" <caret> <caret>");
+  }
+
+  public void testCloneCaretBeforeInlay() {
+    initText("\n");
+    addInlay(0);
+    addInlay(1);
+    mouse().clickAt(0, 0);
+    executeAction("EditorCloneCaretBelow");
+    verifyCaretsAndSelections(0, 0, 0, 0,
+                              1, 0, 0, 0);
+  }
+
+  public void testCloneCaretAfterInlay() {
+    initText("\n");
+    addInlay(0);
+    addInlay(1);
+    mouse().clickAt(0, 1);
+    executeAction("EditorCloneCaretBelow");
+    verifyCaretsAndSelections(0, 1, 1, 1,
+                              1, 1, 1, 1);
+  }
+
+  public void testCloneCaretDoesNotUseRememberedHorizontalPositionFromMovement() {
+    initText("long long line<caret>\nshort line");
+    executeAction(IdeActions.ACTION_EDITOR_MOVE_CARET_DOWN);
+    executeAction(IdeActions.ACTION_EDITOR_CLONE_CARET_ABOVE);
+    checkResultByText("long long <caret>line\nshort line<caret>");
   }
 }

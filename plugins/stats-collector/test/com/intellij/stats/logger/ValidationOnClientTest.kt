@@ -17,22 +17,25 @@
 package com.intellij.stats.logger
 
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.stats.completion.DeserializedLogEvent
-import com.intellij.stats.completion.LogEventSerializer
-import com.intellij.stats.completion.ValidationStatus
+import com.intellij.stats.completion.*
 import com.intellij.stats.completion.events.DownPressedEvent
 import com.intellij.stats.completion.events.LogEvent
-import com.intellij.testFramework.PlatformTestCase
+import com.intellij.testFramework.HeavyPlatformTestCase
 import junit.framework.TestCase
 import java.util.concurrent.LinkedBlockingQueue
 
 /**
  * @author Vitaliy.Bibaev
  */
-class ValidationOnClientTest : PlatformTestCase() {
+class ValidationOnClientTest : HeavyPlatformTestCase() {
+    private companion object {
+        val EMPTY_STATE = LookupState(emptyList(), emptyList(), emptyList(), 1, emptyMap())
+        const val bucket = "0"
+    }
+
     fun `test validation before log`() {
-        val event1 = DownPressedEvent("1", "1", emptyList(), emptyList(), 1, System.currentTimeMillis())
-        val event2 = DownPressedEvent("1", "2", emptyList(), emptyList(), 1, System.currentTimeMillis())
+        val event1 = DownPressedEvent("1", "1", EMPTY_STATE, bucket, System.currentTimeMillis())
+        val event2 = DownPressedEvent("1", "2", EMPTY_STATE, bucket, System.currentTimeMillis())
 
         TestCase.assertEquals(ValidationStatus.UNKNOWN, event1.validationStatus)
         val queue = LinkedBlockingQueue<DeserializedLogEvent>()
@@ -46,9 +49,9 @@ class ValidationOnClientTest : PlatformTestCase() {
     }
 
     fun `test log after session finished`() {
-        val event1 = DownPressedEvent("1", "1", emptyList(), emptyList(), 1, System.currentTimeMillis())
-        val event2 = DownPressedEvent("1", "1", emptyList(), emptyList(), 2, System.currentTimeMillis())
-        val event3 = DownPressedEvent("1", "2", emptyList(), emptyList(), 1, System.currentTimeMillis())
+        val event1 = DownPressedEvent("1", "1", EMPTY_STATE, bucket, System.currentTimeMillis())
+        val event2 = DownPressedEvent("1", "1", EMPTY_STATE.withSelected(2), bucket, System.currentTimeMillis())
+        val event3 = DownPressedEvent("1", "2", EMPTY_STATE, bucket, System.currentTimeMillis())
 
         val queue = LinkedBlockingQueue<DeserializedLogEvent>()
 
@@ -69,8 +72,8 @@ class ValidationOnClientTest : PlatformTestCase() {
     }
 
     fun `test log executed on pooled thread`() {
-        val event1 = DownPressedEvent("1", "1", emptyList(), emptyList(), 1, System.currentTimeMillis())
-        val event2 = DownPressedEvent("1", "2", emptyList(), emptyList(), 1, System.currentTimeMillis())
+        val event1 = DownPressedEvent("1", "1", EMPTY_STATE, bucket, System.currentTimeMillis())
+        val event2 = DownPressedEvent("1", "2", EMPTY_STATE, bucket, System.currentTimeMillis())
 
         val queue = LinkedBlockingQueue<Boolean>()
         val logger = createLogger { queue.add(ApplicationManager.getApplication().isDispatchThread) }

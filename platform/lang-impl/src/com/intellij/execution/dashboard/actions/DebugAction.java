@@ -28,12 +28,6 @@ import org.jetbrains.annotations.NotNull;
  * @author konstantin.aleev
  */
 public class DebugAction extends ExecutorAction {
-  public DebugAction() {
-    super(ExecutionBundle.message("run.dashboard.debug.action.name"),
-          ExecutionBundle.message("run.dashboard.debug.action.description"),
-          AllIcons.Actions.StartDebugger);
-  }
-
   @Override
   protected Executor getExecutor() {
     return ExecutorRegistry.getInstance().getExecutorById(ToolWindowId.DEBUG);
@@ -43,13 +37,13 @@ public class DebugAction extends ExecutorAction {
   protected void update(@NotNull AnActionEvent e, boolean running) {
     Presentation presentation = e.getPresentation();
     if (running) {
-      presentation.setText(ExecutionBundle.message("run.dashboard.restart.debugger.action.name"));
-      presentation.setDescription(ExecutionBundle.message("run.dashboard.restart.debugger.action.description"));
+      presentation.setText(ExecutionBundle.messagePointer("run.dashboard.restart.debugger.action.name"));
+      presentation.setDescription(ExecutionBundle.messagePointer("run.dashboard.restart.debugger.action.description"));
       presentation.setIcon(AllIcons.Actions.RestartDebugger);
     }
     else {
-      presentation.setText(ExecutionBundle.message("run.dashboard.debug.action.name"));
-      presentation.setDescription(ExecutionBundle.message("run.dashboard.debug.action.description"));
+      presentation.setText(ExecutionBundle.messagePointer("run.dashboard.debug.action.name"));
+      presentation.setDescription(ExecutionBundle.messagePointer("run.dashboard.debug.action.description"));
       presentation.setIcon(AllIcons.Actions.StartDebugger);
     }
   }

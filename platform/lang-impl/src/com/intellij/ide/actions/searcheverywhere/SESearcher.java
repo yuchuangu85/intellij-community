@@ -7,50 +7,22 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 interface SESearcher {
-  ProgressIndicator search(Map<SearchEverywhereContributor<?>, Integer> contributorsAndLimits, String pattern,
-                           boolean useNonProjectItems,
-                           Function<SearchEverywhereContributor<?>, SearchEverywhereContributorFilter<?>> filterSupplier);
+  ProgressIndicator search(@NotNull Map<? extends SearchEverywhereContributor<?>, Integer> contributorsAndLimits,
+                           @NotNull String pattern);
 
-  ProgressIndicator findMoreItems(Map<SearchEverywhereContributor<?>, Collection<ElementInfo>> alreadyFound, String pattern,
-                                  boolean useNonProjectItems, SearchEverywhereContributor<?> contributorToExpand, int newLimit,
-                                  Function<SearchEverywhereContributor<?>, SearchEverywhereContributorFilter<?>> filterSupplier);
+  ProgressIndicator findMoreItems(@NotNull Map<? extends SearchEverywhereContributor<?>, Collection<SearchEverywhereFoundElementInfo>> alreadyFound,
+                                  @NotNull String pattern,
+                                  @NotNull SearchEverywhereContributor<?> contributor,
+                                  int newLimit);
 
   /**
    * Search process listener interface
    */
   interface Listener {
-    void elementsAdded(@NotNull List<ElementInfo> list);
-    void elementsRemoved(@NotNull List<ElementInfo> list);
+    void elementsAdded(@NotNull List<? extends SearchEverywhereFoundElementInfo> list);
+    void elementsRemoved(@NotNull List<? extends SearchEverywhereFoundElementInfo> list);
     void searchFinished(@NotNull Map<SearchEverywhereContributor<?>, Boolean> hasMoreContributors);
-  }
-
-  /**
-   * Class containing info about found elements
-   */
-  class ElementInfo {
-    public final int priority;
-    public final Object element;
-    public final SearchEverywhereContributor<?> contributor;
-
-    public ElementInfo(Object element, int priority, SearchEverywhereContributor<?> contributor) {
-      this.priority = priority;
-      this.element = element;
-      this.contributor = contributor;
-    }
-
-    public int getPriority() {
-      return priority;
-    }
-
-    public Object getElement() {
-      return element;
-    }
-
-    public SearchEverywhereContributor<?> getContributor() {
-      return contributor;
-    }
   }
 }

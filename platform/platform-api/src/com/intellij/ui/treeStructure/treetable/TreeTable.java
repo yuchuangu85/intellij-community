@@ -1,34 +1,23 @@
-// Copyright 2000-2017 JetBrains s.r.o.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.treeStructure.treetable;
 
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.TableUtil;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.ui.table.JBTable;
-import com.intellij.util.ObjectUtils;
-import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.accessibility.ScreenReader;
+import com.intellij.util.ui.tree.TreeUtil;
+import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
+import javax.swing.plaf.UIResource;
 import javax.swing.tree.DefaultTreeSelectionModel;
 import javax.swing.tree.TreeCellRenderer;
 import javax.swing.tree.TreePath;
 import java.awt.*;
-import java.awt.event.KeyEvent;
+import java.awt.event.ActionEvent;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
@@ -58,6 +47,48 @@ public class TreeTable extends JBTable {
   public TreeTable(TreeTableModel treeTableModel) {
     super();
     setModel(treeTableModel);
+    new TreeAction("selectPreviousColumn", "selectParent");
+    new TreeAction("selectPreviousColumnExtendSelection", "selectParentExtendSelection");
+    new TreeAction("selectNextColumn", "selectChild");
+    new TreeAction("selectNextColumnExtendSelection", "selectChildExtendSelection");
+  }
+
+  private final class TreeAction extends AbstractAction implements UIResource {
+    private final String actionId;
+    private final Action action;
+
+    private TreeAction(@NotNull String tableActionId, @NotNull String treeActionId) {
+      super(tableActionId + " -> " + treeActionId);
+      actionId = treeActionId;
+      ActionMap map = getActionMap();
+      action = map.get(tableActionId);
+      if (!(action instanceof TreeAction)) {
+        map.put(tableActionId, this);
+      }
+    }
+
+    private JTree getTreeToPerformAction() {
+      JTree tree = !myProcessCursorKeys ? null : getTree();
+      if (tree == null || 1 != getSelectedRowCount()) return null;
+      if (!getColumnModel().getColumnSelectionAllowed()) return tree;
+      int column = getColumnModel().getSelectionModel().getAnchorSelectionIndex();
+      return 0 <= column && column < getColumnCount() && !isTreeColumn(column) ? null : tree;
+    }
+
+    @Override
+    public void actionPerformed(ActionEvent event) {
+      JTree tree = getTreeToPerformAction();
+      Action action = tree == null ? null : tree.getActionMap().get(actionId);
+      if (action == null) {
+        this.action.actionPerformed(event);
+      }
+      else {
+        action.actionPerformed(new ActionEvent(tree, ActionEvent.ACTION_PERFORMED, actionId));
+        int row = tree.getLeadSelectionRow();
+        getSelectionModel().setSelectionInterval(row, row);
+        TableUtil.scrollSelectionToVisible(TreeTable.this);
+      }
+    }
   }
 
   public void setModel(TreeTableModel treeTableModel) {// Create the tree. It will be used as a renderer and editor.
@@ -96,7 +127,7 @@ public class TreeTable extends JBTable {
 
     // And update the height of the trees row to match that of the table.
     if (myTree.getRowHeight() < 1) {
-      setRowHeight(JBUI.scale(18));  // Metal looks better like this.
+      setRowHeight(JBUIScale.scale(18));  // Metal looks better like this.
     }
     else {
       setRowHeight(getRowHeight());
@@ -171,41 +202,6 @@ public class TreeTable extends JBTable {
    */
   public TreeTableTree getTree() {
     return myTree;
-  }
-
-  @Override
-  protected void processKeyEvent(KeyEvent e){
-    if (!myProcessCursorKeys) {
-      super.processKeyEvent(e);
-      return;
-    }
-
-    int keyCode = e.getKeyCode();
-    final int selColumn = columnModel.getSelectionModel().getAnchorSelectionIndex();
-    boolean treeHasFocus = selColumn == -1 || selColumn >= 0 && isTreeColumn(selColumn);
-    boolean oneRowSelected = getSelectedRowCount() == 1;
-    if(treeHasFocus && oneRowSelected && ((keyCode == KeyEvent.VK_LEFT) || (keyCode == KeyEvent.VK_RIGHT))){
-      try {
-        myTree._processKeyEvent(e);
-        int rowToSelect = ObjectUtils.notNull(myTree.getSelectionRows())[0];
-        getSelectionModel().setSelectionInterval(rowToSelect, rowToSelect);
-        TableUtil.scrollSelectionToVisible(this);
-      }
-      catch (ArrayIndexOutOfBoundsException ex) {
-        // diagnostic for EA-106780
-        List<Container> hierarchy = new ArrayList<>();
-        Container current = this;
-        while (current != null) {
-          hierarchy.add(current);
-          current = current.getParent();
-        }
-        LOG.error(StringUtil.join(hierarchy, " -> "), ex);
-        throw ex;
-      }
-    }
-    else{
-      super.processKeyEvent(e);
-    }
   }
 
   /**
@@ -317,7 +313,7 @@ public class TreeTable extends JBTable {
               }
             }
             if (!selectionPaths.isEmpty()) {
-              addSelectionPaths(selectionPaths.toArray(new TreePath[0]));
+              addSelectionPaths(selectionPaths.toArray(TreeUtil.EMPTY_TREE_PATH));
             }
           }
         }

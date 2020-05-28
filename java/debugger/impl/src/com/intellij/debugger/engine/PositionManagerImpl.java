@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.engine;
 
 import com.intellij.debugger.MultiRequestPositionManager;
@@ -26,7 +26,6 @@ import com.intellij.psi.impl.compiled.ClsClassImpl;
 import com.intellij.psi.search.FilenameIndex;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiTreeUtil;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.xdebugger.XDebuggerUtil;
 import com.sun.jdi.AbsentInformationException;
 import com.sun.jdi.Location;
@@ -44,7 +43,7 @@ import java.util.function.Consumer;
  * @author lex
  */
 public class PositionManagerImpl implements PositionManager, MultiRequestPositionManager {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.debugger.engine.PositionManagerImpl");
+  private static final Logger LOG = Logger.getInstance(PositionManagerImpl.class);
 
   private final DebugProcessImpl myDebugProcess;
 
@@ -172,14 +171,11 @@ public class PositionManagerImpl implements PositionManager, MultiRequestPositio
 
     int lambdaOrdinal = -1;
     if (DebuggerUtilsEx.isLambda(method)) {
-      Set<Method> lambdas =
-        ContainerUtil.map2SetNotNull(locationsOfLine(location.declaringType(), sourcePosition), location1 -> {
-          Method method1 = location1.method();
-          if (DebuggerUtilsEx.isLambda(method1)) {
-            return method1;
-          }
-          return null;
-        });
+      int line = sourcePosition.getLine() + 1;
+      Set<Method> lambdas = StreamEx.of(location.declaringType().methods())
+        .filter(DebuggerUtilsEx::isLambda)
+        .filter(m -> !DebuggerUtilsEx.locationsOfLine(m, line).isEmpty())
+        .toSet();
       if (lambdas.size() > 1) {
         ArrayList<Method> lambdasList = new ArrayList<>(lambdas);
         lambdasList.sort(DebuggerUtilsEx.LAMBDA_ORDINAL_COMPARATOR);
@@ -337,8 +333,8 @@ public class PositionManagerImpl implements PositionManager, MultiRequestPositio
         PsiFile[] files = FilenameIndex.getFilesByName(project, refType.sourceName(), GlobalSearchScope.allScope(project));
         for (PsiFile file : files) {
           if (file instanceof PsiJavaFile) {
-            for (PsiClass cls : ((PsiJavaFile)file).getClasses()) {
-              if (StringUtil.equals(originalQName, cls.getQualifiedName())) {
+            for (PsiClass cls : PsiTreeUtil.findChildrenOfAnyType(file, PsiClass.class)) {
+              if (StringUtil.equals(originalQName, JVMNameUtil.getClassVMName(cls))) {
                 return file;
               }
             }
@@ -352,30 +348,31 @@ public class PositionManagerImpl implements PositionManager, MultiRequestPositio
     return null;
   }
 
-  private PsiClass findPsiClassByName(String originalQName, @Nullable Consumer<ClsClassImpl> altClsProcessor) {
+  private PsiClass findPsiClassByName(String originalQName, @Nullable Consumer<? super ClsClassImpl> altClsProcessor) {
     PsiClass psiClass = null;
     // first check alternative jre if any
     Sdk alternativeJre = myDebugProcess.getSession().getAlternativeJre();
     if (alternativeJre != null) {
-      psiClass = findClass(myDebugProcess.getProject(), originalQName, AlternativeJreClassFinder.getSearchScope(alternativeJre));
+      GlobalSearchScope scope = AlternativeJreClassFinder.getSearchScope(alternativeJre);
+      psiClass = findClass(myDebugProcess.getProject(), originalQName, scope, false);
       if (psiClass instanceof ClsClassImpl && altClsProcessor != null) { //try to find sources
         altClsProcessor.accept((ClsClassImpl)psiClass);
       }
     }
 
     if (psiClass == null) {
-      psiClass = findClass(myDebugProcess.getProject(), originalQName, myDebugProcess.getSearchScope());
+      psiClass = findClass(myDebugProcess.getProject(), originalQName, myDebugProcess.getSearchScope(), true);
     }
     return psiClass;
   }
 
   @Nullable
-  public static PsiClass findClass(Project project, String originalQName, GlobalSearchScope searchScope) {
-    PsiClass psiClass = DebuggerUtils.findClass(originalQName, project, searchScope); // try to lookup original name first
+  public static PsiClass findClass(Project project, String originalQName, GlobalSearchScope searchScope, boolean fallbackToAllScope) {
+    PsiClass psiClass = DebuggerUtils.findClass(originalQName, project, searchScope, fallbackToAllScope); // try to lookup original name first
     if (psiClass == null) {
       int dollar = originalQName.indexOf('$');
       if (dollar > 0) {
-        psiClass = DebuggerUtils.findClass(originalQName.substring(0, dollar), project, searchScope);
+        psiClass = DebuggerUtils.findClass(originalQName.substring(0, dollar), project, searchScope, fallbackToAllScope);
       }
     }
     return psiClass;
@@ -623,7 +620,7 @@ public class PositionManagerImpl implements PositionManager, MultiRequestPositio
     }
 
     @Override
-    public void visitElement(PsiElement element) {
+    public void visitElement(@NotNull PsiElement element) {
       if (myCompiledMethod == null) {
         super.visitElement(element);
       }

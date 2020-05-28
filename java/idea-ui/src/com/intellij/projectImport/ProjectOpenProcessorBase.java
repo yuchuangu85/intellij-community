@@ -1,22 +1,10 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.projectImport;
 
 import com.intellij.CommonBundle;
+import com.intellij.ide.GeneralSettings;
 import com.intellij.ide.IdeBundle;
+import com.intellij.ide.JavaUiBundle;
 import com.intellij.ide.highlighter.ProjectFileType;
 import com.intellij.ide.impl.NewProjectUtil;
 import com.intellij.ide.impl.ProjectUtil;
@@ -45,18 +33,32 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Paths;
 
-/**
- * @author anna
- */
-public abstract class ProjectOpenProcessorBase<T extends ProjectImportBuilder> extends ProjectOpenProcessor {
+public abstract class ProjectOpenProcessorBase<T extends ProjectImportBuilder<?>> extends ProjectOpenProcessor {
+  @Nullable
   private final T myBuilder;
 
+  /**
+   * @deprecated Override {@link #doGetBuilder()} and use {@code ProjectImportBuilder.EXTENSIONS_POINT_NAME.findExtensionOrFail(yourClass.class)}.
+   */
+  @Deprecated
   protected ProjectOpenProcessorBase(@NotNull final T builder) {
     myBuilder = builder;
   }
 
+  protected ProjectOpenProcessorBase() {
+    myBuilder = null;
+  }
+
+  @NotNull
+  protected T doGetBuilder() {
+    assert myBuilder != null;
+    return myBuilder;
+  }
+
   @Override
+  @NotNull
   public String getName() {
     return getBuilder().getName();
   }
@@ -68,26 +70,24 @@ public abstract class ProjectOpenProcessorBase<T extends ProjectImportBuilder> e
   }
 
   @Override
-  public boolean canOpenProject(final VirtualFile file) {
-    final String[] supported = getSupportedExtensions();
-    if (supported != null) {
-      if (file.isDirectory()) {
-        for (VirtualFile child : getFileChildren(file)) {
-          if (canOpenFile(child, supported)) return true;
+  public boolean canOpenProject(@NotNull  VirtualFile file) {
+    String[] supported = getSupportedExtensions();
+    if (file.isDirectory()) {
+      for (VirtualFile child : getFileChildren(file)) {
+        if (canOpenFile(child, supported)) {
+          return true;
         }
-        return false;
       }
-      if (canOpenFile(file, supported)) return true;
+      return false;
     }
-    return false;
+    return canOpenFile(file, supported);
   }
 
-  @NotNull
-  private static VirtualFile[] getFileChildren(VirtualFile file) {
+  private static VirtualFile @NotNull [] getFileChildren(@NotNull VirtualFile file) {
     return ObjectUtils.chooseNotNull(file.getChildren(), VirtualFile.EMPTY_ARRAY);
   }
 
-  protected static boolean canOpenFile(VirtualFile file, String[] supported) {
+  protected static boolean canOpenFile(@NotNull VirtualFile file, String @NotNull [] supported) {
     final String fileName = file.getName();
     for (String name : supported) {
       if (fileName.equals(name)) {
@@ -97,26 +97,25 @@ public abstract class ProjectOpenProcessorBase<T extends ProjectImportBuilder> e
     return false;
   }
 
-  protected boolean doQuickImport(VirtualFile file, final WizardContext wizardContext) {
+  protected boolean doQuickImport(@NotNull VirtualFile file, @NotNull WizardContext wizardContext) {
     return false;
   }
 
   @NotNull
   public T getBuilder() {
-    return myBuilder;
+    return doGetBuilder();
   }
 
-  @Nullable
-  public abstract String[] getSupportedExtensions();
+  public abstract String @NotNull [] getSupportedExtensions();
 
   @Override
   @Nullable
   public Project doOpenProject(@NotNull VirtualFile virtualFile, Project projectToClose, boolean forceOpenInNewFrame) {
     try {
       getBuilder().setUpdate(false);
-      final WizardContext wizardContext = new WizardContext(null, null);
+      WizardContext wizardContext = new WizardContext(null, null);
       if (virtualFile.isDirectory()) {
-        final String[] supported = getSupportedExtensions();
+        String[] supported = getSupportedExtensions();
         for (VirtualFile file : getFileChildren(virtualFile)) {
           if (canOpenFile(file, supported)) {
             virtualFile = file;
@@ -127,14 +126,16 @@ public abstract class ProjectOpenProcessorBase<T extends ProjectImportBuilder> e
 
       wizardContext.setProjectFileDirectory(virtualFile.getParent().getPath());
 
-      if (!doQuickImport(virtualFile, wizardContext)) return null;
+      if (!doQuickImport(virtualFile, wizardContext)) {
+        return null;
+      }
 
       if (wizardContext.getProjectName() == null) {
         if (wizardContext.getProjectStorageFormat() == StorageScheme.DEFAULT) {
-          wizardContext.setProjectName(IdeBundle.message("project.import.default.name", getName()) + ProjectFileType.DOT_DEFAULT_EXTENSION);
+          wizardContext.setProjectName(JavaUiBundle.message("project.import.default.name", getName()) + ProjectFileType.DOT_DEFAULT_EXTENSION);
         }
         else {
-          wizardContext.setProjectName(IdeBundle.message("project.import.default.name.dotIdea", getName()));
+          wizardContext.setProjectName(JavaUiBundle.message("project.import.default.name.dotIdea", getName()));
         }
       }
 
@@ -145,9 +146,9 @@ public abstract class ProjectOpenProcessorBase<T extends ProjectImportBuilder> e
       }
       wizardContext.setProjectJdk(jdk);
 
-      final String dotIdeaFilePath = wizardContext.getProjectFileDirectory() + File.separator + Project.DIRECTORY_STORE_FOLDER;
-      final String projectFilePath = wizardContext.getProjectFileDirectory() + File.separator + wizardContext.getProjectName() +
-                                     ProjectFileType.DOT_DEFAULT_EXTENSION;
+      String dotIdeaFilePath = wizardContext.getProjectFileDirectory() + File.separator + Project.DIRECTORY_STORE_FOLDER;
+      String projectFilePath = wizardContext.getProjectFileDirectory() + File.separator + wizardContext.getProjectName() +
+                               ProjectFileType.DOT_DEFAULT_EXTENSION;
 
       File dotIdeaFile = new File(dotIdeaFilePath);
       File projectFile = new File(projectFilePath);
@@ -155,7 +156,8 @@ public abstract class ProjectOpenProcessorBase<T extends ProjectImportBuilder> e
       String pathToOpen;
       if (wizardContext.getProjectStorageFormat() == StorageScheme.DEFAULT) {
         pathToOpen = projectFilePath;
-      } else {
+      }
+      else {
         pathToOpen = dotIdeaFile.getParent();
       }
 
@@ -178,11 +180,11 @@ public abstract class ProjectOpenProcessorBase<T extends ProjectImportBuilder> e
           }
           int result = Messages.showYesNoCancelDialog(
             projectToClose,
-            IdeBundle.message("project.import.open.existing", existingName, projectFile.getParent(), virtualFile.getName()),
+            JavaUiBundle.message("project.import.open.existing", existingName, projectFile.getParent(), virtualFile.getName()),
             IdeBundle.message("title.open.project"),
-            IdeBundle.message("project.import.open.existing.openExisting"),
-            IdeBundle.message("project.import.open.existing.reimport"),
-            CommonBundle.message("button.cancel"),
+            JavaUiBundle.message("project.import.open.existing.openExisting"),
+            JavaUiBundle.message("project.import.open.existing.reimport"),
+            CommonBundle.getCancelButtonText(),
             Messages.getQuestionIcon());
           if (result == Messages.CANCEL) return null;
           shouldOpenExisting = result == Messages.YES;
@@ -190,10 +192,10 @@ public abstract class ProjectOpenProcessorBase<T extends ProjectImportBuilder> e
         }
       }
 
-      final Project projectToOpen;
+      Project projectToOpen;
       if (shouldOpenExisting) {
         try {
-          projectToOpen = ProjectManagerEx.getInstanceEx().loadProject(pathToOpen);
+          projectToOpen = ProjectManagerEx.getInstanceEx().loadProject(Paths.get(pathToOpen).toAbsolutePath());
         }
         catch (Exception e) {
           return null;
@@ -202,7 +204,9 @@ public abstract class ProjectOpenProcessorBase<T extends ProjectImportBuilder> e
       else {
         projectToOpen = ProjectManagerEx.getInstanceEx().newProject(wizardContext.getProjectName(), pathToOpen, true, false);
       }
-      if (projectToOpen == null) return null;
+      if (projectToOpen == null) {
+        return null;
+      }
 
       if (importToProject) {
         if (!getBuilder().validate(projectToClose, projectToOpen)) {
@@ -229,11 +233,17 @@ public abstract class ProjectOpenProcessorBase<T extends ProjectImportBuilder> e
       }
 
       if (!forceOpenInNewFrame) {
-        NewProjectUtil.closePreviousProject(projectToClose);
+        Project[] openProjects = ProjectUtil.getOpenProjects();
+        if (openProjects.length > 0) {
+          int exitCode = ProjectUtil.confirmOpenNewProject(true);
+          if (exitCode == GeneralSettings.OPEN_PROJECT_SAME_WINDOW) {
+            Project project = projectToClose != null ? projectToClose : openProjects[openProjects.length - 1];
+            ProjectUtil.closeAndDispose(project);
+          }
+        }
       }
       ProjectUtil.updateLastProjectLocation(pathToOpen);
       ProjectManagerEx.getInstanceEx().openProject(projectToOpen);
-
       return projectToOpen;
     }
     finally {
@@ -241,11 +251,12 @@ public abstract class ProjectOpenProcessorBase<T extends ProjectImportBuilder> e
     }
   }
 
-  public static String getUrl(@NonNls String path) {
+  @NotNull
+  public static String getUrl(@NonNls @NotNull String path) {
     try {
       path = FileUtil.resolveShortWindowsName(path);
     }
     catch (IOException ignored) { }
-    return VfsUtilCore.pathToUrl(FileUtil.toSystemIndependentName(path));
+    return VfsUtilCore.pathToUrl(path);
   }
 }

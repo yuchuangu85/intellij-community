@@ -20,9 +20,6 @@ import org.jetbrains.jps.service.JpsServiceManager;
 
 import java.util.Collection;
 
-/**
- * @author nik
- */
 public abstract class JpsPluginManager {
   @NotNull
   public static JpsPluginManager getInstance() {
@@ -31,4 +28,6 @@ public abstract class JpsPluginManager {
 
   @NotNull
   public abstract <T> Collection<T> loadExtensions(@NotNull Class<T> extensionClass);
+
+  public abstract int getModificationStamp();
 }

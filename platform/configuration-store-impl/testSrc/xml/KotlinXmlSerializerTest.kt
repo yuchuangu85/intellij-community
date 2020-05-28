@@ -1,10 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.configurationStore.xml
 
 import com.intellij.configurationStore.AState
 import com.intellij.configurationStore.deserialize
 import com.intellij.openapi.components.BaseState
-import com.intellij.util.loadElement
+import com.intellij.openapi.util.JDOMUtil
 import com.intellij.util.xmlb.annotations.MapAnnotation
 import com.intellij.util.xmlb.annotations.Property
 import com.intellij.util.xmlb.annotations.Tag
@@ -16,7 +16,7 @@ class KotlinXmlSerializerTest {
   @Test fun internalVar() {
     @Tag("bean")
     class Foo {
-      internal var PLACES_MAP = ""
+      var PLACES_MAP = ""
     }
 
     val data = Foo()
@@ -86,25 +86,25 @@ class KotlinXmlSerializerTest {
       </option>
     </bean>""", data)
 
-    assertThat(loadElement("""<bean>
-      <option name="PLACES_MAP">
-        <entry key="">
-          <PlaceSettings>
-            <option name="IGNORE_POLICY" />
-          </PlaceSettings>
-        </entry>
-      </option>
-    </bean>""").deserialize<Foo>().PLACES_MAP.get("")!!.IGNORE_POLICY).isEqualTo(IgnorePolicy.DEFAULT)
+    assertThat(deserialize<Foo>(JDOMUtil.load("""<bean>
+          <option name="PLACES_MAP">
+            <entry key="">
+              <PlaceSettings>
+                <option name="IGNORE_POLICY" />
+              </PlaceSettings>
+            </entry>
+          </option>
+        </bean>""")).PLACES_MAP.get("")!!.IGNORE_POLICY).isEqualTo(IgnorePolicy.DEFAULT)
 
-    val value = loadElement("""<bean>
-      <option name="PLACES_MAP">
-        <entry key="">
-          <PlaceSettings>
-            <option name="SOME_UNKNOWN_VALUE" />
-          </PlaceSettings>
-        </entry>
-      </option>
-    </bean>""").deserialize<Foo>()
+    val value = deserialize<Foo>(JDOMUtil.load("""<bean>
+          <option name="PLACES_MAP">
+            <entry key="">
+              <PlaceSettings>
+                <option name="SOME_UNKNOWN_VALUE" />
+              </PlaceSettings>
+            </entry>
+          </option>
+        </bean>"""))
     assertThat(value).isNotNull()
     val placeSettings = value.PLACES_MAP.get("")
     assertThat(placeSettings).isNotNull()

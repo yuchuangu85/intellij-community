@@ -20,7 +20,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.spellchecker.LiteralExpressionTokenizer;
 import com.intellij.spellchecker.inspections.Splitter;
 import com.intellij.spellchecker.tokenizer.TokenConsumer;
-import com.intellij.testFramework.fixtures.LightPlatformCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.BasePlatformTestCase;
 import com.intellij.util.Consumer;
 
 import java.util.ArrayList;
@@ -29,7 +29,7 @@ import java.util.List;
 /**
  * @author yole
  */
-public class LiteralExpressionTokenizerTest extends LightPlatformCodeInsightFixtureTestCase {
+public class LiteralExpressionTokenizerTest extends BasePlatformTestCase {
   private static class TokenCollector extends TokenConsumer implements Consumer<TextRange> {
     private final List<String> myTokenTexts = new ArrayList<>();
     private String myText;
@@ -46,7 +46,7 @@ public class LiteralExpressionTokenizerTest extends LightPlatformCodeInsightFixt
 
     @Override
     public void consume(TextRange range) {
-      myTokenTexts.add(myText.substring(range.getStartOffset(), range.getEndOffset()));
+      myTokenTexts.add(range.substring(myText));
     }
   }
 

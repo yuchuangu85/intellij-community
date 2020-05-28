@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.process;
 
 import com.intellij.execution.ExecutionException;
@@ -21,13 +7,16 @@ import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.remote.RemoteProcess;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
-import org.jvnet.winp.WinProcess;
+import org.jetbrains.annotations.Nullable;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.Set;
 
 /**
  * This process handler supports the "soft-kill" feature (see {@link KillableProcessHandler}).
@@ -42,7 +31,7 @@ public class KillableProcessHandler extends OSProcessHandler implements Killable
 
   private boolean myShouldKillProcessSoftly = true;
   private final boolean myMediatedProcess;
-  private boolean myShouldKillProcessSoftlyWithWinP = false;
+  private boolean myShouldKillProcessSoftlyWithWinP = SystemInfo.isWin10OrNewer && Registry.is("use.winp.for.graceful.process.termination");
 
   public KillableProcessHandler(@NotNull GeneralCommandLine commandLine) throws ExecutionException {
     super(commandLine);
@@ -68,7 +57,17 @@ public class KillableProcessHandler extends OSProcessHandler implements Killable
    * {@code commandLine} must not be not empty (for correct thread attribution in the stacktrace)
    */
   public KillableProcessHandler(@NotNull Process process, /*@NotNull*/ String commandLine, @NotNull Charset charset) {
-    super(process, commandLine, charset);
+    this(process, commandLine, charset, null);
+  }
+
+  /**
+   * {@code commandLine} must not be not empty (for correct thread attribution in the stacktrace)
+   */
+  public KillableProcessHandler(@NotNull Process process, /*@NotNull*/
+                                String commandLine,
+                                @NotNull Charset charset,
+                                @Nullable Set<? extends File> filesToDelete) {
+    super(process, commandLine, charset, filesToDelete);
     myMediatedProcess = false;
   }
 
@@ -163,11 +162,19 @@ public class KillableProcessHandler extends OSProcessHandler implements Killable
       if (myMediatedProcess) {
         return RunnerMediator.destroyProcess(myProcess, true);
       }
-      if (myShouldKillProcessSoftlyWithWinP) {
+      if (myShouldKillProcessSoftlyWithWinP && !Registry.is("disable.winp")) {
         try {
-          return new WinProcess(myProcess).sendCtrlC();
+          if (!myProcess.isAlive()) {
+            OSProcessUtil.logSkippedActionWithTerminatedProcess(myProcess, "destroy", getCommandLine());
+            return true;
+          }
+          return OSProcessUtil.createWinProcess(myProcess).sendCtrlC();
         }
         catch (Throwable e) {
+          if (!myProcess.isAlive()) {
+            OSProcessUtil.logSkippedActionWithTerminatedProcess(myProcess, "destroy", getCommandLine());
+            return true;
+          }
           LOG.error("Failed to send Ctrl+C, fallback to default termination: " + getCommandLine(), e);
         }
       }

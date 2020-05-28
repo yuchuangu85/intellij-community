@@ -1,6 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.memory.ui;
 
+import com.intellij.CommonBundle;
+import com.intellij.debugger.JavaDebuggerBundle;
 import com.intellij.debugger.DebuggerManager;
 import com.intellij.debugger.engine.DebugProcessImpl;
 import com.intellij.debugger.engine.DebuggerUtils;
@@ -9,10 +11,13 @@ import com.intellij.debugger.engine.SuspendContextImpl;
 import com.intellij.debugger.engine.evaluation.EvaluationContext;
 import com.intellij.debugger.engine.evaluation.EvaluationContextImpl;
 import com.intellij.debugger.engine.events.DebuggerContextCommandImpl;
+import com.intellij.debugger.memory.agent.MemoryAgentUtil;
 import com.intellij.debugger.memory.filtering.FilteringResult;
 import com.intellij.debugger.memory.filtering.FilteringTask;
 import com.intellij.debugger.memory.filtering.FilteringTaskCallback;
-import com.intellij.debugger.memory.utils.*;
+import com.intellij.debugger.memory.utils.AndroidUtil;
+import com.intellij.debugger.memory.utils.ErrorsValueGroup;
+import com.intellij.debugger.memory.utils.InstanceJavaValue;
 import com.intellij.debugger.ui.impl.watch.DebuggerTreeNodeImpl;
 import com.intellij.debugger.ui.impl.watch.MessageDescriptor;
 import com.intellij.debugger.ui.impl.watch.NodeManagerImpl;
@@ -21,16 +26,18 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.DoubleClickListener;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBPanel;
+import com.intellij.ui.scale.JBUIScale;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.update.UiNotifyConnector;
 import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.XDebugSessionListener;
-import com.intellij.xdebugger.XExpression;
 import com.intellij.xdebugger.evaluation.XDebuggerEditorsProvider;
 import com.intellij.xdebugger.frame.XValueChildrenList;
 import com.intellij.xdebugger.impl.ui.XDebuggerExpressionEditor;
@@ -38,16 +45,14 @@ import com.intellij.xdebugger.memory.ui.InstancesTree;
 import com.intellij.xdebugger.memory.ui.InstancesViewBase;
 import com.intellij.xdebugger.memory.utils.InstancesProvider;
 import org.jetbrains.annotations.NotNull;
-import com.sun.jdi.ObjectReference;
-import com.sun.jdi.Value;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.util.List;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 class InstancesView extends InstancesViewBase {
   private static final Logger LOG = Logger.getInstance(InstancesView.class);
@@ -66,20 +71,21 @@ class InstancesView extends InstancesViewBase {
   private final MyNodeManager myNodeManager;
   private final Consumer<? super String> myWarningMessageConsumer;
 
-  private final JButton myFilterButton = new JButton("Filter");
+  private final JButton myFilterButton = new JButton(CommonBundle.message("button.filter"));
   private final FilteringProgressView myProgress = new FilteringProgressView();
 
   private final Object myFilteringTaskLock = new Object();
 
-  private boolean myIsAndroidVM = false;
+  private boolean myIsAndroidVM;
   private final DebugProcessImpl myDebugProcess;
   private final String myClassName;
 
 
-  private volatile MyFilteringWorker myFilteringTask = null;
+  private volatile FilteringTask myFilteringTask;
+  private volatile Future<?> myFilteringTaskFuture;
 
   InstancesView(@NotNull XDebugSession session, InstancesProvider instancesProvider, String className, Consumer<? super String> warningMessageConsumer) {
-    super(new BorderLayout(0, JBUI.scale(BORDER_LAYOUT_DEFAULT_GAP)), session, instancesProvider);
+    super(new BorderLayout(0, JBUIScale.scale(BORDER_LAYOUT_DEFAULT_GAP)), session, instancesProvider);
     myClassName = className;
     myDebugProcess = (DebugProcessImpl) (DebuggerManager.getInstance(session.getProject()).getDebugProcess(session.getDebugProcess().getProcessHandler()));
     myNodeManager = new MyNodeManager(session.getProject());
@@ -91,17 +97,17 @@ class InstancesView extends InstancesViewBase {
       editorsProvider, this);
 
     final Dimension filteringButtonSize = myFilterConditionEditor.getEditorComponent().getPreferredSize();
-    filteringButtonSize.width = JBUI.scale(FILTERING_BUTTON_ADDITIONAL_WIDTH) +
-      getFilterButton().getPreferredSize().width;
+    filteringButtonSize.width = JBUIScale.scale(FILTERING_BUTTON_ADDITIONAL_WIDTH) +
+                                getFilterButton().getPreferredSize().width;
     getFilterButton().setPreferredSize(filteringButtonSize);
 
-    final JBPanel filteringPane = new JBPanel(new BorderLayout(JBUI.scale(BORDER_LAYOUT_DEFAULT_GAP), 0));
-    final JBLabel sideEffectsWarning = new JBLabel("Warning: filtering may have side effects", SwingConstants.RIGHT);
+    final JBPanel filteringPane = new JBPanel(new BorderLayout(JBUIScale.scale(BORDER_LAYOUT_DEFAULT_GAP), 0));
+    final JBLabel sideEffectsWarning = new JBLabel(JavaDebuggerBundle.message("warning.filtering.may.have.side.effects"), SwingConstants.RIGHT);
     sideEffectsWarning.setBorder(JBUI.Borders.emptyTop(1));
     sideEffectsWarning.setComponentStyle(UIUtil.ComponentStyle.SMALL);
     sideEffectsWarning.setFontColor(UIUtil.FontColor.BRIGHTER);
 
-    filteringPane.add(new JBLabel("Condition:"), BorderLayout.WEST);
+    filteringPane.add(new JBLabel(JavaDebuggerBundle.message("condition")), BorderLayout.WEST);
     filteringPane.add(myFilterConditionEditor.getComponent(), BorderLayout.CENTER);
     filteringPane.add(getFilterButton(), BorderLayout.EAST);
     filteringPane.add(sideEffectsWarning, BorderLayout.SOUTH);
@@ -126,7 +132,7 @@ class InstancesView extends InstancesViewBase {
     list.addListSelectionListener(e -> list.navigateToSelectedValue(false));
     new DoubleClickListener() {
       @Override
-      protected boolean onDoubleClick(MouseEvent event) {
+      protected boolean onDoubleClick(@NotNull MouseEvent event) {
         list.navigateToSelectedValue(true);
         return true;
       }
@@ -181,24 +187,29 @@ class InstancesView extends InstancesViewBase {
         final int limit = myIsAndroidVM
           ? AndroidUtil.ANDROID_INSTANCES_LIMIT
           : DEFAULT_INSTANCES_LIMIT;
-        List<ObjectReference> instances = getInstancesProvider().getInstances(limit + 1).stream().map(referenceInfo -> ((JavaReferenceInfo) referenceInfo).getObjectReference()).collect(Collectors.toList());
+        List<JavaReferenceInfo> instances = ContainerUtil
+          .map(getInstancesProvider().getInstances(limit + 1), referenceInfo -> ((JavaReferenceInfo)referenceInfo));
 
-        final EvaluationContextImpl evaluationContext = myDebugProcess
-          .getDebuggerContext().createEvaluationContext();
+        final EvaluationContextImpl evaluationContext = new EvaluationContextImpl(suspendContext, suspendContext.getFrameProxy());
 
         if (instances.size() > limit) {
           myWarningMessageConsumer.accept(String.format("Not all instances will be loaded (only %d)", limit));
           instances = instances.subList(0, limit);
         }
 
-        if (evaluationContext != null) {
-          synchronized (myFilteringTaskLock) {
-            List<ObjectReference> finalInstances = instances;
-            ApplicationManager.getApplication().runReadAction(() -> {
-              myFilteringTask = new MyFilteringWorker(finalInstances, myFilterConditionEditor.getExpression(), evaluationContext);
-              myFilteringTask.execute();
-            });
-          }
+        if (Registry.is("debugger.memory.agent.use.in.memory.view")) {
+          instances = MemoryAgentUtil.tryCalculateSizes(evaluationContext, instances);
+        }
+
+        synchronized (myFilteringTaskLock) {
+          List<JavaReferenceInfo> finalInstances = instances;
+          ApplicationManager.getApplication().runReadAction(() -> {
+            myFilteringTask =
+              new FilteringTask(myClassName, myDebugProcess, myFilterConditionEditor.getExpression(), new MyValuesList(finalInstances),
+                                new MyFilteringCallback(evaluationContext));
+
+              myFilteringTaskFuture = ApplicationManager.getApplication().executeOnPooledThread(myFilteringTask);
+          });
         }
       }
     });
@@ -210,6 +221,8 @@ class InstancesView extends InstancesViewBase {
         if (myFilteringTask != null) {
           myFilteringTask.cancel();
           myFilteringTask = null;
+          myFilteringTaskFuture.cancel(false);
+          myFilteringTaskFuture = null;
         }
       }
     }
@@ -248,18 +261,15 @@ class InstancesView extends InstancesViewBase {
   }
 
 
-
-
-
   private class MyFilteringCallback implements FilteringTaskCallback {
     private final ErrorsValueGroup myErrorsGroup = new ErrorsValueGroup();
     private final EvaluationContextImpl myEvaluationContext;
 
     private long myFilteringStartedTime;
 
-    private int myProceedCount = 0;
-    private int myMatchedCount = 0;
-    private int myErrorsCount = 0;
+    private int myProceedCount;
+    private int myMatchedCount;
+    private int myErrorsCount;
 
     private long myLastTreeUpdatingTime;
     private long myLastProgressUpdatingTime;
@@ -280,8 +290,8 @@ class InstancesView extends InstancesViewBase {
 
     @NotNull
     @Override
-    public Action matched(@NotNull Value ref) {
-      final JavaValue val = new InstanceJavaValue(new InstanceValueDescriptor(myDebugProcess.getProject(), ref),
+    public Action matched(@NotNull JavaReferenceInfo ref) {
+      final JavaValue val = new InstanceJavaValue(ref.createDescriptor(myDebugProcess.getProject()),
         myEvaluationContext, myNodeManager);
       myMatchedCount++;
       myProceedCount++;
@@ -294,7 +304,7 @@ class InstancesView extends InstancesViewBase {
 
     @NotNull
     @Override
-    public Action notMatched(@NotNull Value ref) {
+    public Action notMatched(@NotNull JavaReferenceInfo ref) {
       myProceedCount++;
       updateProgress();
 
@@ -303,8 +313,8 @@ class InstancesView extends InstancesViewBase {
 
     @NotNull
     @Override
-    public Action error(@NotNull Value ref, @NotNull String description) {
-      final JavaValue val = new InstanceJavaValue(new InstanceValueDescriptor(myDebugProcess.getProject(), ref),
+    public Action error(@NotNull JavaReferenceInfo ref, @NotNull String description) {
+      final JavaValue val = new InstanceJavaValue(ref.createDescriptor(myDebugProcess.getProject()),
         myEvaluationContext, myNodeManager);
       myErrorsGroup.addErrorValue(description, val);
       myProceedCount++;
@@ -360,9 +370,9 @@ class InstancesView extends InstancesViewBase {
     }
   }
   private static class MyValuesList implements FilteringTask.ValuesList {
-    private final List<? extends ObjectReference> myRefs;
+    private final List<? extends JavaReferenceInfo> myRefs;
 
-    MyValuesList(List<? extends ObjectReference> refs) {
+    MyValuesList(List<? extends JavaReferenceInfo> refs) {
       myRefs = refs;
     }
 
@@ -372,33 +382,8 @@ class InstancesView extends InstancesViewBase {
     }
 
     @Override
-    public ObjectReference get(int index) {
+    public JavaReferenceInfo get(int index) {
       return myRefs.get(index);
-    }
-  }
-  private class MyFilteringWorker extends SwingWorker<Void, Void> {
-    private final FilteringTask myTask;
-
-    MyFilteringWorker(@NotNull List<ObjectReference> refs,
-                      @NotNull XExpression expression,
-                      @NotNull EvaluationContextImpl evaluationContext) {
-      myTask = new FilteringTask(myClassName, myDebugProcess, expression, new MyValuesList(refs),
-        new MyFilteringCallback(evaluationContext));
-    }
-
-    @Override
-    protected Void doInBackground() {
-      try {
-        myTask.run();
-      } catch (Throwable e) {
-        LOG.error(e);
-      }
-      return null;
-    }
-
-    public void cancel() {
-      myTask.cancel();
-      super.cancel(false);
     }
   }
 }

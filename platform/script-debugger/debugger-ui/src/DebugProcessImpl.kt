@@ -1,13 +1,14 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.debugger
 
 import com.intellij.execution.DefaultExecutionResult
 import com.intellij.execution.ExecutionResult
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.openapi.application.runReadAction
+import com.intellij.openapi.ui.MessageType
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.ui.BrowserHyperlinkListener
 import com.intellij.util.Url
-import com.intellij.util.containers.ContainerUtil
 import com.intellij.util.io.socketConnection.ConnectionStatus
 import com.intellij.xdebugger.DefaultDebugProcessHandler
 import com.intellij.xdebugger.XDebugProcess
@@ -21,6 +22,7 @@ import com.intellij.xdebugger.stepping.XSmartStepIntoHandler
 import org.jetbrains.concurrency.Promise
 import org.jetbrains.debugger.connection.RemoteVmConnection
 import org.jetbrains.debugger.connection.VmConnection
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.event.HyperlinkListener
@@ -48,15 +50,13 @@ abstract class DebugProcessImpl<out C : VmConnection<*>>(session: XDebugSession,
                                                          private val editorsProvider: XDebuggerEditorsProvider,
                                                          private val smartStepIntoHandler: XSmartStepIntoHandler<*>? = null,
                                                          protected val executionResult: ExecutionResult? = null) : XDebugProcess(session), MultiVmDebugProcess {
-  protected val repeatStepInto: AtomicBoolean = AtomicBoolean()
   @Volatile var lastStep: StepAction? = null
   @Volatile protected var lastCallFrame: CallFrame? = null
   @Volatile protected var isForceStep: Boolean = false
   @Volatile protected var disableDoNotStepIntoLibraries: Boolean = false
 
-  protected val urlToFileCache: ConcurrentMap<Url, VirtualFile> = ContainerUtil.newConcurrentMap<Url, VirtualFile>()
-
-  var processBreakpointConditionsAtIdeSide: Boolean = false
+  // todo: file resolving: check that urlToFileCache still needed
+  protected val urlToFileCache: ConcurrentMap<Url, VirtualFile> = ConcurrentHashMap()
 
   private val connectedListenerAdded = AtomicBoolean()
   private val breakpointsInitiated = AtomicBoolean()
@@ -101,7 +101,7 @@ abstract class DebugProcessImpl<out C : VmConnection<*>>(session: XDebugSession,
         }
 
         ConnectionStatus.CONNECTION_FAILED -> {
-          getSession().reportError(it.message)
+          getSession().reportMessage(it.message, MessageType.ERROR, BrowserHyperlinkListener.INSTANCE)
           getSession().stop()
         }
 
@@ -118,7 +118,7 @@ abstract class DebugProcessImpl<out C : VmConnection<*>>(session: XDebugSession,
 
   final override fun checkCanPerformCommands(): Boolean = activeOrMainVm != null
 
-  final override fun isValuesCustomSorted(): Boolean = true
+  override fun isValuesCustomSorted(): Boolean = true
 
   final override fun startStepOver(context: XSuspendContext?) {
     val vm = context.vm
@@ -131,6 +131,7 @@ abstract class DebugProcessImpl<out C : VmConnection<*>>(session: XDebugSession,
 
   final override fun startForceStepInto(context: XSuspendContext?) {
     isForceStep = true
+    enableBlackboxing(false, context.vm)
     startStepInto(context)
   }
 
@@ -142,12 +143,7 @@ abstract class DebugProcessImpl<out C : VmConnection<*>>(session: XDebugSession,
 
   final override fun startStepOut(context: XSuspendContext?) {
     val vm = context.vm
-    if (isVmStepOutCorrect()) {
-      lastCallFrame = null
-    }
-    else {
-      updateLastCallFrame(vm)
-    }
+    updateLastCallFrame(vm)
     continueVm(vm, StepAction.OUT)
   }
 
@@ -180,12 +176,16 @@ abstract class DebugProcessImpl<out C : VmConnection<*>>(session: XDebugSession,
       lastStep = null
       lastCallFrame = null
       urlToFileCache.clear()
-      disableDoNotStepIntoLibraries = false
+      enableBlackboxing(true, vm)
     }
     else {
       lastStep = stepAction
     }
     return suspendContextManager.continueVm(stepAction)
+  }
+
+  protected open fun enableBlackboxing(state: Boolean, vm: Vm) {
+    disableDoNotStepIntoLibraries = !state
   }
 
   protected fun setOverlay(context: SuspendContext<*>) {

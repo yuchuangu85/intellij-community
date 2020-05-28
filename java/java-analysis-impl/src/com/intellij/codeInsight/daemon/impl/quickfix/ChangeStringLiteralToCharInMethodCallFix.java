@@ -18,6 +18,7 @@ package com.intellij.codeInsight.daemon.impl.quickfix;
 import com.intellij.codeInsight.daemon.QuickFixBundle;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.codeInsight.intention.impl.BaseIntentionAction;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
@@ -62,7 +63,7 @@ public class ChangeStringLiteralToCharInMethodCallFix implements IntentionAction
 
   @Override
   public boolean isAvailable(@NotNull final Project project, final Editor editor, final PsiFile file) {
-    return myCall.isValid() && myLiteral.isValid() && myCall.getManager().isInProject(myCall);
+    return myCall.isValid() && myLiteral.isValid() && BaseIntentionAction.canModify(myCall);
   }
 
   @Override
@@ -94,8 +95,8 @@ public class ChangeStringLiteralToCharInMethodCallFix implements IntentionAction
     return builder.toString();
   }
 
-  public static void registerFixes(@NotNull final PsiMethod[] candidates, @NotNull final PsiConstructorCall call,
-                                        @NotNull final HighlightInfo out) {
+  public static void registerFixes(final PsiMethod @NotNull [] candidates, @NotNull final PsiConstructorCall call,
+                                   @NotNull final HighlightInfo out) {
     final Set<PsiLiteralExpression> literals = new HashSet<>();
     if (call.getArgumentList() == null) {
       return;
@@ -109,7 +110,7 @@ public class ChangeStringLiteralToCharInMethodCallFix implements IntentionAction
     }
   }
 
-  public static void registerFixes(@NotNull final CandidateInfo[] candidates,
+  public static void registerFixes(final CandidateInfo @NotNull [] candidates,
                                    @NotNull final PsiMethodCallExpression methodCall,
                                    @Nullable final HighlightInfo info) {
     if (info == null) return;

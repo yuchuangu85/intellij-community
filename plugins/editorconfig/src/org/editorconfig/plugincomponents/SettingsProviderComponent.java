@@ -1,6 +1,7 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.editorconfig.plugincomponents;
 
+import com.intellij.application.options.codeStyle.cache.CodeStyleCachingService;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.module.Module;
@@ -10,7 +11,7 @@ import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.roots.ProjectRootModificationTracker;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.SimpleModificationTracker;
-import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.util.UserDataHolder;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.util.CachedValue;
@@ -22,6 +23,8 @@ import org.editorconfig.Utils;
 import org.editorconfig.core.EditorConfig;
 import org.editorconfig.core.EditorConfig.OutPair;
 import org.editorconfig.core.EditorConfigException;
+import org.editorconfig.core.ParserCallback;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
@@ -39,15 +42,21 @@ public class SettingsProviderComponent extends SimpleModificationTracker {
   }
 
   public List<OutPair> getOutPairs(Project project, VirtualFile file) {
+    return getOutPairs(project, file, null);
+  }
+
+  public List<OutPair> getOutPairs(Project project, VirtualFile file, @Nullable ParserCallback callback) {
     final String filePath = Utils.getFilePath(project, file);
     if (filePath == null) return Collections.emptyList();
-    CachedValue<List<OutPair>> cache = file.getUserData(CACHED_PAIRS);
+    final UserDataHolder dataHolder = CodeStyleCachingService.getInstance(project).getDataHolder(file);
+    if (dataHolder == null) return Collections.emptyList();
+    CachedValue<List<OutPair>> cache = dataHolder.getUserData(CACHED_PAIRS);
     if (cache == null) {
       final Set<String> rootDirs = getRootDirs(project);
       cache = new CachedValueImpl<>(() -> {
         final List<OutPair> outPairs;
         try {
-          outPairs = editorConfig.getProperties(filePath, rootDirs);
+          outPairs = editorConfig.getProperties(filePath, rootDirs, callback);
           return CachedValueProvider.Result.create(outPairs, this);
         }
         catch (EditorConfigException error) {
@@ -56,14 +65,9 @@ public class SettingsProviderComponent extends SimpleModificationTracker {
           return CachedValueProvider.Result.create(errorResult, this);
         }
       });
-      file.putUserData(CACHED_PAIRS, cache);
+      dataHolder.putUserData(CACHED_PAIRS, cache);
     }
-    List<OutPair> result = cache.getValue();
-    String error = Utils.configValueForKey(result, ERROR);
-    if (!StringUtil.isEmpty(error)) {
-      Utils.invalidConfigMessage(project, error, "", filePath);
-    }
-    return result;
+    return cache.getValue();
   }
 
   public Set<String> getRootDirs(final Project project) {

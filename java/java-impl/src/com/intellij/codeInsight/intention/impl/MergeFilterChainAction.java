@@ -15,8 +15,8 @@
  */
 package com.intellij.codeInsight.intention.impl;
 
-import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInsight.intention.PsiElementBaseIntentionAction;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
@@ -29,6 +29,7 @@ import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.refactoring.util.LambdaRefactoringUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.siyeh.ig.psiutils.ExpressionUtils;
+import com.siyeh.ig.psiutils.MethodCallUtils;
 import com.siyeh.ig.psiutils.ParenthesesUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -53,19 +54,15 @@ public class MergeFilterChainAction extends PsiElementBaseIntentionAction {
 
   @Nullable
   private static PsiMethodCallExpression getFilterToMerge(PsiMethodCallExpression methodCallExpression) {
-    final PsiExpression qualifierExpression = methodCallExpression.getMethodExpression().getQualifierExpression();
-    if (qualifierExpression instanceof PsiMethodCallExpression && isFilterCall((PsiMethodCallExpression)qualifierExpression)) {
-      return (PsiMethodCallExpression)qualifierExpression;
+    final PsiMethodCallExpression prevCall = MethodCallUtils.getQualifierMethodCall(methodCallExpression);
+    if (prevCall != null && isFilterCall(prevCall)) {
+      return prevCall;
     }
 
-    final PsiElement parent = methodCallExpression.getParent();
-    if (parent instanceof PsiReferenceExpression) {
-      final PsiElement gParent = parent.getParent();
-      if (gParent instanceof PsiMethodCallExpression && isFilterCall((PsiMethodCallExpression)gParent)) {
-        return (PsiMethodCallExpression)gParent;
-      }
+    final PsiMethodCallExpression nextCall = ExpressionUtils.getCallForQualifier(methodCallExpression);
+    if (nextCall != null && isFilterCall(nextCall)) {
+      return nextCall;
     }
-
     return null;
   }
 
@@ -89,13 +86,13 @@ public class MergeFilterChainAction extends PsiElementBaseIntentionAction {
   @NotNull
   @Override
   public String getText() {
-    return CodeInsightBundle.message("intention.merge.filter.text");
+    return JavaBundle.message("intention.merge.filter.text");
   }
 
   @Override
   @NotNull
   public String getFamilyName() {
-    return CodeInsightBundle.message("intention.merge.filter.family");
+    return JavaBundle.message("intention.merge.filter.family");
   }
 
   @Nullable

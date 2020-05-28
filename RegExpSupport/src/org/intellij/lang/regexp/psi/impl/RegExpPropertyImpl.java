@@ -23,9 +23,9 @@ import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiReference;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.PlatformIcons;
-import com.intellij.util.containers.ContainerUtil;
 import org.intellij.lang.regexp.RegExpLanguageHosts;
 import org.intellij.lang.regexp.RegExpTT;
 import org.intellij.lang.regexp.psi.RegExpElementVisitor;
@@ -64,70 +64,88 @@ public class RegExpPropertyImpl extends RegExpElementImpl implements RegExpPrope
         return getNode().findChildByType(RegExpTT.NAME);
     }
 
-    @Override
-    public void accept(RegExpElementVisitor visitor) {
-        visitor.visitRegExpProperty(this);
-    }
+  @Nullable
+  @Override
+  public ASTNode getValueNode() {
+    ASTNode node = getNode();
+    ASTNode eq = node.findChildByType(RegExpTT.EQ);
+    return eq != null ? node.findChildByType(RegExpTT.NAME, eq) : null;
+  }
+
+  @Override
+  public void accept(RegExpElementVisitor visitor) {
+    visitor.visitRegExpProperty(this);
+  }
 
   private class MyPsiReference implements PsiReference {
-        @Override
-        @NotNull
-        public PsiElement getElement() {
-            return RegExpPropertyImpl.this;
-        }
-
-        @Override
-        @NotNull
-        public TextRange getRangeInElement() {
-            ASTNode firstNode = getNode().findChildByType(RegExpTT.CARET);
-            if (firstNode == null) {
-              firstNode = getNode().findChildByType(RegExpTT.LBRACE);
-            }
-            assert firstNode != null;
-            final ASTNode rbrace = getNode().findChildByType(RegExpTT.RBRACE);
-            int to = rbrace == null ? getTextRange().getEndOffset() : rbrace.getTextRange().getEndOffset() - 1;
-
-            final TextRange t = new TextRange(firstNode.getStartOffset() + 1, to);
-            return t.shiftRight(-getTextRange().getStartOffset());
-        }
-
-        @Override
-        @Nullable
-        public PsiElement resolve() {
-            return RegExpPropertyImpl.this;
-        }
-
-        @Override
-        @NotNull
-        public String getCanonicalText() {
-            return getRangeInElement().substring(getElement().getText());
-        }
-
-        @Override
-        public PsiElement handleElementRename(@NotNull String newElementName) throws IncorrectOperationException {
-            throw new IncorrectOperationException();
-        }
-
-        @Override
-        public PsiElement bindToElement(@NotNull PsiElement element) throws IncorrectOperationException {
-            throw new IncorrectOperationException();
-        }
-
-        @Override
-        public boolean isReferenceTo(@NotNull PsiElement element) {
-            return false;
-        }
+    @Override
+    @NotNull
+    public PsiElement getElement() {
+      return RegExpPropertyImpl.this;
+    }
 
     @Override
     @NotNull
-    public Object[] getVariants() {
+    public TextRange getRangeInElement() {
+      ASTNode node = getNode();
+      ASTNode firstNode = node.findChildByType(RegExpTT.CARET);
+      if (firstNode == null) {
+        firstNode = node.findChildByType(RegExpTT.LBRACE);
+      }
+      assert firstNode != null;
+      ASTNode eq = node.findChildByType(RegExpTT.EQ);
+      final ASTNode rbrace = node.findChildByType(RegExpTT.RBRACE);
+      int to;
+      if (eq != null) {
+        to = eq.getTextRange().getEndOffset() - 1;
+      }
+      else if (rbrace != null) {
+        to = rbrace.getTextRange().getEndOffset() - 1;
+      }
+      else {
+        to = getTextRange().getEndOffset();
+      }
+
+      final TextRange t = new TextRange(firstNode.getStartOffset() + 1, to);
+      return t.shiftRight(-getTextRange().getStartOffset());
+    }
+
+    @Override
+    @Nullable
+    public PsiElement resolve() {
+      return RegExpPropertyImpl.this;
+    }
+
+    @Override
+    @NotNull
+    public String getCanonicalText() {
+      return getRangeInElement().substring(getElement().getText());
+    }
+
+    @Override
+    public PsiElement handleElementRename(@NotNull String newElementName) throws IncorrectOperationException {
+      throw new IncorrectOperationException();
+    }
+
+    @Override
+    public PsiElement bindToElement(@NotNull PsiElement element) throws IncorrectOperationException {
+      throw new IncorrectOperationException();
+    }
+
+    @Override
+    public boolean isReferenceTo(@NotNull PsiElement element) {
+      return false;
+    }
+
+    @Override
+    public Object @NotNull [] getVariants() {
       final ASTNode categoryNode = getCategoryNode();
       if (categoryNode != null && categoryNode.getText().startsWith("In") && !categoryNode.getText().startsWith("Intelli")) {
         return UNICODE_BLOCKS;
       }
       else {
         boolean startsWithIs = categoryNode != null && categoryNode.getText().startsWith("Is");
-        Collection<LookupElement> result = ContainerUtil.newArrayList();
+        Collection<LookupElement> result = new ArrayList<>();
         for (String[] properties : RegExpLanguageHosts.getInstance().getAllKnownProperties(getElement())) {
           String name = ArrayUtil.getFirstElement(properties);
           if (name != null) {
@@ -166,6 +184,6 @@ public class RegExpPropertyImpl extends RegExpElementImpl implements RegExpPrope
                 }
             }
         }
-      UNICODE_BLOCKS = ArrayUtil.toStringArray(unicodeBlocks);
+      UNICODE_BLOCKS = ArrayUtilRt.toStringArray(unicodeBlocks);
     }
 }

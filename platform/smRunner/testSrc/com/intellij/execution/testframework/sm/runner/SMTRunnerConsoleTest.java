@@ -68,6 +68,9 @@ public class SMTRunnerConsoleTest extends BaseSMTRunnerTestCase {
       Disposer.dispose(myEventsProcessor);
       Disposer.dispose(myConsole);
     }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
     finally {
       super.tearDown();
     }
@@ -502,7 +505,6 @@ public class SMTRunnerConsoleTest extends BaseSMTRunnerTestCase {
 
   public void testStopCollectingOutput() {
     myResultsViewer.selectAndNotify(myResultsViewer.getTestsRootNode());
-    myConsole.attachToProcess(null);
 
     myEventsProcessor.onStartTesting();
     myEventsProcessor.onSuiteStarted(new TestSuiteStartedEvent("suite", null));

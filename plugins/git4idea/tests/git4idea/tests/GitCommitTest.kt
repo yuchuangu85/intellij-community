@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2010 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.tests
 
 import com.intellij.openapi.extensions.Extensions
@@ -22,12 +8,9 @@ import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.vcs.Executor.*
 import com.intellij.openapi.vcs.FilePath
-import com.intellij.openapi.vcs.VcsException
-import com.intellij.openapi.vcs.changes.Change
-import com.intellij.util.containers.ContainerUtil
-import git4idea.GitUtil
 import git4idea.checkin.GitCheckinEnvironment
 import git4idea.checkin.GitCheckinExplicitMovementProvider
+import git4idea.checkin.isCommitRenamesSeparately
 import git4idea.config.GitVersion
 import git4idea.test.*
 import org.junit.Assume.assumeTrue
@@ -46,21 +29,15 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     super.setUp()
 
     val point = Extensions.getRootArea().getExtensionPoint(GitCheckinExplicitMovementProvider.EP_NAME)
-    point.registerExtension(myMovementProvider)
-    Registry.get("git.allow.explicit.commit.renames").setValue(true)
+    point.registerExtension(myMovementProvider, testRootDisposable)
     Registry.get("git.force.commit.using.staging.area").setValue(useStagingArea)
 
-    (vcs.checkinEnvironment as GitCheckinEnvironment).setCommitRenamesSeparately(true)
+    commitContext.isCommitRenamesSeparately = true
   }
 
   override fun tearDown() {
     try {
-      val point = Extensions.getRootArea().getExtensionPoint(GitCheckinExplicitMovementProvider.EP_NAME)
-      point.unregisterExtension(myMovementProvider)
-      Registry.get("git.allow.explicit.commit.renames").resetToDefault()
       Registry.get("git.force.commit.using.staging.area").resetToDefault()
-
-      (vcs.checkinEnvironment as GitCheckinEnvironment).setCommitRenamesSeparately(false)
     }
     finally {
       super.tearDown()
@@ -105,14 +82,14 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     git("mv -f b.java c.java")
     overwrite("a.java", "new content")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       modified("a.java")
       rename("b.java", "c.java")
     }
 
     commit(listOf(changes[0]))
 
-    assertChanges {
+    assertChangesWithRefresh {
       rename("b.java", "c.java")
     }
     repo.assertCommitted {
@@ -127,14 +104,14 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     git("mv -f b.java B.java")
     overwrite("a.java", "new content")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       modified("a.java")
       rename("b.java", "B.java")
     }
 
     commit(listOf(changes[0]))
 
-    assertChanges {
+    assertChangesWithRefresh {
       rename("b.java", "B.java")
     }
     repo.assertCommitted {
@@ -147,7 +124,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
 
     git("mv -f b.java c.java")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       rename("b.java", "c.java")
     }
 
@@ -162,7 +139,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
   fun `test commit case rename`() {
     generateCaseRename("a.java", "A.java")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       rename("a.java", "A.java")
     }
     commit(changes)
@@ -173,13 +150,13 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
   }
 
   fun `test commit unstaged case rename - case ignored on case insensitive system`() {
-    assumeTrue(!SystemInfo.isFileSystemCaseSensitive)
+    assumeCaseInsensitiveSystem()
 
     tac("a.java", "old content")
     rm("a.java")
     touch("A.java", "new content")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       modified("a.java")
     }
     commit(changes)
@@ -190,14 +167,14 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
   }
 
   fun `test commit wrongly staged case rename - case ignored on case insensitive system`() {
-    assumeTrue(!SystemInfo.isFileSystemCaseSensitive)
+    assumeCaseInsensitiveSystem()
 
     tac("a.java", "old content")
     rm("a.java")
     touch("A.java", "new content")
     git("add -A a.java A.java")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       modified("a.java")
     }
     commit(changes)
@@ -207,12 +184,16 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     }
   }
 
+  private fun assumeCaseInsensitiveSystem() {
+    assumeTrue("Case-insensitive system expected", !SystemInfo.isFileSystemCaseSensitive)
+  }
+
   fun `test commit case rename + one staged file`() {
     generateCaseRename("a.java", "A.java")
     touch("s.java")
     git("add s.java")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       rename("a.java", "A.java")
       added("s.java")
     }
@@ -233,7 +214,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     git("mv -f a.java c.java")
     git("mv -f b.java B.java")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       rename("b.java", "B.java")
       rename("a.java", "c.java")
     }
@@ -252,7 +233,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     generateCaseRename("a.java", "A.java")
     echo("m.java", "unstaged")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       rename("a.java", "A.java")
       modified("m.java")
     }
@@ -271,14 +252,14 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     generateCaseRename("a.java", "A.java")
     echo("m.java", "unstaged")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       rename("a.java", "A.java")
       modified("m.java")
     }
 
     commit(listOf(changes[0]))
 
-    assertChanges {
+    assertChangesWithRefresh {
       modified("m.java")
     }
     repo.assertCommitted {
@@ -294,7 +275,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     echo("s.java", "staged")
     git("add s.java")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       rename("a.java", "A.java")
       modified("s.java")
     }
@@ -304,7 +285,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     repo.assertCommitted {
       rename("a.java", "A.java")
     }
-    assertChanges {
+    assertChangesWithRefresh {
       modified("s.java")
     }
     repo.assertStagedChanges {
@@ -319,7 +300,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     generateCaseRename("a.java", "A.java")
     git("mv s.java S.java")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       rename("a.java", "A.java")
       rename("s.java", "S.java")
     }
@@ -329,7 +310,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     repo.assertCommitted {
       rename("a.java", "A.java")
     }
-    assertChanges {
+    assertChangesWithRefresh {
       rename("s.java", "S.java")
     }
     repo.assertStagedChanges {
@@ -345,7 +326,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     generateCaseRename("a.java", "A.java")
     git("mv before.txt after.txt")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       rename("a.java", "A.java")
       rename("before.txt", "after.txt")
     }
@@ -355,7 +336,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     repo.assertCommitted {
       rename("a.java", "A.java")
     }
-    assertChanges {
+    assertChangesWithRefresh {
       rename("before.txt", "after.txt")
     }
     repo.assertStagedChanges {
@@ -373,7 +354,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     echo("m.java", "unstaged")
     git("add s.java m.java")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       rename("a.java", "A.java")
       modified("s.java")
       modified("m.java")
@@ -385,7 +366,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
       rename("a.java", "A.java")
       modified("m.java")
     }
-    assertChanges {
+    assertChangesWithRefresh {
       modified("s.java")
     }
     repo.assertStagedChanges {
@@ -404,7 +385,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     val UNSTAGED_CONTENT = "unstaged"
     overwrite("c.java", UNSTAGED_CONTENT)
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       rename("a.java", "A.java")
       modified("c.java")
     }
@@ -414,7 +395,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     repo.assertCommitted {
       rename("a.java", "A.java")
     }
-    assertChanges {
+    assertChangesWithRefresh {
       modified("c.java")
     }
     repo.assertStagedChanges {
@@ -450,7 +431,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     val additionalContent = "non-staged content"
     append("A.java", additionalContent)
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       rename("a.java", "A.java")
     }
 
@@ -473,7 +454,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     git("add a.after")
 
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       deleted("a.before")
       added("a.after")
     }
@@ -507,7 +488,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     echo("m.java", "unstaged")
     git("add s.java m.java")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       deleted("a.before")
       added("a.after")
       modified("m.java")
@@ -516,7 +497,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
 
     commit(listOf(changes[0], changes[1], changes[2]))
 
-    assertChanges {
+    assertChangesWithRefresh {
       modified("s.java")
     }
     repo.assertStagedChanges {
@@ -537,7 +518,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
 
   fun `test commit rename with conflicting staged rename`() {
     `assume version where git reset returns 0 exit code on success `()
-    assumeTrue(Registry.`is`("git.force.commit.using.staging.area")) // known bug in "--only" implementation
+    assumeTrue("git.force.commit.using.staging.area only", Registry.`is`("git.force.commit.using.staging.area")) // known bug in "--only" implementation
 
     tac("a.txt", "file content")
 
@@ -547,19 +528,19 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     git("add a.txt")
     git("add b.txt")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       rename("a.txt", "b.txt")
     }
 
     git("add c.txt")
     git("rm b.txt --cached")
-    assertChanges {
+    assertChangesWithRefresh {
       rename("a.txt", "c.txt")
     }
 
     commit(changes)
 
-    assertChanges {
+    assertChangesWithRefresh {
       added("c.txt")
     }
 
@@ -580,7 +561,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     git("add b.txt")
     rm("b.txt")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       modified("a.txt")
     }
 
@@ -605,15 +586,48 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     git("add -A b.txt")
     touch("b.txt", "new content")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       modified("a.txt")
       deleted("b.txt")
     }
 
     commit(listOf(changes[0]))
 
-    assertChanges {
+    assertChangesWithRefresh {
       deleted("b.txt")
+    }
+    assertMessage("comment", repo.message("HEAD"))
+    repo.assertCommitted {
+      modified("a.txt")
+    }
+  }
+
+  fun `test commit with excluded added-deleted and added files`() {
+    `assume version where git reset returns 0 exit code on success `()
+
+    tac("a.txt", "file content")
+
+    overwrite("a.txt", "new content")
+
+    touch("b.txt", "new content")
+    touch("c.txt", "new content")
+    git("add -A b.txt c.txt")
+    rm("b.txt")
+
+    val changes = assertChangesWithRefresh {
+      modified("a.txt")
+      added("c.txt")
+    }
+
+    commit(listOf(changes[0]))
+
+    assertChangesWithRefresh {
+      added("c.txt")
+    }
+    if (Registry.`is`("git.force.commit.using.staging.area")) { // known bug in "--only" implementation
+      repo.assertStagedChanges {
+        added("c.txt")
+      }
     }
     assertMessage("comment", repo.message("HEAD"))
     repo.assertCommitted {
@@ -633,7 +647,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     git("add -A b.txt")
     touch("b.txt", "new content")
 
-    val changes = assertChanges {
+    val changes = assertChangesWithRefresh {
       modified("a.txt")
       deleted("b.txt")
     }
@@ -660,7 +674,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
 
   fun `test commit during unresolved merge conflict`() {
     `assume version where git reset returns 0 exit code on success `()
-    assumeTrue(Registry.`is`("git.force.commit.using.staging.area")) // "--only" shows dialog in this case
+    assumeTrue("git.force.commit.using.staging.area only", Registry.`is`("git.force.commit.using.staging.area")) // "--only" shows dialog in this case
 
     createFileStructure(projectRoot, "a.txt")
     addCommit("created some file structure")
@@ -699,7 +713,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     touch("ignore2.txt", "ignore2 content")
     git("add -f -- ignore1.txt ignore2.txt file.txt")
 
-    val changes1 = assertChanges {
+    val changes1 = assertChangesWithRefresh {
       added("file.txt")
       added("ignore1.txt")
       added("ignore2.txt")
@@ -719,7 +733,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     overwrite("ignore1.txt", "new file1 content")
     overwrite("ignore2.txt", "new file2 content")
 
-    val changes2 = assertChanges {
+    val changes2 = assertChangesWithRefresh {
       modified("file.txt")
       modified("ignore1.txt")
       modified("ignore2.txt")
@@ -746,7 +760,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     touch("ignore/ignore2.txt", "ignore2 content")
     git("add -f -- ignore/ignore1.txt ignore/ignore2.txt file.txt")
 
-    val changes1 = assertChanges {
+    val changes1 = assertChangesWithRefresh {
       added("file.txt")
       added("ignore/ignore1.txt")
       added("ignore/ignore2.txt")
@@ -766,7 +780,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     overwrite("ignore/ignore1.txt", "new file1 content")
     overwrite("ignore/ignore2.txt", "new file2 content")
 
-    val changes2 = assertChanges {
+    val changes2 = assertChangesWithRefresh {
       modified("file.txt")
       modified("ignore/ignore1.txt")
       modified("ignore/ignore2.txt")
@@ -792,7 +806,7 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     touch("ignore1.txt", "ignore1 content")
     git("add -f -- ignore1.txt file.txt")
 
-    val changes1 = assertChanges {
+    val changes1 = assertChangesWithRefresh {
       added("file.txt")
       added("ignore1.txt")
     }
@@ -810,14 +824,14 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
     touch("ignore2.txt", "ignore2 content")
     git("add -f -- ignore1.txt ignore2.txt")
 
-    val changes2 = assertChanges {
+    val changes2 = assertChangesWithRefresh {
       modified("ignore1.txt")
       added("ignore2.txt")
     }
 
     commit(listOf(changes2[0]))
 
-    assertChanges {
+    assertChangesWithRefresh {
       added("ignore2.txt")
     }
     assertMessage("comment", repo.message("HEAD"))
@@ -825,6 +839,69 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
       modified("ignore1.txt")
     }
   }
+
+  fun `test file to directory renames`() {
+    assumeTrue("git.force.commit.using.staging.area only", Registry.`is`("git.force.commit.using.staging.area")) // known bug in "--only" implementation
+
+    tac("a_path", "file content 1")
+    tac("b_path", "file content 2")
+
+    rm("a_path")
+    rm("b_path")
+    touch("a_path/file1.txt", "file content 1")
+    touch("b_path/file2.txt", "file content 2")
+    git("add -A .")
+
+    val changes = assertChangesWithRefresh {
+      rename("a_path", "a_path/file1.txt")
+      rename("b_path", "b_path/file2.txt")
+    }
+
+    commit(listOf(changes[0]))
+
+    assertChangesWithRefresh {
+      rename("b_path", "b_path/file2.txt")
+    }
+    repo.assertStagedChanges {
+      rename("b_path", "b_path/file2.txt")
+    }
+    assertMessage("comment", repo.message("HEAD"))
+    repo.assertCommitted {
+      rename("a_path", "a_path/file1.txt")
+    }
+  }
+
+  fun `test directory to file renames`() {
+    tac("a_path/file1.txt", "file content 1")
+    tac("b_path/file2.txt", "file content 2")
+
+    rm("a_path/file1.txt")
+    rm("b_path/file2.txt")
+    rm("a_path")
+    rm("b_path")
+    touch("a_path", "file content 1")
+    touch("b_path", "file content 2")
+    git("add -A .")
+
+    val changes = assertChangesWithRefresh {
+      rename("a_path/file1.txt", "a_path")
+      rename("b_path/file2.txt", "b_path")
+    }
+
+    commit(listOf(changes[0]))
+
+    assertChangesWithRefresh {
+      rename("b_path/file2.txt", "b_path")
+    }
+    repo.assertStagedChanges {
+      rename("b_path/file2.txt", "b_path")
+    }
+    assertMessage("comment", repo.message("HEAD"))
+    repo.assertCommitted {
+      rename("a_path/file1.txt", "a_path")
+    }
+  }
+
 
   private fun `assume version where git reset returns 0 exit code on success `() {
     assumeTrue("Not testing: git reset returns 1 and fails the commit process in ${vcs.version}",
@@ -834,44 +911,6 @@ abstract class GitCommitTest(private val useStagingArea: Boolean) : GitSingleRep
   private fun generateCaseRename(from: String, to: String) {
     tac(from)
     git("mv -f $from $to")
-  }
-
-  private fun commit(changes: Collection<Change>) {
-    val exceptions = vcs.checkinEnvironment!!.commit(ArrayList(changes), "comment")
-    assertNoExceptions(exceptions)
-    updateChangeListManager()
-  }
-
-  private fun assertNoChanges() {
-    val changes = changeListManager.getChangesIn(projectRoot)
-    assertTrue("We expected no changes but found these: " + GitUtil.getLogString(projectPath, changes), changes.isEmpty())
-  }
-
-  private fun assertNoExceptions(exceptions: List<VcsException>?) {
-    val ex = ContainerUtil.getFirstItem(exceptions)
-    if (ex != null) {
-      LOG.error(ex)
-      fail("Exception during executing the commit: " + ex.message)
-    }
-  }
-
-  private fun assertChanges(changes: ChangesBuilder.() -> Unit) : List<Change> {
-    val cb = ChangesBuilder()
-    cb.changes()
-
-    updateChangeListManager()
-    val vcsChanges = changeListManager.allChanges
-    val allChanges = mutableListOf<Change>()
-    val actualChanges = HashSet(vcsChanges)
-
-    for (change in cb.changes) {
-      val found = actualChanges.find(change.matcher)
-      assertNotNull("The change [$change] not found\n$vcsChanges", found)
-      actualChanges.remove(found)
-      allChanges.add(found!!)
-    }
-    assertTrue(actualChanges.isEmpty())
-    return allChanges
   }
 
   private class MyExplicitMovementProvider : GitCheckinExplicitMovementProvider() {

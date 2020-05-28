@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions;
 
 import com.intellij.lang.ASTNode;
@@ -15,35 +15,49 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrExpres
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrMethodCall;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrReferenceExpression;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.path.GrCallExpressionImpl;
-import org.jetbrains.plugins.groovy.lang.resolve.GrReferenceResolveRunnerKt;
 import org.jetbrains.plugins.groovy.lang.resolve.api.GroovyMethodCallReference;
-import org.jetbrains.plugins.groovy.lang.resolve.impl.GrMethodCallReference;
+import org.jetbrains.plugins.groovy.lang.resolve.impl.GrImplicitCallReference;
+import org.jetbrains.plugins.groovy.lang.resolve.references.GrExplicitMethodCallReference;
+
+import static org.jetbrains.plugins.groovy.lang.psi.impl.PsiImplUtilKt.isExplicitCall;
+import static org.jetbrains.plugins.groovy.lang.psi.impl.PsiImplUtilKt.isImplicitCall;
 
 /**
  * @author Maxim.Medvedev
  */
 public abstract class GrMethodCallImpl extends GrCallExpressionImpl implements GrMethodCall {
 
+  private final GroovyMethodCallReference myImplicitCallReference = new GrImplicitCallReference(this);
+  private final GroovyMethodCallReference myExplicitCallReference = new GrExplicitMethodCallReference(this);
+
   public GrMethodCallImpl(@NotNull ASTNode node) {
     super(node);
   }
 
-  private final GroovyMethodCallReference myCallReference = new GrMethodCallReference(this);
+  @Nullable
+  @Override
+  public GroovyMethodCallReference getImplicitCallReference() {
+    return isImplicitCall(this) ? myImplicitCallReference : null;
+  }
 
-  @NotNull
+  @Nullable
+  @Override
+  public GroovyMethodCallReference getExplicitCallReference() {
+    return isExplicitCall(this) ? myExplicitCallReference : null;
+  }
+
+  @Nullable
   @Override
   public GroovyMethodCallReference getCallReference() {
-    return myCallReference;
+    GroovyMethodCallReference explicitCallReference = getExplicitCallReference();
+    return explicitCallReference == null ? getImplicitCallReference() : explicitCallReference;
   }
 
   @Override
-  @NotNull
-  public GroovyResolveResult[] getCallVariants(@Nullable GrExpression upToArgument) {
+  public GroovyResolveResult @NotNull [] getCallVariants(@Nullable GrExpression upToArgument) {
     final GrExpression invoked = getInvokedExpression();
     if (!(invoked instanceof GrReferenceExpression)) return GroovyResolveResult.EMPTY_ARRAY;
-    if (((GrReferenceExpression)invoked).hasMemberPointer()) return ((GrReferenceExpression)invoked).multiResolve(true);
-
-    return GrReferenceResolveRunnerKt.getCallVariants(((GrReferenceExpression)invoked), upToArgument);
+    return ((GrReferenceExpression)invoked).multiResolve(true);
   }
 
   @Override
@@ -63,10 +77,17 @@ public abstract class GrMethodCallImpl extends GrCallExpressionImpl implements G
     return ((GrReferenceExpression)expression).getDotToken() == null;
   }
 
-  @NotNull
   @Override
-  public GroovyResolveResult[] multiResolve(boolean incompleteCode) {
-    return myCallReference.multiResolve(incompleteCode);
+  public GroovyResolveResult @NotNull [] multiResolve(boolean incompleteCode) {
+    final GroovyMethodCallReference implicitCallReference = getImplicitCallReference();
+    if (implicitCallReference != null) {
+      return implicitCallReference.multiResolve(incompleteCode);
+    }
+    final GroovyMethodCallReference explicitCallReference = getExplicitCallReference();
+    if (explicitCallReference != null) {
+      return explicitCallReference.multiResolve(incompleteCode);
+    }
+    return GroovyResolveResult.EMPTY_ARRAY;
   }
 
   @Override

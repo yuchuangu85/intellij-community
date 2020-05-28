@@ -14,10 +14,20 @@ public interface RunProfileWithCompileBeforeLaunchOption extends RunProfile {
   /**
    * @return modules to compile before run. Empty list to build project
    */
-  @NotNull
-  default Module[] getModules() {
+  default Module @NotNull [] getModules() {
     return Module.EMPTY_ARRAY;
   }
+
+  /**
+   * Modifies behavior for the case when {@link #getModules()} returns empty list.
+   * By default whole project will be built in this case.
+   * @return true if whole project is to be built when no particular module is selected,
+   *         false effectively skips project compilation
+   */
+  default boolean isBuildProjectOnEmptyModuleList() {
+    return true;
+  }
+
 
   /**
    * @return true if "Build" Before Launch task should be added automatically on run configuration creation

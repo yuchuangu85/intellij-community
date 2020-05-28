@@ -1,24 +1,10 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.jps.incremental.fs;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.util.containers.CollectionFactory;
 import com.intellij.util.io.IOUtil;
-import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.builders.BuildRootDescriptor;
@@ -33,13 +19,12 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 
-/** */
 public final class FilesDelta {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.jps.incremental.fs.FilesDelta");
+  private static final Logger LOG = Logger.getInstance(FilesDelta.class);
   private final ReentrantLock myDataLock = new ReentrantLock();
 
-  private final Set<String> myDeletedPaths = new THashSet<>(FileUtil.PATH_HASHING_STRATEGY);
-  private final Map<BuildRootDescriptor, Set<File>> myFilesToRecompile = new HashMap<>();
+  private final Set<String> myDeletedPaths = CollectionFactory.createFilePathLinkedSet();
+  private final Map<BuildRootDescriptor, Set<File>> myFilesToRecompile = new LinkedHashMap<>();
 
   public void lockData(){
     myDataLock.lock();
@@ -110,13 +95,13 @@ public final class FilesDelta {
         if (descriptor != null) {
           files = myFilesToRecompile.get(descriptor);
           if (files == null) {
-            files = new THashSet<>(FileUtil.FILE_HASHING_STRATEGY);
+            files = CollectionFactory.createFileLinkedSet();
             myFilesToRecompile.put(descriptor, files);
           }
         }
         else {
           LOG.debug("Cannot find root by " + rootId + ", delta will be skipped");
-          files = new THashSet<>(FileUtil.FILE_HASHING_STRATEGY);
+          files = CollectionFactory.createFileLinkedSet();
         }
         int filesCount = in.readInt();
         while (filesCount-- > 0) {
@@ -219,10 +204,10 @@ public final class FilesDelta {
     return _addToRecompiled(root, Collections.singleton(file));
   }
 
-  private boolean _addToRecompiled(BuildRootDescriptor root, Collection<File> filesToAdd) {
+  private boolean _addToRecompiled(BuildRootDescriptor root, Collection<? extends File> filesToAdd) {
     Set<File> files = myFilesToRecompile.get(root);
     if (files == null) {
-      files = new THashSet<>(FileUtil.FILE_HASHING_STRATEGY);
+      files = CollectionFactory.createFileLinkedSet();
       myFilesToRecompile.put(root, files);
     }
     return files.addAll(filesToAdd);
@@ -260,9 +245,9 @@ public final class FilesDelta {
     lockData();
     try {
       try {
-        final THashSet<String> _paths = new THashSet<>(FileUtil.PATH_HASHING_STRATEGY);
-        _paths.addAll(myDeletedPaths);
-        return _paths;
+        Set<String> result = CollectionFactory.createFilePathLinkedSet();
+        result.addAll(myDeletedPaths);
+        return result;
       }
       finally {
         myDeletedPaths.clear();

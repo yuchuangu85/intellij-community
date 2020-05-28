@@ -15,6 +15,7 @@
  */
 package com.intellij.refactoring.extractInterface;
 
+import com.intellij.java.refactoring.JavaRefactoringBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiUtil;
@@ -28,7 +29,7 @@ import com.intellij.refactoring.extractSuperclass.JavaExtractSuperBaseDialog;
 import com.intellij.refactoring.ui.MemberSelectionPanel;
 import com.intellij.refactoring.util.DocCommentPolicy;
 import com.intellij.refactoring.util.classMembers.MemberInfo;
-import com.intellij.util.ArrayUtil;
+import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
@@ -37,7 +38,7 @@ import java.util.List;
 class ExtractInterfaceDialog extends JavaExtractSuperBaseDialog {
 
   ExtractInterfaceDialog(Project project, PsiClass sourceClass) {
-    super(project, sourceClass, collectMembers(sourceClass), ExtractInterfaceHandler.REFACTORING_NAME);
+    super(project, sourceClass, collectMembers(sourceClass), ExtractInterfaceHandler.getRefactoringName());
     for (MemberInfo memberInfo : myMemberInfos) {
       final PsiMember member = memberInfo.getMember();
       if (member instanceof PsiMethod &&
@@ -87,6 +88,7 @@ class ExtractInterfaceDialog extends JavaExtractSuperBaseDialog {
            : RefactoringBundle.message("package.for.original.class");
   }
 
+  @NotNull
   @Override
   protected String getEntityName() {
     return RefactoringBundle.message("extractSuperInterface.interface");
@@ -118,7 +120,7 @@ class ExtractInterfaceDialog extends JavaExtractSuperBaseDialog {
 
   @Override
   protected String getDocCommentPanelName() {
-    return RefactoringBundle.message("extractSuperInterface.javadoc");
+    return JavaRefactoringBundle.message("extractSuperInterface.javadoc");
   }
 
   @Override
@@ -139,7 +141,7 @@ class ExtractInterfaceDialog extends JavaExtractSuperBaseDialog {
   @Override
   protected ExtractSuperBaseProcessor createProcessor() {
     return new ExtractInterfaceProcessor(myProject, false, getTargetDirectory(), getExtractedSuperName(),
-                                         mySourceClass, ArrayUtil.toObjectArray(getSelectedMemberInfos(), MemberInfo.class),
+                                         mySourceClass, getSelectedMemberInfos().toArray(new MemberInfo[0]),
                                          new DocCommentPolicy(getDocCommentPolicy()));
   }
 

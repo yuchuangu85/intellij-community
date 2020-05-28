@@ -15,8 +15,7 @@
  */
 package com.intellij.debugger.actions;
 
-import com.intellij.debugger.DebuggerBundle;
-import com.intellij.debugger.impl.DebuggerUtilsEx;
+import com.intellij.debugger.JavaDebuggerBundle;
 import com.intellij.debugger.settings.JavaDebuggerSettings;
 import com.intellij.debugger.settings.NodeRendererSettings;
 import com.intellij.idea.ActionsBundle;
@@ -79,7 +78,7 @@ public class CustomizeContextViewAction extends XDebuggerTreeActionBase {
 
     @Override
     public String getDisplayName() {
-      return DebuggerBundle.message("title.customize.data.views");
+      return JavaDebuggerBundle.message("title.customize.data.views");
     }
 
     @Override
@@ -106,6 +105,6 @@ public class CustomizeContextViewAction extends XDebuggerTreeActionBase {
   @Override
   public void update(@NotNull AnActionEvent e) {
     e.getPresentation().setText(ActionsBundle.actionText(DebuggerActions.CUSTOMIZE_VIEWS));
-    e.getPresentation().setEnabledAndVisible(DebuggerUtilsEx.isInJavaSession(e));
+    e.getPresentation().setEnabledAndVisible(DebuggerAction.isInJavaSession(e));
   }
 }

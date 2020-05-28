@@ -15,7 +15,6 @@
  */
 package org.jetbrains.jps.gradle.model;
 
-import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.builders.storage.BuildDataPaths;
@@ -44,7 +43,7 @@ public abstract class JpsGradleExtensionService {
   public abstract JpsGradleModuleExtension getExtension(@NotNull JpsModule module);
 
   @NotNull
-  public abstract JpsGradleModuleExtension getOrCreateExtension(@NotNull JpsModule module, Element rootElement);
+  public abstract JpsGradleModuleExtension getOrCreateExtension(@NotNull JpsModule module, @Nullable String moduleType);
 
   public abstract void setProductionOnTestDependency(@NotNull JpsDependencyElement dependency, boolean value);
 

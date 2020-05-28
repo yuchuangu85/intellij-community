@@ -1,11 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInspection.reference;
 
 import com.intellij.codeInsight.TestFrameworks;
 import com.intellij.lang.Language;
 import com.intellij.lang.injection.InjectedLanguageManager;
-import com.intellij.lang.jvm.JvmField;
 import com.intellij.lang.jvm.JvmMetaLanguage;
 import com.intellij.lang.jvm.JvmModifier;
 import com.intellij.lang.jvm.util.JvmInheritanceUtil;
@@ -102,6 +101,8 @@ public class RefClassImpl extends RefJavaElementImpl implements RefClass {
       }
     }
 
+    if (!myManager.isDeclarationsFound()) return;
+
     PsiClass javaPsi = uClass.getJavaPsi();
     setAbstract(javaPsi.hasModifier(JvmModifier.ABSTRACT));
     setAnonymous(uClass.getName() == null);
@@ -166,6 +167,13 @@ public class RefClassImpl extends RefJavaElementImpl implements RefClass {
         }
       }
     }
+    if (!isInterface()) {
+      for (int i = 0; i < uFields.length && utilityClass; i++) {
+        if (!uFields[i].isStatic()) {
+          utilityClass = false;
+        }
+      }
+    }
 
     if (!utilityClass) {
       utilityClass = ClassUtils.isSingleton(uClass.getJavaPsi());
@@ -181,14 +189,6 @@ public class RefClassImpl extends RefJavaElementImpl implements RefClass {
       addConstructor(refImplicitConstructor);
     }
 
-    if (isInterface()) {
-      for (int i = 0; i < uFields.length && isUtilityClass(); i++) {
-        JvmField psiField = uFields[i];
-        if (!psiField.hasModifier(JvmModifier.STATIC)) {
-          utilityClass = false;
-        }
-      }
-    }
     setUtilityClass(utilityClass);
 
 
@@ -221,13 +221,12 @@ public class RefClassImpl extends RefJavaElementImpl implements RefClass {
   }
 
   @Override
-  public boolean isSelfInheritor(UClass uClass) {
+  public boolean isSelfInheritor(@NotNull UClass uClass) {
     return isSelfInheritor(uClass, new ArrayList<>());
   }
 
-  @Nullable
   @Override
-  public RefModule getModule() {
+  public @Nullable RefModule getModule() {
     return myRefModule;
   }
 
@@ -269,9 +268,8 @@ public class RefClassImpl extends RefJavaElementImpl implements RefClass {
     return UastContextKt.toUElement(getPsiElement(), UClass.class);
   }
 
-  @NotNull
   @Override
-  public String getQualifiedName() {
+  public @NotNull String getQualifiedName() {
     final UClass uClass = getUastElement();
     if (uClass == null) return super.getQualifiedName();
     final String qName = uClass.getQualifiedName();
@@ -294,7 +292,7 @@ public class RefClassImpl extends RefJavaElementImpl implements RefClass {
         RefJavaUtil.getInstance().addReferencesTo(uClass, this, classInitializer.getUastBody());
       }
 
-      RefJavaUtil.getInstance().addReferencesTo(uClass, this, ((UAnnotated)uClass).getAnnotations().toArray(UElementKt.EMPTY_ARRAY));
+      RefJavaUtil.getInstance().addReferencesTo(uClass, this, ((UAnnotated)uClass).getUAnnotations().toArray(UElementKt.EMPTY_ARRAY));
 
       for (PsiTypeParameter parameter : uClass.getJavaPsi().getTypeParameters()) {
         UElement uTypeParameter = UastContextKt.toUElement(parameter);
@@ -324,7 +322,7 @@ public class RefClassImpl extends RefJavaElementImpl implements RefClass {
   }
 
   @Override
-  public void accept(@NotNull final RefVisitor visitor) {
+  public void accept(final @NotNull RefVisitor visitor) {
     if (visitor instanceof RefJavaVisitor) {
       ApplicationManager.getApplication().runReadAction(() -> ((RefJavaVisitor)visitor).visitClass(this));
     } else {
@@ -333,8 +331,7 @@ public class RefClassImpl extends RefJavaElementImpl implements RefClass {
   }
 
   @Override
-  @NotNull
-  public synchronized Set<RefClass> getBaseClasses() {
+  public synchronized @NotNull Set<RefClass> getBaseClasses() {
     if (myBases == null) return EMPTY_CLASS_SET;
     return myBases;
   }
@@ -352,8 +349,7 @@ public class RefClassImpl extends RefJavaElementImpl implements RefClass {
   }
 
   @Override
-  @NotNull
-  public synchronized Set<RefClass> getSubClasses() {
+  public synchronized @NotNull Set<RefClass> getSubClasses() {
     if (mySubClasses == null) return EMPTY_CLASS_SET;
     return mySubClasses;
   }
@@ -380,15 +376,13 @@ public class RefClassImpl extends RefJavaElementImpl implements RefClass {
   }
 
   @Override
-  @NotNull
-  public synchronized List<RefMethod> getConstructors() {
+  public synchronized @NotNull List<RefMethod> getConstructors() {
     if (myConstructors == null) return EMPTY_METHOD_LIST;
     return myConstructors;
   }
 
   @Override
-  @NotNull
-  public synchronized Set<RefElement> getInTypeReferences() {
+  public synchronized @NotNull Set<RefElement> getInTypeReferences() {
     if (myInTypeReferences == null) return EMPTY_SET;
     return myInTypeReferences;
   }
@@ -426,8 +420,7 @@ public class RefClassImpl extends RefJavaElementImpl implements RefClass {
   }
 
   @Override
-  @NotNull
-  public synchronized List<RefMethod> getLibraryMethods() {
+  public synchronized @NotNull List<RefMethod> getLibraryMethods() {
     if (myOverridingMethods == null) return EMPTY_METHOD_LIST;
     return myOverridingMethods;
   }
@@ -462,8 +455,7 @@ public class RefClassImpl extends RefJavaElementImpl implements RefClass {
   }
 
 
-  @Nullable
-  static RefClass classFromExternalName(RefManager manager, String externalName) {
+  static @Nullable RefClass classFromExternalName(RefManager manager, String externalName) {
     return (RefClass) manager.getReference(ClassUtil.findPsiClass(PsiManager.getInstance(manager.getProject()), externalName));
   }
 
@@ -594,14 +586,13 @@ public class RefClassImpl extends RefJavaElementImpl implements RefClass {
   }
 
   @Override
-  @NotNull
-  public RefElement getContainingEntry() {
+  public @NotNull RefElement getContainingEntry() {
     RefElement defaultConstructor = getDefaultConstructor();
     if (defaultConstructor != null) return defaultConstructor;
     return super.getContainingEntry();
   }
 
-  private static boolean isKindOfJvmLanguage(Language language) {
+  private static boolean isKindOfJvmLanguage(@NotNull Language language) {
     return Language.findInstance(JvmMetaLanguage.class).getMatchingLanguages().stream().anyMatch(language::is);
   }
 }

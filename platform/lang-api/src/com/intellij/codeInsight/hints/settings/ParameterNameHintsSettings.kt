@@ -10,12 +10,15 @@ import com.intellij.util.getAttributeBooleanValue
 import org.jdom.Element
 
 private object XmlTagHelper {
-  val BLACKLISTS = "blacklists"
-  val LANGUAGE_LIST = "blacklist"
-  val LANGUAGE = "language"
-  val ADDED = "added"
-  val REMOVED = "removed"
-  val PATTERN = "pattern"
+  const val BLACKLISTS = "blacklists"
+  const val LANGUAGE_LIST = "blacklist"
+  const val LANGUAGE = "language"
+  const val ADDED = "added"
+  const val REMOVED = "removed"
+  const val PATTERN = "pattern"
+  const val DISABLED_LANGUAGES = "disabledLanguages"
+  const val DISABLED_LANGUAGE_ITEM = "language"
+  const val DISABLED_LANGUAGE_ID = "id"
 }
 
 class Diff(val added: Set<String>, val removed: Set<String>) {
@@ -44,7 +47,8 @@ class ParameterNameHintsSettings : PersistentStateComponent<Element> {
   private val removedPatterns = hashMapOf<String, Set<String>>()
   private val addedPatterns = hashMapOf<String, Set<String>>()
   private val options = hashMapOf<String, Boolean>()
-  
+  private val disabledLanguages = hashSetOf<String>()
+
   fun addIgnorePattern(language: Language, pattern: String) {
     val patternsBefore = getAddedPatterns(language)
     setAddedPatterns(language, patternsBefore + pattern)
@@ -61,64 +65,94 @@ class ParameterNameHintsSettings : PersistentStateComponent<Element> {
     setAddedPatterns(language, diff.added)
     setRemovedPatterns(language, diff.removed)
   }
-  
+
   override fun getState(): Element {
     val root = Element("settings")
 
     if (removedPatterns.isNotEmpty() || addedPatterns.isNotEmpty()) {
       val blacklists = Element(XmlTagHelper.BLACKLISTS)
       root.addContent(blacklists)
-      
+
       val allLanguages = removedPatterns.keys + addedPatterns.keys
       allLanguages.forEach {
         val removed = removedPatterns[it] ?: emptySet()
         val added = addedPatterns[it] ?: emptySet()
-        
+
         val languageBlacklist = Element(XmlTagHelper.LANGUAGE_LIST).apply {
           setAttribute(XmlTagHelper.LANGUAGE, it)
           val removedElements = removed.map { it.toPatternElement(XmlTagHelper.REMOVED) }
           val addedElements = added.map { it.toPatternElement(XmlTagHelper.ADDED) }
           addContent(addedElements + removedElements)
         }
-        
+
         blacklists.addContent(languageBlacklist)
       }
     }
-    
-    options.forEach { id, value ->
+
+    options.forEach { (id, value) ->
       val element = Element("option")
       element.setAttribute("id", id)
       element.setAttribute("value", value.toString())
       root.addContent(element)
     }
-    
+
+    if (disabledLanguages.isNotEmpty()) {
+      val disabledLanguagesElement = Element(XmlTagHelper.DISABLED_LANGUAGES)
+      disabledLanguagesElement.addContent(disabledLanguages.map {
+        val element = Element(XmlTagHelper.DISABLED_LANGUAGE_ITEM)
+        element.setAttribute(XmlTagHelper.DISABLED_LANGUAGE_ID, it)
+        element
+      })
+      root.addContent(disabledLanguagesElement)
+    }
+
     return root
+  }
+
+  fun setIsEnabledForLanguage(enabled: Boolean, language: Language) {
+    if (!enabled) {
+      disabledLanguages.add(language.id)
+    } else {
+      disabledLanguages.remove(language.id)
+    }
+  }
+
+  fun isEnabledForLanguage(language: Language): Boolean {
+    return language.id !in disabledLanguages
   }
 
   override fun loadState(state: Element) {
     addedPatterns.clear()
     removedPatterns.clear()
     options.clear()
-    
+    disabledLanguages.clear()
+
     val allBlacklistElements = state.getChild(XmlTagHelper.BLACKLISTS)
                           ?.getChildren(XmlTagHelper.LANGUAGE_LIST) ?: emptyList()
 
     allBlacklistElements.forEach { blacklistElement ->
       val language = blacklistElement.attributeValue(XmlTagHelper.LANGUAGE) ?: return@forEach
-      
+
       val added = blacklistElement.extractPatterns(XmlTagHelper.ADDED)
       addedPatterns[language] = addedPatterns[language]?.plus(added) ?: added
-      
+
       val removed = blacklistElement.extractPatterns(XmlTagHelper.REMOVED)
       removedPatterns[language] = removedPatterns[language]?.plus(removed) ?: removed
     }
-    
-    state.getChildren("option").forEach { 
+
+    state.getChildren("option").forEach {
       val id = it.getAttributeValue("id")
       options[id] = it.getAttributeBooleanValue("value")
     }
+
+    state.getChild(XmlTagHelper.DISABLED_LANGUAGES)?.apply {
+      getChildren(XmlTagHelper.DISABLED_LANGUAGE_ITEM).forEach {
+        val languageId = it.attributeValue(XmlTagHelper.DISABLED_LANGUAGE_ID) ?: return@forEach
+        disabledLanguages.add(languageId)
+      }
+    }
   }
-  
+
   companion object {
     @JvmStatic
     fun getInstance(): ParameterNameHintsSettings = ServiceManager.getService(ParameterNameHintsSettings::class.java)
@@ -133,7 +167,7 @@ class ParameterNameHintsSettings : PersistentStateComponent<Element> {
       options.remove(optionId)
     }
     else {
-      options[optionId] = value 
+      options[optionId] = value
     }
   }
 

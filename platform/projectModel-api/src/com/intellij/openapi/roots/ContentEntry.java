@@ -16,6 +16,7 @@
 package com.intellij.openapi.roots;
 
 import com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.model.JpsElement;
@@ -26,13 +27,14 @@ import java.util.Set;
 
 /**
  * Represents a module's content root.
- * You can get existing entries with {@link com.intellij.openapi.roots.ModuleRootModel#getContentEntries()} or
- * create a new one with {@link ModifiableRootModel#addContentEntry(com.intellij.openapi.vfs.VirtualFile)}.
+ * You can get existing entries with {@link ModuleRootModel#getContentEntries()} or
+ * create a new one with {@link ModifiableRootModel#addContentEntry(VirtualFile)}.
  *
  * @author dsl
  * @see ModuleRootModel#getContentEntries()
- * @see ModifiableRootModel#addContentEntry(com.intellij.openapi.vfs.VirtualFile)
+ * @see ModifiableRootModel#addContentEntry(VirtualFile)
  */
+@ApiStatus.NonExtendable
 public interface ContentEntry extends Synthetic {
   /**
    * Returns the root file or directory for the content root, if it is valid.
@@ -55,10 +57,9 @@ public interface ContentEntry extends Synthetic {
   /**
    * Returns the list of source roots under this content root.
    *
-   * @return list of this {@code ContentEntry} {@link com.intellij.openapi.roots.SourceFolder}s
+   * @return list of this {@code ContentEntry} {@link SourceFolder}s
    */
-  @NotNull
-  SourceFolder[] getSourceFolders();
+  SourceFolder @NotNull [] getSourceFolders();
 
   /**
    * @param rootType type of accepted source roots
@@ -80,16 +81,14 @@ public interface ContentEntry extends Synthetic {
    *
    * @return list of all valid source roots.
    */
-  @NotNull
-  VirtualFile[] getSourceFolderFiles();
+  VirtualFile @NotNull [] getSourceFolderFiles();
 
   /**
    * Returns the list of excluded roots configured under this content root. The result doesn't include synthetic excludes like the module output.
    *
-   * @return list of this {@code ContentEntry} {@link com.intellij.openapi.roots.ExcludeFolder}s
+   * @return list of this {@code ContentEntry} {@link ExcludeFolder}s
    */
-  @NotNull
-  ExcludeFolder[] getExcludeFolders();
+  ExcludeFolder @NotNull [] getExcludeFolders();
 
   /**
    * @return list of URLs for all excluded roots under this content root including synthetic excludes like the module output
@@ -102,8 +101,7 @@ public interface ContentEntry extends Synthetic {
    *
    * @return list of all valid exclude roots including synthetic excludes like the module output
    */
-  @NotNull
-  VirtualFile[] getExcludeFolderFiles();
+  VirtualFile @NotNull [] getExcludeFolderFiles();
 
   /**
    * Adds a source or test source root under the content root.
@@ -168,6 +166,7 @@ public interface ContentEntry extends Synthetic {
    * @param file the file or directory to add as an exclude root.
    * @return the object representing the added root.
    */
+  @NotNull
   ExcludeFolder addExcludeFolder(@NotNull VirtualFile file);
 
   /**
@@ -176,6 +175,7 @@ public interface ContentEntry extends Synthetic {
    * @param url the file or directory url to add as an exclude root.
    * @return the object representing the added root.
    */
+  @NotNull
   ExcludeFolder addExcludeFolder(@NotNull String url);
 
   /**
@@ -205,4 +205,7 @@ public interface ContentEntry extends Synthetic {
   void addExcludePattern(@NotNull String pattern);
   void removeExcludePattern(@NotNull String pattern);
   void setExcludePatterns(@NotNull List<String> patterns);
+
+  @NotNull
+  ModuleRootModel getRootModel();
 }

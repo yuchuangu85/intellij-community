@@ -76,7 +76,7 @@ public class XmlAttributeReferenceCompletionProvider extends CompletionProvider<
     final XmlTag tag = attribute.getParent();
     final PsiFile file = tag.getContainingFile();
     final XmlExtension extension = XmlExtension.getExtension(file);
-    final String prefix = attribute.getName().contains(":") && ((XmlAttributeImpl) attribute).getRealLocalName().length() > 0
+    final String prefix = attribute.getName().contains(":") && XmlAttributeImpl.getRealName(attribute).length() > 0
                           ? attribute.getNamespacePrefix() + ":"
                           : null;
 
@@ -134,7 +134,7 @@ public class XmlAttributeReferenceCompletionProvider extends CompletionProvider<
     }
   }
 
-  private static boolean isValidVariant(XmlAttribute attribute,
+  public static boolean isValidVariant(XmlAttribute attribute,
                                         @NotNull XmlAttributeDescriptor descriptor,
                                         final XmlAttribute[] attributes,
                                         final XmlExtension extension) {

@@ -1,3 +1,4 @@
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.aether;
 
 import org.apache.maven.repository.internal.MavenRepositorySystemUtils;
@@ -50,7 +51,6 @@ import java.util.*;
  *
  * instance of this component should be managed by the code which requires dependency resolution functionality
  * all necessary params like path to local repo should be passed in constructor
- *
  */
 public class ArtifactRepositoryManager {
   private static final VersionScheme ourVersioning = new GenericVersionScheme();
@@ -59,7 +59,7 @@ public class ArtifactRepositoryManager {
   private final DefaultRepositorySystemSession mySession;
 
   private static final RemoteRepository MAVEN_CENTRAL_REPOSITORY = createRemoteRepository(
-    "central", "http://repo1.maven.org/maven2/"
+    "central", "https://repo1.maven.org/maven2/"
   );
   private static final RemoteRepository JBOSS_COMMUNITY_REPOSITORY = createRemoteRepository(
     "jboss.community", "https://repository.jboss.org/nexus/content/repositories/public/"
@@ -129,7 +129,7 @@ public class ArtifactRepositoryManager {
    * Returns list of classes corresponding to classpath entries for this this module.
    */
   @SuppressWarnings("UnnecessaryFullyQualifiedName")
-  public static List<Class> getClassesFromDependencies() {
+  public static List<Class<?>> getClassesFromDependencies() {
     return Arrays.asList(
       org.jetbrains.idea.maven.aether.ArtifactRepositoryManager.class, //this module
       org.apache.maven.repository.internal.VersionsMetadataGeneratorFactory.class, //maven-aether-provider
@@ -152,7 +152,6 @@ public class ArtifactRepositoryManager {
       com.google.common.base.Predicate.class, //guava
       org.apache.http.HttpConnection.class, //httpcore
       org.apache.http.client.HttpClient.class, //httpclient
-      org.apache.commons.codec.binary.Base64.class, // commons-codec
       org.apache.commons.logging.LogFactory.class, // commons-logging
       org.slf4j.Marker.class // slf4j
     );
@@ -221,7 +220,9 @@ public class ArtifactRepositoryManager {
                 requests.add(new ArtifactRequest(newArtifact, Collections.unmodifiableList(myRemoteRepositories), null));
               }
             }
-            requests.add(new ArtifactRequest(artifact, Collections.unmodifiableList(myRemoteRepositories), null));
+            else {
+              requests.add(new ArtifactRequest(artifact, Collections.unmodifiableList(myRemoteRepositories), null));
+            }
           }
         }
 
@@ -309,6 +310,10 @@ public class ArtifactRepositoryManager {
     return DependencyFilterUtils.classpathFilter(JavaScopes.COMPILE, JavaScopes.RUNTIME);
   }
 
+  /**
+   * Gets the versions (in ascending order) that matched the requested range.
+   */
+  @NotNull
   public List<Version> getAvailableVersions(String groupId, String artifactId, String versionConstraint, final ArtifactKind artifactKind) throws Exception {
     final VersionRangeResult result = ourSystem.resolveVersionRange(
       mySession, createVersionRangeRequest(groupId, artifactId, asVersionConstraint(versionConstraint), artifactKind)
@@ -316,9 +321,20 @@ public class ArtifactRepositoryManager {
     return result.getVersions();
   }
 
-  public static RemoteRepository createRemoteRepository(final String id, final String url) {
+  public static RemoteRepository createRemoteRepository(final String id,
+                                                        final String url) {
+    return createRemoteRepository(id, url, true);
+  }
+
+  public static RemoteRepository createRemoteRepository(final String id,
+                                                        final String url,
+                                                        boolean allowSnapshots) {
     // for maven repos repository type should be 'default'
-    return new RemoteRepository.Builder(id, "default", url).setProxy(ourProxySelector.getProxy(url)).build();
+    RemoteRepository.Builder builder = new RemoteRepository.Builder(id, "default", url);
+    if (!allowSnapshots) {
+      builder.setSnapshotPolicy(new RepositoryPolicy(false, null, null));
+    }
+    return builder.setProxy(ourProxySelector.getProxy(url)).build();
   }
 
   public static RemoteRepository createRemoteRepository(RemoteRepository prototype) {
@@ -402,11 +418,17 @@ public class ArtifactRepositoryManager {
     public boolean visitEnter(DependencyNode node) {
       final Dependency dep = node.getDependency();
       if (dep != null) {
-        myRequests.add(new ArtifactRequest(
-          new ArtifactWithChangedClassifier(node.getDependency().getArtifact(), myKind.getClassifier()),
-          node.getRepositories(),
-          node.getRequestContext()
-        ));
+        Artifact artifact = dep.getArtifact();
+        String classifier = myKind.getClassifier();
+        if (classifier.isEmpty()) {
+          myRequests.add(new ArtifactRequest(node));
+        }
+        else {
+          myRequests.add(new ArtifactRequest(new ArtifactWithChangedClassifier(artifact, classifier),
+            node.getRepositories(),
+            node.getRequestContext()
+          ));
+        }
       }
       return true;
     }

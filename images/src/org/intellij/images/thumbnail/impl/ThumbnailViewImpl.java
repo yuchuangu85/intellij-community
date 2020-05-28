@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package org.intellij.images.thumbnail.impl;
 
@@ -32,7 +32,7 @@ final class ThumbnailViewImpl implements ThumbnailView {
 
   private boolean recursive = false;
   private VirtualFile root = null;
-  private final ThumbnailViewUI myThubmnailViewUi;
+  private final ThumbnailViewUI myThumbnailViewUI;
   private ThemeFilter myFilter;
   private TagFilter[] myTagFilters;
 
@@ -40,14 +40,15 @@ final class ThumbnailViewImpl implements ThumbnailView {
     this.project = project;
 
     ToolWindowManager windowManager = ToolWindowManager.getInstance(project);
-    myThubmnailViewUi = new ThumbnailViewUI(this);
-    toolWindow = windowManager.registerToolWindow(TOOLWINDOW_ID, myThubmnailViewUi, ToolWindowAnchor.BOTTOM);
+    myThumbnailViewUI = new ThumbnailViewUI(this);
+    Disposer.register(this, myThumbnailViewUI);
+    toolWindow = windowManager.registerToolWindow(TOOLWINDOW_ID, myThumbnailViewUI, ToolWindowAnchor.BOTTOM);
     toolWindow.setIcon(ImagesIcons.ThumbnailToolWindow);
     setVisible(false);
   }
 
   private ThumbnailViewUI getUI() {
-    return myThubmnailViewUi;
+    return myThumbnailViewUI;
   }
 
   @Override
@@ -85,8 +86,7 @@ final class ThumbnailViewImpl implements ThumbnailView {
   }
 
   @Override
-  @NotNull
-  public VirtualFile[] getSelection() {
+  public VirtualFile @NotNull [] getSelection() {
     if (isVisible()) {
       return getUI().getSelection();
     }
@@ -134,21 +134,17 @@ final class ThumbnailViewImpl implements ThumbnailView {
     updateUI();
   }
 
-  @Nullable
   @Override
-  public TagFilter[] getTagFilters() {
+  public TagFilter @Nullable [] getTagFilters() {
     return myTagFilters;
   }
 
   @Override
   public void setVisible(boolean visible) {
-    toolWindow.setAvailable(visible, null);
+    toolWindow.setAvailable(visible);
     if (visible) {
       setTitle();
       getUI().refresh();
-    }
-    else {
-      Disposer.dispose(getUI());
     }
   }
 
@@ -218,8 +214,6 @@ final class ThumbnailViewImpl implements ThumbnailView {
 
   @Override
   public void dispose() {
-    // Dispose UI
-    Disposer.dispose(getUI());
     // Unregister ToolWindow
     ToolWindowManager windowManager = ToolWindowManager.getInstance(project);
     windowManager.unregisterToolWindow(TOOLWINDOW_ID);

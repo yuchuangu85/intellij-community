@@ -22,9 +22,6 @@ import java.util.Collection;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
-* @author nik
-*/
 public class ModuleSourceSet {
   public enum Type { PRODUCTION, TEST }
 
@@ -65,6 +62,7 @@ public class ModuleSourceSet {
     return getDisplayName();
   }
 
+  @NotNull
   public String getDisplayName() {
     return (myType == Type.PRODUCTION ? "" : "Tests of ") + "'" + myModule.getName() + "' module";
   }

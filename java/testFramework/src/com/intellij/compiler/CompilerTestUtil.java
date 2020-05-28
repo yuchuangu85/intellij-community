@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.compiler;
 
 import com.intellij.compiler.server.BuildManager;
@@ -18,15 +18,9 @@ import com.intellij.openapi.projectRoots.impl.JavaAwareProjectJdkTableImpl;
 import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.roots.ModuleRootModificationUtil;
 import com.intellij.testFramework.EdtTestUtil;
-import com.intellij.util.SmartList;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
 
-import java.util.List;
-
-/**
- * @author nik
- */
 public class CompilerTestUtil {
   private CompilerTestUtil() {
   }
@@ -41,9 +35,9 @@ public class CompilerTestUtil {
   // should be invoked in EDT
   public static void saveApplicationSettings() {
     IComponentStore store = getApplicationStore();
-    store.saveApplicationComponent((PersistentStateComponent<?>)ProjectJdkTable.getInstance());
-    store.saveApplicationComponent((PersistentStateComponent<?>)FileTypeManager.getInstance());
-    store.saveApplicationComponent((PersistentStateComponent<?>)PathMacros.getInstance());
+    store.saveComponent((PersistentStateComponent<?>)ProjectJdkTable.getInstance());
+    store.saveComponent((PersistentStateComponent<?>)FileTypeManager.getInstance());
+    store.saveComponent((PersistentStateComponent<?>)PathMacros.getInstance());
   }
 
   @NotNull
@@ -53,7 +47,7 @@ public class CompilerTestUtil {
 
   @TestOnly
   public static void saveApplicationComponent(@NotNull PersistentStateComponent<?> appComponent) {
-    EdtTestUtil.runInEdtAndWait(() -> getApplicationStore().saveApplicationComponent(appComponent));
+    EdtTestUtil.runInEdtAndWait(() -> getApplicationStore().saveComponent(appComponent));
   }
 
   @TestOnly
@@ -68,15 +62,11 @@ public class CompilerTestUtil {
       final JavaAwareProjectJdkTableImpl table = JavaAwareProjectJdkTableImpl.getInstanceEx();
       ApplicationManager.getApplication().runWriteAction(() -> {
         Sdk internalJdk = table.getInternalJdk();
-        List<Module> modulesToRestore = new SmartList<>();
         for (Module module : ModuleManager.getInstance(project).getModules()) {
           Sdk sdk = ModuleRootManager.getInstance(module).getSdk();
           if (sdk != null && sdk.equals(internalJdk)) {
-            modulesToRestore.add(module);
+            ModuleRootModificationUtil.setModuleSdk(module, null);
           }
-        }
-        for (Module module : modulesToRestore) {
-          ModuleRootModificationUtil.setModuleSdk(module, internalJdk);
         }
         table.removeJdk(internalJdk);
         BuildManager.getInstance().clearState(project);

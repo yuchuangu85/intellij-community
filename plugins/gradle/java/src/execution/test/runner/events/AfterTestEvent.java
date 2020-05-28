@@ -16,7 +16,6 @@
 package org.jetbrains.plugins.gradle.execution.test.runner.events;
 
 import com.intellij.execution.testframework.sm.runner.SMTestProxy;
-import com.intellij.openapi.externalSystem.util.CompositeRunnable;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Couple;
 import com.intellij.openapi.util.text.StringUtil;
@@ -24,8 +23,7 @@ import com.intellij.util.ObjectUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.gradle.execution.test.runner.GradleTestsExecutionConsole;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import static org.jetbrains.plugins.gradle.execution.GradleRunnerUtil.parseComparisonMessage;
 
 /**
  * @author Vladislav.Soroka
@@ -54,11 +52,10 @@ public class AfterTestEvent extends AbstractTestEvent {
     catch (NumberFormatException ignored) {
     }
 
-    final CompositeRunnable runInEdt = new CompositeRunnable();
     final TestEventResult result = TestEventResult.fromValue(eventXml.getTestEventResultType());
     switch (result) {
       case SUCCESS:
-        runInEdt.add(testProxy::setFinished);
+        testProxy.setFinished();
         break;
       case FAILURE:
         final String failureType = eventXml.getEventTestResultFailureType();
@@ -69,59 +66,27 @@ public class AfterTestEvent extends AbstractTestEvent {
           String filePath = ObjectUtils.nullizeByCondition(decode(eventXml.getEventTestResultFilePath()), emptyString);
           String actualFilePath = ObjectUtils.nullizeByCondition(
             decode(eventXml.getEventTestResultActualFilePath()), emptyString);
-          testProxy.setTestComparisonFailed(exceptionMsg, stackTrace, actualText, expectedText, filePath, actualFilePath);
+          testProxy.setTestComparisonFailed(exceptionMsg, stackTrace, actualText, expectedText, filePath, actualFilePath, true);
         }
         else {
-          Couple<String> comparisonPair =
-            parseComparisonMessage(exceptionMsg, "\nExpected: is \"(.*)\"\n\\s*got: \"(.*)\"\n");
-          if (comparisonPair == null) {
-            comparisonPair = parseComparisonMessage(exceptionMsg, "\nExpected: is \"(.*)\"\n\\s*but: was \"(.*)\"");
+          Couple<String> comparisonPair = parseComparisonMessage(exceptionMsg);
+          if (comparisonPair != null) {
+            testProxy.setTestComparisonFailed(exceptionMsg, stackTrace, comparisonPair.second, comparisonPair.first);
           }
-          if (comparisonPair == null) {
-            comparisonPair = parseComparisonMessage(exceptionMsg, "\nExpected: (.*)\n\\s*got: (.*)");
+          else {
+            testProxy.setTestFailed(exceptionMsg, stackTrace, "error".equals(failureType));
           }
-          if (comparisonPair == null) {
-            comparisonPair = parseComparisonMessage(exceptionMsg, "\\s*expected same:<(.*)> was not:<(.*)>");
-          }
-          if (comparisonPair == null) {
-            comparisonPair = parseComparisonMessage(exceptionMsg, ".*\\s*expected:<(.*)> but was:<(.*)>");
-          }
-          if (comparisonPair == null) {
-            comparisonPair = parseComparisonMessage(exceptionMsg, "\nExpected: \"(.*)\"\n\\s*but: was \"(.*)\"");
-          }
-
-          final Couple<String> finalComparisonPair = comparisonPair;
-          runInEdt.add(() -> {
-            if (finalComparisonPair != null) {
-              testProxy.setTestComparisonFailed(exceptionMsg, stackTrace, finalComparisonPair.second, finalComparisonPair.first);
-            }
-            else {
-              testProxy.setTestFailed(exceptionMsg, stackTrace, "error".equals(failureType));
-            }
-          });
         }
-        runInEdt.add(() -> getResultsViewer().onTestFailed(testProxy));
+        getResultsViewer().onTestFailed(testProxy);
         break;
       case SKIPPED:
-        runInEdt.add(() -> {
-          testProxy.setTestIgnored(null, null);
-          getResultsViewer().onTestIgnored(testProxy);
-        });
+        testProxy.setTestIgnored(null, null);
+        getResultsViewer().onTestIgnored(testProxy);
         break;
       case UNKNOWN_RESULT:
         break;
     }
 
-    runInEdt.add(() -> getResultsViewer().onTestFinished(testProxy));
-
-    addToInvokeLater(runInEdt);
-  }
-
-  private static Couple<String> parseComparisonMessage(String message, final String regex) {
-    final Matcher matcher = Pattern.compile(regex, Pattern.DOTALL | Pattern.CASE_INSENSITIVE).matcher(message);
-    if (matcher.matches()) {
-      return Couple.of(matcher.group(1).replaceAll("\\\\n", "\n"), matcher.group(2).replaceAll("\\\\n", "\n"));
-    }
-    return null;
+    getResultsViewer().onTestFinished(testProxy);
   }
 }

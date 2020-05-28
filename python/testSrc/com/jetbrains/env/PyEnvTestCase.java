@@ -1,7 +1,6 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.env;
 
-import com.google.common.collect.Lists;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
@@ -13,6 +12,8 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.testFramework.LoggedErrorProcessor;
 import com.intellij.testFramework.UsefulTestCase;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.UIUtil;
 import com.jetbrains.LoggingRule;
 import com.jetbrains.TestEnv;
@@ -28,16 +29,16 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static com.intellij.testFramework.assertions.Assertions.assertThat;
 
 /**
- * @author traff
  * <p>
- * All inhertors must be in {@link com.jetbrains.env}.*
+ * All inheritors must be in {@link com.jetbrains.env}.*
  * <p>
  * See "community/python/setup-test-environment/build.gradle"
+ *
+ * @author traff
  */
 public abstract class PyEnvTestCase {
   private static final Logger LOG = Logger.getInstance(PyEnvTestCase.class.getName());
@@ -66,9 +67,12 @@ public abstract class PyEnvTestCase {
    * Tags that should exist between all tags, available on all interpreters for test to run.
    * See {@link #PyEnvTestCase(String...)}
    */
-  @Nullable
-  private final String[] myRequiredTags;
+  private final String @Nullable [] myRequiredTags;
 
+  /**
+   * Environments and tags they provide.
+   */
+  public static final Map<String, List<String>> envTags = new HashMap<>();
 
   private boolean myStaging = false;
   /**
@@ -97,17 +101,18 @@ public abstract class PyEnvTestCase {
 
   protected boolean isStaging(Description description) {
     try {
-      if (description.getTestClass().isAnnotationPresent(Staging.class)) {
+      Class<?> aClass = description.getTestClass();
+      if (aClass.isAnnotationPresent(Staging.class)) {
         return true;
       }
-      if (description.getTestClass().getMethod(description.getMethodName()).isAnnotationPresent(Staging.class)) {
+      if (aClass.getMethod(description.getMethodName()).isAnnotationPresent(Staging.class)) {
         return true;
       }
       else {
-        for (StagingOn so : description.getTestClass().getMethod(description.getMethodName()).getAnnotationsByType(StagingOn.class)) {
-          if (so.os().isThisOs()) {
-            return true;
-          }
+        final StagingOn[] methodAnnotations = aClass.getMethod(description.getMethodName()).getAnnotationsByType(StagingOn.class);
+        final StagingOn[] classAnnotations = aClass.getAnnotationsByType(StagingOn.class);
+        if (Arrays.stream(ArrayUtil.mergeArrays(methodAnnotations, classAnnotations)).map(StagingOn::os).anyMatch(TestEnv::isThisOs)) {
+          return true;
         }
         return false;
       }
@@ -124,7 +129,7 @@ public abstract class PyEnvTestCase {
    *                     See <a href="http://junit.sourceforge.net/javadoc/org/junit/Assume.html">Assume manual</a>.
    *                     Check [IDEA-122939] and [TW-25043] as well.
    */
-  protected PyEnvTestCase(@NotNull final String... requiredTags) {
+  protected PyEnvTestCase(final String @NotNull ... requiredTags) {
     myRequiredTags = requiredTags.length > 0 ? requiredTags.clone() : null;
   }
 
@@ -148,10 +153,17 @@ public abstract class PyEnvTestCase {
   @NotNull
   private static Collection<String> getAvailableTags() {
     final Collection<String> allAvailableTags = new HashSet<>();
-    for (final String pythonRoot : getPythonRoots()) {
-      allAvailableTags.addAll(loadEnvTags(pythonRoot));
+    for(List<String> tags : envTags.values()) {
+      allAvailableTags.addAll(tags);
     }
     return allAvailableTags;
+  }
+
+  @BeforeClass
+  public static void collectTagsForEnvs() {
+    for (final String pythonRoot : getPythonRoots()) {
+      envTags.put(pythonRoot, loadEnvTags(pythonRoot));
+    }
   }
 
   protected void invokeTestRunnable(@NotNull final Runnable runnable) {
@@ -202,7 +214,7 @@ public abstract class PyEnvTestCase {
 
     List<String> roots = getPythonRoots();
 
-    /**
+    /*
      * <p>
      * {@link org.junit.AssumptionViolatedException} here means this test must be <strong>skipped</strong>.
      * TeamCity supports this (if not you should create and issue about that).
@@ -268,18 +280,17 @@ public abstract class PyEnvTestCase {
     taskRunner.runTask(testTask, testName, skipOnFlavors, ArrayUtil.mergeArrays(methodTags, classTags));
   }
 
-  @NotNull
-  private static String[] getTags(@Nullable final EnvTestTagsRequired tagsRequiredAnnotation) {
+  private static String @NotNull [] getTags(@Nullable final EnvTestTagsRequired tagsRequiredAnnotation) {
     if (tagsRequiredAnnotation != null) {
       return tagsRequiredAnnotation.tags();
     }
     else {
-      return ArrayUtil.EMPTY_STRING_ARRAY;
+      return ArrayUtilRt.EMPTY_STRING_ARRAY;
     }
   }
 
   public static List<String> getPythonRoots() {
-    return SETTINGS.getPythons().stream().map(File::getAbsolutePath).collect(Collectors.toList());
+    return ContainerUtil.map(SETTINGS.getPythons(), File::getAbsolutePath);
   }
 
 
@@ -294,7 +305,7 @@ public abstract class PyEnvTestCase {
       envTags = com.intellij.openapi.util.io.FileUtil.loadLines(new File(parent, TAGS_FILE));
     }
     catch (IOException e) {
-      envTags = Lists.newArrayList();
+      envTags = new ArrayList<>();
     }
     return envTags;
   }
@@ -353,7 +364,7 @@ public abstract class PyEnvTestCase {
     private final List<Throwable> myExceptions = new ArrayList<>();
 
     @Override
-    public int show(final String message) {
+    public int show(@NotNull final String message) {
       myMessages.add(message);
       return 0;
     }

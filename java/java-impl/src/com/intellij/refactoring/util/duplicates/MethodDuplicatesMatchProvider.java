@@ -15,6 +15,7 @@
  */
 package com.intellij.refactoring.util.duplicates;
 
+import com.intellij.java.refactoring.JavaRefactoringBundle;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
@@ -22,7 +23,6 @@ import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiTypesUtil;
 import com.intellij.psi.util.PsiUtil;
-import com.intellij.refactoring.RefactoringBundle;
 import com.intellij.refactoring.util.RefactoringChangeUtil;
 import com.intellij.refactoring.util.RefactoringUtil;
 import com.intellij.util.IncorrectOperationException;
@@ -50,13 +50,13 @@ class MethodDuplicatesMatchProvider implements MatchProvider {
   @Override
   public PsiElement processMatch(Match match) throws IncorrectOperationException {
     final PsiClass containingClass = myMethod.getContainingClass();
-    if (isEssentialStaticContextAbsent(match)) {
+    if (isEssentialStaticContextAbsent(match, myMethod)) {
       PsiUtil.setModifierProperty(myMethod, PsiModifier.STATIC, true);
     }
 
     final PsiElementFactory factory = JavaPsiFacade.getElementFactory(myMethod.getProject());
     final boolean needQualifier = match.getInstanceExpression() != null;
-    final boolean needStaticQualifier = isExternal(match);
+    final boolean needStaticQualifier = isExternal(match, myMethod);
     final boolean nameConflicts = nameConflicts(match);
     final String methodName = myMethod.isConstructor() ? "this" : myMethod.getName();
     @NonNls final String text = needQualifier || needStaticQualifier || nameConflicts
@@ -110,9 +110,9 @@ class MethodDuplicatesMatchProvider implements MatchProvider {
 
 
 
-  private boolean isExternal(final Match match) {
+  private static boolean isExternal(final Match match, final PsiMethod method) {
     final PsiElement matchStart = match.getMatchStart();
-    final PsiClass containingClass = myMethod.getContainingClass();
+    final PsiClass containingClass = method.getContainingClass();
     if (PsiTreeUtil.isAncestor(containingClass, matchStart, false)) {
       return false;
     }
@@ -135,14 +135,14 @@ class MethodDuplicatesMatchProvider implements MatchProvider {
     return false;
   }
 
-  private boolean isEssentialStaticContextAbsent(final Match match) {
-    if (!myMethod.hasModifierProperty(PsiModifier.STATIC)) {
+  public static boolean isEssentialStaticContextAbsent(final Match match, final PsiMethod method) {
+    if (!method.hasModifierProperty(PsiModifier.STATIC)) {
       final PsiExpression instanceExpression = match.getInstanceExpression();
       if (instanceExpression != null) return false;
-      if (isExternal(match)) return true;
+      if (isExternal(match, method)) return true;
 
       final PsiElement matchStart = match.getMatchStart();
-      final PsiClass containingClass = myMethod.getContainingClass();
+      final PsiClass containingClass = method.getContainingClass();
 
       if (PsiTreeUtil.isAncestor(containingClass, matchStart, false)) {
         if (RefactoringUtil.isInStaticContext(matchStart, containingClass)) return true;
@@ -176,27 +176,27 @@ class MethodDuplicatesMatchProvider implements MatchProvider {
   public String getConfirmDuplicatePrompt(final Match match) {
     final PsiElement matchStart = match.getMatchStart();
     String visibility = VisibilityUtil.getPossibleVisibility(myMethod, matchStart);
-    final boolean shouldBeStatic = isEssentialStaticContextAbsent(match);
+    final boolean shouldBeStatic = isEssentialStaticContextAbsent(match, myMethod);
     final String signature = MatchUtil
       .getChangedSignature(match, myMethod, myMethod.hasModifierProperty(PsiModifier.STATIC) || shouldBeStatic, visibility);
     if (signature != null) {
-      return RefactoringBundle.message("replace.this.code.fragment.and.change.signature", signature);
+      return JavaRefactoringBundle.message("replace.this.code.fragment.and.change.signature", signature);
     }
     final boolean needToEscalateVisibility = !PsiUtil.isAccessible(myMethod, matchStart, null);
     if (needToEscalateVisibility) {
       final String visibilityPresentation = VisibilityUtil.toPresentableText(visibility);
       return shouldBeStatic
-             ? RefactoringBundle.message("replace.this.code.fragment.and.make.method.static.visible", visibilityPresentation)
-             : RefactoringBundle.message("replace.this.code.fragment.and.make.method.visible", visibilityPresentation);
+             ? JavaRefactoringBundle.message("replace.this.code.fragment.and.make.method.static.visible", visibilityPresentation)
+             : JavaRefactoringBundle.message("replace.this.code.fragment.and.make.method.visible", visibilityPresentation);
     }
     if (shouldBeStatic) {
-      return RefactoringBundle.message("replace.this.code.fragment.and.make.method.static");
+      return JavaRefactoringBundle.message("replace.this.code.fragment.and.make.method.static");
     }
     return null;
   }
 
   @Override
   public String getReplaceDuplicatesTitle(int idx, int size) {
-    return RefactoringBundle.message("process.methods.duplicates.title", idx, size, myMethod.getName());
+    return JavaRefactoringBundle.message("process.methods.duplicates.title", idx, size, myMethod.getName());
   }
 }

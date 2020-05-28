@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2017 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2019 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package com.siyeh.ipp.initialization;
 
+import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.*;
@@ -24,10 +25,9 @@ import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.refactoring.util.RefactoringUtil;
-import com.siyeh.IntentionPowerPackBundle;
+import com.siyeh.ig.psiutils.HighlightUtils;
 import com.siyeh.ipp.base.Intention;
 import com.siyeh.ipp.base.PsiElementPredicate;
-import com.siyeh.ipp.psiutils.HighlightUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
@@ -42,7 +42,18 @@ public class SplitDeclarationAndInitializationIntention extends Intention {
   }
 
   @Override
-  public void processIntention(@NotNull PsiElement element) {
+  public boolean isAvailable(@NotNull Project project, Editor editor, @NotNull PsiElement element) {
+    return PsiTreeUtil.getParentOfType(element, PsiField.class, false, PsiCodeBlock.class) != null &&
+           super.isAvailable(project, editor, element);
+  }
+
+  @Override
+  protected void processIntention(@NotNull PsiElement element) {
+    throw new UnsupportedOperationException("The only 'processIntention(Editor, PsiElement)' is allowed to be invoked.");
+  }
+
+  @Override
+  public void processIntention(Editor editor, @NotNull PsiElement element) {
     final PsiField field = (PsiField)element.getParent();
     final PsiExpression initializer = field.getInitializer();
     if (initializer == null) {
@@ -66,9 +77,6 @@ public class SplitDeclarationAndInitializationIntention extends Intention {
       if (initializerIsStatic == fieldIsStatic) {
         Predicate<PsiReference> usedBeforeInitializer = ref -> {
           PsiElement refElement = ref.getElement();
-          if (refElement == null) {
-            return true;
-          }
           TextRange textRange = refElement.getTextRange();
           return textRange == null || textRange.getStartOffset() < initializerOffset;
         };
@@ -80,7 +88,7 @@ public class SplitDeclarationAndInitializationIntention extends Intention {
     }
     final PsiManager manager = field.getManager();
     final Project project = manager.getProject();
-    final PsiElementFactory elementFactory = JavaPsiFacade.getInstance(project).getElementFactory();
+    final PsiElementFactory elementFactory = JavaPsiFacade.getElementFactory(project);
     if (classInitializer == null) {
       if (PsiUtil.isJavaToken(PsiTreeUtil.skipWhitespacesForward(field), JavaTokenType.COMMA)) {
         field.normalizeDeclaration();
@@ -103,7 +111,6 @@ public class SplitDeclarationAndInitializationIntention extends Intention {
     }
     initializer.delete();
     CodeStyleManager.getInstance(manager.getProject()).reformat(classInitializer);
-    HighlightUtil.highlightElement(addedElement, IntentionPowerPackBundle.message(
-                                     "press.escape.to.remove.highlighting.message"));
+    HighlightUtils.highlightElement(addedElement, editor);
   }
 }

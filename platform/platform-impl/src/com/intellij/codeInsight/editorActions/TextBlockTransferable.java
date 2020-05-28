@@ -1,9 +1,10 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.editorActions;
 
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.RawText;
+import com.intellij.openapi.ide.Sizeable;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.text.StringUtil;
@@ -18,7 +19,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.util.*;
 
-public class TextBlockTransferable implements Transferable {
+public class TextBlockTransferable implements Transferable, Sizeable {
   private final Collection<? extends TextBlockTransferableData> myExtraData;
   private final RawText myRawText;
   private final String myText;
@@ -30,8 +31,8 @@ public class TextBlockTransferable implements Transferable {
     myRawText = rawText;
 
     List<DataFlavorWithPriority> dataFlavors = new ArrayList<>();
-    Collections.addAll(dataFlavors, 
-                       new DataFlavorWithPriority(DataFlavor.stringFlavor, TextBlockTransferableData.PLAIN_TEXT_PRIORITY), 
+    Collections.addAll(dataFlavors,
+                       new DataFlavorWithPriority(DataFlavor.stringFlavor, TextBlockTransferableData.PLAIN_TEXT_PRIORITY),
                        new DataFlavorWithPriority(DataFlavor.plainTextFlavor, TextBlockTransferableData.PLAIN_TEXT_PRIORITY));
     final DataFlavor flavor = RawText.getDataFlavor();
     if (myRawText != null && flavor != null) {
@@ -47,10 +48,19 @@ public class TextBlockTransferable implements Transferable {
     myTransferDataFlavors = ContainerUtil.map2Array(dataFlavors, DataFlavor.class, value -> value.flavor);
   }
 
+  @Override
+  public int getSize() {
+    int size = myText.length();
+    if (myRawText != null && myRawText.rawText != myText) {
+      size += StringUtil.length(myRawText.rawText);
+    }
+    return size;
+  }
+
   @NotNull
   private static String cleanFromNullsIfNeeded(@NotNull String text) {
     // Clipboard on Windows and Linux works with null-terminated strings, on Mac nulls are not treated in a special way.
-    return SystemInfo.isMac ? text : text.replace('\000', ' '); 
+    return SystemInfo.isMac ? text : text.replace('\000', ' ');
   }
 
   @Override

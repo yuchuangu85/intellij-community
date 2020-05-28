@@ -28,9 +28,6 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * @author nik
- */
 public class CreateModuleLibraryFromFilesTest extends ModuleRootManagerTestCase {
   private LibraryTable.ModifiableModel myModifiableModel;
   private ModifiableRootModel myModifiableRootModel;
@@ -46,6 +43,9 @@ public class CreateModuleLibraryFromFilesTest extends ModuleRootManagerTestCase 
   protected void tearDown() throws Exception {
     try {
       myModifiableRootModel.dispose();
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
     }
     finally {
       myModifiableModel = null;

@@ -25,6 +25,7 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 
+@Deprecated
 public class TestsProgressAnimator implements Runnable, Disposable {
   private static final int FRAMES_COUNT = 8;
   private static final int MOVIE_TIME = 800;
@@ -39,7 +40,7 @@ public class TestsProgressAnimator implements Runnable, Disposable {
   private final AbstractTestTreeBuilderBase myTreeBuilder;
 
   /**
-   * To be deleted when AbstractTreeBuilder would be completely eliminated
+   * @deprecated To be deleted when AbstractTreeBuilder would be completely eliminated
    */
   @Deprecated
   public TestsProgressAnimator(AbstractTestTreeBuilder builder) {

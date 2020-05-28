@@ -3,20 +3,23 @@ package com.intellij.util;
 
 import com.intellij.concurrency.AsyncFuture;
 import com.intellij.concurrency.AsyncUtil;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadActionProcessor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 /**
  * @author peter
  */
 public abstract class AbstractQuery<Result> implements Query<Result> {
-  private boolean myIsProcessing;
+  private final ThreadLocal<Boolean> myIsProcessing = new ThreadLocal<>();
+
+  // some clients rely on the (accidental) order of found result
+  // to discourage them, randomize the results sometimes to induce errors caused by the order reliance
+  private static final boolean RANDOMIZE = ApplicationManager.getApplication().isUnitTestMode() || ApplicationManager.getApplication().isInternal() ;
+  private static final Comparator<Object> CRAZY_ORDER = (o1, o2) -> -Integer.compare(System.identityHashCode(o1), System.identityHashCode(o2));
 
   @Override
   @NotNull
@@ -25,6 +28,9 @@ public abstract class AbstractQuery<Result> implements Query<Result> {
     List<Result> result = new ArrayList<>();
     Processor<Result> processor = Processors.cancelableCollectProcessor(result);
     forEach(processor);
+    if (RANDOMIZE && result.size() > 1) {
+      result.sort(CRAZY_ORDER);
+    }
     return result;
   }
 
@@ -45,28 +51,52 @@ public abstract class AbstractQuery<Result> implements Query<Result> {
   }
 
   private void assertNotProcessing() {
-    assert !myIsProcessing : "Operation is not allowed while query is being processed";
+    assert myIsProcessing.get() == null : "Operation is not allowed while query is being processed";
   }
 
-  @NotNull
   @Override
-  public Result[] toArray(@NotNull Result[] a) {
+  public Result @NotNull [] toArray(Result @NotNull [] a) {
     assertNotProcessing();
 
     final Collection<Result> all = findAll();
     return all.toArray(a);
   }
 
+  @NotNull
+  @Override
+  public Query<Result> allowParallelProcessing() {
+    return new AbstractQuery<Result>() {
+      @Override
+      protected boolean processResults(@NotNull Processor<? super Result> consumer) {
+        return AbstractQuery.this.doProcessResults(consumer);
+      }
+    };
+  }
+
+  @NotNull
+  private Processor<Result> threadSafeProcessor(@NotNull Processor<? super Result> consumer) {
+    Object lock = ObjectUtils.sentinel("AbstractQuery lock");
+    return e -> {
+      synchronized (lock) {
+        return consumer.process(e);
+      }
+    };
+  }
+
   @Override
   public boolean forEach(@NotNull Processor<? super Result> consumer) {
+    return doProcessResults(threadSafeProcessor(consumer));
+  }
+
+  private boolean doProcessResults(@NotNull Processor<? super Result> consumer) {
     assertNotProcessing();
 
-    myIsProcessing = true;
+    myIsProcessing.set(true);
     try {
       return processResults(consumer);
     }
     finally {
-      myIsProcessing = false;
+      myIsProcessing.remove();
     }
   }
 
@@ -76,11 +106,19 @@ public abstract class AbstractQuery<Result> implements Query<Result> {
     return AsyncUtil.wrapBoolean(forEach(consumer));
   }
 
+  /**
+   * Assumes consumer being capable of processing results in parallel
+   */
   protected abstract boolean processResults(@NotNull Processor<? super Result> consumer);
 
-  @NotNull
-  protected AsyncFuture<Boolean> processResultsAsync(@NotNull Processor<? super Result> consumer) {
-    return AsyncUtil.wrapBoolean(processResults(consumer));
+  /**
+   * Should be called only from {@link #processResults} implementations to delegate to another query
+   */
+  protected static <T> boolean delegateProcessResults(@NotNull Query<T> query, @NotNull Processor<? super T> consumer) {
+    if (query instanceof AbstractQuery) {
+      return ((AbstractQuery<T>)query).doProcessResults(consumer);
+    }
+    return query.forEach(consumer);
   }
 
   @NotNull
@@ -88,7 +126,7 @@ public abstract class AbstractQuery<Result> implements Query<Result> {
     return new AbstractQuery<T>() {
       @Override
       protected boolean processResults(@NotNull Processor<? super T> consumer) {
-        return query.forEach(ReadActionProcessor.wrapInReadAction(consumer));
+        return AbstractQuery.delegateProcessResults(query, ReadActionProcessor.wrapInReadAction(consumer));
       }
     };
   }

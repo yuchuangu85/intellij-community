@@ -17,7 +17,6 @@ package com.jetbrains.python.codeInsight.stdlib;
 
 import com.google.common.collect.ImmutableMap;
 import com.intellij.openapi.projectRoots.Sdk;
-import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
@@ -31,9 +30,14 @@ import com.jetbrains.python.psi.PyFile;
 import com.jetbrains.python.psi.PyFunction;
 import com.jetbrains.python.psi.impl.PyBuiltinCache;
 import com.jetbrains.python.psi.resolve.QualifiedNameFinder;
-import com.jetbrains.python.sdk.PythonSdkType;
+import com.jetbrains.python.sdk.PythonSdkUtil;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * @author yole
@@ -950,22 +954,22 @@ public class PyStdlibDocumentationLinkProvider implements PythonDocumentationLin
 
   @Override
   public String getExternalDocumentationUrl(PsiElement element, PsiElement originalElement) {
-    PsiFileSystemItem file = element instanceof PsiFileSystemItem ? (PsiFileSystemItem) element : element.getContainingFile();
+    PsiFileSystemItem file = element instanceof PsiFileSystemItem ? (PsiFileSystemItem)element : element.getContainingFile();
     if (PyNames.INIT_DOT_PY.equals(file.getName())) {
       file = file.getParent();
       assert file != null;
     }
     Sdk sdk = PyBuiltinCache.findSdkForFile(file);
     VirtualFile vFile = file.getVirtualFile();
-    if (vFile != null && sdk != null && PythonSdkType.isStdLib(vFile, sdk)) {
+    if (vFile != null && sdk != null && PythonSdkUtil.isStdLib(vFile, sdk)) {
       QualifiedName qName = QualifiedNameFinder.findCanonicalImportPath(element, originalElement);
       return getStdlibUrlFor(element, qName, sdk);
     }
     return null;
   }
 
-  @Override
-  public String getExternalDocumentationRoot(Sdk sdk) {
+  @NotNull
+  private static String getExternalDocumentationRoot(@NotNull Sdk sdk) {
     final String versionString = sdk.getVersionString();
     if (versionString != null && StringUtil.startsWithIgnoreCase(versionString, "jython")) {
       return "http://jython.org/docs/library/";
@@ -984,17 +988,36 @@ public class PyStdlibDocumentationLinkProvider implements PythonDocumentationLin
     return urlBuilder.toString();
   }
 
+  @Nullable
+  @Override
+  public Function<Document, String> quickDocExtractor(@NotNull PsiNamedElement namedElement) {
+    return document -> {
+      final String moduleName = getModuleNameForDocumentationUrl(namedElement, namedElement);
+
+      final String elementId = (isBuiltins(moduleName) ? "" : moduleName + ".") + namedElement.getName();
+      document.select("a.headerlink").remove();
+      final Element definitionElement = document.getElementById(elementId);
+      if (definitionElement != null) {
+        final Element parent = definitionElement.parent();
+        if (parent != null) {
+          return parent.toString();
+        }
+      }
+      final Element moduleElement = document.getElementById("module-" + moduleName);
+      if (moduleElement != null) {
+        return moduleElement.toString();
+      }
+      return document.toString();
+    };
+  }
+
   private String getStdlibUrlFor(PsiElement element, QualifiedName moduleName, Sdk sdk) {
     StringBuilder urlBuilder = new StringBuilder(getExternalDocumentationRoot(sdk));
 
-    Pair<String, String> modName = getModuleName(moduleName.toString(), moduleName.toString());
+    final String webpageName = webPageName(moduleName, sdk);
 
-    final String pyVersion = PythonDocumentationProvider.pyVersion(sdk.getVersionString());
-    final Map<String, String> moduleToWebpageName =
-      pyVersion != null && pyVersion.startsWith("3") ? py3LibraryModulesToWebpageName : py2LibraryModulesToWebpageName;
-    final String webpageName = moduleToWebpageName.get(modName.first);
+    final boolean isBuiltin = isBuiltins(webpageName);
 
-    final boolean isBuiltin = "__builtin__".equals(webpageName) || "builtins".equals(webpageName);
     final String className = element instanceof PyFunction && ((PyFunction)element).getContainingClass() != null ?
                              ((PyFunction)element).getContainingClass().getName() : "";
     final String name = element instanceof PsiNamedElement && !(element instanceof PyFile) ? ((PsiNamedElement)element).getName() : null;
@@ -1009,37 +1032,45 @@ public class PyStdlibDocumentationLinkProvider implements PythonDocumentationLin
     if (webpageName2 != null && element instanceof PsiNamedElement && !(element instanceof PyFile)) {
       urlBuilder.append('#');
       if (!isBuiltin) {
-        urlBuilder.append(modName.second).append(".");
+        urlBuilder.append(fragmentName(moduleName.toString())).append(".");
       }
       urlBuilder.append(qName);
     }
     return urlBuilder.toString();
   }
 
-  private static Pair<String, String> getModuleName(String qname, String moduleName) {
-    if (qname.equals("ntpath") || qname.equals("posixpath")) {
-      qname = "os.path";
-    } else if (qname.equals("genericpath")) {
-      qname = "os.path";
-      moduleName = qname;
-    }
-    else if (qname.equals("nt")) {
-      qname = "os";
-    }
-    else if (qname.equals("cPickle")) {
+  private static boolean isBuiltins(String webpageName) {
+    return "__builtin__".equals(webpageName) || "builtins".equals(webpageName);
+  }
+
+  public String webPageName(QualifiedName moduleName, Sdk sdk) {
+    String modName = getModuleName(moduleName.toString());
+
+    final String pyVersion = PythonDocumentationProvider.pyVersion(sdk.getVersionString());
+    final Map<String, String> moduleToWebpageName =
+      pyVersion != null && pyVersion.startsWith("3") ? py3LibraryModulesToWebpageName : py2LibraryModulesToWebpageName;
+    return moduleToWebpageName.get(modName);
+  }
+
+  public String fragmentName(String qname) {
+    return getModuleName(qname);
+  }
+
+  public static String getModuleName(String qname) {
+    if (qname.equals("cPickle")) {
       qname = "pickle";
     }
     else if (qname.equals("pyexpat")) {
       qname = "xml.parsers.expat";
     }
 
-    return Pair.create(qname, moduleName);
+    return qname;
   }
 
-  public String getModuleNameForDocumentationUrl(PsiElement element, PsiElement originalElement) {
+  private static String getModuleNameForDocumentationUrl(@NotNull PsiElement element, @Nullable PsiElement originalElement) {
     QualifiedName qName = QualifiedNameFinder.findCanonicalImportPath(element, originalElement);
 
-    return getModuleName(qName.toString(), qName.toString()).second;
+    return qName != null ? getModuleName(qName.toString()) : "";
   }
 
   private static final class MyBuilder extends ImmutableMap.Builder<String, String> {
@@ -1049,8 +1080,7 @@ public class PyStdlibDocumentationLinkProvider implements PythonDocumentationLin
 
     @Override
     public MyBuilder put(String key, String value) {
-      return (MyBuilder) super.put(key, value);
+      return (MyBuilder)super.put(key, value);
     }
   }
-
 }

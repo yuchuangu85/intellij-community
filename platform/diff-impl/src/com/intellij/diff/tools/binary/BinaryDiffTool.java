@@ -17,8 +17,8 @@ package com.intellij.diff.tools.binary;
 
 import com.intellij.diff.DiffContext;
 import com.intellij.diff.FrameDiffTool;
-import com.intellij.diff.requests.ContentDiffRequest;
 import com.intellij.diff.requests.DiffRequest;
+import com.intellij.openapi.diff.DiffBundle;
 import org.jetbrains.annotations.NotNull;
 
 public class BinaryDiffTool implements FrameDiffTool {
@@ -43,6 +43,6 @@ public class BinaryDiffTool implements FrameDiffTool {
   @NotNull
   @Override
   public String getName() {
-    return "Binary file viewer";
+    return DiffBundle.message("binary.file.viewer");
   }
 }

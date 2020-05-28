@@ -1,40 +1,26 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.diff.tools.util;
 
+import com.intellij.diff.util.Range;
 import com.intellij.diff.util.Side;
 import com.intellij.diff.util.ThreeSide;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.LogicalPosition;
 import com.intellij.openapi.editor.ScrollingModel;
+import com.intellij.openapi.editor.VisualPosition;
 import com.intellij.openapi.editor.event.VisibleAreaEvent;
 import com.intellij.openapi.editor.event.VisibleAreaListener;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.impl.FoldingModelImpl;
 import com.intellij.util.ArrayUtil;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.CalledInAwt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.Arrays;
 import java.util.List;
-
-import static com.intellij.util.ArrayUtil.toObjectArray;
 
 public class SyncScrollSupport {
   public interface SyncScrollable {
@@ -43,6 +29,10 @@ public class SyncScrollSupport {
 
     @CalledInAwt
     int transfer(@NotNull Side baseSide, int line);
+
+    @NotNull
+    @CalledInAwt
+    Range getRange(@NotNull Side baseSide, int line);
   }
 
   public interface Support {
@@ -75,7 +65,7 @@ public class SyncScrollSupport {
     @Override
     @NotNull
     protected List<? extends ScrollHelper> getScrollHelpers() {
-      return ContainerUtil.list(myHelper1, myHelper2);
+      return Arrays.asList(myHelper1, myHelper2);
     }
 
     @NotNull
@@ -147,7 +137,7 @@ public class SyncScrollSupport {
     @Override
     @NotNull
     protected List<? extends ScrollHelper> getScrollHelpers() {
-      return ContainerUtil.list(myHelper12, myHelper21, myHelper23, myHelper32);
+      return Arrays.asList(myHelper12, myHelper21, myHelper23, myHelper32);
     }
 
     @NotNull
@@ -251,7 +241,7 @@ public class SyncScrollSupport {
       assert startLines.length == count;
       assert endLines.length == count;
 
-      final int[] offsets = getTargetOffsets(toObjectArray(editors, Editor.class), startLines, endLines, -1);
+      final int[] offsets = getTargetOffsets(editors.toArray(Editor.EMPTY_ARRAY), startLines, endLines, -1);
 
       final int[] startOffsets = new int[count];
       for (int i = 0; i < count; i++) {
@@ -315,10 +305,6 @@ public class SyncScrollSupport {
       mySide = side;
     }
 
-    private int convertLine(int value) {
-      return myScrollable.transfer(mySide, value);
-    }
-
     public void setAnchor(int masterStartOffset, int masterEndOffset, int slaveStartOffset, int slaveEndOffset) {
       myAnchor = new Anchor(masterStartOffset, masterEndOffset, slaveStartOffset, slaveEndOffset);
     }
@@ -359,26 +345,35 @@ public class SyncScrollSupport {
     }
 
     private void syncVerticalScroll(boolean animated) {
-      if (getMaster().getDocument().getTextLength() == 0) return;
+      Editor master = getMaster();
+      Editor slave = getSlave();
 
-      Rectangle viewRect = getMaster().getScrollingModel().getVisibleArea();
-      int middleY = viewRect.height / 3;
-      int lineHeight = getMaster().getLineHeight();
+      if (master.getDocument().getTextLength() == 0) return;
+
+      Rectangle viewRect = master.getScrollingModel().getVisibleArea();
+      int lineHeight = master.getLineHeight();
 
       boolean onlyMajorForward = false;
       boolean onlyMajorBackward = false;
       int offset;
       if (myAnchor == null) {
-        LogicalPosition masterPos = getMaster().xyToLogicalPosition(new Point(viewRect.x, viewRect.y + middleY));
-        int masterCenterLine = masterPos.line;
-        int convertedCenterLine = convertLine(masterCenterLine);
+        int middleY = viewRect.height / 3;
+        int masterOffset = viewRect.y + middleY;
 
-        Point point = getSlave().logicalPositionToXY(new LogicalPosition(convertedCenterLine, masterPos.column));
-        int correction = (viewRect.y + middleY) % lineHeight;
-        offset = point.y - middleY + correction;
+        int masterVisualLine = master.yToVisualLine(masterOffset);
+        int convertedVisualLine = transferVisualLine(masterVisualLine);
 
-        onlyMajorBackward = convertedCenterLine == convertLine(masterCenterLine - 1) && correction < lineHeight / 2;
-        onlyMajorForward = convertedCenterLine == convertLine(masterCenterLine + 1) && correction > lineHeight / 2;
+        int slaveOffset = slave.visualLineToY(convertedVisualLine);
+        int masterOffsetRaw = master.visualLineToY(masterVisualLine);
+        // ensure that anchor lines are in the same phase
+        int correction = (masterOffset - masterOffsetRaw) % lineHeight;
+
+        offset = slaveOffset - middleY + correction;
+
+        onlyMajorBackward = correction < lineHeight / 2 && masterVisualLine > 0 &&
+                            convertedVisualLine == transferVisualLine(masterVisualLine - 1);
+        onlyMajorForward = correction > lineHeight / 2 &&
+                           convertedVisualLine == transferVisualLine(masterVisualLine + 1);
       }
       else {
         double progress = myAnchor.masterStartOffset == myAnchor.masterEndOffset || viewRect.y == myAnchor.masterEndOffset ? 1 :
@@ -387,8 +382,29 @@ public class SyncScrollSupport {
         offset = myAnchor.slaveStartOffset + (int)((myAnchor.slaveEndOffset - myAnchor.slaveStartOffset) * progress);
       }
 
-      int deltaHeaderOffset = getHeaderOffset(getSlave()) - getHeaderOffset(getMaster());
-      doScrollVertically(getSlave(), offset + deltaHeaderOffset, animated, onlyMajorForward, onlyMajorBackward);
+      int deltaHeaderOffset = getHeaderOffset(slave) - getHeaderOffset(master);
+      doScrollVertically(slave, offset + deltaHeaderOffset, animated, onlyMajorForward, onlyMajorBackward);
+    }
+
+    private int transferVisualLine(int masterVisualLine) {
+      Editor master = getMaster();
+      Editor slave = getSlave();
+
+      int masterCenterLine = master.visualToLogicalPosition(new VisualPosition(masterVisualLine, 0)).line;
+      Range range = myScrollable.getRange(mySide, masterCenterLine);
+
+      int masterStart = logicalToVisualLine(master, range.start1);
+      int masterEnd = range.start1 == range.end1 ? masterStart : logicalToVisualLine(master, range.end1);
+
+      int slaveStart = logicalToVisualLine(slave, range.start2);
+      int slaveEnd = range.start2 == range.end2 ? slaveStart : logicalToVisualLine(slave, range.end2);
+
+      Range visualRange = new Range(masterStart, masterEnd, slaveStart, slaveEnd);
+      return BaseSyncScrollable.transferLine(masterVisualLine, visualRange);
+    }
+
+    private static int logicalToVisualLine(@NotNull Editor editor, int line) {
+      return editor.logicalToVisualPosition(new LogicalPosition(line, 0)).line;
     }
 
     private void syncHorizontalScroll(boolean animated) {
@@ -430,18 +446,16 @@ public class SyncScrollSupport {
     return header == null ? 0 : header.getHeight();
   }
 
-  @NotNull
-  public static int[] getTargetOffsets(@NotNull Editor editor1, @NotNull Editor editor2,
-                                       int startLine1, int endLine1, int startLine2, int endLine2,
-                                       int preferredTopShift) {
+  public static int @NotNull [] getTargetOffsets(@NotNull Editor editor1, @NotNull Editor editor2,
+                                                 int startLine1, int endLine1, int startLine2, int endLine2,
+                                                 int preferredTopShift) {
     return getTargetOffsets(new Editor[]{editor1, editor2},
                             new int[]{startLine1, startLine2},
                             new int[]{endLine1, endLine2},
                             preferredTopShift);
   }
 
-  @NotNull
-  private static int[] getTargetOffsets(@NotNull Editor[] editors, int[] startLines, int[] endLines, int preferredTopShift) {
+  private static int @NotNull [] getTargetOffsets(Editor @NotNull [] editors, int[] startLines, int[] endLines, int preferredTopShift) {
     int count = editors.length;
     assert startLines.length == count;
     assert endLines.length == count;

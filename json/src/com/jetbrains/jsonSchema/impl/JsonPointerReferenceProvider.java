@@ -1,45 +1,40 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.jsonSchema.impl;
 
 import com.intellij.codeInsight.completion.CompletionUtil;
 import com.intellij.codeInsight.completion.CompletionUtilCore;
+import com.intellij.codeInsight.completion.PrioritizedLookupElement;
+import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.LookupElementBuilder;
 import com.intellij.icons.AllIcons;
 import com.intellij.json.JsonFileType;
+import com.intellij.json.pointer.JsonPointerResolver;
 import com.intellij.json.psi.*;
 import com.intellij.openapi.paths.WebReference;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiReference;
 import com.intellij.psi.PsiReferenceProvider;
 import com.intellij.psi.impl.source.resolve.reference.impl.providers.FileInfoManager;
 import com.intellij.psi.impl.source.resolve.reference.impl.providers.FileReference;
 import com.intellij.psi.impl.source.resolve.reference.impl.providers.FileReferenceSet;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.ProcessingContext;
 import com.intellij.util.containers.ContainerUtil;
+import com.jetbrains.jsonSchema.extension.JsonSchemaInfo;
 import com.jetbrains.jsonSchema.ide.JsonSchemaService;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 
 import static com.jetbrains.jsonSchema.JsonPointerUtil.*;
@@ -49,17 +44,16 @@ import static com.jetbrains.jsonSchema.remote.JsonFileResolver.isHttpPath;
  * @author Irina.Chernushina on 3/31/2016.
  */
 public class JsonPointerReferenceProvider extends PsiReferenceProvider {
-  private final boolean myOnlyFilePart;
+  private final boolean myIsSchemaProperty;
 
-  public JsonPointerReferenceProvider(boolean onlyFilePart) {
-    myOnlyFilePart = onlyFilePart;
+  public JsonPointerReferenceProvider(boolean isSchemaProperty) {
+    myIsSchemaProperty = isSchemaProperty;
   }
 
-  @NotNull
   @Override
-  public PsiReference[] getReferencesByElement(@NotNull PsiElement element, @NotNull ProcessingContext context) {
+  public PsiReference @NotNull [] getReferencesByElement(@NotNull PsiElement element, @NotNull ProcessingContext context) {
     if (!(element instanceof JsonStringLiteral)) return PsiReference.EMPTY_ARRAY;
-    List<PsiReference> refs = ContainerUtil.newArrayList();
+    List<PsiReference> refs = new ArrayList<>();
 
     List<Pair<TextRange, String>> fragments = ((JsonStringLiteral)element).getTextFragments();
     if (fragments.size() != 1)  return PsiReference.EMPTY_ARRAY;
@@ -76,19 +70,22 @@ public class JsonPointerReferenceProvider extends PsiReferenceProvider {
         addFileOrWebReferences(element, refs, hash, id);
       }
     }
-    if (!myOnlyFilePart) {
-      String relativePath = normalizeSlashes(JsonSchemaService.normalizeId(splitter.getRelativePath()));
-      List<String> parts1 = split(relativePath);
-      String[] strings = ContainerUtil.toArray(parts1, String[]::new);
-      List<String> parts2 = split(normalizeSlashes(originalText.substring(hash + 1)));
-      if (strings.length == parts2.size()) {
-        int start = hash + 2;
-        for (int i = 0; i < parts2.size(); i++) {
-          int length = parts2.get(i).length();
-          if (i == parts2.size() - 1) length--;
-          refs.add(new JsonPointerReference((JsonValue)element, new TextRange(start, start + length),
+    if (!myIsSchemaProperty) {
+      String relativePath = normalizeSlashes(normalizeId(splitter.getRelativePath()));
+      if (!StringUtil.isEmpty(relativePath)) {
+        List<String> parts1 = split(relativePath);
+        String[] strings = ContainerUtil.toArray(parts1, String[]::new);
+        List<String> parts2 = split(normalizeSlashes(originalText.substring(hash + 1)));
+        if (strings.length == parts2.size()) {
+          int start = hash + 2;
+          for (int i = 0; i < parts2.size(); i++) {
+            int length = parts2.get(i).length();
+            if (i == parts2.size() - 1) length--;
+            if (length <= 0) break;
+            refs.add(new JsonPointerReference((JsonValue)element, new TextRange(start, start + length),
                                               (id == null ? "" : id) + "#/" + StringUtil.join(strings, 0, i + 1, "/")));
-          start += length + 1;
+            start += length + 1;
+          }
         }
       }
     }
@@ -100,6 +97,8 @@ public class JsonPointerReferenceProvider extends PsiReferenceProvider {
       refs.add(new WebReference(element, new TextRange(1, hashIndex >= 0 ? hashIndex : id.length() + 1), id));
       return;
     }
+
+    boolean isCompletion = id.contains(CompletionUtilCore.DUMMY_IDENTIFIER_TRIMMED);
 
     ContainerUtil.addAll(refs, new FileReferenceSet(id, element, 1, null, true,
                                                     true, new JsonFileType[]{JsonFileType.INSTANCE}) {
@@ -125,6 +124,32 @@ public class JsonPointerReferenceProvider extends PsiReferenceProvider {
           protected Object createLookupItem(PsiElement candidate) {
             return FileInfoManager.getFileLookupItem(candidate);
           }
+
+          @Override
+          public Object @NotNull [] getVariants() {
+            final Object[] fileVariants = super.getVariants();
+            if (!isCompletion || getRangeInElement().getStartOffset() != 1) {
+              return fileVariants;
+            }
+            return ArrayUtil.mergeArrays(fileVariants, collectCatalogVariants());
+          }
+
+          private Object @NotNull [] collectCatalogVariants() {
+            List<LookupElement> elements = new ArrayList<>();
+            final Project project = getElement().getProject();
+            final List<JsonSchemaInfo> schemas = JsonSchemaService.Impl.get(project).getAllUserVisibleSchemas();
+            for (JsonSchemaInfo schema : schemas) {
+              LookupElementBuilder element = LookupElementBuilder.create(schema.getUrl(project))
+                .withPresentableText(schema.getDescription())
+                .withLookupString(schema.getDescription())
+                .withIcon(AllIcons.General.Web)
+                .withTypeText(schema.getDocumentation(), true);
+              if (schema.getName() != null) element = element.withLookupString(schema.getName());
+              if (schema.getDocumentation() != null) element = element.withLookupString(schema.getDocumentation());
+              elements.add(PrioritizedLookupElement.withPriority(element, -1));
+            }
+            return elements.toArray();
+          }
         };
       }
     }.getAllReferences());
@@ -141,47 +166,19 @@ public class JsonPointerReferenceProvider extends PsiReferenceProvider {
       if (schemaFile == null) return null;
     }
 
-    final String normalized = JsonSchemaService.normalizeId(splitter.getRelativePath());
-    if (!alwaysRoot && (StringUtil.isEmptyOrSpaces(normalized) || split(normalizeSlashes(normalized)).size() == 0)) {
-      return element.getManager().findFile(schemaFile);
+    PsiFile psiFile = element.getManager().findFile(schemaFile);
+
+    final String normalized = normalizeId(splitter.getRelativePath());
+    if (!alwaysRoot && (StringUtil.isEmptyOrSpaces(normalized) || split(normalizeSlashes(normalized)).size() == 0)
+      || !(psiFile instanceof JsonFile)) {
+      return psiFile;
     }
     final List<String> chain = split(normalizeSlashes(normalized));
     final JsonSchemaObject schemaObject = service.getSchemaObjectForSchemaFile(schemaFile);
     if (schemaObject == null) return null;
 
-    JsonValue root = schemaObject.getJsonObject();
-    final List<JsonSchemaVariantsTreeBuilder.Step> steps = JsonSchemaVariantsTreeBuilder.buildSteps(StringUtil.join(chain, "/"));
-    for (JsonSchemaVariantsTreeBuilder.Step step : steps) {
-      String name = step.getName();
-      if (name != null) {
-        if (!(root instanceof JsonObject)) return null;
-        JsonProperty property = ((JsonObject)root).findProperty(name);
-        root = property == null ? null : property.getValue();
-      }
-      else {
-        int idx = step.getIdx();
-        if (idx < 0) return null;
-
-        if (!(root instanceof JsonArray)) {
-          if (root instanceof JsonObject) {
-            JsonProperty property = ((JsonObject)root).findProperty(String.valueOf(idx));
-            if (property == null) {
-              return null;
-            }
-            root = property.getValue();
-            continue;
-          }
-          else {
-            return null;
-          }
-        }
-        List<JsonValue> list = ((JsonArray)root).getValueList();
-        if (idx >= list.size()) return null;
-        root = list.get(idx);
-      }
-    }
-
-    return root;
+    JsonValue value = ((JsonFile)psiFile).getTopLevelValue();
+    return value == null ? psiFile : new JsonPointerResolver(value, StringUtil.join(chain, "/")).resolve();
   }
 
   public static class JsonSchemaIdReference extends JsonSchemaBaseReference<JsonValue> {
@@ -206,14 +203,13 @@ public class JsonPointerReferenceProvider extends PsiReferenceProvider {
       return resolveForPath(myElement, "#" + id, false);
     }
 
-    @NotNull
     @Override
-    public Object[] getVariants() {
+    public Object @NotNull [] getVariants() {
       return JsonCachedValues.getAllIdsInFile(myElement.getContainingFile()).toArray();
     }
   }
 
-  private static class JsonPointerReference extends JsonSchemaBaseReference<JsonValue> {
+  static class JsonPointerReference extends JsonSchemaBaseReference<JsonValue> {
     private final String myFullPath;
 
     JsonPointerReference(JsonValue element, TextRange textRange, String curPath) {
@@ -238,9 +234,8 @@ public class JsonPointerReferenceProvider extends PsiReferenceProvider {
       return super.isIdenticalTo(that) && getRangeInElement().equals(that.getRangeInElement());
     }
 
-    @NotNull
     @Override
-    public Object[] getVariants() {
+    public Object @NotNull [] getVariants() {
       String text = getCanonicalText();
       int index = text.indexOf(CompletionUtilCore.DUMMY_IDENTIFIER_TRIMMED);
       if (index >= 0) {
@@ -262,7 +257,7 @@ public class JsonPointerReferenceProvider extends PsiReferenceProvider {
         }
         else if (element instanceof JsonArray) {
           List<JsonValue> list = ((JsonArray)element).getValueList();
-          List<Object> values = ContainerUtil.newLinkedList();
+          List<Object> values = new LinkedList<>();
           for (int i = 0; i < list.size(); i++) {
             String stringValue = String.valueOf(i);
             if (prefix != null && !stringValue.startsWith(prefix)) continue;
@@ -272,7 +267,7 @@ public class JsonPointerReferenceProvider extends PsiReferenceProvider {
         }
       }
 
-      return ArrayUtil.EMPTY_OBJECT_ARRAY;
+      return ArrayUtilRt.EMPTY_OBJECT_ARRAY;
     }
 
     private static Icon getIcon(JsonValue value) {

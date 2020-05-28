@@ -24,9 +24,11 @@ import java.util.concurrent.ConcurrentHashMap;
 */
 @ChannelHandler.Sharable
 class BuildMessageDispatcher extends SimpleChannelInboundHandlerAdapter<CmdlineRemoteProto.Message> {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.compiler.server.BuildMessageDispatcher");
+  private static final Logger LOG = Logger.getInstance(BuildMessageDispatcher.class);
 
-  private static final AttributeKey<SessionData> SESSION_DATA = AttributeKey.valueOf("BuildMessageDispatcher.sessionData");
+  private static class Holder {
+    private static final AttributeKey<SessionData> SESSION_DATA = AttributeKey.valueOf("BuildMessageDispatcher.sessionData");
+  }
 
   private final Map<UUID, SessionData> mySessionDescriptors = new ConcurrentHashMap<>(16, 0.75f, 1);
   private final Set<UUID> myCanceledSessions = ContainerUtil.newConcurrentSet();
@@ -62,7 +64,7 @@ class BuildMessageDispatcher extends SimpleChannelInboundHandlerAdapter<CmdlineR
     final Channel channel = data.channel;
     if (channel != null) {
       // cleanup the attribute so that session data is not leaked
-      channel.attr(SESSION_DATA).set(null);
+      channel.attr(Holder.SESSION_DATA).set(null);
     }
     return data.handler;
   }
@@ -116,7 +118,7 @@ class BuildMessageDispatcher extends SimpleChannelInboundHandlerAdapter<CmdlineR
 
   @Override
   protected void messageReceived(ChannelHandlerContext context, CmdlineRemoteProto.Message message) {
-    SessionData sessionData = context.channel().attr(SESSION_DATA).get();
+    SessionData sessionData = context.channel().attr(Holder.SESSION_DATA).get();
     final boolean isFirstMessage = sessionData == null;
     final UUID sessionId;
     if (isFirstMessage) {
@@ -127,18 +129,20 @@ class BuildMessageDispatcher extends SimpleChannelInboundHandlerAdapter<CmdlineR
       sessionData = mySessionDescriptors.get(sessionId);
       if (sessionData != null) {
         sessionData.channel = context.channel();
-        context.channel().attr(SESSION_DATA).set(sessionData);
+        context.channel().attr(Holder.SESSION_DATA).set(sessionData);
       }
     }
     else {
       sessionId = sessionData.sessionId;
     }
 
+    final BuilderMessageHandler handler = sessionData != null? sessionData.handler : null;
     try {
-      final BuilderMessageHandler handler = sessionData != null? sessionData.handler : null;
       if (handler == null) {
-        // todo
-        LOG.info("No message handler registered for session " + sessionId);
+        if (!isBuilderEvent(message)) {
+          // do not pollute logs, just silently skip events in case handler is missing
+          LOG.info("No message handler registered for session " + sessionId);
+        }
         return;
       }
 
@@ -184,11 +188,16 @@ class BuildMessageDispatcher extends SimpleChannelInboundHandlerAdapter<CmdlineR
       }
     }
     finally {
-      if (isFirstMessage && myCanceledSessions.contains(sessionId)) {
-        // handle the case when the session had been cancelled before communication even started
+      if ((isFirstMessage && myCanceledSessions.contains(sessionId)) || (handler == null && !isBuilderEvent(message))) {
+        // handle the case when the session had been cancelled before communication even started  
+        // or if message handling is not possible due to missing handler
         context.channel().writeAndFlush(CmdlineProtoUtil.toMessage(sessionId, CmdlineProtoUtil.createCancelCommand()));
       }
     }
+  }
+
+  private static boolean isBuilderEvent(CmdlineRemoteProto.Message message) {
+    return message.hasBuilderMessage() && message.getBuilderMessage().getType() == CmdlineRemoteProto.Message.BuilderMessage.Type.BUILD_EVENT;
   }
 
   @Override
@@ -197,7 +206,7 @@ class BuildMessageDispatcher extends SimpleChannelInboundHandlerAdapter<CmdlineR
       super.channelInactive(context);
     }
     finally {
-      final SessionData sessionData = context.channel().attr(SESSION_DATA).get();
+      final SessionData sessionData = context.channel().attr(Holder.SESSION_DATA).get();
       if (sessionData != null) {
         final BuilderMessageHandler handler = unregisterBuildMessageHandler(sessionData.sessionId);
         if (handler != null) {

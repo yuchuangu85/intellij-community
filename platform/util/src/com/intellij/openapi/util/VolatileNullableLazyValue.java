@@ -5,10 +5,12 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
+ * NOTE: Assumes that values computed by different threads are equal and interchangeable
+ * and readers should be ready to get different instances on different invocations of the {@link #getValue()}
+ *
  * @author peter
  */
 public abstract class VolatileNullableLazyValue<T> extends NullableLazyValue<T> {
-  private static final RecursionGuard ourGuard = RecursionManager.createGuard("VolatileNullableLazyValue");
   private volatile boolean myComputed;
   @Nullable private volatile T myValue;
 
@@ -19,9 +21,10 @@ public abstract class VolatileNullableLazyValue<T> extends NullableLazyValue<T> 
   @Override
   @Nullable
   public T getValue() {
+    boolean computed = myComputed;
     T value = myValue;
-    if (!myComputed) {
-      RecursionGuard.StackStamp stamp = ourGuard.markStack();
+    if (!computed) {
+      RecursionGuard.StackStamp stamp = RecursionManager.markStack();
       value = compute();
       if (stamp.mayCacheNow()) {
         myValue = value;
@@ -29,6 +32,11 @@ public abstract class VolatileNullableLazyValue<T> extends NullableLazyValue<T> 
       }
     }
     return value;
+  }
+
+  public void drop() {
+    myComputed = false;
+    myValue = null;
   }
 
   @SuppressWarnings("MethodOverridesStaticMethodOfSuperclass")

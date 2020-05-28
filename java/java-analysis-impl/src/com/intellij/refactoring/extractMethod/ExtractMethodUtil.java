@@ -33,8 +33,8 @@ import java.util.Map;
  * @author ven
  */
 public class ExtractMethodUtil {
+  private static final Logger LOG = Logger.getInstance(ExtractMethodUtil.class);
   private static final Key<PsiMethod> RESOLVE_TARGET_KEY = Key.create("RESOLVE_TARGET_KEY");
-  private static final Logger LOG = Logger.getInstance("com.intellij.refactoring.extractMethod.ExtractMethodUtil");
 
   private ExtractMethodUtil() { }
 
@@ -45,7 +45,7 @@ public class ExtractMethodUtil {
     final Map<PsiMethodCallExpression, PsiMethod> ret = new HashMap<>();
     encodeInClass(targetClass, overloadName, extractedFragment, ret);
 
-    ClassInheritorsSearch.search(targetClass, processConflictsScope, true).forEach(inheritor -> {
+    ClassInheritorsSearch.search(targetClass, processConflictsScope, true).allowParallelProcessing().forEach(inheritor -> {
       encodeInClass(inheritor, overloadName, extractedFragment, ret);
       return true;
     });

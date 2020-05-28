@@ -5,8 +5,12 @@ import com.intellij.application.options.PathMacrosImpl;
 import com.intellij.openapi.application.PathMacros;
 import com.intellij.openapi.compiler.CompilerMessage;
 import com.intellij.openapi.compiler.CompilerMessageCategory;
+import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.roots.ModuleRootModificationUtil;
+import com.intellij.pom.java.LanguageLevel;
 import com.intellij.testFramework.CompilerTester;
+import com.intellij.testFramework.IdeaTestUtil;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.util.List;
@@ -37,6 +41,17 @@ public abstract class AbstractTestFrameworkCompilingIntegrationTest extends Abst
     }
   }
 
+  @NotNull
+  @Override
+  protected LanguageLevel getProjectLanguageLevel() {
+    return LanguageLevel.JDK_1_8;
+  }
+
+  @Override
+  protected Sdk getTestProjectJdk() {
+    return IdeaTestUtil.getMockJdk18();
+  }
+
   protected String getDefaultMavenRepositoryPath() {
     final String root = System.getProperty("user.home", null);
     return (root != null ? new File(root, ".m2/repository") : new File(".m2/repository")).getAbsolutePath();
@@ -53,6 +68,9 @@ public abstract class AbstractTestFrameworkCompilingIntegrationTest extends Abst
   protected void tearDown() throws Exception {
     try {
       myCompilerTester.tearDown();
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
     }
     finally {
       super.tearDown();

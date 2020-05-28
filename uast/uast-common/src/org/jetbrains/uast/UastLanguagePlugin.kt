@@ -1,33 +1,19 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.uast
 
 import com.intellij.lang.Language
 import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.psi.*
+import org.jetbrains.annotations.ApiStatus
+import org.jetbrains.uast.analysis.UastAnalysisPlugin
 
 interface UastLanguagePlugin {
   companion object {
-    val extensionPointName: ExtensionPointName<UastLanguagePlugin> =
-      ExtensionPointName.create<UastLanguagePlugin>("org.jetbrains.uast.uastLanguagePlugin")
-    private val extensionArray: Array<UastLanguagePlugin> by lazy(LazyThreadSafetyMode.PUBLICATION) { extensionPointName.extensions }
+    val extensionPointName = ExtensionPointName<UastLanguagePlugin>("org.jetbrains.uast.uastLanguagePlugin")
 
-    fun getInstances(): Collection<UastLanguagePlugin> = extensionArray.toList()
+    fun getInstances(): Collection<UastLanguagePlugin> = extensionPointName.extensionList
 
-    fun byLanguage(language: Language): UastLanguagePlugin? = extensionArray.firstOrNull { it.language === language }
+    fun byLanguage(language: Language): UastLanguagePlugin? = extensionPointName.extensionList.firstOrNull { it.language === language }
   }
 
   data class ResolvedMethod(val call: UCallExpression, val method: PsiMethod)
@@ -104,13 +90,34 @@ interface UastLanguagePlugin {
    * Do not rely on this property too much, its value can be approximate in some cases.
    */
   fun isExpressionValueUsed(element: UExpression): Boolean
+
+  @JvmDefault
+  @Suppress("UNCHECKED_CAST")
+  fun <T : UElement> convertElementWithParent(element: PsiElement, requiredTypes: Array<out Class<out T>>): T? =
+    when {
+      requiredTypes.isEmpty() -> convertElementWithParent(element, null)
+      requiredTypes.size == 1 -> convertElementWithParent(element, requiredTypes.single())
+      else -> convertElementWithParent(element, null)
+        ?.takeIf { result -> requiredTypes.any { it.isAssignableFrom(result.javaClass) } }
+    } as? T
+
+
+  @JvmDefault
+  fun <T : UElement> convertToAlternatives(element: PsiElement, requiredTypes: Array<out Class<out T>>): Sequence<T> =
+    sequenceOf(convertElementWithParent(element, requiredTypes)).filterNotNull()
+
+  @JvmDefault
+  val analysisPlugin: UastAnalysisPlugin?
+    @ApiStatus.Experimental
+    get() = null
 }
 
 inline fun <reified T : UElement> UastLanguagePlugin.convertOpt(element: PsiElement?, parent: UElement?): T? {
   if (element == null) return null
-  return convertElement(element, parent) as? T
+  return convertElement(element, parent, T::class.java) as? T
 }
 
+@Deprecated("will throw exception if conversion fails", ReplaceWith("convertOpt"))
 inline fun <reified T : UElement> UastLanguagePlugin.convert(element: PsiElement, parent: UElement?): T {
   return convertElement(element, parent, T::class.java) as T
 }

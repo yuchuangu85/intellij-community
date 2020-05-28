@@ -1,22 +1,9 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.varScopeCanBeNarrowed;
 
-import com.intellij.codeInsight.daemon.GroupNames;
 import com.intellij.codeInspection.*;
+import com.intellij.java.JavaBundle;
+import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.controlFlow.*;
@@ -29,7 +16,6 @@ import com.intellij.refactoring.util.CanonicalTypes;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.util.NotNullFunction;
 import com.intellij.util.VisibilityUtil;
-import com.intellij.util.containers.ContainerUtil;
 import com.siyeh.ig.psiutils.MethodUtils;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -43,20 +29,10 @@ import java.util.*;
 public class ParameterCanBeLocalInspection extends AbstractBaseJavaLocalInspectionTool {
   @NonNls public static final String SHORT_NAME = "ParameterCanBeLocal";
 
-  protected ConvertParameterToLocalQuickFix createFix() {
-    return new ConvertParameterToLocalQuickFix();
-  }
-
   @Override
   @NotNull
   public String getGroupDisplayName() {
-    return GroupNames.CLASS_LAYOUT_GROUP_NAME;
-  }
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionsBundle.message("inspection.parameter.can.be.local.display.name");
+    return InspectionsBundle.message("group.names.class.structure");
   }
 
   @Override
@@ -69,12 +45,16 @@ public class ParameterCanBeLocalInspection extends AbstractBaseJavaLocalInspecti
   public ProblemDescriptor[] checkMethod(@NotNull PsiMethod method, @NotNull InspectionManager manager, boolean isOnTheFly) {
     final Collection<PsiParameter> parameters = filterFinal(method.getParameterList().getParameters());
     final PsiCodeBlock body = method.getBody();
-    if (body == null || parameters.isEmpty() || isOverrides(method) || MethodUtils.isOverridden(method)) {
+    if (body == null || parameters.isEmpty() || isOverrides(method)) {
       return ProblemDescriptor.EMPTY_ARRAY;
     }
 
+    Collection<PsiParameter> writtenBeforeReadParameters = getWriteBeforeRead(parameters, body);
+    if (writtenBeforeReadParameters.isEmpty() || MethodUtils.isOverridden(method)) {
+      return ProblemDescriptor.EMPTY_ARRAY;
+    }
     final List<ProblemDescriptor> result = new ArrayList<>();
-    for (PsiParameter parameter : getWriteBeforeRead(parameters, body)) {
+    for (PsiParameter parameter : writtenBeforeReadParameters) {
       final PsiIdentifier identifier = parameter.getNameIdentifier();
       if (identifier != null && identifier.isPhysical()) {
         result.add(createProblem(manager, identifier, isOnTheFly));
@@ -84,16 +64,16 @@ public class ParameterCanBeLocalInspection extends AbstractBaseJavaLocalInspecti
   }
 
   @NotNull
-  private ProblemDescriptor createProblem(@NotNull InspectionManager manager,
-                                          @NotNull PsiIdentifier identifier,
-                                          boolean isOnTheFly) {
+  private static ProblemDescriptor createProblem(@NotNull InspectionManager manager,
+                                                 @NotNull PsiIdentifier identifier,
+                                                 boolean isOnTheFly) {
     return manager.createProblemDescriptor(
       identifier,
-      InspectionsBundle.message("inspection.parameter.can.be.local.problem.descriptor"),
+      JavaBundle.message("inspection.parameter.can.be.local.problem.descriptor"),
       true,
       ProblemHighlightType.LIKE_UNUSED_SYMBOL,
       isOnTheFly,
-      createFix()
+      new ConvertParameterToLocalQuickFix()
     );
   }
 
@@ -114,7 +94,10 @@ public class ParameterCanBeLocalInspection extends AbstractBaseJavaLocalInspecti
     if (controlFlow == null) return Collections.emptyList();
 
     final Set<PsiParameter> result = filterParameters(controlFlow, parameters);
+    if (result.isEmpty()) return Collections.emptyList();
+    //noinspection SuspiciousMethodCalls
     result.retainAll(ControlFlowUtil.getWrittenVariables(controlFlow, 0, controlFlow.getSize(), false));
+    if (result.isEmpty()) return Collections.emptyList();
     for (final PsiReferenceExpression readBeforeWrite : ControlFlowUtil.getReadBeforeWrite(controlFlow)) {
       final PsiElement resolved = readBeforeWrite.resolve();
       if (resolved instanceof PsiParameter) {
@@ -159,12 +142,17 @@ public class ParameterCanBeLocalInspection extends AbstractBaseJavaLocalInspecti
     }
 
     @Override
+    public void applyFix(@NotNull Project project, @NotNull ProblemDescriptor descriptor) {
+      WriteAction.run(() -> super.applyFix(project, descriptor));
+    }
+
+    @Override
     protected PsiElement applyChanges(@NotNull final Project project,
                                       @NotNull final String localName,
                                       @Nullable final PsiExpression initializer,
                                       @NotNull final PsiParameter parameter,
                                       @NotNull final Collection<? extends PsiReference> references,
-                                      boolean delete, 
+                                      boolean delete,
                                       @NotNull final NotNullFunction<? super PsiDeclarationStatement, ? extends PsiElement> action) {
       final PsiElement scope = parameter.getDeclarationScope();
       if (scope instanceof PsiMethod) {
@@ -175,24 +163,34 @@ public class ParameterCanBeLocalInspection extends AbstractBaseJavaLocalInspecti
         for (int i = 0; i < parameters.length; i++) {
           PsiParameter psiParameter = parameters[i];
           if (psiParameter == parameter) continue;
-          info.add(new ParameterInfoImpl(i, psiParameter.getName(), psiParameter.getType()));
+          info.add(ParameterInfoImpl.create(i).withName(psiParameter.getName()).withType(psiParameter.getType()));
         }
         final ParameterInfoImpl[] newParams = info.toArray(new ParameterInfoImpl[0]);
         final String visibilityModifier = VisibilityUtil.getVisibilityModifier(method.getModifierList());
         final PsiType returnType = method.getReturnType();
         final JavaChangeInfo changeInfo = new JavaChangeInfoImpl(visibilityModifier, method, method.getName(),
                                                                  returnType != null ? CanonicalTypes.createTypeWrapper(returnType) : null,
-                                                                 newParams, null, false, ContainerUtil.newHashSet(), ContainerUtil.newHashSet());
-        final ChangeSignatureProcessor cp = new ChangeSignatureProcessor(project, changeInfo) {
-          @Override
-          protected void performRefactoring(@NotNull UsageInfo[] usages) {
-            final PsiElementFactory elementFactory = JavaPsiFacade.getElementFactory(project);
-            final PsiElement newDeclaration = moveDeclaration(elementFactory, localName, parameter, initializer, action, references);
-            super.performRefactoring(usages);
-            positionCaretToDeclaration(project, newDeclaration.getContainingFile(), newDeclaration);
+                                                                 newParams, null, false, new HashSet<>(), new HashSet<>());
+        class ParameterToLocalProcessor extends ChangeSignatureProcessor {
+          private PsiElement newDeclaration;
+
+          ParameterToLocalProcessor(Project project, JavaChangeInfo changeInfo) {
+            super(project, changeInfo);
           }
-        };
-        cp.run();
+
+          @Override
+          protected void performRefactoring(UsageInfo @NotNull [] usages) {
+            final PsiElementFactory elementFactory = JavaPsiFacade.getElementFactory(project);
+            newDeclaration = WriteAction.compute(
+              () -> moveDeclaration(elementFactory, localName, parameter, initializer, action, references));
+            super.performRefactoring(usages);
+          }
+        }
+
+        final ParameterToLocalProcessor processor = new ParameterToLocalProcessor(project, changeInfo);
+        processor.run();
+
+        return processor.newDeclaration;
       }
       return null;
     }

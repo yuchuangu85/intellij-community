@@ -13,19 +13,22 @@ import org.jetbrains.annotations.Nullable;
 public interface SearchEverywhereManager {
 
   static SearchEverywhereManager getInstance(Project project) {
-    return ServiceManager.getService(project, SearchEverywhereManager.class);
+    return project != null ? ServiceManager.getService(project, SearchEverywhereManager.class)
+                           : ServiceManager.getService(SearchEverywhereManager.class);
   }
 
   boolean isShown();
 
-  void show(@NotNull String selectedContributorID, @Nullable String searchText, @NotNull AnActionEvent initEvent); //todo change to contributor??? UX-1
+  void show(@NotNull String contributorID, @Nullable String searchText, @NotNull AnActionEvent initEvent); //todo change to contributor??? UX-1
 
-  String getShownContributorID();
+  @NotNull
+  String getSelectedContributorID();
 
-  void setShownContributor(@NotNull String newSelectedContributorID); //todo change to contributor??? UX-1
+  void setSelectedContributor(@NotNull String contributorID); //todo change to contributor??? UX-1
 
-  boolean isShowNonProjectItems();
+  void toggleEverywhereFilter();
 
-  void setShowNonProjectItems(boolean show);
+  // todo remove
+  boolean isEverywhere();
 
 }

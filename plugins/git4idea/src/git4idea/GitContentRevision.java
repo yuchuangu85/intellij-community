@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea;
 
 import com.intellij.openapi.project.Project;
@@ -44,6 +44,11 @@ public class GitContentRevision implements ByteBackedContentRevision {
     myCharset = charset;
   }
 
+  @Nullable
+  public Charset getCharset() {
+    return myCharset;
+  }
+
   @Override
   @Nullable
   public String getContent() throws VcsException {
@@ -52,9 +57,8 @@ public class GitContentRevision implements ByteBackedContentRevision {
     return ContentRevisionCache.getAsString(bytes, myFile, myCharset);
   }
 
-  @Nullable
   @Override
-  public byte[] getContentAsBytes() throws VcsException {
+  public byte @Nullable [] getContentAsBytes() throws VcsException {
     if (myFile.isDirectory()) {
       return null;
     }
@@ -66,8 +70,8 @@ public class GitContentRevision implements ByteBackedContentRevision {
     }
   }
 
-  private byte[] loadContent() throws VcsException {
-    VirtualFile root = GitUtil.getGitRoot(myFile);
+  private byte @NotNull [] loadContent() throws VcsException {
+    VirtualFile root = GitUtil.getRootForFile(myProject, myFile);
     return GitFileUtils.getFileContent(myProject, root, myRevision.getRev(), VcsFileUtil.relativePath(root, myFile));
   }
 
@@ -83,38 +87,18 @@ public class GitContentRevision implements ByteBackedContentRevision {
     return myRevision;
   }
 
+  @Override
   public boolean equals(Object obj) {
     if (this == obj) return true;
-    if ((obj == null) || (obj.getClass() != getClass())) return false;
+    if (obj == null || obj.getClass() != getClass()) return false;
 
     GitContentRevision test = (GitContentRevision)obj;
-    return (myFile.equals(test.myFile) && myRevision.equals(test.myRevision));
+    return myFile.equals(test.myFile) && myRevision.equals(test.myRevision);
   }
 
+  @Override
   public int hashCode() {
     return myFile.hashCode() + myRevision.hashCode();
-  }
-
-  /**
-   * Create revision
-   *
-   *
-   * @param vcsRoot        a vcs root for the repository
-   * @param path           an path inside with possibly escape sequences
-   * @param revisionNumber a revision number, if null the current revision will be created
-   * @param project        the context project
-   * @param unescapePath
-   * @return a created revision
-   * @throws VcsException if there is a problem with creating revision
-   */
-  @NotNull
-  public static ContentRevision createRevision(@NotNull VirtualFile vcsRoot,
-                                               @NotNull String path,
-                                               @Nullable VcsRevisionNumber revisionNumber,
-                                               Project project,
-                                               boolean unescapePath) throws VcsException {
-    FilePath file = createPath(vcsRoot, path, unescapePath);
-    return createRevision(file, revisionNumber, project, null);
   }
 
   @Nullable
@@ -128,7 +112,7 @@ public class GitContentRevision implements ByteBackedContentRevision {
     }
 
     GitRepositoryManager repositoryManager = GitRepositoryManager.getInstance(project);
-    GitRepository candidate = repositoryManager.getRepositoryForRoot(file);
+    GitRepository candidate = repositoryManager.getRepositoryForRootQuick(file);
     if (candidate == null) { // not a root
       return null;
     }
@@ -136,41 +120,48 @@ public class GitContentRevision implements ByteBackedContentRevision {
   }
 
   @NotNull
-  public static ContentRevision createRevisionForTypeChange(@NotNull Project project,
-                                                            @NotNull VirtualFile vcsRoot,
-                                                            @NotNull String path,
+  public static ContentRevision createRevisionForTypeChange(@NotNull FilePath filePath,
                                                             @Nullable VcsRevisionNumber revisionNumber,
-                                                            boolean unescapePath) throws VcsException {
-    FilePath filePath;
+                                                            @NotNull Project project) {
     if (revisionNumber == null) {
-      File file = new File(makeAbsolutePath(vcsRoot, path, unescapePath));
+      File file = filePath.getIOFile();
       VirtualFile virtualFile = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file);
-      filePath = virtualFile == null ? VcsUtil.getFilePath(file, false) : VcsUtil.getFilePath(virtualFile);
-    } else {
-      filePath = createPath(vcsRoot, path, unescapePath);
+      if (virtualFile != null) filePath = VcsUtil.getFilePath(virtualFile);
     }
-    return createRevision(filePath, revisionNumber, project, null);
+    return createRevision(filePath, revisionNumber, project);
   }
 
   @NotNull
-  public static FilePath createPath(@NotNull VirtualFile vcsRoot,
-                                    @NotNull String path,
-                                    boolean unescapePath) throws VcsException {
-    String absolutePath = makeAbsolutePath(vcsRoot, path, unescapePath);
-    return VcsUtil.getFilePath(absolutePath, false);
+  public static FilePath createPathFromEscaped(@NotNull VirtualFile vcsRoot, @NotNull String path) throws VcsException {
+    return createPathFromEscaped(vcsRoot, path, false);
   }
 
   @NotNull
-  private static String makeAbsolutePath(@NotNull VirtualFile vcsRoot, @NotNull String path, boolean unescapePath) throws VcsException {
-    String unescapedPath = unescapePath ? GitUtil.unescapePath(path) : path;
+  public static FilePath createPathFromEscaped(@NotNull VirtualFile vcsRoot, @NotNull String path, boolean isDirectory) throws VcsException {
+    String absolutePath = makeAbsolutePath(vcsRoot, GitUtil.unescapePath(path));
+    return VcsUtil.getFilePath(absolutePath, isDirectory);
+  }
+
+  @NotNull
+  public static FilePath createPath(@NotNull VirtualFile vcsRoot, @NotNull String unescapedPath) {
+    return createPath(vcsRoot, unescapedPath, false);
+  }
+
+  @NotNull
+  public static FilePath createPath(@NotNull VirtualFile vcsRoot, @NotNull String unescapedPath, boolean isDirectory) {
+    String absolutePath = makeAbsolutePath(vcsRoot, unescapedPath);
+    return VcsUtil.getFilePath(absolutePath, isDirectory);
+  }
+
+  @NotNull
+  private static String makeAbsolutePath(@NotNull VirtualFile vcsRoot, @NotNull String unescapedPath) {
     return vcsRoot.getPath() + "/" + unescapedPath;
   }
 
   @NotNull
-  public static ContentRevision createRevision(@NotNull VirtualFile file,
+  public static ContentRevision createRevision(@NotNull FilePath filePath,
                                                @Nullable VcsRevisionNumber revisionNumber,
                                                @NotNull Project project) {
-    FilePath filePath = VcsUtil.getFilePath(file);
     return createRevision(filePath, revisionNumber, project, null);
   }
 
@@ -201,7 +192,8 @@ public class GitContentRevision implements ByteBackedContentRevision {
                                                        @Nullable Charset charset) {
     if (path.getFileType().isBinary()) {
       return new GitBinaryContentRevision(path, revisionNumber, project);
-    } else {
+    }
+    else {
       return new GitContentRevision(path, revisionNumber, project, charset);
     }
   }

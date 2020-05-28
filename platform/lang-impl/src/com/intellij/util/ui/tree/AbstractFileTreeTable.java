@@ -1,10 +1,12 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.util.ui.tree;
 
+import com.intellij.CommonBundle;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.CommonActionsManager;
 import com.intellij.ide.DefaultTreeExpander;
+import com.intellij.lang.LangBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.roots.ProjectRootManager;
@@ -22,7 +24,7 @@ import com.intellij.ui.treeStructure.treetable.TreeTableCellRenderer;
 import com.intellij.ui.treeStructure.treetable.TreeTableModel;
 import com.intellij.util.IconUtil;
 import com.intellij.util.PlatformIcons;
-import com.intellij.util.ui.UIUtil;
+import com.intellij.util.ui.JBUI;
 import gnu.trove.THashMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -34,8 +36,8 @@ import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeNode;
 import java.awt.*;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 
 public class AbstractFileTreeTable<T> extends TreeTable {
   private final MyModel<T> myModel;
@@ -82,7 +84,6 @@ public class AbstractFileTreeTable<T> extends TreeTable {
     CommonActionsManager.getInstance().createCollapseAllAction(treeExpander, this);
 
     getTree().setShowsRootHandles(true);
-    getTree().setLineStyleAngled();
     getTree().setRootVisible(showProjectNode);
     final ProjectFileIndex fileIndex = ProjectRootManager.getInstance(project).getFileIndex();
     getTree().setCellRenderer(new DefaultTreeCellRenderer() {
@@ -116,7 +117,8 @@ public class AbstractFileTreeTable<T> extends TreeTable {
     getTableHeader().setReorderingAllowed(false);
 
     setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-    setPreferredScrollableViewportSize(new Dimension(300, getRowHeight() * 10));
+    setPreferredScrollableViewportSize(JBUI.size(300, -1));
+    setVisibleRowCount(10);
 
     getColumnModel().getColumn(0).setPreferredWidth(280);
     getColumnModel().getColumn(1).setPreferredWidth(60);
@@ -167,7 +169,8 @@ public class AbstractFileTreeTable<T> extends TreeTable {
     if (subdirectoryMappings.isEmpty()) {
       return true;
     }
-    int ret = Messages.showYesNoCancelDialog(myProject, message, title, "Override", "Do Not Override", "Cancel",
+    int ret = Messages.showYesNoCancelDialog(myProject, message, title, LangBundle.message("button.override"),
+                                             LangBundle.message("button.do.not.override"), CommonBundle.getCancelButtonText(),
                                              Messages.getWarningIcon());
     if (ret == Messages.YES) {
       for (VirtualFile file : subdirectoryMappings.keySet()) {
@@ -185,10 +188,8 @@ public class AbstractFileTreeTable<T> extends TreeTable {
   @Override
   public TreeTableCellRenderer createTableRenderer(TreeTableModel treeTableModel) {
     TreeTableCellRenderer tableRenderer = super.createTableRenderer(treeTableModel);
-    UIUtil.setLineStyleAngled(tableRenderer);
     tableRenderer.setRootVisible(false);
     tableRenderer.setShowsRootHandles(true);
-
     return tableRenderer;
   }
 
@@ -352,7 +353,7 @@ public class AbstractFileTreeTable<T> extends TreeTable {
     }
 
     @Override
-    protected void appendChildrenTo(@NotNull final Collection<ConvenientNode> children) {
+    protected void appendChildrenTo(@NotNull final Collection<? super ConvenientNode> children) {
       Project project = getObject();
       VirtualFile[] roots = ProjectRootManager.getInstance(project).getContentRoots();
 
@@ -379,7 +380,7 @@ public class AbstractFileTreeTable<T> extends TreeTable {
       return myObject;
     }
 
-    protected abstract void appendChildrenTo(@NotNull Collection<ConvenientNode> children);
+    protected abstract void appendChildrenTo(@NotNull Collection<? super ConvenientNode> children);
 
     @Override
     public int getChildCount() {
@@ -404,7 +405,7 @@ public class AbstractFileTreeTable<T> extends TreeTable {
         setUserObject(myObject);
         final List<ConvenientNode> children = new ArrayList<>();
         appendChildrenTo(children);
-        Collections.sort(children, (node1, node2) -> {
+        children.sort((node1, node2) -> {
           Object o1 = node1.getObject();
           Object o2 = node2.getObject();
           if (o1 == o2) return 0;
@@ -451,7 +452,7 @@ public class AbstractFileTreeTable<T> extends TreeTable {
     }
 
     @Override
-    protected void appendChildrenTo(@NotNull final Collection<ConvenientNode> children) {
+    protected void appendChildrenTo(@NotNull final Collection<? super ConvenientNode> children) {
       for (VirtualFile child : getObject().getChildren()) {
         if (myFilter.accept(child)) {
           children.add(new FileNode(child, myProject, myFilter));

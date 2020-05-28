@@ -18,7 +18,6 @@ import java.util.Collections;
 import java.util.List;
 
 public class TestDataFilesReferencesContributor extends PsiReferenceContributor {
-  private static final String TEST_DATA_FILE_ANNOTATION_QUALIFIED_NAME = TestDataFile.class.getCanonicalName();
 
   @Override
   public void registerReferenceProviders(@NotNull PsiReferenceRegistrar registrar) {
@@ -26,18 +25,19 @@ public class TestDataFilesReferencesContributor extends PsiReferenceContributor 
     UastReferenceRegistrar
       .registerUastReferenceProvider(
         registrar,
-        UastPatterns.stringLiteralExpression().inCall(UastPatterns.callExpression()),
-        new UastLiteralReferenceProvider() {
-          @NotNull
+        UastPatterns.injectionHostUExpression().inCall(UastPatterns.callExpression()),
+        new UastInjectionHostReferenceProvider() {
+          private final String TEST_DATA_FILE_ANNOTATION_QUALIFIED_NAME = TestDataFile.class.getCanonicalName();
+
           @Override
-          public PsiReference[] getReferencesByULiteral(@NotNull ULiteralExpression expression,
-                                                        @NotNull PsiLanguageInjectionHost host,
-                                                        @NotNull ProcessingContext context) {
+          public PsiReference @NotNull [] getReferencesForInjectionHost(@NotNull UExpression expression,
+                                                                        @NotNull PsiLanguageInjectionHost host,
+                                                                        @NotNull ProcessingContext context) {
             UCallExpression call = UastUtils.getUCallExpression(expression);
             if (call == null) return PsiReference.EMPTY_ARRAY;
 
             PsiParameter targetParameter = UastUtils.getParameterForArgument(call, expression);
-            if (!checkTestDataFileAnnotationPresent(targetParameter)) {
+            if (targetParameter == null || !targetParameter.hasAnnotation(TEST_DATA_FILE_ANNOTATION_QUALIFIED_NAME)) {
               return PsiReference.EMPTY_ARRAY;
             }
 
@@ -60,23 +60,10 @@ public class TestDataFilesReferencesContributor extends PsiReferenceContributor 
       );
   }
 
-  private static boolean checkTestDataFileAnnotationPresent(@Nullable PsiParameter targetParameter) {
-    if (targetParameter == null) {
-      return false;
-    }
-    PsiAnnotation[] annotations = targetParameter.getAnnotations();
-    for (PsiAnnotation annotation : annotations) {
-      if (TEST_DATA_FILE_ANNOTATION_QUALIFIED_NAME.equals(annotation.getQualifiedName())) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   @Nullable
-  private static String getTestDataDirectory(@NotNull ULiteralExpression expression,
+  private static String getTestDataDirectory(@NotNull UExpression expression,
                                              @NotNull UCallExpression methodCallExpression) {
-    Object value = expression.getValue();
+    Object value = expression.evaluate();
     if (!(value instanceof String)) {
       return null;
     }

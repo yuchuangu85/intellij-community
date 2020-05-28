@@ -1,10 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.impl
 
 import com.google.common.collect.HashMultiset
 import com.google.common.collect.Multiset
+import com.intellij.diagnostic.ThreadDumper
 import com.intellij.icons.AllIcons
-import com.intellij.ide.file.BatchFileChangeListener
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationType
@@ -14,12 +14,11 @@ import com.intellij.openapi.application.*
 import com.intellij.openapi.command.CommandEvent
 import com.intellij.openapi.command.CommandListener
 import com.intellij.openapi.command.CommandProcessor
-import com.intellij.openapi.components.BaseComponent
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
-import com.intellij.openapi.editor.EditorKind
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.editor.event.EditorFactoryEvent
@@ -27,47 +26,45 @@ import com.intellij.openapi.editor.event.EditorFactoryListener
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
+import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.progress.util.BackgroundTaskUtil
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.impl.DirectoryIndex
-import com.intellij.openapi.startup.StartupManager
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.io.FileUtilRt
-import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vcs.*
 import com.intellij.openapi.vcs.changes.*
 import com.intellij.openapi.vcs.changes.conflicts.ChangelistConflictFileStatusProvider
-import com.intellij.openapi.vcs.changes.ui.ChangesViewContentManager
+import com.intellij.openapi.vcs.changes.ui.ChangesViewContentManager.Companion.LOCAL_CHANGES
+import com.intellij.openapi.vcs.changes.ui.ChangesViewContentManager.Companion.getToolWindowFor
 import com.intellij.openapi.vcs.checkin.CheckinHandler
 import com.intellij.openapi.vcs.checkin.CheckinHandlerFactory
+import com.intellij.openapi.vcs.ex.ChangelistsLocalLineStatusTracker
 import com.intellij.openapi.vcs.ex.LineStatusTracker
-import com.intellij.openapi.vcs.ex.PartialLocalLineStatusTracker
+import com.intellij.openapi.vcs.ex.LocalLineStatusTracker
 import com.intellij.openapi.vcs.ex.SimpleLocalLineStatusTracker
 import com.intellij.openapi.vcs.history.VcsRevisionNumber
-import com.intellij.openapi.vfs.*
-import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileDeleteEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
+import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.util.EventDispatcher
 import com.intellij.util.concurrency.Semaphore
 import com.intellij.util.ui.UIUtil
+import com.intellij.vcs.commit.isNonModalCommit
 import com.intellij.vcsUtil.VcsUtil
-import org.jetbrains.annotations.CalledInAny
-import org.jetbrains.annotations.CalledInAwt
-import org.jetbrains.annotations.CalledInBackground
-import org.jetbrains.annotations.TestOnly
+import org.jetbrains.annotations.*
 import java.nio.charset.Charset
 import java.util.*
 import java.util.concurrent.Future
+import java.util.function.Supplier
 
-class LineStatusTrackerManager(
-  private val project: Project,
-  private val application: Application,
-  private val statusProvider: VcsBaseContentProvider,
-  private val changeListManager: ChangeListManagerImpl,
-  private val fileDocumentManager: FileDocumentManager,
-  private val fileEditorManager: FileEditorManagerEx,
-  @Suppress("UNUSED_PARAMETER") makeSureIndexIsInitializedFirst: DirectoryIndex
-) : BaseComponent, LineStatusTrackerManagerI, Disposable {
-
+class LineStatusTrackerManager(private val project: Project) : LineStatusTrackerManagerI, Disposable {
   private val LOCK = Any()
   private var isDisposed = false
 
@@ -76,12 +73,12 @@ class LineStatusTrackerManager(
 
   private val eventDispatcher = EventDispatcher.create(Listener::class.java)
 
-  private var partialChangeListsEnabled = VcsApplicationSettings.getInstance().ENABLE_PARTIAL_CHANGELISTS && Registry.`is`("vcs.enable.partial.changelists")
+  private var partialChangeListsEnabled = VcsApplicationSettings.getInstance().ENABLE_PARTIAL_CHANGELISTS
   private val documentsInDefaultChangeList = HashSet<Document>()
-  private var batchChangeTaskCounter: Int = 0
+  private var clmFreezeCounter: Int = 0
 
   private val filesWithDamagedInactiveRanges = HashSet<VirtualFile>()
-  private val fileStatesAwaitingRefresh = HashMap<VirtualFile, PartialLocalLineStatusTracker.State>()
+  private val fileStatesAwaitingRefresh = HashMap<VirtualFile, ChangelistsLocalLineStatusTracker.State>()
 
   private val loader: SingleThreadLoader<RefreshRequest, RefreshData> = MyBaseRevisionLoader()
 
@@ -89,9 +86,7 @@ class LineStatusTrackerManager(
     private val LOG = Logger.getInstance(LineStatusTrackerManager::class.java)
 
     @JvmStatic
-    fun getInstance(project: Project): LineStatusTrackerManagerI {
-      return project.getComponent(LineStatusTrackerManagerI::class.java)
-    }
+    fun getInstance(project: Project): LineStatusTrackerManagerI = project.service()
 
     @JvmStatic
     fun getInstanceImpl(project: Project): LineStatusTrackerManager {
@@ -99,39 +94,51 @@ class LineStatusTrackerManager(
     }
   }
 
-  override fun initComponent() {
-    StartupManager.getInstance(project).registerPreStartupActivity {
-      if (isDisposed) return@registerPreStartupActivity
+  class MyStartupActivity : VcsStartupActivity {
+    override fun runActivity(project: Project) {
+      LineStatusTrackerManager.getInstanceImpl(project).startListenForEditors()
+    }
 
-      application.addApplicationListener(MyApplicationListener(), this)
+    override fun getOrder(): Int = VcsInitObject.OTHER_INITIALIZATION.order
+  }
 
-      val busConnection = project.messageBus.connect(this)
-      busConnection.subscribe(LineStatusTrackerSettingListener.TOPIC, MyLineStatusTrackerSettingListener())
-      busConnection.subscribe(BatchFileChangeListener.TOPIC, MyBatchFileChangeListener())
+  private fun startListenForEditors() {
+    val busConnection = project.messageBus.connect()
+    busConnection.subscribe(LineStatusTrackerSettingListener.TOPIC, MyLineStatusTrackerSettingListener())
+    busConnection.subscribe(VcsFreezingProcess.Listener.TOPIC, MyFreezeListener())
+    busConnection.subscribe(CommandListener.TOPIC, MyCommandListener())
+    busConnection.subscribe(ChangeListListener.TOPIC, MyChangeListListener())
 
-      val fsManager = FileStatusManager.getInstance(project)
-      fsManager.addFileStatusListener(MyFileStatusListener(), this)
+    ApplicationManager.getApplication().messageBus.connect(this)
+      .subscribe(VirtualFileManager.VFS_CHANGES, MyVirtualFileListener())
 
-      val editorFactory = EditorFactory.getInstance()
-      editorFactory.addEditorFactoryListener(MyEditorFactoryListener(), this)
-      editorFactory.eventMulticaster.addDocumentListener(MyDocumentListener(), this)
+    runInEdt {
+      if (project.isDisposed) return@runInEdt
 
-      changeListManager.addChangeListListener(MyChangeListListener())
+      ApplicationManager.getApplication().addApplicationListener(MyApplicationListener(), this)
+      FileStatusManager.getInstance(project).addFileStatusListener(MyFileStatusListener(), this)
 
-      val virtualFileManager = VirtualFileManager.getInstance()
-      virtualFileManager.addVirtualFileListener(MyVirtualFileListener(), this)
+      EditorFactory.getInstance().eventMulticaster.addDocumentListener(MyDocumentListener(), this)
 
-      busConnection.subscribe(CommandListener.TOPIC, MyCommandListener())
+      MyEditorFactoryListener().install(this)
+      onEverythingChanged()
+
+      val states = project.service<PartialLineStatusTrackerManagerState>().getStatesAndClear()
+      if (states.isNotEmpty()) {
+        ChangeListManager.getInstance(project).invokeAfterUpdate({ restoreTrackersForPartiallyChangedFiles(states) },
+                                                                 InvokeAfterUpdateMode.SILENT, null, null)
+      }
     }
   }
 
   override fun dispose() {
     isDisposed = true
+    Disposer.dispose(loader)
 
     synchronized(LOCK) {
       for ((document, multiset) in forcedDocuments) {
         for (requester in multiset.elementSet()) {
-          warn("Tracker for is being held on dispose by $requester", document)
+          warn("Tracker is being held on dispose by $requester", document)
         }
       }
       forcedDocuments.clear()
@@ -141,8 +148,6 @@ class LineStatusTrackerManager(
         data.tracker.release()
       }
       trackers.clear()
-
-      loader.dispose()
     }
   }
 
@@ -153,19 +158,19 @@ class LineStatusTrackerManager(
   }
 
   override fun getLineStatusTracker(file: VirtualFile): LineStatusTracker<*>? {
-    val document = fileDocumentManager.getCachedDocument(file) ?: return null
+    val document = FileDocumentManager.getInstance().getCachedDocument(file) ?: return null
     return getLineStatusTracker(document)
   }
 
   @CalledInAwt
   override fun requestTrackerFor(document: Document, requester: Any) {
-    application.assertIsDispatchThread()
+    ApplicationManager.getApplication().assertIsWriteThread()
     synchronized(LOCK) {
       val multiset = forcedDocuments.computeIfAbsent(document) { HashMultiset.create<Any>() }
       multiset.add(requester)
 
       if (trackers[document] == null) {
-        val virtualFile = fileDocumentManager.getFile(document) ?: return
+        val virtualFile = FileDocumentManager.getInstance().getFile(document) ?: return
         installTracker(virtualFile, document)
       }
     }
@@ -173,7 +178,7 @@ class LineStatusTrackerManager(
 
   @CalledInAwt
   override fun releaseTrackerFor(document: Document, requester: Any) {
-    application.assertIsDispatchThread()
+    ApplicationManager.getApplication().assertIsWriteThread()
     synchronized(LOCK) {
       val multiset = forcedDocuments[document]
       if (multiset == null || !multiset.contains(requester)) {
@@ -222,10 +227,18 @@ class LineStatusTrackerManager(
 
       if (forcedDocuments.containsKey(document)) return
 
-      if (data.tracker is PartialLocalLineStatusTracker) {
+      if (data.tracker is ChangelistsLocalLineStatusTracker) {
         val hasPartialChanges = data.tracker.hasPartialState()
+        if (hasPartialChanges) {
+          log("checkIfTrackerCanBeReleased - hasPartialChanges", data.tracker.virtualFile)
+          return
+        }
+
         val isLoading = loader.hasRequest(RefreshRequest(document))
-        if (hasPartialChanges || isLoading) return
+        if (isLoading) {
+          log("checkIfTrackerCanBeReleased - isLoading", data.tracker.virtualFile)
+          return
+        }
       }
 
       releaseTracker(document)
@@ -235,7 +248,7 @@ class LineStatusTrackerManager(
 
   @CalledInAwt
   private fun onEverythingChanged() {
-    application.assertIsDispatchThread()
+    ApplicationManager.getApplication().assertIsWriteThread()
     synchronized(LOCK) {
       if (isDisposed) return
       log("onEverythingChanged", null)
@@ -246,7 +259,7 @@ class LineStatusTrackerManager(
         files.add(data.tracker.virtualFile)
       }
       for (document in forcedDocuments.keys) {
-        val file = fileDocumentManager.getFile(document)
+        val file = FileDocumentManager.getInstance().getFile(document)
         if (file != null) files.add(file)
       }
 
@@ -258,7 +271,7 @@ class LineStatusTrackerManager(
 
   @CalledInAwt
   private fun onFileChanged(virtualFile: VirtualFile) {
-    val document = fileDocumentManager.getCachedDocument(virtualFile) ?: return
+    val document = FileDocumentManager.getInstance().getCachedDocument(virtualFile) ?: return
 
     synchronized(LOCK) {
       if (isDisposed) return
@@ -272,7 +285,7 @@ class LineStatusTrackerManager(
       }
       else {
         val isPartialTrackerExpected = canCreatePartialTrackerFor(virtualFile)
-        val isPartialTracker = tracker is PartialLocalLineStatusTracker
+        val isPartialTracker = tracker is ChangelistsLocalLineStatusTracker
 
         if (isPartialTrackerExpected == isPartialTracker) {
           refreshTracker(tracker)
@@ -287,7 +300,7 @@ class LineStatusTrackerManager(
 
   private fun registerTrackerInCLM(data: TrackerData) {
     val tracker = data.tracker
-    if (tracker !is PartialLocalLineStatusTracker) return
+    if (tracker !is ChangelistsLocalLineStatusTracker) return
 
     val filePath = VcsUtil.getFilePath(tracker.virtualFile)
     if (data.clmFilePath != null) {
@@ -295,13 +308,13 @@ class LineStatusTrackerManager(
       return
     }
 
-    changeListManager.registerChangeTracker(filePath, tracker)
+    ChangeListManagerImpl.getInstanceImpl(project).registerChangeTracker(filePath, tracker)
     data.clmFilePath = filePath
   }
 
   private fun unregisterTrackerInCLM(data: TrackerData) {
     val tracker = data.tracker
-    if (tracker !is PartialLocalLineStatusTracker) return
+    if (tracker !is ChangelistsLocalLineStatusTracker) return
 
     val filePath = data.clmFilePath
     if (filePath == null) {
@@ -309,7 +322,7 @@ class LineStatusTrackerManager(
       return
     }
 
-    changeListManager.unregisterChangeTracker(filePath, tracker)
+    ChangeListManagerImpl.getInstanceImpl(project).unregisterChangeTracker(filePath, tracker)
     data.clmFilePath = null
 
     val actualFilePath = VcsUtil.getFilePath(tracker.virtualFile)
@@ -320,7 +333,7 @@ class LineStatusTrackerManager(
 
   private fun reregisterTrackerInCLM(data: TrackerData) {
     val tracker = data.tracker
-    if (tracker !is PartialLocalLineStatusTracker) return
+    if (tracker !is ChangelistsLocalLineStatusTracker) return
 
     val oldFilePath = data.clmFilePath
     val newFilePath = VcsUtil.getFilePath(tracker.virtualFile)
@@ -331,8 +344,8 @@ class LineStatusTrackerManager(
     }
 
     if (oldFilePath != newFilePath) {
-      changeListManager.unregisterChangeTracker(oldFilePath, tracker)
-      changeListManager.registerChangeTracker(newFilePath, tracker)
+      ChangeListManagerImpl.getInstanceImpl(project).unregisterChangeTracker(oldFilePath, tracker)
+      ChangeListManagerImpl.getInstanceImpl(project).registerChangeTracker(newFilePath, tracker)
       data.clmFilePath = newFilePath
     }
   }
@@ -340,9 +353,9 @@ class LineStatusTrackerManager(
 
   private fun canGetBaseRevisionFor(virtualFile: VirtualFile?): Boolean {
     if (isDisposed) return false
-    if (virtualFile == null || virtualFile is LightVirtualFile || !virtualFile.isValid) return false
-    if (virtualFile.fileType.isBinary || FileUtilRt.isTooLarge(virtualFile.length)) return false
-    if (!statusProvider.isSupported(virtualFile)) return false
+    if (virtualFile == null || virtualFile is LightVirtualFile) return false
+    if (runReadAction { !virtualFile.isValid || virtualFile.fileType.isBinary || FileUtilRt.isTooLarge(virtualFile.length) }) return false
+    if (!VcsFileStatusProvider.getInstance(project).isSupported(virtualFile)) return false
 
     val status = FileStatusManager.getInstance(project).getStatus(virtualFile)
     if (status == FileStatus.ADDED ||
@@ -370,7 +383,6 @@ class LineStatusTrackerManager(
 
   override fun arePartialChangelistsEnabled(virtualFile: VirtualFile): Boolean {
     if (!partialChangeListsEnabled) return false
-    if (getTrackingMode() == LineStatusTracker.Mode.SILENT) return false
 
     val vcs = VcsUtil.getVcsFor(project, virtualFile)
     return vcs != null && vcs.arePartialChangelistsSupported()
@@ -386,13 +398,13 @@ class LineStatusTrackerManager(
 
   @CalledInAwt
   private fun doInstallTracker(virtualFile: VirtualFile, document: Document): LineStatusTracker<*>? {
-    application.assertIsDispatchThread()
+    ApplicationManager.getApplication().assertIsWriteThread()
     synchronized(LOCK) {
       if (isDisposed) return null
       if (trackers[document] != null) return null
 
       val tracker = if (canCreatePartialTrackerFor(virtualFile)) {
-        PartialLocalLineStatusTracker.createTracker(project, document, virtualFile, getTrackingMode())
+        ChangelistsLocalLineStatusTracker.createTracker(project, document, virtualFile, getTrackingMode())
       }
       else {
         SimpleLocalLineStatusTracker.createTracker(project, document, virtualFile, getTrackingMode())
@@ -405,7 +417,7 @@ class LineStatusTrackerManager(
       refreshTracker(tracker)
       eventDispatcher.multicaster.onTrackerAdded(tracker)
 
-      if (batchChangeTaskCounter > 0) {
+      if (clmFreezeCounter > 0) {
         tracker.freeze()
       }
 
@@ -416,7 +428,7 @@ class LineStatusTrackerManager(
 
   @CalledInAwt
   private fun releaseTracker(document: Document) {
-    application.assertIsDispatchThread()
+    ApplicationManager.getApplication().assertIsWriteThread()
     synchronized(LOCK) {
       if (isDisposed) return
       val data = trackers.remove(document) ?: return
@@ -439,7 +451,7 @@ class LineStatusTrackerManager(
         val virtualFile = tracker.virtualFile
 
         val isPartialTrackerExpected = canCreatePartialTrackerFor(virtualFile)
-        val isPartialTracker = tracker is PartialLocalLineStatusTracker
+        val isPartialTracker = tracker is ChangelistsLocalLineStatusTracker
 
         if (isPartialTrackerExpected == isPartialTracker) {
           tracker.mode = mode
@@ -452,15 +464,15 @@ class LineStatusTrackerManager(
     }
   }
 
-  private fun getTrackingMode(): LineStatusTracker.Mode {
+  private fun getTrackingMode(): LocalLineStatusTracker.Mode {
     val settings = VcsApplicationSettings.getInstance()
-    if (!settings.SHOW_LST_GUTTER_MARKERS) return LineStatusTracker.Mode.SILENT
-    if (settings.SHOW_WHITESPACES_IN_LST) return LineStatusTracker.Mode.SMART
-    return LineStatusTracker.Mode.DEFAULT
+    return LocalLineStatusTracker.Mode(settings.SHOW_LST_GUTTER_MARKERS,
+                                       settings.SHOW_LST_ERROR_STRIPE_MARKERS,
+                                       settings.SHOW_WHITESPACES_IN_LST)
   }
 
   @CalledInAwt
-  private fun refreshTracker(tracker: LineStatusTracker<*>) {
+  private fun refreshTracker(tracker: LocalLineStatusTracker<*>) {
     synchronized(LOCK) {
       if (isDisposed) return
       loader.scheduleRefresh(RefreshRequest(tracker.document))
@@ -473,7 +485,7 @@ class LineStatusTrackerManager(
     override fun loadRequest(request: RefreshRequest): Result<RefreshData> {
       if (isDisposed) return Result.Canceled()
       val document = request.document
-      val virtualFile = fileDocumentManager.getFile(document)
+      val virtualFile = FileDocumentManager.getInstance().getFile(document)
 
       log("Loading started", virtualFile)
 
@@ -487,7 +499,7 @@ class LineStatusTrackerManager(
         return Result.Error()
       }
 
-      val baseContent = statusProvider.getBaseRevision(virtualFile)
+      val baseContent = VcsFileStatusProvider.getInstance(project).getBaseRevision(virtualFile)
       if (baseContent == null) {
         log("Loading error: base revision not found", virtualFile)
         return Result.Error()
@@ -532,15 +544,15 @@ class LineStatusTrackerManager(
       checkIfTrackerCanBeReleased(document)
     }
 
-    private fun LineStatusTrackerManager.handleCanceled(document: Document) {
-      val virtualFile = fileDocumentManager.getFile(document) ?: return
+    private fun handleCanceled(document: Document) {
+      val virtualFile = FileDocumentManager.getInstance().getFile(document) ?: return
 
       val state = synchronized(LOCK) {
         fileStatesAwaitingRefresh.remove(virtualFile) ?: return
       }
 
       val tracker = getLineStatusTracker(document)
-      if (tracker is PartialLocalLineStatusTracker) {
+      if (tracker is ChangelistsLocalLineStatusTracker) {
         tracker.restoreState(state)
         log("Loading canceled: state restored", virtualFile)
       }
@@ -555,10 +567,10 @@ class LineStatusTrackerManager(
       }
     }
 
-    private fun LineStatusTrackerManager.handleSuccess(document: Document,
-                                                       refreshData: RefreshData) {
-      val virtualFile = fileDocumentManager.getFile(document)!!
+    private fun handleSuccess(document: Document, refreshData: RefreshData) {
+      val virtualFile = FileDocumentManager.getInstance().getFile(document)!!
 
+      val tracker: LocalLineStatusTracker<*>
       synchronized(LOCK) {
         val data = trackers[document]
         if (data == null) {
@@ -571,13 +583,13 @@ class LineStatusTrackerManager(
         }
 
         data.contentInfo = refreshData.info
+        tracker = data.tracker
       }
 
-      val tracker = getLineStatusTracker(document)!!
       tracker.setBaseRevision(refreshData.text)
       log("Loading finished: success", virtualFile)
 
-      if (tracker is PartialLocalLineStatusTracker) {
+      if (tracker is ChangelistsLocalLineStatusTracker) {
         val state = fileStatesAwaitingRefresh.remove(tracker.virtualFile)
         if (state != null) {
           tracker.restoreState(state)
@@ -585,6 +597,25 @@ class LineStatusTrackerManager(
         }
       }
     }
+  }
+
+  /**
+   * We can speedup initial content loading if it was already loaded by someone.
+   * We do not set 'contentInfo' here to ensure, that following refresh will fix potential inconsistency.
+   */
+  @CalledInAwt
+  @ApiStatus.Internal
+  fun offerTrackerContent(document: Document, text: CharSequence) {
+    val tracker: LocalLineStatusTracker<*>
+    synchronized(LOCK) {
+      val data = trackers[document]
+      if (data == null || data.contentInfo != null) return
+
+      tracker = data.tracker
+    }
+
+    tracker.setBaseRevision(text)
+    log("Offered content", FileDocumentManager.getInstance().getFile(document))
   }
 
   private inner class MyFileStatusListener : FileStatusListener {
@@ -598,6 +629,16 @@ class LineStatusTrackerManager(
   }
 
   private inner class MyEditorFactoryListener : EditorFactoryListener {
+    fun install(disposable: Disposable) {
+      val editorFactory = EditorFactory.getInstance()
+      for (editor in editorFactory.allEditors) {
+        if (isTrackedEditor(editor)) {
+          requestTrackerFor(editor.document, editor)
+        }
+      }
+      editorFactory.addEditorFactoryListener(this, disposable)
+    }
+
     override fun editorCreated(event: EditorFactoryEvent) {
       val editor = event.editor
       if (isTrackedEditor(editor)) {
@@ -613,27 +654,33 @@ class LineStatusTrackerManager(
     }
 
     private fun isTrackedEditor(editor: Editor): Boolean {
-      if (editor.project != null && editor.project != project) return false
-      if (editor.editorKind == EditorKind.PREVIEW_UNDER_READ_ACTION) return false
-      return true
+      // can't filter out "!isInLocalFileSystem" files, custom VcsBaseContentProvider can handle them
+      if (FileDocumentManager.getInstance().getFile(editor.document) == null) {
+        return false
+      }
+      return editor.project == null || editor.project == project
     }
   }
 
-  private inner class MyVirtualFileListener : VirtualFileListener {
-    override fun beforePropertyChange(event: VirtualFilePropertyEvent) {
-      if (VirtualFile.PROP_ENCODING == event.propertyName) {
-        onFileChanged(event.file)
+  private inner class MyVirtualFileListener : BulkFileListener {
+    override fun before(events: List<VFileEvent>) {
+      for (event in events) {
+        when (event) {
+          is VFileDeleteEvent -> handleFileDeletion(event.file)
+        }
       }
     }
 
-    override fun propertyChanged(event: VirtualFilePropertyEvent) {
-      if (VirtualFile.PROP_NAME == event.propertyName) {
-        handleFileMovement(event.file)
+    override fun after(events: List<VFileEvent>) {
+      for (event in events) {
+        when (event) {
+          is VFilePropertyChangeEvent -> when {
+            VirtualFile.PROP_ENCODING == event.propertyName -> onFileChanged(event.file)
+            event.isRename -> handleFileMovement(event.file)
+          }
+          is VFileMoveEvent -> handleFileMovement(event.file)
+        }
       }
-    }
-
-    override fun fileMoved(event: VirtualFileMoveEvent) {
-      handleFileMovement(event.file)
     }
 
     private fun handleFileMovement(file: VirtualFile) {
@@ -646,11 +693,11 @@ class LineStatusTrackerManager(
       }
     }
 
-    override fun fileDeleted(event: VirtualFileEvent) {
+    private fun handleFileDeletion(file: VirtualFile) {
       if (!partialChangeListsEnabled) return
 
       synchronized(LOCK) {
-        forEachTrackerUnder(event.file) { data ->
+        forEachTrackerUnder(file) { data ->
           releaseTracker(data.tracker.document)
         }
       }
@@ -664,7 +711,7 @@ class LineStatusTrackerManager(
         }
       }
       else {
-        val document = fileDocumentManager.getCachedDocument(file) ?: return
+        val document = FileDocumentManager.getInstance().getCachedDocument(file) ?: return
         val data = trackers[document] ?: return
 
         action(data)
@@ -675,22 +722,22 @@ class LineStatusTrackerManager(
   private inner class MyDocumentListener : DocumentListener {
     override fun documentChanged(event: DocumentEvent) {
       if (!ApplicationManager.getApplication().isDispatchThread) return // disable for documents forUseInNonAWTThread
-      if (!partialChangeListsEnabled) return
+      if (!partialChangeListsEnabled || project.isDisposed) return
 
       val document = event.document
       if (documentsInDefaultChangeList.contains(document)) return
 
-      val virtualFile = fileDocumentManager.getFile(document) ?: return
+      val virtualFile = FileDocumentManager.getInstance().getFile(document) ?: return
       if (getLineStatusTracker(document) != null) return
       if (!canGetBaseRevisionFor(virtualFile)) return
       if (!canCreatePartialTrackerFor(virtualFile)) return
 
-      val changeList = changeListManager.getChangeList(virtualFile)
+      val changeList = ChangeListManagerImpl.getInstanceImpl(project).getChangeList(virtualFile)
       if (changeList != null && !changeList.isDefault) {
         log("Tracker install from DocumentListener: ", virtualFile)
 
         val tracker = doInstallTracker(virtualFile, document)
-        if (tracker is PartialLocalLineStatusTracker) {
+        if (tracker is ChangelistsLocalLineStatusTracker) {
           tracker.replayChangesFromDocumentEvents(listOf(event))
         }
         return
@@ -700,7 +747,7 @@ class LineStatusTrackerManager(
     }
   }
 
-  private inner class MyApplicationListener : ApplicationAdapter() {
+  private inner class MyApplicationListener : ApplicationListener {
     override fun afterWriteActionFinished(action: Any) {
       documentsInDefaultChangeList.clear()
 
@@ -715,7 +762,7 @@ class LineStatusTrackerManager(
 
   private inner class MyLineStatusTrackerSettingListener : LineStatusTrackerSettingListener {
     override fun settingsUpdated() {
-      partialChangeListsEnabled = VcsApplicationSettings.getInstance().ENABLE_PARTIAL_CHANGELISTS && Registry.`is`("vcs.enable.partial.changelists")
+      partialChangeListsEnabled = VcsApplicationSettings.getInstance().ENABLE_PARTIAL_CHANGELISTS
 
       updateTrackingModes()
     }
@@ -724,6 +771,8 @@ class LineStatusTrackerManager(
   private inner class MyChangeListListener : ChangeListAdapter() {
     override fun defaultListChanged(oldDefaultList: ChangeList?, newDefaultList: ChangeList?) {
       runInEdt(ModalityState.any()) {
+        if (project.isDisposed) return@runInEdt
+
         expireInactiveRangesDamagedNotifications()
 
         EditorFactory.getInstance().allEditors
@@ -748,28 +797,31 @@ class LineStatusTrackerManager(
 
   class CheckinFactory : CheckinHandlerFactory() {
     override fun createHandler(panel: CheckinProjectPanel, commitContext: CommitContext): CheckinHandler {
+      val project = panel.project
       return object : CheckinHandler() {
         override fun checkinSuccessful() {
-          runInEdt {
-            getInstanceImpl(panel.project).resetExcludedFromCommitMarkers()
-          }
+          resetExcludedFromCommit()
         }
 
         override fun checkinFailed(exception: MutableList<VcsException>?) {
+          resetExcludedFromCommit()
+        }
+
+        private fun resetExcludedFromCommit() {
           runInEdt {
-            getInstanceImpl(panel.project).resetExcludedFromCommitMarkers()
+            // TODO Move this to SingleChangeListCommitWorkflow
+            if (!project.isDisposed && !panel.isNonModalCommit) getInstanceImpl(project).resetExcludedFromCommitMarkers()
           }
         }
       }
     }
   }
 
-  private inner class MyBatchFileChangeListener : BatchFileChangeListener {
-    override fun batchChangeStarted(eventProject: Project, activityName: String?) {
-      if (eventProject != project) return
+  private inner class MyFreezeListener : VcsFreezingProcess.Listener {
+    override fun onFreeze() {
       runReadAction {
         synchronized(LOCK) {
-          if (batchChangeTaskCounter == 0) {
+          if (clmFreezeCounter == 0) {
             for (data in trackers.values) {
               try {
                 data.tracker.freeze()
@@ -779,17 +831,16 @@ class LineStatusTrackerManager(
               }
             }
           }
-          batchChangeTaskCounter++
+          clmFreezeCounter++
         }
       }
     }
 
-    override fun batchChangeCompleted(eventProject: Project) {
-      if (eventProject != project) return
+    override fun onUnfreeze() {
       runInEdt(ModalityState.any()) {
         synchronized(LOCK) {
-          batchChangeTaskCounter--
-          if (batchChangeTaskCounter == 0) {
+          clmFreezeCounter--
+          if (clmFreezeCounter == 0) {
             for (data in trackers.values) {
               try {
                 data.tracker.unfreeze()
@@ -813,7 +864,7 @@ class LineStatusTrackerManager(
     return true
   }
 
-  private class TrackerData(val tracker: LineStatusTracker<*>,
+  private class TrackerData(val tracker: LocalLineStatusTracker<*>,
                             var contentInfo: ContentInfo? = null,
                             var clmFilePath: FilePath? = null)
 
@@ -823,6 +874,7 @@ class LineStatusTrackerManager(
   private class RefreshRequest(val document: Document) {
     override fun equals(other: Any?): Boolean = other is RefreshRequest && document == other.document
     override fun hashCode(): Int = document.hashCode()
+    override fun toString(): String = "RefreshRequest: " + (FileDocumentManager.getInstance().getFile(document)?.path ?: "unknown")
   }
 
   private class RefreshData(val text: String, val info: ContentInfo)
@@ -840,7 +892,7 @@ class LineStatusTrackerManager(
   }
 
   private fun warn(message: String, document: Document?) {
-    val file = document?.let { fileDocumentManager.getFile(it) }
+    val file = document?.let { FileDocumentManager.getInstance().getFile(it) }
     warn(message, file)
   }
 
@@ -856,14 +908,14 @@ class LineStatusTrackerManager(
 
   @CalledInAwt
   fun resetExcludedFromCommitMarkers() {
-    application.assertIsDispatchThread()
+    ApplicationManager.getApplication().assertIsWriteThread()
     synchronized(LOCK) {
       val documents = mutableListOf<Document>()
 
       for (data in trackers.values) {
         val tracker = data.tracker
-        if (tracker is PartialLocalLineStatusTracker) {
-          tracker.setExcludedFromCommit(false)
+        if (tracker is ChangelistsLocalLineStatusTracker) {
+          tracker.resetExcludedFromCommitMarkers()
           documents.add(tracker.document)
         }
       }
@@ -876,13 +928,13 @@ class LineStatusTrackerManager(
 
 
   @CalledInAwt
-  internal fun collectPartiallyChangedFilesStates(): List<PartialLocalLineStatusTracker.FullState> {
-    application.assertIsDispatchThread()
-    val result = mutableListOf<PartialLocalLineStatusTracker.FullState>()
+  internal fun collectPartiallyChangedFilesStates(): List<ChangelistsLocalLineStatusTracker.FullState> {
+    ApplicationManager.getApplication().assertIsWriteThread()
+    val result = mutableListOf<ChangelistsLocalLineStatusTracker.FullState>()
     synchronized(LOCK) {
       for (data in trackers.values) {
         val tracker = data.tracker
-        if (tracker is PartialLocalLineStatusTracker) {
+        if (tracker is ChangelistsLocalLineStatusTracker) {
           val hasPartialChanges = tracker.affectedChangeListsIds.size > 1
           if (hasPartialChanges) {
             result.add(tracker.storeTrackerState())
@@ -894,19 +946,19 @@ class LineStatusTrackerManager(
   }
 
   @CalledInAwt
-  internal fun restoreTrackersForPartiallyChangedFiles(trackerStates: List<PartialLocalLineStatusTracker.State>) {
+  private fun restoreTrackersForPartiallyChangedFiles(trackerStates: List<ChangelistsLocalLineStatusTracker.State>) {
     runWriteAction {
       synchronized(LOCK) {
         for (state in trackerStates) {
           val virtualFile = state.virtualFile
-          val document = fileDocumentManager.getDocument(virtualFile) ?: continue
+          val document = FileDocumentManager.getInstance().getDocument(virtualFile) ?: continue
 
           if (!canCreatePartialTrackerFor(virtualFile)) continue
 
           val oldData = trackers[document]
           val oldTracker = oldData?.tracker
-          if (oldTracker is PartialLocalLineStatusTracker) {
-            val stateRestored = state is PartialLocalLineStatusTracker.FullState &&
+          if (oldTracker is ChangelistsLocalLineStatusTracker) {
+            val stateRestored = state is ChangelistsLocalLineStatusTracker.FullState &&
                                 oldTracker.restoreState(state)
             if (stateRestored) {
               log("Tracker restore: reused, full restored", virtualFile)
@@ -924,7 +976,7 @@ class LineStatusTrackerManager(
             }
           }
           else {
-            val tracker = PartialLocalLineStatusTracker.createTracker(project, document, virtualFile, getTrackingMode())
+            val tracker = ChangelistsLocalLineStatusTracker.createTracker(project, document, virtualFile, getTrackingMode())
 
             val data = TrackerData(tracker)
             trackers.put(document, data)
@@ -940,7 +992,7 @@ class LineStatusTrackerManager(
             refreshTracker(tracker)
             eventDispatcher.multicaster.onTrackerAdded(tracker)
 
-            val stateRestored = state is PartialLocalLineStatusTracker.FullState &&
+            val stateRestored = state is ChangelistsLocalLineStatusTracker.FullState &&
                                 tracker.restoreState(state)
             if (stateRestored) {
               log("Tracker restore: created, full restored", virtualFile)
@@ -965,9 +1017,10 @@ class LineStatusTrackerManager(
 
   @CalledInAwt
   internal fun notifyInactiveRangesDamaged(virtualFile: VirtualFile) {
-    application.assertIsDispatchThread()
-    if (filesWithDamagedInactiveRanges.contains(virtualFile)) return
-    if (virtualFile == fileEditorManager.currentFile) return
+    ApplicationManager.getApplication().assertIsWriteThread()
+    if (filesWithDamagedInactiveRanges.contains(virtualFile) || virtualFile == FileEditorManagerEx.getInstanceEx(project).currentFile) {
+      return
+    }
     filesWithDamagedInactiveRanges.add(virtualFile)
   }
 
@@ -1004,20 +1057,24 @@ class LineStatusTrackerManager(
                    NotificationType.INFORMATION,
                    null) {
     init {
-      addAction(NotificationAction.createSimple("View Changes...") {
-        val defaultList = ChangeListManager.getInstance(project).defaultChangeList
-        val changes = defaultList.changes.filter { virtualFiles.contains(it.virtualFile) }
+      addAction(NotificationAction.createSimple(
+        Supplier { VcsBundle.message("action.NotificationAction.InactiveRangesDamagedNotification.text.view.changes") },
+        Runnable {
+          val defaultList = ChangeListManager.getInstance(project).defaultChangeList
+          val changes = defaultList.changes.filter { virtualFiles.contains(it.virtualFile) }
 
-        val window = ToolWindowManager.getInstance(project).getToolWindow(ChangesViewContentManager.TOOLWINDOW_ID)
-        window.activate { ChangesViewManager.getInstance(project).selectChanges(changes) }
-        expire()
-      })
+          val window = getToolWindowFor(project, LOCAL_CHANGES)
+          window?.activate { ChangesViewManager.getInstance(project).selectChanges(changes) }
+          expire()
+        }))
     }
   }
 
 
   @TestOnly
   fun waitUntilBaseContentsLoaded() {
+    assert(ApplicationManager.getApplication().isUnitTestMode)
+
     if (ApplicationManager.getApplication().isDispatchThread) {
       UIUtil.dispatchAllInvocationEvents()
     }
@@ -1037,7 +1094,9 @@ class LineStatusTrackerManager(
       if (semaphore.waitFor(10)) {
         return
       }
-      if (System.currentTimeMillis() - start > 2000) {
+      if (System.currentTimeMillis() - start > 10000) {
+        loader.dumpInternalState()
+        System.err.println(ThreadDumper.dumpThreadsToString())
         throw IllegalStateException("Couldn't await base contents")
       }
     }
@@ -1064,7 +1123,7 @@ class LineStatusTrackerManager(
  * - Allows to check whether request is scheduled or is waiting for completion.
  * - Notifies callbacks when queue is exhausted.
  */
-private abstract class SingleThreadLoader<Request, T> {
+private abstract class SingleThreadLoader<Request, T> : Disposable {
   private val LOG = Logger.getInstance(SingleThreadLoader::class.java)
   private val LOCK: Any = Any()
 
@@ -1097,7 +1156,7 @@ private abstract class SingleThreadLoader<Request, T> {
   }
 
   @CalledInAwt
-  fun dispose() {
+  override fun dispose() {
     val callbacks = mutableListOf<Runnable>()
     synchronized(LOCK) {
       isDisposed = true
@@ -1155,7 +1214,9 @@ private abstract class SingleThreadLoader<Request, T> {
 
       isScheduled = true
       lastFuture = ApplicationManager.getApplication().executeOnPooledThread {
-        handleRequests()
+        BackgroundTaskUtil.runUnderDisposeAwareIndicator(this, Runnable {
+          handleRequests()
+        })
       }
     }
   }
@@ -1181,6 +1242,9 @@ private abstract class SingleThreadLoader<Request, T> {
   private fun handleSingleRequest(request: Request) {
     val result: Result<T> = try {
       loadRequest(request)
+    }
+    catch (e: ProcessCanceledException) {
+      Result.Canceled()
     }
     catch (e: Throwable) {
       LOG.error(e)
@@ -1222,8 +1286,25 @@ private abstract class SingleThreadLoader<Request, T> {
       try {
         callback.run()
       }
+      catch (e: ProcessCanceledException) {
+      }
       catch (e: Throwable) {
         LOG.error(e)
+      }
+    }
+  }
+
+  @TestOnly
+  fun dumpInternalState() {
+    synchronized(LOCK) {
+      LOG.debug("isScheduled - $isScheduled")
+      LOG.debug("pending callbacks: ${callbacksWaitingUpdateCompletion.size}")
+
+      taskQueue.forEach {
+        LOG.debug("pending task: ${it}")
+      }
+      waitingForRefresh.forEach {
+        LOG.debug("waiting refresh: ${it}")
       }
     }
   }

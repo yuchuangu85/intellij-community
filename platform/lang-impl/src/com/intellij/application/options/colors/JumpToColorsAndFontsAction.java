@@ -1,9 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options.colors;
 
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.hint.HintManager;
 import com.intellij.injected.editor.EditorWindow;
+import com.intellij.lang.LangBundle;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.editor.Editor;
@@ -34,14 +35,13 @@ import com.intellij.ui.ColoredListCellRenderer;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.Processor;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.JBIterable;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -70,7 +70,7 @@ public class JumpToColorsAndFontsAction extends DumbAwareAction {
     Project project = e.getData(CommonDataKeys.PROJECT);
     Editor editor = e.getData(CommonDataKeys.EDITOR);
     if (project == null || editor == null) return;
-    Map<TextAttributesKey, Pair<ColorAndFontDescriptorsProvider, AttributesDescriptor>> keyMap = ContainerUtil.newHashMap();
+    Map<TextAttributesKey, Pair<ColorAndFontDescriptorsProvider, AttributesDescriptor>> keyMap = new HashMap<>();
     Processor<RangeHighlighterEx> processor = r -> {
       HighlightInfo info = HighlightInfo.fromRangeHighlighter(r);
       TextAttributesKey key = info != null
@@ -106,17 +106,17 @@ public class JumpToColorsAndFontsAction extends DumbAwareAction {
     }
 
     if (keyMap.isEmpty()) {
-      HintManager.getInstance().showErrorHint(editor, "No text attributes found");
+      HintManager.getInstance().showErrorHint(editor, LangBundle.message("hint.text.no.text.attributes.found"));
     }
     else if (keyMap.size() == 1) {
       Pair<ColorAndFontDescriptorsProvider, AttributesDescriptor> p = keyMap.values().iterator().next();
       if (!openSettingsAndSelectKey(project, p.first, p.second)) {
-        HintManager.getInstance().showErrorHint(editor, "No appropriate settings page found");
+        HintManager.getInstance().showErrorHint(editor, LangBundle.message("hint.text.no.appropriate.settings.page.found"));
       }
     }
     else {
-      ArrayList<Pair<ColorAndFontDescriptorsProvider, AttributesDescriptor>> attrs = ContainerUtil.newArrayList(keyMap.values());
-      Collections.sort(attrs, (o1, o2) -> StringUtil.naturalCompare(
+      ArrayList<Pair<ColorAndFontDescriptorsProvider, AttributesDescriptor>> attrs = new ArrayList<>(keyMap.values());
+      attrs.sort((o1, o2) -> StringUtil.naturalCompare(
         o1.first.getDisplayName() + o1.second.getDisplayName(), o2.first.getDisplayName() + o2.second.getDisplayName()));
 
       EditorColorsScheme colorsScheme = editor.getColorsScheme();
@@ -164,7 +164,7 @@ public class JumpToColorsAndFontsAction extends DumbAwareAction {
         .setRequestFocus(true)
         .setItemChosenCallback((p) -> {
           if (!openSettingsAndSelectKey(project, p.first, p.second)) {
-            HintManager.getInstance().showErrorHint(editor, "No appropriate settings page found");
+            HintManager.getInstance().showErrorHint(editor, LangBundle.message("hint.text.no.appropriate.settings.page.found"));
           }
         })
         .createPopup().showInBestPositionFor(editor);

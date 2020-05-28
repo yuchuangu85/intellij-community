@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.tasks.config;
 
 import com.intellij.ide.DataManager;
@@ -6,6 +6,7 @@ import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.actionSystem.Separator;
+import com.intellij.openapi.extensions.BaseExtensionPointName;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.options.SearchableConfigurable;
 import com.intellij.openapi.project.DumbAware;
@@ -14,10 +15,7 @@ import com.intellij.openapi.roots.ui.configuration.actions.IconWithTextAction;
 import com.intellij.openapi.ui.Splitter;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.openapi.util.Disposer;
-import com.intellij.tasks.TaskManager;
-import com.intellij.tasks.TaskRepository;
-import com.intellij.tasks.TaskRepositorySubtype;
-import com.intellij.tasks.TaskRepositoryType;
+import com.intellij.tasks.*;
 import com.intellij.tasks.impl.TaskManagerImpl;
 import com.intellij.ui.*;
 import com.intellij.ui.components.JBLabel;
@@ -25,7 +23,6 @@ import com.intellij.ui.components.JBList;
 import com.intellij.util.Consumer;
 import com.intellij.util.containers.ConcurrentFactoryMap;
 import com.intellij.util.containers.ContainerUtil;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -40,14 +37,13 @@ import java.util.*;
  * @author Dmitry Avdeev
  */
 @SuppressWarnings("unchecked")
-public class TaskRepositoriesConfigurable implements Configurable.NoScroll, SearchableConfigurable {
-
+public class TaskRepositoriesConfigurable implements Configurable.NoScroll, SearchableConfigurable, Configurable.WithEpDependencies {
   public static final String ID = "tasks.servers";
   private static final String EMPTY_PANEL = "empty.panel";
 
   private JPanel myPanel;
   private JPanel myServersPanel;
-  private final JBList myRepositoriesList;
+  private final JBList<TaskRepository> myRepositoriesList;
   @SuppressWarnings({"UnusedDeclaration"})
   private JPanel myToolbarPanel;
   private JPanel myRepositoryEditor;
@@ -73,13 +69,14 @@ public class TaskRepositoriesConfigurable implements Configurable.NoScroll, Sear
     myManager = (TaskManagerImpl)TaskManager.getManager(project);
 
     myRepositoriesList = new JBList();
-    myRepositoriesList.getEmptyText().setText("No servers");
+    myRepositoriesList.getEmptyText().setText(TaskBundle.message("settings.no.servers"));
 
     myServersLabel.setLabelFor(myRepositoriesList);
 
     myServersPanel.setMinimumSize(new Dimension(-1, 100));
 
-    TaskRepositoryType[] groups = TaskRepositoryType.getRepositoryTypes();
+    List<TaskRepositoryType<?>> groups = new ArrayList<>(TaskRepositoryType.getRepositoryTypes());
+    groups.sort(null);
 
     final List<AnAction> createActions = new ArrayList<>();
     for (final TaskRepositoryType repositoryType : groups) {
@@ -160,14 +157,10 @@ public class TaskRepositoriesConfigurable implements Configurable.NoScroll, Sear
       }
     });
 
-    myRepositoriesList.setCellRenderer(new ColoredListCellRenderer() {
-      @Override
-      protected void customizeCellRenderer(@NotNull JList list, Object value, int index, boolean selected, boolean hasFocus) {
-        TaskRepository repository = (TaskRepository)value;
-        setIcon(repository.getIcon());
-        append(repository.getPresentableName(), SimpleTextAttributes.REGULAR_ATTRIBUTES);
-      }
-    });
+    myRepositoriesList.setCellRenderer(SimpleListCellRenderer.create((label, value, index) -> {
+      label.setIcon(value.getIcon());
+      label.setText(value.getPresentableName());
+    }));
 
     myChangeListener = repository -> ((CollectionListModel)myRepositoriesList.getModel()).contentsChanged(repository);
   }
@@ -190,13 +183,12 @@ public class TaskRepositoriesConfigurable implements Configurable.NoScroll, Sear
 
   @Nullable
   private TaskRepository getSelectedRepository() {
-    return (TaskRepository)myRepositoriesList.getSelectedValue();
+    return myRepositoriesList.getSelectedValue();
   }
 
   @Override
-  @Nls
   public String getDisplayName() {
-    return "Servers";
+    return TaskBundle.message("configurable.TaskRepositoriesConfigurable.display.name");
   }
 
   @Override
@@ -221,7 +213,7 @@ public class TaskRepositoriesConfigurable implements Configurable.NoScroll, Sear
 
   @Override
   public void apply() {
-    List<TaskRepository> newRepositories = ContainerUtil.map(myRepositories, taskRepository -> taskRepository.clone());
+    List<TaskRepository> newRepositories = ContainerUtil.map(myRepositories, TaskRepository::clone);
     myManager.setRepositories(newRepositories);
     myManager.updateIssues(null);
     RecentTaskRepositories.getInstance().addRepositories(myRepositories);
@@ -279,10 +271,15 @@ public class TaskRepositoriesConfigurable implements Configurable.NoScroll, Sear
     return matched == null ? null : () -> myRepositoriesList.setSelectedValue(matched, true);
   }
 
+  @Override
+  public @NotNull Collection<BaseExtensionPointName<?>> getDependencies() {
+    return Collections.singletonList(TaskRepositoryType.EP_NAME);
+  }
+
   private abstract class AddServerAction extends IconWithTextAction implements DumbAware {
 
     AddServerAction(TaskRepositorySubtype subtype) {
-      super(subtype.getName(), "New " + subtype.getName() + " server", subtype.getIcon());
+      super(subtype::getName, TaskBundle.messagePointer("settings.new.server", subtype.getName()), subtype.getIcon());
     }
 
     AddServerAction(TaskRepository repository) {

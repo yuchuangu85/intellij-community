@@ -1,9 +1,7 @@
 package org.jetbrains.plugins.javaFX.fxml;
 
 import com.intellij.java.codeInsight.daemon.impl.SdkSetupNotificationTestBase;
-import com.intellij.openapi.projectRoots.JavaSdk;
 import com.intellij.openapi.projectRoots.Sdk;
-import com.intellij.openapi.projectRoots.impl.JavaSdkImpl;
 import com.intellij.openapi.roots.ModuleRootModificationUtil;
 import com.intellij.testFramework.IdeaTestUtil;
 import com.intellij.ui.EditorNotificationPanel;
@@ -16,7 +14,7 @@ public class JavaFxSdkSetupNotificationTest extends SdkSetupNotificationTestBase
   private static final String SAMPLE_FXML = "<?import javafx.scene.layout.VBox?>\n<VBox/>";
 
   public void testJavaFxAsLibrary() {
-    ModuleRootModificationUtil.updateModel(myModule, model -> AbstractJavaFXTestCase.addJavaFxJarAsLibrary(myModule, model));
+    ModuleRootModificationUtil.updateModel(getModule(), model -> AbstractJavaFXTestCase.addJavaFxJarAsLibrary(model));
     final EditorNotificationPanel panel = configureBySdkAndText(IdeaTestUtil.getMockJdk18(), false, "sample.fxml", SAMPLE_FXML);
     assertNull(panel);
   }
@@ -33,11 +31,11 @@ public class JavaFxSdkSetupNotificationTest extends SdkSetupNotificationTestBase
 
   public void testNoJavaFx() {
     final EditorNotificationPanel panel = configureBySdkAndText(IdeaTestUtil.getMockJdk17(), false, "sample.fxml", SAMPLE_FXML);
-    assertSdkSetupPanelShown(panel, "The JavaFX runtime is not configured");
+    assertSdkSetupPanelShown(panel, "Setup SDK");
   }
 
   @NotNull
   private static Sdk getTestJdk() {
-    return ((JavaSdkImpl)JavaSdk.getInstance()).createMockJdk("testJdk", System.getProperty("java.home"), true);
+    return IdeaTestUtil.createMockJdk("testJdk", System.getProperty("java.home"), true);
   }
 }

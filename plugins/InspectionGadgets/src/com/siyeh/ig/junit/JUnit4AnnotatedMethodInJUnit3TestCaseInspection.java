@@ -29,7 +29,6 @@ import com.siyeh.ig.fixes.RenameFix;
 import com.siyeh.ig.psiutils.ClassUtils;
 import com.siyeh.ig.psiutils.ExpectedTypeUtils;
 import com.siyeh.ig.psiutils.TestUtils;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -43,9 +42,8 @@ public class JUnit4AnnotatedMethodInJUnit3TestCaseInspection extends BaseInspect
 
   protected static final String IGNORE = "org.junit.Ignore";
 
-  @NotNull
   @Override
-  protected InspectionGadgetsFix[] buildFixes(Object... infos) {
+  protected InspectionGadgetsFix @NotNull [] buildFixes(Object... infos) {
     final List<InspectionGadgetsFix> fixes = new ArrayList<>(3);
     final PsiMethod method = (PsiMethod)infos[1];
     if (AnnotationUtil.isAnnotated(method, IGNORE, 0)) {
@@ -67,13 +65,6 @@ public class JUnit4AnnotatedMethodInJUnit3TestCaseInspection extends BaseInspect
     final String className = aClass.getName();
     fixes.add(new ConvertToJUnit4Fix(className));
     return fixes.toArray(InspectionGadgetsFix.EMPTY_ARRAY);
-  }
-
-  @Override
-  @Nls
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("junit4.test.method.in.class.extending.junit3.testcase.display.name");
   }
 
   @Override
@@ -160,7 +151,7 @@ public class JUnit4AnnotatedMethodInJUnit3TestCaseInspection extends BaseInspect
     @NotNull
     @Override
     public String getFamilyName() {
-      return "Convert JUnit 3 class to JUnit 4";
+      return InspectionGadgetsBundle.message("convert.to.j.unit.4.fix.family.name");
     }
 
     @Override
@@ -194,38 +185,36 @@ public class JUnit4AnnotatedMethodInJUnit3TestCaseInspection extends BaseInspect
     final MultiMap<PsiElement, String> conflicts = checkForConflicts(junit3Class);
     if (conflicts == null) return; // cancelled by user
 
-    final Runnable runnable = () -> {
-      WriteAction.run(() -> {
-        final PsiReferenceList extendsList = junit3Class.getExtendsList();
-        if (extendsList == null) {
-          return;
-        }
-        for (PsiMethod method : junit3Class.getMethods()) {
-          @NonNls final String name = method.getName();
-          if (!method.hasModifierProperty(PsiModifier.STATIC) &&
-              PsiType.VOID.equals(method.getReturnType()) &&
-              method.getParameterList().isEmpty()) {
-            final PsiModifierList modifierList = method.getModifierList();
-            if (name.startsWith("test")) {
-              addAnnotationIfNotPresent(modifierList, "org.junit.Test");
-            }
-            else if (name.equals("setUp")) {
-              transformSetUpOrTearDownMethod(method);
-              addAnnotationIfNotPresent(modifierList, "org.junit.Before");
-            }
-            else if (name.equals("tearDown")) {
-              transformSetUpOrTearDownMethod(method);
-              addAnnotationIfNotPresent(modifierList, "org.junit.After");
-            }
+    final Runnable runnable = () -> WriteAction.run(() -> {
+      final PsiReferenceList extendsList = junit3Class.getExtendsList();
+      if (extendsList == null) {
+        return;
+      }
+      for (PsiMethod method : junit3Class.getMethods()) {
+        @NonNls final String name = method.getName();
+        if (!method.hasModifierProperty(PsiModifier.STATIC) &&
+            PsiType.VOID.equals(method.getReturnType()) &&
+            method.getParameterList().isEmpty()) {
+          final PsiModifierList modifierList = method.getModifierList();
+          if (name.startsWith("test")) {
+            addAnnotationIfNotPresent(modifierList, "org.junit.Test");
           }
-          method.accept(new MethodCallModifier());
+          else if (name.equals("setUp")) {
+            transformSetUpOrTearDownMethod(method);
+            addAnnotationIfNotPresent(modifierList, "org.junit.Before");
+          }
+          else if (name.equals("tearDown")) {
+            transformSetUpOrTearDownMethod(method);
+            addAnnotationIfNotPresent(modifierList, "org.junit.After");
+          }
         }
-        final PsiJavaCodeReferenceElement[] referenceElements = extendsList.getReferenceElements();
-        for (PsiJavaCodeReferenceElement referenceElement : referenceElements) {
-          referenceElement.delete();
-        }
-      });
-    };
+        method.accept(new MethodCallModifier());
+      }
+      final PsiJavaCodeReferenceElement[] referenceElements = extendsList.getReferenceElements();
+      for (PsiJavaCodeReferenceElement referenceElement : referenceElements) {
+        referenceElement.delete();
+      }
+    });
     if (!conflicts.isEmpty()) {
       if (ApplicationManager.getApplication().isUnitTestMode()) {
         if (!BaseRefactoringProcessor.ConflictsInTestsException.isTestIgnore()) {

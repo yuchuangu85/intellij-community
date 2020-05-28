@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.sdk
 
 import com.intellij.openapi.components.PersistentStateComponent
@@ -10,17 +10,11 @@ import com.intellij.openapi.options.UnnamedConfigurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.projectRoots.Sdk
 import com.intellij.openapi.util.SystemInfo
-import com.intellij.util.EnvironmentUtil
-import com.jetbrains.python.run.PyVirtualEnvReader
 import com.jetbrains.python.run.findActivateScript
 import org.jetbrains.plugins.terminal.LocalTerminalCustomizer
+import org.jetbrains.plugins.terminal.TerminalOptionsProvider
 import java.io.File
 import javax.swing.JCheckBox
-
-/**
- * @author traff
- */
-
 
 class PyVirtualEnvTerminalCustomizer : LocalTerminalCustomizer() {
   override fun customizeCommandAndEnvironment(project: Project,
@@ -28,50 +22,45 @@ class PyVirtualEnvTerminalCustomizer : LocalTerminalCustomizer() {
                                               envs: MutableMap<String, String>): Array<out String> {
     val sdk: Sdk? = findSdk(project)
 
-    if (sdk != null && (PythonSdkType.isVirtualEnv(sdk) || PythonSdkType.isCondaVirtualEnv(
-      sdk)) && PyVirtualEnvTerminalSettings.getInstance(project).virtualEnvActivate) {
+    if (sdk != null &&
+        (PythonSdkUtil.isVirtualEnv(sdk) || PythonSdkUtil.isConda(sdk)) &&
+        PyVirtualEnvTerminalSettings.getInstance(project).virtualEnvActivate) {
       // in case of virtualenv sdk on unix we activate virtualenv
       val path = sdk.homePath
 
-      if (path != null) {
-
+      if (path != null && command.isNotEmpty()) {
         val shellPath = command[0]
-        val shellName = File(shellPath).name
-
-        if (shellName == "bash" || (SystemInfo.isMac && shellName == "sh") || (shellName == "zsh") ||
-            ((shellName == "fish") && PythonSdkType.isVirtualEnv(sdk))) { //fish shell works only for virtualenv and not for conda
+        if (isShellIntegrationAvailable(shellPath)) { //fish shell works only for virtualenv and not for conda
           //for bash we pass activate script to jediterm shell integration (see jediterm-bash.in) to source it there
+          //TODO: fix conda for fish
+
           findActivateScript(path, shellPath)?.let { activate ->
-            val pathEnv = EnvironmentUtil.getEnvironmentMap().get("PATH")
-            if (pathEnv != null) {
-              envs.put("PATH", pathEnv)
-            }
-            envs.put("JEDITERM_SOURCE", if (activate.second != null) "${activate.first} ${activate.second}" else activate.first)
+            envs.put("JEDITERM_SOURCE",  activate.first)
+            envs.put("JEDITERM_SOURCE_ARGS", activate.second?:"")
           }
         }
         else {
           //for other shells we read envs from activate script by the default shell and pass them to the process
-          val reader = PyVirtualEnvReader(path)
-          reader.activate?.let {
-            // we add only envs that are setup by the activate script, because adding other variables from the different shell
-            // can break the actual shell
-            envs.putAll(reader.readPythonEnv().mapKeys { k -> k.key.toUpperCase() }.filterKeys { k ->
-              k in PyVirtualEnvReader.virtualEnvVars
-            })
-          }
+          envs.putAll(PySdkUtil.activateVirtualEnv(sdk))
         }
       }
     }
 
-    // for some reason virtualenv isn't activated in the rcfile for the login shell, so we make it non-login
-    return command.filter { arg -> arg != "--login" && arg != "-l" }.toTypedArray()
+    return command
   }
 
+  private fun isShellIntegrationAvailable(shellPath: String) : Boolean {
+    if (TerminalOptionsProvider.instance.shellIntegration()) {
+      val shellName = File(shellPath).name
+      return shellName == "bash" || (SystemInfo.isMac && shellName == "sh") || shellName == "zsh" || shellName == "fish"
+    }
+    return false
+  }
 
   private fun findSdk(project: Project): Sdk? {
     for (m in ModuleManager.getInstance(project).modules) {
-      val sdk: Sdk? = PythonSdkType.findPythonSdk(m)
-      if (sdk != null && !PythonSdkType.isRemote(sdk)) {
+      val sdk: Sdk? = PythonSdkUtil.findPythonSdk(m)
+      if (sdk != null && !PythonSdkUtil.isRemote(sdk)) {
         return sdk
       }
     }
@@ -87,7 +76,7 @@ class PyVirtualEnvTerminalCustomizer : LocalTerminalCustomizer() {
   override fun getConfigurable(project: Project): UnnamedConfigurable = object : UnnamedConfigurable {
     val settings = PyVirtualEnvTerminalSettings.getInstance(project)
 
-    var myCheckbox: JCheckBox = JCheckBox("Activate virtualenv")
+    var myCheckbox: JCheckBox = JCheckBox(PyTerminalBundle.message("activate.virtualenv.checkbox.text"))
 
     override fun createComponent() = myCheckbox
 

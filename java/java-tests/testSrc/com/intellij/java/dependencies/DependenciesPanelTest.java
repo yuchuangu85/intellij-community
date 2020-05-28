@@ -27,6 +27,7 @@ import com.intellij.packageDependencies.ForwardDependenciesBuilder;
 import com.intellij.packageDependencies.ui.DependenciesPanel;
 import com.intellij.packageDependencies.ui.PackagePatternProvider;
 import com.intellij.packageDependencies.ui.ProjectPatternProvider;
+import com.intellij.projectView.BaseProjectViewTestCase;
 import com.intellij.psi.*;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.testFramework.TestSourceBasedTestCase;
@@ -42,7 +43,7 @@ public class DependenciesPanelTest extends TestSourceBasedTestCase {
     PsiPackage psiPackage = JavaDirectoryService.getInstance().getPackage(psiDirectory);
     assertNotNull(psiPackage);
     PsiClass[] classes = psiPackage.getClasses();
-    sortClassesByName(classes);
+    BaseProjectViewTestCase.sortClassesByName(classes);
     PsiFile file = classes[0].getContainingFile();
 
     DependencyUISettings.getInstance().SCOPE_TYPE = PackagePatternProvider.PACKAGES;
@@ -77,7 +78,11 @@ public class DependenciesPanelTest extends TestSourceBasedTestCase {
                                                          "    -dependencies\n" +
                                                          "     -src\n" +
                                                          "      com/package1\n",
-                            "Root\n");
+                            "-Root\n" +
+                            " -External Dependencies\n" +
+                            "  -src.zip\n" +
+                            "   -java/lang\n" +
+                            "    String.java");
   }
 
   private void doTestDependenciesTrees(AnalysisScope scope, String expectedLeftTree, String expectedRightTree) {

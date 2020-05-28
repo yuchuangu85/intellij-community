@@ -5,11 +5,10 @@ import com.intellij.diff.chains.SimpleDiffRequestChain.DiffRequestProducerWrappe
 import com.intellij.diff.requests.ErrorDiffRequest;
 import com.intellij.diff.requests.LoadingDiffRequest;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.ListSelection;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.util.BackgroundTaskUtil;
 import com.intellij.util.EventDispatcher;
+import com.intellij.util.ListSelection;
 import org.jetbrains.annotations.CalledInAwt;
 import org.jetbrains.annotations.CalledInBackground;
 import org.jetbrains.annotations.NotNull;
@@ -19,14 +18,10 @@ import java.util.Collections;
 import java.util.EventListener;
 import java.util.List;
 
-import static com.intellij.openapi.diagnostic.Logger.getInstance;
-
 public abstract class AsyncDiffRequestChain extends DiffRequestChainBase {
-  private static final Logger LOG = getInstance(AsyncDiffRequestChain.class);
-
   private final EventDispatcher<Listener> myDispatcher = EventDispatcher.create(Listener.class);
 
-  private List<? extends DiffRequestProducer> myRequests = null;
+  private volatile List<? extends DiffRequestProducer> myRequests = null;
 
   @Nullable private ProgressIndicator myIndicator;
   private int myAssignments = 0;
@@ -83,19 +78,20 @@ public abstract class AsyncDiffRequestChain extends DiffRequestChainBase {
       ListSelection<? extends DiffRequestProducer> producers = loadRequestsInBackground();
       return () -> {
         indicator.checkCanceled();
-
-        if (myRequests != null) {
-          LOG.error("Changes are loaded twice");
-          return;
-        }
-
-        myRequests = producers.getList();
-        setIndex(producers.getSelectedIndex());
-        myIndicator = null;
-
-        myDispatcher.getMulticaster().onRequestsLoaded();
+        applyLoadedChanges(producers);
       };
     }, null);
+  }
+
+  @CalledInAwt
+  private void applyLoadedChanges(@NotNull ListSelection<? extends DiffRequestProducer> producers) {
+    if (myRequests != null) return;
+
+    myRequests = producers.getList();
+    setIndex(producers.getSelectedIndex());
+    myIndicator = null;
+
+    myDispatcher.getMulticaster().onRequestsLoaded();
   }
 
   @NotNull

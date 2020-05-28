@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.editor;
 
 import com.intellij.codeInsight.CodeInsightSettings;
@@ -33,6 +19,7 @@ import com.intellij.openapi.util.text.LineTokenizer;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.source.tree.TreeUtil;
 import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
+import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.jetbrains.python.PyTokenTypes;
 import com.jetbrains.python.codeInsight.PyCodeInsightSettings;
@@ -48,33 +35,6 @@ import java.util.regex.Matcher;
  */
 public class PythonEnterHandler extends EnterHandlerDelegateAdapter {
   private int myPostprocessShift = 0;
-
-  public static final Class[] IMPLICIT_WRAP_CLASSES = new Class[] {
-    PyListLiteralExpression.class,
-    PySetLiteralExpression.class,
-    PyDictLiteralExpression.class,
-    PyDictLiteralExpression.class,
-    PyParenthesizedExpression.class,
-    PyArgumentList.class,
-    PyParameterList.class
-  };
-
-  private static final Class[] WRAPPABLE_CLASSES = new Class[]{
-    PsiComment.class,
-    PyParenthesizedExpression.class,
-    PyListCompExpression.class,
-    PyDictCompExpression.class,
-    PySetCompExpression.class,
-    PyDictLiteralExpression.class,
-    PySetLiteralExpression.class,
-    PyListLiteralExpression.class,
-    PyArgumentList.class,
-    PyParameterList.class,
-    PyDecoratorList.class,
-    PySliceExpression.class,
-    PySubscriptionExpression.class,
-    PyGeneratorExpression.class
-  };
 
   @Override
   public Result preprocessEnter(@NotNull PsiFile file,
@@ -122,7 +82,8 @@ public class PythonEnterHandler extends EnterHandlerDelegateAdapter {
 
     final ASTNode node = element.getNode();
     PsiElement elementParent = element.getParent();
-    if (node.getElementType() == PyTokenTypes.LPAR) elementParent = elementParent.getParent();
+    final IElementType nodeType = node.getElementType();
+    if (nodeType == PyTokenTypes.LPAR) elementParent = elementParent.getParent();
     if (elementParent instanceof PyParenthesizedExpression || elementParent instanceof PyGeneratorExpression) return Result.Continue;
 
     final PyStringElement stringElement = PsiTreeUtil.getParentOfType(element, PyStringElement.class, false);
@@ -130,8 +91,12 @@ public class PythonEnterHandler extends EnterHandlerDelegateAdapter {
       return Result.Continue;
     }
     
-    if (stringElement != null && (!stringElement.isFormatted() || node.getElementType() == PyTokenTypes.FSTRING_TEXT)) {
-      if (stringElement.isTripleQuoted() || node.getElementType() == PyTokenTypes.DOCSTRING) {
+    if (stringElement != null && (!stringElement.isFormatted() ||
+                                  nodeType == PyTokenTypes.FSTRING_TEXT ||
+                                  // Caret should be right before the opening brace of an f-string fragment 
+                                  nodeType == PyTokenTypes.FSTRING_FRAGMENT_START || 
+                                  nodeType == PyTokenTypes.FSTRING_END)) {
+      if (stringElement.isTripleQuoted() || nodeType == PyTokenTypes.DOCSTRING) {
         return Result.Continue;
       }
       if (prevElement != null && PsiTreeUtil.isAncestor(stringElement, prevElement, false)) {
@@ -143,34 +108,28 @@ public class PythonEnterHandler extends EnterHandlerDelegateAdapter {
         final String quote = stringElement.getQuote();
 
         // Don't split in the middle of an escape sequence
-        final boolean nextIsBackslash = "\\".equals(doc.getText(TextRange.from(offset - 1, 1)));
-        final boolean isEscapedQuote = quote.equals(doc.getText(TextRange.from(offset, 1))) && nextIsBackslash;
-        final boolean isEscapedBackslash = "\\".equals(doc.getText(TextRange.from(offset - 2, 1))) && nextIsBackslash;
-        if (nextIsBackslash && !isEscapedQuote && !isEscapedBackslash) return Result.Continue;
+        final boolean afterBackslash = "\\".equals(doc.getText(TextRange.from(offset - 1, 1)));
+        final boolean isEscapedQuote = quote.equals(doc.getText(TextRange.from(offset, 1))) && afterBackslash;
+        final boolean isEscapedBackslash = "\\".equals(doc.getText(TextRange.from(offset - 2, 1))) && afterBackslash;
+        if (afterBackslash && !isEscapedQuote && !isEscapedBackslash) return Result.Continue;
 
         myPostprocessShift = pref.length() + quote.length();
 
-        if (PsiTreeUtil.getParentOfType(stringElement, IMPLICIT_WRAP_CLASSES) != null) {
-          final StringBuilder replacementString = new StringBuilder();
-          replacementString.append(quote).append(pref).append(quote);
-          doc.insertString(offset, replacementString);
+        if (PsiTreeUtil.getParentOfType(stringElement, PyEditorHandlerConfig.IMPLICIT_WRAP_CLASSES) != null) {
+          doc.insertString(offset, quote + pref + quote);
           caretOffset.set(caretOffset.get() + 1);
-          return Result.Continue;
         }
         else {
-          final StringBuilder replacementString = new StringBuilder();
+          int insertionOffset = offset;
           if (isEscapedQuote) {
-            replacementString.append(quote);
+            // Preserve the escaped quote, split after it
             caretOffset.set(caretOffset.get() + 1);
+            insertionOffset++;
           }
-          replacementString.append(quote).append(" \\").append(pref);
-          if (!isEscapedQuote) {
-            replacementString.append(quote);
-          }
-          doc.insertString(offset, replacementString);
+          doc.insertString(insertionOffset, quote + " \\" + pref + quote);
           caretOffset.set(caretOffset.get() + 3);
-          return Result.Continue;
         }
+        return Result.Continue;
       }
     }
 
@@ -240,7 +199,7 @@ public class PythonEnterHandler extends EnterHandlerDelegateAdapter {
     PsiElement wrappableAfter = findWrappable(nodeAtCaret, false);
     if (!(wrappableBefore instanceof PsiComment)) {
       while (wrappableBefore != null) {
-        PsiElement next = PsiTreeUtil.getParentOfType(wrappableBefore, WRAPPABLE_CLASSES);
+        PsiElement next = PsiTreeUtil.getParentOfType(wrappableBefore, PyEditorHandlerConfig.WRAPPABLE_CLASSES);
         if (next == null) {
           break;
         }
@@ -249,7 +208,7 @@ public class PythonEnterHandler extends EnterHandlerDelegateAdapter {
     }
     if (!(wrappableAfter instanceof PsiComment)) {
       while (wrappableAfter != null) {
-        PsiElement next = PsiTreeUtil.getParentOfType(wrappableAfter, WRAPPABLE_CLASSES);
+        PsiElement next = PsiTreeUtil.getParentOfType(wrappableAfter, PyEditorHandlerConfig.WRAPPABLE_CLASSES);
         if (next == null) {
           break;
         }
@@ -288,8 +247,8 @@ public class PythonEnterHandler extends EnterHandlerDelegateAdapter {
   @Nullable
   private static PsiElement findWrappable(ASTNode nodeAtCaret, boolean before) {
     PsiElement wrappable = before
-                                 ? findBeforeCaret(nodeAtCaret, WRAPPABLE_CLASSES)
-                                 : findAfterCaret(nodeAtCaret, WRAPPABLE_CLASSES);
+                                 ? findBeforeCaret(nodeAtCaret, PyEditorHandlerConfig.WRAPPABLE_CLASSES)
+                                 : findAfterCaret(nodeAtCaret, PyEditorHandlerConfig.WRAPPABLE_CLASSES);
     if (wrappable == null) {
       PsiElement emptyTuple = before
                               ? findBeforeCaret(nodeAtCaret, PyTupleExpression.class)
@@ -332,7 +291,7 @@ public class PythonEnterHandler extends EnterHandlerDelegateAdapter {
   }
 
   @Nullable
-  private static <T extends PsiElement> T getNonStrictParentOfType(@NotNull PsiElement element, @NotNull Class<? extends T>... classes) {
+  private static <T extends PsiElement> T getNonStrictParentOfType(@NotNull PsiElement element, Class<? extends T> @NotNull ... classes) {
     PsiElement run = element;
     while (run != null) {
       for (Class<? extends T> aClass : classes) {

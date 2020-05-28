@@ -17,11 +17,11 @@ import com.intellij.openapi.fileTypes.SyntaxHighlighterFactory;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.xml.XmlTokenType;
 import com.intellij.testFramework.EditorTestUtil;
-import com.intellij.testFramework.LightCodeInsightTestCase;
+import com.intellij.testFramework.LightJavaCodeInsightTestCase;
 
 import java.util.List;
 
-public class XmlHighlighterTest extends LightCodeInsightTestCase {
+public class XmlHighlighterTest extends LightJavaCodeInsightTestCase {
   private Document doc;
   private EditorEx editor;
   private EditorHighlighter highlighter;
@@ -42,6 +42,9 @@ public class XmlHighlighterTest extends LightCodeInsightTestCase {
     try {
       EditorFactory.getInstance().releaseEditor(editor);
       editor = null;
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
     }
     finally {
       super.tearDown();

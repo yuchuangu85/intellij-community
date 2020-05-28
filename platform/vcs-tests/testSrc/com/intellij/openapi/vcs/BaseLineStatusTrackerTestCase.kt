@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs
 
 import com.intellij.diff.comparison.iterables.DiffIterableUtil
@@ -25,10 +11,9 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.impl.DocumentImpl
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileTypes.PlainTextFileType
-import com.intellij.openapi.util.Comparing
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vcs.ex.*
-import com.intellij.openapi.vcs.ex.LineStatusTracker.Mode
+import com.intellij.openapi.vcs.ex.LocalLineStatusTracker.Mode
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightPlatformTestCase.assertOrderedEquals
 import com.intellij.testFramework.LightVirtualFile
@@ -55,7 +40,7 @@ abstract class BaseLineStatusTrackerTestCase : BaseLineStatusTrackerManagerTest(
   protected fun testPartial(text: String, vcsText: String, task: PartialTest.() -> Unit) {
     resetTestState()
 
-    doTest(text, vcsText, { tracker -> PartialTest(tracker as PartialLocalLineStatusTracker) }, task)
+    doTest(text, vcsText, { tracker -> PartialTest(tracker as ChangelistsLocalLineStatusTracker) }, task)
   }
 
   private fun <TestHelper : Test> doTest(text: String, vcsText: String,
@@ -80,7 +65,7 @@ abstract class BaseLineStatusTrackerTestCase : BaseLineStatusTrackerManagerTest(
     val file = LightVirtualFile("LSTTestFile", PlainTextFileType.INSTANCE, parseInput(text))
     val document = FileDocumentManager.getInstance().getDocument(file)!!
     val tracker = runWriteAction {
-      val tracker = SimpleLocalLineStatusTracker.createTracker(getProject(), document, file, if (smart) Mode.SMART else Mode.DEFAULT)
+      val tracker = SimpleLocalLineStatusTracker.createTracker(getProject(), document, file, Mode(true, true, smart))
       tracker.setBaseRevision(parseInput(vcsText))
       tracker
     }
@@ -97,13 +82,13 @@ abstract class BaseLineStatusTrackerTestCase : BaseLineStatusTrackerManagerTest(
   }
 
 
-  protected open inner class Test(val tracker: LineStatusTracker<*>) {
+  protected open inner class Test(val tracker: LocalLineStatusTracker<*>) {
     val file: VirtualFile = tracker.virtualFile
     val document: Document = tracker.document
     val vcsDocument: Document = tracker.vcsDocument
     private val documentTracker = tracker.getDocumentTrackerInTestMode()
 
-    fun assertHelperContentIs(expected: String, helper: PartialLocalLineStatusTracker.PartialCommitHelper) {
+    fun assertHelperContentIs(expected: String, helper: PartialCommitHelper) {
       assertEquals(parseInput(expected), helper.content)
     }
 
@@ -317,8 +302,8 @@ abstract class BaseLineStatusTrackerTestCase : BaseLineStatusTrackerManagerTest(
         val l1 = ContainerUtil.getLastItem(lines1)
         val l2 = ContainerUtil.getLastItem(lines2)
 
-        assertFalse(Comparing.equal(f1, f2))
-        assertFalse(Comparing.equal(l1, l2))
+        assertFalse(f1 == f2)
+        assertFalse(l1 == l2)
       }
     }
 
@@ -371,7 +356,7 @@ abstract class BaseLineStatusTrackerTestCase : BaseLineStatusTrackerManagerTest(
     private fun getCurrentLines(range: Range): List<String> = DiffUtil.getLines(document, range.line1, range.line2)
   }
 
-  protected inner class PartialTest(val partialTracker: PartialLocalLineStatusTracker) : Test(partialTracker) {
+  protected inner class PartialTest(val partialTracker: ChangelistsLocalLineStatusTracker) : Test(partialTracker) {
     fun assertAffectedChangeLists(vararg expected: String) {
       partialTracker.assertAffectedChangeLists(*expected)
     }
@@ -382,8 +367,8 @@ abstract class BaseLineStatusTrackerTestCase : BaseLineStatusTrackerManagerTest(
     }
 
 
-    fun handlePartialCommit(side: Side, list: String): PartialLocalLineStatusTracker.PartialCommitHelper {
-      return partialTracker.handlePartialCommit(side, listOf(list.asListNameToId()))
+    fun handlePartialCommit(side: Side, list: String, honorExcludedFromCommit: Boolean = true): PartialCommitHelper {
+      return partialTracker.handlePartialCommit(side, listOf(list.asListNameToId()), honorExcludedFromCommit)
     }
 
 

@@ -35,7 +35,7 @@ public class LineReader {
 
   public List<byte[]> readLines() throws IOException {
 
-    ArrayList<byte[]> result = new ArrayList<byte[]>();
+    ArrayList<byte[]> result = new ArrayList<>();
     byte[] line;
     while ((line = readLineInternal()) != null) result.add(line);
     return result;
@@ -58,8 +58,7 @@ public class LineReader {
     private String myCurrentEOL = "";
     private ByteArrayOutputStream myResult = null;
 
-    @Nullable
-    public byte[] execute() throws IOException {
+    public byte @Nullable [] execute() throws IOException {
 
       if (myAtEnd) return null;
 
@@ -128,8 +127,7 @@ public class LineReader {
     }
   }
 
-  @Nullable
-  private byte[] readLineInternal() throws IOException {
+  private byte @Nullable [] readLineInternal() throws IOException {
     return new ReadLine().execute();
   }
 

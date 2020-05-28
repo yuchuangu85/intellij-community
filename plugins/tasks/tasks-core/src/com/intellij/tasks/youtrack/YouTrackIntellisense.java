@@ -1,3 +1,4 @@
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.tasks.youtrack;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -28,8 +29,8 @@ import static com.intellij.openapi.editor.HighlighterColors.TEXT;
  * See https://confluence.jetbrains.com/display/YTD5/Intellisense+for+issue+search for format details.
  * <p/>
  * It also provides two additional classes to represent tokens highlighting and
- * available completion items from response: {@link com.intellij.tasks.youtrack.YouTrackIntellisense.HighlightRange}
- * and {@link com.intellij.tasks.youtrack.YouTrackIntellisense.CompletionItem}.
+ * available completion items from response: {@link YouTrackIntellisense.HighlightRange}
+ * and {@link YouTrackIntellisense.CompletionItem}.
  *
  * @author Mikhail Golubev
  */
@@ -66,7 +67,7 @@ public class YouTrackIntellisense {
   }
 
   private static final Map<Pair<String, Integer>, Response> ourCache =
-    Collections.synchronizedMap(new SizeLimitedCache<Pair<String, Integer>, Response>(CACHE_SIZE));
+    Collections.synchronizedMap(new SizeLimitedCache<>(CACHE_SIZE));
 
   @NotNull
   private static TextAttributes getAttributeByStyleClass(@NotNull String styleClass) {
@@ -125,8 +126,8 @@ public class YouTrackIntellisense {
 
   /**
    * Main wrapper around "IntelliSense" element in YouTrack response. It delegates further parsing
-   * to {@link com.intellij.tasks.youtrack.YouTrackIntellisense.HighlightRange} and
-   * {@link com.intellij.tasks.youtrack.YouTrackIntellisense.CompletionItem}
+   * to {@link YouTrackIntellisense.HighlightRange} and
+   * {@link YouTrackIntellisense.CompletionItem}
    */
   public static class Response {
 

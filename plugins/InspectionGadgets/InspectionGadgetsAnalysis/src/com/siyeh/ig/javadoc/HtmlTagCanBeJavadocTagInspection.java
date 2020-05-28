@@ -15,6 +15,7 @@
  */
 package com.siyeh.ig.javadoc;
 
+import com.intellij.codeInspection.CommonQuickFixBundle;
 import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.project.Project;
@@ -33,7 +34,6 @@ import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.InspectionGadgetsFix;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
@@ -41,13 +41,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class HtmlTagCanBeJavadocTagInspection extends BaseInspection {
-
-  @Nls
-  @NotNull
-  @Override
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("html.tag.can.be.javadoc.tag.display.name");
-  }
 
   @NotNull
   @Override
@@ -65,7 +58,7 @@ public class HtmlTagCanBeJavadocTagInspection extends BaseInspection {
     @Override
     @NotNull
     public String getFamilyName() {
-      return InspectionGadgetsBundle.message("html.tag.can.be.javadoc.tag.quickfix");
+      return CommonQuickFixBundle.message("fix.replace.with.x", "{@code ...}");
     }
 
     @Override
@@ -112,7 +105,7 @@ public class HtmlTagCanBeJavadocTagInspection extends BaseInspection {
         out.append(' ');
       }
       final String s = text.substring(startOffset, endOffset);
-      out.append(StringUtil.unescapeXml(s));
+      out.append(StringUtil.unescapeXmlEntities(s));
     }
   }
 
@@ -149,14 +142,23 @@ public class HtmlTagCanBeJavadocTagInspection extends BaseInspection {
     }
 
     private static boolean hasMatchingCloseTag(PsiElement element, int offset) {
+      int balance = 0;
       while (element != null) {
         @NonNls final String text = element.getText();
         final int endIndex = StringUtil.indexOfIgnoreCase(text, "</code>", offset);
-        if (containsHtmlTag(text, offset, endIndex >= 0 ? endIndex : text.length())) {
+        final int end = endIndex >= 0 ? endIndex : text.length();
+        if (text.equals("{")) {
+          balance++;
+        }
+        else if (text.equals("}")) {
+          balance--;
+          if (balance < 0) return false;
+        }
+        if (containsHtmlTag(text, offset, end)) {
           return false;
         }
         if (endIndex >= 0) {
-          return true;
+          return balance == 0;
         }
         offset = 0;
         element = element.getNextSibling();
@@ -170,7 +172,7 @@ public class HtmlTagCanBeJavadocTagInspection extends BaseInspection {
 
   private static final Pattern START_TAG_PATTERN = Pattern.compile("<([a-zA-Z])+([^>])*>");
 
-  private static boolean containsHtmlTag(String text, int startIndex, int endIndex) {
+  static boolean containsHtmlTag(String text, int startIndex, int endIndex) {
     final Matcher matcher = START_TAG_PATTERN.matcher(text);
     if (matcher.find(startIndex)) {
       return matcher.start() < endIndex;

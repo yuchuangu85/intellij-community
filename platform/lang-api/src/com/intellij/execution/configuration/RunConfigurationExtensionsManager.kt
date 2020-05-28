@@ -1,13 +1,17 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.configuration
 
 import com.intellij.execution.ExecutionException
+import com.intellij.execution.Executor
 import com.intellij.execution.Location
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.configurations.RunConfigurationBase
 import com.intellij.execution.configurations.RunnerSettings
 import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.ui.SettingsEditorFragment
 import com.intellij.openapi.extensions.ExtensionPointName
+import com.intellij.openapi.options.ExtendableSettingsEditor
+import com.intellij.openapi.options.ExtensionSettingsEditor
 import com.intellij.openapi.options.SettingsEditorGroup
 import com.intellij.openapi.util.JDOMUtil
 import com.intellij.openapi.util.Key
@@ -16,6 +20,7 @@ import com.intellij.util.SmartList
 import gnu.trove.THashMap
 import org.jdom.Element
 import java.util.*
+import kotlin.collections.ArrayList
 
 private val RUN_EXTENSIONS = Key.create<List<Element>>("run.extension.elements")
 private const val EXT_ID_ATTR = "ID"
@@ -77,7 +82,7 @@ open class RunConfigurationExtensionsManager<U : RunConfigurationBase<*>, T : Ru
         return@processApplicableExtensions
       }
 
-      if (!element.content.isEmpty() || element.attributes.size > 1) {
+      if (element.content.isNotEmpty() || element.attributes.size > 1) {
         map.put(extension.serializationId, element)
       }
     }
@@ -88,11 +93,41 @@ open class RunConfigurationExtensionsManager<U : RunConfigurationBase<*>, T : Ru
   }
 
   fun <V : U> appendEditors(configuration: U, group: SettingsEditorGroup<V>) {
+    appendEditors(configuration, group, null)
+  }
+
+  /**
+   * Appends {@code SettingsEditor} to group or to {@param mainEditor} (if editor implements marker interface {@code ExtensionSettingsEditor}
+   */
+  fun <V : U> appendEditors(configuration: U, group: SettingsEditorGroup<V>, mainEditor: ExtendableSettingsEditor<V>?) {
     processApplicableExtensions(configuration) {
       @Suppress("UNCHECKED_CAST")
       val editor = it.createEditor(configuration as V) ?: return@processApplicableExtensions
-      group.addEditor(it.editorTitle, editor)
+      if (mainEditor != null && editor is ExtensionSettingsEditor) {
+        mainEditor.addExtensionEditor(editor)
+      } else {
+        group.addEditor(it.editorTitle, editor)
+      }
     }
+  }
+
+  fun createFragments(configuration: U): List<SettingsEditorFragment<U, *>> {
+    val list = ArrayList<SettingsEditorFragment<U, *>>()
+    processApplicableExtensions(configuration) {
+      val fragments = it.createFragments(configuration)
+      if (fragments != null) {
+        list.addAll(fragments);
+      }
+      else {
+        val editor = it.createEditor(configuration)
+        if (editor != null) {
+          val wrapper = SettingsEditorFragment.createWrapper(it.serializationId, it.editorTitle, null, editor)
+          wrapper.isSelected = it.isEnabledFor(configuration, null)
+          list.add(wrapper)
+        }
+      }
+    }
+    return list
   }
 
   @Throws(Exception::class)
@@ -112,6 +147,18 @@ open class RunConfigurationExtensionsManager<U : RunConfigurationBase<*>, T : Ru
   fun extendTemplateConfiguration(configuration: U) {
     processApplicableExtensions(configuration) {
       it.extendTemplateConfiguration(configuration)
+    }
+  }
+
+  @Throws(ExecutionException::class)
+  open fun patchCommandLine(configuration: U,
+                            runnerSettings: RunnerSettings?,
+                            cmdLine: GeneralCommandLine,
+                            runnerId: String,
+                            executor: Executor) {
+    // only for enabled extensions
+    processEnabledExtensions(configuration, runnerSettings) {
+      it.patchCommandLine(configuration, runnerSettings, cmdLine, runnerId, executor)
     }
   }
 
@@ -142,7 +189,7 @@ open class RunConfigurationExtensionsManager<U : RunConfigurationBase<*>, T : Ru
   }
 
   protected inline fun processApplicableExtensions(configuration: U, handler: (T) -> Unit) {
-    for (extension in extensionPoint.extensionList) {
+    for (extension in extensionPoint.iterable) {
       if (extension.isApplicableFor(configuration)) {
         handler(extension)
       }
@@ -150,7 +197,7 @@ open class RunConfigurationExtensionsManager<U : RunConfigurationBase<*>, T : Ru
   }
 
   protected inline fun processEnabledExtensions(configuration: U, runnerSettings: RunnerSettings?, handler: (T) -> Unit) {
-    for (extension in extensionPoint.extensionList) {
+    for (extension in extensionPoint.iterable) {
       if (extension.isApplicableFor(configuration) && extension.isEnabledFor(configuration, runnerSettings)) {
         handler(extension)
       }

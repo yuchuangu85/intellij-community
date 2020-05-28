@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.codeInspection.unusedDef;
 
 import com.intellij.codeInspection.ProblemHighlightType;
@@ -21,11 +7,10 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiRecursiveElementWalkingVisitor;
 import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.tree.IElementType;
-import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.TIntHashSet;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.codeInspection.GroovyInspectionBundle;
@@ -34,7 +19,6 @@ import org.jetbrains.plugins.groovy.codeInspection.utils.ControlFlowUtils;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyTokenTypes;
 import org.jetbrains.plugins.groovy.lang.psi.GrControlFlowOwner;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElement;
-import org.jetbrains.plugins.groovy.lang.psi.GroovyRecursiveElementVisitor;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrField;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariable;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrAssignmentExpression;
@@ -43,31 +27,36 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrUnaryE
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.params.GrParameter;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.Instruction;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.ReadWriteVariableInstruction;
+import org.jetbrains.plugins.groovy.lang.psi.controlFlow.VariableDescriptor;
 import org.jetbrains.plugins.groovy.lang.psi.dataFlow.DFAEngine;
 import org.jetbrains.plugins.groovy.lang.psi.dataFlow.reachingDefs.DefinitionMap;
 import org.jetbrains.plugins.groovy.lang.psi.dataFlow.reachingDefs.ReachingDefinitionsDfaInstance;
 import org.jetbrains.plugins.groovy.lang.psi.dataFlow.reachingDefs.ReachingDefinitionsSemilattice;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import static org.jetbrains.plugins.groovy.lang.psi.dataFlow.UtilKt.getVarIndexes;
 
 /**
  & @author ven
  */
 public class UnusedDefInspection extends GroovyLocalInspectionBase {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.plugins.groovy.codeInspection.unusedDef.UnusedDefInspection");
+  private static final Logger LOG = Logger.getInstance(UnusedDefInspection.class);
 
-  @Override
-  @Nls
   @NotNull
-  public String getDisplayName() {
-    return GroovyInspectionBundle.message("unused.assignment");
+  @Override
+  public String getShortName() {
+    // used to enable inspection in tests
+    // remove when inspection class will match its short name
+    return "GroovyUnusedAssignment";
   }
 
   @Override
   protected void check(@NotNull final GrControlFlowOwner owner, @NotNull final ProblemsHolder problemsHolder) {
     final Instruction[] flow = owner.getControlFlow();
-    final ReachingDefinitionsDfaInstance dfaInstance = new ReachingDefinitionsDfaInstance(flow);
+    final ReachingDefinitionsDfaInstance dfaInstance = new ReachingDefinitionsDfaInstance(flow, getVarIndexes(owner));
     final ReachingDefinitionsSemilattice lattice = new ReachingDefinitionsSemilattice();
     final DFAEngine<DefinitionMap> engine = new DFAEngine<>(flow, dfaInstance, lattice);
     final List<DefinitionMap> dfaResult = engine.performDFAWithTimeout();
@@ -87,12 +76,12 @@ public class UnusedDefInspection extends GroovyLocalInspectionBase {
       if (instruction instanceof ReadWriteVariableInstruction) {
         final ReadWriteVariableInstruction varInst = (ReadWriteVariableInstruction) instruction;
         if (!varInst.isWrite()) {
-          final String varName = varInst.getVariableName();
+          final VariableDescriptor descriptor = varInst.getDescriptor();
           DefinitionMap e = dfaResult.get(i);
           e.forEachValue(reaching -> {
             reaching.forEach(defNum -> {
-              final String defName = ((ReadWriteVariableInstruction) flow[defNum]).getVariableName();
-              if (varName.equals(defName)) {
+              final VariableDescriptor defDescriptor = ((ReadWriteVariableInstruction) flow[defNum]).getDescriptor();
+              if (descriptor.equals(defDescriptor)) {
                 unusedDefs.remove(defNum);
               }
               return true;
@@ -103,7 +92,7 @@ public class UnusedDefInspection extends GroovyLocalInspectionBase {
       }
     }
 
-    final Set<PsiElement> checked = ContainerUtil.newHashSet();
+    final Set<PsiElement> checked = new HashSet<>();
 
     unusedDefs.forEach(num -> {
       final ReadWriteVariableInstruction instruction = (ReadWriteVariableInstruction)flow[num];
@@ -112,13 +101,21 @@ public class UnusedDefInspection extends GroovyLocalInspectionBase {
       return true;
     });
 
-    owner.accept(new GroovyRecursiveElementVisitor() {
+    owner.acceptChildren(new PsiRecursiveElementWalkingVisitor() {
       @Override
-      public void visitVariable(@NotNull GrVariable variable) {
-        if (checked.contains(variable) || variable.getInitializerGroovy() != null) return;
-
-        if (ReferencesSearch.search(variable, variable.getUseScope()).findFirst() == null) {
-          process(variable, checked, problemsHolder, GroovyInspectionBundle.message("unused.variable"));
+      public void visitElement(@NotNull PsiElement element) {
+        if (element instanceof GrControlFlowOwner) {
+          // don't go deeper
+        }
+        else if (element instanceof GrVariable && !(element instanceof GrField)) {
+          GrVariable variable = (GrVariable)element;
+          if (checked.contains(variable) || variable.getInitializerGroovy() != null) return;
+          if (ReferencesSearch.search(variable, variable.getUseScope()).findFirst() == null) {
+            process(variable, checked, problemsHolder, GroovyInspectionBundle.message("unused.variable"));
+          }
+        }
+        else {
+          super.visitElement(element);
         }
       }
     });
@@ -175,13 +172,12 @@ public class UnusedDefInspection extends GroovyLocalInspectionBase {
         PsiFile file = var.getContainingFile();
         if (file == null) {
           LOG.error("no file??? var of type" + var.getClass().getCanonicalName());
-          return false;
         }
         else {
           TextRange range = var.getTextRange();
           LOG.error("var: " + var.getName() + ", offset:" + (range != null ? range.getStartOffset() : -1));
-          return false;
         }
+        return false;
       }
 
       return ReferencesSearch.search(var, var.getUseScope()).forEach(
@@ -206,10 +202,5 @@ public class UnusedDefInspection extends GroovyLocalInspectionBase {
 
   private static boolean isLocalVariable(GrVariable var, boolean parametersAllowed) {
     return !(var instanceof GrField || var instanceof GrParameter && !parametersAllowed);
-  }
-
-  @Override
-  public boolean isEnabledByDefault() {
-    return true;
   }
 }

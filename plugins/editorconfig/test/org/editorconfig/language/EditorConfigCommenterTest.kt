@@ -3,11 +3,11 @@ package org.editorconfig.language
 
 import com.intellij.codeInsight.generation.actions.CommentByLineCommentAction
 import com.intellij.openapi.application.ex.PathManagerEx
-import com.intellij.testFramework.fixtures.LightPlatformCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
-class EditorConfigCommenterTest : LightPlatformCodeInsightFixtureTestCase() {
+class EditorConfigCommenterTest : BasePlatformTestCase() {
   override fun getTestDataPath() =
-    "${PathManagerEx.getCommunityHomePath()}/plugins/editorconfig/testSrc/org/editorconfig/language/commenter/"
+    "${PathManagerEx.getCommunityHomePath()}/plugins/editorconfig/testData/org/editorconfig/language/commenter/"
 
   fun testComment() = doTest()
   fun testUncomment() = doTest()

@@ -25,18 +25,12 @@ import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.InspectionGadgetsFix;
 import com.siyeh.ig.PsiReplacementUtil;
 import com.siyeh.ig.psiutils.CommentTracker;
+import com.siyeh.ig.psiutils.ExpressionUtils;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
 public class InstantiatingObjectToGetClassObjectInspection
   extends BaseInspection {
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message(
-      "instantiating.object.to.get.class.object.display.name");
-  }
 
   @Override
   public boolean isEnabledByDefault() {
@@ -53,7 +47,7 @@ public class InstantiatingObjectToGetClassObjectInspection
   @Override
   protected InspectionGadgetsFix buildFix(Object... infos) {
     final PsiMethodCallExpression methodCallExpression = (PsiMethodCallExpression)infos[0];
-    if (methodCallExpression.getParent() instanceof PsiExpressionStatement) {
+    if (ExpressionUtils.isVoidContext(methodCallExpression)) {
       return null;
     }
     return new InstantiatingObjectToGetClassObjectFix();

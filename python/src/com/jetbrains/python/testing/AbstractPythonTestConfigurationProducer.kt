@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.testing
 
 import com.intellij.execution.RunManager
@@ -7,14 +7,18 @@ import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.ConfigurationFromContext
 import com.intellij.execution.actions.RunConfigurationProducer
 import com.intellij.execution.configurations.ConfigurationFactory
-import com.intellij.execution.configurations.ConfigurationType
 
 /**
  * Parent of all test configuration producers
  */
 abstract class AbstractPythonTestConfigurationProducer<T : AbstractPythonTestRunConfiguration<*>> : RunConfigurationProducer<T> {
+  constructor() : super(true)
+
+  /**
+   * @deprecated Override [getConfigurationFactory].
+   */
+  @Deprecated("Override getConfigurationFactory")
   constructor(configurationFactory: ConfigurationFactory) : super(configurationFactory)
-  constructor(configurationType: ConfigurationType) : super(configurationType)
 
   /**
    * Configuration type this producer accepts/creates
@@ -26,8 +30,8 @@ abstract class AbstractPythonTestConfigurationProducer<T : AbstractPythonTestRun
   override fun getConfigurationSettingsList(runManager: RunManager): List<RunnerAndConfigurationSettings> =
     super.getConfigurationSettingsList(runManager).filter { configurationClass.isAssignableFrom(it.configuration.javaClass) }
 
-  override fun createConfigurationFromContext(context: ConfigurationContext?): ConfigurationFromContext? {
-    if (context == null || !configurationClass.isAssignableFrom(cloneTemplateConfiguration(context).configuration.javaClass)) {
+  override fun createConfigurationFromContext(context: ConfigurationContext): ConfigurationFromContext? {
+    if (!configurationClass.isAssignableFrom(cloneTemplateConfiguration(context).configuration.javaClass)) {
       return null
     }
     return super.createConfigurationFromContext(context)

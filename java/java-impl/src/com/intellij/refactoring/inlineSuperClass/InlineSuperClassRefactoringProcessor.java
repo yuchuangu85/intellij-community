@@ -78,7 +78,7 @@ public class InlineSuperClassRefactoringProcessor extends FixableUsagesRefactori
 
   @Override
   @NotNull
-  protected UsageViewDescriptor createUsageViewDescriptor(@NotNull final UsageInfo[] usages) {
+  protected UsageViewDescriptor createUsageViewDescriptor(final UsageInfo @NotNull [] usages) {
     return new InlineSuperClassUsageViewDescriptor(mySuperClass);
   }
 
@@ -211,14 +211,14 @@ public class InlineSuperClassRefactoringProcessor extends FixableUsagesRefactori
                                                  List<? super FixableUsageInfo> usages,
                                                  Set<? super PsiMethod> addedSuperConstructors) {
     addedSuperConstructors.add(superConstructorWithChain);
-    PsiMethod chainedConstructor = InlineUtil.getChainedConstructor(superConstructorWithChain);
+    PsiMethod chainedConstructor = RefactoringUtil.getChainedConstructor(superConstructorWithChain);
     while (chainedConstructor != null && addedSuperConstructors.add(chainedConstructor)) {
       usages.add(new CopyDefaultConstructorUsageInfo(targetClass, chainedConstructor));
-      chainedConstructor = InlineUtil.getChainedConstructor(chainedConstructor);
+      chainedConstructor = RefactoringUtil.getChainedConstructor(chainedConstructor);
     }
   }
 
-  private void findUsagesInExtendsList(@NotNull List<FixableUsageInfo> usages, PsiReferenceList extendsList) {
+  private void findUsagesInExtendsList(@NotNull List<? super FixableUsageInfo> usages, PsiReferenceList extendsList) {
     final PsiJavaCodeReferenceElement[] referenceExtendsElements = extendsList != null ? extendsList.getReferenceElements() : null;
     if (referenceExtendsElements != null) {
       for (PsiJavaCodeReferenceElement element : referenceExtendsElements) {
@@ -238,7 +238,7 @@ public class InlineSuperClassRefactoringProcessor extends FixableUsagesRefactori
         conflicts.putValue(targetClass, "Cannot inline into anonymous class.");
       }
       else if (PsiTreeUtil.isAncestor(mySuperClass, targetClass, false)) {
-        conflicts.putValue(targetClass, "Cannot inline into the inner class. Move \'" + targetClass.getName() + "\' to upper level");
+        conflicts.putValue(targetClass, "Cannot inline into the inner class. Move '" + targetClass.getName() + "' to upper level");
       }
       else {
         for (MemberInfo info : myMemberInfos) {
@@ -256,14 +256,12 @@ public class InlineSuperClassRefactoringProcessor extends FixableUsagesRefactori
     if (myCurrentInheritor != null) {
       ReferencesSearch.search(myCurrentInheritor).forEach(reference -> {
         final PsiElement element = reference.getElement();
-        if (element != null) {
-          final PsiElement parent = element.getParent();
-          if (parent instanceof PsiNewExpression) {
-            final PsiClass aClass = PsiUtil.resolveClassInType(getPlaceExpectedType(parent));
-            if (aClass == mySuperClass) {
-              conflicts.putValue(parent, "Instance of target type is passed to a place where super class is expected.");
-              return false;
-            }
+        final PsiElement parent = element.getParent();
+        if (parent instanceof PsiNewExpression) {
+          final PsiClass aClass = PsiUtil.resolveClassInType(getPlaceExpectedType(parent));
+          if (aClass == mySuperClass) {
+            conflicts.putValue(parent, "Instance of target type is passed to a place where super class is expected.");
+            return false;
           }
         }
         return true;
@@ -306,7 +304,7 @@ public class InlineSuperClassRefactoringProcessor extends FixableUsagesRefactori
   }
 
   @Override
-  protected void performRefactoring(@NotNull final UsageInfo[] usages) {
+  protected void performRefactoring(final UsageInfo @NotNull [] usages) {
     try {
       final UsageInfo[] infos = ContainerUtil.map2Array(myTargetClasses, UsageInfo.class, UsageInfo::new);
       new PushDownProcessor<>(mySuperClass, Arrays.asList(myMemberInfos), new DocCommentPolicy(myPolicy)).pushDownToClasses(infos);
@@ -353,7 +351,7 @@ public class InlineSuperClassRefactoringProcessor extends FixableUsagesRefactori
 
   @Nullable
   @Override
-  protected RefactoringEventData getAfterData(@NotNull UsageInfo[] usages) {
+  protected RefactoringEventData getAfterData(UsageInfo @NotNull [] usages) {
     final RefactoringEventData data = new RefactoringEventData();
     data.addElements(myTargetClasses);
     return data;

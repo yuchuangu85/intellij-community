@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package org.jetbrains.plugins.groovy.refactoring.introduce.parameter.java2groovy;
 
@@ -12,15 +12,15 @@ import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.refactoring.IntroduceParameterRefactoring;
 import com.intellij.refactoring.util.RefactoringUtil;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.IncorrectOperationException;
-import java.util.HashMap;
-import com.intellij.util.containers.hash.HashSet;
+import java.util.HashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyTokenTypes;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElementFactory;
 import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult;
-import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrClosureSignature;
+import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrSignature;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrStatement;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariableDeclaration;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.blocks.GrClosableBlock;
@@ -33,6 +33,7 @@ import org.jetbrains.plugins.groovy.lang.psi.util.GroovyPropertyUtils;
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 import org.jetbrains.plugins.groovy.refactoring.GroovyRefactoringUtil;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,8 +58,8 @@ public class OldReferencesResolver {
   private final PsiElement myParameterInitializer;
   private final PsiManager myManager;
   private final PsiParameter[] myParameters;
-  private final GrClosureSignature mySignature;
-  
+  private final GrSignature mySignature;
+
   private final Set<PsiParameter> myParamsToNotInline = new HashSet<>();
 
   public OldReferencesResolver(GrCall context,
@@ -66,7 +67,7 @@ public class OldReferencesResolver {
                                PsiElement toReplaceIn,
                                int replaceFieldsWithGetters,
                                PsiElement parameterInitializer,
-                               final GrClosureSignature signature,
+                               final GrSignature signature,
                                final GrClosureSignatureUtil.ArgInfo<PsiElement>[] actualArgs, PsiParameter[] parameters) throws IncorrectOperationException {
     myContext = context;
     myExpr = expr;
@@ -252,7 +253,7 @@ public class OldReferencesResolver {
 
   private PsiElement inlineParam(PsiElement newExpr, GrExpression actualArg, PsiParameter parameter) {
     if (myParamsToNotInline.contains(parameter)) return newExpr;
-    
+
     GroovyPsiElementFactory factory = GroovyPsiElementFactory.getInstance(myProject);
 
     if (myExpr instanceof GrClosableBlock) {
@@ -272,7 +273,7 @@ public class OldReferencesResolver {
           type = parameter.getType();
         }
         final GrVariableDeclaration declaration =
-          factory.createVariableDeclaration(ArrayUtil.EMPTY_STRING_ARRAY, actualArg, type, parameter.getName());
+          factory.createVariableDeclaration(ArrayUtilRt.EMPTY_STRING_ARRAY, actualArg, type, parameter.getName());
 
         final GrStatement[] statements = ((GrClosableBlock)myExpr).getStatements();
         GrStatement anchor = statements.length > 0 ? statements[0] : null;

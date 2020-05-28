@@ -19,7 +19,6 @@ import com.intellij.openapi.vcs.*;
 import com.intellij.openapi.vcs.changes.*;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.ui.JBColor;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
@@ -32,20 +31,16 @@ import org.zmlx.hg4idea.command.HgWorkingCopyRevisionsCommand;
 import org.zmlx.hg4idea.repo.HgRepository;
 import org.zmlx.hg4idea.util.HgUtil;
 
-import java.awt.*;
 import java.io.File;
 import java.util.*;
-import java.util.List;
 
 public class HgChangeProvider implements ChangeProvider {
 
   private final Project myProject;
   private final VcsKey myVcsKey;
 
-  public static final FileStatus COPIED = FileStatusFactory.getInstance().createFileStatus("COPIED", "Copied", FileStatus.ADDED.getColor());
-  public static final FileStatus RENAMED = FileStatusFactory.getInstance().createFileStatus("RENAMED", "Renamed",
-                                                                                            new JBColor(JBColor.CYAN.darker().darker(),
-                                                                                                        new Color(0x3a8484)));
+  public static final FileStatus COPIED = FileStatusFactory.getInstance().createFileStatus("COPIED", HgBundle.message("hg4idea.file.status.copied"));
+  public static final FileStatus RENAMED = FileStatusFactory.getInstance().createFileStatus("RENAMED", HgBundle.message("hg4idea.file.status.renamed"));
 
   private static final EnumMap<HgFileStatusEnum, HgChangeProcessor> PROCESSORS =
     new EnumMap<>(HgFileStatusEnum.class);
@@ -68,10 +63,6 @@ public class HgChangeProvider implements ChangeProvider {
   @Override
   public boolean isModifiedDocumentTrackingRequired() {
     return true;
-  }
-
-  @Override
-  public void doCleanup(List<VirtualFile> files) {
   }
 
   @Override
@@ -288,7 +279,7 @@ public class HgChangeProvider implements ChangeProvider {
       void process(Project project, VcsKey vcsKey, ChangelistBuilder builder,
         HgRevisionNumber currentNumber, HgRevisionNumber parentRevision,
         HgFile beforeFile, HgFile afterFile) {
-        builder.processUnversionedFile(VcsUtil.getVirtualFile(afterFile.getFile()));
+        builder.processUnversionedFile(afterFile.toFilePath());
       }
     };
 

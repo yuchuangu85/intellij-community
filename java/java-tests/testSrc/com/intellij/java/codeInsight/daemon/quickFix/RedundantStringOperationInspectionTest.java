@@ -8,12 +8,9 @@ import org.jetbrains.annotations.NotNull;
 
 
 public class RedundantStringOperationInspectionTest extends LightQuickFixParameterizedTestCase {
-  @NotNull
   @Override
-  protected LocalInspectionTool[] configureLocalInspectionTools() {
-    return new LocalInspectionTool[]{
-      new RedundantStringOperationInspection()
-    };
+  protected LocalInspectionTool @NotNull [] configureLocalInspectionTools() {
+    return new LocalInspectionTool[]{new RedundantStringOperationInspection()};
   }
 
   @Override

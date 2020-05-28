@@ -73,3 +73,24 @@ class AnonymousArgTest {
         Inner(int x) {}
     }
 }
+final class InheritTest {
+    Object createInnerClass() {
+        return new <warning descr="Access to private member of class 'InnerClass' requires synthetic accessor">InnerClass</warning>();
+    }
+    private final class InnerClass {
+        // default private constructor
+    }
+}
+class Sample {
+    private interface I {
+        void start();
+    }
+
+    public static void main(String[] args) {
+        new I() {
+            @Override
+            public void start() {
+            }
+        };
+    }
+}

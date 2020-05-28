@@ -19,9 +19,9 @@ import com.intellij.icons.AllIcons;
 import com.intellij.ide.ui.UISettings;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationListener;
+import com.intellij.notification.impl.NotificationCollector;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.ui.MessageType;
-import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.ColorUtil;
 import com.intellij.util.ui.UIUtil;
@@ -38,7 +38,7 @@ import java.awt.*;
  * @author spleaner
  */
 public class NotificationsUtil {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.notification.impl.ui.NotificationsUtil");
+  private static final Logger LOG = Logger.getInstance(NotificationsUtil.class);
   private static final int TITLE_LIMIT = 1000;
   private static final int CONTENT_LIMIT = 10000;
 
@@ -127,18 +127,23 @@ public class NotificationsUtil {
   }
 
   @Nullable
-  public static Pair<String, Integer> getFontData() {
+  public static Integer getFontSize() {
     UISettings uiSettings = UISettings.getInstance();
     if (uiSettings.getOverrideLafFonts()) {
-      return Pair.create(uiSettings.getFontFace(), uiSettings.getFontSize());
+      return uiSettings.getFontSize();
     }
-    return UIUtil.getSystemFontData();
+    Font font = UIUtil.getLabelFont();
+    return font == null ? null : font.getSize();
   }
 
   @Nullable
   public static String getFontName() {
-    Pair<String, Integer> data = getFontData();
-    return Pair.getFirst(data);
+    UISettings uiSettings = UISettings.getInstance();
+    if (uiSettings.getOverrideLafFonts()) {
+      return uiSettings.getFontFace();
+    }
+    Font font = UIUtil.getLabelFont();
+    return font == null ? null : font.getName();
   }
 
   @Nullable
@@ -152,6 +157,7 @@ public class NotificationsUtil {
         if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
           final NotificationListener listener1 = notification.getListener();
           if (listener1 != null) {
+            NotificationCollector.getInstance().logHyperlinkClicked(notification);
             listener1.hyperlinkUpdate(notification, e);
           }
         }

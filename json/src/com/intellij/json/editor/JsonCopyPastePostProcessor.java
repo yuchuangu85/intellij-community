@@ -3,7 +3,7 @@ package com.intellij.json.editor;
 
 import com.intellij.codeInsight.editorActions.CopyPastePostProcessor;
 import com.intellij.codeInsight.editorActions.TextBlockTransferableData;
-import com.intellij.ide.scratch.ScratchFileType;
+import com.intellij.ide.scratch.ScratchUtil;
 import com.intellij.json.JsonElementTypes;
 import com.intellij.json.JsonFileType;
 import com.intellij.json.psi.JsonArray;
@@ -97,7 +97,7 @@ public class JsonCopyPastePostProcessor extends CopyPastePostProcessor<TextBlock
     if (file == null) return false;
     final FileType fileType = file.getFileType();
     if (fileType instanceof JsonFileType) return true;
-    if (!(fileType instanceof ScratchFileType)) return false;
+    if (!ScratchUtil.isScratch(file)) return false;
     return PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument()) instanceof JsonFile;
   }
 
@@ -147,11 +147,16 @@ public class JsonCopyPastePostProcessor extends CopyPastePostProcessor<TextBlock
       final PsiElement property = getParentPropertyOrArrayItem(endElement);
       if (endElement instanceof PsiErrorElement || property != null && skipWhitespaces(property.getNextSibling()) instanceof PsiErrorElement) {
         PsiElement finalEndElement1 = endElement;
-        ApplicationManager.getApplication().runWriteAction(() -> bounds.getDocument().insertString(property != null ? property.getTextRange().getEndOffset()
-                                                                                                                    : finalEndElement1.getTextOffset(), ","));
+        ApplicationManager.getApplication().runWriteAction(() -> bounds.getDocument().insertString(getOffset(property, finalEndElement1), ","));
         manager.commitDocument(bounds.getDocument());
       }
     }
+  }
+
+  private static int getOffset(@Nullable PsiElement property, @Nullable PsiElement finalEndElement1) {
+    if (finalEndElement1 instanceof PsiErrorElement) return finalEndElement1.getTextOffset();
+    assert finalEndElement1 != null;
+    return property != null ? property.getTextRange().getEndOffset() : finalEndElement1.getTextOffset();
   }
 
   @Nullable

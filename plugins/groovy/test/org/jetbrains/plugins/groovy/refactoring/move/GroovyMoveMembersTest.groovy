@@ -16,9 +16,9 @@
 
 package org.jetbrains.plugins.groovy.refactoring.move
 
+import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.vfs.VirtualFileFilter
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMember
 import com.intellij.psi.PsiModifier
@@ -26,14 +26,14 @@ import com.intellij.psi.search.ProjectScope
 import com.intellij.refactoring.move.moveMembers.MoveMembersOptions
 import com.intellij.refactoring.move.moveMembers.MoveMembersProcessor
 import com.intellij.testFramework.PlatformTestUtil
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariableDeclaration
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrTypeDefinition
 import org.jetbrains.plugins.groovy.util.TestUtils
 /**
  * @author Maxim.Medvedev
  */
-class GroovyMoveMembersTest extends LightCodeInsightFixtureTestCase {
+abstract class GroovyMoveMembersTest extends LightJavaCodeInsightFixtureTestCase {
   final String basePath = TestUtils.testDataPath + "refactoring/move/moveMembers/"
 
   /*public void testJavadocRefs() throws Exception {
@@ -167,4 +167,13 @@ class GroovyMoveMembersTest extends LightCodeInsightFixtureTestCase {
     boolean makeEnumConstant() { true }
   }
 
+  static class SyncTest extends GroovyMoveMembersTest { }
+
+  static class BranchTest extends GroovyMoveMembersTest {
+    @Override
+    protected void setUp() throws Exception {
+      super.setUp();
+      Registry.get("run.refactorings.in.model.branch").setValue(true, getTestRootDisposable());
+    }
+  }
 }

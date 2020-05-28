@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.settingsRepository
 
 import com.intellij.configurationStore.StreamProvider
@@ -15,11 +15,13 @@ import com.intellij.openapi.diagnostic.runAndLogException
 import com.intellij.openapi.options.SchemeManagerFactory
 import com.intellij.openapi.progress.runBackgroundableTask
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.project.impl.ProjectLifecycleListener
+import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.project.ProjectManagerListener
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.util.SingleAlarm
 import com.intellij.util.io.exists
 import com.intellij.util.io.move
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.settingsRepository.git.GitRepositoryManager
 import org.jetbrains.settingsRepository.git.GitRepositoryService
 import org.jetbrains.settingsRepository.git.processChildren
@@ -33,7 +35,7 @@ internal const val PLUGIN_NAME = "Settings Repository"
 internal val LOG = logger<IcsManager>()
 
 internal val icsManager by lazy(LazyThreadSafetyMode.NONE) {
-  ApplicationLoadListener.EP_NAME.findExtension(IcsApplicationLoadListener::class.java)!!.icsManager
+  ApplicationLoadListener.EP_NAME.findExtensionOrFail(IcsApplicationLoadListener::class.java).icsManager
 }
 
 class IcsManager @JvmOverloads constructor(dir: Path, val schemeManagerFactory: Lazy<SchemeManagerFactoryBase> = lazy { (SchemeManagerFactory.getInstance() as SchemeManagerFactoryBase) }) {
@@ -60,7 +62,9 @@ class IcsManager @JvmOverloads constructor(dir: Path, val schemeManagerFactory: 
   private val commitAlarm = SingleAlarm(Runnable {
     runBackgroundableTask(icsMessage("task.commit.title")) { indicator ->
       LOG.runAndLogException {
-        repositoryManager.commit(indicator, fixStateIfCannotCommit = false)
+        runBlocking {
+          repositoryManager.commit(indicator, fixStateIfCannotCommit = false)
+        }
       }
     }
   }, settings.commitDelay)
@@ -101,7 +105,9 @@ class IcsManager @JvmOverloads constructor(dir: Path, val schemeManagerFactory: 
     }
   }
 
-  fun sync(syncType: SyncType, project: Project? = null, localRepositoryInitializer: (() -> Unit)? = null): Boolean = syncManager.sync(syncType, project, localRepositoryInitializer)
+  suspend fun sync(syncType: SyncType, project: Project? = null, localRepositoryInitializer: (() -> Unit)? = null): Boolean {
+    return syncManager.sync(syncType, project, localRepositoryInitializer)
+  }
 
   private fun cancelAndDisableAutoCommit() {
     if (autoCommitEnabled) {
@@ -110,7 +116,7 @@ class IcsManager @JvmOverloads constructor(dir: Path, val schemeManagerFactory: 
     }
   }
 
-  fun runInAutoCommitDisabledMode(task: ()->Unit) {
+  suspend fun runInAutoCommitDisabledMode(task: suspend () -> Unit) {
     cancelAndDisableAutoCommit()
     try {
       task()
@@ -128,27 +134,23 @@ class IcsManager @JvmOverloads constructor(dir: Path, val schemeManagerFactory: 
     storageManager.addStreamProvider(ApplicationLevelProvider(), first = true)
   }
 
-  fun beforeApplicationLoaded(application: Application) {
+  fun beforeApplicationLoaded(app: Application) {
     isRepositoryActive = repositoryManager.isRepositoryExists()
 
-    application.stateStore.storageManager.addStreamProvider(ApplicationLevelProvider())
+    app.stateStore.storageManager.addStreamProvider(ApplicationLevelProvider())
 
-    val messageBusConnection = application.messageBus.connect()
+    val messageBusConnection = app.messageBus.connect()
     messageBusConnection.subscribe(AppLifecycleListener.TOPIC, object : AppLifecycleListener {
       override fun appWillBeClosed(isRestart: Boolean) {
         autoSyncManager.autoSync(true)
       }
     })
-    messageBusConnection.subscribe(ProjectLifecycleListener.TOPIC, object : ProjectLifecycleListener {
-      override fun beforeProjectLoaded(project: Project) {
-        if (project.isDefault) {
-          return
-        }
-
+    messageBusConnection.subscribe(ProjectManager.TOPIC, object : ProjectManagerListener {
+      override fun projectOpened(project: Project) {
         autoSyncManager.registerListeners(project)
       }
 
-      override fun afterProjectClosed(project: Project) {
+      override fun projectClosed(project: Project) {
         autoSyncManager.autoSync()
       }
     })
@@ -158,8 +160,8 @@ class IcsManager @JvmOverloads constructor(dir: Path, val schemeManagerFactory: 
     override val enabled: Boolean
       get() = this@IcsManager.isActive
 
-    override val isDisableExportAction: Boolean
-      get() = this@IcsManager.isRepositoryActive
+    override val isExclusive: Boolean
+      get() = isRepositoryActive
 
     override fun isApplicable(fileSpec: String, roamingType: RoamingType): Boolean = isRepositoryActive
 
@@ -249,7 +251,9 @@ class IcsApplicationLoadListener : ApplicationLoadListener {
       val removeOtherXml = repositoryManager.delete("other.xml")
       if (migrateSchemes || migrateKeyMaps || removeOtherXml) {
         // schedule push to avoid merge conflicts
-        application.invokeLater { icsManager.autoSyncManager.autoSync(force = true) }
+        application.invokeLater {
+          icsManager.autoSyncManager.autoSync(force = true)
+        }
       }
     }
 

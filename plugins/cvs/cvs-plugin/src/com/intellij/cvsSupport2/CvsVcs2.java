@@ -1,13 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.cvsSupport2;
-
 
 import com.intellij.CvsBundle;
 import com.intellij.cvsSupport2.actions.merge.CvsMergeProvider;
 import com.intellij.cvsSupport2.annotate.CvsAnnotationProvider;
 import com.intellij.cvsSupport2.application.CvsEntriesManager;
 import com.intellij.cvsSupport2.application.CvsStorageSupportingDeletionComponent;
-import com.intellij.cvsSupport2.changeBrowser.CvsChangeList;
 import com.intellij.cvsSupport2.changeBrowser.CvsCommittedChangesProvider;
 import com.intellij.cvsSupport2.checkinProject.CvsCheckinEnvironment;
 import com.intellij.cvsSupport2.checkinProject.CvsRollbackEnvironment;
@@ -55,8 +53,7 @@ import java.util.function.Function;
  * @author pavel
  * @author lesya
  */
-
-public class CvsVcs2 extends AbstractVcs<CvsChangeList> implements TransactionProvider, EditFileProvider {
+public final class CvsVcs2 extends AbstractVcs implements TransactionProvider, EditFileProvider {
   private static final String NAME = "CVS";
   private static final VcsKey ourKey = createKey(NAME);
   private final Cvs2Configurable myConfigurable;
@@ -241,7 +238,7 @@ public class CvsVcs2 extends AbstractVcs<CvsChangeList> implements TransactionPr
 
   @Override
   protected void activate() {
-    CvsStorageSupportingDeletionComponent.getInstance(myProject).init(getProject());
+    CvsStorageSupportingDeletionComponent.getInstance(myProject).activate();
     CvsEntriesManager.getInstance().addCvsEntriesListener(myCvsEntriesListener);
   }
 
@@ -337,6 +334,7 @@ public class CvsVcs2 extends AbstractVcs<CvsChangeList> implements TransactionPr
     return new CvsRevisionSelector(myProject);
   }
 
+  @NotNull
   @Override
   public CommittedChangesProvider getCommittedChangesProvider() {
     return myCommittedChangesProvider;
@@ -393,7 +391,7 @@ public class CvsVcs2 extends AbstractVcs<CvsChangeList> implements TransactionPr
 
   @NotNull
   @Override
-  public <S> List<S> filterUniqueRoots(@NotNull List<S> in, @NotNull Function<S, VirtualFile> convertor) {
+  public <S> List<S> filterUniqueRoots(@NotNull List<S> in, @NotNull Function<? super S, ? extends VirtualFile> convertor) {
     return in;
   }
 }

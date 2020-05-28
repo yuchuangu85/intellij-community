@@ -54,8 +54,7 @@ class MoveFilesOrDirectoriesViewDescriptor implements UsageViewDescriptor {
   }
 
   @Override
-  @NotNull
-  public PsiElement[] getElements() {
+  public PsiElement @NotNull [] getElements() {
     return myElementsToMove;
   }
 
@@ -64,6 +63,7 @@ class MoveFilesOrDirectoriesViewDescriptor implements UsageViewDescriptor {
     return myProcessedElementsHeader;
   }
 
+  @NotNull
   @Override
   public String getCodeReferencesText(int usagesCount, int filesCount) {
     return myCodeReferencesText + UsageViewBundle.getReferencesString(usagesCount, filesCount);

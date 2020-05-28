@@ -55,11 +55,9 @@ public abstract class EditorActionManager {
   public abstract EditorActionHandler setActionHandler(@NonNls @NotNull String actionId, @NotNull EditorActionHandler handler);
 
   /**
-   * Returns the service for registering actions activated by typing visible characters
-   * in the editor.
-   *
-   * @return the typed action service instance.
+   * @deprecated Use {@link TypedAction#getInstance()} instead
    */
+  @Deprecated
   @NotNull
   public abstract TypedAction getTypedAction();
 
@@ -67,7 +65,7 @@ public abstract class EditorActionManager {
    * Gets the default handler which is invoked on attempt to modify a read-only fragment in the editor.
    *
    * @return the handler instance.
-   * @see com.intellij.openapi.editor.Document#createGuardedBlock(int, int)
+   * @see Document#createGuardedBlock(int, int)
    */
   public abstract ReadonlyFragmentModificationHandler getReadonlyFragmentModificationHandler();
 
@@ -76,7 +74,7 @@ public abstract class EditorActionManager {
    *
    * @param handler the handler instance.
    * @return the old instance of the handler.
-   * @see com.intellij.openapi.editor.Document#createGuardedBlock(int, int)
+   * @see Document#createGuardedBlock(int, int)
    */
   public abstract ReadonlyFragmentModificationHandler setReadonlyFragmentModificationHandler(@NotNull ReadonlyFragmentModificationHandler handler);
 
@@ -85,7 +83,7 @@ public abstract class EditorActionManager {
    *
    * @param document target document
    * @return the handler instance.
-   * @see com.intellij.openapi.editor.Document#createGuardedBlock(int, int)
+   * @see Document#createGuardedBlock(int, int)
    */
   public abstract ReadonlyFragmentModificationHandler getReadonlyFragmentModificationHandler(@NotNull Document document);
 
@@ -94,7 +92,7 @@ public abstract class EditorActionManager {
    *
    * @param document target document
    * @param handler  new handler
-   * @see com.intellij.openapi.editor.Document#createGuardedBlock(int, int)
+   * @see Document#createGuardedBlock(int, int)
    */
   public abstract void setReadonlyFragmentModificationHandler(@NotNull Document document, ReadonlyFragmentModificationHandler handler);
 

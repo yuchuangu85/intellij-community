@@ -27,16 +27,16 @@ import org.jetbrains.jps.model.module.JpsModuleSourceRoot;
 import org.jetbrains.jps.model.module.JpsTypedModuleSourceRoot;
 import org.jetbrains.jps.util.JpsPathUtil;
 
+import java.io.File;
+import java.nio.file.Files;
+
 import static com.intellij.util.io.TestFileSystemItem.fs;
 
-/**
- * @author nik
- */
 public class ResourceCopyingTest extends JpsBuildTestCase {
   @Override
   protected void setUp() throws Exception {
     super.setUp();
-    JpsJavaExtensionService.getInstance().getOrCreateCompilerConfiguration(myProject).addResourcePattern("*.xml");
+    JpsJavaExtensionService.getInstance().getCompilerConfiguration(myProject).addResourcePattern("*.xml");
   }
 
   public void testSimple() {
@@ -44,6 +44,30 @@ public class ResourceCopyingTest extends JpsBuildTestCase {
     JpsModule m = addModule("m", PathUtil.getParentPath(file));
     rebuildAllModules();
     assertOutput(m, fs().file("a.xml"));
+  }
+
+  public void testReadonly() {
+    String source = createFile("src/a.xml");
+    final File sourceFile = new File(source);
+
+    assertTrue("Unable to make file readonly: ", sourceFile.setWritable(false));
+
+    JpsModule m = addModule("m", PathUtil.getParentPath(source));
+    rebuildAllModules();
+    assertOutput(m, fs().file("a.xml"));
+
+    final File outputFile = new File(getModuleOutput(m), "a.xml");
+    assertTrue(outputFile.exists());
+    assertFalse(Files.isWritable(outputFile.toPath()));
+
+    sourceFile.setWritable(true); // need this to perform the change
+    change(source, "changed content");
+    assertTrue("Unable to make file readonly: ", sourceFile.setWritable(false));
+
+    buildAllModules().assertSuccessful();
+
+    assertTrue(outputFile.exists());
+    assertFalse(Files.isWritable(outputFile.toPath()));
   }
 
   public void testCaseChange() {
@@ -80,7 +104,7 @@ public class ResourceCopyingTest extends JpsBuildTestCase {
     String excludedFile = createFile("res/excluded.java", "XXX");
     JpsModule m = addModule("m");
     m.addSourceRoot(JpsPathUtil.pathToUrl(PathUtil.getParentPath(file)), JavaResourceRootType.RESOURCE);
-    JpsJavaExtensionService.getInstance().getOrCreateCompilerConfiguration(myProject).getCompilerExcludes().addExcludedFile(
+    JpsJavaExtensionService.getInstance().getCompilerConfiguration(myProject).getCompilerExcludes().addExcludedFile(
       "file://" + FileUtil.toSystemIndependentName(excludedFile)
     );
     rebuildAllModules();

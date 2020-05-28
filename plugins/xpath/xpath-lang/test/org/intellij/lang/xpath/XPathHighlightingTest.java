@@ -22,15 +22,12 @@ public class XPathHighlightingTest extends TestBase {
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-      new XPathSupportLoader();
       //noinspection unchecked
-      myFixture.enableInspections(new Class[]{
-        CheckNodeTest.class,
-        ImplicitTypeConversion.class,
-        RedundantTypeConversion.class,
-        IndexZeroPredicate.class,
-        HardwiredNamespacePrefix.class,
-      });
+      myFixture.enableInspections(CheckNodeTest.class,
+                                  ImplicitTypeConversion.class,
+                                  RedundantTypeConversion.class,
+                                  IndexZeroPredicate.class,
+                                  HardwiredNamespacePrefix.class);
     }
 
     public void testPathTypeMismatch() {

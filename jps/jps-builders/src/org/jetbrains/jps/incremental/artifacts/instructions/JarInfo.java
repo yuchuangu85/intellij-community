@@ -22,9 +22,6 @@ import org.jetbrains.annotations.NotNull;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * @author nik
- */
 public class JarInfo {
   private final List<Pair<String, Object>> myContent;
   private final DestinationInfo myDestination;
@@ -35,11 +32,11 @@ public class JarInfo {
   }
 
   public void addContent(String pathInJar, ArtifactRootDescriptor descriptor) {
-    myContent.add(Pair.create(pathInJar, (Object)descriptor));
+    myContent.add(Pair.create(pathInJar, descriptor));
   }
 
   public void addJar(String pathInJar, JarInfo jarInfo) {
-    myContent.add(Pair.create(pathInJar, (Object)jarInfo));
+    myContent.add(Pair.create(pathInJar, jarInfo));
   }
 
   public List<Pair<String, Object>> getContent() {

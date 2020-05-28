@@ -1,3 +1,4 @@
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.json.psi;
 
 import com.intellij.json.JsonElementTypes;
@@ -13,6 +14,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -65,7 +67,7 @@ public class JsonPsiUtil {
   /**
    * Find the furthest sibling element with the same type as given anchor.
    * <p/>
-   * Ignore white spaces for any type of element except {@link com.intellij.json.JsonElementTypes#LINE_COMMENT}
+   * Ignore white spaces for any type of element except {@link JsonElementTypes#LINE_COMMENT}
    * where non indentation white space (that has new line in the middle) will stop the search.
    *
    * @param anchor element to start from
@@ -107,21 +109,21 @@ public class JsonPsiUtil {
   }
 
   /**
-   * @see #hasElementType(com.intellij.lang.ASTNode, com.intellij.psi.tree.TokenSet)
+   * @see #hasElementType(ASTNode, TokenSet)
    */
   public static boolean hasElementType(@NotNull ASTNode node, IElementType... types) {
     return hasElementType(node, TokenSet.create(types));
   }
 
   /**
-   * @see #hasElementType(com.intellij.lang.ASTNode, com.intellij.psi.tree.TokenSet)
+   * @see #hasElementType(ASTNode, TokenSet)
    */
   public static boolean hasElementType(@NotNull PsiElement element, @NotNull TokenSet set) {
     return element.getNode() != null && hasElementType(element.getNode(), set);
   }
 
   /**
-   * @see #hasElementType(com.intellij.lang.ASTNode, com.intellij.psi.tree.IElementType...)
+   * @see #hasElementType(ASTNode, IElementType...)
    */
   public static boolean hasElementType(@NotNull PsiElement element, IElementType... types) {
     return element.getNode() != null && hasElementType(element.getNode(), types);
@@ -220,7 +222,7 @@ public class JsonPsiUtil {
     if (property == null) return Collections.emptySet();
     JsonObject object = ObjectUtils.tryCast(property.getParent(), JsonObject.class);
     if (object == null) return Collections.emptySet();
-    Set<String> result = ContainerUtil.newHashSet();
+    Set<String> result = new HashSet<>();
     for (JsonProperty jsonProperty : object.getPropertyList()) {
       if (jsonProperty != property) {
         result.add(jsonProperty.getName());

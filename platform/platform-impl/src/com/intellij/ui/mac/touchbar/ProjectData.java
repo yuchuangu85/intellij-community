@@ -1,10 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.mac.touchbar;
 
-import com.intellij.execution.ExecutionListener;
-import com.intellij.execution.ExecutionManager;
-import com.intellij.execution.process.ProcessHandler;
-import com.intellij.execution.runners.ExecutionEnvironment;
+import com.intellij.execution.dashboard.RunDashboardManager;
 import com.intellij.openapi.actionSystem.ActionGroup;
 import com.intellij.openapi.actionSystem.DataProvider;
 import com.intellij.openapi.application.ApplicationManager;
@@ -13,7 +10,7 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowId;
-import com.intellij.openapi.wm.ex.ToolWindowManagerEx;
+import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentManagerEvent;
@@ -25,14 +22,12 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.InputEvent;
-import java.beans.PropertyChangeEvent;
-import java.beans.PropertyChangeListener;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
-class ProjectData {
+final class ProjectData {
   private static final Logger LOG = Logger.getInstance(ProjectData.class);
 
   private final @NotNull Project myProject;
@@ -40,62 +35,37 @@ class ProjectData {
   private final Map<Editor, EditorData> myEditors = new HashMap<>();
   private final Map<ToolWindow, ToolWindowData> myToolWindows = new HashMap<>();
 
-  private AtomicInteger myActiveDebugSessions = new AtomicInteger(0);
-
   ProjectData(@NotNull Project project) {
     myProject = project;
 
-    //
-    // Listen EXECUTION_TOPIC
-    //
-    myProject.getMessageBus().connect().subscribe(ExecutionManager.EXECUTION_TOPIC, new ExecutionListener() {
-      @Override
-      public void processStarted(@NotNull String executorId, @NotNull ExecutionEnvironment env, @NotNull ProcessHandler handler) {
-        // System.out.println("processStarted: " + executorId);
-        if (ToolWindowId.DEBUG.equals(env.getExecutor().getToolWindowId()))
-          myActiveDebugSessions.incrementAndGet();
-      }
-      @Override
-      public void processTerminated(@NotNull String executorId, @NotNull ExecutionEnvironment env, @NotNull ProcessHandler handler, int exitCode) {
-        // System.out.println("processTerminated: " + executorId);
-        if (ToolWindowId.DEBUG.equals(env.getExecutor().getToolWindowId())) {
-          final int val = myActiveDebugSessions.decrementAndGet();
-          if (val < 0) {
-            LOG.error("received 'processTerminated' when no process wasn't started");
-            myActiveDebugSessions.incrementAndGet();
-          }
-        }
-      }
-    });
-
-    //
-    // Listen ToolWindowManager
-    //
     myProject.getMessageBus().connect().subscribe(ToolWindowManagerListener.TOPIC, new ToolWindowManagerListener() {
       @Override
-      public void stateChanged() {
-        final ToolWindowManagerEx twm = ToolWindowManagerEx.getInstanceEx(myProject);
-        final String activeId = twm.getActiveToolWindowId();
-        if (activeId != null && (activeId.equals(ToolWindowId.DEBUG) || activeId.equals(ToolWindowId.RUN_DASHBOARD))) {
-          // System.out.println("stateChanged, dbgSessionsCount=" + pd.getDbgSessions());
-          if (getDbgSessions() <= 0)
-            return;
+      public void stateChanged(@NotNull ToolWindowManager toolWindowManager) {
+        String activeId = toolWindowManager.getActiveToolWindowId();
+        if (activeId != null &&
+            (activeId.equals(ToolWindowId.DEBUG) ||
+             activeId.equals(ToolWindowId.RUN_DASHBOARD) ||
+             activeId.equals(ToolWindowId.SERVICES))) {
 
-          get(BarType.DEBUGGER).show();
+          final BarContainer bc = myPermanentBars.get(BarType.DEBUGGER);
+          if (bc != null)
+            bc.show();
         }
       }
+
       @Override
-      public void toolWindowRegistered(@NotNull String id) {
+      public void toolWindowsRegistered(@NotNull List<String> ids) {
         ApplicationManager.getApplication().assertIsDispatchThread();
-
-        final ToolWindowManagerEx twm = ToolWindowManagerEx.getInstanceEx(myProject);
-        final ToolWindow tw = twm.getToolWindow(id);
-
-        final ToolWindowData twd = new ToolWindowData(tw, id);
-        myToolWindows.put(tw, twd);
-        // System.out.println("register tool-window: " + id);
-        tw.getContentManager().addContentManagerListener(twd);
+        ToolWindowManager toolWindowManager = ToolWindowManager.getInstance(myProject);
+        for (String id : ids) {
+          ToolWindow toolWindow = toolWindowManager.getToolWindow(id);
+          ToolWindowData toolWindowData = new ToolWindowData(toolWindow, id);
+          myToolWindows.put(toolWindow, toolWindowData);
+          // System.out.println("register tool-window: " + id);
+          toolWindow.addContentManagerListener(toolWindowData);
+        }
       }
+
       @Override
       public void toolWindowUnregistered(@NotNull String id, @NotNull ToolWindow toolWindow) {
         ApplicationManager.getApplication().assertIsDispatchThread();
@@ -105,7 +75,7 @@ class ProjectData {
           return;
         }
 
-        final ToolWindowData removed = myToolWindows.remove(toolWindow);
+        ToolWindowData removed = myToolWindows.remove(toolWindow);
         if (removed == null) {
           LOG.error("try to remove unregistered tool-window: " + id + ", tw=" + toolWindow);
           return;
@@ -115,9 +85,12 @@ class ProjectData {
     });
   }
 
-  boolean isDisposed() { return myProject.isDisposed(); }
+  boolean isDisposed() {
+    return myProject.isDisposed();
+  }
 
-  @Nullable BarContainer get(BarType type) {
+  @NotNull
+  BarContainer get(BarType type) {
     BarContainer result = myPermanentBars.get(type);
     if (result == null) {
       result = new BarContainer(type, TouchBar.EMPTY, null, null);
@@ -138,7 +111,8 @@ class ProjectData {
     return false;
   }
 
-  @Nullable EditorData findEditorDataByComponent(Component child) {
+  @Nullable
+  EditorData findEditorDataByComponent(Component child) {
     ApplicationManager.getApplication().assertIsDispatchThread();
 
     for (EditorData editorData : myEditors.values()) {
@@ -156,52 +130,42 @@ class ProjectData {
     return null;
   }
 
-  @Nullable BarContainer findDebugToolWindowByComponent(Component child) {
+  @Nullable
+  BarContainer findDebugToolWindowByComponent(Component child) {
     ApplicationManager.getApplication().assertIsDispatchThread();
 
-    if (myActiveDebugSessions.get() <= 0)
+    ToolWindowManager toolWindowManager = ToolWindowManager.getInstance(myProject);
+    ToolWindow dtw = toolWindowManager.getToolWindow(ToolWindowId.DEBUG);
+    ToolWindow rtw = toolWindowManager.getToolWindow(RunDashboardManager.getInstance(myProject).getToolWindowId());
+
+    Component compD = dtw != null ? dtw.getComponent() : null;
+    Component compR = rtw != null ? rtw.getComponent() : null;
+    if (compD == null && compR == null) {
       return null;
+    }
 
-    final ToolWindowManagerEx twm = ToolWindowManagerEx.getInstanceEx(myProject);
-    if (twm == null)
-      return null;
-
-    final ToolWindow dtw = twm.getToolWindow(ToolWindowId.DEBUG);
-    final ToolWindow rtw = twm.getToolWindow(ToolWindowId.RUN_DASHBOARD);
-
-    final Component compD = dtw != null ? dtw.getComponent() : null;
-    final Component compR = rtw != null ? rtw.getComponent() : null;
-    if (compD == null && compR == null)
-      return null;
-
-    if (
-      child == compD || child == compR
+    if (child == compD || child == compR
       || (compD != null && SwingUtilities.isDescendingFrom(child, compD))
-      || (compR != null && SwingUtilities.isDescendingFrom(child, compR))
-    )
+      || (compR != null && SwingUtilities.isDescendingFrom(child, compR))) {
       return get(BarType.DEBUGGER);
+    }
 
     return null;
   }
 
-  EditorData registerEditor(@NotNull Editor editor) {
-    ApplicationManager.getApplication().assertIsDispatchThread();
-
-    final EditorData result = new EditorData(editor);
-    myEditors.put(editor, result);
-    return result;
+  void registerEditor(@NotNull Editor editor) {
+    myEditors.put(editor, new EditorData(editor));
   }
 
   EditorData getEditorData(@NotNull Editor editor) {
-    ApplicationManager.getApplication().assertIsDispatchThread();
     return myEditors.get(editor);
   }
 
   void removeEditor(@NotNull Editor editor) {
-    ApplicationManager.getApplication().assertIsDispatchThread();
-
-    if (myEditors.isEmpty()) // already cleared
+    // already cleared
+    if (myEditors.isEmpty()) {
       return;
+    }
 
     final EditorData removed = myEditors.remove(editor);
     if (removed == null) {
@@ -212,7 +176,7 @@ class ProjectData {
     removed.release();
   }
 
-  private void _fillBarContainer(@NotNull BarContainer container) {
+  private static void _fillBarContainer(@NotNull BarContainer container) {
     ApplicationManager.getApplication().assertIsDispatchThread();
 
     final @NotNull BarType type = container.getType();
@@ -222,10 +186,12 @@ class ProjectData {
     if (type == BarType.DEFAULT) {
       barId = "Default";
       replaceEsc = false;
-    } else if (type == BarType.DEBUGGER) {
+    }
+    else if (type == BarType.DEBUGGER) {
       barId = ToolWindowId.DEBUG;
       replaceEsc = true;
-    } else {
+    }
+    else {
       LOG.error("can't create touchbar, unknown context: " + type);
       return;
     }
@@ -236,25 +202,28 @@ class ProjectData {
       return;
     }
 
-    final Map<String, ActionGroup> strmod2alt = BuildUtils.getAltLayouts(mainLayout);
-    final Map<Long, TouchBar> alts = new HashMap<>();
-    if (strmod2alt != null && !strmod2alt.isEmpty()) {
-      for (String modId: strmod2alt.keySet()) {
+    Map<String, ActionGroup> strmod2alt = BuildUtils.getAltLayouts(mainLayout);
+    Map<Long, TouchBar> alts = new HashMap<>();
+    if (!strmod2alt.isEmpty()) {
+      for (String modId : strmod2alt.keySet()) {
         final long mask = _str2mask(modId);
         if (mask == 0) {
           // System.out.println("ERROR: zero mask for modId="+modId);
           continue;
         }
-        alts.put(mask, TouchBar.buildFromCustomizedGroup(type.name() + "_" + modId, strmod2alt.get(modId), replaceEsc));
+        final @NotNull TouchBar altTouchbar =
+          BuildUtils.buildFromCustomizedGroup(type.name() + "_" + modId, strmod2alt.get(modId), replaceEsc);
+        alts.put(mask, altTouchbar);
+        altTouchbar.setAllowSkipSlowUpdates(true);
       }
     }
 
-    container.set(TouchBar.buildFromCustomizedGroup(type.name(), mainLayout, replaceEsc), alts);
+    container.set(BuildUtils.buildFromCustomizedGroup(type.name(), mainLayout, replaceEsc), alts);
   }
 
   void releaseAll() {
     ApplicationManager.getApplication().assertIsDispatchThread();
-    myPermanentBars.forEach((t, bc)->bc.release());
+    myPermanentBars.forEach((t, bc) -> bc.release());
     myPermanentBars.clear();
     myEditors.forEach((e, ed) -> ed.release());
     myEditors.clear();
@@ -265,53 +234,64 @@ class ProjectData {
 
   void reloadAll() {
     ApplicationManager.getApplication().assertIsDispatchThread();
-    myPermanentBars.forEach((t, bc)->{
+    myPermanentBars.forEach((t, bc) -> {
       bc.release();
       _fillBarContainer(bc);
     });
     // System.out.println("reloaded permanent bars");
   }
 
-  Collection<BarContainer> getAllContainers() { return myPermanentBars.values(); }
+  Collection<BarContainer> getAllContainers() {
+    return myPermanentBars.values();
+  }
 
-  int getDbgSessions() { return myActiveDebugSessions.get(); }
-
-  static long getUsedKeyMask() { return InputEvent.ALT_DOWN_MASK | InputEvent.META_DOWN_MASK | InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK; }
+  static long getUsedKeyMask() {
+    return InputEvent.ALT_DOWN_MASK |
+           InputEvent.META_DOWN_MASK |
+           InputEvent.CTRL_DOWN_MASK |
+           InputEvent.SHIFT_DOWN_MASK;
+  }
 
   private static long _str2mask(@NotNull String modifierId) {
     if (!modifierId.contains(".")) {
-      if (modifierId.equalsIgnoreCase("alt"))
+      if (modifierId.equalsIgnoreCase("alt")) {
         return InputEvent.ALT_DOWN_MASK;
-      if (modifierId.equalsIgnoreCase("cmd"))
+      }
+      if (modifierId.equalsIgnoreCase("cmd")) {
         return InputEvent.META_DOWN_MASK;
-      if (modifierId.equalsIgnoreCase("ctrl"))
+      }
+      if (modifierId.equalsIgnoreCase("ctrl")) {
         return InputEvent.CTRL_DOWN_MASK;
-      if (modifierId.equalsIgnoreCase("shift"))
+      }
+      if (modifierId.equalsIgnoreCase("shift")) {
         return InputEvent.SHIFT_DOWN_MASK;
+      }
       return 0;
     }
 
     final String[] spl = modifierId.split("\\.");
-    if (spl == null)
-      return 0;
-
     long mask = 0;
-    for (String sub: spl)
+    for (String sub : spl) {
       mask |= _str2mask(sub);
+    }
     return mask;
   }
 
-  static class EditorData {
+  static final class EditorData {
     final @NotNull Editor editor;
     JComponent editorHeader;
 
     ActionGroup actionsSearch;
     BarContainer containerSearch;
 
-    EditorData(Editor editor) { this.editor = editor; }
+    EditorData(@NotNull Editor editor) {
+      this.editor = editor;
+    }
+
     void release() {
-      if (containerSearch != null)
+      if (containerSearch != null) {
         containerSearch.release();
+      }
       containerSearch = null;
     }
   }
@@ -328,13 +308,16 @@ class ProjectData {
 
     void release() {}
 
-    @Nullable ContentData findParentContent(@NotNull Component childOfToolWindow) {
-      if (contents.isEmpty())
+    @Nullable
+    ContentData findParentContent(@NotNull Component childOfToolWindow) {
+      if (contents.isEmpty()) {
         return null;
+      }
 
-      for (ContentData cd: contents.values()) {
-        if (SwingUtilities.isDescendingFrom(childOfToolWindow, cd.content.getComponent()))
+      for (ContentData cd : contents.values()) {
+        if (SwingUtilities.isDescendingFrom(childOfToolWindow, cd.content.getComponent())) {
           return cd;
+        }
       }
 
       return null;
@@ -361,17 +344,14 @@ class ProjectData {
       // System.out.printf("register content of ToolWindow %s with touchbar-action '%s' [%s]\n", toolWindowId, optAction.toString(), ActionManager.getInstance().getId(optAction));
       _registerContent(content, optAction);
 
-      content.addPropertyChangeListener(new PropertyChangeListener() {
-        @Override
-        public void propertyChange(PropertyChangeEvent evt) {
-          if (Content.PROP_COMPONENT.equals(evt.getPropertyName())) {
-            // final Component oldComponent = (Component)evt.getOldValue();
-            // final Component newComponent = (Component)evt.getNewValue();
-            // final ActionGroup actions = _getTouchbarActions(newComponent);
-            // TODO: update link to ToolWindowData.JComponent, ToolWindowData.AnAction, items of corresponding touchbar
-          }
-        }
-      });
+      //content.addPropertyChangeListener(evt -> {
+      //  if (Content.PROP_COMPONENT.equals(evt.getPropertyName())) {
+      //    // final Component oldComponent = (Component)evt.getOldValue();
+      //    // final Component newComponent = (Component)evt.getNewValue();
+      //    // final ActionGroup actions = _getTouchbarActions(newComponent);
+      //    // TODO: update link to ToolWindowData.JComponent, ToolWindowData.AnAction, items of corresponding touchbar
+      //  }
+      //});
     }
 
     @Override
@@ -379,6 +359,7 @@ class ProjectData {
 
     @Override
     public void contentRemoveQuery(@NotNull ContentManagerEvent event) {}
+
     @Override
     public void selectionChanged(@NotNull ContentManagerEvent event) {}
 
@@ -407,11 +388,11 @@ class ProjectData {
         return;
       }
 
-      contents.remove(cd);
+      contents.remove(content);
       cd.setOptionalContextActions(null);
     }
 
-    private class ContentData {
+    private final class ContentData {
       final @NotNull Content content;
       final @NotNull BarContainer barContainer;
       final @NotNull String contextName;
@@ -421,8 +402,14 @@ class ProjectData {
         this.barContainer = barContainer;
         contextName = toolWindowId + "_" + content.toString();
       }
-      void setOptionalContextActions(ActionGroup group) { barContainer.setOptionalContextActions(group, contextName); }
-      void setContextActionsVisible(boolean visible) { barContainer.setOptionalContextVisible(visible ? contextName : null); }
+
+      void setOptionalContextActions(ActionGroup group) {
+        barContainer.setOptionalContextActions(group, contextName);
+      }
+
+      void setContextActionsVisible(boolean visible) {
+        barContainer.setOptionalContextVisible(visible ? contextName : null);
+      }
     }
   }
 
@@ -430,6 +417,7 @@ class ProjectData {
     final JComponent component = content.getComponent();
     return _getTouchbarActions(component);
   }
+
   private static ActionGroup _getTouchbarActions(Component component) {
     return component instanceof DataProvider ? TouchbarDataKeys.ACTIONS_KEY.getData((DataProvider)component) : null;
   }

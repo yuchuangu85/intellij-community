@@ -1,31 +1,16 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.editor.impl;
 
 import com.intellij.openapi.editor.ex.LineIterator;
 import com.intellij.openapi.util.text.LineTokenizer;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.BitUtil;
-import com.intellij.util.containers.IntArrayList;
 import com.intellij.util.text.CharArrayUtil;
 import com.intellij.util.text.MergingCharSequence;
 import gnu.trove.TByteArrayList;
 import gnu.trove.TIntArrayList;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.TestOnly;
 
 import java.util.Arrays;
 
@@ -35,7 +20,7 @@ import java.util.Arrays;
  * <p/>
  * Immutable.
  */
-public class LineSet{
+public final class LineSet {
   private static final int MODIFIED_MASK = 0x4;
   private static final int SEPARATOR_MASK = 0x3;
 
@@ -73,14 +58,29 @@ public class LineSet{
       return createLineSet(replacement, !wholeTextReplaced);
     }
 
+    // if we're breaking or creating a '\r\n' pair, expand the changed range to include it fully
+    CharSequence newText = StringUtil.replaceSubSequence(prevText, start, end, replacement);
+    if (hasChar(prevText, start - 1, '\r') &&
+        (hasChar(prevText, start, '\n') || hasChar(newText, start, '\n'))) {
+      replacement = new MergingCharSequence("\r", replacement);
+      start--;
+    }
+
+    if (hasChar(prevText, end, '\n') &&
+        (hasChar(prevText, end -1, '\r') || hasChar(newText, start + replacement.length() - 1, '\r'))) {
+      replacement = new MergingCharSequence(replacement, "\n");
+      end++;
+    }
+
     LineSet result = isSingleLineChange(start, end, replacement)
                      ? updateInsideOneLine(findLineIndex(start), replacement.length() - (end - start))
-                     : genericUpdate(prevText, start, end, replacement);
+                     : genericUpdate(start, end, replacement);
 
-    if (doTest) {
-      result.checkEquals(createLineSet(StringUtil.replaceSubSequence(prevText, start, end, replacement)));
-    }
     return wholeTextReplaced ? result.clearModificationFlags() : result;
+  }
+
+  private static boolean hasChar(CharSequence s, int index, char c) {
+    return index >= 0 && index < s.length() && s.charAt(index) == c;
   }
 
   private boolean isSingleLineChange(int start, int end, @NotNull CharSequence replacement) {
@@ -102,69 +102,61 @@ public class LineSet{
     return new LineSet(starts, flags, myLength + lengthDelta);
   }
 
-  private LineSet genericUpdate(CharSequence prevText, int _start, int _end, CharSequence replacement) {
-    int startOffset = _start;
-    if (replacement.length() > 0 && replacement.charAt(0) == '\n' && startOffset > 0 && prevText.charAt(startOffset - 1) == '\r') {
-      startOffset--;
-    }
+  private LineSet genericUpdate(int startOffset, int endOffset, CharSequence replacement) {
     int startLine = findLineIndex(startOffset);
-    startOffset = getLineStart(startLine);
-
-    int endOffset = _end;
-    if (replacement.length() > 0 && replacement.charAt(replacement.length() - 1) == '\r' && endOffset < prevText.length() && prevText.charAt(endOffset) == '\n') {
-      endOffset++;
-    }
     int endLine = findLineIndex(endOffset);
-    endOffset = getLineEnd(endLine);
-    if (!isLastEmptyLine(endLine)) endLine++;
-
-    if (startOffset < _start) {
-      replacement = new MergingCharSequence(prevText.subSequence(startOffset, _start), replacement);
-    }
-    if (_end < endOffset) {
-      replacement = new MergingCharSequence(replacement, prevText.subSequence(_end, endOffset));
-    }
 
     LineSet patch = createLineSet(replacement, true);
-    return applyPatch(startOffset, endOffset, startLine, endLine, patch);
-  }
 
-  private void checkEquals(@NotNull LineSet fresh) {
-    if (getLineCount() != fresh.getLineCount()) {
-      throw new AssertionError();
-    }
-    for (int i = 0; i < getLineCount(); i++) {
-      boolean start = getLineStart(i) != fresh.getLineStart(i);
-      boolean end = getLineEnd(i) != fresh.getLineEnd(i);
-      boolean sep = getSeparatorLength(i) != fresh.getSeparatorLength(i);
-      if (start || end || sep) {
-        throw new AssertionError();
-      }
-    }
-  }
-
-  @NotNull
-  private LineSet applyPatch(int startOffset, int endOffset, int startLine, int endLine, @NotNull LineSet patch) {
-    int lineShift = patch.myStarts.length - (endLine - startLine);
     int lengthShift = patch.myLength - (endOffset - startOffset);
 
-    int newLineCount = myStarts.length + lineShift;
+    int startLineStart = getLineStart(startLine);
+    boolean addStartLine = startOffset - startLineStart > 0 || patch.myStarts.length > 0 || endOffset < myLength;
+    boolean addEndLine = endOffset < myLength && patch.myLength > 0 && patch.getSeparatorLength(patch.myStarts.length - 1) > 0;
+    int newLineCount = startLine + (addStartLine ? 1 : 0) +
+                       Math.max(patch.myStarts.length - 1, 0) +
+                       (addEndLine ? 1 : 0) + Math.max(myStarts.length - endLine - 1, 0);
+
     int[] starts = new int[newLineCount];
     byte[] flags = new byte[newLineCount];
 
-    for (int i = 0; i < startLine; i++) {
-      starts[i] = myStarts[i];
-      flags[i] = myFlags[i];
+    if (startLine > 0) {
+      System.arraycopy(myStarts, 0, starts, 0, startLine);
+      System.arraycopy(myFlags, 0, flags, 0, startLine);
     }
-    for (int i = 0; i < patch.myStarts.length; i++) {
-      starts[startLine + i] = patch.myStarts[i] + startOffset;
-      flags[startLine + i] = patch.myFlags[i];
+
+    int toIndex = startLine;
+    if (addStartLine) {
+      starts[toIndex] = startLineStart;
+      flags[toIndex] = patch.myStarts.length > 0 ? patch.myFlags[0] : MODIFIED_MASK;
+      toIndex++;
     }
-    for (int i = endLine; i < myStarts.length; i++) {
-      starts[lineShift + i] = myStarts[i] + lengthShift;
-      flags[lineShift + i] = myFlags[i];
+
+    toIndex = patch.shiftData(starts, flags, 1, toIndex, patch.myStarts.length - 1, startOffset);
+
+    if (endOffset < myLength) {
+      if (addEndLine) {
+        starts[toIndex] = endOffset + lengthShift;
+        flags[toIndex] = (byte) (myFlags[endLine] | MODIFIED_MASK);
+        toIndex++;
+      } else if (toIndex > 0) {
+        flags[toIndex - 1] = (byte) (myFlags[endLine] | MODIFIED_MASK);
+      }
     }
+
+    shiftData(starts, flags, endLine + 1, toIndex, myStarts.length - (endLine + 1), lengthShift);
+
     return new LineSet(starts, flags, myLength + lengthShift);
+  }
+
+  private int shiftData(int[] dstStarts, byte[] dstFlags, int srcOffset, int dstOffset, int count, int offsetDelta) {
+    if (count < 0) return dstOffset;
+
+    System.arraycopy(myFlags, srcOffset, dstFlags, dstOffset, count);
+    for (int i = 0; i < count; i++) {
+      dstStarts[dstOffset + i] = myStarts[srcOffset + i] + offsetDelta;
+    }
+    return dstOffset + count;
   }
 
   public int findLineIndex(int offset) {
@@ -189,7 +181,11 @@ public class LineSet{
   }
 
   private boolean isLastEmptyLine(int index) {
-    return index == myFlags.length && index > 0 && getSeparatorLengthUnsafe(index - 1) > 0;
+    return index == myFlags.length && hasEol(index - 1);
+  }
+
+  private boolean hasEol(int lineIndex) {
+    return lineIndex >= 0 && getSeparatorLengthUnsafe(lineIndex) > 0;
   }
 
   public final int getLineEnd(int index) {
@@ -214,13 +210,13 @@ public class LineSet{
       return this;
     }
     if (indices.size() == 1) {
-      int index = indices.get(0);
+      int index = indices.getInt(0);
       if (isLastEmptyLine(index) || isModified(index)) return this;
     }
 
     byte[] flags = myFlags.clone();
     for (int i=0; i<indices.size();i++) {
-      int index = indices.get(i);
+      int index = indices.getInt(i);
       flags[index] |= MODIFIED_MASK;
     }
     return new LineSet(myStarts, flags, myLength);
@@ -261,13 +257,6 @@ public class LineSet{
   final int getLineCount() {
     return myStarts.length + (isLastEmptyLine(myStarts.length) ? 1 : 0);
   }
-
-  @TestOnly
-  public static void setTestingMode(boolean testMode) {
-    doTest = testMode;
-  }
-
-  private static boolean doTest;
 
   int getLength() {
     return myLength;

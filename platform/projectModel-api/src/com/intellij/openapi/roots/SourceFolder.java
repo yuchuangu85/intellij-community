@@ -15,7 +15,9 @@
  */
 package com.intellij.openapi.roots;
 
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.jps.model.JpsElement;
 import org.jetbrains.jps.model.module.JpsModuleSourceRoot;
 import org.jetbrains.jps.model.module.JpsModuleSourceRootType;
 
@@ -25,6 +27,7 @@ import org.jetbrains.jps.model.module.JpsModuleSourceRootType;
  * @author dsl
  * @see ContentEntry#getSourceFolders()
  */
+@ApiStatus.NonExtendable
 public interface SourceFolder extends ContentFolder {
   /**
    * Checks if this root is a production or test source root.
@@ -42,7 +45,7 @@ public interface SourceFolder extends ContentFolder {
   String getPackagePrefix();
 
   /**
-   * Sets the package prefix for this source root.
+   * Sets the package prefix for this source root. This method may be called only on a modifiable instance obtained from {@link ModifiableRootModel}.
    *
    * @param packagePrefix the package prefix, or an empty string if the root has no package prefix.
    */
@@ -53,4 +56,11 @@ public interface SourceFolder extends ContentFolder {
 
   @NotNull
   JpsModuleSourceRoot getJpsElement();
+
+  /**
+   * This method is used internally to change root type to 'unknown' and back when the plugin which provides the custom root type is
+   * unloaded or loader. It isn't intended to change root type to some other arbitrary type and must not be used in plugins.
+   */
+  @ApiStatus.Internal
+  <P extends JpsElement> void changeType(JpsModuleSourceRootType<P> newType, P properties);
 }

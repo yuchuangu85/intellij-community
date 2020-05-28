@@ -25,9 +25,9 @@ import static com.intellij.psi.util.PsiUtilCore.getVirtualFile;
 import static com.intellij.ui.ColorUtil.toHex;
 
 public final class GutterTooltipHelper {
-  private static final JBColor BORDER_COLOR = JBColor.namedColor("GutterTooltip.borderColor", HintUtil.INFORMATION_BORDER_COLOR);
+  private static final JBColor SEPARATOR_COLOR = JBColor.namedColor("GutterTooltip.lineSeparatorColor", HintUtil.INFORMATION_BORDER_COLOR);
   private static final JBColor CONTEXT_HELP_FOREGROUND
-    = JBColor.namedColor("GutterTooltip.ContextHelp.foreground", new JBColor(0x787878, 0x878787));
+    = JBColor.namedColor("GutterTooltip.infoForeground", new JBColor(0x787878, 0x878787));
 
   private GutterTooltipHelper() {
   }
@@ -53,7 +53,7 @@ public final class GutterTooltipHelper {
     if (elementsCount <= 1) return " ";
     StringBuilder sb = new StringBuilder("</p><p style='margin-top:2pt");
     if (marginLeft) sb.append(";margin-left:20pt");
-    if (!firstElement) sb.append(";border-top:thin solid #").append(toHex(BORDER_COLOR));
+    if (!firstElement) sb.append(";border-top:thin solid #").append(toHex(SEPARATOR_COLOR));
     return sb.append(";'>").toString();
   }
 
@@ -64,18 +64,18 @@ public final class GutterTooltipHelper {
    * @param actionId                 an action identifier to generate context help or {@code null} if not applicable
    */
   @NotNull
-  public static <E extends PsiElement> String getTooltipText(@NotNull Collection<E> elements,
-                                                             @NotNull Function<E, String> elementToPrefix,
-                                                             @NotNull Predicate<E> skipFirstMemberOfElement,
+  public static <E extends PsiElement> String getTooltipText(@NotNull Collection<? extends E> elements,
+                                                             @NotNull Function<? super E, String> elementToPrefix,
+                                                             @NotNull Predicate<? super E> skipFirstMemberOfElement,
                                                              @Nullable String actionId) {
     return getTooltipText(null, elements, elementToPrefix, skipFirstMemberOfElement, actionId);
   }
 
   @NotNull
   private static <E extends PsiElement> String getTooltipText(@Nullable String prefix,
-                                                              @NotNull Collection<E> elements,
-                                                              @NotNull Function<E, String> elementToPrefix,
-                                                              @NotNull Predicate<E> skipFirstMemberOfElement,
+                                                              @NotNull Collection<? extends E> elements,
+                                                              @NotNull Function<? super E, String> elementToPrefix,
+                                                              @NotNull Predicate<? super E> skipFirstMemberOfElement,
                                                               @Nullable String actionId) {
     StringBuilder sb = new StringBuilder("<html><body><p>");
     if (prefix != null) sb.append(prefix);
@@ -93,15 +93,15 @@ public final class GutterTooltipHelper {
     boolean useSingleLink = Registry.is("gutter.tooltip.single.link");
     String packageName = null;
     boolean addedSingleLink = useSingleLink && appendLink(sb, element);
-    PsiElement skipped = null;
+    PsiElement original = element; // use original member as a first separate link
     if (skip && (element instanceof PsiMethod || element instanceof PsiField)) {
-      skipped = element; // use skipped member as first separate link
       element = getContainingElement(element);
     }
     while (element != null) {
       String name = getPresentableName(element);
       if (name != null) {
-        boolean addedLink = !useSingleLink && appendLink(sb, skipped != null ? skipped : element);
+        boolean addedLink = !useSingleLink && appendLink(sb, original != null ? original : element);
+        original = null; // do not use a link to the original element if it is already added
         // Swing uses simple HTML processing and paints a link incorrectly if it contains different fonts.
         // This is the reason why I use monospaced font not only for element name, but for a whole link.
         // By the same reason I have to comment out support for deprecated elements.
@@ -123,9 +123,8 @@ public final class GutterTooltipHelper {
           break;
         }
       }
-      if (parent != null) sb.append(" in ");
+      if (name != null && parent != null) sb.append(" in ");
       element = parent;
-      skipped = null;
     }
     if (addedSingleLink) sb.append("</code></a>");
     appendPackageName(sb, packageName);
@@ -143,7 +142,7 @@ public final class GutterTooltipHelper {
     if (action == null) return; // action is not exist
     String text = getPreferredShortcutText(action.getShortcutSet().getShortcuts());
     if (StringUtil.isEmpty(text)) return; // action have no shortcuts
-    sb.append("</p><p style='margin-top:8px'><font size='2' color='#");
+    sb.append("</p><p style='margin-top:8px;'><font size='2' color='#");
     sb.append(toHex(CONTEXT_HELP_FOREGROUND));
     sb.append("'>Press ").append(text).append(" to navigate</font>");
   }
@@ -179,6 +178,9 @@ public final class GutterTooltipHelper {
   @Nullable
   private static PsiElement getContainingElement(@NotNull PsiElement element) {
     PsiMember member = getStubOrPsiParentOfType(element, PsiMember.class);
+    if (member == null && element instanceof PsiMember) {
+      member = ((PsiMember)element).getContainingClass();
+    }
     return member != null ? member : element.getContainingFile();
   }
 

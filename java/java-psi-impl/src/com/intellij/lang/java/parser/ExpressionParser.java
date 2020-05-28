@@ -1,21 +1,22 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.lang.java.parser;
 
-import com.intellij.codeInsight.daemon.JavaErrorMessages;
+import com.intellij.core.JavaPsiBundle;
 import com.intellij.lang.PsiBuilder;
 import com.intellij.lang.WhitespacesBinders;
+import com.intellij.openapi.util.Key;
 import com.intellij.psi.JavaTokenType;
 import com.intellij.psi.TokenType;
 import com.intellij.psi.impl.source.tree.ElementType;
 import com.intellij.psi.impl.source.tree.JavaElementType;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.tree.TokenSet;
-import com.intellij.util.Function;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.PropertyKey;
 
-import static com.intellij.codeInsight.daemon.JavaErrorMessages.BUNDLE;
+import java.util.function.Function;
+
 import static com.intellij.lang.PsiBuilderUtil.*;
 import static com.intellij.lang.java.parser.JavaParserUtil.*;
 
@@ -34,7 +35,7 @@ public class ExpressionParser {
   private static final TokenSet LITERALS = TokenSet.create(
     JavaTokenType.TRUE_KEYWORD, JavaTokenType.FALSE_KEYWORD, JavaTokenType.NULL_KEYWORD, JavaTokenType.INTEGER_LITERAL,
     JavaTokenType.LONG_LITERAL, JavaTokenType.FLOAT_LITERAL, JavaTokenType.DOUBLE_LITERAL, JavaTokenType.CHARACTER_LITERAL,
-    JavaTokenType.STRING_LITERAL, JavaTokenType.RAW_STRING_LITERAL);
+    JavaTokenType.STRING_LITERAL, JavaTokenType.TEXT_BLOCK_LITERAL);
   private static final TokenSet CONDITIONAL_OR_OPS = TokenSet.create(JavaTokenType.OROR);
   private static final TokenSet CONDITIONAL_AND_OPS = TokenSet.create(JavaTokenType.ANDAND);
   private static final TokenSet OR_OPS = TokenSet.create(JavaTokenType.OR);
@@ -52,15 +53,28 @@ public class ExpressionParser {
   private static final TokenSet TYPE_START = TokenSet.orSet(
     ElementType.PRIMITIVE_TYPE_BIT_SET, TokenSet.create(JavaTokenType.IDENTIFIER, JavaTokenType.AT));
 
+  private static final Key<Boolean> CASE_LABEL = Key.create("java.parser.case.label.expr");
+
   private final JavaParser myParser;
 
-  public ExpressionParser(@NotNull final JavaParser javaParser) {
+  public ExpressionParser(@NotNull JavaParser javaParser) {
     myParser = javaParser;
   }
 
   @Nullable
-  public PsiBuilder.Marker parse(final PsiBuilder builder) {
+  public PsiBuilder.Marker parse(@NotNull PsiBuilder builder) {
     return parseAssignment(builder);
+  }
+
+  @Nullable
+  public PsiBuilder.Marker parseCaseLabel(@NotNull PsiBuilder builder) {
+    CASE_LABEL.set(builder, Boolean.TRUE);
+    try {
+      return parseAssignment(builder);
+    }
+    finally {
+      CASE_LABEL.set(builder, null);
+    }
   }
 
   @Nullable
@@ -75,7 +89,7 @@ public class ExpressionParser {
 
       final PsiBuilder.Marker right = parse(builder);
       if (right == null) {
-        error(builder, JavaErrorMessages.message("expected.expression"));
+        error(builder, JavaPsiBundle.message("expected.expression"));
       }
 
       assignment.done(JavaElementType.ASSIGNMENT_EXPRESSION);
@@ -96,13 +110,13 @@ public class ExpressionParser {
 
     final PsiBuilder.Marker truePart = parse(builder);
     if (truePart == null) {
-      error(builder, JavaErrorMessages.message("expected.expression"));
+      error(builder, JavaPsiBundle.message("expected.expression"));
       ternary.done(JavaElementType.CONDITIONAL_EXPRESSION);
       return ternary;
     }
 
     if (builder.getTokenType() != JavaTokenType.COLON) {
-      error(builder, JavaErrorMessages.message("expected.colon"));
+      error(builder, JavaPsiBundle.message("expected.colon"));
       ternary.done(JavaElementType.CONDITIONAL_EXPRESSION);
       return ternary;
     }
@@ -110,7 +124,7 @@ public class ExpressionParser {
 
     final PsiBuilder.Marker falsePart = parseConditional(builder);
     if (falsePart == null) {
-      error(builder, JavaErrorMessages.message("expected.expression"));
+      error(builder, JavaPsiBundle.message("expected.expression"));
       ternary.done(JavaElementType.CONDITIONAL_EXPRESSION);
       return ternary;
     }
@@ -165,6 +179,25 @@ public class ExpressionParser {
   }
 
   @Nullable
+  private PsiBuilder.Marker parsePattern(final PsiBuilder builder) {
+    PsiBuilder.Marker pattern = builder.mark();
+    PsiBuilder.Marker patternVariable = builder.mark();
+    PsiBuilder.Marker type = myParser.getReferenceParser().parseType(builder, ReferenceParser.EAT_LAST_DOT | ReferenceParser.WILDCARD);
+    if (type == null) {
+      patternVariable.drop();
+      pattern.drop();
+      return null;
+    }
+    if (!expect(builder, JavaTokenType.IDENTIFIER)) {
+      patternVariable.drop();
+    } else {
+      patternVariable.done(JavaElementType.PATTERN_VARIABLE);
+    }
+    pattern.done(JavaElementType.TYPE_TEST_PATTERN);
+    return pattern;
+  }
+
+  @Nullable
   private PsiBuilder.Marker parseBinary(final PsiBuilder builder, final ExprType type, final TokenSet ops) {
     PsiBuilder.Marker result = parseExpression(builder, type);
     if (result == null) return null;
@@ -184,7 +217,7 @@ public class ExpressionParser {
         // save
         result = result.precede();
         if (right == null) {
-          error(builder, JavaErrorMessages.message("expected.expression"));
+          error(builder, JavaPsiBundle.message("expected.expression"));
         }
         result.done(operandCount > 2 ? JavaElementType.POLYADIC_EXPRESSION : JavaElementType.BINARY_EXPRESSION);
         if (right == null) break;
@@ -204,14 +237,14 @@ public class ExpressionParser {
     IElementType tokenType;
     while ((tokenType = getGtTokenType(builder)) != null) {
       final IElementType toCreate;
-      final ExprType toParse;
+      final boolean patternExpected; // Otherwise ExprType.SHIFT is expected
       if (RELATIONAL_OPS.contains(tokenType)) {
         toCreate = JavaElementType.BINARY_EXPRESSION;
-        toParse = ExprType.SHIFT;
+        patternExpected = false;
       }
       else if (tokenType == JavaTokenType.INSTANCEOF_KEYWORD) {
         toCreate = JavaElementType.INSTANCE_OF_EXPRESSION;
-        toParse = ExprType.TYPE;
+        patternExpected = true;
       }
       else {
         break;
@@ -220,9 +253,9 @@ public class ExpressionParser {
       final PsiBuilder.Marker expression = left.precede();
       advanceGtToken(builder, tokenType);
 
-      final PsiBuilder.Marker right = parseExpression(builder, toParse);
+      final PsiBuilder.Marker right = patternExpected ? parsePattern(builder) : parseExpression(builder, ExprType.SHIFT);
       if (right == null) {
-        error(builder, JavaErrorMessages.message(toParse == ExprType.TYPE ? "expected.type" : "expected.expression"));
+        error(builder, JavaPsiBundle.message(patternExpected ? "expected.type" : "expected.expression"));
         expression.done(toCreate);
         return expression;
       }
@@ -244,7 +277,7 @@ public class ExpressionParser {
 
       final PsiBuilder.Marker operand = parseUnary(builder);
       if (operand == null) {
-        error(builder, JavaErrorMessages.message("expected.expression"));
+        error(builder, JavaPsiBundle.message("expected.expression"));
       }
 
       unary.done(JavaElementType.PREFIX_EXPRESSION);
@@ -273,12 +306,15 @@ public class ExpressionParser {
           return parsePostfix(builder);
         }
         else {
-          error(builder, JavaErrorMessages.message("expected.expression"));
+          error(builder, JavaPsiBundle.message("expected.expression"));
         }
       }
 
       typeCast.done(JavaElementType.TYPE_CAST_EXPRESSION);
       return typeCast;
+    }
+    else if (tokenType == JavaTokenType.SWITCH_KEYWORD) {
+      return myParser.getStatementParser().parseExprInParenthWithBlock(builder, JavaElementType.SWITCH_EXPRESSION, true);
     }
     else {
       return parsePostfix(builder);
@@ -327,7 +363,7 @@ public class ExpressionParser {
 
         if (dotTokenType == JavaTokenType.CLASS_KEYWORD && exprType(expr) == JavaElementType.REFERENCE_EXPRESSION) {
           if (breakPoint == BreakPoint.P1 && builder.getCurrentOffset() == breakOffset) {
-            error(builder, JavaErrorMessages.message("expected.identifier"));
+            error(builder, JavaPsiBundle.message("expected.identifier"));
             drop(startMarker, dotPos);
             return expr;
           }
@@ -394,7 +430,7 @@ public class ExpressionParser {
             dotPos.rollbackTo();
             builder.advanceLexer();
             myParser.getReferenceParser().parseReferenceParameterList(builder, false, false);
-            error(builder, JavaErrorMessages.message("expected.identifier"));
+            error(builder, JavaPsiBundle.message("expected.identifier"));
             refExpr.done(JavaElementType.REFERENCE_EXPRESSION);
             startMarker.drop();
             return refExpr;
@@ -443,14 +479,14 @@ public class ExpressionParser {
 
           final PsiBuilder.Marker index = parse(builder);
           if (index == null) {
-            error(builder, JavaErrorMessages.message("expected.expression"));
+            error(builder, JavaPsiBundle.message("expected.expression"));
             arrayAccess.done(JavaElementType.ARRAY_ACCESS_EXPRESSION);
             startMarker.drop();
             return arrayAccess;
           }
 
           if (builder.getTokenType() != JavaTokenType.RBRACKET) {
-            error(builder, JavaErrorMessages.message("expected.rbracket"));
+            error(builder, JavaPsiBundle.message("expected.rbracket"));
             arrayAccess.done(JavaElementType.ARRAY_ACCESS_EXPRESSION);
             startMarker.drop();
             return arrayAccess;
@@ -491,9 +527,11 @@ public class ExpressionParser {
     }
 
     if (tokenType == JavaTokenType.LPARENTH) {
-      final PsiBuilder.Marker lambda = parseLambdaAfterParenth(builder);
-      if (lambda != null) {
-        return lambda;
+      if (CASE_LABEL.get(builder) != Boolean.TRUE) {
+        final PsiBuilder.Marker lambda = parseLambdaAfterParenth(builder);
+        if (lambda != null) {
+          return lambda;
+        }
       }
 
       final PsiBuilder.Marker parenth = builder.mark();
@@ -501,12 +539,12 @@ public class ExpressionParser {
 
       final PsiBuilder.Marker inner = parse(builder);
       if (inner == null) {
-        error(builder, JavaErrorMessages.message("expected.expression"));
+        error(builder, JavaPsiBundle.message("expected.expression"));
       }
 
       if (!expect(builder, JavaTokenType.RPARENTH)) {
         if (inner != null) {
-          error(builder, JavaErrorMessages.message("expected.rparen"));
+          error(builder, JavaPsiBundle.message("expected.rparen"));
         }
       }
 
@@ -541,7 +579,7 @@ public class ExpressionParser {
       builder.remapCurrentToken(tokenType = JavaTokenType.IDENTIFIER);
     }
     if (tokenType == JavaTokenType.IDENTIFIER) {
-      if (builder.lookAhead(1) == JavaTokenType.ARROW) {
+      if (CASE_LABEL.get(builder) != Boolean.TRUE && builder.lookAhead(1) == JavaTokenType.ARROW) {
         return parseLambdaExpression(builder, false);
       }
 
@@ -601,15 +639,15 @@ public class ExpressionParser {
 
   @NotNull
   private PsiBuilder.Marker parseArrayInitializer(PsiBuilder builder) {
-    return parseArrayInitializer(builder, JavaElementType.ARRAY_INITIALIZER_EXPRESSION, builder1 -> parse(builder1) != null, "expected.expression");
+    return parseArrayInitializer(builder, JavaElementType.ARRAY_INITIALIZER_EXPRESSION, this::parse, "expected.expression");
   }
 
   @NotNull
   public PsiBuilder.Marker parseArrayInitializer(@NotNull PsiBuilder builder,
                                                  @NotNull IElementType type,
-                                                 @NotNull Function<? super PsiBuilder, Boolean> elementParser,
-                                                 @NotNull @PropertyKey(resourceBundle = BUNDLE) String missingElementKey) {
-    final PsiBuilder.Marker arrayInit = builder.mark();
+                                                 @NotNull Function<? super PsiBuilder, PsiBuilder.Marker> elementParser,
+                                                 @NotNull @PropertyKey(resourceBundle = JavaPsiBundle.BUNDLE) String missingElementKey) {
+    PsiBuilder.Marker arrayInit = builder.mark();
     builder.advanceLexer();
 
     boolean first = true;
@@ -620,20 +658,20 @@ public class ExpressionParser {
       }
 
       if (builder.getTokenType() == null) {
-        error(builder, JavaErrorMessages.message("expected.rbrace"));
+        error(builder, JavaPsiBundle.message("expected.rbrace"));
         break;
       }
 
-      if (!elementParser.fun(builder)) {
+      if (elementParser.apply(builder) == null) {
         if (builder.getTokenType() == JavaTokenType.COMMA) {
           if (first && builder.lookAhead(1) == JavaTokenType.RBRACE) {
             advance(builder, 2);
             break;
           }
-          builder.error(JavaErrorMessages.message(missingElementKey));
+          builder.error(JavaPsiBundle.message(missingElementKey));
         }
         else if (builder.getTokenType() != JavaTokenType.RBRACE) {
-          error(builder, JavaErrorMessages.message("expected.rbrace"));
+          error(builder, JavaPsiBundle.message("expected.rbrace"));
           break;
         }
       }
@@ -642,7 +680,7 @@ public class ExpressionParser {
 
       IElementType tokenType = builder.getTokenType();
       if (!expect(builder, JavaTokenType.COMMA) && tokenType != JavaTokenType.RBRACE) {
-        error(builder, JavaErrorMessages.message("expected.comma"));
+        error(builder, JavaPsiBundle.message("expected.comma"));
       }
     }
 
@@ -664,7 +702,7 @@ public class ExpressionParser {
       rollbackTo(anno);
       refOrType = myParser.getReferenceParser().parseJavaCodeReference(builder, true, true, true, true);
       if (refOrType == null) {
-        error(builder, JavaErrorMessages.message("expected.identifier"));
+        error(builder, JavaPsiBundle.message("expected.identifier"));
         newExpr.done(JavaElementType.NEW_EXPRESSION);
         return newExpr;
       }
@@ -674,7 +712,7 @@ public class ExpressionParser {
       builder.advanceLexer();
     }
     else {
-      error(builder, JavaErrorMessages.message("expected.identifier"));
+      error(builder, JavaPsiBundle.message("expected.identifier"));
       newExpr.done(JavaElementType.NEW_EXPRESSION);
       return newExpr;
     }
@@ -694,7 +732,7 @@ public class ExpressionParser {
 
     if (builder.getTokenType() != JavaTokenType.LBRACKET) {
       rollbackTo(anno);
-      error(builder, JavaErrorMessages.message(refOrType == null ? "expected.lbracket" : "expected.lparen.or.lbracket"));
+      error(builder, JavaPsiBundle.message(refOrType == null ? "expected.lbracket" : "expected.lparen.or.lbracket"));
       newExpr.done(JavaElementType.NEW_EXPRESSION);
       return newExpr;
     }
@@ -729,7 +767,7 @@ public class ExpressionParser {
         parseArrayInitializer(builder);
       }
       else {
-        error(builder, JavaErrorMessages.message("expected.array.initializer"));
+        error(builder, JavaPsiBundle.message("expected.array.initializer"));
       }
     }
 
@@ -777,7 +815,7 @@ public class ExpressionParser {
     else {
       if (!optionalClassKeyword) return null;
       mark.rollbackTo();
-      builder.error(".class expected");
+      builder.error(JavaPsiBundle.message("class.literal.expected"));
     }
 
     expr.done(JavaElementType.CLASS_OBJECT_ACCESS_EXPRESSION);
@@ -791,7 +829,7 @@ public class ExpressionParser {
     myParser.getReferenceParser().parseReferenceParameterList(builder, false, false);
 
     if (!expect(builder, JavaTokenType.IDENTIFIER) && !expect(builder, JavaTokenType.NEW_KEYWORD)) {
-      error(builder, JavaErrorMessages.message("expected.identifier"));
+      error(builder, JavaPsiBundle.message("expected.identifier"));
     }
 
     start.done(JavaElementType.METHOD_REF_EXPRESSION);
@@ -872,7 +910,7 @@ public class ExpressionParser {
     }
 
     if (body == null) {
-      builder.error(JavaErrorMessages.message("expected.lbrace"));
+      builder.error(JavaPsiBundle.message("expected.lbrace"));
     }
 
     start.done(JavaElementType.LAMBDA_EXPRESSION);
@@ -897,7 +935,7 @@ public class ExpressionParser {
         }
         else {
           hasError = true;
-          error(builder, JavaErrorMessages.message("expected.comma.or.rparen"));
+          error(builder, JavaPsiBundle.message("expected.comma.or.rparen"));
           emptyExpression(builder);
         }
       }
@@ -906,7 +944,7 @@ public class ExpressionParser {
       final PsiBuilder.Marker arg = parse(builder);
       if (arg == null) {
         if (!hasError) {
-          error(builder, JavaErrorMessages.message("expected.expression"));
+          error(builder, JavaPsiBundle.message("expected.expression"));
           emptyExpression(builder);
         }
         if (!ARGS_LIST_CONTINUE.contains(builder.getTokenType())) break;

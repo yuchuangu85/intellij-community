@@ -1,21 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-/** $Id$ */
-
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.intellij.images.vfs;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -27,10 +10,8 @@ import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.reference.SoftReference;
-import com.intellij.util.LogicalRoot;
-import com.intellij.util.LogicalRootsManager;
+import com.intellij.ui.scale.ScaleContext;
 import com.intellij.util.SVGLoader;
-import com.intellij.util.ui.JBUI.ScaleContext;
 import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.common.bytesource.ByteSourceArray;
 import org.apache.commons.imaging.formats.ico.IcoImageParser;
@@ -53,7 +34,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Iterator;
 
-import static com.intellij.util.ui.JBUI.ScaleType.OBJ_SCALE;
+import static com.intellij.ui.scale.ScaleType.OBJ_SCALE;
 
 /**
  * Image loader utility.
@@ -76,7 +57,7 @@ public final class IfsUtil {
    *
    * @param file File
    * @return true if file image is loaded.
-   * @throws java.io.IOException if image can not be loaded
+   * @throws IOException if image can not be loaded
    */
   private static boolean refresh(@NotNull VirtualFile file) throws IOException {
     Long loadedTimeStamp = file.getUserData(TIMESTAMP_KEY);
@@ -116,7 +97,7 @@ public final class IfsUtil {
 
           file.putUserData(FORMAT_KEY, SVG_FORMAT);
           file.putUserData(IMAGE_PROVIDER_REF_KEY, new SoftReference<>(new ImageDocument.CachedScaledImageProvider() {
-            ScaleContext.Cache<BufferedImage> cache = new ScaleContext.Cache<>((ctx) -> {
+            final ScaleContext.Cache<BufferedImage> cache = new ScaleContext.Cache<>((ctx) -> {
               try {
                 return SVGLoader.loadHiDPI(url.get(), new ByteArrayInputStream(content), ctx);
               }
@@ -132,7 +113,7 @@ public final class IfsUtil {
             @Override
             public BufferedImage apply(Double zoom, Component ancestor) {
               ScaleContext ctx = ScaleContext.create(ancestor);
-              ctx.update(OBJ_SCALE.of(zoom));
+              ctx.setScale(OBJ_SCALE.of(zoom));
               return cache.getOrProvide(ctx);
             }
           }));
@@ -196,11 +177,6 @@ public final class IfsUtil {
   }
 
   public static String getReferencePath(Project project, VirtualFile file) {
-    final LogicalRoot logicalRoot = LogicalRootsManager.getLogicalRootsManager(project).findLogicalRoot(file);
-    if (logicalRoot != null) {
-      return getRelativePath(file, logicalRoot.getVirtualFile());
-    }
-
     ProjectFileIndex fileIndex = ProjectRootManager.getInstance(project).getFileIndex();
     VirtualFile sourceRoot = fileIndex.getSourceRootForFile(file);
     if (sourceRoot != null) {

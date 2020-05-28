@@ -1,42 +1,32 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.openapi.vcs.rollback;
 
+import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsException;
-import com.intellij.openapi.vcs.VcsProviderMarker;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 /**
  * Interface for performing VCS rollback / revert operations.
  *
  * @author yole
- * @since 7.0
  */
-public interface RollbackEnvironment extends VcsProviderMarker {
+public interface RollbackEnvironment {
   /**
    * Returns the name of operation which is shown in the UI (in menu item name, dialog title and button text).
    *
    * @return the user-readable name of operation (for example, "Rollback" or "Revert").
    */
+  @Nls(capitalization = Nls.Capitalization.Title)
+  @NotNull
   String getRollbackOperationName();
 
   /**
@@ -83,4 +73,11 @@ public interface RollbackEnvironment extends VcsProviderMarker {
    * @param file the file to rollback.
    */
   void rollbackIfUnchanged(VirtualFile file);
+
+  /**
+   * @return the list of VCS-specific rollback-flavoured actions to show in Commit dialog
+   */
+  default Collection<? extends AnAction> createCustomRollbackActions() {
+    return Collections.emptyList();
+  }
 }

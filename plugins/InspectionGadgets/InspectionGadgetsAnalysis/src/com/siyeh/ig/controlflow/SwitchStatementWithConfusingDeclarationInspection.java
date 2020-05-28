@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2013 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2018 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,12 +34,6 @@ public class SwitchStatementWithConfusingDeclarationInspection extends BaseInspe
 
   @Override
   @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("switch.statement.with.confusing.declaration.display.name");
-  }
-
-  @Override
-  @NotNull
   protected String buildErrorString(Object... infos) {
     return InspectionGadgetsBundle.message("switch.statement.with.confusing.declaration.problem.descriptor");
   }
@@ -53,7 +47,16 @@ public class SwitchStatementWithConfusingDeclarationInspection extends BaseInspe
 
     @Override
     public void visitSwitchStatement(@NotNull PsiSwitchStatement statement) {
-      final PsiCodeBlock body = statement.getBody();
+      checkSwitchBlock(statement);
+    }
+
+    @Override
+    public void visitSwitchExpression(PsiSwitchExpression expression) {
+      checkSwitchBlock(expression);
+    }
+
+    private void checkSwitchBlock(PsiSwitchBlock block) {
+      final PsiCodeBlock body = block.getBody();
       if (body == null) {
         return;
       }
@@ -72,7 +75,7 @@ public class SwitchStatementWithConfusingDeclarationInspection extends BaseInspe
             }
           }
         }
-        else if (child instanceof PsiBreakStatement) {
+        else if (child instanceof PsiSwitchLabelStatementBase) {
           variablesInPreviousBranches.addAll(variablesInCurrentBranch);
           variablesInCurrentBranch.clear();
         }

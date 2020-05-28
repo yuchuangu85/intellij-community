@@ -18,8 +18,8 @@ import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectRootManager
-import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.util.use
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
 import java.util.*
@@ -36,19 +36,24 @@ class RetypeFileAction : AnAction() {
       existingSession.stop(false)
     }
     else {
-      val retypeOptionsDialog = RetypeOptionsDialog(project, editor)
+      val retypeOptions = RetypeOptions(project)
+      val retypeOptionsDialog = RetypeOptionsDialog(project, retypeOptions, editor)
       if (!retypeOptionsDialog.showAndGet()) return
-      val scriptBuilder = if (retypeOptionsDialog.recordScript) StringBuilder() else null
-      if (retypeOptionsDialog.isRetypeCurrentFile) {
-        val session = RetypeSession(project, editor!!, retypeOptionsDialog.retypeDelay, scriptBuilder, retypeOptionsDialog.threadDumpDelay)
+      val scriptBuilder = if (retypeOptions.recordScript) StringBuilder() else null
+      val largeIndexFileCount = if (retypeOptions.enableLargeIndexing) retypeOptions.largeIndexFilesCount else -1
+      latencyMap.clear()
+      if (retypeOptions.retypeCurrentFile) {
+        val session = RetypeSession(project, editor!!, retypeOptions.retypeDelay, scriptBuilder, retypeOptions.threadDumpDelay,
+                                    restoreText = retypeOptions.restoreOriginalText,
+                                    filesForIndexCount = largeIndexFileCount)
         session.start()
       }
       else {
-        latencyMap.clear()
-        val queue = RetypeQueue(project, retypeOptionsDialog.retypeDelay, retypeOptionsDialog.threadDumpDelay, scriptBuilder)
+        val queue = RetypeQueue(project, retypeOptions.retypeDelay, retypeOptions.threadDumpDelay, scriptBuilder,
+                                largeIndexFileCount, retypeOptions.restoreOriginalText)
         if (!collectSizeSampledFiles(project,
-                                     retypeOptionsDialog.retypeExtension.removePrefix("."),
-                                     retypeOptionsDialog.fileCount,
+                                     retypeOptions.retypeExtension.removePrefix("."),
+                                     retypeOptions.fileCount,
                                      queue)) return
         queue.processNext()
       }
@@ -99,6 +104,8 @@ class RetypeFileAction : AnAction() {
 
 interface RetypeFileAssistant {
   fun acceptLookupElement(element: LookupElement): Boolean
+  fun retypeDone(editor: Editor) {
+  }
 
   companion object {
     val EP_NAME = ExtensionPointName.create<RetypeFileAssistant>("com.intellij.retypeFileAssistant")
@@ -108,7 +115,10 @@ interface RetypeFileAssistant {
 private class RetypeQueue(private val project: Project,
                           private val retypeDelay: Int,
                           private val threadDumpDelay: Int,
-                          private val scriptBuilder: StringBuilder?) {
+                          private val scriptBuilder: StringBuilder?,
+                          private val largeIndexFileCount: Int,
+                          private val restoreText: Boolean
+) {
   val files = mutableListOf<VirtualFile>()
   private val threadDumps = mutableListOf<String>()
 
@@ -119,7 +129,9 @@ private class RetypeQueue(private val project: Project,
 
     val editor = FileEditorManager.getInstance(project).openTextEditor(OpenFileDescriptor(project, file, 0), true) as EditorImpl
     selectFragmentToRetype(editor)
-    val retypeSession = RetypeSession(project, editor, retypeDelay, scriptBuilder, threadDumpDelay, threadDumps)
+    val retypeSession = RetypeSession(project, editor, retypeDelay, scriptBuilder, threadDumpDelay, threadDumps,
+                                      restoreText = restoreText,
+                                      filesForIndexCount = largeIndexFileCount)
     if (files.isNotEmpty()) {
       retypeSession.startNextCallback = {
         ApplicationManager.getApplication().invokeLater { processNext() }
@@ -131,15 +143,11 @@ private class RetypeQueue(private val project: Project,
   private fun selectFragmentToRetype(editor: Editor) {
     if (editor.document.textLength < 2000) return  // file is small, retype it all
     val fileEditor = FileEditorManager.getInstance(project).selectedEditor ?: return
-    val structureView = fileEditor.structureViewBuilder?.createStructureView(fileEditor, project) ?: return
-    try {
-      val root = structureView.treeModel.root as? PsiTreeElementBase<*> ?: return
+    fileEditor.structureViewBuilder?.createStructureView(fileEditor, project)?.use {
+      val root = it.treeModel.root as? PsiTreeElementBase<*> ?: return
       val range = findRangeOfSuitableElement(root) ?: return
       editor.selectionModel.setSelection(range.startOffset, range.endOffset)
       editor.caretModel.moveToOffset(range.startOffset)
-    }
-    finally {
-      Disposer.dispose(structureView)
     }
   }
 

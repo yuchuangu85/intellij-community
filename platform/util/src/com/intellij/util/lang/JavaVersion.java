@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.lang;
 
 import com.intellij.openapi.util.text.StringUtil;
@@ -15,31 +15,30 @@ import java.util.List;
  * "New Version-String Scheme" (Java 9), as well as earlier version's formats.
  *
  * @see #parse(String) for examples of supported version strings
- * @since 2018.1
  */
 public final class JavaVersion implements Comparable<JavaVersion> {
   /**
    * The major version.
-   * Corresponds to the first number of a Java 9+ version string and to the second number of Java 1.0 to 1.8 strings.
+   * Corresponds to the first number of 9+ format (<b>9</b>.0.1) / the second number of 1.x format (1.<b>8</b>.0_60).
    */
   public final int feature;
 
   /**
    * The minor version.
-   * Corresponds to the second number of a Java 9+ version string and to the third number of Java 1.0 to 1.8 strings.
-   * Used in version strings prior to Java 1.5, in newer strings is always {@code 0}.
+   * Corresponds to the second number of 9+ format (9.<b>0</b>.1) / the third number of 1.x format (1.8.<b>0</b>_60).
+   * Was used in version strings prior to 1.5, in newer strings is always {@code 0}.
    */
   public final int minor;
 
   /**
    * The patch version.
-   * Corresponds to the third number of a Java 9+ version string and to the number of Java 1.0 to 1.8 strings (one after an underscore).
+   * Corresponds to the third number of 9+ format (9.0.<b>1</b>) / the number after an underscore of 1.x format (1.8.0_<b>60</b>).
    */
   public final int update;
 
   /**
    * The build number.
-   * Corresponds to a number prefixed by a plus sign in a Java 9+ version string and by "-b" string in earlier versions.
+   * Corresponds to a number prefixed by the "plus" sign in 9+ format (9.0.1+<b>7</b>) / by "-b" string in 1.x format (1.8.0_60-b<b>12</b>).
    */
   public final int build;
 
@@ -95,22 +94,55 @@ public final class JavaVersion implements Comparable<JavaVersion> {
     return hash;
   }
 
+  /**
+   * @return feature version string, e.g. <b>1.8</b> or <b>11</b>
+   */
+  @NotNull
+  public String toFeatureString() {
+    return formatVersionTo( true, true);
+  }
+
+  /**
+   * @return feature, minor and update components of the version string, e.g.
+   * <b>1.8.0_242</b> or <b>11.0.5</b>
+   */
+  @NotNull
+  public String toFeatureMinorUpdateString() {
+    return formatVersionTo(false, true);
+  }
+
   @Override
   public String toString() {
+    return formatVersionTo(false, false);
+  }
+
+  @NotNull
+  @SuppressWarnings("HardCodedStringLiteral")
+  private String formatVersionTo(boolean upToFeature,
+                                 boolean upToUpdate) {
     StringBuilder sb = new StringBuilder();
+
     if (feature > 8) {
       sb.append(feature);
-      if (minor > 0 || update > 0) sb.append('.').append(minor);
-      if (update > 0) sb.append('.').append(update);
-      if (ea) sb.append("-ea");
-      if (build > 0) sb.append('+').append(build);
+      if (!upToFeature) {
+        if (minor > 0 || update > 0) sb.append('.').append(minor);
+        if (update > 0) sb.append('.').append(update);
+        if (!upToUpdate) {
+          if (ea) sb.append("-ea");
+          if (build > 0) sb.append('+').append(build);
+        }
+      }
     }
     else {
       sb.append("1.").append(feature);
-      if (minor > 0 || update > 0 || ea || build > 0) sb.append('.').append(minor);
-      if (update > 0) sb.append('_').append(update);
-      if (ea) sb.append("-ea");
-      if (build > 0) sb.append("-b").append(build);
+      if (!upToFeature) {
+        if (minor > 0 || update > 0 || ea || build > 0) sb.append('.').append(minor);
+        if (update > 0) sb.append('_').append(update);
+        if (!upToUpdate) {
+          if (ea) sb.append("-ea");
+          if (build > 0) sb.append("-b").append(build);
+        }
+      }
     }
     return sb.toString();
   }
@@ -180,10 +212,11 @@ public final class JavaVersion implements Comparable<JavaVersion> {
    *
    * <p>Supports various sources, including (but not limited to):<br>
    *   - {@code "java.*version"} system properties (a version number without any decoration)<br>
-   *   - values of Java compiler -source/-target/--release options ("$MAJOR", "1.$MAJOR")</br>
+   *   - values of Java compiler -source/-target/--release options ("$MAJOR", "1.$MAJOR")<br>
    *   - output of "{@code java -version}" (usually "java version \"$VERSION\"")<br>
    *   - a second line of the above command (something like to "Java(TM) SE Runtime Environment (build $VERSION)")<br>
-   *   - output of "{@code java --full-version}" ("java $VERSION")</p>
+   *   - output of "{@code java --full-version}" ("java $VERSION")<br>
+   *   - a line of "release" file ("JAVA_VERSION=\"$VERSION\"")</p>
    *
    * <p>See com.intellij.util.lang.JavaVersionTest for examples.</p>
    *
@@ -198,8 +231,8 @@ public final class JavaVersion implements Comparable<JavaVersion> {
     }
 
     // partitioning
-    List<String> separators = new ArrayList<String>();
-    List<String> numbers = new ArrayList<String>();
+    List<String> separators = new ArrayList<>();
+    List<String> numbers = new ArrayList<>();
     int length = str.length(), p = 0;
     boolean number = false;
     while (p < length) {

@@ -64,10 +64,6 @@ public abstract class AbstractTestEvent implements TestEvent {
            : JavaTestLocator.TEST_PROTOCOL + SCHEME_SEPARATOR + StringUtil.getQualifiedName(fqClassName, StringUtil.trimEnd(name, "()"));
   }
 
-  protected void addToInvokeLater(final Runnable runnable) {
-    ExternalSystemApiUtil.addToInvokeLater(runnable);
-  }
-
   @Nullable
   protected SMTestProxy findTestProxy(final String proxyId) {
     return getExecutionConsole().getTestsMap().get(proxyId);
@@ -79,5 +75,9 @@ public abstract class AbstractTestEvent implements TestEvent {
 
   protected String decode(String s) {
     return new String(Base64.getDecoder().decode(s), StandardCharsets.UTF_8);
+  }
+
+  protected boolean showInternalTestNodes() {
+    return GradleConsoleProperties.SHOW_INTERNAL_TEST_NODES.value(getProperties());
   }
 }

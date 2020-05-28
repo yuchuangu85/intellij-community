@@ -1,28 +1,23 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.application.ex;
 
 import com.intellij.openapi.application.ApplicationInfo;
+import com.intellij.openapi.extensions.PluginId;
+import com.intellij.openapi.util.BuildNumber;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.awt.*;
-import java.io.File;
 import java.util.Calendar;
 import java.util.List;
 
-/**
- * @author mike
- */
 public abstract class ApplicationInfoEx extends ApplicationInfo {
   public static ApplicationInfoEx getInstanceEx() {
-    return (ApplicationInfoEx) getInstance();
+    return (ApplicationInfoEx)getInstance();
   }
 
   public abstract Calendar getMajorReleaseBuildDate();
 
   public abstract String getSplashImageUrl();
-
-  public abstract Color getSplashTextColor();
 
   public abstract String getAboutImageUrl();
 
@@ -32,40 +27,38 @@ public abstract class ApplicationInfoEx extends ApplicationInfo {
   @Deprecated
   public abstract String getIconUrl();
 
-  public abstract String getSmallIconUrl();
+  /**
+   * @deprecated use {@link #getSmallApplicationSvgIconUrl()} instead
+   */
+  @Deprecated
+  public abstract @NotNull String getSmallIconUrl();
 
   /**
    * @deprecated use {@link #getApplicationSvgIconUrl()} instead
    */
   @Deprecated
-  @Nullable
-  public abstract String getBigIconUrl();
+  public abstract @Nullable String getBigIconUrl();
 
   /**
    * Return path to an svg file containing icon of the current version of the product. The path is a relative path inside the product's JAR
    * files. It may return special icon for EAP builds.
    */
-  @Nullable
-  public abstract String getApplicationSvgIconUrl();
+  public abstract @Nullable String getApplicationSvgIconUrl();
 
   /**
-   * Return an svg file containing icon of the current version of the product. It may return special icon for EAP builds.
+   * Return path to an svg file containing a variant of {@link #getApplicationSvgIconUrl() the product icon} which is suitable for 16x16 images.
    */
-  @Nullable
-  public abstract File getApplicationSvgIconFile();
+  public abstract @Nullable String getSmallApplicationSvgIconUrl();
 
   public abstract String getToolWindowIconUrl();
 
-  public abstract String getWelcomeScreenLogoUrl();
+  public abstract @Nullable String getWelcomeScreenLogoUrl();
 
   /**
    * This method is used to detect that the product isn't meant to be used as an IDE but is embedded to another product or used as a
    * standalone tool so different licensing scheme should be applied.
    */
-  @Nullable
-  public abstract String getPackageCode();
-
-  public abstract String getFullApplicationName();
+  public abstract @Nullable String getPackageCode();
 
   public abstract boolean showLicenseeInfo();
 
@@ -76,7 +69,7 @@ public abstract class ApplicationInfoEx extends ApplicationInfo {
    */
   public abstract boolean isMajorEAP();
 
-  public abstract UpdateUrls getUpdateUrls();
+  public abstract @Nullable UpdateUrls getUpdateUrls();
 
   public abstract String getDocumentationUrl();
 
@@ -86,7 +79,12 @@ public abstract class ApplicationInfoEx extends ApplicationInfo {
 
   public abstract String getFeedbackUrl();
 
+  /*
+   * Returns url to plugins repository without trailing slash
+   */
   public abstract String getPluginManagerUrl();
+
+  public abstract boolean usesJetBrainsPluginRepository();
 
   public abstract String getPluginsListUrl();
 
@@ -104,31 +102,21 @@ public abstract class ApplicationInfoEx extends ApplicationInfo {
 
   public abstract String getMacKeymapUrl();
 
-  public abstract Color getAboutForeground();
+  public abstract long getAboutForeground();
 
   public interface UpdateUrls {
     String getCheckingUrl();
     String getPatchesUrl();
   }
 
-  public interface PluginChooserPage {
-    @NotNull
-    String getTitle();
-    @Nullable
-    String getCategory();
-    @Nullable
-    String getDependentPlugin();
-  }
-
-  public abstract List<PluginChooserPage> getPluginChooserPages();
-
   /**
    * @return {@code true} if the specified plugin is an essential part of the IDE so it cannot be disabled and isn't shown in Settings | Plugins
    */
-  public abstract boolean isEssentialPlugin(String pluginId);
+  public abstract boolean isEssentialPlugin(@NotNull String pluginId);
 
-  @Nullable
-  public abstract String getCustomizeIDEWizardStepsProvider();
+  public abstract boolean isEssentialPlugin(@NotNull PluginId pluginId);
+
+  public abstract @Nullable String getCustomizeIDEWizardStepsProvider();
 
   public abstract String getSubscriptionFormId();
 
@@ -140,8 +128,7 @@ public abstract class ApplicationInfoEx extends ApplicationInfo {
 
   public abstract boolean areSubscriptionTipsAvailable();
 
-  @Nullable
-  public abstract String getSubscriptionAdditionalFormData();
+  public abstract @Nullable String getSubscriptionAdditionalFormData();
 
   /**
    * @return true if the product's vendor is JetBrains
@@ -149,4 +136,18 @@ public abstract class ApplicationInfoEx extends ApplicationInfo {
   public final boolean isVendorJetBrains() {
     return "JetBrains".equals(getShortCompanyName());
   }
+
+  public abstract List<ProgressSlide> getProgressSlides();
+
+  public abstract int getProgressHeight();
+
+  public abstract int getProgressY();
+
+  public abstract long getProgressColor();
+
+  public abstract long getCopyrightForeground();
+
+  public abstract @Nullable String getProgressTailIcon();
+
+  public abstract @NotNull BuildNumber getApiVersionAsNumber();
 }

@@ -25,8 +25,12 @@ import java.util.concurrent.ConcurrentMap;
 
 /**
  * A type of item with a distinct highlighting in an editor or in other views.
+ * Use one of {@link #createTextAttributesKey(String)} {@link #createTextAttributesKey(String, TextAttributesKey)}
+ * to create a new key, fallbacks will help finding colors in all colors schemes.
+ * Specifying different attributes for different color schemes is possible using additionalTextAttributes extension point.
  */
 public final class TextAttributesKey implements Comparable<TextAttributesKey> {
+  public static final TextAttributesKey[] EMPTY_ARRAY = new TextAttributesKey[0];
   private static final Logger LOG = Logger.getInstance(TextAttributesKey.class);
   private static final String TEMP_PREFIX = "TEMP::";
   private static final TextAttributes NULL_ATTRIBUTES = new TextAttributes();
@@ -135,7 +139,8 @@ public final class TextAttributesKey implements Comparable<TextAttributesKey> {
    * @return the text attributes.
    */
   public TextAttributes getDefaultAttributes() {
-    if (myDefaultAttributes == null) {
+    TextAttributes defaultAttributes = myDefaultAttributes;
+    if (defaultAttributes == null) {
       final TextAttributeKeyDefaultsProvider provider = ourDefaultsProvider.getValue();
       if (provider != null) {
         Set<String> called = CALLED_RECURSIVELY.get();
@@ -148,7 +153,7 @@ public final class TextAttributesKey implements Comparable<TextAttributesKey> {
         }
       }
     }
-    return myDefaultAttributes;
+    return defaultAttributes;
   }
 
   /**

@@ -27,13 +27,13 @@ import com.intellij.psi.PsiMethod;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.testFramework.IdeaTestUtil;
 import com.intellij.testFramework.LightProjectDescriptor;
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
-public class ExternalJavadocUrlsTest extends LightCodeInsightFixtureTestCase {
+public class ExternalJavadocUrlsTest extends LightJavaCodeInsightFixtureTestCase {
   private static final ProjectDescriptor DESCRIPTOR = new ProjectDescriptor(LanguageLevel.HIGHEST) {
     @Override
     public Sdk getSdk() {
@@ -62,7 +62,7 @@ public class ExternalJavadocUrlsTest extends LightCodeInsightFixtureTestCase {
            "  void <caret>foo(Class<?>... cl) { }\n" +
            "}",
 
-           "foo-java.lang.Class...-", "foo-java.lang.Class<?>...-", "foo(java.lang.Class...)", "foo(java.lang.Class<?>...)");
+           "foo(java.lang.Class...)", "foo-java.lang.Class...-");
 
   }
 
@@ -72,7 +72,14 @@ public class ExternalJavadocUrlsTest extends LightCodeInsightFixtureTestCase {
            "}\n" +
            "class Comparator<X>{}",
 
-           "sort-T:A-Comparator-", "sort-T:A-Comparator<? super T>-", "sort(T[], Comparator)", "sort(T[], Comparator<? super T>)");
+           "sort(T[],Comparator)", "sort-T:A-Comparator-", "sort(T[], Comparator)");
+  }
+
+  public void testConstructor() {
+    doTest("class Test {\n" +
+           "  Test<caret>() { }\n" +
+           "}",
+           "<init>()", "Test--", "Test()");
   }
 
   protected void doTest(String text, String... expected) {

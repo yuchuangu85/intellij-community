@@ -1,19 +1,5 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+
 package org.jetbrains.plugins.github
 
 import com.intellij.CommonBundle
@@ -22,8 +8,9 @@ import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.DataProvider
-import com.intellij.openapi.application.invokeAndWaitIfNeed
+import com.intellij.openapi.application.invokeAndWaitIfNeeded
 import com.intellij.openapi.components.service
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
@@ -33,11 +20,9 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.Splitter
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.ThrowableComputable
-import com.intellij.openapi.vcs.ProjectLevelVcsManager
-import com.intellij.openapi.vcs.VcsDataKeys
-import com.intellij.openapi.vcs.VcsException
-import com.intellij.openapi.vcs.VcsNotifier
+import com.intellij.openapi.vcs.*
 import com.intellij.openapi.vcs.changes.ChangeListManager
 import com.intellij.openapi.vcs.changes.ui.SelectFilesDialog
 import com.intellij.openapi.vcs.ui.CommitMessage
@@ -51,7 +36,6 @@ import com.intellij.util.ui.UIUtil
 import com.intellij.vcsUtil.VcsFileUtil
 import git4idea.DialogManager
 import git4idea.GitUtil
-import git4idea.actions.BasicAction
 import git4idea.actions.GitInit
 import git4idea.commands.Git
 import git4idea.commands.GitCommand
@@ -63,10 +47,12 @@ import org.jetbrains.annotations.NonNls
 import org.jetbrains.annotations.TestOnly
 import org.jetbrains.plugins.github.api.GithubApiRequestExecutorManager
 import org.jetbrains.plugins.github.api.GithubApiRequests
+import org.jetbrains.plugins.github.api.data.request.Type
 import org.jetbrains.plugins.github.api.util.GithubApiPagesLoader
 import org.jetbrains.plugins.github.authentication.GithubAuthenticationManager
 import org.jetbrains.plugins.github.authentication.accounts.GithubAccount
 import org.jetbrains.plugins.github.authentication.accounts.GithubAccountInformationProvider
+import org.jetbrains.plugins.github.i18n.GithubBundle
 import org.jetbrains.plugins.github.ui.GithubShareDialog
 import org.jetbrains.plugins.github.util.GithubAccountsMigrationHelper
 import org.jetbrains.plugins.github.util.GithubGitHelper
@@ -83,7 +69,9 @@ import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.JPanel
 
-class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily share project on GitHub", AllIcons.Vcs.Vendors.Github) {
+class GithubShareAction : DumbAwareAction(GithubBundle.messagePointer("share.action"),
+                                          GithubBundle.messagePointer("share.action.description"),
+                                          AllIcons.Vcs.Vendors.Github) {
   override fun update(e: AnActionEvent) {
     val project = e.getData(CommonDataKeys.PROJECT)
     e.presentation.isEnabledAndVisible = project != null && !project.isDefault
@@ -114,7 +102,7 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
 
     @JvmStatic
     fun shareProjectOnGithub(project: Project, file: VirtualFile?) {
-      BasicAction.saveAll()
+      FileDocumentManager.getInstance().saveAllDocuments();
 
       val gitRepository = GithubGitHelper.findGitRepository(project, file)
 
@@ -149,10 +137,10 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
             val user = requestExecutor.execute(progressManager.progressIndicator, GithubApiRequests.CurrentUser.get(account.server))
             val names = GithubApiPagesLoader
               .loadAll(requestExecutor, progressManager.progressIndicator,
-                       GithubApiRequests.CurrentUser.Repos.pages(account.server, false))
+                       GithubApiRequests.CurrentUser.Repos.pages(account.server, Type.OWNER))
               .mapSmartSet { it.name }
             user.canCreatePrivateRepo() to names
-          }, "Loading Account Information For $account", true, project)
+          }, GithubBundle.message("share.process.loading.account.info", account), true, project)
         }
       }
 
@@ -173,13 +161,13 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
       val account: GithubAccount = shareDialog.getAccount()
 
       val requestExecutor = requestExecutorManager.getExecutor(account, project) ?: return
-      object : Task.Backgroundable(project, "Sharing Project on GitHub...") {
+      object : Task.Backgroundable(project, GithubBundle.message("share.process")) {
         private lateinit var url: String
 
         override fun run(indicator: ProgressIndicator) {
           // create GitHub repo (network)
           LOG.info("Creating GitHub repository")
-          indicator.text = "Creating GitHub repository..."
+          indicator.text = GithubBundle.message("share.process.creating.repository")
           url = requestExecutor
             .execute(indicator, GithubApiRequests.CurrentUser.Repos.create(account.server, name, description, isPrivate)).htmlUrl
           LOG.info("Successfully created GitHub repository")
@@ -189,7 +177,7 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
           LOG.info("Binding local project with GitHub")
           if (gitRepository == null) {
             LOG.info("No git detected, creating empty git repo")
-            indicator.text = "Creating empty git repo..."
+            indicator.text = GithubBundle.message("share.process.creating.git.repository")
             if (!createEmptyGitRepository(project, root)) {
               return
             }
@@ -198,17 +186,18 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
           val repositoryManager = GitUtil.getRepositoryManager(project)
           val repository = repositoryManager.getRepositoryForRoot(root)
           if (repository == null) {
-            GithubNotifications.showError(project, "Failed to create GitHub Repository", "Can't find Git repository")
+            GithubNotifications.showError(project, GithubBundle.message("share.error.failed.to.create.repo"),
+                                          GithubBundle.message("cannot.find.git.repo"))
             return
           }
 
-          indicator.text = "Retrieving username..."
+          indicator.text = GithubBundle.message("share.process.retrieving.username")
           val username = accountInformationProvider.getInformation(requestExecutor, indicator, account).login
           val remoteUrl = gitHelper.getRemoteUrl(account.server, username, name)
 
           //git remote add origin git@github.com:login/name.git
           LOG.info("Adding GitHub as a remote host")
-          indicator.text = "Adding GitHub as a remote host..."
+          indicator.text = GithubBundle.message("share.process.adding.gh.as.remote.host")
           git.addRemote(repository, remoteName, remoteUrl).throwOnError()
           repository.update()
 
@@ -219,12 +208,12 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
 
           //git push origin master
           LOG.info("Pushing to github master")
-          indicator.text = "Pushing to github master..."
+          indicator.text = GithubBundle.message("share.process.pushing.to.github.master")
           if (!pushCurrentBranch(project, repository, remoteName, remoteUrl, name, url)) {
             return
           }
 
-          GithubNotifications.showInfoURL(project, "Successfully shared project on GitHub", name, url)
+          GithubNotifications.showInfoURL(project, GithubBundle.message("share.process.successfully.shared"), name, url)
         }
 
         private fun createEmptyGitRepository(project: Project,
@@ -236,7 +225,6 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
             return false
           }
           GitInit.refreshAndConfigureVcsMappings(project, root, root.path)
-          //even if gitignore file can be created after VCS configuration changed, we call this explicitly just to be sure that gitignore file will be added to initial commit
           GitUtil.generateGitignoreFileIfNeeded(project, root)
           return true
         }
@@ -255,18 +243,19 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
           LOG.info("Trying to commit")
           try {
             LOG.info("Adding files for commit")
-            indicator.text = "Adding files to git..."
+            indicator.text = GithubBundle.message("share.process.adding.files")
 
             // ask for files to add
             val trackedFiles = ChangeListManager.getInstance(project).affectedFiles
-            val untrackedFiles = filterOutIgnored(project, repository.untrackedFilesHolder.retrieveUntrackedFiles())
+            val untrackedFiles =
+              filterOutIgnored(project, repository.untrackedFilesHolder.retrieveUntrackedFilePaths().mapNotNull(FilePath::getVirtualFile))
             trackedFiles.removeAll(untrackedFiles) // fix IDEA-119855
 
             val allFiles = ArrayList<VirtualFile>()
             allFiles.addAll(trackedFiles)
             allFiles.addAll(untrackedFiles)
 
-            val dialog = invokeAndWaitIfNeed(indicator.modalityState) {
+            val dialog = invokeAndWaitIfNeeded(indicator.modalityState) {
               GithubUntrackedFilesDialog(project, allFiles).apply {
                 if (!trackedFiles.isEmpty()) {
                   selectedFiles = trackedFiles
@@ -277,7 +266,7 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
 
             val files2commit = dialog.selectedFiles
             if (!dialog.isOK || files2commit.isEmpty()) {
-              GithubNotifications.showInfoURL(project, "Successfully created empty repository on GitHub", name, url)
+              GithubNotifications.showInfoURL(project, GithubBundle.message("share.process.empty.project.created"), name, url)
               return false
             }
 
@@ -291,7 +280,7 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
 
             // commit
             LOG.info("Performing commit")
-            indicator.text = "Performing commit..."
+            indicator.text = GithubBundle.message("share.process.performing.commit")
             val handler = GitLineHandler(project, root, GitCommand.COMMIT)
             handler.setStdoutSuppressed(false)
             handler.addParameters("-m", dialog.commitMessage)
@@ -302,8 +291,11 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
           }
           catch (e: VcsException) {
             LOG.warn(e)
-            GithubNotifications.showErrorURL(project, "Can't finish GitHub sharing process", "Successfully created project ", "'$name'",
-                                             " on GitHub, but initial commit failed:<br/>" + GithubUtil.getErrorTextFromException(e),
+            GithubNotifications.showErrorURL(project, GithubBundle.message("share.error.cannot.finish"),
+                                             GithubBundle.message("share.error.created.project"),
+                                             " '$name' ",
+                                             GithubBundle.message("share.error.init.commit.failed") + GithubUtil.getErrorTextFromException(
+                                               e),
                                              url)
             return false
           }
@@ -326,21 +318,26 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
                                       url: String): Boolean {
           val currentBranch = repository.currentBranch
           if (currentBranch == null) {
-            GithubNotifications.showErrorURL(project, "Can't finish GitHub sharing process", "Successfully created project ", "'$name'",
-                                             " on GitHub, but initial push failed: no current branch", url)
+            GithubNotifications.showErrorURL(project, GithubBundle.message("share.error.cannot.finish"),
+                                             GithubBundle.message("share.error.created.project"),
+                                             " '$name' ",
+                                             GithubBundle.message("share.error.push.no.current.branch"),
+                                             url)
             return false
           }
           val result = git.push(repository, remoteName, remoteUrl, currentBranch.name, true)
           if (!result.success()) {
-            GithubNotifications.showErrorURL(project, "Can't finish GitHub sharing process", "Successfully created project ", "'$name'",
-                                             " on GitHub, but initial push failed:<br/>" + result.errorOutputAsHtmlString, url)
+            GithubNotifications.showErrorURL(project, GithubBundle.message("share.error.cannot.finish"),
+                                             GithubBundle.message("share.error.created.project"),
+                                             " '$name' ",
+                                             GithubBundle.message("share.error.push.failed", result.errorOutputAsHtmlString), url)
             return false
           }
           return true
         }
 
         override fun onThrowable(error: Throwable) {
-          GithubNotifications.showError(project, "Failed to create GitHub Repository", error)
+          GithubNotifications.showError(project, GithubBundle.message("share.error.failed.to.create.repo"), error)
         }
       }.queue()
     }
@@ -349,14 +346,14 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
   @TestOnly
   class GithubExistingRemotesDialog(project: Project, private val remotes: List<String>) : DialogWrapper(project) {
     init {
-      title = "Project Is Already on GitHub"
-      setOKButtonText("Share Anyway")
+      title = GithubBundle.message("share.error.project.is.on.github")
+      setOKButtonText(GithubBundle.message("share.anyway.button"))
       init()
     }
 
     override fun createCenterPanel(): JComponent? {
-      val mainText = JBLabel(if (remotes.size == 1) "Remote is already on GitHub:"
-                             else "Following remotes are already on GitHub:")
+      val mainText = JBLabel(if (remotes.size == 1) GithubBundle.message("share.action.remote.is.on.github")
+                             else GithubBundle.message("share.action.remotes.are.on.github"))
 
       val remotesPanel = JPanel().apply {
         layout = BoxLayout(this, BoxLayout.Y_AXIS)
@@ -393,7 +390,7 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
       get() = myCommitMessagePanel!!.comment
 
     init {
-      title = "Add Files For Initial Commit"
+      title = GithubBundle.message("untracked.files.dialog.title")
       setOKButtonText(CommonBundle.getAddButtonText())
       setCancelButtonText(CommonBundle.getCancelButtonText())
       init()
@@ -406,8 +403,10 @@ class GithubShareAction : DumbAwareAction("Share Project on GitHub", "Easily sha
     override fun createCenterPanel(): JComponent? {
       val tree = super.createCenterPanel()
 
-      myCommitMessagePanel = CommitMessage(myProject)
-      myCommitMessagePanel!!.setCommitMessage("Initial commit")
+      val commitMessage = CommitMessage(myProject)
+      Disposer.register(disposable, commitMessage)
+      commitMessage.setCommitMessage("Initial commit")
+      myCommitMessagePanel = commitMessage
 
       val splitter = Splitter(true)
       splitter.setHonorComponentsMinimumSize(true)

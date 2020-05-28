@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.source.codeStyle;
 
 import com.intellij.configurationStore.SchemeDataHolder;
@@ -23,6 +9,7 @@ import com.intellij.openapi.options.SchemeState;
 import com.intellij.openapi.util.InvalidDataException;
 import com.intellij.psi.codeStyle.CodeStyleScheme;
 import com.intellij.psi.codeStyle.CodeStyleSettings;
+import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -34,6 +21,7 @@ public class CodeStyleSchemeImpl extends ExternalizableSchemeAdapter implements 
   private String myParentSchemeName;
   private final boolean myIsDefault;
   private volatile CodeStyleSettings myCodeStyleSettings;
+  private long myLastModificationCount;
 
   private final Object lock = new Object();
 
@@ -44,7 +32,7 @@ public class CodeStyleSchemeImpl extends ExternalizableSchemeAdapter implements 
     myParentSchemeName = parentSchemeName;
   }
 
-  public CodeStyleSchemeImpl(@NotNull String name, boolean isDefault, CodeStyleScheme parentScheme) {
+  public CodeStyleSchemeImpl(@NotNull String name, boolean isDefault, @Nullable CodeStyleScheme parentScheme) {
     setName(name);
     myIsDefault = isDefault;
     init(parentScheme, null);
@@ -54,11 +42,11 @@ public class CodeStyleSchemeImpl extends ExternalizableSchemeAdapter implements 
   private CodeStyleSettings init(@Nullable CodeStyleScheme parentScheme, @Nullable Element root) {
     final CodeStyleSettings settings;
     if (parentScheme == null) {
-      settings = new CodeStyleSettings();
+      settings = CodeStyleSettingsManager.getInstance().createSettings();
     }
     else {
       CodeStyleSettings parentSettings = parentScheme.getCodeStyleSettings();
-      settings = parentSettings.clone();
+      settings = CodeStyleSettingsManager.getInstance().cloneSettings(parentSettings);
       while (parentSettings.getParentSettings() != null) {
         parentSettings = parentSettings.getParentSettings();
       }
@@ -92,8 +80,10 @@ public class CodeStyleSchemeImpl extends ExternalizableSchemeAdapter implements 
         return myCodeStyleSettings;
       }
 
+      Element element = dataHolder.read();
+      // nullize only after element is successfully read, otherwise our state will be undefined - both myDataHolder and myCodeStyleSettings are null
       myDataHolder = null;
-      settings = init(myParentSchemeName == null ? null : CodeStyleSchemesImpl.getSchemeManager().findSchemeByName(myParentSchemeName), dataHolder.read());
+      settings = init(myParentSchemeName == null ? null : CodeStyleSchemesImpl.getSchemeManager().findSchemeByName(myParentSchemeName), element);
       dataHolder.updateDigest(this);
       myParentSchemeName = null;
     }
@@ -117,7 +107,14 @@ public class CodeStyleSchemeImpl extends ExternalizableSchemeAdapter implements 
   @Override
   public SchemeState getSchemeState() {
     synchronized (lock) {
-      return myDataHolder == null ? SchemeState.POSSIBLY_CHANGED : SchemeState.UNCHANGED;
+      if (myDataHolder == null) {
+        final long currModificationCount = myCodeStyleSettings.getModificationTracker().getModificationCount();
+        if (myLastModificationCount != currModificationCount) {
+          myLastModificationCount = currModificationCount;
+          return SchemeState.POSSIBLY_CHANGED;
+        }
+      }
+      return SchemeState.UNCHANGED;
     }
   }
 

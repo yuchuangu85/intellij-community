@@ -1,7 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.ui;
 
-import com.intellij.debugger.DebuggerBundle;
+import com.intellij.debugger.JavaDebuggerBundle;
 import com.intellij.debugger.DebuggerManagerEx;
 import com.intellij.debugger.engine.JavaStackFrame;
 import com.intellij.debugger.engine.events.DebuggerCommandImpl;
@@ -19,13 +19,11 @@ import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
-import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.EditorNotificationPanel;
 import com.intellij.ui.EditorNotifications;
 import com.intellij.ui.components.JBList;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.xdebugger.XDebugSession;
-import com.intellij.xdebugger.XDebuggerManager;
 import com.intellij.xdebugger.XSourcePosition;
 import com.intellij.xdebugger.frame.XStackFrame;
 import com.intellij.xdebugger.impl.ui.DebuggerUIUtil;
@@ -38,17 +36,9 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
 
-/**
- * @author egor
- */
-public class AlternativeSourceNotificationProvider extends EditorNotifications.Provider<EditorNotificationPanel> {
+public final class AlternativeSourceNotificationProvider extends EditorNotifications.Provider<EditorNotificationPanel> {
   private static final Key<EditorNotificationPanel> KEY = Key.create("AlternativeSource");
   private static final Key<Boolean> FILE_PROCESSED_KEY = Key.create("AlternativeSourceCheckDone");
-  private final Project myProject;
-
-  public AlternativeSourceNotificationProvider(Project project) {
-    myProject = project;
-  }
 
   @NotNull
   @Override
@@ -58,11 +48,14 @@ public class AlternativeSourceNotificationProvider extends EditorNotifications.P
 
   @Nullable
   @Override
-  public EditorNotificationPanel createNotificationPanel(@NotNull VirtualFile file, @NotNull FileEditor fileEditor) {
+  public EditorNotificationPanel createNotificationPanel(@NotNull VirtualFile file, @NotNull FileEditor fileEditor, @NotNull Project project) {
     if (!DebuggerSettings.getInstance().SHOW_ALTERNATIVE_SOURCE) {
       return null;
     }
-    XDebugSession session = XDebuggerManager.getInstance(myProject).getCurrentSession();
+
+    DebuggerSession javaSession = DebuggerManagerEx.getInstanceEx(project).getContext().getDebuggerSession();
+    XDebugSession session = javaSession != null ? javaSession.getXDebugSession() : null;
+
     if (session == null) {
       setFileProcessed(file, false);
       return null;
@@ -74,7 +67,7 @@ public class AlternativeSourceNotificationProvider extends EditorNotifications.P
       return null;
     }
 
-    final PsiFile psiFile = PsiManager.getInstance(myProject).findFile(file);
+    final PsiFile psiFile = PsiManager.getInstance(project).findFile(file);
     if (psiFile == null) return null;
 
     if (!(psiFile instanceof PsiJavaFile)) return null;
@@ -87,10 +80,10 @@ public class AlternativeSourceNotificationProvider extends EditorNotifications.P
 
     if (name == null) return null;
 
-    if (DumbService.getInstance(myProject).isDumb()) return null;
+    if (DumbService.getInstance(project).isDumb()) return null;
 
     ArrayList<PsiClass> alts = ContainerUtil.newArrayList(
-      JavaPsiFacade.getInstance(myProject).findClasses(name, GlobalSearchScope.allScope(myProject)));
+      JavaPsiFacade.getInstance(project).findClasses(name, javaSession.getSearchScope()));
     ContainerUtil.removeDuplicates(alts);
 
     setFileProcessed(file, true);
@@ -117,7 +110,7 @@ public class AlternativeSourceNotificationProvider extends EditorNotifications.P
         }
       }
 
-      return new AlternativeSourceNotificationPanel(elems, baseClass, myProject, file, locationDeclName);
+      return new AlternativeSourceNotificationPanel(elems, baseClass, project, file, locationDeclName);
     }
     return null;
   }
@@ -158,7 +151,7 @@ public class AlternativeSourceNotificationProvider extends EditorNotifications.P
                                               final Project project,
                                               final VirtualFile file,
                                               String locationDeclName) {
-      setText(DebuggerBundle.message("editor.notification.alternative.source", aClass.getQualifiedName()));
+      setText(JavaDebuggerBundle.message("editor.notification.alternative.source", aClass.getQualifiedName()));
       final ComboBox<ComboBoxClassElement> switcher = new ComboBox<>(alternatives);
       switcher.addActionListener(new ActionListener() {
         @Override
@@ -188,7 +181,7 @@ public class AlternativeSourceNotificationProvider extends EditorNotifications.P
         }
       });
       myLinksPanel.add(switcher);
-      createActionLabel(DebuggerBundle.message("action.disable.text"), () -> {
+      createActionLabel(JavaDebuggerBundle.message("action.disable.text"), () -> {
         DebuggerSettings.getInstance().SHOW_ALTERNATIVE_SOURCE = false;
         setFileProcessed(file, false);
         FileEditorManager fileEditorManager = FileEditorManager.getInstance(project);

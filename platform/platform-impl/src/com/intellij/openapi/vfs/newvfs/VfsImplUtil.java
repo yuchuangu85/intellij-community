@@ -1,35 +1,37 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vfs.newvfs;
 
+import com.intellij.ide.plugins.DynamicPluginListener;
+import com.intellij.ide.plugins.IdeaPluginDescriptor;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.vfs.LocalFileSystem;
-import com.intellij.openapi.vfs.VFileProperty;
-import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.openapi.vfs.*;
 import com.intellij.openapi.vfs.impl.ArchiveHandler;
 import com.intellij.openapi.vfs.newvfs.events.*;
 import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.messages.MessageBusConnection;
+import gnu.trove.THashMap;
+import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.TestOnly;
 
 import java.io.File;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
-public class VfsImplUtil {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.vfs.newvfs.VfsImplUtil");
+import static com.intellij.openapi.util.Pair.pair;
 
-  private static final String FILE_SEPARATORS = "/" + File.separator;
+public class VfsImplUtil {
+  private static final Logger LOG = Logger.getInstance(VfsImplUtil.class);
+
+  private static final String FILE_SEPARATORS = "/" + (File.separatorChar == '/' ? "" : File.separator);
 
   private VfsImplUtil() { }
 
@@ -89,10 +91,10 @@ public class VfsImplUtil {
         file = file.findChildIfCached(pathElement);
       }
 
-      if (file == null) return Pair.pair(null, last);
+      if (file == null) return pair(null, last);
     }
 
-    return Pair.pair(file, null);
+    return pair(file, null);
   }
 
   @Nullable
@@ -125,14 +127,14 @@ public class VfsImplUtil {
 
   @Nullable
   private static Pair<NewVirtualFile, Iterable<String>> prepare(@NotNull NewVirtualFileSystem vfs, @NotNull String path) {
-    String normalizedPath = normalize(vfs, path);
+    String normalizedPath = vfs.normalize(path);
     if (StringUtil.isEmptyOrSpaces(normalizedPath)) {
       return null;
     }
 
     String basePath = vfs.extractRootPath(normalizedPath);
-    if (basePath.length() > normalizedPath.length() || basePath.isEmpty()) {
-      LOG.warn(vfs + " failed to extract root path '" + basePath + "' from '" + normalizedPath + "' (original '" + path + "')");
+    if (StringUtil.isEmptyOrSpaces(basePath) || basePath.length() > normalizedPath.length()) {
+      LOG.warn(vfs + " has extracted incorrect root '" + basePath + "' from '" + normalizedPath + "' (original '" + path + "')");
       return null;
     }
 
@@ -142,7 +144,7 @@ public class VfsImplUtil {
     }
 
     Iterable<String> parts = StringUtil.tokenize(normalizedPath.substring(basePath.length()), FILE_SEPARATORS);
-    return Pair.create(root, parts);
+    return pair(root, parts);
   }
 
   public static void refresh(@NotNull NewVirtualFileSystem vfs, boolean asynchronous) {
@@ -150,10 +152,6 @@ public class VfsImplUtil {
     if (roots.length > 0) {
       RefreshQueue.getInstance().refresh(asynchronous, true, null, roots);
     }
-  }
-
-  public static String normalize(@NotNull NewVirtualFileSystem vfs, @NotNull String path) {
-    return vfs.normalize(path);
   }
 
   /**
@@ -178,28 +176,28 @@ public class VfsImplUtil {
 
   private static final AtomicBoolean ourSubscribed = new AtomicBoolean(false);
   private static final Object ourLock = new Object();
-  private static final Map<String, Pair<ArchiveFileSystem, ArchiveHandler>> ourHandlers = ContainerUtil.newTroveMap(FileUtil.PATH_HASHING_STRATEGY);
-  private static final Map<String, Set<String>> ourDominatorsMap = ContainerUtil.newTroveMap(FileUtil.PATH_HASHING_STRATEGY);
+  private static final Map<String, Pair<ArchiveFileSystem, ArchiveHandler>> ourHandlerCache = new THashMap<>(FileUtil.PATH_HASHING_STRATEGY); // guarded by ourLock
+  private static final Map<String, Set<String>> ourDominatorsMap = new THashMap<>(FileUtil.PATH_HASHING_STRATEGY);
 
   @NotNull
   public static <T extends ArchiveHandler> T getHandler(@NotNull ArchiveFileSystem vfs,
                                                         @NotNull VirtualFile entryFile,
                                                         @NotNull Function<? super String, ? extends T> producer) {
-    String localPath = vfs.extractLocalPath(vfs.extractRootPath(entryFile.getPath()));
+    String localPath = vfs.extractLocalPath(VfsUtilCore.getRootFile(entryFile).getPath());
     checkSubscription();
 
     T handler;
 
     synchronized (ourLock) {
-      Pair<ArchiveFileSystem, ArchiveHandler> record = ourHandlers.get(localPath);
+      Pair<ArchiveFileSystem, ArchiveHandler> record = ourHandlerCache.get(localPath);
 
       if (record == null) {
         handler = producer.fun(localPath);
-        record = Pair.create(vfs, handler);
-        ourHandlers.put(localPath, record);
+        record = pair(vfs, handler);
+        ourHandlerCache.put(localPath, record);
 
         forEachDirectoryComponent(localPath, containingDirectoryPath -> {
-          Set<String> handlers = ourDominatorsMap.computeIfAbsent(containingDirectoryPath, __ -> ContainerUtil.newTroveSet());
+          Set<String> handlers = ourDominatorsMap.computeIfAbsent(containingDirectoryPath, __ -> new THashSet<>());
           handlers.add(localPath);
         });
       }
@@ -211,7 +209,7 @@ public class VfsImplUtil {
     return handler;
   }
 
-  private static void forEachDirectoryComponent(String rootPath, Consumer<? super String> consumer) {
+  private static void forEachDirectoryComponent(@NotNull String rootPath, @NotNull Consumer<? super String> consumer) {
     int index = rootPath.lastIndexOf('/');
     while (index > 0) {
       String containingDirectoryPath = rootPath.substring(0, index);
@@ -224,8 +222,12 @@ public class VfsImplUtil {
     if (ourSubscribed.getAndSet(true)) return;
 
     Application app = ApplicationManager.getApplication();
-    if (app.isDisposeInProgress()) return;  // we might perform a shutdown activity that includes visiting archives (IDEA-181620)
-    app.getMessageBus().connect(app).subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
+    if (app.isDisposed()) {
+      // we might perform a shutdown activity that includes visiting archives (IDEA-181620)
+      return;
+    }
+    MessageBusConnection connection = app.getMessageBus().connect(app);
+    connection.subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
       @Override
       public void after(@NotNull List<? extends VFileEvent> events) {
         InvalidationState state = null;
@@ -256,7 +258,7 @@ public class VfsImplUtil {
             else {
               Collection<String> affectedPaths = ourDominatorsMap.get(path);
               if (affectedPaths != null) {
-                affectedPaths = ContainerUtil.newArrayList(affectedPaths);  // defensive copying; original may be updated on invalidation
+                affectedPaths = new ArrayList<>(affectedPaths);  // defensive copying; original may be updated on invalidation
                 for (String affectedPath : affectedPaths) {
                   state = invalidate(state, affectedPath);
                 }
@@ -268,11 +270,20 @@ public class VfsImplUtil {
         if (state != null) state.scheduleRefresh();
       }
     });
+    connection.subscribe(DynamicPluginListener.TOPIC, new DynamicPluginListener() {
+      @Override
+      public void pluginUnloaded(@NotNull IdeaPluginDescriptor pluginDescriptor, boolean isUpdate) {
+        synchronized (ourLock) {
+          // avoid leaking ArchiveFileSystem registered by plugin, e.g. TgzFileSystem from Kubernetes plugin
+          ourHandlerCache.clear();
+        }
+      }
+    });
   }
 
   @Nullable
-  private static InvalidationState invalidate(@Nullable InvalidationState state, String path) {
-    Pair<ArchiveFileSystem, ArchiveHandler> handlerPair = ourHandlers.remove(path);
+  private static InvalidationState invalidate(@Nullable InvalidationState state, @NotNull String path) {
+    Pair<ArchiveFileSystem, ArchiveHandler> handlerPair = ourHandlerCache.remove(path);
     if (handlerPair != null) {
       handlerPair.second.dispose();
 
@@ -291,24 +302,32 @@ public class VfsImplUtil {
   }
 
   private static class InvalidationState {
-    private Set<NewVirtualFile> myRootsToRefresh;
+    private Set<Pair<String, ArchiveFileSystem>> myRootsToRefresh;
 
-    private void registerPathToRefresh(String path, ArchiveFileSystem vfs) {
-      NewVirtualFile root = ManagingFS.getInstance().findRoot(vfs.composeRootPath(path), vfs);
-      if (root != null) {
-        if (myRootsToRefresh == null) myRootsToRefresh = ContainerUtil.newHashSet();
-        myRootsToRefresh.add(root);
-      }
+    private void registerPathToRefresh(@NotNull String path, @NotNull ArchiveFileSystem vfs) {
+      if (myRootsToRefresh == null) myRootsToRefresh = new HashSet<>();
+      myRootsToRefresh.add(pair(path, vfs));
     }
 
     private void scheduleRefresh() {
       if (myRootsToRefresh != null) {
-        for (NewVirtualFile root : myRootsToRefresh) {
+        List<NewVirtualFile> rootsToRefresh = ContainerUtil.mapNotNull(myRootsToRefresh, pathAndFs ->
+          ManagingFS.getInstance().findRoot(pathAndFs.second.composeRootPath(pathAndFs.first), pathAndFs.second));
+        for (NewVirtualFile root : rootsToRefresh) {
           root.markDirtyRecursively();
         }
         boolean async = !ApplicationManager.getApplication().isUnitTestMode();
-        RefreshQueue.getInstance().refresh(async, true, null, myRootsToRefresh);
+        RefreshQueue.getInstance().refresh(async, true, null, rootsToRefresh);
       }
+    }
+  }
+
+  @TestOnly
+  public static void releaseHandler(@NotNull String localPath) {
+    if (!ApplicationManager.getApplication().isUnitTestMode()) throw new IllegalStateException();
+    synchronized (ourLock) {
+      InvalidationState state = invalidate(null, localPath);
+      if (state == null) throw new IllegalArgumentException(localPath + " not in " + ourHandlerCache.keySet());
     }
   }
 }

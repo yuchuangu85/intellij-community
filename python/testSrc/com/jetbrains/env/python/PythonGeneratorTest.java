@@ -1,3 +1,4 @@
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.env.python;
 
 import com.jetbrains.env.PyEnvTestCase;
@@ -9,9 +10,6 @@ import com.jetbrains.python.tools.sdkTools.SdkCreationType;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Test;
 
-/**
- * @author traff
- */
 public class PythonGeneratorTest extends PyEnvTestCase {
   @Test
   @Staging
@@ -27,7 +25,7 @@ public class PythonGeneratorTest extends PyEnvTestCase {
       protected void checkTestResults(@NotNull final PyUnitTestProcessRunner runner,
                                       @NotNull final String stdout,
                                       @NotNull final String stderr,
-                                      @NotNull final String all) {
+                                      @NotNull final String all, int exitCode) {
         runner.assertAllTestsPassed();
       }
 

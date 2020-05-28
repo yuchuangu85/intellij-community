@@ -20,15 +20,21 @@ import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiReference;
+import com.intellij.psi.SyntaxTraverser;
 import com.intellij.psi.search.PsiElementProcessor;
 import com.intellij.psi.util.PsiElementFilter;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.IncorrectOperationException;
 import org.intellij.lang.regexp.psi.RegExpBackref;
-import org.intellij.lang.regexp.psi.RegExpElement;
 import org.intellij.lang.regexp.psi.RegExpElementVisitor;
 import org.intellij.lang.regexp.psi.RegExpGroup;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
+
+import static com.intellij.openapi.util.text.StringUtil.trimEnd;
+import static com.intellij.openapi.util.text.StringUtil.trimStart;
 
 public class RegExpBackrefImpl extends RegExpElementImpl implements RegExpBackref {
     public RegExpBackrefImpl(ASTNode astNode) {
@@ -37,9 +43,20 @@ public class RegExpBackrefImpl extends RegExpElementImpl implements RegExpBackre
 
     @Override
     public int getIndex() {
+        return Integer.parseInt(getIndexNumberText());
+    }
+
+    @NotNull
+    private String getIndexNumberText() {
         final String s = getUnescapedText();
         assert s.charAt(0) == '\\';
-        return Integer.parseInt(s.substring(1));
+        boolean pcreBackReference = s.charAt(1) == 'g';
+        return pcreBackReference ? getPcreBackrefIndexNumberText(s.substring(2)) : s.substring(1);
+    }
+
+    @NotNull
+    private static String getPcreBackrefIndexNumberText(String s) {
+        return trimEnd(trimStart(s, "{"), "}");
     }
 
     @Override
@@ -50,27 +67,19 @@ public class RegExpBackrefImpl extends RegExpElementImpl implements RegExpBackre
     @Override
     public RegExpGroup resolve() {
         final int index = getIndex();
-
-        final PsiElementProcessor.FindFilteredElement<RegExpElement> processor =
-          new PsiElementProcessor.FindFilteredElement<>(new PsiElementFilter() {
-            int groupCount;
-
-            @Override
-            public boolean isAccepted(PsiElement element) {
-              if (element instanceof RegExpGroup) {
-                if (((RegExpGroup)element).isCapturing() && ++groupCount == index) {
-                  return true;
-                }
-              }
-              return element == RegExpBackrefImpl.this;
-            }
-          });
-
-        PsiTreeUtil.processElements(getContainingFile(), processor);
-        if (processor.getFoundElement() instanceof RegExpGroup) {
-            return (RegExpGroup)processor.getFoundElement();
+        if (index < 0) {
+            return resolveRelativeGroup(Math.abs(index));
         }
-        return null;
+
+        return SyntaxTraverser.psiTraverser(getContainingFile()).traverse().takeWhile(e -> e != RegExpBackrefImpl.this)
+          .filter(RegExpGroup.class).filter(RegExpGroup::isCapturing).skip(index - 1).first();
+    }
+
+    @Nullable
+    private RegExpGroup resolveRelativeGroup(int index) {
+        List<RegExpGroup> groups = SyntaxTraverser.psiTraverser(getContainingFile()).filter(RegExpGroup.class)
+          .filter(RegExpGroup::isCapturing).toList();
+        return index <= groups.size() ? groups.get(groups.size() - index) : null;
     }
 
     @Override

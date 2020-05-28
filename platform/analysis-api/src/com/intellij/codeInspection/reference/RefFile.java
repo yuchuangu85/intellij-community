@@ -21,7 +21,6 @@ import com.intellij.psi.PsiFile;
  * A node in the reference graph corresponding to a file.
  *
  * @author anna
- * @since 6.0
  */
 public interface RefFile extends RefElement {
   /**
@@ -34,6 +33,10 @@ public interface RefFile extends RefElement {
     return getElement();
   }
 
+
+  /**
+   * @deprecated use {@link #getPsiElement()}
+   */
   @Deprecated
   @Override
   default PsiFile getElement() {

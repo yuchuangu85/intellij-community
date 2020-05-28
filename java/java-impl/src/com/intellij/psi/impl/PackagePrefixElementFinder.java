@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl;
 
 import com.intellij.openapi.project.DumbAware;
@@ -10,6 +10,7 @@ import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiPackage;
 import com.intellij.psi.impl.file.PsiPackageImpl;
 import com.intellij.psi.search.GlobalSearchScope;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
@@ -27,14 +28,18 @@ public class PackagePrefixElementFinder extends PsiElementFinder implements Dumb
     myPackagePrefixIndex = new PackagePrefixIndex(project);
   }
 
+  @NotNull
+  public static PackagePrefixElementFinder getInstance(@NotNull Project project) {
+    return PsiElementFinder.EP.findExtensionOrFail(PackagePrefixElementFinder.class, project);
+  }
+
   @Override
   public PsiClass findClass(@NotNull String qualifiedName, @NotNull GlobalSearchScope scope) {
     return null;
   }
 
-  @NotNull
   @Override
-  public PsiClass[] findClasses(@NotNull String qualifiedName, @NotNull GlobalSearchScope scope) {
+  public PsiClass @NotNull [] findClasses(@NotNull String qualifiedName, @NotNull GlobalSearchScope scope) {
     return PsiClass.EMPTY_ARRAY;
   }
 
@@ -46,9 +51,8 @@ public class PackagePrefixElementFinder extends PsiElementFinder implements Dumb
     return null;
   }
 
-  @NotNull
   @Override
-  public PsiPackage[] getSubPackages(@NotNull PsiPackage psiPackage, @NotNull GlobalSearchScope scope) {
+  public PsiPackage @NotNull [] getSubPackages(@NotNull PsiPackage psiPackage, @NotNull GlobalSearchScope scope) {
     final Map<String, PsiPackage> packagesMap = new HashMap<>();
     final String qualifiedName = psiPackage.getQualifiedName();
 
@@ -66,6 +70,7 @@ public class PackagePrefixElementFinder extends PsiElementFinder implements Dumb
     return packagesMap.values().toArray(PsiPackage.EMPTY_ARRAY);
   }
 
+  @Contract(pure = true)
   public boolean packagePrefixExists(String packageQName) {
     for (final String prefix : myPackagePrefixIndex.getAllPackagePrefixes(null)) {
       if (StringUtil.startsWithConcatenation(prefix, packageQName, ".") || prefix.equals(packageQName)) {
@@ -74,14 +79,5 @@ public class PackagePrefixElementFinder extends PsiElementFinder implements Dumb
     }
 
     return false;
-  }
-
-  public static PackagePrefixElementFinder getInstance(Project project) {
-    for (PsiElementFinder o : PsiElementFinder.EP_NAME.getExtensions(project)) {
-      if (o instanceof PackagePrefixElementFinder) {
-        return (PackagePrefixElementFinder) o;
-      }
-    }
-    throw new UnsupportedOperationException("couldn't find self");
   }
 }

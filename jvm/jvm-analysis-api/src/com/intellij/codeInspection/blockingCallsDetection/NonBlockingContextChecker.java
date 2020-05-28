@@ -11,10 +11,7 @@ import org.jetbrains.annotations.NotNull;
  * Determines if passed element is inside code fragment where thread should not be blocked.
  * <p>
  * Frameworks could implement this EP to provide information that in some contexts the execution thread should not be blocked.
- *
- * @since 2018.3
  */
-@ApiStatus.Experimental
 public interface NonBlockingContextChecker {
   ExtensionPointName<NonBlockingContextChecker> EP_NAME = ExtensionPointName.create("com.intellij.codeInsight.nonBlockingContextChecker");
 

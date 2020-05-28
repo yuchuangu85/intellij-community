@@ -16,10 +16,10 @@
 package com.intellij.application.options;
 
 import com.intellij.ide.highlighter.JavaHighlightingColors;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonShortcuts;
 import com.intellij.openapi.actionSystem.ShortcutSet;
-import com.intellij.openapi.application.ApplicationBundle;
 import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.psi.codeStyle.PackageEntry;
@@ -40,14 +40,13 @@ import javax.swing.table.TableCellEditor;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableModel;
 import java.awt.*;
-import java.awt.event.ItemEvent;
-import java.awt.event.ItemListener;
 
 /**
  * @author Max Medvedev
  */
 public abstract class ImportLayoutPanel extends JPanel {
-  private final JBCheckBox myCbLayoutStaticImportsSeparately = new JBCheckBox("Layout static imports separately");
+  private final JBCheckBox myCbLayoutStaticImportsSeparately =
+    new JBCheckBox(JavaBundle.message("import.layout.static.imports.separately"));
   private final JBTable myImportLayoutTable;
 
   private final PackageEntryTable myImportLayoutList = new PackageEntryTable();
@@ -66,44 +65,41 @@ public abstract class ImportLayoutPanel extends JPanel {
 
   public ImportLayoutPanel() {
     super(new BorderLayout());
-    setBorder(IdeBorderFactory.createTitledBorder(ApplicationBundle.message("title.import.layout"), false, JBUI.emptyInsets()));
+    setBorder(IdeBorderFactory.createTitledBorder(JavaBundle.message("title.import.layout"), false, JBUI.emptyInsets()));
 
-    myCbLayoutStaticImportsSeparately.addItemListener(new ItemListener() {
-      @Override
-      public void itemStateChanged(ItemEvent e) {
-        if (areStaticImportsEnabled()) {
-          boolean found = false;
-          for (int i = myImportLayoutList.getEntryCount() - 1; i >= 0; i--) {
-            PackageEntry entry = myImportLayoutList.getEntryAt(i);
-            if (entry == PackageEntry.ALL_OTHER_STATIC_IMPORTS_ENTRY) {
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            int index = myImportLayoutList.getEntryCount();
-            if (index != 0 && myImportLayoutList.getEntryAt(index - 1) != PackageEntry.BLANK_LINE_ENTRY) {
-              myImportLayoutList.addEntry(PackageEntry.BLANK_LINE_ENTRY);
-            }
-            myImportLayoutList.addEntry(PackageEntry.ALL_OTHER_STATIC_IMPORTS_ENTRY);
+    myCbLayoutStaticImportsSeparately.addItemListener(e -> {
+      if (areStaticImportsEnabled()) {
+        boolean found = false;
+        for (int i = myImportLayoutList.getEntryCount() - 1; i >= 0; i--) {
+          PackageEntry entry = myImportLayoutList.getEntryAt(i);
+          if (entry == PackageEntry.ALL_OTHER_STATIC_IMPORTS_ENTRY) {
+            found = true;
+            break;
           }
         }
-        else {
-          for (int i = myImportLayoutList.getEntryCount() - 1; i >= 0; i--) {
-            PackageEntry entry = myImportLayoutList.getEntryAt(i);
-            if (entry.isStatic()) {
-              myImportLayoutList.removeEntryAt(i);
-            }
+        if (!found) {
+          int index = myImportLayoutList.getEntryCount();
+          if (index != 0 && myImportLayoutList.getEntryAt(index - 1) != PackageEntry.BLANK_LINE_ENTRY) {
+            myImportLayoutList.addEntry(PackageEntry.BLANK_LINE_ENTRY);
           }
+          myImportLayoutList.addEntry(PackageEntry.ALL_OTHER_STATIC_IMPORTS_ENTRY);
         }
-        refresh();
       }
+      else {
+        for (int i = myImportLayoutList.getEntryCount() - 1; i >= 0; i--) {
+          PackageEntry entry = myImportLayoutList.getEntryAt(i);
+          if (entry.isStatic()) {
+            myImportLayoutList.removeEntryAt(i);
+          }
+        }
+      }
+      refresh();
     });
 
     add(myCbLayoutStaticImportsSeparately, BorderLayout.NORTH);
 
     JPanel importLayoutPanel = ToolbarDecorator.createDecorator(myImportLayoutTable = createTableForPackageEntries(myImportLayoutList, this))
-      .addExtraAction(new DumbAwareActionButton(ApplicationBundle.message("button.add.package"), IconUtil.getAddPackageIcon()) {
+      .addExtraAction(new DumbAwareActionButton(JavaBundle.messagePointer("button.add.package"), IconUtil.getAddPackageIcon()) {
         @Override
         public void actionPerformed(@NotNull AnActionEvent e) {
           addPackageToImportLayouts();
@@ -114,39 +110,21 @@ public abstract class ImportLayoutPanel extends JPanel {
           return CommonShortcuts.getNewForDialogs();
         }
       })
-      .addExtraAction(new DumbAwareActionButton(ApplicationBundle.message("button.add.blank"), IconUtil.getAddBlankLineIcon()) {
+      .addExtraAction(new DumbAwareActionButton(JavaBundle.messagePointer("button.add.blank"), IconUtil.getAddBlankLineIcon()) {
         @Override
         public void actionPerformed(@NotNull AnActionEvent e) {
           addBlankLine();
         }
       })
-      .setRemoveAction(new AnActionButtonRunnable() {
-        @Override
-        public void run(AnActionButton button) {
-          removeEntryFromImportLayouts();
-        }
+      .setRemoveAction(button -> removeEntryFromImportLayouts())
+      .setMoveUpAction(button -> moveRowUp())
+      .setMoveDownAction(button -> moveRowDown())
+      .setRemoveActionUpdater(e -> {
+        int selectedImport = myImportLayoutTable.getSelectedRow();
+        PackageEntry entry = selectedImport < 0 ? null : myImportLayoutList.getEntryAt(selectedImport);
+        return entry != null && entry != PackageEntry.ALL_OTHER_STATIC_IMPORTS_ENTRY && entry != PackageEntry.ALL_OTHER_IMPORTS_ENTRY;
       })
-      .setMoveUpAction(new AnActionButtonRunnable() {
-        @Override
-        public void run(AnActionButton button) {
-          moveRowUp();
-        }
-      })
-      .setMoveDownAction(new AnActionButtonRunnable() {
-        @Override
-        public void run(AnActionButton button) {
-          moveRowDown();
-        }
-      })
-      .setRemoveActionUpdater(new AnActionButtonUpdater() {
-        @Override
-        public boolean isEnabled(@NotNull AnActionEvent e) {
-          int selectedImport = myImportLayoutTable.getSelectedRow();
-          PackageEntry entry = selectedImport < 0 ? null : myImportLayoutList.getEntryAt(selectedImport);
-          return entry != null && entry != PackageEntry.ALL_OTHER_STATIC_IMPORTS_ENTRY && entry != PackageEntry.ALL_OTHER_IMPORTS_ENTRY;
-        }
-      })
-      .setButtonComparator(ApplicationBundle.message("button.add.package"), ApplicationBundle.message("button.add.blank"), "Remove", "Up", "Down")
+      .setButtonComparator(JavaBundle.message("button.add.package"), JavaBundle.message("button.add.blank"), "Remove", "Up", "Down")
       .setPreferredSize(new Dimension(-1, 100)).createPanel();
 
 
@@ -236,8 +214,8 @@ public abstract class ImportLayoutPanel extends JPanel {
 
   public static JBTable createTableForPackageEntries(final PackageEntryTable packageTable, final ImportLayoutPanel panel) {
     final String[] names = {
-      ApplicationBundle.message("listbox.import.package"),
-      ApplicationBundle.message("listbox.import.with.subpackages"),
+      JavaBundle.message("listbox.import.package"),
+      JavaBundle.message("listbox.import.with.subpackages"),
     };
     // Create a model of the data.
     TableModel dataModel = new AbstractTableModel() {
@@ -271,7 +249,7 @@ public abstract class ImportLayoutPanel extends JPanel {
 
       @Override
       public String getColumnName(int column) {
-        if (panel.areStaticImportsEnabled() && column == 0) return "Static";
+        if (panel.areStaticImportsEnabled() && column == 0) return JavaBundle.message("listbox.import.static");
         column -= panel.areStaticImportsEnabled() ? 1 : 0;
         return names[column];
       }
@@ -404,9 +382,7 @@ public abstract class ImportLayoutPanel extends JPanel {
     TableUtil.editCellAt(table, selectedRow, 0);
     Component editorComp = table.getEditorComponent();
     if (editorComp != null) {
-      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-        IdeFocusManager.getGlobalInstance().requestFocus(editorComp, true);
-      });
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(editorComp, true));
     }
   }
 }

@@ -33,15 +33,12 @@ public class AppMainV2 {
   public static final String LAUNCHER_PORT_NUMBER = "idea.launcher.port";
   public static final String LAUNCHER_BIN_PATH = "idea.launcher.bin.path";
 
-  private static final String JAVAFX_LAUNCHER = "com.sun.javafx.application.LauncherImpl";
-  private static final String LAUNCH_APPLICATION_METHOD_NAME = "launchApplication";
-
   private static native void triggerControlBreak();
 
   private static boolean loadHelper(String binPath) {
-    String osName = System.getProperty("os.name").toLowerCase(Locale.US);
+    String osName = System.getProperty("os.name").toLowerCase(Locale.ENGLISH);
     if (osName.startsWith("windows")) {
-      String arch = System.getProperty("os.arch").toLowerCase(Locale.US);
+      String arch = System.getProperty("os.arch").toLowerCase(Locale.ENGLISH);
       File libFile = new File(binPath, arch.equals("amd64") ? "breakgen64.dll" : "breakgen.dll");
       if (libFile.isFile()) {
         System.load(libFile.getAbsolutePath());
@@ -104,10 +101,10 @@ public class AppMainV2 {
     String[] params = new String[args.length - 1];
     System.arraycopy(args, 1, params, 0, args.length - 1);
 
-    Class appClass = Class.forName(mainClass);
+    Class<?> appClass = Class.forName(mainClass);
     Method m;
     try {
-      m = appClass.getMethod("main", new Class[]{params.getClass()});
+      m = appClass.getMethod("main", String[].class);
     }
     catch (NoSuchMethodException e) {
       if (!startJavaFXApplication(params, appClass)) {
@@ -135,12 +132,12 @@ public class AppMainV2 {
     }
   }
 
-  private static boolean startJavaFXApplication(String[] params, Class appClass) throws NoSuchMethodException {
+  private static boolean startJavaFXApplication(String[] params, Class<?> appClass) {
     try {
       //check in launch method for application class in the stack trace leads to this hack here
-      Class[] types = {appClass.getClass(), params.getClass()};
-      Method launchApplication = Class.forName(JAVAFX_LAUNCHER).getMethod(LAUNCH_APPLICATION_METHOD_NAME, types);
-      launchApplication.invoke(null, new Object[] {appClass, params});
+      Method launchApplication = Class.forName("com.sun.javafx.application.LauncherImpl")
+        .getMethod("launchApplication", Class.class, String[].class);
+      launchApplication.invoke(null, appClass, params);
       return true;
     }
     catch (Throwable e) {

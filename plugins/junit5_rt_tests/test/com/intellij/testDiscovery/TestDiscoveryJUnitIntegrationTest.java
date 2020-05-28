@@ -2,21 +2,23 @@
 package com.intellij.testDiscovery;
 
 import com.intellij.execution.ExecutionException;
-import com.intellij.execution.configurations.RunConfiguration;
-import com.intellij.execution.configurations.RunConfigurationBase;
 import com.intellij.execution.junit.JUnitConfiguration;
 import com.intellij.execution.testDiscovery.TestDiscoveryDataSocketListener;
 import com.intellij.execution.testDiscovery.TestDiscoveryExtension;
 import com.intellij.execution.testDiscovery.TestDiscoveryIndex;
+import com.intellij.execution.testDiscovery.actions.ShowAffectedTestsAction;
 import com.intellij.java.execution.AbstractTestFrameworkCompilingIntegrationTest;
 import com.intellij.openapi.actionSystem.LangDataKeys;
 import com.intellij.openapi.roots.ContentEntry;
 import com.intellij.openapi.roots.ModuleRootModificationUtil;
+import com.intellij.openapi.util.Couple;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
+import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiMethod;
 import com.intellij.testFramework.EdtRule;
 import com.intellij.testFramework.MapDataContext;
 import com.intellij.testFramework.PlatformTestUtil;
@@ -33,7 +35,6 @@ import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Set;
@@ -69,7 +70,7 @@ public class TestDiscoveryJUnitIntegrationTest extends AbstractTestFrameworkComp
                                              entry.addSourceFolder(getTestContentRoot() + "/src", false);
                                              entry.addSourceFolder(getTestContentRoot() + "/test", true);
                                            });
-    addLibs(myModule, new JpsMavenRepositoryLibraryDescriptor("junit", "junit", myJUnitVersion), getRepoManager());
+    addMavenLibs(myModule, new JpsMavenRepositoryLibraryDescriptor("junit", "junit", myJUnitVersion), getRepoManager());
   }
 
   @Before
@@ -115,10 +116,16 @@ public class TestDiscoveryJUnitIntegrationTest extends AbstractTestFrameworkComp
     assertTestDiscoveryIndex("Person", "<init>", t("PersonTest", "testPerson"));
   }
 
-  private void assertTestDiscoveryIndex(String className, String methodName, Pair<String, String>... expectedTests) throws IOException {
+  private void assertTestDiscoveryIndex(String className, String methodName, Pair<String, String>... expectedTests) {
+    PsiClass aClass = myJavaFacade.findClass(className);
+    PsiMethod method = "<init>".equals(methodName)
+                       ? assertOneElement(aClass.getConstructors())
+                       : assertOneElement(aClass.findMethodsByName(methodName, false));
+    Couple<String> methodKey = ShowAffectedTestsAction.getMethodKey(method);
+
     TestDiscoveryIndex testDiscoveryIndex = TestDiscoveryIndex.getInstance(myProject);
     MultiMap<String, String> rawActualTests1 =
-      testDiscoveryIndex.getTestsByMethodName(className, methodName, JUnitConfiguration.FRAMEWORK_ID);
+      testDiscoveryIndex.getTestsByMethodName(methodKey.getFirst(), methodKey.getSecond(), JUnitConfiguration.FRAMEWORK_ID);
     MultiMap<String, String> rawActualTests2 = testDiscoveryIndex.getTestsByClassName(className, JUnitConfiguration.FRAMEWORK_ID);
 
     Set<Pair<String, String>> actualTests1 =
@@ -137,6 +144,12 @@ public class TestDiscoveryJUnitIntegrationTest extends AbstractTestFrameworkComp
       .collect(Collectors.toSet());
     String module = assertOneElement(modules);
     assertEquals(myModule.getName(), module);
+
+    for (Pair<String, String> test : expectedTests) {
+      assertTrue(testDiscoveryIndex.hasTestTrace(test.getFirst(), test.getSecond(), JUnitConfiguration.FRAMEWORK_ID));
+    }
+    assertFalse(testDiscoveryIndex.hasTestTrace("dummy test name", "123", JUnitConfiguration.FRAMEWORK_ID));
+
   }
 
   private static Pair<String, String> t(String testClassName, String testMethodName) {
@@ -146,12 +159,12 @@ public class TestDiscoveryJUnitIntegrationTest extends AbstractTestFrameworkComp
   private void runTestConfiguration(@NotNull PsiElement psiElement) throws ExecutionException {
     MapDataContext context = new MapDataContext();
     context.put(LangDataKeys.MODULE, myModule);
-    RunConfiguration configuration = createConfiguration(psiElement, context);
+    JUnitConfiguration configuration = createConfiguration(psiElement, context);
     ProcessOutput processOutput = doStartTestsProcess(configuration);
     TestDiscoveryDataSocketListener socketListener =
-      ((RunConfigurationBase)configuration).getUserData(TestDiscoveryExtension.SOCKET_LISTENER_KEY);
+      configuration.getUserData(TestDiscoveryExtension.SOCKET_LISTENER_KEY);
     socketListener.awaitTermination();
-    ((RunConfigurationBase)configuration).putUserData(TestDiscoveryExtension.SOCKET_LISTENER_KEY, null);
+    configuration.putUserData(TestDiscoveryExtension.SOCKET_LISTENER_KEY, null);
     assertEmpty(processOutput.err);
   }
 

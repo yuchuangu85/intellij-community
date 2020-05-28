@@ -40,6 +40,7 @@ public abstract class FileDifferenceModel {
   public String getTitle() {
     Entry e = getRightEntry();
     if (e == null) e = getLeftEntry();
+    if (e == null) return null;
     return FileUtil.toSystemDependentName(e.getPath());
   }
 
@@ -57,8 +58,8 @@ public abstract class FileDifferenceModel {
     return formatTitle(getRightEntry(), true);
   }
 
-  private String formatTitle(Entry e, boolean isAvailable) {
-    String result = DateFormatUtil.formatPrettyDateTime(e.getTimestamp()) + " - " + e.getName();
+  private static String formatTitle(Entry e, boolean isAvailable) {
+    String result = DateFormatUtil.formatDateTime(e.getTimestamp()) + " - " + e.getName();
     if (!isAvailable) {
       result += " - " + LocalHistoryBundle.message("content.not.available");
     }

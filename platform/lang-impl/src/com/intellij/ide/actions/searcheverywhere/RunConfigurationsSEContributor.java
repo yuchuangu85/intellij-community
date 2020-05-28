@@ -1,11 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.actions.searcheverywhere;
 
 import com.intellij.execution.Executor;
 import com.intellij.execution.ExecutorRegistry;
 import com.intellij.execution.RunnerAndConfigurationSettings;
 import com.intellij.execution.actions.ChooseRunConfigurationPopup;
-import com.intellij.execution.actions.ExecutorProvider;
 import com.intellij.execution.configurations.RunConfiguration;
 import com.intellij.execution.executors.DefaultRunExecutor;
 import com.intellij.execution.runners.ProgramRunner;
@@ -20,7 +19,9 @@ import com.intellij.psi.codeStyle.MinusculeMatcher;
 import com.intellij.psi.codeStyle.NameUtil;
 import com.intellij.ui.SimpleColoredComponent;
 import com.intellij.ui.SimpleTextAttributes;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.ObjectUtils;
+import com.intellij.util.Processor;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.intellij.lang.annotations.MagicConstant;
@@ -34,13 +35,14 @@ import java.awt.event.KeyEvent;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
-public class RunConfigurationsSEContributor implements SearchEverywhereContributor<Void> {
+public class RunConfigurationsSEContributor implements SearchEverywhereContributor<ChooseRunConfigurationPopup.ItemWrapper> {
 
-  private final SearchEverywhereCommandInfo RUN_COMMAND = new SearchEverywhereCommandInfo("run", IdeBundle.message("searcheverywhere.runconfigurations.command.run.description"), this);
-  private final SearchEverywhereCommandInfo DEBUG_COMMAND = new SearchEverywhereCommandInfo("debug", IdeBundle.message("searcheverywhere.runconfigurations.command.debug.description"), this);
+  private final SearchEverywhereCommandInfo RUN_COMMAND =
+    new SearchEverywhereCommandInfo("run", IdeBundle.message("searcheverywhere.runconfigurations.command.run.description"), this);
+  private final SearchEverywhereCommandInfo DEBUG_COMMAND =
+    new SearchEverywhereCommandInfo("debug", IdeBundle.message("searcheverywhere.runconfigurations.command.debug.description"), this);
 
   private final static int RUN_MODE = 0;
   private final static int DEBUG_MODE = 1;
@@ -67,15 +69,9 @@ public class RunConfigurationsSEContributor implements SearchEverywhereContribut
     return IdeBundle.message("searcheverywhere.run.configs.tab.name");
   }
 
-  @Nullable
-  @Override
-  public String includeNonProjectItemsText() {
-    return null;
-  }
-
   @Override
   public int getSortWeight() {
-    return 80;
+    return 350;
   }
 
   @Override
@@ -84,15 +80,14 @@ public class RunConfigurationsSEContributor implements SearchEverywhereContribut
   }
 
   @Override
-  public boolean processSelectedItem(@NotNull Object selected, int modifiers, @NotNull String searchText) {
-    ChooseRunConfigurationPopup.ItemWrapper itemWrapper = (ChooseRunConfigurationPopup.ItemWrapper) selected;
-    RunnerAndConfigurationSettings settings = ObjectUtils.tryCast(itemWrapper.getValue(), RunnerAndConfigurationSettings.class);
+  public boolean processSelectedItem(@NotNull ChooseRunConfigurationPopup.ItemWrapper selected, int modifiers, @NotNull String searchText) {
+    RunnerAndConfigurationSettings settings = ObjectUtils.tryCast(selected.getValue(), RunnerAndConfigurationSettings.class);
     if (settings != null) {
       int mode = getMode(searchText, modifiers);
       Executor executor = findExecutor(settings, mode);
       if (executor != null) {
         DataManager dataManager = DataManager.getInstance();
-        itemWrapper.perform(myProject, executor, dataManager.getDataContext(myContextComponent));
+        selected.perform(myProject, executor, dataManager.getDataContext(myContextComponent));
       }
     }
 
@@ -101,13 +96,13 @@ public class RunConfigurationsSEContributor implements SearchEverywhereContribut
 
   @Nullable
   @Override
-  public Object getDataForItem(@NotNull Object element, @NotNull String dataId) {
+  public Object getDataForItem(@NotNull ChooseRunConfigurationPopup.ItemWrapper element, @NotNull String dataId) {
     return null;
   }
 
   @NotNull
   @Override
-  public ListCellRenderer getElementsRenderer(@NotNull JList<?> list) {
+  public ListCellRenderer<? super ChooseRunConfigurationPopup.ItemWrapper> getElementsRenderer() {
     return renderer;
   }
 
@@ -119,28 +114,16 @@ public class RunConfigurationsSEContributor implements SearchEverywhereContribut
 
   @Override
   public void fetchElements(@NotNull String pattern,
-                            boolean everywhere,
-                            @Nullable SearchEverywhereContributorFilter<Void> filter,
                             @NotNull ProgressIndicator progressIndicator,
-                            @NotNull Function<Object, Boolean> consumer) {
+                            @NotNull Processor<? super ChooseRunConfigurationPopup.ItemWrapper> consumer) {
 
     if (StringUtil.isEmptyOrSpaces(pattern)) return;
 
     pattern = filterString(pattern);
     MinusculeMatcher matcher = NameUtil.buildMatcher(pattern).build();
-    ChooseRunConfigurationPopup.ItemWrapper[] wrappers =
-      ChooseRunConfigurationPopup.createSettingsList(myProject, new ExecutorProvider() {
-        @Override
-        public Executor getExecutor() {
-          return ExecutorRegistry.getInstance().getExecutorById(ToolWindowId.DEBUG);
-        }
-      }, false);
-
-    for (ChooseRunConfigurationPopup.ItemWrapper wrapper : wrappers) {
-      if (matcher.matches(wrapper.getText())) {
-        if (!consumer.apply(wrapper)) {
-          return;
-        }
+    for (ChooseRunConfigurationPopup.ItemWrapper wrapper : ChooseRunConfigurationPopup.createFlatSettingsList(myProject)) {
+      if (matcher.matches(wrapper.getText()) && !consumer.process(wrapper)) {
+        return;
       }
     }
   }
@@ -149,9 +132,11 @@ public class RunConfigurationsSEContributor implements SearchEverywhereContribut
   private int getMode(String searchText, int modifiers) {
     if (isCommand(searchText, DEBUG_COMMAND)) {
       return DEBUG_MODE;
-    } else if (isCommand(searchText, RUN_COMMAND)) {
+    }
+    else if (isCommand(searchText, RUN_COMMAND)) {
       return RUN_MODE;
-    } else {
+    }
+    else {
       return (modifiers & InputEvent.SHIFT_MASK) == 0 ? DEBUG_MODE : RUN_MODE;
     }
   }
@@ -166,7 +151,8 @@ public class RunConfigurationsSEContributor implements SearchEverywhereContribut
 
   private String filterString(String input) {
     return extractFirstWord(input)
-      .filter(firstWord -> RUN_COMMAND.getCommandWithPrefix().startsWith(firstWord) || DEBUG_COMMAND.getCommandWithPrefix().startsWith(firstWord))
+      .filter(firstWord -> RUN_COMMAND.getCommandWithPrefix().startsWith(firstWord) ||
+                           DEBUG_COMMAND.getCommandWithPrefix().startsWith(firstWord))
       .map(firstWord -> input.substring(firstWord.length() + 1))
       .orElse(input);
   }
@@ -192,7 +178,7 @@ public class RunConfigurationsSEContributor implements SearchEverywhereContribut
       super(new BorderLayout());
       add(runConfigInfo, BorderLayout.CENTER);
       add(executorInfo, BorderLayout.EAST);
-      setBorder(JBUI.Borders.empty(1, UIUtil.isUnderWin10LookAndFeel() ? 0 : JBUI.scale(UIUtil.getListCellHPadding())));
+      setBorder(JBUI.Borders.empty(1, UIUtil.isUnderWin10LookAndFeel() ? 0 : JBUIScale.scale(UIUtil.getListCellHPadding())));
     }
 
     @Override
@@ -204,7 +190,7 @@ public class RunConfigurationsSEContributor implements SearchEverywhereContribut
       runConfigInfo.clear();
       executorInfo.clear();
 
-      setBackground(UIUtil.getListBackground(isSelected));
+      setBackground(UIUtil.getListBackground(isSelected, true));
       setFont(list.getFont());
       Color foreground = isSelected ? list.getSelectionForeground() : list.getForeground();
       runConfigInfo.append(wrapper.getText(), new SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, foreground));
@@ -246,7 +232,8 @@ public class RunConfigurationsSEContributor implements SearchEverywhereContribut
           executorInfo.append(" / " + runExecutor.getId(), commandAttributes);
           executorInfo.append("(" + KeymapUtil.getKeystrokeText(shiftEnterStroke) + ")", shortcutAttributes);
         }
-      } else {
+      }
+      else {
         if (runExecutor != null) {
           executorInfo.append(runExecutor.getId(), commandAttributes);
           executorInfo.append("(" + KeymapUtil.getKeystrokeText(enterStroke) + ")", shortcutAttributes);
@@ -256,12 +243,12 @@ public class RunConfigurationsSEContributor implements SearchEverywhereContribut
 
     private void fillWithMode(ChooseRunConfigurationPopup.ItemWrapper wrapper, @MagicConstant(intValues = {RUN_MODE, DEBUG_MODE}) int mode,
                               SimpleTextAttributes attributes) {
-     Optional.ofNullable(ObjectUtils.tryCast(wrapper.getValue(), RunnerAndConfigurationSettings.class))
-       .map(settings -> findExecutor(settings, mode))
-       .ifPresent(executor -> {
-         executorInfo.append(executor.getId(), attributes);
-         executorInfo.setIcon(executor.getToolWindowIcon());
-       });
+      Optional.ofNullable(ObjectUtils.tryCast(wrapper.getValue(), RunnerAndConfigurationSettings.class))
+        .map(settings -> findExecutor(settings, mode))
+        .ifPresent(executor -> {
+          executorInfo.append(executor.getId(), attributes);
+          executorInfo.setIcon(executor.getToolWindowIcon());
+        });
     }
   }
 

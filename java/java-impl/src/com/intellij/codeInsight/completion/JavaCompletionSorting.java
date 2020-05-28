@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.completion;
 
 import com.intellij.codeInsight.ExpectedTypeInfo;
@@ -29,13 +15,16 @@ import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import com.intellij.psi.codeStyle.NameUtil;
 import com.intellij.psi.codeStyle.VariableKind;
+import com.intellij.psi.filters.getters.BuilderCompletionKt;
 import com.intellij.psi.javadoc.PsiDocComment;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
+import com.intellij.util.ObjectUtils;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.THashSet;
+import gnu.trove.TObjectIntHashMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -64,6 +53,7 @@ public class JavaCompletionSorting {
     ContainerUtil.addIfNotNull(afterProximity, PreferMostUsedWeigher.create(position));
     afterProximity.add(new PreferContainingSameWords(expectedTypes));
     afterProximity.add(new PreferShorter(expectedTypes));
+    afterProximity.add(new DispreferTechnicalOverloads(position));
 
     CompletionSorter sorter = CompletionSorter.defaultSorter(parameters, result.getPrefixMatcher());
     if (!smart && afterNew) {
@@ -71,19 +61,23 @@ public class JavaCompletionSorting {
     } else if (PsiTreeUtil.getParentOfType(position, PsiReferenceList.class) == null) {
       sorter = ((CompletionSorterImpl)sorter).withClassifier("liftShorterClasses", true, new LiftShorterClasses(position));
     }
-    if (smart) {
-      sorter = sorter.weighAfter("priority", new PreferDefaultTypeWeigher(expectedTypes, parameters, false));
-    }
 
-    List<LookupElementWeigher> afterStats = ContainerUtil.newArrayList();
+    List<LookupElementWeigher> afterPriority = new ArrayList<>();
+    ContainerUtil.addIfNotNull(afterPriority, dispreferPreviousChainCalls(position));
+    if (smart) {
+      afterPriority.add(new PreferDefaultTypeWeigher(expectedTypes, parameters, false));
+    }
+    sorter = sorter.weighAfter("priority", afterPriority.toArray(new LookupElementWeigher[0]));
+
+    List<LookupElementWeigher> afterStats = new ArrayList<>();
     afterStats.add(new PreferByKindWeigher(type, position, expectedTypes));
     if (smart) {
       afterStats.add(new PreferDefaultTypeWeigher(expectedTypes, parameters, true));
     } else {
-      ContainerUtil.addIfNotNull(afterStats, preferStatics(position, expectedTypes));
       if (!afterNew) {
         afterStats.add(new PreferExpected(false, expectedTypes, position));
       }
+      ContainerUtil.addIfNotNull(afterStats, preferStatics(position, expectedTypes));
     }
 
     ContainerUtil.addIfNotNull(afterStats, recursion(parameters, expectedTypes));
@@ -98,8 +92,43 @@ public class JavaCompletionSorting {
     return result.withRelevanceSorter(sorter);
   }
 
-  @NotNull
-  private static ExpectedTypeInfo[] getExpectedTypesWithDfa(CompletionParameters parameters, PsiElement position) {
+  @Nullable
+  private static LookupElementWeigher dispreferPreviousChainCalls(PsiElement position) {
+    TObjectIntHashMap<PsiMethod> previousChainCalls = new TObjectIntHashMap<>();
+    if (position.getParent() instanceof PsiReferenceExpression) {
+      PsiReferenceExpression ref = (PsiReferenceExpression)position.getParent();
+      PsiMethodCallExpression qualifier = getCallQualifier(ref);
+      PsiClass qualifierClass = qualifier == null ? null : PsiUtil.resolveClassInClassTypeOnly(qualifier.getType());
+      if (BuilderCompletionKt.looksLikeBuilder(qualifierClass)) {
+        while (qualifier != null) {
+          PsiMethod method = qualifier.resolveMethod();
+          if (method != null) {
+            String name = method.getName();
+            boolean seemsLikeExpectsMultipleCalls =
+              name.startsWith("put") || name.startsWith("add") || name.startsWith("append") || name.startsWith("get");
+            if (!seemsLikeExpectsMultipleCalls && qualifierClass == method.getContainingClass()) {
+              previousChainCalls.put(method, previousChainCalls.get(method) + 1);
+            }
+          }
+          qualifier = getCallQualifier(qualifier.getMethodExpression());
+        }
+      }
+    }
+    return previousChainCalls.isEmpty() ? null : new LookupElementWeigher("dispreferPreviousChainCalls") {
+      @Override
+      public Comparable weigh(@NotNull LookupElement element, @NotNull WeighingContext context) {
+        PsiElement psi = element.getPsiElement();
+        return psi instanceof PsiMethod && previousChainCalls.get((PsiMethod)psi) == 1;
+      }
+    };
+  }
+
+  @Nullable
+  private static PsiMethodCallExpression getCallQualifier(PsiReferenceExpression ref) {
+    return ObjectUtils.tryCast(ref.getQualifier(), PsiMethodCallExpression.class);
+  }
+
+  private static ExpectedTypeInfo @NotNull [] getExpectedTypesWithDfa(CompletionParameters parameters, PsiElement position) {
     if (psiElement().beforeLeaf(psiElement().withText(".")).accepts(position)) {
       return ExpectedTypeInfo.EMPTY_ARRAY;
     }
@@ -141,7 +170,9 @@ public class JavaCompletionSorting {
       @NotNull
       @Override
       public Comparable weigh(@NotNull LookupElement element) {
-        final Object o = element.getObject();
+        JavaConstructorCallElement call = element.as(JavaConstructorCallElement.class);
+        Object o = call != null ? call.getConstructedClass() : element.getObject();
+
         if (o instanceof PsiKeyword) return -3;
         if (!(o instanceof PsiMember) || element.getUserData(JavaGenerateMemberCompletionContributor.GENERATE_ELEMENT) != null) {
           return 0;
@@ -160,7 +191,10 @@ public class JavaCompletionSorting {
     };
   }
 
-  private static ExpectedTypeMatching getExpectedTypeMatching(LookupElement item, ExpectedTypeInfo[] expectedInfos, @Nullable String expectedMemberName) {
+  private static ExpectedTypeMatching getExpectedTypeMatching(LookupElement item,
+                                                              ExpectedTypeInfo[] expectedInfos,
+                                                              @Nullable String expectedMemberName,
+                                                              @NotNull PsiElement position) {
     PsiType itemType = JavaCompletionUtil.getLookupElementType(item);
 
     if (itemType != null) {
@@ -188,7 +222,8 @@ public class JavaCompletionSorting {
     if (hasNonVoid(expectedInfos)) {
       if (item.getObject() instanceof PsiKeyword) {
         String keyword = ((PsiKeyword)item.getObject()).getText();
-        if (PsiKeyword.NEW.equals(keyword) || PsiKeyword.NULL.equals(keyword)) {
+        if (PsiKeyword.NEW.equals(keyword) && !(position.getParent() instanceof PsiMethodReferenceExpression) ||
+            PsiKeyword.NULL.equals(keyword)) {
           return ExpectedTypeMatching.maybeExpected;
         }
       }
@@ -281,8 +316,8 @@ public class JavaCompletionSorting {
     for (int i = 0; i < limit; i++) {
       String word = words.get(words.size() - i - 1);
       String expectedWord = expectedWords[expectedWords.length - i - 1];
-      if ( word.equalsIgnoreCase(expectedWord) || 
-           StringUtil.endsWithIgnoreCase(word, expectedWord) || 
+      if ( word.equalsIgnoreCase(expectedWord) ||
+           StringUtil.endsWithIgnoreCase(word, expectedWord) ||
            StringUtil.endsWithIgnoreCase(expectedWord, word)) {
         max = Math.max(max, i + 1);
       }
@@ -300,7 +335,7 @@ public class JavaCompletionSorting {
     private final boolean myPreferExact;
     private final CompletionLocation myLocation;
 
-    PreferDefaultTypeWeigher(@NotNull ExpectedTypeInfo[] expectedTypes, CompletionParameters parameters, boolean preferExact) {
+    PreferDefaultTypeWeigher(ExpectedTypeInfo @NotNull [] expectedTypes, CompletionParameters parameters, boolean preferExact) {
       super("defaultType" + (preferExact ? "Exact" : ""));
       myExpectedTypes = ContainerUtil.map2Array(expectedTypes, ExpectedTypeInfo.class, info -> {
         PsiType type = removeClassWildcard(info.getType());
@@ -458,20 +493,26 @@ public class JavaCompletionSorting {
 
     @NotNull
     @Override
-    public Comparable weigh(@NotNull LookupElement element) {
+    public Integer weigh(@NotNull LookupElement element) {
       final Object object = element.getObject();
-      if (object instanceof PsiMethod && !FunctionalExpressionCompletionProvider.isFunExprItem(element)) {
-        PsiType type = ((PsiMethod)object).getReturnType();
-        final JavaMethodCallElement callItem = element.as(JavaMethodCallElement.CLASS_CONDITION_KEY);
-        if (callItem != null) {
-          type = callItem.getSubstitutor().substitute(type);
-        }
-
-        if (type instanceof PsiClassType && ((PsiClassType) type).resolve() instanceof PsiTypeParameter) return 1;
-      }
-
-      return 0;
+      return object instanceof PsiMethod &&
+             !FunctionalExpressionCompletionProvider.isFunExprItem(element) &&
+             isTooGeneric(element, (PsiMethod)object) ? 1 : 0;
     }
+  }
+
+  static boolean isTooGeneric(@NotNull LookupElement element, PsiMethod method) {
+    PsiType type = method.getReturnType();
+    JavaMethodCallElement callItem = element.as(JavaMethodCallElement.CLASS_CONDITION_KEY);
+    if (callItem != null) {
+      type = callItem.getSubstitutor().substitute(type);
+    }
+
+    if (type instanceof PsiClassType) {
+      PsiClass target = ((PsiClassType)type).resolve();
+      return target instanceof PsiTypeParameter && ((PsiTypeParameter)target).getOwner() instanceof PsiMethod;
+    }
+    return false;
   }
 
   private static class PreferSimple extends LookupElementWeigher {
@@ -493,6 +534,7 @@ public class JavaCompletionSorting {
   private static class PreferExpected extends LookupElementWeigher {
     private final boolean myConstructorPossible;
     private final ExpectedTypeInfo[] myExpectedTypes;
+    private final PsiElement myPosition;
     private final List<PsiType> myExpectedClasses = new SmartList<>();
     private final String myExpectedMemberName;
 
@@ -500,6 +542,7 @@ public class JavaCompletionSorting {
       super("expectedType");
       myConstructorPossible = constructorPossible;
       myExpectedTypes = expectedTypes;
+      myPosition = position;
       for (ExpectedTypeInfo info : expectedTypes) {
         ContainerUtil.addIfNotNull(myExpectedClasses, PsiUtil.substituteTypeParameter(info.getDefaultType(), CommonClassNames.JAVA_LANG_CLASS, 0, false));
       }
@@ -536,7 +579,7 @@ public class JavaCompletionSorting {
         }
       }
 
-      return getExpectedTypeMatching(item, myExpectedTypes, myExpectedMemberName);
+      return getExpectedTypeMatching(item, myExpectedTypes, myExpectedMemberName, myPosition);
     }
   }
 
@@ -605,6 +648,42 @@ public class JavaCompletionSorting {
         return NameUtil.nameToWords(name).length - 1000;
       }
       return 0;
+    }
+  }
+
+  /**
+   * Sometimes there's core vararg method and a couple of overloads of fixed arity to avoid runtime invocation costs of varargs.
+   * We prefer the vararg method then.
+   */
+  private static class DispreferTechnicalOverloads extends LookupElementWeigher {
+    private final PsiElement myPlace;
+
+    DispreferTechnicalOverloads(PsiElement place) {
+      super("technicalOverloads");
+      myPlace = place;
+    }
+
+    @NotNull
+    @Override
+    public Comparable weigh(@NotNull LookupElement element) {
+      Object object = element.getObject();
+      if (object instanceof PsiMethod && element.getUserData(JavaCompletionUtil.FORCE_SHOW_SIGNATURE_ATTR) == null) {
+        PsiMethod method = (PsiMethod)object;
+        PsiClass containingClass = method.getContainingClass();
+        if (!method.isVarArgs() &&
+            containingClass != null &&
+            ContainerUtil.exists(containingClass.findMethodsByName(method.getName(), false), m -> isPurelyVarargOverload(method, m))) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    private boolean isPurelyVarargOverload(PsiMethod original, PsiMethod candidate) {
+      return candidate.hasModifierProperty(PsiModifier.STATIC) == original.hasModifierProperty(PsiModifier.STATIC) &&
+             candidate.isVarArgs() &&
+             candidate.getParameterList().getParametersCount() == 1 &&
+             PsiResolveHelper.SERVICE.getInstance(candidate.getProject()).isAccessible(candidate, myPlace, null);
     }
   }
 

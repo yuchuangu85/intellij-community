@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui;
 
 import com.intellij.icons.AllIcons;
@@ -21,17 +7,12 @@ import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Factory;
 import com.intellij.util.IconUtil;
-import com.intellij.util.PlatformIcons;
-import com.intellij.util.containers.Convertor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.util.*;
 
-/**
- * @author dyoma
- */
 public abstract class ReorderableListController <T> {
   private final JList myList;
   private static final Icon REMOVE_ICON = IconUtil.getRemoveIcon();
@@ -64,14 +45,8 @@ public abstract class ReorderableListController <T> {
     return description;
   }
 
-  public CopyActionDescription addCopyAction(final String actionName, final Convertor<? super T, ? extends T> copier, final Condition<? super T> enableCondition) {
-    final CopyActionDescription description = new CopyActionDescription(actionName, copier, enableCondition);
-    addActionDescription(description);
-    return description;
-  }
-
   public void addMoveUpAction() {
-    addAction(new AnAction(UIBundle.message("move.up.action.name"), null, IconUtil.getMoveUpIcon()) {
+    addAction(new AnAction(UIBundle.messagePointer("move.up.action.name"), Presentation.NULL_STRING, IconUtil.getMoveUpIcon()) {
       @Override
       public void actionPerformed(@NotNull final AnActionEvent e) {
         ListUtil.moveSelectedItemsUp(myList);
@@ -85,7 +60,7 @@ public abstract class ReorderableListController <T> {
   }
 
   public void addMoveDownAction() {
-    addAction(new AnAction(UIBundle.message("move.down.action.name"), null, AllIcons.Actions.MoveDown) {
+    addAction(new AnAction(UIBundle.messagePointer("move.down.action.name"), Presentation.NULL_STRING, AllIcons.Actions.MoveDown) {
       @Override
       public void actionPerformed(@NotNull final AnActionEvent e) {
         ListUtil.moveSelectedItemsDown(myList);
@@ -201,7 +176,7 @@ public abstract class ReorderableListController <T> {
     }
   }
 
-  static interface ActionBehaviour<T> {
+  interface ActionBehaviour<T> {
     T performAction(@NotNull AnActionEvent e);
     void updateAction(@NotNull AnActionEvent e);
   }
@@ -259,7 +234,7 @@ public abstract class ReorderableListController <T> {
     }
   }
 
-  public abstract class AddActionDescriptionBase<V> extends CustomActionDescription<V> {
+  public abstract static class AddActionDescriptionBase<V> extends CustomActionDescription<V> {
     private final String myActionDescription;
     private final Factory<? extends V> myAddHandler;
     private final boolean myCreateShortcut;
@@ -334,60 +309,6 @@ public abstract class ReorderableListController <T> {
         }
       }
       return t;
-    }
-  }
-
-  public class CopyActionDescription extends CustomActionDescription<T> {
-    private final Convertor<? super T, ? extends T> myCopier;
-    private final Condition<? super T> myEnabled;
-    private final String myActionName;
-    private boolean myVisibleWhenDisabled;
-
-    public CopyActionDescription(final String actionName, final Convertor<? super T, ? extends T> copier, final Condition<? super T> enableCondition) {
-      myActionName = actionName;
-      myCopier = copier;
-      myEnabled = enableCondition;
-      myVisibleWhenDisabled = true;
-    }
-
-    @Override
-    public BaseAction createAction(final JComponent component) {
-      final ActionBehaviour<T> behaviour = new ActionBehaviour<T>() {
-        @Override
-        public T performAction(@NotNull final AnActionEvent e) {
-          final T newElement = myCopier.convert((T)myList.getSelectedValue());
-          handleNewElement(newElement);
-          return newElement;
-        }
-
-        @Override
-        public void updateAction(@NotNull final AnActionEvent e) {
-          final boolean applicable = myList.getSelectedIndices().length == 1;
-          final Presentation presentation = e.getPresentation();
-          if (!applicable) {
-            presentation.setEnabled(applicable);
-            return;
-          }
-          final boolean enabled = myEnabled.value((T)myList.getSelectedValue());
-          presentation.setEnabled(enabled);
-          presentation.setVisible(enabled || myVisibleWhenDisabled);
-        }
-      };
-      return createAction(behaviour);
-    }
-
-    @Override
-    public Icon getActionIcon() {
-      return PlatformIcons.COPY_ICON;
-    }
-
-    @Override
-    public String getActionName() {
-      return myActionName;
-    }
-
-    public void setVisibleWhenDisabled(final boolean visible) {
-      myVisibleWhenDisabled = visible;
     }
   }
 

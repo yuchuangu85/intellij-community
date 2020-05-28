@@ -1,7 +1,6 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.hierarchy.type;
 
-import com.intellij.icons.AllIcons;
 import com.intellij.ide.hierarchy.HierarchyNodeDescriptor;
 import com.intellij.ide.hierarchy.JavaHierarchyUtil;
 import com.intellij.openapi.editor.markup.TextAttributes;
@@ -12,7 +11,6 @@ import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFunctionalExpression;
 import com.intellij.psi.presentation.java.ClassPresentationUtil;
-import com.intellij.ui.LayeredIcon;
 
 import java.awt.*;
 
@@ -34,10 +32,7 @@ public final class TypeHierarchyNodeDescriptor extends HierarchyNodeDescriptor {
     }
 
     if (changes && myIsBase) {
-      final LayeredIcon icon = new LayeredIcon(2);
-      icon.setIcon(getIcon(), 0);
-      icon.setIcon(AllIcons.Actions.Forward, 1, -AllIcons.Actions.Forward.getIconWidth() / 2, 0);
-      setIcon(icon);
+      setIcon(getBaseMarkerIcon(getIcon()));
     }
 
     final PsiElement psiElement = getPsiClass();

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.ui;
 
 import com.intellij.openapi.Disposable;
@@ -24,14 +10,15 @@ import com.intellij.openapi.wm.IdeGlassPane;
 import com.intellij.openapi.wm.IdeGlassPaneUtil;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.OnePixelSplitter;
-import com.intellij.util.Producer;
-import com.intellij.util.ui.JBUI;
+import com.intellij.ui.scale.JBUIScale;
+import com.intellij.util.MathUtil;
 import com.intellij.util.ui.UIUtil;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.function.Supplier;
 
 /**
  * @author Konstantin Bulenkov
@@ -66,9 +53,9 @@ public class OnePixelDivider extends Divider {
   public void paint(Graphics g) {
     final Rectangle bounds = g.getClipBounds();
     if (mySplitter instanceof OnePixelSplitter) {
-      final Producer<Insets> blindZone = ((OnePixelSplitter)mySplitter).getBlindZone();
+      final Supplier<Insets> blindZone = ((OnePixelSplitter)mySplitter).getBlindZone();
       if (blindZone != null) {
-        final Insets insets = blindZone.produce();
+        final Insets insets = blindZone.get();
         if (insets != null) {
           bounds.x += insets.left;
           bounds.y += insets.top;
@@ -106,8 +93,20 @@ public class OnePixelDivider extends Divider {
     }
   }
   private class MyMouseAdapter extends MouseAdapter implements Weighted {
+    private boolean skipEventProcessing() {
+      if (isShowing()) {
+        return false;
+      }
+      setDragging(false);
+      myGlassPane.setCursor(null, this);
+      return true;
+    }
+
     @Override
     public void mousePressed(MouseEvent e) {
+      if (skipEventProcessing()) {
+        return;
+      }
       setDragging(isInDragZone(e));
       _processMouseEvent(e);
       if (myDragging) {
@@ -122,11 +121,14 @@ public class OnePixelDivider extends Divider {
       OnePixelDivider d = OnePixelDivider.this;
       if ((vertical ? p.x : p.y) < 0 || vertical && p.x > d.getWidth() || !vertical && p.y > d.getHeight()) return false;
       int r = Math.abs(vertical ? p.y : p.x);
-      return r < JBUI.scale(Registry.intValue("ide.splitter.mouseZone"));
+      return r < JBUIScale.scale(Registry.intValue("ide.splitter.mouseZone"));
     }
 
     @Override
     public void mouseReleased(MouseEvent e) {
+      if (skipEventProcessing()) {
+        return;
+      }
       _processMouseEvent(e);
       if (myDragging) {
         e.consume();
@@ -136,6 +138,9 @@ public class OnePixelDivider extends Divider {
 
     @Override
     public void mouseMoved(MouseEvent e) {
+      if (skipEventProcessing()) {
+        return;
+      }
       final OnePixelDivider divider = OnePixelDivider.this;
       if (isInDragZone(e)) {
         myGlassPane.setCursor(divider.getCursor(), divider);
@@ -147,12 +152,17 @@ public class OnePixelDivider extends Divider {
 
     @Override
     public void mouseDragged(MouseEvent e) {
+      if (skipEventProcessing()) {
+        return;
+      }
       _processMouseMotionEvent(e);
     }
+
     @Override
     public double getWeight() {
       return 1;
     }
+
     private void _processMouseMotionEvent(MouseEvent e) {
       MouseEvent event = getTargetEvent(e);
       if (event == null) {
@@ -210,15 +220,15 @@ public class OnePixelDivider extends Divider {
       final float secondMinProportion = mySplitter.getMinProportion(false);
       if (isVertical()) {
         if (getHeight() > 0) {
-          proportion = Math.min(1.0f, Math
-            .max(.0f, Math.min(Math.max(firstMinProportion, (float)myPoint.y / (float)mySplitter.asComponent().getHeight()), 1 - secondMinProportion)));
+          float ratio = (float)myPoint.y / (float)mySplitter.asComponent().getHeight();
+          proportion = MathUtil.clamp(MathUtil.clamp(ratio, firstMinProportion, 1 - secondMinProportion), 0f, 1f);
           mySplitter.setProportion(proportion);
         }
       }
       else {
         if (getWidth() > 0) {
-          proportion = Math.min(1.0f, Math.max(.0f, Math.min(
-            Math.max(firstMinProportion, (float)myPoint.x / (float)mySplitter.asComponent().getWidth()), 1 - secondMinProportion)));
+          float ratio = (float)myPoint.x / (float)mySplitter.asComponent().getWidth();
+          proportion = MathUtil.clamp(MathUtil.clamp(ratio, firstMinProportion, 1 - secondMinProportion), 0f, 1f);
           mySplitter.setProportion(proportion);
         }
       }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.ide.commander;
 
@@ -30,6 +16,7 @@ import com.intellij.openapi.vcs.FileStatusManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiModificationTracker;
+import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.util.Alarm;
 import org.jetbrains.annotations.NotNull;
 
@@ -55,11 +42,11 @@ public class ProjectListBuilder extends AbstractListBuilder {
     myUpdateAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, myProject);
 
     myPsiTreeChangeListener = new MyPsiTreeChangeListener();
-    PsiManager.getInstance(myProject).addPsiTreeChangeListener(myPsiTreeChangeListener);
+    PsiManager.getInstance(myProject).addPsiTreeChangeListener(myPsiTreeChangeListener, this);
     myFileStatusListener = new MyFileStatusListener();
-    FileStatusManager.getInstance(myProject).addFileStatusListener(myFileStatusListener);
+    FileStatusManager.getInstance(myProject).addFileStatusListener(myFileStatusListener, this);
     myCopyPasteListener = new MyCopyPasteListener();
-    CopyPasteManager.getInstance().addContentChangedListener(myCopyPasteListener);
+    CopyPasteManager.getInstance().addContentChangedListener(myCopyPasteListener, this);
     buildRoot();
   }
 
@@ -87,8 +74,8 @@ public class ProjectListBuilder extends AbstractListBuilder {
   }
 
   @Override
-  protected List<AbstractTreeNode> getAllAcceptableNodes(final Object[] childElements, VirtualFile file) {
-    ArrayList<AbstractTreeNode> result = new ArrayList<>();
+  protected List<AbstractTreeNode<?>> getAllAcceptableNodes(final Object[] childElements, VirtualFile file) {
+    ArrayList<AbstractTreeNode<?>> result = new ArrayList<>();
 
     for (Object childElement1 : childElements) {
       ProjectViewNode childElement = (ProjectViewNode)childElement1;
@@ -96,14 +83,6 @@ public class ProjectListBuilder extends AbstractListBuilder {
     }
 
     return result;
-  }
-
-  @Override
-  public void dispose() {
-    super.dispose();
-    PsiManager.getInstance(myProject).removePsiTreeChangeListener(myPsiTreeChangeListener);
-    FileStatusManager.getInstance(myProject).removeFileStatusListener(myFileStatusListener);
-    CopyPasteManager.getInstance().removeContentChangedListener(myCopyPasteListener);
   }
 
   public void addUpdateRequest() {
@@ -217,20 +196,8 @@ public class ProjectListBuilder extends AbstractListBuilder {
 
     @Override
     public void fileStatusChanged(@NotNull final VirtualFile vFile) {
-      final PsiManager manager = PsiManager.getInstance(myProject);
-
-      if (vFile.isDirectory()) {
-        final PsiDirectory directory = manager.findDirectory(vFile);
-        if (directory != null) {
-          myPsiTreeChangeListener.childrenChanged();
-        }
-      }
-      else {
-        final PsiFile file = manager.findFile(vFile);
-        if (file != null){
-          myPsiTreeChangeListener.childrenChanged();
-        }
-      }
+      PsiFileSystemItem item = PsiUtilCore.findFileSystemItem(myProject, vFile);
+      if (item != null) myPsiTreeChangeListener.childrenChanged();
     }
   }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2011 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2018 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 package com.intellij.codeInspection.ui;
 
 import com.intellij.codeInspection.InspectionProfileEntry;
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.ui.DocumentAdapter;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NonNls;
@@ -32,13 +33,13 @@ import java.text.ParseException;
 
 public class SingleIntegerFieldOptionsPanel extends JPanel {
 
-    public SingleIntegerFieldOptionsPanel(String labelString,
+    public SingleIntegerFieldOptionsPanel(@NlsContexts.Label String labelString,
                                           final InspectionProfileEntry owner,
                                           @NonNls final String property) {
-        this(labelString, owner, property, 2);
+        this(labelString, owner, property, 4);
     }
 
-    public SingleIntegerFieldOptionsPanel(String labelString,
+    public SingleIntegerFieldOptionsPanel(@NlsContexts.Label String labelString,
                                           final InspectionProfileEntry owner,
                                           @NonNls final String property,
                                           int integerFieldColumns) {

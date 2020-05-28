@@ -3,10 +3,10 @@
 package com.intellij.openapi.vcs.changes.ui;
 
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.FileStatus;
 import com.intellij.openapi.vcs.changes.ChangeListManager;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -19,7 +19,7 @@ public class ChangesBrowserFileNode extends ChangesBrowserNode<VirtualFile> impl
 
   public ChangesBrowserFileNode(@Nullable Project project, @NotNull VirtualFile userObject) {
     super(userObject);
-    myName = StringUtil.toLowerCase(userObject.getName());
+    myName = userObject.getName();
     myProject = project;
   }
 
@@ -53,7 +53,7 @@ public class ChangesBrowserFileNode extends ChangesBrowserNode<VirtualFile> impl
       appendCount(renderer);
     }
 
-    renderer.setIcon(file.getFileType(), file.isDirectory());
+    renderer.setIcon(VcsUtil.getFilePath(file), file.isDirectory());
   }
 
   @Override
@@ -73,17 +73,12 @@ public class ChangesBrowserFileNode extends ChangesBrowserNode<VirtualFile> impl
 
   @Override
   public int compareTo(ChangesBrowserFileNode o) {
-    return myName.compareTo(o.myName);
-  }
-
-  @Override
-  public int compareUserObjects(final VirtualFile o2) {
-    return getUserObject().getName().compareToIgnoreCase(o2.getName());
+    return compareFileNames(myName, o.myName);
   }
 
   @NotNull
   private FileStatus getFileStatus() {
-    if (myProject == null) return FileStatus.NOT_CHANGED;
+    if (myProject == null || myProject.isDisposed()) return FileStatus.NOT_CHANGED;
     return ChangeListManager.getInstance(myProject).getStatus(getUserObject());
   }
 }

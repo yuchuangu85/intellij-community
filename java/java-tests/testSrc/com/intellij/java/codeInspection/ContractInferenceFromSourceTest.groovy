@@ -22,13 +22,15 @@ import com.intellij.psi.impl.source.PsiFileImpl
 import com.intellij.psi.impl.source.PsiMethodImpl
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.LightProjectDescriptor
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
+import groovy.transform.CompileStatic
 import org.jetbrains.annotations.NotNull
 
 /**
  * @author peter
  */
-class ContractInferenceFromSourceTest extends LightCodeInsightFixtureTestCase {
+@CompileStatic
+class ContractInferenceFromSourceTest extends LightJavaCodeInsightFixtureTestCase {
 
   void "test if null return null"() {
     def c = inferContract("""
@@ -546,6 +548,7 @@ class Foo {{
 
   void "test anonymous class methods potentially used from outside"() {
     def method = PsiTreeUtil.findChildOfType(myFixture.addClass("""
+@SuppressWarnings("ALL")
 class Foo {{
   Runnable r = new Runnable() {
     public void run() {
@@ -588,7 +591,7 @@ class Foo {{
     return s == null ? "" : s;
   }
 """)
-    assert c == ['null -> !null', '!null -> param1']
+    assert c == ['!null -> param1'] // NotNull annotation is also inferred, so 'null -> !null' is redundant
   }
 
   void "test coalesce"() {
@@ -681,6 +684,61 @@ public static void test(Object obj, int i) {
   System.exit(0);
 }""")
     assert c == ['_, _ -> fail']
+  }
+  
+  void "test ternary two notnull"() {
+    def c = inferContracts("""
+static String test(String v, boolean b, String s) { return b ? getFoo() : getBar(); }
+
+static String getFoo() { return "foo"; }
+static String getBar() { return "bar"; }
+""")
+    assert c == ['_, _, _ -> !null']
+  }
+
+  void "test not collapsed"() {
+    def c = inferContracts("""
+static String test(String a, String b) { 
+  if(b == null || a == null) return null;
+  return unknown(a+b);  
+}
+""")
+    assert c == ['_, null -> null', 'null, !null -> null']
+  }
+  
+  void "test primitive cast ignored"() {
+    def c = inferContracts("""static int test(long x) {return (int)x;}""")
+    assert c == []
+  }
+  
+  void "test return param is not propagated"() {
+    def c = inferContracts("""static String foo(Object x) {return String.class.cast(String.valueOf(x));}""")
+    assert c == []
+  }
+  
+  void "test return param propagated"() {
+    def c = inferContracts("""static Object foo(Class<?> c, Object x) {return c.cast(x);}""")
+    assert c == ['_, _ -> param2']
+  }
+  
+  void "test return param propagated to this"() {
+    def c = inferContracts("""Object foo(Class<?> c) {return c.cast(this);}""")
+    assert c == ['_ -> this']
+  }
+  
+  void "test return param propagated new"() {
+    def c = inferContracts("""static Object foo() {return java.util.Objects.requireNonNull(new Object());}""")
+    assert c == [' -> new']
+  }
+  
+  void "test this not propagated"() {
+    def c = inferContracts("""StringBuilder foo() {return new StringBuilder().append("foo");}""")
+    assert c == [' -> new']
+  }
+  
+  void "test this propagated to parameter"() {
+    def c = inferContracts("""StringBuilder foo(StringBuilder sb) {return sb.append("foo");}""")
+    assert c == ['_ -> param1']
   }
 
   private String inferContract(String method) {

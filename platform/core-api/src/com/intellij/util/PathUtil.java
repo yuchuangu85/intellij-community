@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util;
 
 import com.intellij.openapi.application.PathManager;
@@ -25,13 +11,9 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.VirtualFileSystem;
 import com.intellij.util.io.URLUtil;
-import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.NonNls;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.*;
 
 public class PathUtil {
-
   private PathUtil() { }
 
   @Nullable
@@ -51,7 +33,7 @@ public class PathUtil {
   }
 
   @NotNull
-  public static String getJarPathForClass(@NotNull Class aClass) {
+  public static String getJarPathForClass(@NotNull Class<?> aClass) {
     final String pathForClass = PathManager.getJarPathForClass(aClass);
     assert pathForClass != null : aClass;
     return pathForClass;
@@ -73,9 +55,7 @@ public class PathUtil {
 
   @Nullable
   public static String getFileExtension(@NotNull String name) {
-    int index = name.lastIndexOf('.');
-    if (index < 0) return null;
-    return name.substring(index + 1);
+    return PathUtilRt.getFileExtension(name);
   }
 
   @NotNull
@@ -113,7 +93,7 @@ public class PathUtil {
 
   @NotNull
   public static String driveLetterToLowerCase(@NotNull String path) {
-    if (SystemInfo.isWindows && FileUtil.isWindowsAbsolutePath(path)) {
+    if (SystemInfo.isWindows && FileUtil.isWindowsAbsolutePath(path) && Character.isUpperCase(path.charAt(0))) {
       return Character.toLowerCase(path.charAt(0)) + path.substring(1);
     }
     return path;
@@ -125,8 +105,9 @@ public class PathUtil {
   }
 
   //<editor-fold desc="Deprecated stuff.">
-  /** @deprecated use {@link  com.intellij.openapi.vfs.VfsUtil#getLocalFile(com.intellij.openapi.vfs.VirtualFile)} instead (to be removed in IDEA 2019) */
+  /** @deprecated use {@link com.intellij.openapi.vfs.VfsUtil#getLocalFile(VirtualFile)} instead */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.1")
   @NotNull
   public static VirtualFile getLocalFile(@NotNull VirtualFile file) {
     if (file.isValid()) {

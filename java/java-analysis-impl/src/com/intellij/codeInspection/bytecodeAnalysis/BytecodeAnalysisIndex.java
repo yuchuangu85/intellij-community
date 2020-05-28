@@ -3,14 +3,8 @@ package com.intellij.codeInspection.bytecodeAnalysis;
 
 import com.intellij.ide.highlighter.JavaClassFileType;
 import com.intellij.openapi.progress.ProcessCanceledException;
-import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.io.DataInputOutputUtilRt;
-import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.gist.GistManager;
-import com.intellij.util.gist.VirtualFileGist;
 import com.intellij.util.indexing.*;
 import com.intellij.util.io.DataExternalizer;
 import com.intellij.util.io.DataInputOutputUtil;
@@ -23,9 +17,7 @@ import org.jetbrains.org.objectweb.asm.*;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.security.MessageDigest;
 import java.util.*;
-import java.util.function.BinaryOperator;
 
 import static com.intellij.codeInspection.bytecodeAnalysis.ProjectBytecodeAnalysis.LOG;
 
@@ -33,18 +25,7 @@ import static com.intellij.codeInspection.bytecodeAnalysis.ProjectBytecodeAnalys
  * @author lambdamix
  */
 public class BytecodeAnalysisIndex extends ScalarIndexExtension<HMember> {
-  private static final ID<HMember, Void> NAME = ID.create("bytecodeAnalysis");
-  private static final HKeyDescriptor KEY_DESCRIPTOR = new HKeyDescriptor();
-
-  private static final int VERSION = 11; // change when inference algorithm changes
-  private static final int VERSION_MODIFIER = HardCodedPurity.AGGRESSIVE_HARDCODED_PURITY ? 1 : 0;
-  private static final int FINAL_VERSION = VERSION * 2 + VERSION_MODIFIER;
-
-  private static final VirtualFileGist<Map<HMember, Equations>> ourGist = GistManager.getInstance().newVirtualFileGist(
-    "BytecodeAnalysisIndex", FINAL_VERSION, new EquationsExternalizer(), new ClassDataIndexer());
-  // Hash collision is possible: resolve it just flushing all the equations for colliding methods (unless equations are the same)
-  static final BinaryOperator<Equations> MERGER =
-    (eq1, eq2) -> eq1.equals(eq2) ? eq1 : new Equations(Collections.emptyList(), false);
+  static final ID<HMember, Void> NAME = ID.create("bytecodeAnalysis");
 
   @NotNull
   @Override
@@ -74,21 +55,20 @@ public class BytecodeAnalysisIndex extends ScalarIndexExtension<HMember> {
   @NotNull
   private static Map<HMember, Void> collectKeys(byte[] content) {
     HashMap<HMember, Void> map = new HashMap<>();
-    MessageDigest md = BytecodeAnalysisConverter.getMessageDigest();
     ClassReader reader = new ClassReader(content);
     String className = reader.getClassName();
     reader.accept(new ClassVisitor(Opcodes.API_VERSION) {
       @Override
       public FieldVisitor visitField(int access, String name, String desc, String signature, Object value) {
         if ((access & Opcodes.ACC_PRIVATE) == 0) {
-          map.put(new Member(className, name, desc).hashed(md), null);
+          map.put(new Member(className, name, desc).hashed(), null);
         }
         return null;
       }
 
       @Override
       public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
-        map.put(new Member(className, name, desc).hashed(md), null);
+        map.put(new Member(className, name, desc).hashed(), null);
         return null;
       }
     }, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES | ClassReader.SKIP_CODE);
@@ -98,7 +78,7 @@ public class BytecodeAnalysisIndex extends ScalarIndexExtension<HMember> {
   @NotNull
   @Override
   public KeyDescriptor<HMember> getKeyDescriptor() {
-    return KEY_DESCRIPTOR;
+    return HKeyDescriptor.INSTANCE;
   }
 
   @Override
@@ -119,20 +99,19 @@ public class BytecodeAnalysisIndex extends ScalarIndexExtension<HMember> {
 
   @Override
   public int getVersion() {
-    return 10;
+    return 11;
   }
 
-  @NotNull
-  static List<Equations> getEquations(GlobalSearchScope scope, HMember key) {
-    Project project = ProjectManager.getInstance().getDefaultProject(); // the data is project-independent
-    return ContainerUtil.mapNotNull(FileBasedIndex.getInstance().getContainingFiles(NAME, key, scope),
-                                    file -> ourGist.getFileData(project, file).get(key));
+  @Override
+  public boolean needsForwardIndexWhenSharing() {
+    return false;
   }
 
   /**
    * Externalizer for primary method keys.
    */
   private static class HKeyDescriptor implements KeyDescriptor<HMember>, DifferentSerializableBytesImplyNonEqualityPolicy {
+    static final HKeyDescriptor INSTANCE = new HKeyDescriptor();
 
     @Override
     public void save(@NotNull DataOutput out, HMember value) throws IOException {
@@ -164,20 +143,19 @@ public class BytecodeAnalysisIndex extends ScalarIndexExtension<HMember> {
     @Override
     public void save(@NotNull DataOutput out, Map<HMember, Equations> value) throws IOException {
       DataInputOutputUtilRt.writeSeq(out, value.entrySet(), entry -> {
-        KEY_DESCRIPTOR.save(out, entry.getKey());
+        HKeyDescriptor.INSTANCE.save(out, entry.getKey());
         saveEquations(out, entry.getValue());
       });
     }
 
     @Override
     public Map<HMember, Equations> read(@NotNull DataInput in) throws IOException {
-      return StreamEx.of(DataInputOutputUtilRt.readSeq(in, () -> Pair.create(KEY_DESCRIPTOR.read(in), readEquations(in)))).
-        toMap(p -> p.getFirst(), p -> p.getSecond(), MERGER);
+      return StreamEx.of(DataInputOutputUtilRt.readSeq(in, () -> Pair.create(HKeyDescriptor.INSTANCE.read(in), readEquations(in)))).
+        toMap(p -> p.getFirst(), p -> p.getSecond(), ClassDataIndexer.MERGER);
     }
 
     private static void saveEquations(@NotNull DataOutput out, Equations eqs) throws IOException {
       out.writeBoolean(eqs.stable);
-      MessageDigest md = BytecodeAnalysisConverter.getMessageDigest();
       DataInputOutputUtil.writeINT(out, eqs.results.size());
       for (DirectionResultPair pair : eqs.results) {
         DataInputOutputUtil.writeINT(out, pair.directionKey);
@@ -197,7 +175,7 @@ public class BytecodeAnalysisIndex extends ScalarIndexExtension<HMember> {
             EKey[] ids = component.ids;
             DataInputOutputUtil.writeINT(out, ids.length);
             for (EKey hKey : ids) {
-              writeKey(out, hKey, md);
+              writeKey(out, hKey);
             }
           }
         }
@@ -205,9 +183,9 @@ public class BytecodeAnalysisIndex extends ScalarIndexExtension<HMember> {
           Effects effects = (Effects)rhs;
           DataInputOutputUtil.writeINT(out, effects.effects.size());
           for (EffectQuantum effect : effects.effects) {
-            writeEffect(out, effect, md);
+            writeEffect(out, effect);
           }
-          writeDataValue(out, effects.returnValue, md);
+          writeDataValue(out, effects.returnValue);
         }
       }
     }
@@ -264,14 +242,14 @@ public class BytecodeAnalysisIndex extends ScalarIndexExtension<HMember> {
       return new EKey(new HMember(bytes), Direction.fromInt(Math.abs(rawDirKey)), in.readBoolean(), rawDirKey < 0);
     }
 
-    private static void writeKey(@NotNull DataOutput out, EKey key, MessageDigest md) throws IOException {
-      out.write(key.member.hashed(md).asBytes());
+    private static void writeKey(@NotNull DataOutput out, EKey key) throws IOException {
+      out.write(key.member.hashed().asBytes());
       int rawDirKey = key.negated ? -key.dirKey : key.dirKey;
       DataInputOutputUtil.writeINT(out, rawDirKey);
       out.writeBoolean(key.stable);
     }
 
-    private static void writeEffect(@NotNull DataOutput out, EffectQuantum effect, MessageDigest md) throws IOException {
+    private static void writeEffect(@NotNull DataOutput out, EffectQuantum effect) throws IOException {
       if (effect == EffectQuantum.TopEffectQuantum) {
         DataInputOutputUtil.writeINT(out, -1);
       }
@@ -281,20 +259,20 @@ public class BytecodeAnalysisIndex extends ScalarIndexExtension<HMember> {
       else if (effect instanceof EffectQuantum.CallQuantum) {
         DataInputOutputUtil.writeINT(out, -3);
         EffectQuantum.CallQuantum callQuantum = (EffectQuantum.CallQuantum)effect;
-        writeKey(out, callQuantum.key, md);
+        writeKey(out, callQuantum.key);
         out.writeBoolean(callQuantum.isStatic);
         DataInputOutputUtil.writeINT(out, callQuantum.data.length);
         for (DataValue dataValue : callQuantum.data) {
-          writeDataValue(out, dataValue, md);
+          writeDataValue(out, dataValue);
         }
       }
       else if (effect instanceof EffectQuantum.ReturnChangeQuantum) {
         DataInputOutputUtil.writeINT(out, -4);
-        writeKey(out, ((EffectQuantum.ReturnChangeQuantum)effect).key, md);
+        writeKey(out, ((EffectQuantum.ReturnChangeQuantum)effect).key);
       }
       else if (effect instanceof EffectQuantum.FieldReadQuantum) {
         DataInputOutputUtil.writeINT(out, -5);
-        writeKey(out, ((EffectQuantum.FieldReadQuantum)effect).key, md);
+        writeKey(out, ((EffectQuantum.FieldReadQuantum)effect).key);
       }
       else if (effect instanceof EffectQuantum.ParamChangeQuantum) {
         DataInputOutputUtil.writeINT(out, ((EffectQuantum.ParamChangeQuantum)effect).n);
@@ -326,7 +304,7 @@ public class BytecodeAnalysisIndex extends ScalarIndexExtension<HMember> {
       }
     }
 
-    private static void writeDataValue(@NotNull DataOutput out, DataValue dataValue, MessageDigest md) throws IOException {
+    private static void writeDataValue(@NotNull DataOutput out, DataValue dataValue) throws IOException {
       if (dataValue == DataValue.ThisDataValue) {
         DataInputOutputUtil.writeINT(out, -1);
       }
@@ -344,7 +322,7 @@ public class BytecodeAnalysisIndex extends ScalarIndexExtension<HMember> {
       }
       else if (dataValue instanceof DataValue.ReturnDataValue) {
         DataInputOutputUtil.writeINT(out, -6);
-        writeKey(out, ((DataValue.ReturnDataValue)dataValue).key, md);
+        writeKey(out, ((DataValue.ReturnDataValue)dataValue).key);
       }
       else if (dataValue instanceof DataValue.ParameterDataValue) {
         DataInputOutputUtil.writeINT(out, ((DataValue.ParameterDataValue)dataValue).n);

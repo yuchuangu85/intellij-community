@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2017 JetBrains s.r.o.
+ * Copyright 2000-2018 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +18,12 @@ package com.intellij.java.codeInspection;
 import com.intellij.JavaTestUtil;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInspection.BlockMarkerCommentsInspection;
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
 
 /**
  * @author Dmitry Batkovich
  */
-public class BlockMarkerCommentsTest extends LightCodeInsightFixtureTestCase {
+public class BlockMarkerCommentsTest extends LightJavaCodeInsightFixtureTestCase {
 
   private BlockMarkerCommentsInspection myInspection;
 
@@ -41,9 +41,16 @@ public class BlockMarkerCommentsTest extends LightCodeInsightFixtureTestCase {
 
   @Override
   public void tearDown() throws Exception {
-    myFixture.disableInspections(myInspection);
-    myInspection = null;
-    super.tearDown();
+    try {
+      myFixture.disableInspections(myInspection);
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
+    finally {
+      myInspection = null;
+      super.tearDown();
+    }
   }
 
   private void doTestInspection() {

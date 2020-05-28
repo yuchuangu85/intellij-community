@@ -22,10 +22,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 
-public interface PsiReferenceProcessor{
+public interface PsiReferenceProcessor {
   boolean execute(PsiReference element);
 
-  class CollectElements implements PsiReferenceProcessor{
+  class CollectElements implements PsiReferenceProcessor {
     private final Collection<PsiReference> myCollection;
 
     public CollectElements(Collection<PsiReference> collection) {
@@ -36,13 +36,11 @@ public interface PsiReferenceProcessor{
       this(new ArrayList<>());
     }
 
-    @NotNull
-    public PsiReference[] toArray(){
+    public PsiReference @NotNull [] toArray() {
       return myCollection.toArray(PsiReference.EMPTY_ARRAY);
     }
 
-    @NotNull
-    public PsiReference[] toArray(PsiReference[] array){
+    public PsiReference @NotNull [] toArray(PsiReference[] array) {
       return myCollection.toArray(array);
     }
 
@@ -50,24 +48,6 @@ public interface PsiReferenceProcessor{
     public boolean execute(PsiReference element) {
       myCollection.add(element);
       return true;
-    }
-  }
-
-  class FindElement implements PsiReferenceProcessor{
-    private volatile PsiReference myFoundElement;
-
-    public boolean isFound() {
-      return myFoundElement != null;
-    }
-
-    public PsiReference getFoundReference() {
-      return myFoundElement;
-    }
-
-    @Override
-    public boolean execute(PsiReference element) {
-      myFoundElement = element;
-      return false;
     }
   }
 }

@@ -18,6 +18,7 @@ package org.jetbrains.jps.incremental.artifacts.builders;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.containers.ClassMap;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.builders.BuildTarget;
@@ -32,7 +33,6 @@ import org.jetbrains.jps.model.artifact.elements.*;
 import org.jetbrains.jps.model.java.*;
 import org.jetbrains.jps.model.module.JpsModule;
 import org.jetbrains.jps.model.module.JpsModuleSourceRoot;
-import org.jetbrains.jps.model.module.JpsTypedModuleSourceRoot;
 import org.jetbrains.jps.service.JpsServiceManager;
 import org.jetbrains.jps.util.JpsPathUtil;
 
@@ -42,11 +42,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-/**
- * @author nik
- */
 public class LayoutElementBuildersRegistry {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.jps.incremental.artifacts.builders.LayoutElementBuildersRegistry");
+  private static final Logger LOG = Logger.getInstance(LayoutElementBuildersRegistry.class);
 
   private static class InstanceHolder {
 
@@ -293,7 +290,8 @@ public class LayoutElementBuildersRegistry {
                                      ArtifactInstructionsBuilderContext builderContext) {
       JpsModule module = element.getModuleReference().resolve();
       if (module != null) {
-        generateModuleSourceInstructions(module.getSourceRoots(), instructionCreator, element);
+        List<JpsModuleSourceRoot> productionSources = ContainerUtil.filter(module.getSourceRoots(), root -> JavaModuleSourceRootTypes.PRODUCTION.contains(root.getRootType()));
+        generateModuleSourceInstructions(productionSources, instructionCreator, element);
       }
     }
 

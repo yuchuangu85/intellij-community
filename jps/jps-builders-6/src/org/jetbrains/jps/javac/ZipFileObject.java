@@ -5,6 +5,7 @@ import com.intellij.openapi.util.io.FileUtilRt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.jps.incremental.CharArrayCharSequence;
 
+import javax.tools.*;
 import java.io.*;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -16,8 +17,8 @@ public class ZipFileObject extends JpsFileObject {
   private final ZipEntry myEntry;
   private final String myEncoding;
 
-  ZipFileObject(File root, ZipFile zip, ZipEntry entry, String encoding) {
-    super(createUri(root, entry.getName()), findKind(entry.getName()));
+  ZipFileObject(File root, ZipFile zip, ZipEntry entry, String encoding, final JavaFileManager.Location location) {
+    super(createUri(root, entry.getName()), findKind(entry.getName()), location);
     myZip = zip;
     myEntry = entry;
     myEncoding = encoding;
@@ -25,8 +26,8 @@ public class ZipFileObject extends JpsFileObject {
 
   @NotNull
   private static URI createUri(final File zipFile, String relPath) {
-    final StringBuilder buf = new StringBuilder();
     final String p = FileUtilRt.toSystemIndependentName(zipFile.getPath());
+    final StringBuilder buf = new StringBuilder(p.length() + relPath.length() + 5);
     if (!p.startsWith("/")) {
       buf.append("///");
     }
@@ -38,7 +39,7 @@ public class ZipFileObject extends JpsFileObject {
       return new URI("jar", null, buf.toString(), null);
     }
     catch (URISyntaxException e) {
-      throw new Error("Cannot create URI " + buf.toString(), e);
+      throw new Error("Cannot create URI " + buf, e);
     }
   }
 
@@ -94,18 +95,7 @@ public class ZipFileObject extends JpsFileObject {
    */
   @Override
   public boolean equals(Object other) {
-    if (this == other) {
-      return true;
-    }
-    if (!(other instanceof ZipFileObject)) {
-      return false;
-    }
-    return toUri().equals(((ZipFileObject)other).toUri());  // todo: check if this is fast enough to rely on URI.equals() here
-  }
-
-  @Override
-  public int hashCode() {
-    return toUri().hashCode();
+    return other instanceof ZipFileObject && super.equals(other);
   }
 
   @Override

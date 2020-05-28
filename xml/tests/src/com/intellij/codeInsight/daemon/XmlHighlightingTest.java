@@ -11,9 +11,7 @@ import com.intellij.codeInsight.daemon.impl.analysis.XmlUnboundNsPrefixInspectio
 import com.intellij.codeInsight.daemon.impl.quickfix.AddXsiSchemaLocationForExtResourceAction;
 import com.intellij.codeInsight.lookup.LookupManager;
 import com.intellij.codeInspection.LocalInspectionTool;
-import com.intellij.codeInspection.htmlInspections.HtmlUnknownTagInspection;
-import com.intellij.codeInspection.htmlInspections.RequiredAttributesInspection;
-import com.intellij.codeInspection.htmlInspections.XmlWrongRootElementInspection;
+import com.intellij.codeInspection.htmlInspections.*;
 import com.intellij.ide.DataManager;
 import com.intellij.ide.highlighter.HighlighterFactory;
 import com.intellij.ide.highlighter.XmlHighlighterFactory;
@@ -36,6 +34,7 @@ import com.intellij.openapi.editor.highlighter.HighlighterIterator;
 import com.intellij.openapi.fileTypes.StdFileTypes;
 import com.intellij.openapi.paths.WebReference;
 import com.intellij.openapi.project.DumbServiceImpl;
+import com.intellij.openapi.util.RecursionManager;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VfsUtilCore;
@@ -118,6 +117,7 @@ public class XmlHighlightingTest extends DaemonAnalyzerTestCase {
   public void testrootTag1() throws Exception { doTest(); }
   public void testManyRootTags() throws Exception { doTest(); }
   public void testCommentBeforeProlog() throws Exception { doTest(); }
+  public void testXmlStylesheet() throws Exception { doTest(); }
   public void testCommentBeforeProlog_2() throws Exception { doTest(); }
   //public void testNoRootTag() throws Exception { doTest(); }
 
@@ -313,7 +313,7 @@ public class XmlHighlightingTest extends DaemonAnalyzerTestCase {
     );
   }
 
-  private void doTestWithLocations(@Nullable String[][] resources, String ext) {
+  private void doTestWithLocations(String[] @Nullable [] resources, String ext) {
     doConfigureWithLocations(resources, ext);
     doDoTest(true,false);
   }
@@ -659,6 +659,7 @@ public class XmlHighlightingTest extends DaemonAnalyzerTestCase {
   }
 
   public void testStackOverflow2() throws Exception {
+    RecursionManager.disableMissedCacheAssertions(getTestRootDisposable());
     final String url = "urn:aaa";
     final String location = getTestName(false) + ".xsd";
     ExternalResourceManagerExImpl.registerResourceTemporarily(url, location, getTestRootDisposable());
@@ -1108,6 +1109,14 @@ public class XmlHighlightingTest extends DaemonAnalyzerTestCase {
     doDoTest(true, false);
 
     doTestWithUnboundNSQuickFix(BASE_PATH + testName + "5");
+  }
+
+  public void testDoctypeSystemConfigured() {
+    ExternalResourceManagerExImpl.registerResourceTemporarily("sample.dtd",
+                                                              getTestDataPath() + BASE_PATH + "sample.dtd",
+                                                              getTestRootDisposable());
+    configureByFiles(null, BASE_PATH + "sample.xml", BASE_PATH + "sample.dtd");
+    doDoTest(true, false);
   }
 
   public void testUnboundNsHighlighting6() throws Exception {
@@ -1863,6 +1872,7 @@ public class XmlHighlightingTest extends DaemonAnalyzerTestCase {
   }
 
   public void testXsiType() throws Exception {
+    RecursionManager.assertOnRecursionPrevention(getTestRootDisposable());
     final String testName = getTestName(false);
 
     doTest(
@@ -1902,8 +1912,24 @@ public class XmlHighlightingTest extends DaemonAnalyzerTestCase {
     doTest(getFullRelativeTestName(".html"), true, true);
   }
 
+  public void testSvgInHtml() throws Exception {
+    enableInspectionTools(new HtmlUnknownTagInspection(),
+                          new HtmlUnknownAttributeInspection(),
+                          new HtmlUnknownBooleanAttributeInspection());
+    doTest(getFullRelativeTestName(".html"), true, true);
+  }
+
+  public void testSvgAttrValueInHtml() throws Exception {
+    doTest(getFullRelativeTestName(".html"), true, false);
+  }
+
   public void testAnyAttribute() {
     configureByFiles(null, BASE_PATH + "anyAttribute.xml", BASE_PATH + "services-1.0.xsd");
+    doDoTest(true, false);
+  }
+
+  public void testAnyAttributeDefaultNamespace() {
+    configureByFiles(null, BASE_PATH + "UnityEngine.xml", BASE_PATH + "UnityEngine.UIElements.xsd");
     doDoTest(true, false);
   }
 
@@ -1953,7 +1979,7 @@ public class XmlHighlightingTest extends DaemonAnalyzerTestCase {
     XmlTag tag = PsiTreeUtil.getParentOfType(at.getElement(), XmlTag.class);
     XmlElementDescriptorImpl descriptor = (XmlElementDescriptorImpl)tag.getDescriptor();
     XmlAttributeDescriptor[] descriptors = descriptor.getAttributesDescriptors(tag);
-    System.out.println(Arrays.asList(descriptors));
+    LOG.debug(String.valueOf(Arrays.asList(descriptors)));
 
     doDoTest(true, false);
 
@@ -1972,7 +1998,7 @@ public class XmlHighlightingTest extends DaemonAnalyzerTestCase {
       XmlTag tag = PsiTreeUtil.getParentOfType(at.getElement(), XmlTag.class);
       XmlElementDescriptor descriptor = tag.getDescriptor();
       XmlAttributeDescriptor[] descriptors = descriptor.getAttributesDescriptors(tag);
-      System.out.println(Arrays.asList(descriptors));
+      LOG.debug(String.valueOf(Arrays.asList(descriptors)));
     }
     finally {
       DumbServiceImpl.getInstance(myProject).setDumb(false);
@@ -1983,6 +2009,11 @@ public class XmlHighlightingTest extends DaemonAnalyzerTestCase {
 
   public void testQualifiedAttributeReference() {
     configureByFiles(null, BASE_PATH + "qualified.xml", BASE_PATH + "qualified.xsd");
+    doDoTest(true, false);
+  }
+
+  public void testUnqualifiedElement() {
+    configureByFiles(null, BASE_PATH + "UnqualifiedElement.xml", BASE_PATH + "UnqualifiedElement.xsd");
     doDoTest(true, false);
   }
 
@@ -2082,6 +2113,7 @@ public class XmlHighlightingTest extends DaemonAnalyzerTestCase {
   }
 
   public void testRedefine() throws Exception {
+    RecursionManager.assertOnRecursionPrevention(getTestRootDisposable());
     doTest(
       new VirtualFile[] {
         getVirtualFile(BASE_PATH + "Redefine/derived.xsd"),
@@ -2097,6 +2129,17 @@ public class XmlHighlightingTest extends DaemonAnalyzerTestCase {
         getVirtualFile(BASE_PATH + "Redefine/sample.xml"),
         getVirtualFile(BASE_PATH + "Redefine/derived.xsd"),
         getVirtualFile(BASE_PATH + "Redefine/base.xsd"),
+      },
+      true, false
+    );
+  }
+
+  public void testRedefineGroup() throws Exception {
+    doTest(
+      new VirtualFile[] {
+        getVirtualFile(BASE_PATH + "RedefineGroup/test.xml"),
+        getVirtualFile(BASE_PATH + "RedefineGroup/originalschema.xsd"),
+        getVirtualFile(BASE_PATH + "RedefineGroup/redefinedschema.xsd"),
       },
       true, false
     );
@@ -2199,6 +2242,7 @@ public class XmlHighlightingTest extends DaemonAnalyzerTestCase {
     ExternalResourceManagerEx.getInstanceEx().setDefaultHtmlDoctype(myOldDoctype, getProject());
   }
 
+  @NotNull
   @Override
   protected String getTestDataPath() {
     return PlatformTestUtil.getCommunityPath().replace(File.separatorChar, '/') + "/xml/tests/testData/";
@@ -2208,6 +2252,9 @@ public class XmlHighlightingTest extends DaemonAnalyzerTestCase {
   protected void tearDown() throws Exception {
     try {
       XmlSettings.getInstance().SHOW_XML_ADD_IMPORT_HINTS = old;
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
     }
     finally {
       super.tearDown();

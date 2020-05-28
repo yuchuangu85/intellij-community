@@ -4,12 +4,10 @@ package com.intellij.openapi.diff.impl.patch;
 import com.intellij.diff.util.Side;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsException;
-import com.intellij.openapi.vcs.VcsOutgoingChangesProvider;
-import com.intellij.openapi.vcs.VcsRoot;
 import com.intellij.openapi.vcs.changes.*;
+import com.intellij.openapi.vcs.ex.PartialCommitHelper;
 import com.intellij.openapi.vcs.impl.PartialChangesUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.BeforeAfter;
@@ -18,116 +16,93 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.charset.Charset;
-import java.util.*;
-
-import static com.intellij.openapi.vcs.changes.ChangesUtil.getAfterPath;
-import static com.intellij.openapi.vcs.changes.ChangesUtil.getBeforePath;
-import static com.intellij.util.ObjectUtils.chooseNotNull;
-import static com.intellij.vcsUtil.VcsUtil.groupByRoots;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 
 public class IdeaTextPatchBuilder {
   private IdeaTextPatchBuilder() {
   }
 
-  public static List<BeforeAfter<AirContentRevision>> revisionsConvertor(@NotNull Project project,
-                                                                         @NotNull List<? extends Change> changes) throws VcsException {
+  private static List<BeforeAfter<AirContentRevision>> revisionsConvertor(@NotNull Project project,
+                                                                          @NotNull List<? extends Change> changes,
+                                                                          boolean honorExcludedFromCommit) {
     final List<BeforeAfter<AirContentRevision>> result = new ArrayList<>(changes.size());
-    Map<VcsRoot, List<Change>> byRoots =
-      groupByRoots(project, changes, change -> chooseNotNull(getBeforePath(change), getAfterPath(change)));
-
-    for (VcsRoot root : byRoots.keySet()) {
-      final Collection<Change> rootChanges = byRoots.get(root);
-
-      if (root.getVcs() == null || root.getVcs().getOutgoingChangesProvider() == null) {
-        addConvertChanges(project, rootChanges, result, null);
-      }
-      else {
-        final VcsOutgoingChangesProvider<?> provider = root.getVcs().getOutgoingChangesProvider();
-        final Collection<Change> basedOnLocal = provider.filterLocalChangesBasedOnLocalCommits(rootChanges, root.getPath());
-        rootChanges.removeAll(basedOnLocal);
-
-        addConvertChanges(project, rootChanges, result, null);
-        addConvertChanges(project, basedOnLocal, result, provider);
-      }
-    }
+    addConvertChanges(project, changes, result, honorExcludedFromCommit);
     return result;
   }
 
   private static void addConvertChanges(@NotNull Project project,
-                                        @NotNull Collection<Change> changes,
-                                        @NotNull List<BeforeAfter<AirContentRevision>> result,
-                                        @Nullable VcsOutgoingChangesProvider<?> provider) {
-    List<Change> otherChanges = PartialChangesUtil.processPartialChanges(project, changes, false, (partialChanges, tracker) -> {
+                                        @NotNull Collection<? extends Change> changes,
+                                        @NotNull List<? super BeforeAfter<AirContentRevision>> result,
+                                        boolean honorExcludedFromCommit) {
+    Collection<Change> otherChanges = PartialChangesUtil.processPartialChanges(project, changes, false, (partialChanges, tracker) -> {
       if (!tracker.hasPartialChangesToCommit()) return false;
 
       List<String> changelistIds = ContainerUtil.map(partialChanges, ChangeListChange::getChangeListId);
       Change change = partialChanges.get(0).getChange();
 
-      String actualText = tracker.getPartiallyAppliedContent(Side.LEFT, changelistIds);
+      PartialCommitHelper helper = tracker.handlePartialCommit(Side.LEFT, changelistIds, honorExcludedFromCommit);
+      String actualText = helper.getContent();
 
-      result.add(new BeforeAfter<>(convertRevision(change.getBeforeRevision(), null, provider),
-                                   convertRevision(change.getAfterRevision(), actualText, provider)));
+      result.add(new BeforeAfter<>(convertRevision(change.getBeforeRevision(), null),
+                                   convertRevision(change.getAfterRevision(), actualText)));
       return true;
     });
 
     for (Change change : otherChanges) {
-      result.add(new BeforeAfter<>(convertRevision(change.getBeforeRevision(), null, provider),
-                                   convertRevision(change.getAfterRevision(), null, provider)));
+      result.add(new BeforeAfter<>(convertRevision(change.getBeforeRevision(), null),
+                                   convertRevision(change.getAfterRevision(), null)));
     }
   }
 
   @NotNull
-  public static List<FilePatch> buildPatch(final Project project, final Collection<? extends Change> changes, final String basePath, final boolean reversePatch) throws VcsException {
+  public static List<FilePatch> buildPatch(Project project,
+                                           Collection<? extends Change> changes,
+                                           String basePath,
+                                           boolean reversePatch) throws VcsException {
+    return buildPatch(project, changes, basePath, reversePatch, false);
+  }
+
+  @NotNull
+  public static List<FilePatch> buildPatch(Project project,
+                                           Collection<? extends Change> changes,
+                                           String basePath,
+                                           boolean reversePatch,
+                                           boolean honorExcludedFromCommit) throws VcsException {
     final Collection<BeforeAfter<AirContentRevision>> revisions;
     if (project != null) {
-      revisions = revisionsConvertor(project, new ArrayList<>(changes));
-    } else {
+      revisions = revisionsConvertor(project, new ArrayList<>(changes), honorExcludedFromCommit);
+    }
+    else {
       revisions = new ArrayList<>(changes.size());
       for (Change change : changes) {
         revisions.add(new BeforeAfter<>(convertRevision(change.getBeforeRevision()),
                                         convertRevision(change.getAfterRevision())));
       }
     }
-    return TextPatchBuilder.buildPatch(revisions, basePath, reversePatch, SystemInfo.isFileSystemCaseSensitive,
-                                       () -> ProgressManager.checkCanceled());
+    return TextPatchBuilder.buildPatch(revisions, basePath, reversePatch, () -> ProgressManager.checkCanceled());
   }
 
   @Nullable
   private static AirContentRevision convertRevision(@Nullable ContentRevision cr) {
-    return convertRevision(cr, null, null);
+    return convertRevision(cr, null);
   }
 
   @Nullable
-  private static AirContentRevision convertRevision(@Nullable ContentRevision cr,
-                                                    @Nullable String actualTextContent,
-                                                    @Nullable VcsOutgoingChangesProvider provider) {
+  private static AirContentRevision convertRevision(@Nullable ContentRevision cr, @Nullable String actualTextContent) {
     if (cr == null) return null;
-    if (provider != null) {
-      final Date date = provider.getRevisionDate(cr.getRevisionNumber(), cr.getFile());
-      final Long ts = date == null ? null : date.getTime();
-      return convertRevisionToAir(cr, actualTextContent, ts);
-    }
-    else {
-      return convertRevisionToAir(cr, actualTextContent, null);
-    }
-  }
-
-  @NotNull
-  private static AirContentRevision convertRevisionToAir(@NotNull ContentRevision cr,
-                                                         @Nullable String actualTextContent,
-                                                         @Nullable Long ts) {
     final FilePath fp = cr.getFile();
-    final StaticPathDescription description = new StaticPathDescription(fp.isDirectory(),
-                                                                        ts == null ? fp.getIOFile().lastModified() : ts, fp.getPath());
+    final StaticPathDescription description = new StaticPathDescription(fp.isDirectory(), fp.getIOFile().lastModified(), fp.getPath());
 
     if (actualTextContent != null) {
-      return new PartialTextAirContentRevision(actualTextContent, cr, description, ts);
+      return new PartialTextAirContentRevision(actualTextContent, cr, description, null);
     }
     else if (cr instanceof BinaryContentRevision) {
-      return new BinaryAirContentRevision((BinaryContentRevision)cr, description, ts);
+      return new BinaryAirContentRevision((BinaryContentRevision)cr, description, null);
     }
     else {
-      return new TextAirContentRevision(cr, description, ts);
+      return new TextAirContentRevision(cr, description, null);
     }
   }
 

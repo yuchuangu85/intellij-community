@@ -1,6 +1,7 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.typeCook.deductive.builder;
 
+import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileTypes.StdFileTypes;
 import com.intellij.openapi.project.Project;
@@ -18,11 +19,15 @@ import com.intellij.refactoring.typeCook.Settings;
 import com.intellij.refactoring.typeCook.Util;
 import com.intellij.refactoring.typeCook.deductive.PsiTypeVariableFactory;
 import com.intellij.refactoring.typeCook.deductive.util.VictimCollector;
+import com.intellij.util.containers.ContainerUtil;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 public class SystemBuilder {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.typeCook.deductive.builder.SystemBuilder");
+  private static final Logger LOG = Logger.getInstance(SystemBuilder.class);
 
   private final PsiManager myManager;
   private final Map<PsiElement, Boolean> myMethodCache;
@@ -326,7 +331,7 @@ public class SystemBuilder {
         final PsiExpression qualifier =
           expr instanceof PsiMethodCallExpression ? ((PsiMethodCallExpression)expr).getMethodExpression().getQualifierExpression() : null;
 
-        final Set<PsiTypeParameter> typeParameters = new HashSet<>(Arrays.asList(methodTypeParameters));
+        final Set<PsiTypeParameter> typeParameters = ContainerUtil.set(methodTypeParameters);
 
         PsiSubstitutor qualifierSubstitutor = PsiSubstitutor.EMPTY;
         PsiSubstitutor supertypeSubstitutor = PsiSubstitutor.EMPTY;
@@ -805,7 +810,7 @@ public class SystemBuilder {
     SearchScope scope = helper.getUseScope(element);
     if (scope instanceof GlobalSearchScope) {
       scope =
-        GlobalSearchScope.getScopeRestrictedByFileTypes((GlobalSearchScope)scope, StdFileTypes.JAVA, StdFileTypes.JSP, StdFileTypes.JSPX);
+        GlobalSearchScope.getScopeRestrictedByFileTypes((GlobalSearchScope)scope, JavaFileType.INSTANCE, StdFileTypes.JSP, StdFileTypes.JSPX);
     }
     return scope;
   }

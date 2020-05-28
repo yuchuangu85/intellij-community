@@ -16,7 +16,6 @@
 package com.intellij.codeInspection.streamToLoop;
 
 import com.intellij.codeInspection.streamToLoop.StreamToLoopInspection.ResultKind;
-import com.intellij.codeInspection.streamToLoop.StreamToLoopInspection.StreamToLoopReplacementContext;
 import com.intellij.codeInspection.util.OptionalUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
@@ -26,6 +25,7 @@ import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.siyeh.ig.psiutils.BoolUtils;
 import com.siyeh.ig.psiutils.ParenthesesUtils;
+import com.siyeh.ig.psiutils.TypeUtils;
 import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
@@ -42,7 +42,7 @@ import static com.intellij.util.ObjectUtils.tryCast;
 
 abstract class TerminalOperation extends Operation {
   @Override
-  final String wrap(StreamVariable inVar, StreamVariable outVar, String code, StreamToLoopReplacementContext context) {
+  final String wrap(ChainVariable inVar, ChainVariable outVar, String code, StreamToLoopReplacementContext context) {
     return generate(inVar, context);
   }
 
@@ -60,10 +60,10 @@ abstract class TerminalOperation extends Operation {
     return null;
   }
 
-  abstract String generate(StreamVariable inVar, StreamToLoopReplacementContext context);
+  abstract String generate(ChainVariable inVar, StreamToLoopReplacementContext context);
 
   @Nullable
-  static TerminalOperation createTerminal(@NotNull String name, @NotNull PsiExpression[] args,
+  static TerminalOperation createTerminal(@NotNull String name, PsiExpression @NotNull [] args,
                                           @NotNull PsiType elementType, @NotNull PsiType resultType, boolean isVoid) {
     if(isVoid) {
       if ((name.equals("forEach") || name.equals("forEachOrdered")) && args.length == 1) {
@@ -156,6 +156,7 @@ abstract class TerminalOperation extends Operation {
   @Contract("_, _, null -> null")
   @Nullable
   private static TerminalOperation fromCollector(@NotNull PsiType elementType, @NotNull PsiType resultType, PsiExpression expr) {
+    expr = PsiUtil.skipParenthesizedExprDown(expr);
     if (!(expr instanceof PsiMethodCallExpression)) return null;
     PsiMethodCallExpression collectorCall = (PsiMethodCallExpression)expr;
     PsiExpression[] collectorArgs = collectorCall.getArgumentList().getExpressions();
@@ -360,11 +361,12 @@ abstract class TerminalOperation extends Operation {
   }
 
   abstract static class AccumulatedOperation extends TerminalOperation {
-    abstract String initAccumulator(StreamVariable inVar, StreamToLoopReplacementContext context);
-    abstract String getAccumulatorUpdater(StreamVariable inVar, String acc);
+    abstract String initAccumulator(ChainVariable inVar, StreamToLoopReplacementContext context);
+
+    abstract String getAccumulatorUpdater(ChainVariable inVar, String acc);
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       String acc = initAccumulator(inVar, context);
       return getAccumulatorUpdater(inVar, acc);
     }
@@ -388,7 +390,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       String accumulator = context.declareResult("acc", myType, myIdentity.getText(), ResultKind.NON_FINAL);
       myUpdater.transform(context, accumulator, inVar.getName());
       return accumulator + "=" + myUpdater.getText() + ";";
@@ -410,7 +412,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       String seen = context.declare("seen", "boolean", "false");
       String accumulator = context.declareResult("acc", myType, myType instanceof PsiPrimitiveType ? "0" : "null", ResultKind.UNKNOWN);
       myUpdater.transform(context, accumulator, inVar.getName());
@@ -452,12 +454,12 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public void preprocessVariables(StreamToLoopReplacementContext context, StreamVariable inVar, StreamVariable outVar) {
+    public void preprocessVariables(StreamToLoopReplacementContext context, ChainVariable inVar, ChainVariable outVar) {
       myAccumulator.preprocessVariable(context, inVar, 1);
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       mySupplier.transform(context);
       String candidate = mySupplier.suggestFinalOutputNames(context, myAccumulator.getParameterName(0), "acc").get(0);
       String acc = context.declareResult(candidate, mySupplier.getResultType(), mySupplier.getText(), ResultKind.FINAL);
@@ -476,7 +478,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       String sum = context.declareResult("sum", myDoubleAccumulator ? PsiType.DOUBLE : PsiType.LONG, "0", ResultKind.UNKNOWN);
       String count = context.declare("count", "long", "0");
       String seenCheck = count + ">0";
@@ -497,7 +499,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       String arr =
         context.declareResult("arr", myType.createArrayType(), "new " + myType.getCanonicalText() + "[10]", ResultKind.NON_FINAL);
       String count = context.declare("count", "int", "0");
@@ -517,7 +519,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    String initAccumulator(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String initAccumulator(ChainVariable inVar, StreamToLoopReplacementContext context) {
       String list =
         context.declareResult("list", context.createType(CommonClassNames.JAVA_UTIL_LIST + "<" + myType.getCanonicalText() + ">"),
                                           "new " + CommonClassNames.JAVA_UTIL_ARRAY_LIST + "<>()", ResultKind.UNKNOWN);
@@ -531,7 +533,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    String getAccumulatorUpdater(StreamVariable inVar, String list) {
+    String getAccumulatorUpdater(ChainVariable inVar, String list) {
       return list+".add("+inVar+");\n";
     }
   }
@@ -544,7 +546,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       return context.assignAndBreak(new ConditionalExpression.Optional(myType, "found", inVar.getName()));
     }
   }
@@ -579,12 +581,12 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public void preprocessVariables(StreamToLoopReplacementContext context, StreamVariable inVar, StreamVariable outVar) {
+    public void preprocessVariables(StreamToLoopReplacementContext context, ChainVariable inVar, ChainVariable outVar) {
       myFn.preprocessVariable(context, inVar, 0);
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       myFn.transform(context, inVar.getName());
       String expression;
       if (myNegatePredicate) {
@@ -602,12 +604,14 @@ abstract class TerminalOperation extends Operation {
   interface CollectorOperation {
     // Non-trivial finishers are not supported
     default void transform(StreamToLoopReplacementContext context, String item) {}
-    default void preprocessVariables(StreamToLoopReplacementContext context, StreamVariable inVar, StreamVariable outVar) {}
+
+    default void preprocessVariables(StreamToLoopReplacementContext context, ChainVariable inVar, ChainVariable outVar) {}
     default void registerReusedElements(Consumer<? super PsiElement> consumer) {}
     String getSupplier();
-    String getAccumulatorUpdater(StreamVariable inVar, String acc);
 
-    default String getMerger(StreamVariable inVar, String map, String key) {
+    String getAccumulatorUpdater(ChainVariable inVar, String acc);
+
+    default String getMerger(ChainVariable inVar, String map, String key) {
       return null;
     }
 
@@ -631,11 +635,11 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    String initAccumulator(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String initAccumulator(ChainVariable inVar, StreamToLoopReplacementContext context) {
       return initAccumulator(inVar, context, true);
     }
 
-    String initAccumulator(StreamVariable inVar, StreamToLoopReplacementContext context, boolean canBeFinal) {
+    String initAccumulator(ChainVariable inVar, StreamToLoopReplacementContext context, boolean canBeFinal) {
       transform(context, inVar.getName());
       PsiType resultType = correctReturnType(myType);
       return context.declareResult(myAccNameSupplier.apply(context), resultType, myMostAbstractAllowedType, getSupplier(),
@@ -692,7 +696,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    String initAccumulator(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String initAccumulator(ChainVariable inVar, StreamToLoopReplacementContext context) {
       ResultKind kind = myFinisherTemplate.equals("{acc}") ?
                         myAccType instanceof PsiPrimitiveType ? ResultKind.NON_FINAL : ResultKind.FINAL : ResultKind.UNKNOWN;
       String varName = context.declareResult(myAccName, myAccType, myAccInitializer, kind);
@@ -711,12 +715,12 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public String getAccumulatorUpdater(StreamVariable inVar, String acc) {
+    public String getAccumulatorUpdater(ChainVariable inVar, String acc) {
       return myUpdateTemplate.replace("{acc}", acc).replace("{item}", inVar.getName());
     }
 
     @Override
-    public String getMerger(StreamVariable inVar, String map, String key) {
+    public String getMerger(ChainVariable inVar, String map, String key) {
       if(!(myAccType instanceof PsiPrimitiveType)) return null;
       String boxedType = PsiTypesUtil.boxIfPossible(myAccType.getCanonicalText());
       String val = myUpdateTemplate.equals("{acc}++;") ? "1L" : "(" + myAccType.getCanonicalText() + ")" + inVar;
@@ -726,7 +730,7 @@ abstract class TerminalOperation extends Operation {
 
     @NotNull
     static TemplateBasedOperation summing(PsiType type) {
-      String defValue = type.equals(PsiType.DOUBLE) ? "0.0" : type.equals(PsiType.LONG) ? "0L" : "0";
+      String defValue = TypeUtils.getDefaultValue(type);
       return new TemplateBasedOperation("sum", type, defValue, "{acc}+={item};");
     }
 
@@ -763,12 +767,12 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public void preprocessVariables(StreamToLoopReplacementContext context, StreamVariable inVar, StreamVariable outVar) {
+    public void preprocessVariables(StreamToLoopReplacementContext context, ChainVariable inVar, ChainVariable outVar) {
       myDelegate.preprocessVariables(context, inVar, outVar);
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       String acc = myDelegate.initAccumulator(inVar, context, false);
       myWrapper.transform(context, acc);
       context.setFinisher(myWrapper.getText());
@@ -786,7 +790,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public String getAccumulatorUpdater(StreamVariable inVar, String acc) {
+    public String getAccumulatorUpdater(ChainVariable inVar, String acc) {
       return acc + ".add(" + inVar + ");\n";
     }
 
@@ -853,7 +857,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       if (getExtremeValue() != null && context.tryUnwrapOrElse(getExtremeValue())) {
         String best = context.declareResult("best", myType, getExtremeValueExpression(), ResultKind.NON_FINAL);
         String comparePredicate = myTemplate.replace("{best}", best).replace("{item}", inVar.getName());
@@ -927,7 +931,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public void preprocessVariables(StreamToLoopReplacementContext context, StreamVariable inVar, StreamVariable outVar) {
+    public void preprocessVariables(StreamToLoopReplacementContext context, ChainVariable inVar, ChainVariable outVar) {
       myKeyExtractor.preprocessVariable(context, inVar, 0);
       myValueExtractor.preprocessVariable(context, inVar, 0);
     }
@@ -940,7 +944,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public String getAccumulatorUpdater(StreamVariable inVar, String map) {
+    public String getAccumulatorUpdater(ChainVariable inVar, String map) {
       if(myMerger == null) {
         return "if("+map+".put("+myKeyExtractor.getText()+","+myValueExtractor.getText()+")!=null) {\n"+
                "throw new java.lang.IllegalStateException(\"Duplicate key\");\n}\n";
@@ -994,7 +998,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public void preprocessVariables(StreamToLoopReplacementContext context, StreamVariable inVar, StreamVariable outVar) {
+    public void preprocessVariables(StreamToLoopReplacementContext context, ChainVariable inVar, ChainVariable outVar) {
       myKeyExtractor.preprocessVariable(context, inVar, 0);
       myCollector.preprocessVariables(context, inVar, outVar);
     }
@@ -1008,7 +1012,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public String getAccumulatorUpdater(StreamVariable inVar, String map) {
+    public String getAccumulatorUpdater(ChainVariable inVar, String map) {
       String key = myKeyExtractor.getText();
       String merger = myCollector.getMerger(inVar, map, key);
       if (merger != null) return merger;
@@ -1035,13 +1039,13 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public void preprocessVariables(StreamToLoopReplacementContext context, StreamVariable inVar, StreamVariable outVar) {
+    public void preprocessVariables(StreamToLoopReplacementContext context, ChainVariable inVar, ChainVariable outVar) {
       myPredicate.preprocessVariable(context, inVar, 0);
       myCollector.preprocessVariables(context, inVar, outVar);
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       PsiType resultType = context.createType(myResultType);
       resultType = correctTypeParameters(resultType, CommonClassNames.JAVA_UTIL_MAP,
                                          Collections.singletonMap("V", myCollector::correctReturnType));
@@ -1075,7 +1079,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public void preprocessVariables(StreamToLoopReplacementContext context, StreamVariable inVar, StreamVariable outVar) {
+    public void preprocessVariables(StreamToLoopReplacementContext context, ChainVariable inVar, ChainVariable outVar) {
       myMapper.preprocessVariable(context, inVar, 0);
     }
 
@@ -1096,22 +1100,22 @@ abstract class TerminalOperation extends Operation {
   }
 
   static class MappingTerminalOperation extends AbstractMappingTerminalOperation {
-    private StreamVariable myVariable;
+    private ChainVariable myVariable;
 
     MappingTerminalOperation(FunctionHelper mapper, TerminalOperation downstream) {
       super(mapper, downstream);
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       createVariable(context, inVar.getName());
       return myVariable.getDeclaration(myMapper.getText()) + myDownstream.generate(myVariable, context);
     }
 
     private void createVariable(StreamToLoopReplacementContext context, String item) {
       myMapper.transform(context, item);
-      myVariable = new StreamVariable(myMapper.getResultType());
-      myDownstream.preprocessVariables(context, myVariable, StreamVariable.STUB);
+      myVariable = new ChainVariable(myMapper.getResultType());
+      myDownstream.preprocessVariables(context, myVariable, ChainVariable.STUB);
       myMapper.suggestOutputNames(context, myVariable);
       myVariable.register(context);
     }
@@ -1123,12 +1127,12 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public String getAccumulatorUpdater(StreamVariable inVar, String acc) {
+    public String getAccumulatorUpdater(ChainVariable inVar, String acc) {
       return myVariable.getDeclaration(myMapper.getText()) + myDownstreamCollector.getAccumulatorUpdater(myVariable, acc);
     }
 
     @Override
-    public String getMerger(StreamVariable inVar, String map, String key) {
+    public String getMerger(ChainVariable inVar, String map, String key) {
       String merger = myDownstreamCollector.getMerger(myVariable, map, key);
       return merger == null ? null : myVariable.getDeclaration(myMapper.getText()) + merger;
     }
@@ -1140,9 +1144,9 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       myMapper.transform(context, inVar.getName());
-      StreamVariable updatedVar = new StreamVariable(myMapper.getResultType(), myMapper.getText());
+      ChainVariable updatedVar = new ChainVariable(myMapper.getResultType(), myMapper.getText());
       return myDownstream.generate(updatedVar, context);
     }
 
@@ -1153,13 +1157,13 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public String getAccumulatorUpdater(StreamVariable inVar, String acc) {
-      return myDownstreamCollector.getAccumulatorUpdater(new StreamVariable(myMapper.getResultType(), myMapper.getText()), acc);
+    public String getAccumulatorUpdater(ChainVariable inVar, String acc) {
+      return myDownstreamCollector.getAccumulatorUpdater(new ChainVariable(myMapper.getResultType(), myMapper.getText()), acc);
     }
 
     @Override
-    public String getMerger(StreamVariable inVar, String map, String key) {
-      return myDownstreamCollector.getMerger(new StreamVariable(myMapper.getResultType(), myMapper.getText()), map, key);
+    public String getMerger(ChainVariable inVar, String map, String key) {
+      return myDownstreamCollector.getMerger(new ChainVariable(myMapper.getResultType(), myMapper.getText()), map, key);
     }
   }
 
@@ -1171,7 +1175,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public void preprocessVariables(StreamToLoopReplacementContext context, StreamVariable inVar, StreamVariable outVar) {
+    public void preprocessVariables(StreamToLoopReplacementContext context, ChainVariable inVar, ChainVariable outVar) {
       myFn.preprocessVariable(context, inVar, 0);
     }
 
@@ -1181,7 +1185,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       myFn.transform(context, inVar.getName());
       return myFn.getStatementText();
     }
@@ -1199,7 +1203,7 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public void preprocessVariables(StreamToLoopReplacementContext context, StreamVariable inVar, StreamVariable outVar) {
+    public void preprocessVariables(StreamToLoopReplacementContext context, ChainVariable inVar, ChainVariable outVar) {
       inVar.addBestNameCandidate("entry");
       inVar.addBestNameCandidate("e");
       inVar.addBestNameCandidate("mapEntry");
@@ -1211,12 +1215,12 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
-      StreamVariable keyVar = new StreamVariable(myKeyType);
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
+      ChainVariable keyVar = new ChainVariable(myKeyType);
       myFn.preprocessVariable(context, keyVar, 0);
       keyVar.addBestNameCandidate("key");
       keyVar.addBestNameCandidate("k");
-      StreamVariable valueVar = new StreamVariable(myValueType);
+      ChainVariable valueVar = new ChainVariable(myValueType);
       myFn.preprocessVariable(context, valueVar, 1);
       valueVar.addBestNameCandidate("value");
       valueVar.addBestNameCandidate("v");
@@ -1247,12 +1251,12 @@ abstract class TerminalOperation extends Operation {
     }
 
     @Override
-    public void preprocessVariables(StreamToLoopReplacementContext context, StreamVariable inVar, StreamVariable outVar) {
+    public void preprocessVariables(StreamToLoopReplacementContext context, ChainVariable inVar, ChainVariable outVar) {
       myOrigin.preprocessVariables(context, inVar, outVar);
     }
 
     @Override
-    String generate(StreamVariable inVar, StreamToLoopReplacementContext context) {
+    String generate(ChainVariable inVar, StreamToLoopReplacementContext context) {
       String acc = myOrigin.initAccumulator(inVar, context);
       context.addAfterStep(acc + ".sort(" + (myComparator == null ? "null" : myComparator.getText()) + ");\n");
       return myOrigin.getAccumulatorUpdater(inVar, acc);

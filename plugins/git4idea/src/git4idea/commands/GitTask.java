@@ -29,6 +29,7 @@ import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.VcsException;
 import git4idea.GitVcs;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -45,6 +46,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @deprecated To remove in IDEA 2017.
  */
+@ApiStatus.ScheduledForRemoval(inVersion = "2017")
 @Deprecated
 public class GitTask {
 
@@ -239,7 +241,7 @@ public class GitTask {
   }
 
   /**
-   * We're using this interface here to work with Task, because standard {@link Task#run(com.intellij.openapi.progress.ProgressIndicator)}
+   * We're using this interface here to work with Task, because standard {@link Task#run(ProgressIndicator)}
    * is busy with timers.
    */
   private interface TaskExecution {
@@ -331,13 +333,11 @@ public class GitTask {
     private ProgressIndicator myIndicator;
     private final TaskExecution myTask;
     private ScheduledFuture<?> myTimer;
-    private final Project myProject;
 
     GitTaskDelegate(Project project, GitHandler handler, TaskExecution task) {
-      myProject = project;
       myHandler = handler;
       myTask = task;
-      Disposer.register(myProject, this);
+      Disposer.register(project, this);
     }
 
     public void run(ProgressIndicator indicator) {

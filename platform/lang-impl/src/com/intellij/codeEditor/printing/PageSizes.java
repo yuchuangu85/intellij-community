@@ -1,23 +1,10 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeEditor.printing;
 
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.util.JdomKt;
+import com.intellij.openapi.editor.EditorBundle;
+import com.intellij.openapi.util.JDOMUtil;
 import org.jdom.Element;
 import org.jetbrains.annotations.NonNls;
 
@@ -25,9 +12,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 
 class PageSizes {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeEditor.printing.PageSizes");
-  private static ArrayList myPageSizes = null;
-  private static HashMap myNamesToPageSizes = null;
+  private static final Logger LOG = Logger.getInstance(PageSizes.class);
+  private static ArrayList<PageSize> myPageSizes = null;
+  private static HashMap<String, PageSize> myNamesToPageSizes = null;
   private static final double MM_TO_INCH = 1/25.4;
   @NonNls private static final String PAGE_SIZES_RESOURCE = "/PageSizes.xml";
   @NonNls private static final String ELEMENT_SIZE = "size";
@@ -41,7 +28,7 @@ class PageSizes {
     init();
     String[] ret = new String[myPageSizes.size()];
     for(int i = 0; i < myPageSizes.size(); i++) {
-      PageSize pageSize = (PageSize)myPageSizes.get(i);
+      PageSize pageSize = myPageSizes.get(i);
       ret[i] = pageSize.name;
     }
     return ret;
@@ -54,7 +41,7 @@ class PageSizes {
 
   public static double getWidth(String name) {
     init();
-    PageSize pageSize = (PageSize)myNamesToPageSizes.get(name);
+    PageSize pageSize = myNamesToPageSizes.get(name);
     if(pageSize == null) {
       return 0;
     }
@@ -63,7 +50,7 @@ class PageSizes {
 
   public static double getHeight(String name) {
     init();
-    PageSize pageSize = (PageSize)myNamesToPageSizes.get(name);
+    PageSize pageSize = myNamesToPageSizes.get(name);
     if(pageSize == null) {
       return 0;
     }
@@ -93,21 +80,20 @@ class PageSizes {
     if(myPageSizes != null) {
       return;
     }
-    myPageSizes = new ArrayList();
-    myNamesToPageSizes = new HashMap();
+    myPageSizes = new ArrayList<>();
+    myNamesToPageSizes = new HashMap<>();
 
     try {
-      for (Element element : JdomKt.loadElement(PageSizes.class.getResourceAsStream(PAGE_SIZES_RESOURCE)).getChildren(ELEMENT_SIZE)) {
+      for (Element element : JDOMUtil.load(PageSizes.class.getResourceAsStream(PAGE_SIZES_RESOURCE)).getChildren(ELEMENT_SIZE)) {
         String name = element.getAttributeValue(ATTRIBUTE_NAME);
         final String widthStr = element.getAttributeValue(ATTRIBUTE_WIDTH);
         final String heightStr = element.getAttributeValue(ATTRIBUTE_HEIGHT);
         String unit = element.getAttributeValue(ATTRIBUTE_UNIT);
 
         final String unitName = unit.equals(UNIT_MM)
-                                ? CodeEditorBundle.message("print.page.size.unit.mm")
-                                : CodeEditorBundle.message("print.page.size.unit.in");
-        final String dimensions = CodeEditorBundle.message("print.page.width.x.height.unit.template",
-                                                           widthStr, heightStr, unitName);
+                                ? EditorBundle.message("print.page.size.unit.mm")
+                                : EditorBundle.message("print.page.size.unit.in");
+        final String dimensions = EditorBundle.message("print.page.width.x.height.unit.template", widthStr, heightStr, unitName);
 
         double width = parsePageSize(widthStr);
         double height = parsePageSize(heightStr);

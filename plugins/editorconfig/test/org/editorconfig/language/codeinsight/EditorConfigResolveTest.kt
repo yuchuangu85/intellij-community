@@ -8,12 +8,12 @@ import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiReference
 import com.intellij.psi.util.PsiUtilCore
 import com.intellij.testFramework.UsefulTestCase
-import com.intellij.testFramework.fixtures.LightPlatformCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import java.util.*
 
-class EditorConfigResolveTest : LightPlatformCodeInsightFixtureTestCase() {
+class EditorConfigResolveTest : BasePlatformTestCase() {
   override fun getTestDataPath() =
-    "${PathManagerEx.getCommunityHomePath()}/plugins/editorconfig/testSrc/org/editorconfig/language/codeinsight/resolve/"
+    "${PathManagerEx.getCommunityHomePath()}/plugins/editorconfig/testData/org/editorconfig/language/codeinsight/resolve/"
 
   fun testSubcaseHeader() = doTest()
   fun testSiblingHeader() = doTest()

@@ -10,6 +10,7 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.EditorFactory;
 import com.intellij.openapi.editor.EditorSettings;
+import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.impl.DocumentImpl;
 import com.intellij.openapi.editor.impl.EditorFactoryImpl;
@@ -42,7 +43,7 @@ import java.io.IOException;
 import java.util.TooManyListenersException;
 
 public class ExportToFileUtil {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.ide.util.ExportToFileUtil");
+  private static final Logger LOG = Logger.getInstance(ExportToFileUtil.class);
 
   public static void exportTextToFile(Project project, String fileName, String textToExport) {
     String prepend = "";
@@ -51,10 +52,10 @@ public class ExportToFileUtil {
       int result = Messages.showYesNoCancelDialog(
         project,
         IdeBundle.message("error.text.file.already.exists", fileName),
-        IdeBundle.message("title.warning"),
-            IdeBundle.message("action.overwrite"),
-            IdeBundle.message("action.append"),
-            CommonBundle.getCancelButtonText(),
+        IdeBundle.message("dialog.title.export.to.file"),
+        IdeBundle.message("action.overwrite"),
+        IdeBundle.message("action.append"),
+        CommonBundle.getCancelButtonText(),
         Messages.getWarningIcon()
       );
 
@@ -153,7 +154,11 @@ public class ExportToFileUtil {
       settings.setAdditionalLinesCount(0);
       settings.setAdditionalColumnsCount(0);
       settings.setAdditionalPageAtBottom(false);
-      ((EditorEx)myTextArea).setBackgroundColor(UIUtil.getInactiveTextFieldBackgroundColor());
+
+      EditorEx editorEx = (EditorEx)myTextArea;
+      editorEx.setBackgroundColor(UIUtil.getInactiveTextFieldBackgroundColor());
+      editorEx.setColorsScheme(EditorColorsManager.getInstance().getSchemeForCurrentUITheme());
+
       myTextArea.getComponent().setPreferredSize(new Dimension(700, 400));
       return myTextArea.getComponent();
     }
@@ -209,8 +214,7 @@ public class ExportToFileUtil {
     }
 
     @Override
-    @NotNull
-    protected Action[] createActions() {
+    protected Action @NotNull [] createActions() {
       return new Action[]{getOKAction(), new CopyToClipboardAction(), getCancelAction()};
     }
 

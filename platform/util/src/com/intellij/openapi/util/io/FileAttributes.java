@@ -16,6 +16,7 @@
 package com.intellij.openapi.util.io;
 
 import org.intellij.lang.annotations.MagicConstant;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import static com.intellij.util.BitUtil.isSet;
@@ -69,6 +70,7 @@ public final class FileAttributes {
     this.lastModified = lastModified;
   }
 
+  @NotNull
   private static Type type(boolean isDirectory, boolean isSpecial) {
     return isDirectory ? Type.DIRECTORY : isSpecial ? Type.SPECIAL : Type.FILE;
   }
@@ -123,7 +125,7 @@ public final class FileAttributes {
   @Override
   public int hashCode() {
     int result = type != null ? type.hashCode() : 0;
-    result = 31 * result + (int)flags;
+    result = 31 * result + flags;
     result = 31 * result + (int)(length ^ (length >>> 32));
     result = 31 * result + (int)(lastModified ^ (lastModified >>> 32));
     return result;
@@ -150,5 +152,11 @@ public final class FileAttributes {
 
     sb.append(']');
     return sb.toString();
+  }
+
+  @NotNull
+  public static FileAttributes createFrom(byte fileAttributesType, byte flags, long length, long lastModified) {
+    Type type = fileAttributesType == -1 ? null : Type.values()[fileAttributesType];
+    return new FileAttributes(type, flags, length, lastModified);
   }
 }

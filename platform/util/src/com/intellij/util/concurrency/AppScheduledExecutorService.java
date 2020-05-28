@@ -1,45 +1,33 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.concurrency;
 
+import com.intellij.diagnostic.ThreadDumper;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.LowMemoryWatcherManager;
-import com.intellij.util.Consumer;
 import com.intellij.util.IncorrectOperationException;
+import com.intellij.util.ReflectionUtil;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 
 /**
  * A ThreadPoolExecutor which also implements {@link ScheduledExecutorService} by awaiting scheduled tasks in a separate thread
  * and then executing them in the owned ThreadPoolExecutor.
  * Unlike the existing {@link ScheduledThreadPoolExecutor}, this pool is unbounded.
  */
-public class AppScheduledExecutorService extends SchedulingWrapper {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.ide.PooledThreadExecutor");
+public final class AppScheduledExecutorService extends SchedulingWrapper {
   static final String POOLED_THREAD_PREFIX = "ApplicationImpl pooled thread ";
   @NotNull private final String myName;
   private final LowMemoryWatcherManager myLowMemoryWatcherManager;
-  private Consumer<? super Thread> newThreadListener;
-  private final AtomicInteger counter = new AtomicInteger();
+  private final MyThreadFactory myCountingThreadFactory;
 
   private static class Holder {
     private static final AppScheduledExecutorService INSTANCE = new AppScheduledExecutorService("Global instance");
@@ -50,30 +38,40 @@ public class AppScheduledExecutorService extends SchedulingWrapper {
     return Holder.INSTANCE;
   }
 
-  AppScheduledExecutorService(@NotNull final String name) {
-    super(new BackendThreadPoolExecutor(), new AppDelayQueue());
-    myName = name;
-    ((BackendThreadPoolExecutor)backendExecutorService).doSetThreadFactory(new ThreadFactory() {
-      @NotNull
-      @Override
-      public Thread newThread(@NotNull final Runnable r) {
-        Thread thread = new Thread(r, POOLED_THREAD_PREFIX + counter.incrementAndGet());
+  private static class MyThreadFactory extends CountingThreadFactory {
+    private Consumer<? super Thread> newThreadListener;
+    private final ThreadFactory myThreadFactory = Executors.privilegedThreadFactory();
 
-        thread.setPriority(Thread.NORM_PRIORITY - 1);
+    @NotNull
+    @Override
+    public Thread newThread(@NotNull final Runnable r) {
+      Thread thread = myThreadFactory.newThread(r);
+      thread.setName(POOLED_THREAD_PREFIX + counter.incrementAndGet());
 
-        Consumer<? super Thread> listener = newThreadListener;
-        if (listener != null) {
-          listener.consume(thread);
-        }
-        return thread;
+      thread.setPriority(Thread.NORM_PRIORITY - 1);
+
+      Consumer<? super Thread> listener = newThreadListener;
+      if (listener != null) {
+        listener.accept(thread);
       }
-    });
+      return thread;
+    }
+
+    void setNewThreadListener(@NotNull Consumer<? super Thread> threadListener) {
+      if (newThreadListener != null) throw new IllegalStateException("Listener was already set: " + newThreadListener);
+      newThreadListener = threadListener;
+    }
+  }
+
+  AppScheduledExecutorService(@NotNull final String name) {
+    super(new BackendThreadPoolExecutor(new MyThreadFactory()), new AppDelayQueue());
+    myName = name;
+    myCountingThreadFactory = (MyThreadFactory)((BackendThreadPoolExecutor)backendExecutorService).getThreadFactory();
     myLowMemoryWatcherManager = new LowMemoryWatcherManager(this);
   }
 
   public void setNewThreadListener(@NotNull Consumer<? super Thread> threadListener) {
-    if (newThreadListener != null) throw new IllegalStateException("Listener was already set: "+newThreadListener);
-    newThreadListener = threadListener;
+    myCountingThreadFactory.setNewThreadListener(threadListener);
   }
 
   @NotNull
@@ -94,13 +92,13 @@ public class AppScheduledExecutorService extends SchedulingWrapper {
   @Override
   void doShutdown() {
     super.doShutdown();
-    ((BackendThreadPoolExecutor)backendExecutorService).doShutdown();
+    ((BackendThreadPoolExecutor)backendExecutorService).superShutdown();
   }
 
   @NotNull
   @Override
   List<Runnable> doShutdownNow() {
-    return ContainerUtil.concat(super.doShutdownNow(), ((BackendThreadPoolExecutor)backendExecutorService).doShutdownNow());
+    return ContainerUtil.concat(super.doShutdownNow(), ((BackendThreadPoolExecutor)backendExecutorService).superShutdownNow());
   }
 
   public void shutdownAppScheduledExecutorService() {
@@ -113,7 +111,7 @@ public class AppScheduledExecutorService extends SchedulingWrapper {
   @NotNull
   @TestOnly
   public String statistics() {
-    return myName + " threads created counter = " + counter;
+    return myName + " threads created counter = " + myCountingThreadFactory.counter;
   }
 
   @TestOnly
@@ -124,47 +122,31 @@ public class AppScheduledExecutorService extends SchedulingWrapper {
   public int getBackendPoolExecutorSize() {
     return ((BackendThreadPoolExecutor)backendExecutorService).getPoolSize();
   }
+
+  @TestOnly
   void setBackendPoolCorePoolSize(int size) {
-    ((BackendThreadPoolExecutor)backendExecutorService).doSetCorePoolSize(size);
-  }
-  int getBackendPoolCorePoolSize() {
-    return ((BackendThreadPoolExecutor)backendExecutorService).getCorePoolSize();
+    ((BackendThreadPoolExecutor)backendExecutorService).superSetCorePoolSize(size);
   }
 
-  private static class BackendThreadPoolExecutor extends ThreadPoolExecutor {
-    BackendThreadPoolExecutor() {
-      super(1, Integer.MAX_VALUE, 1, TimeUnit.MINUTES, new SynchronousQueue<Runnable>());
-    }
-
-    @Override
-    protected void beforeExecute(Thread t, Runnable r) {
-      if (LOG.isTraceEnabled()) {
-        LOG.trace("beforeExecute " + BoundedTaskExecutor.info(r) + " in " + t);
-      }
+  static class BackendThreadPoolExecutor extends ThreadPoolExecutor {
+    BackendThreadPoolExecutor(@NotNull ThreadFactory factory) {
+      super(1, Integer.MAX_VALUE, 1, TimeUnit.MINUTES, new SynchronousQueue<>(), factory);
     }
 
     @Override
     protected void afterExecute(Runnable r, Throwable t) {
-      if (LOG.isTraceEnabled()) {
-        LOG.trace("afterExecute  " + BoundedTaskExecutor.info(r) + " in " + Thread.currentThread());
-      }
-
       if (t != null) {
-        LOG.error("Worker exited due to exception", t);
+        Logger.getInstance(SchedulingWrapper.class).error("Worker exited due to exception", t);
       }
     }
 
-    private void doShutdown() {
+    private void superShutdown() {
       super.shutdown();
     }
 
     @NotNull
-    private List<Runnable> doShutdownNow() {
+    private List<Runnable> superShutdownNow() {
       return super.shutdownNow();
-    }
-
-    private void doSetThreadFactory(@NotNull ThreadFactory threadFactory) {
-      super.setThreadFactory(threadFactory);
     }
 
     // stub out sensitive methods
@@ -184,7 +166,7 @@ public class AppScheduledExecutorService extends SchedulingWrapper {
       error();
     }
 
-    private void doSetCorePoolSize(int corePoolSize) {
+    private void superSetCorePoolSize(int corePoolSize) {
       super.setCorePoolSize(corePoolSize);
     }
 
@@ -203,13 +185,56 @@ public class AppScheduledExecutorService extends SchedulingWrapper {
       error();
     }
 
+    void superSetKeepAliveTime(long time, TimeUnit unit) {
+      super.setKeepAliveTime(time, unit);
+    }
+
     @Override
     public void setThreadFactory(ThreadFactory threadFactory) {
       error();
     }
   }
+
   @NotNull
   public Thread getPeriodicTasksThread() {
     return delayQueue.getThread();
+  }
+
+
+  @TestOnly
+  void awaitQuiescence(long timeout, @NotNull TimeUnit unit) {
+    BackendThreadPoolExecutor executor = (BackendThreadPoolExecutor)backendExecutorService;
+    executor.getKeepAliveTime(TimeUnit.NANOSECONDS);
+    executor.superSetKeepAliveTime(1, TimeUnit.NANOSECONDS); // no need for zombies in tests
+    executor.superSetCorePoolSize(0); // interrupt idle workers
+    ReentrantLock mainLock = ReflectionUtil.getField(executor.getClass(), executor, ReentrantLock.class, "mainLock");
+    mainLock.lock();
+    Set workers;
+    try {
+      Set workersField = ReflectionUtil.getField(executor.getClass(), executor, HashSet.class, "workers");
+      workers = new HashSet(workersField); // to be able to iterate thread-safely outside the lock
+    }
+    finally {
+      mainLock.unlock();
+    }
+    executor.superSetKeepAliveTime(1, TimeUnit.SECONDS);
+
+    for (Object worker : workers) {
+      Thread thread = ReflectionUtil.getField(worker.getClass(), worker, Thread.class, "thread");
+      try {
+        thread.join(unit.toMillis(timeout));
+      }
+      catch (InterruptedException e) {
+        String trace = "Thread leaked: " + thread + "; " + thread.getState() + " (" + thread.isAlive() + ")\n--- its stacktrace:\n";
+        for (final StackTraceElement stackTraceElement : thread.getStackTrace()) {
+          trace += " at " + stackTraceElement + "\n";
+        }
+        trace += "---\n";
+        System.err.println("Executor " + executor + " is still active after " + unit.toSeconds(timeout) + " seconds://///\n" +
+                           "Thread " + thread + " dump:\n" + trace +
+                           "all thread dump:\n" + ThreadDumper.dumpThreadsToString() + "\n/////");
+        break;
+      }
+    }
   }
 }

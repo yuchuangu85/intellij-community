@@ -15,10 +15,13 @@
  */
 package com.intellij.openapi.vcs.changes.shelf;
 
+import com.intellij.CommonBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.DialogWrapper;
+import com.intellij.openapi.vcs.VcsBundle;
 import com.intellij.ui.EnumComboBoxModel;
+import com.intellij.ui.SimpleListCellRenderer;
 import net.miginfocom.swing.MigLayout;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -30,10 +33,9 @@ import java.awt.event.ItemListener;
 import java.util.Calendar;
 
 public class CleanUnshelvedFilterDialog extends DialogWrapper {
-  private final JRadioButton mySystemUnshelvedButton;
   private final JRadioButton myUnshelvedWithFilterButton;
   private final JRadioButton myAllUnshelvedButton;
-  private final ComboBox myTimePeriodComboBox;
+  private final ComboBox<TimePeriod> myTimePeriodComboBox;
 
   private enum TimePeriod {
     Week {
@@ -64,11 +66,22 @@ public class CleanUnshelvedFilterDialog extends DialogWrapper {
 
   public CleanUnshelvedFilterDialog(@Nullable Project project) {
     super(project);
-    setTitle("Clean Unshelved Changelists");
-    mySystemUnshelvedButton = new JRadioButton("created automatically", true);
-    myUnshelvedWithFilterButton = new JRadioButton("older than one", false);
-    myAllUnshelvedButton = new JRadioButton("all", false);
-    myTimePeriodComboBox = new ComboBox(new EnumComboBoxModel<>(TimePeriod.class));
+    setTitle(VcsBundle.message("shelve.clean.unshelved.changelists.title"));
+    myUnshelvedWithFilterButton = new JRadioButton(VcsBundle.message("shelve.clean.changelists.older.than.one.button"), true);
+    myAllUnshelvedButton = new JRadioButton(VcsBundle.message("shelve.clean.changelists.all.button"), false);
+    myTimePeriodComboBox = new ComboBox<>(new EnumComboBoxModel<>(TimePeriod.class));
+    myTimePeriodComboBox.setRenderer(SimpleListCellRenderer.create("", value -> {
+      switch (value) {
+        case Week:
+          return VcsBundle.message("shelve.clean.timeperiod.week");
+        case Month:
+          return VcsBundle.message("shelve.clean.timeperiod.month");
+        case Year:
+          return VcsBundle.message("shelve.clean.timeperiod.year");
+        default:
+          throw new IllegalArgumentException(value.name());
+      }
+    }));
     myTimePeriodComboBox.setEnabled(myUnshelvedWithFilterButton.isSelected());
     myUnshelvedWithFilterButton.addItemListener(new ItemListener() {
       @Override
@@ -76,7 +89,7 @@ public class CleanUnshelvedFilterDialog extends DialogWrapper {
         myTimePeriodComboBox.setEnabled(myUnshelvedWithFilterButton.isSelected());
       }
     });
-    setOKButtonText("Delete");
+    setOKButtonText(CommonBundle.message("button.delete"));
     init();
     setResizable(false);
   }
@@ -85,25 +98,21 @@ public class CleanUnshelvedFilterDialog extends DialogWrapper {
   @Override
   protected JComponent createCenterPanel() {
     JPanel panel = new JPanel(new BorderLayout());
-    JLabel questLabel = new JLabel("Delete already unshelved changelists: \n");
-    String panelConstraints = "flowx, ins 0";
+    JLabel questLabel = new JLabel(VcsBundle.message("shelve.delete.already.unshelved.label"));
+    String panelConstraints = "flowx, ins 0"; //NON-NLS
     final MigLayout migLayout = new MigLayout(panelConstraints);
     JPanel buttonsPanel = new JPanel(migLayout);
     ButtonGroup gr = new ButtonGroup();
-    gr.add(mySystemUnshelvedButton);
     gr.add(myUnshelvedWithFilterButton);
     gr.add(myAllUnshelvedButton);
 
-    mySystemUnshelvedButton.setBorder(BorderFactory.createEmptyBorder());
     myUnshelvedWithFilterButton.setBorder(BorderFactory.createEmptyBorder());
     myAllUnshelvedButton.setBorder(BorderFactory.createEmptyBorder());
-
-    buttonsPanel.add(mySystemUnshelvedButton, "wrap");
 
     JPanel filterPanel = new JPanel(new MigLayout(panelConstraints));
     filterPanel.add(myUnshelvedWithFilterButton);
     filterPanel.add(myTimePeriodComboBox);
-    buttonsPanel.add(filterPanel, "wrap");
+    buttonsPanel.add(filterPanel, "wrap"); //NON-NLS
     buttonsPanel.add(myAllUnshelvedButton);
     panel.add(questLabel, BorderLayout.NORTH);
     panel.add(buttonsPanel, BorderLayout.CENTER);

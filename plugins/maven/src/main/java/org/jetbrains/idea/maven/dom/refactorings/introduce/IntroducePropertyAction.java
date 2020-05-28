@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.dom.refactorings.introduce;
 
 import com.intellij.find.FindManager;
@@ -18,7 +18,6 @@ import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.ReadonlyStatusHandler;
-import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
@@ -32,7 +31,7 @@ import com.intellij.usageView.UsageInfo;
 import com.intellij.usageView.UsageViewContentManager;
 import com.intellij.usages.*;
 import com.intellij.util.Processor;
-import com.intellij.util.containers.hash.HashSet;
+import java.util.HashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.maven.dom.MavenDomProjectProcessorUtils;
@@ -57,7 +56,7 @@ public class IntroducePropertyAction extends BaseRefactoringAction {
   }
 
   @Override
-  protected boolean isEnabledOnElements(@NotNull PsiElement[] elements) {
+  protected boolean isEnabledOnElements(PsiElement @NotNull [] elements) {
     return false;
   }
 
@@ -110,7 +109,7 @@ public class IntroducePropertyAction extends BaseRefactoringAction {
   private static class MyRefactoringActionHandler implements RefactoringActionHandler {
     @Override
     public void invoke(@NotNull final Project project, final Editor editor, PsiFile file, DataContext dataContext) {
-      MavenActionsUsagesCollector.trigger(project, "IntroducePropertyAction");
+      MavenActionsUsagesCollector.trigger(project, MavenActionsUsagesCollector.ActionID.IntroducePropertyAction);
       PsiDocumentManager.getInstance(project).commitAllDocuments();
 
       Pair<XmlElement, TextRange> elementAndRange = getSelectedElementAndTextRange(editor, file);
@@ -160,7 +159,8 @@ public class IntroducePropertyAction extends BaseRefactoringAction {
       showFindUsages(project, propertyName, selectedString, replaceWith, selectedProject);
     }
 
-    private static VirtualFile[] getFiles(PsiFile file, MavenDomProjectModel model) {
+    @NotNull
+    private static List<VirtualFile> getFiles(PsiFile file, MavenDomProjectModel model) {
       Set<VirtualFile> virtualFiles = new HashSet<>();
       VirtualFile virtualFile = file.getVirtualFile();
       if (virtualFile != null) {
@@ -173,7 +173,7 @@ public class IntroducePropertyAction extends BaseRefactoringAction {
         if (vf != null) virtualFiles.add(vf);
       }
 
-      return VfsUtilCore.toVirtualFileArray(virtualFiles);
+      return new ArrayList<>(virtualFiles);
     }
 
     private static void createMavenProperty(@NotNull MavenDomProjectModel model,
@@ -231,7 +231,7 @@ public class IntroducePropertyAction extends BaseRefactoringAction {
     }
 
     @Override
-    public void invoke(@NotNull Project project, @NotNull PsiElement[] elements, DataContext dataContext) {
+    public void invoke(@NotNull Project project, PsiElement @NotNull [] elements, DataContext dataContext) {
     }
 
     private static class MyUsageSearcherFactory implements Factory<UsageSearcher> {
@@ -248,10 +248,10 @@ public class IntroducePropertyAction extends BaseRefactoringAction {
       @Override
       public UsageSearcher create() {
         return new UsageSearcher() {
-          Set<UsageInfo> usages = new HashSet<>();
+          final Set<UsageInfo> usages = new HashSet<>();
 
           @Override
-          public void generate(@NotNull final Processor<Usage> processor) {
+          public void generate(@NotNull final Processor<? super Usage> processor) {
             ApplicationManager.getApplication().runReadAction(() -> {
               collectUsages(myModel);
               for (MavenDomProjectModel model : MavenDomProjectProcessorUtils.getChildrenProjects(myModel)) {

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.scratch;
 
 import com.intellij.compiler.options.CompileStepBeforeRun;
@@ -17,25 +17,25 @@ import com.intellij.openapi.roots.OrderEnumerator;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.model.java.JpsJavaSdkType;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.*;
 
 /**
  * @author Eugene Zhuravlev
  */
-public class JavaScratchCompilationSupport implements CompileTask {
-  public JavaScratchCompilationSupport(CompilerManager compileManager) {
-    compileManager.addAfterTask(this);
-  }
-
+final class JavaScratchCompilationSupport implements CompileTask {
   @Nullable
   public static File getScratchOutputDirectory(Project project) {
     final File root = CompilerManager.getInstance(project).getJavacCompilerWorkingDir();
@@ -49,7 +49,7 @@ public class JavaScratchCompilationSupport implements CompileTask {
   }
 
   @Override
-  public boolean execute(CompileContext context) {
+  public boolean execute(@NotNull CompileContext context) {
     final Project project = context.getProject();
 
     final RunConfiguration configuration = CompileStepBeforeRun.getRunConfiguration(context);
@@ -89,6 +89,10 @@ public class JavaScratchCompilationSupport implements CompileTask {
     try {
       final File scratchFile = new File(VirtualFileManager.extractPath(scratchUrl));
       File srcFile = scratchFile;
+
+      VirtualFile vFile = ReadAction.compute(() -> VirtualFileManager.getInstance().findFileByUrl(scratchUrl));
+      Charset charset = ReadAction.compute(() -> vFile == null ? null : vFile.getCharset());
+
       if (!StringUtil.endsWith(srcFile.getName(), ".java")) {
 
         final File srcDir = getScratchTempDirectory(project);
@@ -98,7 +102,6 @@ public class JavaScratchCompilationSupport implements CompileTask {
         FileUtil.delete(srcDir); // perform cleanup
 
         final String srcFileName = ReadAction.compute(() -> {
-          final VirtualFile vFile = VirtualFileManager.getInstance().findFileByUrl(scratchUrl);
           if (vFile != null) {
             final PsiFile psiFile = PsiManager.getInstance(project).findFile(vFile);
             if (psiFile instanceof PsiJavaFile) {
@@ -121,7 +124,7 @@ public class JavaScratchCompilationSupport implements CompileTask {
               }
             }
           }
-          return FileUtil.getNameWithoutExtension(scratchFile);
+          return FileUtilRt.getNameWithoutExtension(scratchFile.getName());
         });
         srcFile = new File(srcDir, srcFileName + ".java");
         FileUtil.copy(scratchFile, srcFile);
@@ -136,8 +139,10 @@ public class JavaScratchCompilationSupport implements CompileTask {
                                                                          : () -> ProjectRootManager.getInstance(project).orderEntries();
 
       ApplicationManager.getApplication().runReadAction(() -> {
-        for (String s : orderEnumerator.compute().compileOnly().recursively().exportedOnly().withoutSdk().getPathsList().getPathList()) {
-          cp.add(new File(s));
+        if (module != null || scratchConfig.isBuildProjectOnEmptyModuleList()) {
+          for (String s : orderEnumerator.compute().compileOnly().recursively().exportedOnly().withoutSdk().getPathsList().getPathList()) {
+            cp.add(new File(s));
+          }
         }
         for (String s : orderEnumerator.compute().compileOnly().sdkOnly().getPathsList().getPathList()) {
           platformCp.add(new File(s));
@@ -148,17 +153,21 @@ public class JavaScratchCompilationSupport implements CompileTask {
       options.add("-g"); // always compile with debug info
       final JavaSdkVersion sdkVersion = JavaSdk.getInstance().getVersion(targetSdk);
       if (sdkVersion != null) {
-        final String langLevel = JpsJavaSdkType.complianceOption(sdkVersion.getMaxLanguageLevel().toJavaVersion());
+        final LanguageLevel level = sdkVersion.getMaxLanguageLevel();
+        final String langLevel = JpsJavaSdkType.complianceOption(level.toJavaVersion());
         options.add("-source");
         options.add(langLevel);
         options.add("-target");
         options.add(langLevel);
-        if (sdkVersion.isAtLeast(JavaSdkVersion.JDK_11)) {
+        if (level.isPreview()) {
           options.add("--enable-preview");
         }
       }
       options.add("-proc:none"); // disable annotation processing
-
+      if (charset != null) {
+        options.add("-encoding");
+        options.add(charset.name());
+      }
       final Collection<ClassObject> result = CompilerManager.getInstance(project).compileJavaCode(
         options, platformCp, cp, Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), files, outputDir
       );

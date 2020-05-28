@@ -1,20 +1,18 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.jsonSchema.impl;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
-import com.intellij.json.psi.JsonContainer;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.impl.http.HttpVirtualFile;
-import com.intellij.psi.PsiFile;
+import com.intellij.openapi.vfs.impl.http.RemoteFileInfo;
+import com.intellij.openapi.vfs.impl.http.RemoteFileState;
+import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.ContainerUtilRt;
 import com.jetbrains.jsonSchema.JsonSchemaVfsListener;
+import com.jetbrains.jsonSchema.extension.adapters.JsonValueAdapter;
 import com.jetbrains.jsonSchema.ide.JsonSchemaService;
 import com.jetbrains.jsonSchema.remote.JsonFileResolver;
 import org.jetbrains.annotations.NonNls;
@@ -38,14 +36,23 @@ import static com.jetbrains.jsonSchema.JsonPointerUtil.*;
 public class JsonSchemaObject {
   private static final Logger LOG = Logger.getInstance(JsonSchemaObject.class);
 
+  public static final String MOCK_URL = "mock:///";
+  public static final String TEMP_URL = "temp:///";
   @NonNls public static final String DEFINITIONS = "definitions";
+  @NonNls public static final String DEFINITIONS_v9 = "$defs";
   @NonNls public static final String PROPERTIES = "properties";
   @NonNls public static final String ITEMS = "items";
   @NonNls public static final String ADDITIONAL_ITEMS = "additionalItems";
   @NonNls public static final String X_INTELLIJ_HTML_DESCRIPTION = "x-intellij-html-description";
-  @Nullable private final JsonContainer myJsonObject;
+  @NonNls public static final String X_INTELLIJ_LANGUAGE_INJECTION = "x-intellij-language-injection";
+  @NonNls public static final String X_INTELLIJ_CASE_INSENSITIVE = "x-intellij-case-insensitive";
+  @NonNls public static final String X_INTELLIJ_ENUM_METADATA = "x-intellij-enum-metadata";
+  @Nullable private final String myFileUrl;
+  @Nullable private JsonSchemaObject myBackRef;
+  @NotNull private final String myPointer;
+  @Nullable private final VirtualFile myRawFile;
   @Nullable private Map<String, JsonSchemaObject> myDefinitionsMap;
-  @NotNull private static final JsonSchemaObject NULL_OBJ = new JsonSchemaObject();
+  @NotNull public static final JsonSchemaObject NULL_OBJ = new JsonSchemaObject("$_NULL_$");
   @NotNull private final ConcurrentMap<String, JsonSchemaObject> myComputedRefs = new ConcurrentHashMap<>();
   @NotNull private final AtomicBoolean mySubscribed = new AtomicBoolean(false);
   @NotNull private Map<String, JsonSchemaObject> myProperties;
@@ -59,10 +66,15 @@ public class JsonSchemaObject {
   @Nullable private String myTitle;
   @Nullable private String myDescription;
   @Nullable private String myHtmlDescription;
+  @Nullable private String myLanguageInjection;
+  @Nullable private String myLanguageInjectionPrefix;
+  @Nullable private String myLanguageInjectionPostfix;
 
   @Nullable private JsonSchemaType myType;
   @Nullable private Object myDefault;
   @Nullable private String myRef;
+  private boolean myRefIsRecursive;
+  private boolean myIsRecursiveAnchor;
   @Nullable private String myFormat;
   @Nullable private Set<JsonSchemaType> myTypeVariants;
   @Nullable private Number myMultipleOf;
@@ -76,6 +88,7 @@ public class JsonSchemaObject {
   @Nullable private Integer myMinLength;
 
   @Nullable private Boolean myAdditionalPropertiesAllowed;
+  @Nullable private Set<String> myAdditionalPropertiesNotAllowedFor;
   @Nullable private JsonSchemaObject myAdditionalPropertiesSchema;
   @Nullable private JsonSchemaObject myPropertyNamesSchema;
 
@@ -104,25 +117,108 @@ public class JsonSchemaObject {
   @Nullable private List<JsonSchemaObject> myAnyOf;
   @Nullable private List<JsonSchemaObject> myOneOf;
   @Nullable private JsonSchemaObject myNot;
+  @Nullable private List<IfThenElse> myIfThenElse;
   @Nullable private JsonSchemaObject myIf;
   @Nullable private JsonSchemaObject myThen;
   @Nullable private JsonSchemaObject myElse;
   private boolean myShouldValidateAgainstJSType;
 
+  @Nullable private String myDeprecationMessage;
+  @Nullable private Map<String, String> myIdsMap;
+
+  @Nullable private Map<String, Map<String, String>> myEnumMetadata;
+
+  private boolean myForceCaseInsensitive = false;
+
   public boolean isValidByExclusion() {
     return myIsValidByExclusion;
   }
 
+  public boolean isForceCaseInsensitive() {
+    return myForceCaseInsensitive;
+  }
+
+  public void setForceCaseInsensitive(boolean forceCaseInsensitive) {
+    myForceCaseInsensitive = forceCaseInsensitive;
+  }
+
   private boolean myIsValidByExclusion = true;
 
-  public JsonSchemaObject(@NotNull JsonContainer object) {
-    myJsonObject = object;
+  public JsonSchemaObject(@Nullable VirtualFile file, @NotNull String pointer) {
+    myFileUrl = file == null ? null : file.getUrl();
+    myRawFile = myFileUrl != null && JsonFileResolver.isTempOrMockUrl(myFileUrl) ? file : null;
+    myPointer = pointer;
     myProperties = new HashMap<>();
   }
 
-  private JsonSchemaObject() {
-    myJsonObject = null;
+  private JsonSchemaObject(@Nullable VirtualFile rawFile, @Nullable String fileUrl, @NotNull String pointer) {
+    myFileUrl = fileUrl;
+    myRawFile = rawFile;
+    myPointer = pointer;
     myProperties = new HashMap<>();
+  }
+
+  private JsonSchemaObject(@NotNull String pointer) {
+    this(null, pointer);
+  }
+
+  public void completeInitialization(JsonValueAdapter jsonObject) {
+    if (myIf != null) {
+      myIfThenElse = new ArrayList<>();
+      myIfThenElse.add(new IfThenElse(myIf, myThen, myElse));
+    }
+
+    myIdsMap = JsonCachedValues.getOrComputeIdsMap(jsonObject.getDelegate().getContainingFile());
+  }
+
+  public String resolveId(@NotNull String id) {
+    return myIdsMap == null ? null : myIdsMap.get(id);
+  }
+
+  @NotNull
+  public String getPointer() {
+    return myPointer;
+  }
+
+  @Nullable
+  public String getFileUrl() {
+    return myFileUrl;
+  }
+
+  /**
+   * NOTE: Raw files are stored only in very specific cases such as mock files
+   * This API should be used only as a fallback to trying to resolve file via its url returned by getFileUrl()
+   */
+  @Nullable
+  public VirtualFile getRawFile() {
+    return myRawFile;
+  }
+
+  public void setLanguageInjection(@Nullable String injection) {
+    myLanguageInjection = injection;
+  }
+
+  public void setLanguageInjectionPrefix(@Nullable String prefix) {
+    myLanguageInjectionPrefix = prefix;
+  }
+
+  public void setLanguageInjectionPostfix(@Nullable String postfix) {
+    myLanguageInjectionPostfix = postfix;
+  }
+
+  @Nullable
+  public String getLanguageInjection() {
+    return myLanguageInjection;
+  }
+
+  @Nullable
+  public String getLanguageInjectionPrefix() {
+    return myLanguageInjectionPrefix;
+  }
+
+  @Nullable
+  public String getLanguageInjectionPostfix() {
+    return myLanguageInjectionPostfix;
   }
 
   @Nullable
@@ -164,7 +260,7 @@ public class JsonSchemaObject {
     if (selfType == null) return otherType;
     if (otherType == null) {
       if (otherTypeVariants != null && !otherTypeVariants.isEmpty()) {
-        Set<JsonSchemaType> filteredVariants = ContainerUtil.newHashSet(otherTypeVariants.size());
+        Set<JsonSchemaType> filteredVariants = EnumSet.noneOf(JsonSchemaType.class);
         for (JsonSchemaType variant : otherTypeVariants) {
           JsonSchemaType subtype = getSubtypeOfBoth(selfType, variant);
           if (subtype != null) filteredVariants.add(subtype);
@@ -193,7 +289,7 @@ public class JsonSchemaObject {
     if (self == null) return other;
     if (other == null) return self;
 
-    Set<JsonSchemaType> resultSet = ContainerUtil.newHashSet(self.size());
+    Set<JsonSchemaType> resultSet = EnumSet.noneOf(JsonSchemaType.class);
     for (JsonSchemaType type : self) {
       JsonSchemaType merged = mergeTypes(type, null, other);
       if (merged != null) resultSet.add(merged);
@@ -242,7 +338,12 @@ public class JsonSchemaObject {
     if (other.myMaxLength != null) myMaxLength = other.myMaxLength;
     if (other.myMinLength != null) myMinLength = other.myMinLength;
     if (other.myPattern != null) myPattern = other.myPattern;
-    if (other.myAdditionalPropertiesAllowed != null) myAdditionalPropertiesAllowed = other.myAdditionalPropertiesAllowed;
+    if (other.myAdditionalPropertiesAllowed != null) {
+      myAdditionalPropertiesAllowed = other.myAdditionalPropertiesAllowed;
+      if (other.myAdditionalPropertiesAllowed == Boolean.FALSE) {
+        addAdditionalPropsNotAllowedFor(other.myFileUrl, other.myPointer);
+      }
+    }
     if (other.myAdditionalPropertiesSchema != null) myAdditionalPropertiesSchema = other.myAdditionalPropertiesSchema;
     if (other.myPropertyNamesSchema != null) myPropertyNamesSchema = other.myPropertyNamesSchema;
     if (other.myAdditionalItemsAllowed != null) myAdditionalItemsAllowed = other.myAdditionalItemsAllowed;
@@ -256,22 +357,29 @@ public class JsonSchemaObject {
     if (other.myMaxProperties != null) myMaxProperties = other.myMaxProperties;
     if (other.myMinProperties != null) myMinProperties = other.myMinProperties;
     if (myRequired != null && other.myRequired != null) {
-      myRequired.addAll(other.myRequired);
+      Set<String> set = new HashSet<>(myRequired.size() + other.myRequired.size());
+      set.addAll(myRequired);
+      set.addAll(other.myRequired);
+      myRequired = set;
     }
     else if (other.myRequired != null) {
       myRequired = other.myRequired;
     }
     myPropertyDependencies = copyMap(myPropertyDependencies, other.myPropertyDependencies);
     mySchemaDependencies = copyMap(mySchemaDependencies, other.mySchemaDependencies);
+    myEnumMetadata = copyMap(myEnumMetadata, other.myEnumMetadata);
     if (other.myEnum != null) myEnum = other.myEnum;
     myAllOf = copyList(myAllOf, other.myAllOf);
     myAnyOf = copyList(myAnyOf, other.myAnyOf);
     myOneOf = copyList(myOneOf, other.myOneOf);
     if (other.myNot != null) myNot = other.myNot;
-    if (other.myIf != null) myIf = other.myIf;
-    if (other.myThen != null) myThen = other.myThen;
-    if (other.myElse != null) myElse = other.myElse;
+    if (other.myIfThenElse != null) {
+      if (myIfThenElse == null) myIfThenElse = other.myIfThenElse;
+      else myIfThenElse = ContainerUtil.concat(myIfThenElse, other.myIfThenElse);
+    }
     myShouldValidateAgainstJSType |= other.myShouldValidateAgainstJSType;
+    if (myLanguageInjection == null) myLanguageInjection = other.myLanguageInjection;
+    myForceCaseInsensitive = myForceCaseInsensitive || other.myForceCaseInsensitive;
   }
 
   private static void mergeProperties(@NotNull JsonSchemaObject thisObject, @NotNull JsonSchemaObject otherObject) {
@@ -283,12 +391,12 @@ public class JsonSchemaObject {
       }
       else {
         JsonSchemaObject existingProp = thisObject.myProperties.get(key);
-        thisObject.myProperties.put(key, JsonSchemaVariantsTreeBuilder.merge(existingProp, otherProp, otherProp));
+        thisObject.myProperties.put(key, merge(existingProp, otherProp, otherProp));
       }
     }
   }
 
-  public void shouldValidateAgainstJSType() {
+  public void setShouldValidateAgainstJSType() {
     myShouldValidateAgainstJSType = true;
   }
 
@@ -299,7 +407,7 @@ public class JsonSchemaObject {
   @Nullable
   private static <T> List<T> copyList(@Nullable List<T> target, @Nullable List<T> source) {
     if (source == null || source.isEmpty()) return target;
-    if (target == null) target = ContainerUtil.newArrayListWithCapacity(source.size());
+    if (target == null) target = new ArrayList<>(source.size());
     target.addAll(source);
     return target;
   }
@@ -307,21 +415,9 @@ public class JsonSchemaObject {
   @Nullable
   private static <K, V> Map<K, V> copyMap(@Nullable Map<K, V> target, @Nullable Map<K, V> source) {
     if (source == null || source.isEmpty()) return target;
-    if (target == null) target = ContainerUtilRt.newHashMap(source.size());
+    if (target == null) target = new HashMap<>(source.size());
     target.putAll(source);
     return target;
-  }
-
-  @NotNull
-  public VirtualFile getSchemaFile() {
-    assert myJsonObject != null;
-    return myJsonObject.getContainingFile().getViewProvider().getVirtualFile();
-  }
-
-  @NotNull
-  public JsonContainer getJsonObject() {
-    assert myJsonObject != null;
-    return myJsonObject;
   }
 
   @Nullable
@@ -454,6 +550,25 @@ public class JsonSchemaObject {
 
   public void setAdditionalPropertiesAllowed(@Nullable Boolean additionalPropertiesAllowed) {
     myAdditionalPropertiesAllowed = additionalPropertiesAllowed;
+    if (additionalPropertiesAllowed == Boolean.FALSE) {
+      addAdditionalPropsNotAllowedFor(myFileUrl, myPointer);
+    }
+  }
+
+  // for the sake of merging validation results, we need to know if this schema prohibits additional properties itself,
+  // or if it inherits this prohibition flag from the merge result, as the behavior differs in these cases
+  public boolean hasOwnExtraPropertyProhibition() {
+    return getAdditionalPropertiesAllowed() == Boolean.FALSE &&
+           (myAdditionalPropertiesNotAllowedFor == null ||
+            myAdditionalPropertiesNotAllowedFor.contains(myFileUrl + myPointer));
+  }
+
+  private void addAdditionalPropsNotAllowedFor(String url, String pointer) {
+    Set<String> newSet = myAdditionalPropertiesNotAllowedFor == null
+                             ? new HashSet<>()
+                             : new HashSet<>(myAdditionalPropertiesNotAllowedFor);
+    newSet.add(url + pointer);
+    myAdditionalPropertiesNotAllowedFor = newSet;
   }
 
   @Nullable
@@ -481,6 +596,15 @@ public class JsonSchemaObject {
 
   public void setAdditionalItemsAllowed(@Nullable Boolean additionalItemsAllowed) {
     myAdditionalItemsAllowed = additionalItemsAllowed;
+  }
+
+  @Nullable
+  public String getDeprecationMessage() {
+    return myDeprecationMessage;
+  }
+
+  public void setDeprecationMessage(@Nullable String deprecationMessage) {
+    myDeprecationMessage = deprecationMessage;
   }
 
   @Nullable
@@ -591,6 +715,15 @@ public class JsonSchemaObject {
   }
 
   @Nullable
+  public Map<String, Map<String, String>> getEnumMetadata() {
+    return myEnumMetadata;
+  }
+
+  public void setEnumMetadata(@Nullable Map<String, Map<String, String>> enumMetadata) {
+    myEnumMetadata = enumMetadata;
+  }
+
+  @Nullable
   public List<Object> getEnum() {
     return myEnum;
   }
@@ -636,26 +769,16 @@ public class JsonSchemaObject {
   }
 
   @Nullable
-  public JsonSchemaObject getIf() {
-    return myIf;
+  public List<IfThenElse> getIfThenElse() {
+    return myIfThenElse;
   }
 
   public void setIf(@Nullable JsonSchemaObject anIf) {
     myIf = anIf;
   }
 
-  @Nullable
-  public JsonSchemaObject getThen() {
-    return myThen;
-  }
-
   public void setThen(@Nullable JsonSchemaObject then) {
     myThen = then;
-  }
-
-  @Nullable
-  public JsonSchemaObject getElse() {
-    return myElse;
   }
 
   public void setElse(@Nullable JsonSchemaObject anElse) {
@@ -678,6 +801,26 @@ public class JsonSchemaObject {
 
   public void setRef(@Nullable String ref) {
     myRef = ref;
+  }
+
+  public void setRefRecursive(boolean isRecursive) {
+    myRefIsRecursive = isRecursive;
+  }
+
+  public boolean isRefRecursive() {
+    return myRefIsRecursive;
+  }
+
+  public void setRecursiveAnchor(boolean isRecursive) {
+    myIsRecursiveAnchor = isRecursive;
+  }
+
+  public boolean isRecursiveAnchor() {
+    return myIsRecursiveAnchor;
+  }
+
+  public void setBackReference(JsonSchemaObject object) {
+    myBackRef = object;
   }
 
   @Nullable
@@ -745,12 +888,7 @@ public class JsonSchemaObject {
   }
 
   private static String unescapeJsonString(@NotNull final String text) {
-    try {
-      final String object = String.format("{\"prop\": \"%s\"}", text);
-      return new Gson().fromJson(object, JsonObject.class).get("prop").getAsString();
-    } catch (JsonParseException e) {
-      return text;
-    }
+    return StringUtil.unescapeStringCharacters(text);
   }
 
   @Nullable
@@ -769,20 +907,6 @@ public class JsonSchemaObject {
   }
 
   @Nullable
-  public Map<JsonContainer, String> getInvalidPatternProperties() {
-    if (myPatternProperties != null) {
-      final Map<String, String> patterns = myPatternProperties.getInvalidPatterns();
-
-      return patterns.entrySet().stream().map(entry -> {
-        final JsonSchemaObject object = myPatternProperties.getSchemaForPattern(entry.getKey());
-        assert object != null;
-        return Pair.create(object.getJsonObject(), entry.getValue());
-      }).collect(Collectors.toMap(o -> o.getFirst(), o -> o.getSecond()));
-    }
-    return null;
-  }
-
-  @Nullable
   public JsonSchemaObject findRelativeDefinition(@NotNull String ref) {
     if (isSelfReference(ref)) {
       return this;
@@ -796,7 +920,7 @@ public class JsonSchemaObject {
     for (int i = 0; i < parts.size(); i++) {
       if (current == null) return null;
       final String part = parts.get(i);
-      if (DEFINITIONS.equals(part)) {
+      if (DEFINITIONS.equals(part) || DEFINITIONS_v9.equals(part)) {
         if (i == (parts.size() - 1)) return null;
         //noinspection AssignmentToForLoopParameter
         final String nextPart = parts.get(++i);
@@ -829,7 +953,7 @@ public class JsonSchemaObject {
         }
         continue;
       }
-      
+
       current = current.getDefinitionsMap() == null ? null : current.getDefinitionsMap().get(part);
     }
     return current;
@@ -852,14 +976,12 @@ public class JsonSchemaObject {
 
     JsonSchemaObject object = (JsonSchemaObject)o;
 
-    assert myJsonObject != null;
-    return myJsonObject.equals(object.myJsonObject);
+    return Objects.equals(myFileUrl, object.myFileUrl) && Objects.equals(myPointer, object.myPointer);
   }
 
   @Override
   public int hashCode() {
-    assert myJsonObject != null;
-    return myJsonObject.hashCode();
+    return Objects.hash(myFileUrl, myPointer);
   }
 
   @NotNull
@@ -1006,10 +1128,11 @@ public class JsonSchemaObject {
   public JsonSchemaObject resolveRefSchema(@NotNull JsonSchemaService service) {
     final String ref = getRef();
     assert !StringUtil.isEmptyOrSpaces(ref);
-    if (!myComputedRefs.containsKey(ref)){
-      JsonSchemaObject value = fetchSchemaFromRefDefinition(ref, this, service);
+    JsonSchemaObject schemaObject = myComputedRefs.getOrDefault(ref, NULL_OBJ);
+    if (schemaObject == NULL_OBJ) {
+      JsonSchemaObject value = fetchSchemaFromRefDefinition(ref, this, service, isRefRecursive());
       if (!mySubscribed.get()) {
-        getJsonObject().getProject().getMessageBus().connect().subscribe(JsonSchemaVfsListener.JSON_DEPS_CHANGED, () -> myComputedRefs.clear());
+        service.getProject().getMessageBus().connect().subscribe(JsonSchemaVfsListener.JSON_DEPS_CHANGED, () -> myComputedRefs.clear());
         mySubscribed.set(true);
       }
       if (!JsonFileResolver.isHttpPath(ref)) {
@@ -1017,39 +1140,55 @@ public class JsonSchemaObject {
       }
       else if (value != null) {
         // our aliases - if http ref actually refers to a local file with specific ID
-        PsiFile file = value.getJsonObject().getContainingFile();
-        if (file != null) {
-          VirtualFile virtualFile = file.getVirtualFile();
-          if (virtualFile != null && !(virtualFile instanceof HttpVirtualFile)) {
-            service.registerReference(virtualFile.getName());
-          }
+        VirtualFile virtualFile = service.resolveSchemaFile(value);
+        if (virtualFile != null && !(virtualFile instanceof HttpVirtualFile)) {
+          service.registerReference(virtualFile.getName());
         }
       }
+      if (value != null && value != NULL_OBJ && !Objects.equals(value.myFileUrl, myFileUrl)) {
+        value.setBackReference(this);
+      }
       myComputedRefs.put(ref, value == null ? NULL_OBJ : value);
+      return value;
     }
-    JsonSchemaObject object = myComputedRefs.getOrDefault(ref, null);
-    return object == NULL_OBJ ? null : object;
+    return schemaObject;
   }
 
   @Nullable
   private static JsonSchemaObject fetchSchemaFromRefDefinition(@NotNull String ref,
                                                                @NotNull final JsonSchemaObject schema,
-                                                               @NotNull JsonSchemaService service) {
+                                                               @NotNull JsonSchemaService service,
+                                                               boolean recursive) {
 
-    final VirtualFile schemaFile = schema.getSchemaFile();
+    final VirtualFile schemaFile = service.resolveSchemaFile(schema);
+    if (schemaFile == null) return null;
     final JsonSchemaVariantsTreeBuilder.SchemaUrlSplitter splitter = new JsonSchemaVariantsTreeBuilder.SchemaUrlSplitter(ref);
     String schemaId = splitter.getSchemaId();
     if (schemaId != null) {
       final JsonSchemaObject refSchema = resolveSchemaByReference(service, schemaFile, schemaId);
       if (refSchema == null) return null;
-      return findRelativeDefinition(refSchema, splitter);
+      return findRelativeDefinition(refSchema, splitter, service);
     }
-    final JsonSchemaObject rootSchema = service.getSchemaObjectForSchemaFile(schemaFile);
+    JsonSchemaObject rootSchema = service.getSchemaObjectForSchemaFile(schemaFile);
     if (rootSchema == null) {
       LOG.debug(String.format("Schema object not found for %s", schemaFile.getPath()));
       return null;
     }
-    return findRelativeDefinition(rootSchema, splitter);
+    if (recursive && ref.startsWith("#")) {
+      while (rootSchema.isRecursiveAnchor()) {
+        JsonSchemaObject backRef = rootSchema.myBackRef;
+        if (backRef == null) break;
+        VirtualFile file = ObjectUtils.coalesce(backRef.myRawFile, backRef.myFileUrl == null ? null : JsonFileResolver.urlToFile(backRef.myFileUrl));
+        if (file == null) break;
+        try {
+          rootSchema = JsonSchemaReader.readFromFile(service.getProject(), file);
+        }
+        catch (Exception e) {
+          break;
+        }
+      }
+    }
+    return findRelativeDefinition(rootSchema, splitter, service);
   }
 
   @Nullable
@@ -1061,6 +1200,19 @@ public class JsonSchemaObject {
       LOG.debug(String.format("Schema file not found by reference: '%s' from %s", schemaId, schemaFile.getPath()));
       return null;
     }
+    if (refFile instanceof HttpVirtualFile) {
+      RemoteFileInfo info = ((HttpVirtualFile)refFile).getFileInfo();
+      if (info != null) {
+        RemoteFileState state = info.getState();
+        if (state == RemoteFileState.DOWNLOADING_NOT_STARTED) {
+          JsonFileResolver.startFetchingHttpFileIfNeeded(refFile, service.getProject());
+          return NULL_OBJ;
+        }
+        else if (state == RemoteFileState.DOWNLOADING_IN_PROGRESS) {
+          return NULL_OBJ;
+        }
+      }
+    }
     final JsonSchemaObject refSchema = service.getSchemaObjectForSchemaFile(refFile);
     if (refSchema == null) {
       LOG.debug(String.format("Schema object not found by reference: '%s' from %s", schemaId, schemaFile.getPath()));
@@ -1070,25 +1222,38 @@ public class JsonSchemaObject {
   }
 
   private static JsonSchemaObject findRelativeDefinition(@NotNull final JsonSchemaObject schema,
-                                                         @NotNull final JsonSchemaVariantsTreeBuilder.SchemaUrlSplitter splitter) {
+                                                         @NotNull final JsonSchemaVariantsTreeBuilder.SchemaUrlSplitter splitter,
+                                                         @NotNull JsonSchemaService service) {
     final String path = splitter.getRelativePath();
     if (StringUtil.isEmptyOrSpaces(path)) {
       final String id = splitter.getSchemaId();
       if (isSelfReference(id)) {
         return schema;
       }
-      if (id != null && id.startsWith("#")) {
-        final String resolvedId = JsonCachedValues.resolveId(schema.getJsonObject().getContainingFile(), id);
+      if (id != null && id.startsWith("#") ) {
+        final String resolvedId = schema.resolveId(id);
         if (resolvedId == null || id.equals("#" + resolvedId)) return null;
-        return findRelativeDefinition(schema, new JsonSchemaVariantsTreeBuilder.SchemaUrlSplitter("#" + resolvedId));
+        return findRelativeDefinition(schema, new JsonSchemaVariantsTreeBuilder.SchemaUrlSplitter("#" + resolvedId), service);
       }
       return schema;
     }
     final JsonSchemaObject definition = schema.findRelativeDefinition(path);
     if (definition == null) {
-      LOG.debug(String.format("Definition not found by reference: '%s' in file %s", path, schema.getSchemaFile().getPath()));
+      VirtualFile schemaFile = service.resolveSchemaFile(schema);
+      LOG.debug(String.format("Definition not found by reference: '%s' in file %s", path, schemaFile == null ? "(no file)" : schemaFile.getPath()));
     }
     return definition;
+  }
+
+  @NotNull
+  public static JsonSchemaObject merge(@NotNull JsonSchemaObject base,
+                                       @NotNull JsonSchemaObject other,
+                                       @NotNull JsonSchemaObject pointTo) {
+    final JsonSchemaObject object = new JsonSchemaObject(pointTo.myRawFile, pointTo.myFileUrl, pointTo.getPointer());
+    object.mergeValues(other);
+    object.mergeValues(base);
+    object.setRef(other.getRef());
+    return object;
   }
 
   private static class PropertyNamePattern {
@@ -1129,19 +1294,15 @@ public class JsonSchemaObject {
     @NotNull private final Map<String, JsonSchemaObject> mySchemasMap;
     @NotNull private final Map<String, Pattern> myCachedPatterns;
     @NotNull private final Map<String, String> myCachedPatternProperties;
-    @NotNull private final Map<String, String> myInvalidPatterns;
 
     PatternProperties(@NotNull final Map<String, JsonSchemaObject> schemasMap) {
       mySchemasMap = new HashMap<>();
       schemasMap.keySet().forEach(key -> mySchemasMap.put(StringUtil.unescapeBackSlashes(key), schemasMap.get(key)));
       myCachedPatterns = new HashMap<>();
       myCachedPatternProperties = ContainerUtil.createConcurrentWeakKeyWeakValueMap();
-      myInvalidPatterns = new HashMap<>();
       mySchemasMap.keySet().forEach(key -> {
         final Pair<Pattern, String> pair = compilePattern(key);
-        if (pair.getSecond() != null) {
-          myInvalidPatterns.put(key, pair.getSecond());
-        } else {
+        if (pair.getSecond() == null) {
           assert pair.getFirst() != null;
           myCachedPatterns.put(key, pair.getFirst());
         }
@@ -1166,15 +1327,6 @@ public class JsonSchemaObject {
         return mySchemasMap.get(value);
       }
       return null;
-    }
-
-    @NotNull
-    public Map<String, String> getInvalidPatterns() {
-      return myInvalidPatterns;
-    }
-
-    public JsonSchemaObject getSchemaForPattern(@NotNull String key) {
-      return mySchemasMap.get(key);
     }
   }
 }

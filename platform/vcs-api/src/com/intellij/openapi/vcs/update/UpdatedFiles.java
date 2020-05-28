@@ -14,8 +14,8 @@ import java.util.List;
  * Container for files which have been affected by an update/integrate/status operation.
  * The files are grouped by file status.
  *
- * @see com.intellij.openapi.vcs.update.UpdateEnvironment#fillGroups
- * @see com.intellij.openapi.vcs.update.UpdateEnvironment#updateDirectories
+ * @see UpdateEnvironment#fillGroups
+ * @see UpdateEnvironment#updateDirectories
  */
 public class UpdatedFiles implements JDOMExternalizable {
   private final List<FileGroup> myGroups = new ArrayList<>();
@@ -53,7 +53,7 @@ public class UpdatedFiles implements JDOMExternalizable {
     return findByIdIn(myGroups, id);
   }
 
-  private static FileGroup findByIdIn(List<FileGroup> groups, String id) {
+  private static FileGroup findByIdIn(List<? extends FileGroup> groups, String id) {
     for (FileGroup fileGroup : groups) {
       if (id.equals(fileGroup.getId())) return fileGroup;
       FileGroup foundInChildren = findByIdIn(fileGroup.getChildren(), id);

@@ -39,7 +39,7 @@ import java.util.List;
  * @author yole
  */
 public class MorphAction extends AbstractGuiEditorAction {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.actions.MorphAction");
+  private static final Logger LOG = Logger.getInstance(MorphAction.class);
 
   private final ComponentItem myLastMorphComponent = null;
 
@@ -57,9 +57,7 @@ public class MorphAction extends AbstractGuiEditorAction {
         editor.refreshAndSave(true);
       };
       CommandProcessor.getInstance().executeCommand(editor.getProject(), runnable, UIDesignerBundle.message("morph.component.command"), null);
-      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-        IdeFocusManager.getGlobalInstance().requestFocus(editor.getGlassLayer(), true);
-      });
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(editor.getGlassLayer(), true));
       return true;
     };
 

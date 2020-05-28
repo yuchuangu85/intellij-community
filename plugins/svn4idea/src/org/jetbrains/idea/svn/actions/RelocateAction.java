@@ -44,7 +44,7 @@ public class RelocateAction extends BasicAction {
       return;
     }
 
-    RelocateDialog dlg = new RelocateDialog(vcs.getProject(), info.getURL());
+    RelocateDialog dlg = new RelocateDialog(vcs.getProject(), info.getUrl());
     if (!dlg.showAndGet()) {
       return;
     }
@@ -72,7 +72,7 @@ public class RelocateAction extends BasicAction {
   }
 
   @Override
-  protected void batchPerform(@NotNull SvnVcs vcs, @NotNull VirtualFile[] files, @NotNull DataContext context) {
+  protected void batchPerform(@NotNull SvnVcs vcs, VirtualFile @NotNull [] files, @NotNull DataContext context) {
   }
 
   @Override

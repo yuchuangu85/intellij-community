@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.highlighting
 
 import com.intellij.codeInsight.intention.IntentionAction
@@ -43,6 +43,13 @@ class GrAssignabilityTest extends GrHighlightingTestBase {
   void testMethodCallWithDefaultParameters() { doTest() }
 
   void testClosureWithDefaultParameters() { doTest() }
+
+  void 'test method with default parameters and varargs'() {
+    testHighlighting '''\
+def go(String a, String b = 'b', String c, int ... i) {}
+go('a', 'c', 1, 2, 3)
+'''
+  }
 
   void testClosureApplicability() { doTest() }
 
@@ -140,14 +147,10 @@ class GrAssignabilityTest extends GrHighlightingTestBase {
   }
 
   void testCallableProperty() {
-    doTest()
+    doTest(new GrUnresolvedAccessInspection())
   }
 
   void testEnumConstantConstructors() {
-    doTest()
-  }
-
-  void testLiteralConstructorUsages() {
     doTest()
   }
 
@@ -182,7 +185,7 @@ def foo1(Object a) { }
 def bar1(def b) { foo1(b) }
 
 def foo2(String a) { }
-def bar2(def b) { foo2<weak_warning descr="Cannot infer argument types">(b)</weak_warning> }
+def bar2(def b) { foo2(b) }
 ''')
   }
 
@@ -359,7 +362,7 @@ def foo(Function<String, String> function) {
 foo<warning descr="'foo' in '_' cannot be applied to '(Function<java.lang.Double,java.lang.Double>)'">({println  it.byteValue()} as Function<Double, Double>)</warning>
 foo({println  it.substring(1)} as Function)
 foo({println  it.substring(1)} as Function<String, String>)
-foo<warning descr="'foo' in '_' cannot be applied to '(groovy.lang.Closure)'">({println  it})</warning>
+foo<warning descr="'foo' in '_' cannot be applied to '(groovy.lang.Closure)'">({println it})</warning>
 
 ''')
   }
@@ -537,10 +540,10 @@ class X {
 X i() { new X() }
 
 print i()[1]
-print i()<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.Integer, java.lang.Integer])'">[1, 2]</warning>
-print i()<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.Integer..java.lang.Integer])'">[1..2]</warning>
+print <weak_warning descr="Cannot infer argument types">i()<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.Integer, java.lang.Integer])'">[1, 2]</warning></weak_warning>
+print <weak_warning descr="Cannot infer argument types">i()<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.Integer..java.lang.Integer])'">[1..2]</warning></weak_warning>
 print i()['a']
-print i()<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.String, java.lang.String])'">['a', 'b']</warning>
+print <weak_warning descr="Cannot infer argument types">i()<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.String, java.lang.String])'">['a', 'b']</warning></weak_warning>
 ''')
   }
 
@@ -553,10 +556,10 @@ class X {
 X i = new X()
 
 print i[1]
-print i<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.Integer, java.lang.Integer])'">[1, 2]</warning>
-print i<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.Integer..java.lang.Integer])'">[1..2]</warning>
+print <weak_warning descr="Cannot infer argument types">i<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.Integer, java.lang.Integer])'">[1, 2]</warning></weak_warning>
+print <weak_warning descr="Cannot infer argument types">i<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.Integer..java.lang.Integer])'">[1..2]</warning></weak_warning>
 print i['a']
-print i<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.String, java.lang.String])'">['a', 'b']</warning>
+print <weak_warning descr="Cannot infer argument types">i<warning descr="'getAt' in 'X' cannot be applied to '([java.lang.String, java.lang.String])'">['a', 'b']</warning></weak_warning>
 ''')
   }
 
@@ -762,7 +765,7 @@ void bug(Collection<String> foo, Collection<String> bar) {
     testHighlighting('''\
 print 1 + 2
 
-print 4 <warning descr="'plus' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '(java.util.ArrayList)'">+</warning> new ArrayList()
+print <weak_warning descr="Cannot infer argument types">4 <warning descr="'plus' in 'org.codehaus.groovy.runtime.DefaultGroovyMethods' cannot be applied to '(java.util.ArrayList)'">+</warning> new ArrayList()</weak_warning>
 ''')
   }
 
@@ -875,6 +878,61 @@ class TestType {
         def (String name, Integer matcherEnd) = [list[0], list[2] as Integer]
     }
 }
+'''
+  }
+
+  void 'test unknown argument plus'() {
+    testHighlighting '''
+class A1{}
+
+class E {
+    def m(){
+
+    }
+    def plus(A1 a1) {
+
+    }
+}
+
+new E() <weak_warning descr="Cannot infer argument types">+</weak_warning> a
+'''
+  }
+
+  void 'test unknown argument plus 2'() {
+    testHighlighting '''
+class A1{}
+class A2{}
+
+class E {
+    def m(){
+
+    }
+    def plus(A1 a1) {
+
+    }
+
+    def plus(A2 a2) {
+
+    }
+}
+
+new E() <weak_warning descr="Cannot infer argument types">+</weak_warning> a
+'''
+  }
+
+  void 'test inapplicable with unknown argument'() {
+    testHighlighting '''\
+def foo(String s, int x) {}
+def foo(String s, Object o) {}
+def foo(String s, String x) {}
+
+// second and third overloads are applicable;
+// first overload is inapplicable independently of the first arg type;
+foo<weak_warning descr="Cannot infer argument types">(unknown, "hi")</weak_warning>
+
+// only second overload is applicable;
+// because of that we don't highlight unknown args
+foo(unknown, new Object())  
 '''
   }
 }

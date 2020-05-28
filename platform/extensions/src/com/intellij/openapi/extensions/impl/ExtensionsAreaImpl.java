@@ -1,203 +1,145 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.extensions.impl;
 
+import com.intellij.ide.plugins.IdeaPluginDescriptor;
+import com.intellij.openapi.Disposable;
+import com.intellij.openapi.components.ComponentManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.*;
-import com.intellij.openapi.util.JDOMUtil;
-import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.MultiMap;
-import com.intellij.util.pico.CachingConstructorInjectionComponentAdapter;
-import com.intellij.util.pico.DefaultPicoContainer;
-import gnu.trove.THashMap;
-import org.jdom.Attribute;
+import com.intellij.openapi.util.Disposer;
+import com.intellij.util.ThreeState;
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import org.jdom.Element;
 import org.jdom.Namespace;
-import org.jetbrains.annotations.NonNls;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.TestOnly;
-import org.picocontainer.MutablePicoContainer;
-import org.picocontainer.PicoContainer;
+import org.jetbrains.annotations.*;
 
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
+import java.lang.reflect.Modifier;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
-@SuppressWarnings("HardCodedStringLiteral")
-public class ExtensionsAreaImpl implements ExtensionsArea {
+@ApiStatus.Internal
+public final class ExtensionsAreaImpl implements ExtensionsArea {
   private static final Logger LOG = Logger.getInstance(ExtensionsAreaImpl.class);
-  public static final String ATTRIBUTE_AREA = "area";
 
-  private static final Map<String,String> ourDefaultEPs = new THashMap<>();
+  private static final boolean DEBUG_REGISTRATION = false;
 
-  static {
-    ourDefaultEPs.put(EPAvailabilityListenerExtension.EXTENSION_POINT_NAME, EPAvailabilityListenerExtension.class.getName());
-  }
+  private final ComponentManager componentManager;
+  private final Map<String, ExtensionPointImpl<?>> extensionPoints = new ConcurrentHashMap<>();
+  private final Map<String,Throwable> epTraces = DEBUG_REGISTRATION ? new Object2ObjectOpenHashMap<>() : null;
 
-  private static final boolean DEBUG_REGISTRATION = Boolean.FALSE.booleanValue(); // not compile-time constant to avoid yellow code
-
-  private final AreaPicoContainer myPicoContainer;
-  private final Throwable myCreationTrace;
-  private final Map<String, ExtensionPointImpl> myExtensionPoints = ContainerUtil.newConcurrentMap();
-  private final Map<String,Throwable> myEPTraces = DEBUG_REGISTRATION ? new THashMap<>() : null;
-  private final MultiMap<String, ExtensionPointAvailabilityListener> myAvailabilityListeners = MultiMap.createSmart(); // guarded by myAvailabilityListeners
-  private final AreaInstance myAreaInstance;
-  private final String myAreaClass;
-
-  public ExtensionsAreaImpl(String areaClass, AreaInstance areaInstance, PicoContainer parentPicoContainer) {
-    myCreationTrace = DEBUG_REGISTRATION ? new Throwable("Area creation trace") : null;
-    myAreaClass = areaClass;
-    myAreaInstance = areaInstance;
-    myPicoContainer = new DefaultPicoContainer(parentPicoContainer);
-    initialize();
+  public ExtensionsAreaImpl(@NotNull ComponentManager componentManager) {
+    this.componentManager = componentManager;
   }
 
   @TestOnly
-  ExtensionsAreaImpl(MutablePicoContainer parentPicoContainer) {
-    this(null, null, parentPicoContainer);
-  }
-
-  @TestOnly
-  public final void notifyAreaReplaced(@NotNull ExtensionsAreaImpl newArea) {
-    Set<String> processedEPs = ContainerUtil.newTroveSet();
-    for (final ExtensionPointImpl point : myExtensionPoints.values()) {
+  public final void notifyAreaReplaced(@Nullable ExtensionsAreaImpl newArea) {
+    Set<String> processedEPs = new HashSet<>(extensionPoints.size());
+    for (ExtensionPointImpl<?> point : extensionPoints.values()) {
       point.notifyAreaReplaced(this);
       processedEPs.add(point.getName());
     }
-    //this code is required because we have a lot of static extensions e.g. LanguageExtension that are initialized only once
-    //for the extensions AvailabilityListeners will be broken if the initialization happened in "fake" area which doesn't have required EP
-    if (!myAvailabilityListeners.isEmpty()) {
-      for (Map.Entry<String, Collection<ExtensionPointAvailabilityListener>> entry : myAvailabilityListeners.entrySet()) {
-        String key = entry.getKey();
-        if (!processedEPs.contains(key)) {
-          boolean wasAdded = false;
-          //if listeners are "detached" for any EP we have to transfer them to the new area (otherwise it will affect area searching)
-          for (ExtensionPointAvailabilityListener listener : entry.getValue()) {
-            if (!newArea.hasAvailabilityListener(key, listener)) {
-              newArea.addAvailabilityListener(key, listener);
-              wasAdded = true;
-            }
-          }
-          if (wasAdded) {
-            processedEPs.add(key);
-          }
-        }
-      }
+
+    if (newArea == null) {
+      return;
     }
 
-    for (ExtensionPointImpl point : newArea.myExtensionPoints.values()) {
+    for (ExtensionPointImpl<?> point : newArea.extensionPoints.values()) {
       if (!processedEPs.contains(point.getName())) {
         point.notifyAreaReplaced(this);
       }
     }
   }
 
-
-  @NotNull
-  @Override
-  public AreaPicoContainer getPicoContainer() {
-    return myPicoContainer;
-  }
-
-  @Override
-  public String getAreaClass() {
-    return myAreaClass;
-  }
-
-  public void registerExtensionPoint(@NotNull String pluginName, @NotNull Element extensionPointElement) {
-    registerExtensionPoint(new DefaultPluginDescriptor(PluginId.getId(pluginName)), extensionPointElement);
-  }
-
-  @Override
-  public void registerExtensionPoint(@NotNull PluginDescriptor pluginDescriptor, @NotNull Element extensionPointElement) {
-    assert pluginDescriptor.getPluginId() != null;
-    final String pluginId = pluginDescriptor.getPluginId().getIdString();
-    String epName = extensionPointElement.getAttributeValue("qualifiedName");
-    if (epName == null) {
-      final String name = extensionPointElement.getAttributeValue("name");
-      if (name == null) {
-        throw new RuntimeException("'name' attribute not specified for extension point in '" + pluginId + "' plugin");
-      }
-      epName = pluginId + '.' + name;
+  @TestOnly
+  public void registerExtensionPoints(@NotNull PluginDescriptor pluginDescriptor, @NotNull List<Element> extensionPointElements) {
+    for (Element element : extensionPointElements) {
+      registerExtensionPoint(pluginDescriptor, element);
     }
+  }
+
+  private void registerExtensionPoint(@NotNull PluginDescriptor pluginDescriptor, @NotNull Element extensionPointElement) {
+    String pointName = getExtensionPointName(extensionPointElement, pluginDescriptor);
 
     String beanClassName = extensionPointElement.getAttributeValue("beanClass");
     String interfaceClassName = extensionPointElement.getAttributeValue("interface");
     if (beanClassName == null && interfaceClassName == null) {
-      throw new RuntimeException("Neither 'beanClass' nor 'interface' attribute is specified for extension point '" + epName + "' in '" + pluginId + "' plugin");
-    }
-    if (beanClassName != null && interfaceClassName != null) {
-      throw new RuntimeException("Both 'beanClass' and 'interface' attributes are specified for extension point '" + epName + "' in '" + pluginId + "' plugin");
+      throw componentManager.createError("Neither 'beanClass' nor 'interface' attribute is specified for extension point '" + pointName + "' in '" + pluginDescriptor + "' plugin", pluginDescriptor.getPluginId());
     }
 
-    ExtensionPoint.Kind kind;
-    String className;
-    if (interfaceClassName != null) {
-      className = interfaceClassName;
-      kind = ExtensionPoint.Kind.INTERFACE;
+    if (beanClassName != null && interfaceClassName != null) {
+      throw componentManager.createError("Both 'beanClass' and 'interface' attributes are specified for extension point '" + pointName + "' in '" + pluginDescriptor + "' plugin", pluginDescriptor.getPluginId());
     }
-    else {
-      className = beanClassName;
-      kind = ExtensionPoint.Kind.BEAN_CLASS;
+
+    boolean dynamic = Boolean.parseBoolean(extensionPointElement.getAttributeValue("dynamic"));
+    String className = interfaceClassName == null ? beanClassName : interfaceClassName;
+    doRegisterExtensionPoint(pointName, className, pluginDescriptor, interfaceClassName != null, dynamic);
+  }
+
+  private @NotNull String getExtensionPointName(@NotNull Element extensionPointElement, @NotNull PluginDescriptor pluginDescriptor) {
+    String pointName = extensionPointElement.getAttributeValue("qualifiedName");
+    if (pointName == null) {
+      final String name = extensionPointElement.getAttributeValue("name");
+      if (name == null) {
+        throw componentManager.createError("'name' attribute not specified for extension point in '" + pluginDescriptor + "' plugin", pluginDescriptor.getPluginId());
+      }
+
+      assert pluginDescriptor.getPluginId() != null;
+      pointName = pluginDescriptor.getPluginId().getIdString() + '.' + name;
     }
-    registerExtensionPoint(epName, className, pluginDescriptor, kind);
+    return pointName;
   }
 
   @Override
-  public void registerExtension(@NotNull final PluginDescriptor pluginDescriptor, @NotNull final Element extensionElement, String extensionNs) {
-    String epName = extractEPName(extensionElement, extensionNs);
+  public void registerExtension(final @NotNull PluginDescriptor pluginDescriptor, final @NotNull Element extensionElement, String extensionNs) {
+    String epName = extractPointName(extensionElement, extensionNs);
     registerExtension(getExtensionPoint(epName), pluginDescriptor, extensionElement);
   }
 
-  // Used in Upsource
   @Override
-  public void registerExtension(@NotNull final ExtensionPoint extensionPoint, @NotNull final PluginDescriptor pluginDescriptor, @NotNull final Element extensionElement) {
-    if (!Extensions.isComponentSuitableForOs(extensionElement.getAttributeValue("os"))) {
-      return;
-    }
-
-    ExtensionComponentAdapter adapter;
-    if (extensionPoint.getKind() == ExtensionPoint.Kind.INTERFACE) {
-      String implClass = extensionElement.getAttributeValue("implementation");
-      if (implClass == null) {
-        throw new RuntimeException("'implementation' attribute not specified for '" + extensionPoint.getName() + "' extension in '"
-                                   + pluginDescriptor.getPluginId().getIdString() + "' plugin");
-      }
-      adapter = createAdapter(implClass, extensionElement, shouldDeserializeInstance(extensionElement), pluginDescriptor);
-    }
-    else {
-      adapter = createAdapter(extensionPoint.getClassName(), extensionElement, !JDOMUtil.isEmpty(extensionElement), pluginDescriptor);
-    }
-    myPicoContainer.registerComponent(adapter);
-    ((ExtensionPointImpl)extensionPoint).registerExtensionAdapter(adapter);
+  public void registerExtension(@NotNull ExtensionPoint<?> extensionPoint, @NotNull PluginDescriptor pluginDescriptor, @NotNull Element extensionElement) {
+    ((ExtensionPointImpl<?>)extensionPoint).createAndRegisterAdapter(extensionElement, pluginDescriptor, componentManager);
   }
 
-  // this method is not ExtensionComponentAdapter constructor because later ExtensionComponentAdapter will not hold element
-  @NotNull
-  private ExtensionComponentAdapter createAdapter(@NotNull String implementationClassName, @NotNull Element extensionElement, boolean isNeedToDeserialize, @NotNull PluginDescriptor pluginDescriptor) {
-    String orderId = extensionElement.getAttributeValue("id");
-    LoadingOrder order = LoadingOrder.readOrder(extensionElement.getAttributeValue("order"));
-    return new ExtensionComponentAdapter(implementationClassName, myPicoContainer, pluginDescriptor, orderId, order, isNeedToDeserialize ? extensionElement : null);
+  public boolean unregisterExtensions(@NotNull String extensionPointName,
+                                      @NotNull PluginDescriptor loadedPluginDescriptor,
+                                      @NotNull List<Element> elements,
+                                      @NotNull List<Runnable> listenerCallbacks) {
+    ExtensionPointImpl<?> point = extensionPoints.get(extensionPointName);
+    if (point == null) {
+      return false;
+    }
+
+    point.unregisterExtensions(componentManager, loadedPluginDescriptor, elements, listenerCallbacks);
+    return true;
   }
 
-  private static boolean shouldDeserializeInstance(Element extensionElement) {
-    // has content
-    if (!extensionElement.getContent().isEmpty()) return true;
-    // has custom attributes
-    for (Attribute attribute : extensionElement.getAttributes()) {
-      final String name = attribute.getName();
-      if (!"implementation".equals(name) && !"id".equals(name) && !"order".equals(name) && !"os".equals(name)) {
-        return true;
+  // extensionPoints here are raw and not initialized (not the same instance, only name can be used)
+  public void resetExtensionPoints(@NotNull List<ExtensionPointImpl<?>> rawExtensionPoints) {
+    for (ExtensionPointImpl<?> point : rawExtensionPoints) {
+      ExtensionPointImpl<?> extensionPoint = extensionPoints.get(point.getName());
+      if (extensionPoint != null) {
+        extensionPoint.reset();
       }
     }
-    return false;
   }
 
-  @NotNull
-  public static String extractEPName(@NotNull Element extensionElement, @Nullable String ns) {
+  public void clearUserCache() {
+    extensionPoints.values().forEach(ExtensionPointImpl::clearUserCache);
+  }
+
+  // note about extension point here the same as for resetExtensionPoints
+  /**
+   * You must call {@link #resetExtensionPoints} before otherwise event ExtensionEvent.REMOVED will be not fired.
+   */
+  public void unregisterExtensionPoints(@NotNull List<ExtensionPointImpl<?>> rawExtensionPoints) {
+    for (ExtensionPointImpl<?> point : rawExtensionPoints) {
+      extensionPoints.remove(point.getName());
+    }
+  }
+
+  public static @NotNull String extractPointName(@NotNull Element extensionElement, @Nullable String ns) {
     String epName = extensionElement.getAttributeValue("point");
-
     if (epName == null) {
       if (ns == null) {
         Namespace namespace = extensionElement.getNamespace();
@@ -210,177 +152,205 @@ public class ExtensionsAreaImpl implements ExtensionsArea {
     return epName;
   }
 
-  private MutablePicoContainer internalGetPluginContainer() {
-    return myPicoContainer;
-  }
-
-  @SuppressWarnings("unchecked")
-  private void initialize() {
-    for (Map.Entry<String, String> entry : ourDefaultEPs.entrySet()) {
-      String epName = entry.getKey();
-      registerExtensionPoint(epName, entry.getValue());
-    }
-
-    getExtensionPoint(EPAvailabilityListenerExtension.EXTENSION_POINT_NAME).addExtensionPointListener(new ExtensionPointListener() {
-      @Override
-      public void extensionRemoved(@NotNull Object extension, final PluginDescriptor pluginDescriptor) {
-        EPAvailabilityListenerExtension epListenerExtension = (EPAvailabilityListenerExtension) extension;
-        synchronized (myAvailabilityListeners) {
-          Collection<ExtensionPointAvailabilityListener> listeners = myAvailabilityListeners.get(epListenerExtension.getExtensionPointName());
-          for (Iterator<ExtensionPointAvailabilityListener> iterator = listeners.iterator(); iterator.hasNext();) {
-            ExtensionPointAvailabilityListener listener = iterator.next();
-            if (listener.getClass().getName().equals(epListenerExtension.getListenerClass())) {
-              iterator.remove();
-              return;
-            }
-          }
-        }
-        LOG.warn("Failed to find EP availability listener: " + epListenerExtension.getListenerClass());
-      }
-
-      @Override
-      public void extensionAdded(@NotNull Object extension, final PluginDescriptor pluginDescriptor) {
-        EPAvailabilityListenerExtension epListenerExtension = (EPAvailabilityListenerExtension) extension;
-        try {
-          String epName = epListenerExtension.getExtensionPointName();
-
-          ExtensionPointAvailabilityListener listener = (ExtensionPointAvailabilityListener) instantiate(epListenerExtension.loadListenerClass());
-          addAvailabilityListener(epName, listener);
-        }
-        catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }
-    });
-  }
-
-  private Object instantiate(Class clazz) {
-    CachingConstructorInjectionComponentAdapter adapter =
-      new CachingConstructorInjectionComponentAdapter(Integer.toString(System.identityHashCode(new Object())), clazz);
-
-    return adapter.getComponentInstance(getPicoContainer());
-  }
-
-  @SuppressWarnings("UnusedDeclaration")
-  public Throwable getCreationTrace() {
-    return myCreationTrace;
-  }
-
   @Override
-  public void addAvailabilityListener(@NotNull String extensionPointName, @NotNull ExtensionPointAvailabilityListener listener) {
-    synchronized (myAvailabilityListeners) {
-      myAvailabilityListeners.putValue(extensionPointName, listener);
+  @TestOnly
+  public void registerExtensionPoint(@NotNull @NonNls String extensionPointName,
+                                     @NotNull String extensionPointBeanClass,
+                                     @NotNull ExtensionPoint.Kind kind) {
+    doRegisterExtensionPoint(extensionPointName, extensionPointBeanClass, kind);
+  }
+
+  @TestOnly
+  public void registerExtensionPoint(@NotNull BaseExtensionPointName<?> extensionPoint,
+                                     @NotNull String extensionPointBeanClass,
+                                     @NotNull ExtensionPoint.Kind kind,
+                                     @NotNull Disposable parentDisposable) {
+    String extensionPointName = extensionPoint.getName();
+    doRegisterExtensionPoint(extensionPointName, extensionPointBeanClass, kind);
+    Disposer.register(parentDisposable, () -> unregisterExtensionPoint(extensionPointName));
+  }
+
+  @TestOnly
+  void doRegisterExtensionPoint(@NotNull String extensionPointName, @NotNull String extensionPointBeanClass, @NotNull ExtensionPoint.Kind kind) {
+    IdeaPluginDescriptor pluginDescriptor = new DefaultPluginDescriptor(PluginId.getId("FakeIdForTests"));
+    doRegisterExtensionPoint(extensionPointName, extensionPointBeanClass, pluginDescriptor, kind == ExtensionPoint.Kind.INTERFACE, false);
+  }
+
+  @TestOnly
+  public <T> ExtensionPointImpl<T> registerPoint(@NotNull String name,
+                                                 @NotNull Class<T> extensionClass,
+                                                 @NotNull PluginDescriptor pluginDescriptor) {
+    return doRegisterExtensionPoint(name, extensionClass.getName(), pluginDescriptor, extensionClass.isInterface() || (extensionClass.getModifiers() & Modifier.ABSTRACT) != 0,
+                                    false);
+  }
+
+  private @NotNull <T> ExtensionPointImpl<T> doRegisterExtensionPoint(@NotNull String name, @NotNull String extensionClass,
+                                                                      @NotNull PluginDescriptor pluginDescriptor, boolean isInterface, boolean dynamic) {
+    ExtensionPointImpl<T> point;
+    if (isInterface) {
+      point = new InterfaceExtensionPoint<>(name, extensionClass, pluginDescriptor, dynamic);
     }
-    ExtensionPointImpl<?> ep = myExtensionPoints.get(extensionPointName);
-    if (ep != null) {
-      listener.extensionPointRegistered(ep);
+    else {
+      point = new BeanExtensionPoint<>(name, extensionClass, pluginDescriptor, dynamic);
     }
+    point.setComponentManager(componentManager);
+    registerExtensionPoint(point);
+    return point;
   }
 
-  @Override
-  public void removeAvailabilityListener(@NotNull String extensionPointName, @NotNull ExtensionPointAvailabilityListener listener) {
-    synchronized (myAvailabilityListeners) {
-      myAvailabilityListeners.remove(extensionPointName, listener);
-    }
+  /**
+   * To register extensions for {@link com.intellij.openapi.util.KeyedExtensionCollector} for test purposes, where extension instance can be KeyedLazyInstance and not a real bean class,
+   * because often it is not possible to use one (for example, {@link com.intellij.lang.LanguageExtensionPoint}).
+   */
+  @TestOnly
+  public <T> ExtensionPointImpl<T> registerFakeBeanPoint(@NotNull String name, @NotNull PluginDescriptor pluginDescriptor) {
+    // any object name can be used, because EP must not create any instance
+    return doRegisterExtensionPoint(name, Object.class.getName(), pluginDescriptor, false, false);
   }
 
-  private boolean hasAvailabilityListener(@NotNull String extensionPointName, @NotNull ExtensionPointAvailabilityListener listener) {
-    Collection<ExtensionPointAvailabilityListener> listeners = myAvailabilityListeners.get(extensionPointName);
-    return ContainerUtil.containsIdentity(listeners, listener);
-  }
-
-  @Override
-  public void registerExtensionPoint(@NotNull final String extensionPointName, @NotNull String extensionPointBeanClass) {
-    registerExtensionPoint(extensionPointName, extensionPointBeanClass, ExtensionPoint.Kind.INTERFACE);
-  }
-
-  @Override
-  public void registerExtensionPoint(@NotNull @NonNls String extensionPointName, @NotNull String extensionPointBeanClass, @NotNull ExtensionPoint.Kind kind) {
-    registerExtensionPoint(extensionPointName, extensionPointBeanClass, new UndefinedPluginDescriptor(), kind);
-  }
-
-  private void registerExtensionPoint(@NotNull String extensionPointName,
-                                      @NotNull String extensionPointBeanClass,
-                                      @NotNull PluginDescriptor descriptor,
-                                      @NotNull ExtensionPoint.Kind kind) {
-    if (hasExtensionPoint(extensionPointName)) {
-      final String message =
-        "Duplicate registration for EP: " + extensionPointName + ": original plugin " + getExtensionPoint(extensionPointName).getDescriptor().getPluginId() +
-        ", new plugin " + descriptor.getPluginId();
-      if (DEBUG_REGISTRATION) {
-        LOG.error(message, myEPTraces.get(extensionPointName));
-      }
-      throw new PicoPluginExtensionInitializationException(message, null, descriptor.getPluginId());
+  private void checkThatPointNotDuplicated(@NotNull String pointName, @NotNull PluginDescriptor pluginDescriptor) {
+    if (!hasExtensionPoint(pointName)) {
+      return;
     }
 
-    registerExtensionPoint(new ExtensionPointImpl(extensionPointName, extensionPointBeanClass, kind, this, myAreaInstance, descriptor));
-  }
-
-  public void registerExtensionPoint(@NotNull ExtensionPointImpl extensionPoint) {
-    String name = extensionPoint.getName();
-    myExtensionPoints.put(name, extensionPoint);
-    notifyEPRegistered(extensionPoint);
+    PluginId id1 = getExtensionPoint(pointName).getPluginDescriptor().getPluginId();
+    PluginId id2 = pluginDescriptor.getPluginId();
+    String message = "Duplicate registration for EP '" + pointName + "': first in " + id1 + ", second in " + id2;
     if (DEBUG_REGISTRATION) {
-      myEPTraces.put(name, new Throwable("Original registration for " + name));
+      LOG.error(message, epTraces.get(pointName));
+    }
+    throw componentManager.createError(message, pluginDescriptor.getPluginId());
+  }
+
+  private void registerExtensionPoint(@NotNull ExtensionPointImpl<?> point) {
+    String name = point.getName();
+    checkThatPointNotDuplicated(name, point.getPluginDescriptor());
+    extensionPoints.put(name, point);
+    if (DEBUG_REGISTRATION) {
+      epTraces.put(name, new Throwable("Original registration for " + name));
     }
   }
 
-  private void notifyEPRegistered(@NotNull ExtensionPoint extensionPoint) {
-    Collection<ExtensionPointAvailabilityListener> listeners;
-    synchronized (myAvailabilityListeners) {
-      listeners = myAvailabilityListeners.get(extensionPoint.getName());
-    }
-    for (final ExtensionPointAvailabilityListener listener : listeners) {
-      listener.extensionPointRegistered(extensionPoint);
+  @ApiStatus.Internal
+  public void registerExtensionPoints(@NotNull List<? extends ExtensionPointImpl<?>> points, boolean clonePoint) {
+    ComponentManager componentManager = this.componentManager;
+    Map<String, ExtensionPointImpl<?>> map = extensionPoints;
+    for (ExtensionPointImpl<?> point : points) {
+      if (clonePoint) {
+        point = point.cloneFor(componentManager);
+      }
+      else {
+        point.setComponentManager(componentManager);
+      }
+
+      ExtensionPointImpl<?> old = map.put(point.getName(), point);
+      if (old != null) {
+        map.put(point.getName(), old);
+        throw componentManager.createError("Duplicate registration for EP '" + point.getName() + "': first in " + old.getPluginDescriptor() +
+                                             ", second in " + point.getPluginDescriptor(), point.getPluginDescriptor().getPluginId());
+      }
     }
   }
 
   @Override
-  @NotNull
-  public <T> ExtensionPointImpl<T> getExtensionPoint(@NotNull String extensionPointName) {
-    //noinspection unchecked
-    ExtensionPointImpl<T> extensionPoint = myExtensionPoints.get(extensionPointName);
+  public @NotNull <T> ExtensionPointImpl<T> getExtensionPoint(@NotNull String extensionPointName) {
+    @SuppressWarnings("unchecked")
+    ExtensionPointImpl<T> extensionPoint = (ExtensionPointImpl<T>)extensionPoints.get(extensionPointName);
     if (extensionPoint == null) {
-      throw new IllegalArgumentException("Missing extension point: " + extensionPointName + " in area " + myAreaInstance);
+      throw new IllegalArgumentException("Missing extension point: " + extensionPointName + " in container " + componentManager);
     }
     return extensionPoint;
   }
 
-  @NotNull
+  public void registerExtensions(@NotNull Map<String, List<Element>> extensions,
+                                 @NotNull IdeaPluginDescriptor pluginDescriptor,
+                                 @Nullable List<Runnable> listenerCallbacks) {
+    extensions.forEach((name, list) -> {
+      ExtensionPointImpl<?> point = extensionPoints.get(name);
+      if (point != null) {
+        point.registerExtensions(list, pluginDescriptor, componentManager, listenerCallbacks);
+      }
+    });
+  }
+
+  public boolean registerExtensions(@NotNull String pointName,
+                                    @NotNull List<Element> extensions,
+                                    @NotNull IdeaPluginDescriptor pluginDescriptor,
+                                    @Nullable List<Runnable> listenerCallbacks)  {
+    ExtensionPointImpl<?> point = extensionPoints.get(pointName);
+    if (point == null) {
+      return false;
+    }
+
+    point.registerExtensions(extensions, pluginDescriptor, componentManager, listenerCallbacks);
+    return true;
+  }
+
   @Override
-  public <T> ExtensionPoint<T> getExtensionPoint(@NotNull ExtensionPointName<T> extensionPointName) {
+  public @Nullable <T> ExtensionPointImpl<T> getExtensionPointIfRegistered(@NotNull String extensionPointName) {
+    //noinspection unchecked
+    return (ExtensionPointImpl<T>)extensionPoints.get(extensionPointName);
+  }
+
+  @Override
+  public @NotNull <T> ExtensionPoint<T> getExtensionPoint(@NotNull ExtensionPointName<T> extensionPointName) {
     return getExtensionPoint(extensionPointName.getName());
   }
 
-  @NotNull
-  @Override
-  public ExtensionPoint[] getExtensionPoints() {
-    return myExtensionPoints.values().toArray(new ExtensionPoint[0]);
+  @TestOnly
+  public void processExtensionPoints(@NotNull Consumer<ExtensionPointImpl<?>> consumer) {
+    extensionPoints.values().forEach(consumer);
   }
 
   @Override
-  public void unregisterExtensionPoint(@NotNull final String extensionPointName) {
-    ExtensionPoint extensionPoint = myExtensionPoints.get(extensionPointName);
+  public @NotNull List<ExtensionPoint<?>> getExtensionPoints() {
+    return Collections.unmodifiableList(new ArrayList<>(extensionPoints.values()));
+  }
+
+  @ApiStatus.Internal
+  public @Nullable <T> T findExtensionByClass(@NotNull Class<T> aClass) {
+    // TeamCity plugin wants DefaultDebugExecutor in constructor
+    if (aClass.getName().equals("com.intellij.execution.executors.DefaultDebugExecutor")) {
+      //noinspection unchecked
+      return ((ExtensionPointImpl<T>)extensionPoints.get("com.intellij.executor")).findExtension(aClass, false, ThreeState.YES);
+    }
+
+    for (ExtensionPointImpl<?> point : extensionPoints.values()) {
+      if (!(point instanceof InterfaceExtensionPoint)) {
+        continue;
+      }
+
+      try {
+        Class<?> extensionClass = point.getExtensionClass();
+        if (!extensionClass.isAssignableFrom(aClass)) {
+          continue;
+        }
+
+        //noinspection unchecked
+        T extension = ((ExtensionPointImpl<T>)point).findExtension(aClass, false, ThreeState.YES);
+        if (extension != null) {
+          return extension;
+        }
+      }
+      catch (Throwable e) {
+        LOG.warn("error during findExtensionPointByClass", e);
+      }
+    }
+    return null;
+  }
+
+  @Override
+  public void unregisterExtensionPoint(@NotNull String extensionPointName) {
+    ExtensionPointImpl<?> extensionPoint = extensionPoints.get(extensionPointName);
     if (extensionPoint != null) {
       extensionPoint.reset();
-      myExtensionPoints.remove(extensionPointName);
-      notifyEPRemoved(extensionPoint);
-    }
-  }
-
-  private void notifyEPRemoved(@NotNull ExtensionPoint extensionPoint) {
-    Collection<ExtensionPointAvailabilityListener> listeners;
-    synchronized (myAvailabilityListeners) {
-      listeners = myAvailabilityListeners.get(extensionPoint.getName());
-    }
-    for (final ExtensionPointAvailabilityListener listener : listeners) {
-      listener.extensionPointRemoved(extensionPoint);
+      extensionPoints.remove(extensionPointName);
     }
   }
 
   @Override
   public boolean hasExtensionPoint(@NotNull String extensionPointName) {
-    return myExtensionPoints.containsKey(extensionPointName);
+    return extensionPoints.containsKey(extensionPointName);
   }
 
   @Override
@@ -388,15 +358,8 @@ public class ExtensionsAreaImpl implements ExtensionsArea {
     return hasExtensionPoint(extensionPointName.getName());
   }
 
-  void removeAllComponents(@NotNull Set<ExtensionComponentAdapter> extensionAdapters) {
-    for (final Object extensionAdapter : extensionAdapters) {
-      ExtensionComponentAdapter componentAdapter = (ExtensionComponentAdapter)extensionAdapter;
-      internalGetPluginContainer().unregisterComponent(componentAdapter.getComponentKey());
-    }
-  }
-
   @Override
   public String toString() {
-    return (myAreaClass == null ? "Root" : myAreaClass)+" Area";
+    return componentManager.toString();
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.service.project.wizard;
 
 import com.intellij.icons.AllIcons;
@@ -17,8 +17,10 @@ import com.intellij.openapi.externalSystem.service.ui.SelectExternalProjectDialo
 import com.intellij.openapi.externalSystem.settings.ExternalProjectSettings;
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
 import com.intellij.openapi.fileTypes.FileTypes;
+import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
+import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.EditorTextField;
 import com.intellij.util.ArrayUtil;
@@ -28,14 +30,13 @@ import com.intellij.util.NullableConsumer;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.TestOnly;
 import org.jetbrains.plugins.gradle.util.GradleConstants;
 
 import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.Collection;
-
-import static org.jetbrains.plugins.gradle.service.project.wizard.GradleModuleWizardStep.isGradleModuleExist;
 
 public class GradleParentProjectForm implements Disposable {
 
@@ -60,7 +61,7 @@ public class GradleParentProjectForm implements Disposable {
     myProjectOrNull = context.getProject();
     myContext = context;
     myConsumer = consumer == null ? EmptyConsumer.getInstance() : consumer;
-    myIsVisible = !context.isCreatingNewProject() && myProjectOrNull != null && isGradleModuleExist(context);
+    myIsVisible = !context.isCreatingNewProject() && myProjectOrNull != null && gradleModuleExists(context);
     initComponents();
   }
 
@@ -71,7 +72,7 @@ public class GradleParentProjectForm implements Disposable {
   private void initComponents() {
     myPanel.setVisible(myIsVisible);
     if (!myIsVisible) return;
-    mySelectParent.setIcon(AllIcons.Actions.Module);
+    mySelectParent.setIcon(AllIcons.Nodes.Module);
     mySelectParent.addActionListener(new ActionListener() {
       @Override
       public void actionPerformed(ActionEvent e) {
@@ -91,6 +92,11 @@ public class GradleParentProjectForm implements Disposable {
   @Nullable
   public ProjectData getParentProject() {
     return myParent;
+  }
+
+  @TestOnly
+  public void setParentProject(@Nullable ProjectData parent) {
+    myParent = parent;
   }
 
   public boolean isVisible() {
@@ -130,8 +136,18 @@ public class GradleParentProjectForm implements Disposable {
   private ProjectData findPotentialParentProject(@Nullable Project project) {
     if (project == null) return null;
 
-    ExternalProjectSettings linkedProjectSettings =
-      ExternalSystemApiUtil.getSettings(project, GradleConstants.SYSTEM_ID).getLinkedProjectSettings(myContext.getProjectFileDirectory());
+    String contextProjectFileDirectory = myContext.getProjectFileDirectory();
+    ExternalProjectSettings linkedProjectSettings = null;
+    for (Object settings : ExternalSystemApiUtil.getSettings(project, GradleConstants.SYSTEM_ID).getLinkedProjectsSettings()) {
+      if (settings instanceof ExternalProjectSettings) {
+        String projectPath = ((ExternalProjectSettings)settings).getExternalProjectPath();
+        if (FileUtil.isAncestor(projectPath, contextProjectFileDirectory, false)) {
+          linkedProjectSettings = (ExternalProjectSettings)settings;
+          break;
+        }
+      }
+    }
+
     if(linkedProjectSettings == null) return null;
 
     final ExternalProjectInfo projectInfo =
@@ -216,5 +232,12 @@ public class GradleParentProjectForm implements Disposable {
       }
       super.removeNotify();
     }
+  }
+
+  public static boolean gradleModuleExists(WizardContext myContext) {
+    for (Module module : myContext.getModulesProvider().getModules()) {
+      if (ExternalSystemApiUtil.isExternalSystemAwareModule(GradleConstants.SYSTEM_ID, module)) return true;
+    }
+    return false;
   }
 }

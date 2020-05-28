@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 @file:Suppress("PropertyName")
 
 package com.intellij.configurationStore.xml
@@ -7,12 +7,16 @@ import com.intellij.configurationStore.StoredPropertyStateTest
 import com.intellij.configurationStore.clearBindingCache
 import com.intellij.configurationStore.deserialize
 import com.intellij.configurationStore.serialize
+import com.intellij.openapi.util.JDOMUtil
 import com.intellij.openapi.util.text.StringUtil
+import com.intellij.serialization.SerializationException
 import com.intellij.testFramework.UsefulTestCase
 import com.intellij.testFramework.assertConcurrent
 import com.intellij.testFramework.assertions.Assertions.assertThat
-import com.intellij.util.loadElement
-import com.intellij.util.xmlb.*
+import com.intellij.util.xmlb.Accessor
+import com.intellij.util.xmlb.SerializationFilter
+import com.intellij.util.xmlb.SkipDefaultsSerializationFilter
+import com.intellij.util.xmlb.XmlSerializer
 import com.intellij.util.xmlb.annotations.*
 import junit.framework.TestCase
 import org.intellij.lang.annotations.Language
@@ -32,7 +36,8 @@ import java.util.*
   KotlinXmlSerializerTest::class,
   XmlSerializerConversionTest::class,
   XmlSerializerListTest::class,
-  XmlSerializerSetTest::class
+  XmlSerializerSetTest::class,
+  ForbidSensitiveInformationTest::class
 )
 class XmlSerializerTestSuite
 
@@ -235,7 +240,7 @@ internal class XmlSerializerTest {
     assertConcurrent(*Array(5) {
       {
         for (i in 0..9) {
-          val bean = e.deserialize<BeanWithFieldWithTagAnnotation>()
+          val bean = deserialize<BeanWithFieldWithTagAnnotation>(e)
           assertThat(bean).isNotNull()
           assertThat(bean.STRING_V).isEqualTo("x")
         }
@@ -279,13 +284,13 @@ internal class XmlSerializerTest {
     bean.INT_V = 987
     bean.STRING_V = "1234"
 
-    val element = bean.serialize()!!
+    val element = serialize(bean)!!
 
     val node = element.children.get(0)
     element.removeContent(node)
     element.addContent(node)
 
-    bean = element.deserialize()
+    bean = deserialize(element)
     assertThat(bean.INT_V).isEqualTo(987)
     assertThat(bean.STRING_V).isEqualTo("1234")
   }
@@ -325,7 +330,7 @@ internal class XmlSerializerTest {
     try {
       testSerializer("<BeanWithPropertyWithoutTagOnPrimitiveValue><name>hello</name></BeanWithPropertyWithoutTagOnPrimitiveValue>", bean)
     }
-    catch (e: XmlSerializationException) {
+    catch (e: SerializationException) {
       return
     }
 
@@ -420,13 +425,13 @@ internal class XmlSerializerTest {
   }
 
   @Test fun deserializeFromFormattedXML() {
-    val bean = loadElement("""
-    <bean>
-    <option name="intV" value="2"/>
-    <vValue v="1"/>
-    <vValue v="2"/>
-    <vValue v="3"/>
-  </bean>""").deserialize<BeanWithArrayWithoutAllTag>()
+    val bean = deserialize<BeanWithArrayWithoutAllTag>(JDOMUtil.load("""
+        <bean>
+        <option name="intV" value="2"/>
+        <vValue v="1"/>
+        <vValue v="2"/>
+        <vValue v="3"/>
+      </bean>"""))
     assertThat(bean.intV).isEqualTo(2)
     assertThat("[1, 2, 3]").isEqualTo(Arrays.asList(*bean.v).toString())
   }
@@ -459,7 +464,7 @@ internal class XmlSerializerTest {
 
   private class PropertyFilterTest : SerializationFilter {
     override fun accepts(accessor: Accessor, bean: Any): Boolean {
-      return accessor.read(bean) != "skip"
+      return accessor.readUnsafe(bean) != "skip"
     }
   }
 
@@ -501,7 +506,8 @@ internal class XmlSerializerTest {
   }
 
   @Test fun deserializeJDOMElementField() {
-    val bean = loadElement("<BeanWithJDOMElement><option name=\"STRING_V\" value=\"bye\"/><actions><action/><action/></actions></BeanWithJDOMElement>").deserialize<BeanWithJDOMElement>()
+    val bean = deserialize<BeanWithJDOMElement>(JDOMUtil.load(
+      "<BeanWithJDOMElement><option name=\"STRING_V\" value=\"bye\"/><actions><action/><action/></actions></BeanWithJDOMElement>"))
 
     assertThat(bean.STRING_V).isEqualTo("bye")
     assertThat(bean.actions).isNotNull
@@ -515,7 +521,7 @@ internal class XmlSerializerTest {
 
   @Test fun jdomElementArrayField() {
     val text = "<BeanWithJDOMElementArray>\n" + "  <option name=\"STRING_V\" value=\"bye\" />\n" + "  <actions>\n" + "    <action />\n" + "    <action />\n" + "  </actions>\n" + "  <actions>\n" + "    <action />\n" + "  </actions>\n" + "</BeanWithJDOMElementArray>"
-    val bean = loadElement(text).deserialize<BeanWithJDOMElementArray>()
+    val bean = deserialize<BeanWithJDOMElementArray>(JDOMUtil.load(text))
 
     TestCase.assertEquals("bye", bean.STRING_V)
     TestCase.assertNotNull(bean.actions)
@@ -608,7 +614,8 @@ internal class XmlSerializerTest {
     val bean = BeanWithPublicFields()
     bean.STRING_V = "zzz"
 
-    XmlSerializer.deserializeInto(bean, loadElement("<BeanWithPublicFields><option name=\"INT_V\" value=\"999\"/></BeanWithPublicFields>"))
+    XmlSerializer.deserializeInto(bean,
+                                  JDOMUtil.load("<BeanWithPublicFields><option name=\"INT_V\" value=\"999\"/></BeanWithPublicFields>"))
 
     assertThat(bean.INT_V).isEqualTo(999)
     assertThat(bean.STRING_V).isEqualTo("zzz")
@@ -627,40 +634,53 @@ internal class XmlSerializerTest {
     testSerializer("<BeanWithDefaultAttributeName foo=\"foo\" />", BeanWithDefaultAttributeName())
   }
 
-  private class Bean2 {
-    @Attribute
-    var ab: String? = null
+  @Test
+  fun ordered() {
+    @Tag("bean")
+    class Bean {
+      @Attribute
+      var ab: String? = null
 
-    @Attribute
-    var module: String? = null
+      @Attribute
+      var module: String? = null
 
-    @Suppress("unused")
-    @Attribute
-    var ac: String? = null
-  }
+      @Suppress("unused")
+      @Attribute
+      var ac: String? = null
+    }
 
-  @Test fun ordered() {
-    val bean = Bean2()
+    val bean = Bean()
     bean.module = "module"
     bean.ab = "ab"
-    testSerializer("<Bean2 ab=\"ab\" module=\"module\" />", bean, SkipDefaultsSerializationFilter())
+    testSerializer("<bean ab=\"ab\" module=\"module\" />", bean, SkipDefaultsSerializationFilter())
   }
 
-  @Test fun cdataAfterNewLine() {
+  @Test
+  fun cdataAfterNewLine() {
     @Tag("bean")
     data class Bean(@Tag val description: String? = null)
 
-    var bean = loadElement("""<bean>
-  <description>
-    <![CDATA[
-    <h4>Node.js integration</h4>
-    ]]>
-  </description>
-</bean>""").deserialize<Bean>()
+    var bean = deserialize<Bean>(JDOMUtil.load("""<bean>
+      <description>
+        <![CDATA[
+        <h4>Node.js integration</h4>
+        ]]>
+      </description>
+    </bean>"""))
     assertThat(bean.description).isEqualToIgnoringWhitespace("<h4>Node.js integration</h4>")
 
-    bean = loadElement("""<bean><description><![CDATA[<h4>Node.js integration</h4>]]></description></bean>""").deserialize()
+    bean = deserialize(JDOMUtil.load("""<bean><description><![CDATA[<h4>Node.js integration</h4>]]></description></bean>"""))
     assertThat(bean.description).isEqualTo("<h4>Node.js integration</h4>")
+  }
+
+  @Test
+  fun nullCollection() {
+    class BeanWithCollection {
+      @Property(surroundWithTag = false)
+      @XCollection
+      var collection: List<BeanWithProperty>? = null
+    }
+    testSerializer("<BeanWithCollection />", BeanWithCollection())
   }
 
 //  @Test
@@ -687,13 +707,13 @@ internal class XmlSerializerTest {
 //  }
 }
 
-internal fun assertSerializer(bean: Any, expected: String, filter: SerializationFilter?, description: String = "Serialization failure"): Element {
-  val element = bean.serialize(filter, createElementIfEmpty = true)!!
+internal fun assertSerializer(bean: Any, expected: String, filter: SerializationFilter? = null, description: String = "Serialization failure"): Element {
+  val element = serialize(bean, filter, createElementIfEmpty = true)!!
   assertThat(element).`as`(description).isEqualTo(expected)
   return element
 }
 
-internal fun <T: Any> testSerializer(@Language("XML") expectedText: String, bean: T, filter: SerializationFilter? = null): T {
+fun <T: Any> testSerializer(@Language("XML") expectedText: String, bean: T, filter: SerializationFilter? = null): T {
   val expectedTrimmed = expectedText.trimIndent()
   val element = assertSerializer(bean, expectedTrimmed, filter)
 

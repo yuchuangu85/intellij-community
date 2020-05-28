@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options.schemes;
 
 import com.intellij.openapi.Disposable;
@@ -26,8 +12,8 @@ import com.intellij.ui.ClickListener;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBTextField;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.ui.GraphicsUtil;
-import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -41,8 +27,8 @@ public abstract class AbstractDescriptionAwareSchemesPanel<T extends Scheme> ext
   private static final String EDIT_DESCRIPTION_CARD = "edit.description.card";
   private static final String ERROR_CARD = "error.card";
 
-  private final static KeyStroke ESC_KEY_STROKE = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0, false);
-  private final static KeyStroke ENTER_KEY_STROKE = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0, false);
+  private static final KeyStroke ESC_KEY_STROKE = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0, false);
+  private static final KeyStroke ENTER_KEY_STROKE = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0, false);
 
   private DescriptionLabel myDescriptionLabel;
   private JLabel myWarningLabel;
@@ -50,7 +36,7 @@ public abstract class AbstractDescriptionAwareSchemesPanel<T extends Scheme> ext
   private CardLayout myLayout;
   private AbstractPainter myPainter;
 
-  public AbstractDescriptionAwareSchemesPanel() {
+  protected AbstractDescriptionAwareSchemesPanel() {
     super(0);
   }
 
@@ -65,22 +51,16 @@ public abstract class AbstractDescriptionAwareSchemesPanel<T extends Scheme> ext
     myDescriptionTextField.addFocusListener(new FocusAdapter() {
       @Override
       public void focusLost(FocusEvent e) {
-        showDescription();
+        showDescription(getSelectedScheme());
       }
     });
-    myDescriptionTextField.registerKeyboardAction(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        showDescription();
-        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(getConfigurableFocusComponent(), true));
-      }
+    myDescriptionTextField.registerKeyboardAction(__ -> {
+      showDescription(getSelectedScheme());
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(getConfigurableFocusComponent(), true));
     }, ESC_KEY_STROKE, JComponent.WHEN_FOCUSED);
-    myDescriptionTextField.registerKeyboardAction(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        applyDescription();
-        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(getConfigurableFocusComponent(), true));
-      }
+    myDescriptionTextField.registerKeyboardAction(__ -> {
+      applyDescription();
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(getConfigurableFocusComponent(), true));
     }, ENTER_KEY_STROKE, JComponent.WHEN_FOCUSED);
 
     myDescriptionLabel = new DescriptionLabel();
@@ -114,7 +94,7 @@ public abstract class AbstractDescriptionAwareSchemesPanel<T extends Scheme> ext
         if (myDescriptionTextField.isShowing()) {
           GraphicsUtil.setupAntialiasing(g);
           g.setColor(JBColor.GRAY);
-          g.drawString(EditableSchemesCombo.EDITING_HINT, 0, -JBUI.scale(5));
+          g.drawString(EditableSchemesCombo.EDITING_HINT, 0, -JBUIScale.scale(5));
         }
       }
     };
@@ -132,7 +112,7 @@ public abstract class AbstractDescriptionAwareSchemesPanel<T extends Scheme> ext
   public void selectScheme(@Nullable T scheme) {
     super.selectScheme(scheme);
     if (scheme != null) {
-      showDescription();
+      showDescription(scheme);
     }
   }
 
@@ -141,17 +121,18 @@ public abstract class AbstractDescriptionAwareSchemesPanel<T extends Scheme> ext
     myLayout.show(myInfoComponent, SHOW_DESCRIPTION_CARD);
   }
 
-  public void showDescription() {
-    String newDescription = (((DescriptionAwareSchemeActions<T>)getActions()).getDescription(getSelectedScheme()));
+  void showDescription(@NotNull T scheme) {
+    String newDescription = ((DescriptionAwareSchemeActions<T>)getActions()).getDescription(scheme);
     myDescriptionLabel.setAllText(StringUtil.notNullize(newDescription));
     myLayout.show(myInfoComponent, SHOW_DESCRIPTION_CARD);
     myPainter.setNeedsRepaint(true);
   }
 
-  public void editDescription(@Nullable String startValue) {
+  void editDescription(@Nullable String startValue) {
     myLayout.show(myInfoComponent, EDIT_DESCRIPTION_CARD);
     myDescriptionTextField.setText(StringUtil.notNullize(startValue));
-    IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(myDescriptionTextField, true));
+    SwingUtilities.invokeLater(() -> IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(
+      () -> IdeFocusManager.getGlobalInstance().requestFocus(myDescriptionTextField, true)));
     myPainter.setNeedsRepaint(true);
   }
 
@@ -159,12 +140,13 @@ public abstract class AbstractDescriptionAwareSchemesPanel<T extends Scheme> ext
   protected abstract JComponent getConfigurableFocusComponent();
 
   private void applyDescription() {
-    (((DescriptionAwareSchemeActions<T>)getActions())).setDescription(getSelectedScheme(), myDescriptionTextField.getText());
-    showDescription();
+    T scheme = getSelectedScheme();
+    ((DescriptionAwareSchemeActions<T>)getActions()).setDescription(scheme, myDescriptionTextField.getText());
+    showDescription(scheme);
   }
 
   private static class DescriptionLabel extends JBLabel {
-    private String myAllText;
+    private String myAllText = "";
 
     DescriptionLabel() {
       setForeground(JBColor.GRAY);

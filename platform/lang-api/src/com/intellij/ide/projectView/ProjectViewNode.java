@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.projectView;
 
 import com.intellij.ide.util.treeView.AbstractTreeNode;
@@ -46,7 +32,7 @@ import java.util.List;
 
 public abstract class ProjectViewNode <Value> extends AbstractTreeNode<Value> implements RootsProvider, SettingsProvider {
 
-  protected static final Logger LOG = Logger.getInstance("#com.intellij.ide.projectView.ProjectViewNode");
+  protected static final Logger LOG = Logger.getInstance(ProjectViewNode.class);
 
   private final ViewSettings mySettings;
   private boolean myValidating;
@@ -60,6 +46,7 @@ public abstract class ProjectViewNode <Value> extends AbstractTreeNode<Value> im
    */
   protected ProjectViewNode(Project project, @NotNull Value value, ViewSettings viewSettings) {
     super(project, value);
+
     mySettings = viewSettings;
   }
 
@@ -87,12 +74,12 @@ public abstract class ProjectViewNode <Value> extends AbstractTreeNode<Value> im
     return mySettings;
   }
 
-  public static List<AbstractTreeNode> wrap(Collection objects,
+  public static List<AbstractTreeNode<?>> wrap(Collection<?> objects,
                                             Project project,
-                                            Class<? extends AbstractTreeNode> nodeClass,
+                                            Class<? extends AbstractTreeNode<?>> nodeClass,
                                             ViewSettings settings) {
     try {
-      ArrayList<AbstractTreeNode> result = new ArrayList<>();
+      ArrayList<AbstractTreeNode<?>> result = new ArrayList<>();
       for (Object object : objects) {
         result.add(createTreeNode(nodeClass, project, object, settings));
       }
@@ -105,13 +92,13 @@ public abstract class ProjectViewNode <Value> extends AbstractTreeNode<Value> im
   }
 
   @NotNull
-  public static AbstractTreeNode createTreeNode(Class<? extends AbstractTreeNode> nodeClass,
-                                                Project project,
-                                                Object value,
-                                                ViewSettings settings) throws InstantiationException {
+  public static AbstractTreeNode<?> createTreeNode(Class<? extends AbstractTreeNode<?>> nodeClass,
+                                                   Project project,
+                                                   Object value,
+                                                   ViewSettings settings) throws InstantiationException {
     Object[] parameters = {project, value, settings};
-    for (Constructor<? extends AbstractTreeNode> constructor : (Constructor<? extends AbstractTreeNode>[])nodeClass.getConstructors()) {
-      if (constructor.getParameterTypes().length != 3) continue;
+    for (Constructor<? extends AbstractTreeNode<?>> constructor : (Constructor<? extends AbstractTreeNode<?>>[])nodeClass.getConstructors()) {
+      if (constructor.getParameterCount() != 3) continue;
       try {
         return constructor.newInstance(parameters);
       }
@@ -151,9 +138,9 @@ public abstract class ProjectViewNode <Value> extends AbstractTreeNode<Value> im
       return false;
     }
 
-    Collection<? extends AbstractTreeNode> kids = getChildren();
-    for (final AbstractTreeNode kid : kids) {
-      ProjectViewNode node = (ProjectViewNode)kid;
+    Collection<? extends AbstractTreeNode<?>> kids = getChildren();
+    for (final AbstractTreeNode<?> kid : kids) {
+      ProjectViewNode<?> node = (ProjectViewNode<?>)kid;
       if (node.contains(file)) return true;
     }
     return false;
@@ -163,33 +150,30 @@ public abstract class ProjectViewNode <Value> extends AbstractTreeNode<Value> im
   @Override
   public Collection<VirtualFile> getRoots() {
     Value value = getValue();
-
     if (value instanceof RootsProvider) {
       return ((RootsProvider)value).getRoots();
-    }
-    if (value instanceof PsiFile) {
-      PsiFile vFile = ((PsiFile)value).getContainingFile();
-      if (vFile != null && vFile.getVirtualFile() != null) {
-        return Collections.singleton(vFile.getVirtualFile());
-      }
-      return EMPTY_ROOTS;
     }
     if (value instanceof VirtualFile) {
       return Collections.singleton((VirtualFile)value);
     }
     if (value instanceof PsiFileSystemItem) {
-      return Collections.singleton(((PsiFileSystemItem)value).getVirtualFile());
+      PsiFileSystemItem item = (PsiFileSystemItem)value;
+      return getDefaultRootsFor(item.getVirtualFile());
     }
-
-    return EMPTY_ROOTS;
+    return Collections.emptySet();
   }
 
+  protected static Collection<VirtualFile> getDefaultRootsFor(@Nullable VirtualFile file) {
+    return file != null ? Collections.singleton(file) : Collections.emptySet();
+  }
 
   @Override
   protected boolean hasProblemFileBeneath() {
     if (!Registry.is("projectView.showHierarchyErrors")) return false;
 
-    return WolfTheProblemSolver.getInstance(getProject()).hasProblemFilesBeneath(virtualFile -> {
+    Project project = getProject();
+    WolfTheProblemSolver wolf = project == null ? null : WolfTheProblemSolver.getInstance(project);
+    return wolf != null && wolf.hasProblemFilesBeneath(virtualFile -> {
       Value value;
       return contains(virtualFile)
              // in case of flattened packages, when package node a.b.c contains error file, node a.b might not.

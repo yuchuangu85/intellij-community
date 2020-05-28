@@ -28,6 +28,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.Objects;
 
 import static com.intellij.psi.util.PsiUtil.skipParenthesizedExprDown;
 import static com.intellij.util.ObjectUtils.tryCast;
@@ -113,7 +114,7 @@ class FindExtremumMigration extends BaseStreamApiMigration {
   //  maxPerson = current;
   //}
   @Nullable
-  static private ExtremumTerminal extractIfElseCase(@NotNull PsiStatement[] statements,
+  static private ExtremumTerminal extractIfElseCase(PsiStatement @NotNull [] statements,
                                                     @NotNull TerminalBlock terminalBlock,
                                                     @Nullable List<? extends PsiVariable> nonFinalVariables) {
     if (statements.length != 1) return null;
@@ -159,7 +160,7 @@ class FindExtremumMigration extends BaseStreamApiMigration {
 
   @Nullable
   static private ExtremumTerminal extractRefCase(@NotNull PsiExpression condition,
-                                                 @NotNull PsiStatement[] statements,
+                                                 PsiStatement @NotNull [] statements,
                                                  @NotNull TerminalBlock terminalBlock,
                                                  @NotNull Extractor extractor,
                                                  @Nullable List<PsiVariable> nonFinalVariables,
@@ -234,7 +235,7 @@ class FindExtremumMigration extends BaseStreamApiMigration {
     @Nullable
     ExtremumTerminal extractOriented(@NotNull PsiExpression nullCheckExpr,
                                      @NotNull PsiExpression comparisonExpr,
-                                     @NotNull PsiStatement[] statements,
+                                     PsiStatement @NotNull [] statements,
                                      @NotNull TerminalBlock terminalBlock,
                                      @Nullable List<PsiVariable> nonFinalVars,
                                      boolean isNegated);
@@ -313,7 +314,7 @@ class FindExtremumMigration extends BaseStreamApiMigration {
     @Nullable
     private static ComplexExtremumTerminal extract(@NotNull PsiExpression nullCheckExpr,
                                                    @NotNull PsiExpression comparisonExpr,
-                                                   @NotNull PsiStatement[] statements,
+                                                   PsiStatement @NotNull [] statements,
                                                    @NotNull TerminalBlock terminalBlock,
                                                    @Nullable List<? extends PsiVariable> nonFinalVariables,
                                                    boolean isNegated) {
@@ -399,7 +400,7 @@ class FindExtremumMigration extends BaseStreamApiMigration {
        * @param nullCheckedExtremum extremum that will be used to recognize extremum assignment
        */
       @Nullable
-      private static ComplexAssignment extract(@NotNull PsiStatement[] statements, @NotNull PsiVariable nullCheckedExtremum) {
+      private static ComplexAssignment extract(PsiStatement @NotNull [] statements, @NotNull PsiVariable nullCheckedExtremum) {
         if (statements.length != 2) return null;
         PsiStatement first = statements[0];
         PsiStatement second = statements[1];
@@ -462,8 +463,8 @@ class FindExtremumMigration extends BaseStreamApiMigration {
 
 
       final TerminalBlock terminalBlock;
-      PsiType variableType = variable.getType();
-      if(!variableType.equals(myExtremum.getType())) {
+      PsiType variableType = myLoopVarExpression.getType();
+      if(!Objects.equals(variableType, myExtremum.getType())) {
         PsiElementFactory factory = JavaPsiFacade.getElementFactory(variable.getProject());
         PsiExpression variableExpr = factory.createExpressionFromText(name, variable);
         terminalBlock = blockWithMap.add(new StreamApiMigrationInspection.MapOp(variableExpr, variable, type));
@@ -500,7 +501,7 @@ class FindExtremumMigration extends BaseStreamApiMigration {
 
     @Nullable
     private static PrimitiveExtremumTerminal extract(@NotNull PsiExpression condition,
-                                                     @NotNull PsiStatement[] statements,
+                                                     PsiStatement @NotNull [] statements,
                                                      @NotNull TerminalBlock terminalBlock,
                                                      @Nullable List<? extends PsiVariable> nonFinalVariables,
                                                      boolean isNegated) {
@@ -526,8 +527,7 @@ class FindExtremumMigration extends BaseStreamApiMigration {
 
       PsiExpression extremumInitializer = extremum.getInitializer();
       if (!ExpressionUtils.isEvaluatedAtCompileTime(extremumInitializer)) return null;
-      return new PrimitiveExtremumTerminal(comparison.isMax(), terminalBlock, comparisonLoopVarExpr, extremum, extremumInitializer
-      );
+      return new PrimitiveExtremumTerminal(comparison.isMax(), terminalBlock, comparisonLoopVarExpr, extremum, extremumInitializer);
     }
   }
 
@@ -584,7 +584,7 @@ class FindExtremumMigration extends BaseStreamApiMigration {
     @Nullable
     private static SimpleRefExtremumTerminal extract(@NotNull PsiExpression nullCheckExpr,
                                                      @NotNull PsiExpression comparisonExpr,
-                                                     @NotNull PsiStatement[] statements,
+                                                     PsiStatement @NotNull [] statements,
                                                      @NotNull TerminalBlock terminalBlock,
                                                      @Nullable List<? extends PsiVariable> nonFinalVars) {
       PsiBinaryExpression nullCheckBinary = tryCast(nullCheckExpr, PsiBinaryExpression.class);

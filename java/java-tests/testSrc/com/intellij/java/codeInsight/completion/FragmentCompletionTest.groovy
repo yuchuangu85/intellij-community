@@ -18,15 +18,18 @@ package com.intellij.java.codeInsight.completion
 import com.intellij.codeInsight.completion.CompletionParameters
 import com.intellij.codeInsight.completion.CompletionType
 import com.intellij.codeInsight.completion.JavaCompletionUtil
-import com.intellij.openapi.fileTypes.StdFileTypes
+import com.intellij.ide.highlighter.JavaFileType
+import com.intellij.lang.java.JavaLanguage
 import com.intellij.psi.*
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import com.intellij.util.PairFunction
+import groovy.transform.CompileStatic
 
 /**
  * @author peter
  */
-class FragmentCompletionTest extends LightCodeInsightFixtureTestCase {
+@CompileStatic
+class FragmentCompletionTest extends LightJavaCodeInsightFixtureTestCase {
   void testDontCompleteFieldsAndMethodsInReferenceCodeFragment() throws Throwable {
     final String text = CommonClassNames.JAVA_LANG_OBJECT + ".<caret>"
     PsiFile file = JavaCodeFragmentFactory.getInstance(project).createReferenceCodeFragment(text, null, true, true)
@@ -89,7 +92,7 @@ class FragmentCompletionTest extends LightCodeInsightFixtureTestCase {
 
   void testQualifierCastingInExpressionCodeFragment() throws Throwable {
     final ctxText = "class Bar {{ Object o; o=null }}"
-    final ctxFile = createLightFile(StdFileTypes.JAVA, ctxText)
+    final ctxFile = createLightFile(JavaFileType.INSTANCE, ctxText)
     final context = ctxFile.findElementAt(ctxText.indexOf("o="))
     assert context
 
@@ -101,7 +104,7 @@ class FragmentCompletionTest extends LightCodeInsightFixtureTestCase {
 
   void testNoGenericQualifierCastingWithRuntimeType() throws Throwable {
     final ctxText = "import java.util.*; class Bar {{ Map<Integer,Integer> map = new HashMap<Integer,Integer>(); map=null; }}"
-    final ctxFile = createLightFile(StdFileTypes.JAVA, ctxText)
+    final ctxFile = createLightFile(JavaFileType.INSTANCE, ctxText)
     final context = ctxFile.findElementAt(ctxText.indexOf("map="))
     assert context
     
@@ -146,6 +149,40 @@ class FragmentCompletionTest extends LightCodeInsightFixtureTestCase {
     myFixture.configureFromExistingVirtualFile(file.getVirtualFile())
     myFixture.completeBasic()
     assert myFixture.lookupElementStrings.contains('context')
+  }
+
+  void "test proximity ordering in scratch-like file"() {
+    def barField = myFixture.addClass('package bar; public class Field {}')
+    def fooField = myFixture.addClass('package foo; public class Field {}')
+    def text = 'import foo.Field; class C { Field<caret> }'
+    def file = PsiFileFactory.getInstance(project).createFileFromText('a.java', JavaLanguage.INSTANCE, text, true, false)
+    myFixture.configureFromExistingVirtualFile(file.virtualFile)
+    def items = myFixture.completeBasic()
+    myFixture.assertPreferredCompletionItems 0, 'Field', 'Field'
+    assert fooField == items[0].object
+    assert barField == items[1].object
+  }
+
+  void "test package default class in code fragment"() {
+    myFixture.addClass "class ABCD {}"
+    PsiJavaCodeReferenceCodeFragment fragment =
+      JavaCodeFragmentFactory.getInstance(getProject()).createReferenceCodeFragment("ABC<caret>", null, true, true)
+    fragment.setVisibilityChecker(JavaCodeFragment.VisibilityChecker.EVERYTHING_VISIBLE)
+    myFixture.configureFromExistingVirtualFile(fragment.getVirtualFile())
+    myFixture.complete(CompletionType.BASIC)
+    assert myFixture.lookupElements.find { (it.lookupString == "ABCD") } != null
+  }
+
+  void "test qualified class in code fragment"() {
+    myFixture.addClass "package foo; public class Foo1 {}"
+    PsiJavaCodeReferenceCodeFragment fragment =
+      JavaCodeFragmentFactory.getInstance(getProject()).createReferenceCodeFragment("Foo<caret>", null, true, true)
+    fragment.setVisibilityChecker(JavaCodeFragment.VisibilityChecker.EVERYTHING_VISIBLE)
+    myFixture.configureFromExistingVirtualFile(fragment.getVirtualFile())
+    myFixture.completeBasic()
+    assert myFixture.lookupElements.find { (it.lookupString == "Foo1") } != null
+    myFixture.type('\n')
+    myFixture.checkResult("foo.Foo1");
   }
 
 }

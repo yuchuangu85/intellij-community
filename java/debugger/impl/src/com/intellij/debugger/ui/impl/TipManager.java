@@ -1,8 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.ui.impl;
 
+import com.intellij.application.Topics;
 import com.intellij.ide.FrameStateListener;
-import com.intellij.ide.FrameStateManager;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -26,11 +26,7 @@ import javax.swing.event.PopupMenuListener;
 import java.awt.*;
 import java.awt.event.*;
 
-/**
- * @author lex
- */
-public class TipManager implements Disposable, PopupMenuListener {
-
+public final class TipManager implements Disposable, PopupMenuListener {
   private volatile boolean myIsDisposed = false;
   private boolean myPopupShown;
   private MyAwtPreprocessor myHideCanceller;
@@ -42,7 +38,6 @@ public class TipManager implements Disposable, PopupMenuListener {
     MouseEvent createTooltipEvent(MouseEvent candidateEvent);
     boolean isFocusOwner();
   }
-
 
   private boolean isOverTip(MouseEvent e) {
     if (myCurrentTooltip != null) {
@@ -222,7 +217,7 @@ public class TipManager implements Disposable, PopupMenuListener {
   public void hideTooltip() {
     hideTooltip(true);
   }
-  
+
   public void hideTooltip(boolean now) {
     if (myTipPopup == null) return;
 
@@ -246,7 +241,6 @@ public class TipManager implements Disposable, PopupMenuListener {
   private final JComponent myComponent;
   private MouseListener myMouseListener = new MyMouseListener();
   private MouseMotionListener myMouseMotionListener = new MyMouseMotionListener();
-  private FrameStateListener myFrameStateListener = new MyFrameStateListener();
 
   private final Alarm myShowAlarm = new Alarm();
   private final Alarm myHideAlarm = new Alarm();
@@ -259,10 +253,6 @@ public class TipManager implements Disposable, PopupMenuListener {
       @Override
       public void showNotify() {
         installListeners();
-      }
-
-      @Override
-      public void hideNotify() {
       }
     });
 
@@ -300,7 +290,7 @@ public class TipManager implements Disposable, PopupMenuListener {
 
     myHideCanceller = new MyAwtPreprocessor();
     Toolkit.getDefaultToolkit().addAWTEventListener(myHideCanceller, AWTEvent.MOUSE_MOTION_EVENT_MASK | AWTEvent.KEY_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK);
-    FrameStateManager.getInstance().addListener(myFrameStateListener);
+    Topics.subscribe(FrameStateListener.TOPIC, this, new MyFrameStateListener());
   }
 
   @Override
@@ -315,8 +305,6 @@ public class TipManager implements Disposable, PopupMenuListener {
     myShowAlarm.cancelAllRequests();
     myMouseListener = null;
     myMouseMotionListener = null;
-    FrameStateManager.getInstance().removeListener(myFrameStateListener);
-    myFrameStateListener = null;
   }
 
   private class MyAwtPreprocessor implements AWTEventListener {

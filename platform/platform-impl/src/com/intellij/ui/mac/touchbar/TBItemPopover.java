@@ -3,21 +3,20 @@ package com.intellij.ui.mac.touchbar;
 
 import com.intellij.openapi.util.IconLoader;
 import com.intellij.ui.mac.foundation.ID;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 
 class TBItemPopover extends TBItem {
-  private Icon myIcon;
-  private String myText;
-  private int myWidthPix;
+  private final Icon myIcon;
+  private final String myText;
+  private final int myWidthPix;
   private TouchBar myExpandTB;
   private TouchBar myTapAndHoldTB;
 
   // NOTE: make popover with 'flexible' width when widthInPix <= 0
-  TBItemPopover(@NotNull String uid, @Nullable ItemListener listener, Icon icon, String text, int widthInPix, TouchBar expandTB, TouchBar tapAndHoldTB) {
-    super(uid, listener);
+  TBItemPopover(@Nullable ItemListener listener, Icon icon, String text, int widthInPix, TouchBar expandTB, TouchBar tapAndHoldTB) {
+    super("popover", listener);
     myIcon = icon != null ? IconLoader.getDarkIcon(icon, true) : null;
     myText = text;
     myWidthPix = widthInPix;
@@ -38,16 +37,9 @@ class TBItemPopover extends TBItem {
     super.releaseNativePeer();
   }
 
-  // NOTE: popover is immutable (at this moment) => update doesn't called => _create/_update can be unsyncronized
-
-  @Override
-  protected void _updateNativePeer() {
-    NST.updatePopover(myNativePeer, myWidthPix, myText, myIcon, getNativePeer(myExpandTB), getNativePeer(myTapAndHoldTB));
-  }
-
   @Override
   protected ID _createNativePeer() {
-    return NST.createPopover(myUid, myWidthPix, myText, myIcon, getNativePeer(myExpandTB), getNativePeer(myTapAndHoldTB));
+    return NST.createPopover(getUid(), myWidthPix, myText, myIcon, getNativePeer(myExpandTB), getNativePeer(myTapAndHoldTB));
   }
 
   private static ID getNativePeer(TouchBar tb) { return tb == null ? ID.NIL : tb.getNativePeer(); }

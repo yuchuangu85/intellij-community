@@ -1,16 +1,20 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.editorActions;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.intellij.codeInsight.CodeInsightSettings;
 import com.intellij.ide.PasteProvider;
 import com.intellij.lang.LanguageFormatting;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.command.impl.UndoManagerImpl;
+import com.intellij.openapi.command.undo.UndoManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.*;
 import com.intellij.openapi.editor.actionSystem.EditorActionHandler;
 import com.intellij.openapi.editor.actionSystem.EditorActionManager;
 import com.intellij.openapi.editor.actionSystem.EditorTextInsertHandler;
+import com.intellij.openapi.editor.actions.BasePasteHandler;
 import com.intellij.openapi.editor.actions.PasteAction;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.extensions.ExtensionPointName;
@@ -29,7 +33,6 @@ import com.intellij.util.DocumentUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.Producer;
 import com.intellij.util.text.CharArrayUtil;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -38,7 +41,7 @@ import java.awt.datatransfer.Transferable;
 import java.util.*;
 
 public class PasteHandler extends EditorActionHandler implements EditorTextInsertHandler {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.editorActions.PasteHandler");
+  private static final Logger LOG = Logger.getInstance(PasteHandler.class);
   private static final ExtensionPointName<PasteProvider> EP_NAME = ExtensionPointName.create("com.intellij.customPasteProvider");
 
   private static final int LINE_LIMIT_FOR_BULK_CHANGE = 5000;
@@ -56,7 +59,7 @@ public class PasteHandler extends EditorActionHandler implements EditorTextInser
   }
 
   @Override
-  public void execute(final Editor editor, final DataContext dataContext, @Nullable final Producer<Transferable> producer) {
+  public void execute(Editor editor, DataContext dataContext, @Nullable Producer<Transferable> producer) {
     final Transferable transferable = EditorModificationUtil.getContentsToPasteToEditor(producer);
     if (transferable == null) return;
 
@@ -67,11 +70,8 @@ public class PasteHandler extends EditorActionHandler implements EditorTextInser
       return;
     }
 
-    DataContext context = new DataContext() {
-      @Override
-      public Object getData(@NotNull @NonNls String dataId) {
-        return PasteAction.TRANSFERABLE_PROVIDER.is(dataId) ? (Producer<Transferable>)() -> transferable : dataContext.getData(dataId);
-      }
+    DataContext context = dataId -> {
+      return PasteAction.TRANSFERABLE_PROVIDER.is(dataId) ? (Producer<Transferable>)() -> transferable : dataContext.getData(dataId);
     };
 
     final Project project = editor.getProject();
@@ -90,24 +90,24 @@ public class PasteHandler extends EditorActionHandler implements EditorTextInser
       return;
     }
 
-    DumbService.getInstance(project).setAlternativeResolveEnabled(true);
-    document.startGuardedBlockChecking();
-    try {
-      for (PasteProvider provider : EP_NAME.getExtensionList()) {
-        if (provider.isPasteEnabled(context)) {
-          provider.performPaste(context);
-          return;
+    DumbService.getInstance(project).runWithAlternativeResolveEnabled(() -> {
+      document.startGuardedBlockChecking();
+      try {
+        for (PasteProvider provider : EP_NAME.getExtensionList()) {
+          if (provider.isPasteEnabled(context)) {
+            provider.performPaste(context);
+            return;
+          }
         }
+        doPaste(editor, project, file, document, transferable);
       }
-      doPaste(editor, project, file, document, transferable);
-    }
-    catch (ReadOnlyFragmentModificationException e) {
-      EditorActionManager.getInstance().getReadonlyFragmentModificationHandler(document).handle(e);
-    }
-    finally {
-      document.stopGuardedBlockChecking();
-      DumbService.getInstance(project).setAlternativeResolveEnabled(false);
-    }
+      catch (ReadOnlyFragmentModificationException e) {
+        EditorActionManager.getInstance().getReadonlyFragmentModificationHandler(document).handle(e);
+      }
+      finally {
+        document.stopGuardedBlockChecking();
+      }
+    });
   }
 
   private static void doPaste(final Editor editor,
@@ -125,6 +125,11 @@ public class PasteHandler extends EditorActionHandler implements EditorTextInser
       editor.getComponent().getToolkit().beep();
     }
     if (text == null) return;
+    int textLength = text.length();
+    if (BasePasteHandler.isContentTooLarge(textLength)) {
+      BasePasteHandler.contentLengthLimitExceededMessage(textLength);
+      return;
+    }
 
     final CodeInsightSettings settings = CodeInsightSettings.getInstance();
 
@@ -172,11 +177,12 @@ public class PasteHandler extends EditorActionHandler implements EditorTextInser
     }
 
     final String _text = text;
-    ApplicationManager.getApplication().runWriteAction(
-      () -> {
-        EditorModificationUtil.insertStringAtCaret(editor, _text, false, true);
+    ApplicationManager.getApplication().runWriteAction(() -> {
+      EditorModificationUtil.insertStringAtCaret(editor, _text, false, true);
+      if (!project.isDisposed()) {
+        ((UndoManagerImpl)UndoManager.getInstance(project)).addDocumentAsAffected(editor.getDocument());
       }
-    );
+    });
 
     int length = text.length();
     int offset = caretModel.getOffset() - length;
@@ -236,7 +242,8 @@ public class PasteHandler extends EditorActionHandler implements EditorTextInser
     }
   }
 
-  static void indentBlock(Project project, Editor editor, final int startOffset, final int endOffset, int originalCaretCol) {
+  @VisibleForTesting
+  public static void indentBlock(Project project, Editor editor, final int startOffset, final int endOffset, int originalCaretCol) {
     final PsiDocumentManager documentManager = PsiDocumentManager.getInstance(project);
     documentManager.commitAllDocuments();
     final Document document = editor.getDocument();
@@ -477,7 +484,7 @@ public class PasteHandler extends EditorActionHandler implements EditorTextInser
         desiredSymbolsToRemove = -diff;
       }
 
-      Runnable deindentTask = () -> {
+      Runnable unindentTask = () -> {
         for (int line = anchorLine + 1; line <= lastLine; line++) {
           int currentLineStart = document.getLineStartOffset(line);
           int currentLineIndentOffset = CharArrayUtil.shiftForward(chars, currentLineStart, " \t");
@@ -487,7 +494,7 @@ public class PasteHandler extends EditorActionHandler implements EditorTextInser
           }
         }
       };
-      DocumentUtil.executeInBulk(document, lastLine - anchorLine > LINE_LIMIT_FOR_BULK_CHANGE, deindentTask);
+      DocumentUtil.executeInBulk(document, lastLine - anchorLine > LINE_LIMIT_FOR_BULK_CHANGE, unindentTask);
     }
     else {
       CharSequence toInsert = chars.subSequence(anchorLineStart, diff + startOffset);

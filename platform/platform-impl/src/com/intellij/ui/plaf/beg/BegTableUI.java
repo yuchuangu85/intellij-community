@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.plaf.beg;
 
 import com.intellij.openapi.wm.IdeFocusManager;
@@ -13,9 +13,6 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
-/**
- * @author mike
- */
 public class BegTableUI extends BasicTableUI {
   private final KeyAdapter myAdapter= new KeyAdapter() {
       @Override
@@ -47,6 +44,16 @@ public class BegTableUI extends BasicTableUI {
   }
 
   @Override
+  public void installDefaults() {
+    super.installDefaults();
+
+    int rowHeight = UIManager.getInt("Table.rowHeight");
+    if (rowHeight > 0) {
+      LookAndFeel.installProperty(table, "rowHeight", rowHeight);
+    }
+  }
+
+  @Override
   protected KeyListener createKeyListener() {
     return myAdapter;
   }
@@ -60,9 +67,7 @@ public class BegTableUI extends BasicTableUI {
         if (cellEditor != null && !cellEditor.stopCellEditing()) {
           return;
         }
-        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-          IdeFocusManager.getGlobalInstance().requestFocus(table, true);
-        });
+        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(table, true));
         return;
       }
       ListSelectionModel rsm = table.getSelectionModel();
@@ -73,9 +78,7 @@ public class BegTableUI extends BasicTableUI {
       Component editorComp = table.getEditorComponent();
       if (editorComp != null) {
         editorComp.addKeyListener(myAdapter);
-        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-          IdeFocusManager.getGlobalInstance().requestFocus(editorComp, true);
-        });
+        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(editorComp, true));
       }
     }
   }

@@ -6,6 +6,16 @@ import java.util.ArrayList;
 public class UnnecessaryParenthesesInspection
 {
 
+    void switchExpressions() {
+      String s = (switch(1) {
+        case 1 -> "one";
+        default -> "other";
+      }).substring(1);
+      int z = -<warning descr="Parentheses around '(switch(1) { default -> 10; })' are unnecessary">(switch(1) {
+        default -> 10;
+      })</warning> + 10;
+    }
+
     public int foo()
     {
         final String s = "foo" + (3 + 4); // do not warn here
@@ -61,8 +71,8 @@ public class UnnecessaryParenthesesInspection
         private float pageHeight; // in cm.
 
         public void foo() {
-            final float width = <error descr="Cannot resolve method 'getSize()'">getSize</error>().width; // actual width in dots
-            final float height = <error descr="Cannot resolve method 'getSize()'">getSize</error>().height; // actual height in dots
+            final float width = <error descr="Cannot resolve method 'getSize' in 'ParenBug'">getSize</error>().width; // actual width in dots
+            final float height = <error descr="Cannot resolve method 'getSize' in 'ParenBug'">getSize</error>().height; // actual height in dots
 
             // to determine the ratio, do the following:
             final float ratio;

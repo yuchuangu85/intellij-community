@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.openapi.roots.ui.configuration;
 
@@ -37,13 +23,14 @@ import com.intellij.openapi.roots.ui.configuration.actions.IconWithTextAction;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
-import com.intellij.openapi.vfs.ex.VirtualFileManagerAdapter;
+import com.intellij.openapi.vfs.VirtualFileManagerListener;
 import com.intellij.ui.JBSplitter;
 import com.intellij.ui.OnePixelSplitter;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.border.CustomLineBorder;
 import com.intellij.ui.roots.ToolbarPanel;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.JBInsets;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
@@ -65,9 +52,12 @@ import java.util.Map;
  * @author Eugene Zhuravlev
  */
 public class CommonContentEntriesEditor extends ModuleElementsEditor {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.roots.ui.configuration.ContentEntriesEditor");
-  public static final String NAME = ProjectBundle.message("module.paths.title");
-  private static final Color BACKGROUND_COLOR = UIUtil.getListBackground();
+  private static final Logger LOG = Logger.getInstance(CommonContentEntriesEditor.class);
+  /**
+   * @deprecated Use {@link #getName()} instead
+   */
+  @Deprecated
+  public static final String NAME = "Sources";
 
   protected ContentEntryTreeEditor myRootTreeEditor;
   private MyContentEntryEditorListener myContentEntryEditorListener;
@@ -92,7 +82,7 @@ public class CommonContentEntriesEditor extends ModuleElementsEditor {
     for (JpsModuleSourceRootType<?> type : rootTypes) {
       ContainerUtil.addIfNotNull(myEditHandlers, ModuleSourceRootEditHandler.getEditHandler(type));
     }
-    final VirtualFileManagerAdapter fileManagerListener = new VirtualFileManagerAdapter() {
+    final VirtualFileManagerListener fileManagerListener = new VirtualFileManagerListener() {
       @Override
       public void afterRefreshFinish(boolean asynchronous) {
         if (state.getProject().isDisposed()) {
@@ -131,7 +121,7 @@ public class CommonContentEntriesEditor extends ModuleElementsEditor {
 
   @Override
   public String getDisplayName() {
-    return NAME;
+    return getName();
   }
 
   protected final List<ModuleSourceRootEditHandler<?>> getEditHandlers() {
@@ -165,7 +155,7 @@ public class CommonContentEntriesEditor extends ModuleElementsEditor {
     group.add(action);
 
     myEditorsPanel = new ScrollablePanel(new VerticalStackLayout());
-    myEditorsPanel.setBackground(BACKGROUND_COLOR);
+    myEditorsPanel.setBackground(UIUtil.getListBackground());
     JScrollPane myScrollPane = ScrollPaneFactory.createScrollPane(myEditorsPanel, true);
     final ToolbarPanel toolbarPanel = new ToolbarPanel(myScrollPane, group);
     int border = myWithBorders ? 1 : 0;
@@ -183,8 +173,8 @@ public class CommonContentEntriesEditor extends ModuleElementsEditor {
     splitter.setSecondComponent(toolbarPanel);
     JPanel contentPanel = new JPanel(new GridBagLayout());
     final ActionToolbar actionToolbar = ActionManager.getInstance().createActionToolbar("ProjectStructureContentEntries", myRootTreeEditor.getEditingActionsGroup(), true);
-    contentPanel.add(new JLabel("Mark as:"),
-                     new GridBagConstraints(0, 0, 1, 1, 0, 0, GridBagConstraints.WEST, 0, JBUI.insets(0, 10), 0, 0));
+    contentPanel.add(new JLabel(ProjectBundle.message("label.text.mark.as")),
+                     new GridBagConstraints(0, 0, 1, 1, 0, 0, GridBagConstraints.WEST, 0, JBInsets.create(0, 10), 0, 0));
     contentPanel.add(actionToolbar.getComponent(),
                      new GridBagConstraints(1, 0, 1, 1, 1.0, 0.0, GridBagConstraints.WEST, GridBagConstraints.HORIZONTAL,
                                             JBUI.emptyInsets(), 0, 0));
@@ -421,7 +411,7 @@ public class CommonContentEntriesEditor extends ModuleElementsEditor {
             ProjectBundle.message("module.paths.add.content.action.description"), AllIcons.General.Add);
       myDescriptor = new FileChooserDescriptor(false, true, true, false, true, true) {
         @Override
-        public void validateSelectedFiles(VirtualFile[] files) throws Exception {
+        public void validateSelectedFiles(VirtualFile @NotNull [] files) throws Exception {
           validateContentEntriesCandidates(files);
         }
       };
@@ -496,4 +486,7 @@ public class CommonContentEntriesEditor extends ModuleElementsEditor {
 
   }
 
+  public static String getName() {
+    return ProjectBundle.message("module.paths.title");
+  }
 }

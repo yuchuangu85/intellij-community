@@ -1,6 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.xmlb;
 
+import com.intellij.openapi.util.JDOMUtil;
+import com.intellij.serialization.ClassUtil;
+import com.intellij.serialization.MutableAccessor;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.ReflectionUtil;
 import com.intellij.util.xmlb.annotations.MapAnnotation;
@@ -18,24 +21,20 @@ import java.util.*;
 
 import static com.intellij.util.xmlb.Constants.*;
 
-class MapBinding extends Binding implements MultiNodeBinding {
-  private static final Comparator<Object> KEY_COMPARATOR = new Comparator<Object>() {
-    @SuppressWarnings({"unchecked"})
-    @Override
-    public int compare(Object o1, Object o2) {
-      if (o1 instanceof Comparable && o2 instanceof Comparable) {
-        Comparable c1 = (Comparable)o1;
-        Comparable c2 = (Comparable)o2;
-        return c1.compareTo(c2);
-      }
-      return 0;
+final class MapBinding implements MultiNodeBinding, NestedBinding {
+  private static final Comparator<Object> KEY_COMPARATOR = (o1, o2) -> {
+    if (o1 instanceof Comparable && o2 instanceof Comparable) {
+      Comparable c1 = (Comparable)o1;
+      Comparable c2 = (Comparable)o2;
+      return c1.compareTo(c2);
     }
+    return 0;
   };
 
   private final MapAnnotation oldAnnotation;
   private final XMap annotation;
 
-  @NotNull private final Class<? extends Map> mapClass;
+  private final @NotNull Class<? extends Map> mapClass;
 
   private Class<?> keyClass;
   private Class<?> valueClass;
@@ -43,8 +42,10 @@ class MapBinding extends Binding implements MultiNodeBinding {
   private Binding keyBinding;
   private Binding valueBinding;
 
+  private final MutableAccessor myAccessor;
+
   MapBinding(@Nullable MutableAccessor accessor, @NotNull Class<? extends Map> mapClass) {
-    super(accessor);
+    myAccessor = accessor;
 
     oldAnnotation = accessor == null ? null : accessor.getAnnotation(MapAnnotation.class);
     annotation = accessor == null ? null : accessor.getAnnotation(XMap.class);
@@ -52,12 +53,17 @@ class MapBinding extends Binding implements MultiNodeBinding {
   }
 
   @Override
+  public @NotNull MutableAccessor getAccessor() {
+    return myAccessor;
+  }
+
+  @Override
   public void init(@NotNull Type originalType, @NotNull Serializer serializer) {
     ParameterizedType type = (ParameterizedType)originalType;
     Type[] typeArguments = type.getActualTypeArguments();
 
-    keyClass = XmlSerializerImpl.typeToClass(typeArguments[0]);
-    valueClass = XmlSerializerImpl.typeToClass(typeArguments[1]);
+    keyClass = ClassUtil.typeToClass(typeArguments[0]);
+    valueClass = ClassUtil.typeToClass(typeArguments[1]);
 
     keyBinding = serializer.getBinding(keyClass, typeArguments[0]);
     valueBinding = serializer.getBinding(valueClass, typeArguments[1]);
@@ -76,9 +82,8 @@ class MapBinding extends Binding implements MultiNodeBinding {
     return oldAnnotation == null || oldAnnotation.sortBeforeSave();
   }
 
-  @Nullable
   @Override
-  public Object serialize(@NotNull Object o, @Nullable Object context, @Nullable SerializationFilter filter) {
+  public @Nullable Object serialize(@NotNull Object o, @Nullable Object context, @Nullable SerializationFilter filter) {
     Element serialized = isSurroundWithTag() ? new Element(MAP) : (Element)context;
     assert serialized != null;
 
@@ -128,9 +133,8 @@ class MapBinding extends Binding implements MultiNodeBinding {
     return oldAnnotation == null ? VALUE : oldAnnotation.valueAttributeName();
   }
 
-  @Nullable
   @Override
-  public Object deserializeList(@Nullable Object context, @NotNull List<? extends Element> elements) {
+  public @Nullable Object deserializeList(@Nullable Object context, @NotNull List<? extends Element> elements) {
     List<? extends Element> childNodes;
     if (isSurroundWithTag()) {
       assert elements.size() == 1;
@@ -147,8 +151,7 @@ class MapBinding extends Binding implements MultiNodeBinding {
     return null;
   }
 
-  @Nullable
-  public Object deserialize(@Nullable Object context, @NotNull Element element) {
+  public @Nullable Object deserialize(@Nullable Object context, @NotNull Element element) {
     if (isSurroundWithTag()) {
       return deserialize(context, element.getChildren());
     }
@@ -157,22 +160,11 @@ class MapBinding extends Binding implements MultiNodeBinding {
     }
   }
 
-  private static boolean isMutableMap(@NotNull Map object) {
-    if (object == Collections.emptyMap()) {
-      return false;
-    }
-    else {
-      String simpleName = object.getClass().getSimpleName();
-      return !simpleName.equals("EmptyMap") && !simpleName.equals("UnmodifiableMap");
-    }
-  }
-
-  @Nullable
-  private Map deserialize(@Nullable Object context, @NotNull List<? extends Element> childNodes) {
+  private @Nullable Map deserialize(@Nullable Object context, @NotNull List<? extends Element> childNodes) {
     // if accessor is null, it is sub-map and we must not use context
     Map map = myAccessor == null ? null : (Map)context;
     if (map != null) {
-      if (isMutableMap(map)) {
+      if (ClassUtil.isMutableMap(map)) {
         map.clear();
       }
       else {
@@ -218,7 +210,7 @@ class MapBinding extends Binding implements MultiNodeBinding {
     }
 
     if (binding == null) {
-      entry.setAttribute(attributeName, XmlSerializerImpl.removeControlChars(XmlSerializerImpl.convertToString(value)));
+      entry.setAttribute(attributeName, JDOMUtil.removeControlChars(XmlSerializerImpl.convertToString(value)));
     }
     else {
       Object serialized = binding.serialize(value, entry, filter);
@@ -254,7 +246,7 @@ class MapBinding extends Binding implements MultiNodeBinding {
     }
     else {
       Element entryChild = entry.getChild(attributeName);
-      List<Element> children = entryChild == null ? Collections.<Element>emptyList() : entryChild.getChildren();
+      List<Element> children = entryChild == null ? Collections.emptyList() : entryChild.getChildren();
       if (children.isEmpty()) {
         return null;
       }

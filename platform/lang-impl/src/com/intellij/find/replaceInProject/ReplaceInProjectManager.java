@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.find.replaceInProject;
 
@@ -13,7 +13,6 @@ import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.KeyboardShortcut;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.TransactionGuard;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.application.impl.ApplicationImpl;
 import com.intellij.openapi.command.CommandProcessor;
@@ -30,7 +29,6 @@ import com.intellij.openapi.util.Factory;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.ReadonlyStatusHandler;
-import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.openapi.wm.StatusBar;
@@ -161,7 +159,7 @@ public class ReplaceInProjectManager {
     findManager.getFindInProjectModel().copyFrom(findModel);
     final FindModel findModelCopy = findModel.clone();
 
-    final UsageViewPresentation presentation = FindInProjectUtil.setupViewPresentation(findModel.isOpenInNewTab(), findModelCopy);
+    final UsageViewPresentation presentation = FindInProjectUtil.setupViewPresentation(findModelCopy);
     final FindUsagesProcessPresentation processPresentation = FindInProjectUtil.setupProcessPresentation(myProject, true, presentation);
     processPresentation.setShowFindOptionsPrompt(findModel.isPromptOnReplace());
 
@@ -177,7 +175,7 @@ public class ReplaceInProjectManager {
     @NotNull
     @Override
     public String getLongDescriptiveName() {
-      UsageViewPresentation presentation = FindInProjectUtil.setupViewPresentation(false, myFindModel);
+      UsageViewPresentation presentation = FindInProjectUtil.setupViewPresentation(myFindModel);
       return "Replace " + StringUtil.decapitalize(presentation.getToolwindowTitle()) + " with '" + myFindModel.getStringToReplace() + "'";
     }
 
@@ -213,7 +211,9 @@ public class ReplaceInProjectManager {
           usageView.setRerunAction(new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-              searchAndShowUsages(manager, usageSearcherFactory, findModelCopy, presentation, processPresentation);
+              UsageViewPresentation rerunPresentation = presentation.copy();
+              rerunPresentation.setOpenInNewTab(false);
+              searchAndShowUsages(manager, usageSearcherFactory, findModelCopy, rerunPresentation, processPresentation);
             }
           });
         }
@@ -221,23 +221,31 @@ public class ReplaceInProjectManager {
         @Override
         public void findingUsagesFinished(final UsageView usageView) {
           if (context[0] != null && !processPresentation.isShowFindOptionsPrompt()) {
-            TransactionGuard.submitTransaction(myProject, () -> {
+            ApplicationManager.getApplication().invokeLater(() -> {
               replaceUsagesUnderCommand(context[0], usageView.getUsages());
               context[0].invalidateExcludedSetCache();
-            });
+            }, myProject.getDisposed());
           }
         }
       });
   }
 
   public boolean showReplaceAllConfirmDialog(@NotNull String usagesCount, @NotNull String stringToFind, @NotNull String filesCount, @NotNull String stringToReplace) {
+    String message = stringToFind.length() < 400 && stringToReplace.length() < 400
+                     ? FindBundle.message("find.replace.all.confirmation", usagesCount,
+                                          StringUtil.escapeXmlEntities(stringToFind),
+                                          filesCount,
+                                          StringUtil.escapeXmlEntities(stringToReplace))
+                     : FindBundle.message("find.replace.all.confirmation.long.text", usagesCount,
+                                          StringUtil.trimMiddle(StringUtil.escapeXmlEntities(stringToFind), 400),
+                                          filesCount,
+                                          StringUtil.trimMiddle(StringUtil.escapeXmlEntities(stringToReplace), 400));
     return Messages.YES == MessageDialogBuilder.yesNo(
       FindBundle.message("find.replace.all.confirmation.title"),
-      FindBundle.message("find.replace.all.confirmation", usagesCount, StringUtil.escapeXml(stringToFind), filesCount,
-                         StringUtil.escapeXml(stringToReplace)))
+      message)
                                                .yesText(FindBundle.message("find.replace.command"))
                                                .project(myProject)
-                                               .noText(Messages.CANCEL_BUTTON).show();
+                                               .noText(Messages.getCancelButton()).show();
   }
 
   private static Set<VirtualFile> getFiles(@NotNull ReplaceContext replaceContext, boolean selectedOnly) {
@@ -303,7 +311,7 @@ public class ReplaceInProjectManager {
         putValue(LONG_DESCRIPTION, KeymapUtil.getKeystrokeText(altEnter));
         putValue(SHORT_DESCRIPTION, KeymapUtil.getKeystrokeText(altEnter));
       }
-      
+
       @Override
       public void actionPerformed(ActionEvent e) {
         replaceUsagesUnderCommand(replaceContext, replaceContext.getUsageView().getSelectedUsages());
@@ -401,6 +409,7 @@ public class ReplaceInProjectManager {
       myProject,
       null,
       indicator -> {
+        indicator.setIndeterminate(false);
         int processed = 0;
         VirtualFile lastFile = null;
 
@@ -521,7 +530,7 @@ public class ReplaceInProjectManager {
     }
 
     final List<Usage> usages = new ArrayList<>(usagesSet);
-    Collections.sort(usages, UsageViewImpl.USAGE_COMPARATOR);
+    usages.sort(UsageViewImpl.USAGE_COMPARATOR);
 
     if (!ensureUsagesWritable(replaceContext, usages)) return;
 
@@ -530,9 +539,7 @@ public class ReplaceInProjectManager {
       final UsageView usageView = replaceContext.getUsageView();
 
       if (closeUsageViewIfEmpty(usageView, success)) return;
-      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-        IdeFocusManager.getGlobalInstance().requestFocus(usageView.getPreferredFocusableComponent(), true);
-      });
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(usageView.getPreferredFocusableComponent(), true));
     }, FindBundle.message("find.replace.command"), null);
 
     replaceContext.invalidateExcludedSetCache();
@@ -550,7 +557,7 @@ public class ReplaceInProjectManager {
     }
 
     if (readOnlyFiles != null) {
-      ReadonlyStatusHandler.getInstance(myProject).ensureFilesWritable(VfsUtilCore.toVirtualFileArray(readOnlyFiles));
+      ReadonlyStatusHandler.getInstance(myProject).ensureFilesWritable(readOnlyFiles);
     }
 
     if (hasReadOnlyUsages(selectedUsages)) {
@@ -571,7 +578,7 @@ public class ReplaceInProjectManager {
       return true;
     }
     if (!success) {
-      NOTIFICATION_GROUP.createNotification("One or more malformed replacement strings", MessageType.ERROR).notify(myProject);
+      NOTIFICATION_GROUP.createNotification(FindBundle.message("notification.content.one.or.more.malformed.replacement.strings"), MessageType.ERROR).notify(myProject);
     }
     return false;
   }

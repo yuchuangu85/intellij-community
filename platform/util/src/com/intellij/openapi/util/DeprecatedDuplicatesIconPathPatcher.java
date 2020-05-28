@@ -2,6 +2,7 @@
 package com.intellij.openapi.util;
 
 import org.jetbrains.annotations.NonNls;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
@@ -11,7 +12,7 @@ import java.util.Map;
  * @author Konstantin Bulenkov
  */
 public class DeprecatedDuplicatesIconPathPatcher extends IconPathPatcher {
-  @NonNls private static final Map<String, String> ourDeprecatedIconsReplacements = new HashMap<String, String>();
+  @NonNls private static final Map<String, String> ourDeprecatedIconsReplacements = new HashMap<>();
 
   static {
     ourDeprecatedIconsReplacements.put("/actions/prevfile.png", "AllIcons.Actions.Back");
@@ -324,7 +325,7 @@ public class DeprecatedDuplicatesIconPathPatcher extends IconPathPatcher {
 
   @Nullable
   @Override
-  public String patchPath(String path, ClassLoader classLoader) {
+  public String patchPath(@NotNull String path, ClassLoader classLoader) {
     return ourDeprecatedIconsReplacements.get(path);
   }
 }

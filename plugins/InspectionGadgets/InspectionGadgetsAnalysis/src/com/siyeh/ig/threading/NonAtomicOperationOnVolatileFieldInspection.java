@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2017 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2019 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,25 +15,18 @@
  */
 package com.siyeh.ig.threading;
 
-import com.intellij.codeInsight.ExpressionUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiUtil;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
-import com.siyeh.ig.psiutils.ParenthesesUtils;
+import com.siyeh.ig.psiutils.EquivalenceChecker;
 import com.siyeh.ig.psiutils.SynchronizationUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class NonAtomicOperationOnVolatileFieldInspection extends BaseInspection {
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("non.atomic.operation.on.volatile.field.display.name");
-  }
 
   @Override
   @NotNull
@@ -51,13 +44,17 @@ public class NonAtomicOperationOnVolatileFieldInspection extends BaseInspection 
     @Override
     public void visitAssignmentExpression(@NotNull PsiAssignmentExpression expression) {
       super.visitAssignmentExpression(expression);
-      final PsiExpression rhs = ParenthesesUtils.stripParentheses(expression.getRExpression());
+      final PsiExpression rhs = PsiUtil.skipParenthesizedExprDown(expression.getRExpression());
       if (rhs == null) {
         return;
       }
       final PsiExpression lhs = expression.getLExpression();
-      final PsiField volatileField = findNonSynchronizedVolatileField(lhs);
-      if (volatileField == null) {
+      final PsiReferenceExpression volatileFieldRef = findNonSynchronizedVolatileFieldRef(lhs);
+      if (volatileFieldRef == null) {
+        return;
+      }
+      final PsiElement referenceNameElement = volatileFieldRef.getReferenceNameElement();
+      if (referenceNameElement == null) {
         return;
       }
       final IElementType tokenType = expression.getOperationTokenType();
@@ -72,21 +69,15 @@ public class NonAtomicOperationOnVolatileFieldInspection extends BaseInspection 
           tokenType.equals(JavaTokenType.LTLTEQ) ||
           tokenType.equals(JavaTokenType.GTGTEQ) ||
           tokenType.equals(JavaTokenType.GTGTGTEQ)) {
-        registerError(lhs);
-        return;
-      }
-      if (isOnTheFly() && !volatileField.hasModifierProperty(PsiModifier.PRIVATE)) {
+        registerError(referenceNameElement);
         return;
       }
       rhs.accept(new JavaRecursiveElementWalkingVisitor() {
         @Override
         public void visitReferenceExpression(PsiReferenceExpression reference) {
-          if (reference.isReferenceTo(volatileField) && ExpressionUtil.isEffectivelyUnqualified(reference)) {
+          if (EquivalenceChecker.getCanonicalPsiEquivalence().expressionsAreEquivalent(lhs, reference)) {
             stopWalking();
-            final PsiElement referenceNameElement = ((PsiJavaCodeReferenceElement)lhs).getReferenceNameElement();
-            if (referenceNameElement != null) {
-              registerError(referenceNameElement);
-            }
+            registerError(referenceNameElement);
             return;
           }
           super.visitReferenceExpression(reference);
@@ -104,22 +95,23 @@ public class NonAtomicOperationOnVolatileFieldInspection extends BaseInspection 
       if (operand == null) {
         return;
       }
-      final PsiField volatileField = findNonSynchronizedVolatileField(operand);
-      if (volatileField == null) {
+      final PsiReferenceExpression volatileFieldRef = findNonSynchronizedVolatileFieldRef(operand);
+      if (volatileFieldRef == null) {
         return;
       }
-      registerError(operand);
+      final PsiElement referenceNameElement = volatileFieldRef.getReferenceNameElement();
+      if (referenceNameElement != null) {
+        registerError(referenceNameElement);
+      }
     }
 
     @Nullable
-    private static PsiField findNonSynchronizedVolatileField(PsiExpression expression) {
+    private static PsiReferenceExpression findNonSynchronizedVolatileFieldRef(PsiExpression expression) {
+      expression = PsiUtil.skipParenthesizedExprDown(expression);
       if (!(expression instanceof PsiReferenceExpression)) {
         return null;
       }
       final PsiReferenceExpression reference = (PsiReferenceExpression)expression;
-      if (!ExpressionUtil.isEffectivelyUnqualified(reference)) {
-        return null;
-      }
       final PsiElement referent = reference.resolve();
       if (!(referent instanceof PsiField)) {
         return null;
@@ -131,7 +123,7 @@ public class NonAtomicOperationOnVolatileFieldInspection extends BaseInspection 
       if (SynchronizationUtil.isInSynchronizedContext(reference)) {
         return null;
       }
-      return field;
+      return (PsiReferenceExpression)expression;
     }
   }
 }

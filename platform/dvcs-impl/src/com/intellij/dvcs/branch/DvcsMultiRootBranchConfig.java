@@ -23,9 +23,9 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Collection;
 
 public abstract class DvcsMultiRootBranchConfig<Repo extends Repository> {
-  @NotNull protected final Collection<Repo> myRepositories;
+  @NotNull protected final Collection<? extends Repo> myRepositories;
 
-  public DvcsMultiRootBranchConfig(@NotNull Collection<Repo> repositories) {
+  public DvcsMultiRootBranchConfig(@NotNull Collection<? extends Repo> repositories) {
     myRepositories = repositories;
   }
 
@@ -36,21 +36,6 @@ public abstract class DvcsMultiRootBranchConfig<Repo extends Repository> {
   @Nullable
   public String getCurrentBranch() {
     return MultiRootBranches.getCommonCurrentBranch(myRepositories);
-  }
-
-  @Nullable
-  public Repository.State getState() {
-    Repository.State commonState = null;
-    for (Repo repository : myRepositories) {
-      Repository.State state = repository.getState();
-      if (commonState == null) {
-        commonState = state;
-      }
-      else if (!commonState.equals(state)) {
-        return null;
-      }
-    }
-    return commonState;
   }
 
   @NotNull

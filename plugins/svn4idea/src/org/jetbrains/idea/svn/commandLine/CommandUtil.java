@@ -1,24 +1,9 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn.commandLine;
 
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.ObjectUtils;
 import com.intellij.util.text.DateFormatUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -28,16 +13,19 @@ import org.jetbrains.idea.svn.api.Target;
 import org.jetbrains.idea.svn.diff.DiffOptions;
 import org.jetbrains.idea.svn.status.StatusType;
 
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.Unmarshaller;
+import javax.xml.bind.*;
 import java.io.File;
 import java.io.StringReader;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class CommandUtil {
 
   private static final Logger LOG = Logger.getInstance(CommandUtil.class);
+
+  private static final Map<Class<?>, JAXBContext> cachedContexts = new ConcurrentHashMap<>();
 
   /**
    * Puts given value to parameters if condition is satisfied
@@ -175,10 +163,21 @@ public class CommandUtil {
   }
 
   public static <T> T parse(@NotNull String data, @NotNull Class<T> type) throws JAXBException {
-    JAXBContext context = JAXBContext.newInstance(type);
+    if (!cachedContexts.containsKey(type)) {
+      cachedContexts.put(type, JAXBContext.newInstance(type));
+    }
+    JAXBContext context = cachedContexts.get(type);
     Unmarshaller unmarshaller = context.createUnmarshaller();
 
-    return (T) unmarshaller.unmarshal(new StringReader(data.trim()));
+    unmarshaller.setEventHandler(new ValidationEventHandler() {
+      @Override
+      public boolean handleEvent(@NotNull ValidationEvent event) {
+        // Fail on exceptions, but not on other errors like "unexpected element" as sometimes we do not use all provided xml data.
+        return event.getLinkedException() == null;
+      }
+    });
+    //noinspection unchecked
+    return (T)unmarshaller.unmarshal(new StringReader(data.trim()));
   }
 
   @NotNull
@@ -241,6 +240,6 @@ public class CommandUtil {
       LOG.error("Existing parent not found for " + file.getAbsolutePath());
     }
 
-    return ObjectUtils.assertNotNull(result);
+    return Objects.requireNonNull(result);
   }
 }

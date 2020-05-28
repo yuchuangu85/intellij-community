@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.application.options;
 
@@ -24,19 +10,22 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.editor.highlighter.EditorHighlighter;
 import com.intellij.openapi.editor.highlighter.EditorHighlighterFactory;
+import com.intellij.openapi.extensions.ExtensionPointListener;
+import com.intellij.openapi.extensions.PluginDescriptor;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.FileTypes;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.ex.ConfigurableWrapper;
 import com.intellij.openapi.project.ProjectManager;
+import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.MessageType;
 import com.intellij.openapi.ui.VerticalFlowLayout;
 import com.intellij.openapi.ui.popup.Balloon;
 import com.intellij.openapi.ui.popup.BalloonBuilder;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
-import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.psi.codeStyle.CodeStyleConstraints;
 import com.intellij.psi.codeStyle.CodeStyleSettings;
 import com.intellij.ui.IdeBorderFactory;
 import com.intellij.ui.JBColor;
@@ -50,34 +39,29 @@ import com.intellij.ui.components.fields.CommaSeparatedIntegersField;
 import com.intellij.ui.components.fields.IntegerField;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.util.List;
+import java.util.Objects;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import javax.swing.Box;
+import javax.swing.JCheckBox;
+import javax.swing.JComponent;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextField;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import javax.swing.*;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
-import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.util.List;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
-
-import static com.intellij.psi.codeStyle.CodeStyleSettings.MAX_RIGHT_MARGIN;
-
 public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
   @SuppressWarnings("UnusedDeclaration")
-  private static final Logger LOG = Logger.getInstance("#com.intellij.application.options.GeneralCodeStylePanel");
-
-  private static final String SYSTEM_DEPENDANT_STRING = ApplicationBundle.message("combobox.crlf.system.dependent");
-  private static final String UNIX_STRING = ApplicationBundle.message("combobox.crlf.unix");
-  private static final String WINDOWS_STRING = ApplicationBundle.message("combobox.crlf.windows");
-  private static final String MACINTOSH_STRING = ApplicationBundle.message("combobox.crlf.mac");
-  private final List<GeneralCodeStyleOptionsProvider> myAdditionalOptions;
+  private static final Logger LOG = Logger.getInstance(GeneralCodeStylePanel.class);
+  private List<GeneralCodeStyleOptionsProvider> myAdditionalOptions;
 
   private IntegerField myRightMarginField;
 
-  private JComboBox myLineSeparatorCombo;
+  private ComboBox myLineSeparatorCombo;
   private JPanel myPanel;
   private JBCheckBox myCbWrapWhenTypingReachesRightMargin;
   private JCheckBox myEnableFormatterTags;
@@ -89,7 +73,6 @@ public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
   private JPanel myMarkerOptionsPanel;
   private JPanel myAdditionalSettingsPanel;
   private JCheckBox myAutodetectIndentsBox;
-  private JPanel myIndentsDetectionPanel;
   private CommaSeparatedIntegersField myVisualGuides;
   private JBLabel myVisualGuidesHint;
   private JBLabel myLineSeparatorHint;
@@ -105,41 +88,30 @@ public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
     super(settings);
 
     //noinspection unchecked
-    myLineSeparatorCombo.addItem(SYSTEM_DEPENDANT_STRING);
+    myLineSeparatorCombo.addItem(getSystemDependantString());
     //noinspection unchecked
-    myLineSeparatorCombo.addItem(UNIX_STRING);
+    myLineSeparatorCombo.addItem(getUnixString());
     //noinspection unchecked
-    myLineSeparatorCombo.addItem(WINDOWS_STRING);
+    myLineSeparatorCombo.addItem(getWindowsString());
     //noinspection unchecked
-    myLineSeparatorCombo.addItem(MACINTOSH_STRING);
+    myLineSeparatorCombo.addItem(getMacintoshString());
     addPanelToWatch(myPanel);
 
     myRightMarginField.setDefaultValue(settings.getDefaultRightMargin());
 
-    myEnableFormatterTags.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        boolean tagsEnabled = myEnableFormatterTags.isSelected();
-        setFormatterTagControlsEnabled(tagsEnabled);
-      }
+    myEnableFormatterTags.addActionListener(__ -> {
+      boolean tagsEnabled = myEnableFormatterTags.isSelected();
+      setFormatterTagControlsEnabled(tagsEnabled);
     });
 
-    myIndentsDetectionPanel
-      .setBorder(IdeBorderFactory.createTitledBorder(ApplicationBundle.message("settings.code.style.general.indents.detection")));
+    myAutodetectIndentsBox.setBorder(JBUI.Borders.emptyTop(10));
 
     myPanel.setBorder(JBUI.Borders.empty(0, 10));
     myScrollPane = ScrollPaneFactory.createScrollPane(null, true);
     myScrollPane.setViewport(new GradientViewport(myPanel, JBUI.insetsTop(5), true));
 
     myAdditionalSettingsPanel.setLayout(new VerticalFlowLayout(true, true));
-    myAdditionalSettingsPanel.removeAll();
-    myAdditionalOptions = ConfigurableWrapper.createConfigurables(GeneralCodeStyleOptionsProviderEP.EP_NAME);
-    for (GeneralCodeStyleOptionsProvider provider : myAdditionalOptions) {
-      JComponent generalSettingsComponent = provider.createComponent();
-      if (generalSettingsComponent != null) {
-        myAdditionalSettingsPanel.add(generalSettingsComponent);
-      }
-    }
+    updateGeneralOptionsPanel();
 
     myVisualGuidesLabel.setText(ApplicationBundle.message("settings.code.style.visual.guides") + ":");
     myVisualGuidesHint.setForeground(JBColor.GRAY);
@@ -154,13 +126,36 @@ public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
     if (ourSelectedTabIndex >= 0) {
       myTabbedPane.setSelectedIndex(ourSelectedTabIndex);
     }
-    myTabbedPane.addChangeListener(new ChangeListener() {
-      @Override
-      public void stateChanged(ChangeEvent e) {
-        //noinspection AssignmentToStaticFieldFromInstanceMethod
-        ourSelectedTabIndex = myTabbedPane.getSelectedIndex();
-      }
+    myTabbedPane.addChangeListener(__ -> {
+      //noinspection AssignmentToStaticFieldFromInstanceMethod
+      ourSelectedTabIndex = myTabbedPane.getSelectedIndex();
     });
+    GeneralCodeStyleOptionsProviderEP.EP_NAME.addExtensionPointListener(
+      new ExtensionPointListener<GeneralCodeStyleOptionsProviderEP>() {
+        @Override
+        public void extensionAdded(@NotNull GeneralCodeStyleOptionsProviderEP extension,
+                                   @NotNull PluginDescriptor pluginDescriptor) {
+          updateGeneralOptionsPanel();
+        }
+
+        @Override
+        public void extensionRemoved(@NotNull GeneralCodeStyleOptionsProviderEP extension,
+                                     @NotNull PluginDescriptor pluginDescriptor) {
+          updateGeneralOptionsPanel();
+        }
+      }, this);
+  }
+
+  private void updateGeneralOptionsPanel() {
+    myAdditionalSettingsPanel.removeAll();
+    myAdditionalOptions = ConfigurableWrapper.createConfigurables(GeneralCodeStyleOptionsProviderEP.EP_NAME);
+    for (GeneralCodeStyleOptionsProvider provider : myAdditionalOptions) {
+      JComponent generalSettingsComponent = provider.createComponent();
+      if (generalSettingsComponent != null) {
+        myAdditionalSettingsPanel.add(Box.createRigidArea(JBUI.size(0, 5)));
+        myAdditionalSettingsPanel.add(generalSettingsComponent);
+      }
+    }
   }
 
 
@@ -210,8 +205,8 @@ public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
   }
 
   private void createUIComponents() {
-    myRightMarginField = new IntegerField(ApplicationBundle.message("editbox.right.margin.columns"), 0, MAX_RIGHT_MARGIN);
-    myVisualGuides = new CommaSeparatedIntegersField(ApplicationBundle.message("settings.code.style.visual.guides"), 0, MAX_RIGHT_MARGIN, "Optional");
+    myRightMarginField = new IntegerField(ApplicationBundle.message("editbox.right.margin.columns"), 0, CodeStyleConstraints.MAX_RIGHT_MARGIN);
+    myVisualGuides = new CommaSeparatedIntegersField(ApplicationBundle.message("settings.code.style.visual.guides"), 0, CodeStyleConstraints.MAX_RIGHT_MARGIN, "Optional");
     myExcludedFilesList = new ExcludedFilesList();
   }
 
@@ -237,13 +232,13 @@ public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
 
   @Nullable
   private String getSelectedLineSeparator() {
-    if (UNIX_STRING.equals(myLineSeparatorCombo.getSelectedItem())) {
+    if (getUnixString().equals(myLineSeparatorCombo.getSelectedItem())) {
       return "\n";
     }
-    else if (MACINTOSH_STRING.equals(myLineSeparatorCombo.getSelectedItem())) {
+    if (getMacintoshString().equals(myLineSeparatorCombo.getSelectedItem())) {
       return "\r";
     }
-    else if (WINDOWS_STRING.equals(myLineSeparatorCombo.getSelectedItem())) {
+    if (getWindowsString().equals(myLineSeparatorCombo.getSelectedItem())) {
       return "\r\n";
     }
     return null;
@@ -256,7 +251,7 @@ public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
 
     if (myExcludedFilesList.isModified(settings)) return true;
 
-    if (!Comparing.equal(getSelectedLineSeparator(), settings.LINE_SEPARATOR)) {
+    if (!Objects.equals(getSelectedLineSeparator(), settings.LINE_SEPARATOR)) {
       return true;
     }
 
@@ -281,9 +276,7 @@ public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
       if (option.isModified(settings)) return true;
     }
 
-    if (settings.AUTODETECT_INDENTS != myAutodetectIndentsBox.isSelected()) return true;
-
-    return false;
+    return settings.AUTODETECT_INDENTS != myAutodetectIndentsBox.isSelected();
   }
 
   @Override
@@ -299,16 +292,16 @@ public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
 
     String lineSeparator = settings.LINE_SEPARATOR;
     if ("\n".equals(lineSeparator)) {
-      myLineSeparatorCombo.setSelectedItem(UNIX_STRING);
+      myLineSeparatorCombo.setSelectedItem(getUnixString());
     }
     else if ("\r\n".equals(lineSeparator)) {
-      myLineSeparatorCombo.setSelectedItem(WINDOWS_STRING);
+      myLineSeparatorCombo.setSelectedItem(getWindowsString());
     }
     else if ("\r".equals(lineSeparator)) {
-      myLineSeparatorCombo.setSelectedItem(MACINTOSH_STRING);
+      myLineSeparatorCombo.setSelectedItem(getMacintoshString());
     }
     else {
-      myLineSeparatorCombo.setSelectedItem(SYSTEM_DEPENDANT_STRING);
+      myLineSeparatorCombo.setSelectedItem(getSystemDependantString());
     }
 
     myRightMarginField.setValue(settings.getDefaultRightMargin());
@@ -362,8 +355,32 @@ public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
   }
 
   @Override
-  public void setModel(@Nullable CodeStyleSchemesModel model) {
+  public void setModel(@NotNull CodeStyleSchemesModel model) {
     super.setModel(model);
     myExcludedFilesList.setSchemesModel(model);
+  }
+
+  @Override
+  public void dispose() {
+    for (GeneralCodeStyleOptionsProvider option : myAdditionalOptions) {
+      option.disposeUIResources();
+    }
+    super.dispose();
+  }
+
+  private static String getSystemDependantString() {
+    return ApplicationBundle.message("combobox.crlf.system.dependent");
+  }
+
+  private static String getUnixString() {
+    return ApplicationBundle.message("combobox.crlf.unix");
+  }
+
+  private static String getWindowsString() {
+    return ApplicationBundle.message("combobox.crlf.windows");
+  }
+
+  private static String getMacintoshString() {
+    return ApplicationBundle.message("combobox.crlf.mac");
   }
 }

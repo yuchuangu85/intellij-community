@@ -15,6 +15,7 @@
  */
 package com.intellij.java.codeInspection
 
+import com.intellij.JavaTestUtil
 import com.intellij.codeInspection.dataFlow.DataFlowInspection
 import com.intellij.openapi.module.StdModuleTypes
 import com.intellij.openapi.roots.ModuleRootManager
@@ -23,17 +24,25 @@ import com.intellij.pom.java.LanguageLevel
 import com.intellij.testFramework.IdeaTestUtil
 import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.JavaCodeInsightFixtureTestCase
+import groovy.transform.CompileStatic
+
 /**
  * @author peter
  */
+@CompileStatic
 class DataFlowInspectionHeavyTest extends JavaCodeInsightFixtureTestCase {
+
+  @Override
+  protected String getTestDataPath() {
+    return JavaTestUtil.getJavaTestDataPath() + "/inspection/dataFlow/fixture/"
+  }
 
   void testDifferentAnnotationsWithDifferentLanguageLevels() {
     def module6 = PsiTestUtil.addModule(project, StdModuleTypes.JAVA, 'mod6', myFixture.tempDirFixture.findOrCreateDir('mod6'))
     IdeaTestUtil.setModuleLanguageLevel(module6, LanguageLevel.JDK_1_6)
-    IdeaTestUtil.setModuleLanguageLevel(myModule, LanguageLevel.JDK_1_8)
-    ModuleRootModificationUtil.addDependency(myModule, module6)
-    ModuleRootModificationUtil.setModuleSdk(module6, ModuleRootManager.getInstance(myModule).sdk)
+    IdeaTestUtil.setModuleLanguageLevel(module, LanguageLevel.JDK_1_8)
+    ModuleRootModificationUtil.addDependency(module, module6)
+    ModuleRootModificationUtil.setModuleSdk(module6, ModuleRootManager.getInstance(module).sdk)
 
     myFixture.addFileToProject 'mod6/annos/annos.java', annotationsText("ElementType.METHOD, ElementType.FIELD, ElementType.PARAMETER, ElementType.LOCAL_VARIABLE")
     myFixture.addFileToProject 'mod6/foo/ObjectUtils.java', '''
@@ -78,7 +87,7 @@ class DataFlowInspectionHeavyTest extends JavaCodeInsightFixtureTestCase {
   }
 
   void "test no always failing calls in tests"() {
-    PsiTestUtil.addSourceRoot(myModule, myFixture.tempDirFixture.findOrCreateDir("test"), true)
+    PsiTestUtil.addSourceRoot(module, myFixture.tempDirFixture.findOrCreateDir("test"), true)
 
     myFixture.addFileToProject("test/org/junit/Test.java", """
 package org.junit;
@@ -101,4 +110,23 @@ class Foo {
     myFixture.enableInspections(new DataFlowInspection())
     myFixture.checkHighlighting()
   }
+
+  void testTypeQualifierNicknameWithoutDeclarations() {
+    myFixture.addClass("package javax.annotation.meta; public @interface TypeQualifierNickname {}")
+    DataFlowInspectionTest.addJavaxNullabilityAnnotations(myFixture)
+
+    def noJsr305dep = 'noJsr305dep'
+    def anotherModule = PsiTestUtil.addModule(project, StdModuleTypes.JAVA, noJsr305dep, myFixture.tempDirFixture.findOrCreateDir(noJsr305dep))
+    ModuleRootModificationUtil.setModuleSdk(anotherModule, ModuleRootManager.getInstance(module).sdk)
+
+    def nullableNick = myFixture.addFileToProject("$noJsr305dep/bar/NullableNick.java", DataFlowInspectionTest.barNullableNick())
+
+    // We load AST for anno attribute. In cls usages, this isn't an issue, but for simplicity we're testing with red Java source here
+    myFixture.allowTreeAccessForFile(nullableNick.virtualFile)
+
+    myFixture.enableInspections(new DataFlowInspection())
+    myFixture.configureFromExistingVirtualFile(myFixture.copyFileToProject("TypeQualifierNickname.java", "$noJsr305dep/a.java"))
+    myFixture.checkHighlighting(true, false, false)
+  }
+
 }

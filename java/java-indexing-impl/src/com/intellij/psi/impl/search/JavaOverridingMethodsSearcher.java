@@ -1,9 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.search;
 
 import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
+import com.intellij.openapi.fileTypes.FileTypeRegistry;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -26,9 +27,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 
-/**
- * @author max
- */
 public class JavaOverridingMethodsSearcher implements QueryExecutor<PsiMethod, OverridingMethodsSearch.SearchParameters> {
   @Override
   public boolean execute(@NotNull final OverridingMethodsSearch.SearchParameters parameters, @NotNull final Processor<? super PsiMethod> consumer) {
@@ -65,8 +63,8 @@ public class JavaOverridingMethodsSearcher implements QueryExecutor<PsiMethod, O
     return true;
   }
 
-  static boolean isJavaOnlyScope(@NotNull VirtualFile[] files) {
-    return Arrays.stream(files).allMatch(file -> file.getFileType() == JavaFileType.INSTANCE);
+  static boolean isJavaOnlyScope(VirtualFile @NotNull [] files) {
+    return Arrays.stream(files).allMatch(file -> FileTypeRegistry.getInstance().isFileOfType(file, JavaFileType.INSTANCE));
   }
 
   private static boolean processLocalScope(@NotNull LocalSearchScope searchScope,
@@ -124,7 +122,7 @@ public class JavaOverridingMethodsSearcher implements QueryExecutor<PsiMethod, O
 
     // use wider scope to handle public method defined in package-private class which is subclassed by public class in the same package which is subclassed by public class from another package with redefined method
     SearchScope allScope = GlobalSearchScope.allScope(project);
-    boolean success = ClassInheritorsSearch.search(containingClass, allScope, true).forEach(inheritorsProcessor);
+    boolean success = ClassInheritorsSearch.search(containingClass, allScope, true).allowParallelProcessing().forEach(inheritorsProcessor);
     assert success;
     return result;
   }

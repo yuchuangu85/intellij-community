@@ -1,11 +1,12 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.actions;
 
 import com.intellij.CommonBundle;
 import com.intellij.analysis.AnalysisScope;
-import com.intellij.analysis.AnalysisScopeBundle;
 import com.intellij.analysis.AnalysisUIOptions;
 import com.intellij.analysis.BaseAnalysisActionDialog;
+import com.intellij.analysis.dialog.ModelScopeItem;
+import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInspection.CleanupLocalInspectionTool;
 import com.intellij.codeInspection.InspectionManager;
 import com.intellij.codeInspection.InspectionProfile;
@@ -20,10 +21,11 @@ import com.intellij.ide.util.gotoByName.ChooseByNameFilter;
 import com.intellij.ide.util.gotoByName.ChooseByNamePopup;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
+import com.intellij.openapi.actionSystem.DataProvider;
+import com.intellij.openapi.actionSystem.PlatformDataKeys;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
-import com.intellij.openapi.module.ModuleUtil;
 import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
@@ -41,7 +43,6 @@ import com.intellij.util.ui.UIUtil;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.jps.model.java.JavaSourceRootType;
 
 import javax.swing.*;
 import java.awt.*;
@@ -52,11 +53,18 @@ import java.util.List;
 /**
  * @author Konstantin Bulenkov
  */
-public class RunInspectionAction extends GotoActionBase {
+public class RunInspectionAction extends GotoActionBase implements DataProvider {
   private static final Logger LOGGER = Logger.getInstance(RunInspectionAction.class);
+  private final String myPredefinedText;
 
+  @SuppressWarnings("unused")
   public RunInspectionAction() {
-    getTemplatePresentation().setText(IdeBundle.message("goto.inspection.action.text"));
+    this(null);
+  }
+
+  public RunInspectionAction(String predefinedText) {
+    myPredefinedText = predefinedText;
+    getTemplatePresentation().setText(IdeBundle.messagePointer("goto.inspection.action.text"));
   }
 
   @Override
@@ -66,9 +74,9 @@ public class RunInspectionAction extends GotoActionBase {
 
     PsiDocumentManager.getInstance(project).commitAllDocuments();
 
-    final PsiElement psiElement = CommonDataKeys.PSI_ELEMENT.getData(e.getDataContext());
-    final PsiFile psiFile = CommonDataKeys.PSI_FILE.getData(e.getDataContext());
-    final VirtualFile virtualFile = CommonDataKeys.VIRTUAL_FILE.getData(e.getDataContext());
+    final PsiElement psiElement = e.getData(CommonDataKeys.PSI_ELEMENT);
+    final PsiFile psiFile = e.getData(CommonDataKeys.PSI_FILE);
+    final VirtualFile virtualFile = e.getData(CommonDataKeys.VIRTUAL_FILE);
 
     FeatureUsageTracker.getInstance().triggerFeatureUsed("navigation.goto.inspection");
 
@@ -86,6 +94,12 @@ public class RunInspectionAction extends GotoActionBase {
           () -> runInspection(project, (((InspectionElement)element)).getToolWrapper().getShortName(), virtualFile, psiElement, psiFile));
       }
     }, false);
+  }
+
+  @Nullable
+  @Override
+  public Object getData(@NotNull String dataId) {
+    return PlatformDataKeys.PREDEFINED_TEXT.is(dataId) ? myPredefinedText : null;
   }
 
   public static void runInspection(final @NotNull Project project,
@@ -126,12 +140,11 @@ public class RunInspectionAction extends GotoActionBase {
     fileFilterPanel.init(options);
 
     final AnalysisScope initialAnalysisScope = analysisScope;
+    List<ModelScopeItem> items = BaseAnalysisActionDialog.standardItems(project, analysisScope, module, psiElement);
     final BaseAnalysisActionDialog dialog = new BaseAnalysisActionDialog("Run '" + toolWrapper.getDisplayName() + "'",
-                                                                         AnalysisScopeBundle.message("analysis.scope.title", InspectionsBundle
-                                                                           .message("inspection.action.noun")), project, BaseAnalysisActionDialog.standardItems(
-      project, analysisScope, module, psiElement),
-                                                                         options, true, ModuleUtil
-                                                                           .isSupportedRootType(project, JavaSourceRootType.TEST_SOURCE)) {
+                                                                         CodeInsightBundle.message("analysis.scope.title", InspectionsBundle
+                                                                           .message("inspection.action.noun")), project,
+                                                                         items, options, true) {
 
       private InspectionToolWrapper myUpdatedSettingsToolWrapper;
 
@@ -181,12 +194,11 @@ public class RunInspectionAction extends GotoActionBase {
         return myUpdatedSettingsToolWrapper == null ? toolWrapper : myUpdatedSettingsToolWrapper;
       }
 
-      @NotNull
       @Override
-      protected Action[] createActions() {
+      protected Action @NotNull [] createActions() {
         final List<Action> actions = new ArrayList<>();
         final boolean hasFixAll = toolWrapper.getTool() instanceof CleanupLocalInspectionTool;
-        actions.add(new AbstractAction(hasFixAll ? AnalysisScopeBundle.message("action.analyze.verb")
+        actions.add(new AbstractAction(hasFixAll ? CodeInsightBundle.message("action.analyze.verb")
                                                  : CommonBundle.getOkButtonText()) {
           {
             putValue(DEFAULT_ACTION, Boolean.TRUE);
@@ -200,12 +212,12 @@ public class RunInspectionAction extends GotoActionBase {
           }
         });
         if (hasFixAll) {
-          actions.add(new AbstractAction("Fix All") {
+          actions.add(new AbstractAction(IdeBundle.message("goto.inspection.action.fix.all")) {
             @Override
             public void actionPerformed(ActionEvent e) {
               InspectionToolWrapper wrapper = getToolWrapper();
               InspectionProfileImpl cleanupToolProfile = RunInspectionIntention.createProfile(wrapper, managerEx, null);
-              managerEx.createNewGlobalContext(false)
+              managerEx.createNewGlobalContext()
                 .codeCleanup(getScope(), cleanupToolProfile, "Cleanup by " + wrapper.getDisplayName(), null, false);
               close(DialogWrapper.OK_EXIT_CODE);
             }

@@ -11,7 +11,6 @@ import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.committed.CommittedChangesTreeBrowser;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.table.TableView;
-import com.intellij.util.ArrayUtil;
 import com.intellij.util.Consumer;
 import com.intellij.util.text.DateFormatUtil;
 import com.intellij.util.ui.ColumnInfo;
@@ -58,7 +57,7 @@ public class CommitListPanel extends JPanel implements TypeSafeDataProvider {
   /**
    * Adds a listener that would be called once user selects a commit in the table.
    */
-  public void addListSelectionListener(final @NotNull Consumer<VcsFullCommitDetails> listener) {
+  public void addListSelectionListener(final @NotNull Consumer<? super VcsFullCommitDetails> listener) {
     myTable.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
       @Override
       public void valueChanged(final ListSelectionEvent e) {
@@ -72,7 +71,7 @@ public class CommitListPanel extends JPanel implements TypeSafeDataProvider {
     });
   }
 
-  public void addListMultipleSelectionListener(final @NotNull Consumer<List<Change>> listener) {
+  public void addListMultipleSelectionListener(final @NotNull Consumer<? super List<Change>> listener) {
     myTable.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
       @Override
       public void valueChanged(final ListSelectionEvent e) {
@@ -108,7 +107,7 @@ public class CommitListPanel extends JPanel implements TypeSafeDataProvider {
       VcsFullCommitDetails commit = myCommits.get(row);
       // suppressing: inherited API
       //noinspection unchecked
-      sink.put(key, ArrayUtil.toObjectArray(commit.getChanges(), Change.class));
+      sink.put(key, commit.getChanges().toArray(new Change[0]));
     }
   }
 
@@ -132,8 +131,7 @@ public class CommitListPanel extends JPanel implements TypeSafeDataProvider {
     myTable.setModelAndUpdateColumns(new ListTableModel<>(generateColumnsInfo(myCommits), myCommits, 0));
   }
 
-  @NotNull
-  private ColumnInfo[] generateColumnsInfo(@NotNull List<? extends VcsFullCommitDetails> commits) {
+  private ColumnInfo @NotNull [] generateColumnsInfo(@NotNull List<? extends VcsFullCommitDetails> commits) {
     ItemAndWidth hash = new ItemAndWidth("", 0);
     ItemAndWidth author = new ItemAndWidth("", 0);
     ItemAndWidth time = new ItemAndWidth("", 0);

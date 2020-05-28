@@ -1,35 +1,75 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.actions;
+
+import static com.intellij.ide.lightEdit.LightEditFeatureUsagesUtil.OpenPlace.RecentFiles;
+import static com.intellij.openapi.keymap.KeymapUtil.getActiveKeymapShortcuts;
+import static java.awt.event.KeyEvent.CTRL_DOWN_MASK;
+import static java.awt.event.KeyEvent.KEY_PRESSED;
+import static java.awt.event.KeyEvent.KEY_RELEASED;
+import static java.awt.event.KeyEvent.VK_ALT;
+import static java.awt.event.KeyEvent.VK_BACK_SPACE;
+import static java.awt.event.KeyEvent.VK_CONTROL;
+import static java.awt.event.KeyEvent.VK_DELETE;
+import static java.awt.event.KeyEvent.VK_DOWN;
+import static java.awt.event.KeyEvent.VK_ENTER;
+import static java.awt.event.KeyEvent.VK_ESCAPE;
+import static java.awt.event.KeyEvent.VK_LEFT;
+import static java.awt.event.KeyEvent.VK_Q;
+import static java.awt.event.KeyEvent.VK_RIGHT;
+import static java.awt.event.KeyEvent.VK_UP;
+import static javax.swing.KeyStroke.getKeyStroke;
 
 import com.intellij.featureStatistics.FeatureUsageTracker;
 import com.intellij.ide.DataManager;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.IdeEventQueue;
+import com.intellij.ide.lightEdit.LightEdit;
+import com.intellij.ide.lightEdit.LightEditCompatible;
+import com.intellij.ide.lightEdit.LightEditFeatureUsagesUtil;
 import com.intellij.ide.ui.UISettings;
 import com.intellij.ide.ui.UISettingsState;
-import com.intellij.openapi.actionSystem.*;
+import com.intellij.ide.util.gotoByName.QuickSearchComponent;
+import com.intellij.openapi.Disposable;
+import com.intellij.openapi.actionSystem.ActionManager;
+import com.intellij.openapi.actionSystem.ActionPlaces;
+import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.actionSystem.CommonDataKeys;
+import com.intellij.openapi.actionSystem.CustomShortcutSet;
+import com.intellij.openapi.actionSystem.DataContext;
+import com.intellij.openapi.actionSystem.DataProvider;
+import com.intellij.openapi.actionSystem.IdeActions;
+import com.intellij.openapi.actionSystem.KeyboardShortcut;
+import com.intellij.openapi.actionSystem.PlatformDataKeys;
+import com.intellij.openapi.actionSystem.Shortcut;
+import com.intellij.openapi.actionSystem.ShortcutSet;
 import com.intellij.openapi.actionSystem.impl.PresentationFactory;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.Experiments;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.command.CommandProcessor;
 import com.intellij.openapi.editor.markup.EffectType;
 import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx;
+import com.intellij.openapi.fileEditor.ex.IdeDocumentHistory;
 import com.intellij.openapi.fileEditor.impl.EditorHistoryManager;
 import com.intellij.openapi.fileEditor.impl.EditorTabPresentationUtil;
 import com.intellij.openapi.fileEditor.impl.EditorWindow;
 import com.intellij.openapi.fileEditor.impl.FileEditorManagerImpl;
+import com.intellij.openapi.fileEditor.impl.IdeDocumentHistoryImpl;
 import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.ui.GraphicsConfig;
 import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
-import com.intellij.openapi.util.Comparing;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Iconable;
+import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.FileStatus;
 import com.intellij.openapi.vcs.FileStatusManager;
@@ -38,46 +78,107 @@ import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.openapi.wm.WindowManager;
-import com.intellij.openapi.wm.impl.ToolWindowImpl;
 import com.intellij.openapi.wm.impl.ToolWindowManagerImpl;
 import com.intellij.problems.WolfTheProblemSolver;
-import com.intellij.ui.*;
+import com.intellij.ui.CaptionPanel;
+import com.intellij.ui.ClickListener;
+import com.intellij.ui.CollectionListModel;
+import com.intellij.ui.ColoredListCellRenderer;
+import com.intellij.ui.Gray;
+import com.intellij.ui.JBColor;
+import com.intellij.ui.ListActions;
+import com.intellij.ui.ListUtil;
+import com.intellij.ui.ScrollPaneFactory;
+import com.intellij.ui.ScrollingUtil;
+import com.intellij.ui.SimpleTextAttributes;
+import com.intellij.ui.SpeedSearchBase;
+import com.intellij.ui.SpeedSearchComparator;
+import com.intellij.ui.SpeedSearchObjectWithWeight;
+import com.intellij.ui.WindowMoveListener;
 import com.intellij.ui.border.CustomLineBorder;
+import com.intellij.ui.components.JBCheckBox;
+import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBList;
+import com.intellij.ui.components.panels.NonOpaquePanel;
+import com.intellij.ui.popup.PopupUpdateProcessorBase;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.ui.speedSearch.NameFilteringListModel;
 import com.intellij.ui.speedSearch.SpeedSearchUtil;
-import com.intellij.util.*;
+import com.intellij.util.Alarm;
+import com.intellij.util.ArrayUtil;
+import com.intellij.util.Consumer;
+import com.intellij.util.Function;
+import com.intellij.util.IconUtil;
+import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.StatusText;
 import com.intellij.util.ui.UIUtil;
-import org.jetbrains.annotations.NonNls;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
-import javax.swing.*;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
-import java.awt.*;
-import java.awt.event.*;
+import java.awt.AWTEvent;
+import java.awt.AWTKeyStroke;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Dimension;
+import java.awt.Event;
+import java.awt.FocusTraversalPolicy;
+import java.awt.Font;
+import java.awt.KeyboardFocusManager;
+import java.awt.Window;
+import java.awt.event.ActionEvent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.*;
-
-import static com.intellij.openapi.keymap.KeymapUtil.getActiveKeymapShortcuts;
-import static java.awt.event.InputEvent.CTRL_DOWN_MASK;
-import static java.awt.event.KeyEvent.*;
-import static javax.swing.KeyStroke.getKeyStroke;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Supplier;
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JPanel;
+import javax.swing.JRootPane;
+import javax.swing.JScrollPane;
+import javax.swing.ListModel;
+import javax.swing.ListSelectionModel;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.border.Border;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+import org.jetbrains.annotations.NonNls;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * @author Konstantin Bulenkov
  */
 @SuppressWarnings({"AssignmentToStaticFieldFromInstanceMethod"})
-public class Switcher extends AnAction implements DumbAware {
+public final class Switcher extends AnAction implements DumbAware {
+  public static final Key<SwitcherPanel> SWITCHER_KEY = Key.create("SWITCHER_KEY");
   private static volatile SwitcherPanel SWITCHER = null;
   private static final Color SEPARATOR_COLOR = JBColor.namedColor("Popup.separatorColor", new JBColor(Gray.xC0, Gray.x4B));
+  private static final String TOGGLE_CHECK_BOX_ACTION_ID = "SwitcherRecentEditedChangedToggleCheckBox";
+
+  private static final int MINIMUM_HEIGHT = JBUIScale.scale(400);
+  private static final int MINIMUM_WIDTH = JBUIScale.scale(500);
 
   @NonNls private static final String SWITCHER_FEATURE_ID = "switcher";
   private static final Color ON_MOUSE_OVER_BG_COLOR = new JBColor(new Color(231, 242, 249), new Color(77, 80, 84));
@@ -93,7 +194,7 @@ public class Switcher extends AnAction implements DumbAware {
 
   static {
     Shortcut recentFiles = ArrayUtil.getFirstElement(getActiveKeymapShortcuts("RecentFiles").getShortcuts());
-    List<Shortcut> shortcuts = ContainerUtil.newArrayList();
+    List<Shortcut> shortcuts = new ArrayList<>();
     for (char ch = '0'; ch <= '9'; ch++) {
       shortcuts.add(CustomShortcutSet.fromString("control " + ch).getShortcuts()[0]);
     }
@@ -146,64 +247,108 @@ public class Switcher extends AnAction implements DumbAware {
       }
       if (SWITCHER == null) {
         isNewSwitcher = true;
-        SWITCHER = createAndShowSwitcher(e, SWITCHER_TITLE, false, null);
+        // Assigns SWITCHER field
+        boolean moveBack = e.getInputEvent() != null && e.getInputEvent().isShiftDown();
+        createAndShowSwitcher(project, SWITCHER_TITLE, IdeActions.ACTION_SWITCHER, false, false, !moveBack);
         FeatureUsageTracker.getInstance().triggerFeatureUsed(SWITCHER_FEATURE_ID);
       }
     }
 
     assert SWITCHER != null;
     if (!SWITCHER.isPinnedMode()) {
-      if (e.getInputEvent() != null && e.getInputEvent().isShiftDown()) {
-        SWITCHER.goBack();
+      if (isNewSwitcher && !FileEditorManagerEx.getInstanceEx(project).hasOpenedFile()) {
+        SWITCHER.files.setSelectedIndex(0);
       }
-      else {
-        if (isNewSwitcher && !FileEditorManagerEx.getInstanceEx(project).hasOpenedFile()) {
-          SWITCHER.files.setSelectedIndex(0);
-        }
-        else {
-          SWITCHER.goForward();
-        }
+
+      if (!isNewSwitcher) {
+        if (e.getInputEvent() != null && e.getInputEvent().isShiftDown()) SWITCHER.goBack();
+        else SWITCHER.goForward();
       }
     }
   }
 
+  /**
+   * @deprecated Please use {@link Switcher#createAndShowSwitcher(AnActionEvent, String, String, boolean, boolean)}
+   */
+  @Deprecated
   @Nullable
-  public static SwitcherPanel createAndShowSwitcher(@NotNull AnActionEvent e, @NotNull String title, boolean pinned, @Nullable final VirtualFile[] vFiles) {
-    Project project = getEventProject(e);
-    if (SWITCHER != null && Comparing.equal(SWITCHER.myTitle, title)) {
-      SWITCHER.goForward();
-      return null;
-    }
-    return project == null ? null : createAndShowSwitcher(project, title, pinned, vFiles == null ? null : Arrays.asList(vFiles));
+  public static SwitcherPanel createAndShowSwitcher(@NotNull AnActionEvent e, @NotNull String title, boolean pinned, final VirtualFile @Nullable [] vFiles) {
+    return createAndShowSwitcher(e, title, "RecentFiles", pinned, vFiles != null);
+  }
+
+  public static SwitcherPanel createAndShowSwitcher(@NotNull AnActionEvent e, @NotNull String title, @NonNls @NotNull String actionId, boolean onlyEdited, boolean pinned) {
+    if (SWITCHER != null && Objects.equals(SWITCHER.myTitle, title)) return null;
+
+    Project project = e.getProject();
+    boolean moveBack = e.getInputEvent() != null && e.getInputEvent().isShiftDown();
+    return project == null ? null : createAndShowSwitcher(project, title, actionId, onlyEdited, pinned, !moveBack);
   }
 
   @Nullable
   private static SwitcherPanel createAndShowSwitcher(@NotNull Project project,
                                                      @NotNull String title,
+                                                     @NotNull String actionId,
+                                                     boolean onlyEdited,
                                                      boolean pinned,
-                                                     @Nullable final List<VirtualFile> vFiles) {
+                                                     boolean moveForward) {
     synchronized (Switcher.class) {
       if (SWITCHER != null) {
         SWITCHER.cancel();
       }
-      SWITCHER = new SwitcherPanel(project, title, pinned) {
-        @NotNull
-        @Override
-        protected List<VirtualFile> getFiles(@NotNull Project project) {
-          return vFiles != null ? vFiles : super.getFiles(project);
-        }
-      };
+      SWITCHER = new SwitcherPanel(project, title, actionId, onlyEdited, pinned, moveForward);
+      project.putUserData(SWITCHER_KEY, SWITCHER);
       return SWITCHER;
     }
   }
 
-  public static class SwitcherPanel extends JPanel implements KeyListener, MouseListener, MouseMotionListener, DataProvider {
+  public static class ToggleCheckBoxAction extends DumbAwareAction implements DumbAware, LightEditCompatible {
+    @Override
+    public void actionPerformed(@NotNull AnActionEvent e) {
+      Project project = e.getProject();
+      SwitcherPanel switcherPanel = SWITCHER_KEY.get(project);
+      if (switcherPanel != null) {
+        switcherPanel.toggleShowEditedFiles();
+      }
+    }
+
+    @Override
+    public void update(@NotNull AnActionEvent e) {
+      Project project = e.getProject();
+      e.getPresentation().setEnabledAndVisible(SWITCHER_KEY.get(project) != null);
+    }
+
+    static boolean isEnabled() {
+      return getActiveKeymapShortcuts(TOGGLE_CHECK_BOX_ACTION_ID).getShortcuts().length > 0;
+    }
+  }
+
+  public static class IterateItemsAction extends DumbAwareAction implements DumbAware {
+    @Override
+    public void actionPerformed(@NotNull AnActionEvent e) {
+      Project project = e.getProject();
+      SwitcherPanel switcherPanel = SWITCHER_KEY.get(project);
+      if (switcherPanel != null) {
+        switcherPanel.goForward();
+      }
+    }
+
+    @Override
+    public void update(@NotNull AnActionEvent e) {
+      Project project = e.getProject();
+      e.getPresentation().setEnabledAndVisible(SWITCHER_KEY.get(project) != null);
+    }
+  }
+
+  public static class SwitcherPanel extends JPanel implements KeyListener, MouseListener, MouseMotionListener, DataProvider,
+                                                              QuickSearchComponent, Disposable {
+    static final Object RECENT_LOCATIONS = new Object();
     final JBPopup myPopup;
-    final JBList toolWindows;
-    final JBList files;
-    final JPanel separator;
-    final ToolWindowManager twManager;
+    final JBList<Object> toolWindows;
+    final JBList<FileInfo> files;
+    final ToolWindowManager toolWindowManager;
+    JBCheckBox myShowOnlyEditedFilesCheckBox;
     final JLabel pathLabel = new JLabel(" ");
+    final JPanel myTopPanel;
     final JPanel descriptions;
     final Project project;
     private final boolean myPinned;
@@ -211,10 +356,19 @@ public class Switcher extends AnAction implements DumbAware {
     final Alarm myAlarm;
     final SwitcherSpeedSearch mySpeedSearch;
     final String myTitle;
+    private JBPopup myHint;
 
     @Nullable
     @Override
     public Object getData(@NotNull @NonNls String dataId) {
+      if (CommonDataKeys.PROJECT.is(dataId)) {
+        return this.project;
+      }
+      if (PlatformDataKeys.SELECTED_ITEM.is(dataId)) {
+        List list = getSelectedList().getSelectedValuesList();
+        Object o = ContainerUtil.getOnlyItem(list);
+        return o instanceof FileInfo ? ((FileInfo)o).first : null;
+      }
       if (CommonDataKeys.VIRTUAL_FILE_ARRAY.is(dataId)) {
         final List list = getSelectedList().getSelectedValuesList();
         if (!list.isEmpty()) {
@@ -301,15 +455,15 @@ public class Switcher extends AnAction implements DumbAware {
     };
 
     @SuppressWarnings({"ConstantConditions"})
-    SwitcherPanel(@NotNull final Project project, @NotNull String title, boolean pinned) {
-      setLayout(new SwitcherLayouter());
+    SwitcherPanel(@NotNull final Project project, @NotNull String title, @NotNull String actionId, boolean onlyEdited, boolean pinned,
+                  boolean moveForward)
+    {
+      setLayout(new BorderLayout());
       this.project = project;
       myTitle = title;
       myPinned = pinned;
-      mySpeedSearch = pinned ? new SwitcherSpeedSearch() : null;
+      mySpeedSearch = pinned ? new SwitcherSpeedSearch(this) : null;
 
-      //setFocusable(true);
-      //addKeyListener(this);
       setBorder(JBUI.Borders.empty());
       setBackground(JBColor.background());
       pathLabel.setHorizontalAlignment(SwingConstants.LEFT);
@@ -326,37 +480,34 @@ public class Switcher extends AnAction implements DumbAware {
 
       descriptions.setBorder(new CustomLineBorder(JBUI.CurrentTheme.Advertiser.borderColor(), JBUI.insetsTop(1)));
       descriptions.add(pathLabel, BorderLayout.CENTER);
-      twManager = ToolWindowManager.getInstance(project);
-      DefaultListModel twModel = new DefaultListModel();
+      toolWindowManager = ToolWindowManager.getInstance(project);
+      CollectionListModel<Object> twModel = new CollectionListModel<>();
       List<ActivateToolWindowAction> actions = ToolWindowsGroup.getToolWindowActions(project, true);
-      List<ToolWindow> windows = ContainerUtil.newArrayList();
+      List<ToolWindow> windows = new ArrayList<>();
       for (ActivateToolWindowAction action : actions) {
-        ToolWindow tw = twManager.getToolWindow(action.getToolWindowId());
+        ToolWindow tw = toolWindowManager.getToolWindow(action.getToolWindowId());
         if (tw.isAvailable()) {
           windows.add(tw);
         }
       }
       twShortcuts = createShortcuts(windows);
       final Map<ToolWindow, String> map = ContainerUtil.reverseMap(twShortcuts);
-      Collections.sort(windows, (o1, o2) -> StringUtil.compare(map.get(o1), map.get(o2), false));
+      windows.sort((o1, o2) -> StringUtil.compare(map.get(o1), map.get(o2), false));
       for (ToolWindow window : windows) {
-        twModel.addElement(window);
+        twModel.add(window);
       }
+      twModel.add(RECENT_LOCATIONS);
 
-      toolWindows = new JBList(twModel);
+      toolWindows = createList(twModel, getNamer(), mySpeedSearch, pinned);
       toolWindows.addFocusListener(new MyToolWindowsListFocusListener());
-      if (pinned) {
-        new NameFilteringListModel<ToolWindow>(toolWindows, window -> window.getStripeTitle(), s -> !mySpeedSearch.isPopupActive()
-                                                                                                || StringUtil.isEmpty(mySpeedSearch.getEnteredPrefix())
-                                                                                                || mySpeedSearch.getComparator().matchingFragments(mySpeedSearch.getEnteredPrefix(), s) != null, mySpeedSearch);
-      }
+      toolWindows.setPreferredSize(new Dimension(JBUI.scale(200), toolWindows.getPreferredSize().height));
 
       toolWindows.setBorder(JBUI.Borders.empty(5, 5, 5, 20));
       toolWindows.setSelectionMode(pinned ? ListSelectionModel.MULTIPLE_INTERVAL_SELECTION : ListSelectionModel.SINGLE_SELECTION);
-      toolWindows.setCellRenderer(new SwitcherToolWindowsListRenderer(mySpeedSearch, map, myPinned) {
+      toolWindows.setCellRenderer(new SwitcherToolWindowsListRenderer(mySpeedSearch, map, myPinned, showEdited()) {
         @NotNull
         @Override
-        public Component getListCellRendererComponent(@NotNull JList list,
+        public Component getListCellRendererComponent(@NotNull JList<?> list,
                                                       Object value,
                                                       int index,
                                                       boolean selected,
@@ -385,103 +536,31 @@ public class Switcher extends AnAction implements DumbAware {
         }
       });
 
-      separator = new JPanel();
-      separator.setBorder(new CustomLineBorder(SEPARATOR_COLOR, JBUI.insetsLeft(1)));
-      separator.setPreferredSize(JBUI.size(9, 10));
-      separator.setBackground(toolWindows.getBackground());
-
-      int selectionIndex = -1;
-      final FileEditorManagerImpl editorManager = (FileEditorManagerImpl)FileEditorManager.getInstance(project);
-      final ArrayList<FileInfo> filesData = new ArrayList<>();
-      final ArrayList<FileInfo> editors = new ArrayList<>();
-      if (!pinned) {
-        if (UISettings.getInstance().getEditorTabPlacement() != UISettings.TABS_NONE) {
-          for (Pair<VirtualFile, EditorWindow> pair : editorManager.getSelectionHistory()) {
-            editors.add(new FileInfo(pair.first, pair.second, project));
-          }
-        }
-      }
-      if (editors.size() < 2 || isPinnedMode()) {
-        if (isPinnedMode() && editors.size() > 1) {
-          filesData.addAll(editors);
-        }
-        final List<VirtualFile> recentFiles = getFiles(project);
-        final int maxFiles = Math.max(editors.size(), recentFiles.size());
-        final int minIndex = isPinnedMode() ? 0 : (recentFiles.size() - Math.min(toolWindows.getModel().getSize(), maxFiles));
-        boolean firstRecentMarked = false;
-        final List<VirtualFile> selectedFiles = Arrays.asList(editorManager.getSelectedFiles());
-        for (int i = recentFiles.size() - 1; i >= minIndex; i--) {
-          if (isPinnedMode()
-              && selectedFiles.contains(recentFiles.get(i))
-              && UISettings.getInstance().getEditorTabPlacement() != UISettings.TABS_NONE) {
-            continue;
-          }
-
-          final FileInfo info = new FileInfo(recentFiles.get(i), null, project);
-          boolean add = true;
-          if (isPinnedMode()) {
-            for (FileInfo fileInfo : filesData) {
-              if (fileInfo.first.equals(info.first)) {
-                add = false;
-                break;
-              }
-            }
-          }
-          if (add) {
-            filesData.add(info);
-            if (!firstRecentMarked) {
-              selectionIndex = filesData.size() - 1;
-              if (selectionIndex != 0 || UISettings.getInstance().getEditorTabPlacement() != UISettings.TABS_NONE || !isPinnedMode() || selectedFiles.isEmpty()) {
-                firstRecentMarked = true;
-              }
-            }
-          }
-        }
-        //if (editors.size() == 1) selectionIndex++;
-        if (editors.size() == 1 && (filesData.isEmpty() || !editors.get(0).getFirst().equals(filesData.get(0).getFirst()))) {
-          filesData.add(0, editors.get(0));
-        }
-      } else {
-        for (int i = 0; i < Math.min(30, editors.size()); i++) {
-          filesData.add(editors.get(i));
-        }
-      }
-
-      final DefaultListModel filesModel = new DefaultListModel();
-      for (FileInfo editor : filesData) {
-        filesModel.addElement(editor);
+      final List<FileInfo> filesToShow = getFilesToShow(project, collectFiles(project, onlyEdited),
+                                                        toolWindows.getModel().getSize(), pinned);
+      final CollectionListModel<FileInfo> filesModel = new CollectionListModel<>();
+      for (FileInfo editor : filesToShow) {
+        filesModel.add(editor);
       }
 
       final VirtualFilesRenderer filesRenderer = new VirtualFilesRenderer(this) {
-        JPanel myPanel = new JPanel(new BorderLayout());
-        JLabel myLabel = createPaleLabel("* ");
+        final JPanel myPanel = new NonOpaquePanel(new BorderLayout());
 
         {
-          myPanel.setOpaque(false);
           myPanel.setBackground(UIUtil.getListBackground());
         }
 
         @NotNull
         @Override
-        public Component getListCellRendererComponent(@NotNull JList list,
-                                                      Object value,
-                                                      int index,
-                                                      boolean selected,
-                                                      boolean hasFocus) {
-          assert value instanceof FileInfo;
-          final Component c = super.getListCellRendererComponent(list, value, index, selected, selected);
-          final Color bg = UIUtil.getListBackground();
-          final Color fg = UIUtil.getListForeground();
-          myLabel.setFont(list.getFont());
-          myLabel.setForeground(open ? fg : bg);
-
+        public Component getListCellRendererComponent(@NotNull JList<? extends FileInfo> list,
+                                                      FileInfo value, int index, boolean selected, boolean hasFocus) {
+          Component c = super.getListCellRendererComponent(list, value, index, selected, selected);
           myPanel.removeAll();
-          myPanel.add(myLabel, BorderLayout.WEST);
           myPanel.add(c, BorderLayout.CENTER);
 
           // Note: Name=name rendered in cell, Description=path to file, as displayed in bottom panel
           myPanel.getAccessibleContext().setAccessibleName(c.getAccessibleContext().getAccessibleName());
-          VirtualFile file = ((FileInfo)value).first;
+          VirtualFile file = value.first;
           String presentableUrl = ObjectUtils.notNull(file.getParent(), file).getPresentableUrl();
           String location = FileUtil.getLocationRelativeToUserHome(presentableUrl);
           myPanel.getAccessibleContext().setAccessibleDescription(location);
@@ -492,7 +571,8 @@ public class Switcher extends AnAction implements DumbAware {
         }
 
         @Override
-        protected void customizeCellRenderer(@NotNull JList list, Object value, int index, boolean selected, boolean hasFocus) {
+        protected void customizeCellRenderer(@NotNull JList<? extends FileInfo> list,
+                                             FileInfo value, int index, boolean selected, boolean hasFocus) {
           setPaintFocusBorder(false);
           super.customizeCellRenderer(list, value, index, selected, hasFocus);
         }
@@ -514,13 +594,18 @@ public class Switcher extends AnAction implements DumbAware {
 
         @Override
         public void valueChanged(@NotNull final ListSelectionEvent e) {
-          ApplicationManager.getApplication().invokeLater(() -> updatePathLabel());
+          if (e.getValueIsAdjusting()) return;
+          updatePathLabel();
+          PopupUpdateProcessorBase popupUpdater = myHint == null || !myHint.isVisible() ?
+                                                  null : myHint.getUserData(PopupUpdateProcessorBase.class);
+          if (popupUpdater != null) popupUpdater.updatePopup(CommonDataKeys.PSI_ELEMENT.getData(
+            DataManager.getInstance().getDataContext(SwitcherPanel.this)));
         }
 
         private void updatePathLabel() {
-          Object[] values = files.getSelectedValues();
-          if (values != null && values.length == 1) {
-            VirtualFile file = ((FileInfo)values[0]).first;
+          List<FileInfo> values = files.getSelectedValuesList();
+          if (values != null && values.size() == 1) {
+            VirtualFile file = values.get(0).first;
             String presentableUrl = ObjectUtils.notNull(file.getParent(), file).getPresentableUrl();
             pathLabel.setText(getTitle2Text(FileUtil.getLocationRelativeToUserHome(presentableUrl)));
           }
@@ -529,21 +614,11 @@ public class Switcher extends AnAction implements DumbAware {
           }
         }
       };
-
-      files = new JBList(filesModel);
-      if (pinned) {
-        new NameFilteringListModel<FileInfo>(files, info -> info.getNameForRendering(), s -> !mySpeedSearch.isPopupActive()
-                                                                                         || StringUtil.isEmpty(mySpeedSearch.getEnteredPrefix())
-                                                                                         || mySpeedSearch.getComparator().matchingFragments(mySpeedSearch.getEnteredPrefix(), s) != null, mySpeedSearch);
-      }
-
+      files = createList(filesModel, FileInfo::getNameForRendering, mySpeedSearch, pinned);
       files.setSelectionMode(pinned ? ListSelectionModel.MULTIPLE_INTERVAL_SELECTION : ListSelectionModel.SINGLE_SELECTION);
-      files.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
-        @Override
-        public void valueChanged(@NotNull ListSelectionEvent e) {
-          if (!files.isSelectionEmpty() && !toolWindows.isSelectionEmpty()) {
-            toolWindows.getSelectionModel().clearSelection();
-          }
+      files.getSelectionModel().addListSelectionListener(e -> {
+        if (!files.isSelectionEmpty() && !toolWindows.isSelectionEmpty()) {
+          toolWindows.getSelectionModel().clearSelection();
         }
       });
 
@@ -559,16 +634,40 @@ public class Switcher extends AnAction implements DumbAware {
       myClickListener.installOn(files);
       ScrollingUtil.ensureSelectionExists(files);
 
+      myShowOnlyEditedFilesCheckBox = new MyCheckBox(ToggleCheckBoxAction.isEnabled() ? TOGGLE_CHECK_BOX_ACTION_ID
+                                                                                      : actionId,
+                                                     onlyEdited);
+      myTopPanel = createTopPanel(myShowOnlyEditedFilesCheckBox,
+                                  isCheckboxMode() ? IdeBundle.message("title.popup.recent.files") : title,
+                                  pinned);
+      if (isCheckboxMode()) {
+        myShowOnlyEditedFilesCheckBox.addActionListener(e -> setShowOnlyEditedFiles(myShowOnlyEditedFilesCheckBox.isSelected()));
+        myShowOnlyEditedFilesCheckBox.addActionListener(e -> toolWindows.repaint());
+      }
+      else {
+        myShowOnlyEditedFilesCheckBox.setEnabled(false);
+        myShowOnlyEditedFilesCheckBox.setVisible(false);
+      }
+
+      this.add(myTopPanel, BorderLayout.NORTH);
       this.add(toolWindows, BorderLayout.WEST);
-      if (filesModel.size() > 0) {
+      if (filesModel.getSize() > 0) {
         files.setAlignmentY(1f);
         final JScrollPane pane = ScrollPaneFactory.createScrollPane(files, true);
-        pane.setPreferredSize(new Dimension(files.getPreferredSize().width, 20 * 20));
-        this.add(pane, BorderLayout.EAST);
+        pane.setPreferredSize(new Dimension(Math.max(myTopPanel.getPreferredSize().width - toolWindows.getPreferredSize().width,
+                                                     files.getPreferredSize().width),
+                                            20 * 20));
+        Border border = JBUI.Borders.merge(
+          JBUI.Borders.emptyLeft(9),
+          new CustomLineBorder(SEPARATOR_COLOR, JBUI.insetsLeft(1)),
+          true
+        );
+        pane.setBorder(border);
+        this.add(pane, BorderLayout.CENTER);
+        int selectionIndex = getFilesSelectedIndex(project, files, moveForward);
         if (selectionIndex > -1) {
           files.setSelectedIndex(selectionIndex);
         }
-        this.add(separator, BorderLayout.CENTER);
       }
       this.add(descriptions, BorderLayout.SOUTH);
 
@@ -583,16 +682,16 @@ public class Switcher extends AnAction implements DumbAware {
       KeymapUtil.reassignAction(files, getKeyStroke(VK_UP, 0), getKeyStroke(VK_UP, CTRL_DOWN_MASK), WHEN_FOCUSED, false);
       KeymapUtil.reassignAction(files, getKeyStroke(VK_DOWN, 0), getKeyStroke(VK_DOWN, CTRL_DOWN_MASK), WHEN_FOCUSED, false);
 
-
       myPopup = JBPopupFactory.getInstance().createComponentPopupBuilder(this, filesModel.getSize() > 0 ? files : toolWindows)
         .setResizable(pinned)
         .setModalContext(false)
         .setFocusable(true)
         .setRequestFocus(true)
-        .setTitle(title)
         .setCancelOnWindowDeactivation(true)
         .setCancelOnOtherWindowOpen(true)
         .setMovable(pinned)
+        .setMinSize(new Dimension(MINIMUM_WIDTH, MINIMUM_HEIGHT))
+        .setDimensionServiceKey(pinned ? project : null, pinned ? "SwitcherDM" : null , false)
         .setCancelKeyEnabled(false)
         .setCancelCallback(() -> {
           Container popupFocusAncestor = getPopupFocusAncestor();
@@ -600,9 +699,10 @@ public class Switcher extends AnAction implements DumbAware {
           SWITCHER = null;
           return true;
         }).createPopup();
+      Disposer.register(myPopup, this);
 
       if (isPinnedMode()) {
-        new DumbAwareAction(null, null, null) {
+        new DumbAwareAction() {
           @Override
           public void actionPerformed(@NotNull AnActionEvent e) {
             if (mySpeedSearch != null && mySpeedSearch.isPopupActive()) {
@@ -618,13 +718,14 @@ public class Switcher extends AnAction implements DumbAware {
           }
         }.registerCustomShortcutSet(CustomShortcutSet.fromString("ESCAPE"), this, myPopup);
       }
-      new DumbAwareAction(null, null, null) {
-        @Override
-        public void actionPerformed(@NotNull AnActionEvent e) {
-          //suppress all actions to activate a toolwindow : IDEA-71277
-        }
-      }.registerCustomShortcutSet(TW_SHORTCUT, this, myPopup);
-
+      if (!myPinned) {
+        new DumbAwareAction(IdeBundle.messagePointer("action.AnActionButton.text.suppress.all.actions.to.activate.a.toolwindow")) {
+          @Override
+          public void actionPerformed(@NotNull AnActionEvent e) {
+            //suppress all actions to activate a toolwindow : IDEA-71277
+          }
+        }.registerCustomShortcutSet(TW_SHORTCUT, this, myPopup);
+      }
       Window window = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusedWindow();
       if (window == null) {
         window = WindowManager.getInstance().getFrame(project);
@@ -641,11 +742,205 @@ public class Switcher extends AnAction implements DumbAware {
       addFocusTraversalKeys(popupFocusAncestor, KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS, "control RIGHT");
       addFocusTraversalKeys(popupFocusAncestor, KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS, "control LEFT");
 
+      fromListToList(toolWindows, files);
+      fromListToList(files, toolWindows);
+    }
+
+    @Override
+    public void dispose() {
+      synchronized (Switcher.class) {
+        SWITCHER = null;
+        project.putUserData(SWITCHER_KEY, null);
+      }
+    }
+
+    @NotNull
+    private Supplier<Boolean> showEdited() {
+      return () -> myShowOnlyEditedFilesCheckBox != null && myShowOnlyEditedFilesCheckBox.isSelected();
+    }
+
+    @NotNull
+    private Function<? super Object, String> getNamer() {
+      return value -> {
+        if (value instanceof ToolWindow) {
+          return ((ToolWindow)value).getStripeTitle();
+        }
+        if (value == RECENT_LOCATIONS) {
+          return getRecentLocationsLabel(showEdited());
+        }
+
+        throw new IllegalStateException();
+      };
+    }
+
+    static String getRecentLocationsLabel(@NotNull Supplier<Boolean> showEdited) {
+      return showEdited.get() ? IdeBundle.message("recent.locations.changed.locations") : IdeBundle.message("recent.locations.popup.title");
+    }
+
+    @Override
+    public void registerHint(@NotNull JBPopup h) {
+      if (myHint != null && myHint.isVisible() && myHint != h) {
+        myHint.cancel();
+      }
+      myHint = h;
+    }
+
+    @Override
+    public void unregisterHint() {
+      myHint = null;
+    }
+
+    @NotNull
+    private static <T> JBList<T> createList(CollectionListModel<T> baseModel,
+                                            Function<? super T, String> namer,
+                                            SwitcherSpeedSearch speedSearch,
+                                            boolean pinned) {
+      ListModel<T> listModel;
+      if (pinned) {
+        listModel = new NameFilteringListModel<>(baseModel, namer, s -> !speedSearch.isPopupActive()
+                                                                        || StringUtil.isEmpty(speedSearch.getEnteredPrefix())
+                                                                        || speedSearch.getComparator().matchingFragments(speedSearch.getEnteredPrefix(), s) != null, () -> StringUtil.notNullize(
+          speedSearch.getEnteredPrefix()));
+      }
+      else {
+        listModel = baseModel;
+      }
+      return new JBList<>(listModel);
+    }
+
+    private static void fromListToList(JBList from, JBList to) {
+      AbstractAction action = new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent event) {
+          to.requestFocus();
+        }
+      };
+      ActionMap map = from.getActionMap();
+      map.put(ListActions.Left.ID, action);
+      map.put(ListActions.Right.ID, action);
     }
 
     private Container getPopupFocusAncestor() {
-      JComponent content = myPopup.getContent();
-      return content == null ? null : content.getFocusCycleRootAncestor();
+      return myPopup.isDisposed() ? null : myPopup.getContent().getFocusCycleRootAncestor();
+    }
+
+    @NotNull
+    static List<VirtualFile> collectFiles(@NotNull Project project, boolean onlyEdited) {
+      return onlyEdited ? Arrays.asList(IdeDocumentHistory.getInstance(project).getChangedFiles())
+                        : getRecentFiles(project);
+    }
+
+    @NotNull
+    static List<FileInfo> getFilesToShow(@NotNull Project project, @NotNull List<VirtualFile> filesForInit,
+                                         int toolWindowsCount, boolean pinned) {
+      final FileEditorManagerImpl editorManager = (FileEditorManagerImpl)FileEditorManager.getInstance(project);
+      final ArrayList<FileInfo> filesData = new ArrayList<>();
+      final ArrayList<FileInfo> editors = new ArrayList<>();
+      LinkedHashSet<VirtualFile> addedFiles = new LinkedHashSet<>();
+      if (!pinned) {
+        for (Pair<VirtualFile, EditorWindow> pair : editorManager.getSelectionHistory()) {
+          editors.add(new FileInfo(pair.first, pair.second, project));
+        }
+      }
+      if (editors.size() < 2 || pinned) {
+        if (pinned && editors.size() > 1) {
+          for (FileInfo fileInfo : editors) {
+            if (addedFiles.add(fileInfo.first))
+              filesData.add(fileInfo);
+          }
+        }
+        int maxFiles = Math.max(editors.size(), filesForInit.size());
+        int minIndex = pinned ? 0 : (filesForInit.size() - Math.min(toolWindowsCount, maxFiles));
+        List<VirtualFile> selectedFiles = Arrays.asList(editorManager.getSelectedFiles());
+        for (int i = filesForInit.size() - 1; i >= minIndex; i--) {
+          if (pinned
+              && UISettings.getInstance().getEditorTabPlacement() != UISettings.TABS_NONE
+              && selectedFiles.contains(filesForInit.get(i)) ) {
+            continue;
+          }
+
+          FileInfo info = new FileInfo(filesForInit.get(i), null, project);
+          boolean add = true;
+          if (pinned) {
+            for (FileInfo fileInfo : filesData) {
+              if (fileInfo.first.equals(info.first)) {
+                add = false;
+                break;
+              }
+            }
+          }
+          if (add) {
+            if (addedFiles.add(info.first)) {
+              filesData.add(info);
+            }
+          }
+        }
+        if (editors.size() == 1 && (filesData.isEmpty() || !editors.get(0).getFirst().equals(filesData.get(0).getFirst()))) {
+          if (addedFiles.add(editors.get(0).first)) {
+            filesData.add(0, editors.get(0));
+          }
+        }
+      } else {
+        for (int i = 0; i < Math.min(30, editors.size()); i++) {
+          if (addedFiles.add(editors.get(i).first)) {
+            filesData.add(editors.get(i));
+          }
+        }
+      }
+
+      return filesData;
+    }
+
+    static int getFilesSelectedIndex(Project project, JList<FileInfo> filesList, boolean forward) {
+      final FileEditorManagerImpl editorManager = (FileEditorManagerImpl)FileEditorManager.getInstance(project);
+      EditorWindow currentWindow = editorManager.getCurrentWindow();
+      VirtualFile currentFile = currentWindow != null ? currentWindow.getSelectedFile() : null;
+
+      ListModel<FileInfo> model = filesList.getModel();
+      if (forward) {
+        for (int i = 0; i < model.getSize(); i++) {
+          FileInfo fileInfo = model.getElementAt(i);
+          if (!fileInfo.first.equals(currentFile)) {
+            return i;
+          }
+        }
+      }
+      else {
+        for (int i = model.getSize() - 1; i >= 0; i--) {
+          FileInfo fileInfo = model.getElementAt(i);
+          if (!fileInfo.first.equals(currentFile)) {
+            return i;
+          }
+        }
+      }
+
+      return -1;
+    }
+
+    @NotNull
+    private static JPanel createTopPanel(@NotNull JBCheckBox showOnlyEditedFilesCheckBox,
+                                         @NotNull String title,
+                                         boolean isMovable) {
+      JPanel topPanel = new CaptionPanel();
+      JBLabel titleLabel = new JBLabel(title);
+      titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
+      topPanel.add(titleLabel, BorderLayout.WEST);
+      topPanel.add(showOnlyEditedFilesCheckBox, BorderLayout.EAST);
+
+      Dimension size = topPanel.getPreferredSize();
+      size.height = JBUIScale.scale(29);
+      size.width = titleLabel.getPreferredSize().width + showOnlyEditedFilesCheckBox.getPreferredSize().width + JBUIScale.scale(50);
+      topPanel.setPreferredSize(size);
+      topPanel.setMinimumSize(size);
+      topPanel.setBorder(JBUI.Borders.empty(5, 8));
+
+      if (isMovable) {
+        WindowMoveListener moveListener = new WindowMoveListener(topPanel);
+        topPanel.addMouseListener(moveListener);
+        topPanel.addMouseMotionListener(moveListener);
+      }
+
+      return topPanel;
     }
 
     private static void  addFocusTraversalKeys (Container focusCycleRoot, int focusTraversalType, String keyStroke) {
@@ -657,8 +952,25 @@ public class Switcher extends AnAction implements DumbAware {
     }
 
     @NotNull
-    protected List<VirtualFile> getFiles(@NotNull Project project) {
-      return EditorHistoryManager.getInstance(project).getFileList();
+    private static List<VirtualFile> getRecentFiles(@NotNull Project project) {
+      List<VirtualFile> recentFiles = EditorHistoryManager.getInstance(project).getFileList();
+      VirtualFile[] openFiles = FileEditorManager.getInstance(project).getOpenFiles();
+
+      Set<VirtualFile> recentFilesSet = new HashSet<>(recentFiles);
+      Set<VirtualFile> openFilesSet = ContainerUtil.newHashSet(openFiles);
+
+      // Add missing FileEditor tabs right after the last one, that is available via "Recent Files"
+      int index = 0;
+      for (int i = 0; i < recentFiles.size(); i++) {
+        if (openFilesSet.contains(recentFiles.get(i))) {
+          index = i;
+          break;
+        }
+      }
+
+      List<VirtualFile> result = new ArrayList<>(recentFiles);
+      result.addAll(index, ContainerUtil.filter(openFiles, it -> !recentFilesSet.contains(it)));
+      return result;
     }
 
     @NotNull
@@ -666,7 +978,7 @@ public class Switcher extends AnAction implements DumbAware {
       final Map<String, ToolWindow> keymap = new HashMap<>(windows.size());
       final List<ToolWindow> otherTW = new ArrayList<>();
       for (ToolWindow window : windows) {
-        int index = ActivateToolWindowAction.getMnemonicForToolWindow(((ToolWindowImpl)window).getId());
+        int index = ActivateToolWindowAction.getMnemonicForToolWindow(window.getId());
         if (index >= '0' && index <= '9') {
           keymap.put(getIndexShortcut(index - '0'), window);
         }
@@ -721,16 +1033,12 @@ public class Switcher extends AnAction implements DumbAware {
     }
 
     @Override
-    public void keyTyped(@NotNull KeyEvent e) {
-      if (e.getKeyCode() == VK_ENTER) {
-        navigate(e);
-      }
-    }
+    public void keyTyped(@NotNull KeyEvent e) {}
 
     @Override
     public void keyReleased(@NotNull KeyEvent e) {
       boolean ctrl = e.getKeyCode() == CTRL_KEY;
-      if ((ctrl && isAutoHide()) || e.getKeyCode() == VK_ENTER) {
+      if ((ctrl && isAutoHide())) {
         navigate(e);
       }
     }
@@ -749,6 +1057,9 @@ public class Switcher extends AnAction implements DumbAware {
           break;
         case VK_ESCAPE:
           cancel();
+          break;
+        case VK_ENTER:
+          if (mySpeedSearch == null) navigate(e);
           break;
       }
     }
@@ -786,7 +1097,6 @@ public class Switcher extends AnAction implements DumbAware {
           if (jList.getModel().getSize() == 1) {
             removeElementAt(jList, selectedIndex);
             this.remove(jList);
-            this.remove(separator);
             final Dimension size = toolWindows.getSize();
             myPopup.setSize(new Dimension(size.width, myPopup.getSize().height));
           }
@@ -800,9 +1110,8 @@ public class Switcher extends AnAction implements DumbAware {
         }
         else if (value instanceof ToolWindow) {
           final ToolWindow toolWindow = (ToolWindow)value;
-          if (twManager instanceof ToolWindowManagerImpl) {
-            ToolWindowManagerImpl manager = (ToolWindowManagerImpl)twManager;
-            manager.hideToolWindow(((ToolWindowImpl)toolWindow).getId(), false, false);
+          if (toolWindowManager instanceof ToolWindowManagerImpl) {
+            ((ToolWindowManagerImpl)toolWindowManager).hideToolWindow(toolWindow.getId(), false, false);
           }
           else {
             toolWindow.hide(null);
@@ -818,17 +1127,8 @@ public class Switcher extends AnAction implements DumbAware {
       }
     }
 
-    private static void removeElementAt(@NotNull JList jList, int index) {
-      final ListModel model = jList.getModel();
-      if (model instanceof DefaultListModel) {
-        ((DefaultListModel)model).removeElementAt(index);
-      }
-      else if (model instanceof NameFilteringListModel) {
-        ((NameFilteringListModel)model).remove(index);
-      }
-      else {
-        throw new IllegalArgumentException("Wrong list model " + model.getClass());
-      }
+    private static void removeElementAt(@NotNull JList<?> jList, int index) {
+      ListUtil.removeItem(jList.getModel(), index);
     }
 
     private void pack() {
@@ -849,10 +1149,6 @@ public class Switcher extends AnAction implements DumbAware {
 
     private boolean isFilesVisible() {
       return files.getModel().getSize() > 0;
-    }
-
-    private boolean isToolWindowsSelected() {
-      return getSelectedList() == toolWindows;
     }
 
     private void cancel() {
@@ -885,7 +1181,7 @@ public class Switcher extends AnAction implements DumbAware {
       go(false);
     }
 
-    public JBList getSelectedList() {
+    public JBList<?> getSelectedList() {
       return getSelectedList(files);
     }
 
@@ -894,16 +1190,49 @@ public class Switcher extends AnAction implements DumbAware {
       return files.hasFocus() ? files : toolWindows.hasFocus() ? toolWindows : preferable;
     }
 
+    boolean isCheckboxMode() {
+      return isPinnedMode() && Experiments.getInstance().isFeatureEnabled("recent.and.edited.files.together");
+    }
+
+    void toggleShowEditedFiles() {
+      myShowOnlyEditedFilesCheckBox.doClick();
+    }
+
+    void setShowOnlyEditedFiles(boolean onlyEdited) {
+      if (myShowOnlyEditedFilesCheckBox.isSelected() != onlyEdited) {
+        myShowOnlyEditedFilesCheckBox.setSelected(onlyEdited);
+      }
+
+      final boolean listWasSelected = files.getSelectedIndex() != -1;
+
+      final List<FileInfo> filesToShow = getFilesToShow(project, collectFiles(project, onlyEdited),
+                                                        toolWindows.getModel().getSize(), isPinnedMode());
+
+      ListModel<FileInfo> model = files.getModel();
+      ListUtil.removeAllItems(model);
+      ListUtil.addAllItems(model, filesToShow);
+
+      int selectionIndex = getFilesSelectedIndex(project, files, true);
+      if (selectionIndex > -1 && listWasSelected) {
+        files.setSelectedIndex(selectionIndex);
+      }
+      files.revalidate();
+      files.repaint();
+    }
+
     void navigate(final InputEvent e) {
-      final boolean openInNewWindow = e != null && e.isShiftDown() && e instanceof KeyEvent && ((KeyEvent)e).getKeyCode() == VK_ENTER;
-      final Object[] values = getSelectedList().getSelectedValues();
-      final String searchQuery = mySpeedSearch != null ? mySpeedSearch.getEnteredPrefix() : null;
+      boolean openInNewWindow = e != null && e.isShiftDown() && e instanceof KeyEvent && ((KeyEvent)e).getKeyCode() == VK_ENTER;
+      List<?> values = getSelectedList().getSelectedValuesList();
+      String searchQuery = mySpeedSearch != null ? mySpeedSearch.getEnteredPrefix() : null;
       myPopup.cancel(null);
-      if (values.length == 0) {
+      if (values.isEmpty()) {
         tryToOpenFileSearch(e, searchQuery);
       }
-      else if (values[0] instanceof ToolWindow) {
-        final ToolWindow toolWindow = (ToolWindow)values[0];
+      else if (values.get(0) == RECENT_LOCATIONS) {
+        RecentLocationsAction.showPopup(project, myShowOnlyEditedFilesCheckBox.isSelected());
+
+      } else if (values.get(0) instanceof ToolWindow) {
+        ToolWindow toolWindow = (ToolWindow)values.get(0);
         IdeFocusManager.getInstance(project).doWhenFocusSettlesDown(() -> toolWindow.activate(null, true, true),
                                                                     ModalityState.current());
       }
@@ -930,6 +1259,9 @@ public class Switcher extends AnAction implements DumbAware {
                 boolean oldValue = settings.getReuseNotModifiedTabs();
                 settings.setReuseNotModifiedTabs(false);
                 manager.openFile(file, true, true);
+                if (LightEdit.owns(project)) {
+                  LightEditFeatureUsagesUtil.logFileOpen(RecentFiles);
+                }
                 if (oldValue) {
                   CommandProcessor.getInstance().executeCommand(project, () -> settings.setReuseNotModifiedTabs(true), "", null);
                 }
@@ -946,15 +1278,11 @@ public class Switcher extends AnAction implements DumbAware {
         myPopup.cancel();
         final AnAction action = gotoFile;
         ApplicationManager.getApplication().invokeLater(() -> DataManager.getInstance().getDataContextFromFocus().doWhenDone((Consumer<DataContext>)context -> {
-          final DataContext dataContext = new DataContext() {
-            @Nullable
-            @Override
-            public Object getData(@NotNull @NonNls String dataId) {
-              if (PlatformDataKeys.PREDEFINED_TEXT.is(dataId)) {
-                return fileName;
-              }
-              return context.getData(dataId);
+          final DataContext dataContext = dataId -> {
+            if (PlatformDataKeys.PREDEFINED_TEXT.is(dataId)) {
+              return fileName;
             }
+            return context.getData(dataId);
           };
           final AnActionEvent event =
             new AnActionEvent(e, dataContext, ActionPlaces.EDITOR_POPUP, new PresentationFactory().getPresentation(action),
@@ -967,6 +1295,9 @@ public class Switcher extends AnAction implements DumbAware {
     @Nullable
     private static EditorWindow findAppropriateWindow(@NotNull FileInfo info) {
       if (info.second == null) return null;
+      if (UISettings.getInstance().getEditorTabPlacement() == UISettings.TABS_NONE) {
+        return info.second.getOwner().getCurrentWindow();
+      }
       final EditorWindow[] windows = info.second.getOwner().getWindows();
       return ArrayUtil.contains(info.second, windows) ? info.second : windows.length > 0 ? windows[0] : null;
     }
@@ -1032,18 +1363,17 @@ public class Switcher extends AnAction implements DumbAware {
     public void mouseDragged(@NotNull MouseEvent e) {
     }
 
-    private class SwitcherSpeedSearch extends SpeedSearchBase<SwitcherPanel> implements PropertyChangeListener {
-      private Object[] myElements;
+    private static class SwitcherSpeedSearch extends SpeedSearchBase<SwitcherPanel> implements PropertyChangeListener {
 
-      SwitcherSpeedSearch() {
-        super(SwitcherPanel.this);
+      SwitcherSpeedSearch(@NotNull SwitcherPanel switcher) {
+        super(switcher);
         addChangeListener(this);
         setComparator(new SpeedSearchComparator(false, true));
       }
 
       @Override
-      protected void processKeyEvent(@NotNull final KeyEvent e) {
-        final int keyCode = e.getKeyCode();
+      protected void processKeyEvent(@NotNull KeyEvent e) {
+        int keyCode = e.getKeyCode();
         if (keyCode == VK_ENTER) {
           SWITCHER.navigate(e);
           e.consume();
@@ -1057,34 +1387,30 @@ public class Switcher extends AnAction implements DumbAware {
 
       @Override
       protected int getSelectedIndex() {
-        return isFilesSelected()
-               ? files.getSelectedIndex()
-               : files.getModel().getSize() + toolWindows.getSelectedIndex();
+        return myComponent.isFilesSelected()
+               ? myComponent.files.getSelectedIndex()
+               : myComponent.files.getModel().getSize() + myComponent.toolWindows.getSelectedIndex();
       }
 
-      @NotNull
       @Override
-      protected Object[] getAllElements() {
-
-        final SwitcherPanel switcher = SwitcherPanel.this;
-
-        ListModel filesModel = switcher.files.getModel();
-        final Object[] files = new Object[filesModel.getSize()];
+      protected Object @NotNull [] getAllElements() {
+        ListModel filesModel = myComponent.files.getModel();
+        Object[] files = new Object[filesModel.getSize()];
         for (int i = 0; i < files.length; i++) {
           files[i] = filesModel.getElementAt(i);
         }
 
-        ListModel twModel = switcher.toolWindows.getModel();
-        final Object[] toolWindows = new Object[twModel.getSize()];
+        ListModel twModel = myComponent.toolWindows.getModel();
+        Object[] toolWindows = new Object[twModel.getSize()];
         for (int i = 0; i < toolWindows.length; i++) {
           toolWindows[i] = twModel.getElementAt(i);
         }
 
-        myElements = new Object[files.length + toolWindows.length];
-        System.arraycopy(files, 0, myElements, 0, files.length);
-        System.arraycopy(toolWindows, 0, myElements, files.length, toolWindows.length);
+        Object[] elements = new Object[files.length + toolWindows.length];
+        System.arraycopy(files, 0, elements, 0, files.length);
+        System.arraycopy(toolWindows, 0, elements, files.length, toolWindows.length);
 
-        return myElements;
+        return elements;
       }
 
 
@@ -1102,41 +1428,41 @@ public class Switcher extends AnAction implements DumbAware {
       @Override
       protected void selectElement(final Object element, String selectedText) {
         if (element instanceof FileInfo) {
-          if (!toolWindows.isSelectionEmpty()) toolWindows.clearSelection();
-          files.clearSelection();
-          files.setSelectedValue(element, true);
-          files.requestFocusInWindow();
+          if (!myComponent.toolWindows.isSelectionEmpty()) myComponent.toolWindows.clearSelection();
+          myComponent.files.clearSelection();
+          myComponent.files.setSelectedValue(element, true);
+          myComponent.files.requestFocusInWindow();
         }
         else {
-          if (!files.isSelectionEmpty()) files.clearSelection();
-          toolWindows.clearSelection();
-          toolWindows.setSelectedValue(element, true);
-          toolWindows.requestFocusInWindow();
+          if (!myComponent.files.isSelectionEmpty()) myComponent.files.clearSelection();
+          myComponent.toolWindows.clearSelection();
+          myComponent.toolWindows.setSelectedValue(element, true);
+          myComponent.toolWindows.requestFocusInWindow();
         }
       }
 
       @Nullable
       @Override
-      protected Object findElement(String s) {
+      protected Object findElement(@NotNull String s) {
         final List<SpeedSearchObjectWithWeight> elements = SpeedSearchObjectWithWeight.findElement(s, this);
         return elements.isEmpty() ? null : elements.get(0).node;
       }
 
       @Override
       public void propertyChange(@NotNull PropertyChangeEvent evt) {
-        if (project.isDisposed()) {
-          myPopup.cancel();
+        if (myComponent.project.isDisposed()) {
+          myComponent.myPopup.cancel();
           return;
         }
-        ((NameFilteringListModel)files.getModel()).refilter();
-        ((NameFilteringListModel)toolWindows.getModel()).refilter();
-        if (files.getModel().getSize() + toolWindows.getModel().getSize() == 0) {
-          toolWindows.getEmptyText().setText("");
-          files.getEmptyText().setText("Press 'Enter' to search in Project");
+        ((NameFilteringListModel)myComponent.files.getModel()).refilter();
+        ((NameFilteringListModel)myComponent.toolWindows.getModel()).refilter();
+        if (myComponent.files.getModel().getSize() + myComponent.toolWindows.getModel().getSize() == 0) {
+          myComponent.toolWindows.getEmptyText().setText("");
+          myComponent.files.getEmptyText().setText(IdeBundle.message("empty.text.press.enter.to.search.in.project"));
         }
         else {
-          files.getEmptyText().setText(StatusText.DEFAULT_EMPTY_TEXT);
-          toolWindows.getEmptyText().setText(StatusText.DEFAULT_EMPTY_TEXT);
+          myComponent.files.getEmptyText().setText(StatusText.getDefaultEmptyText());
+          myComponent.toolWindows.getEmptyText().setText(StatusText.getDefaultEmptyText());
         }
         refreshSelection();
       }
@@ -1149,43 +1475,26 @@ public class Switcher extends AnAction implements DumbAware {
     public boolean isPinnedMode() {
       return myPinned;
     }
+  }
 
-    private class SwitcherLayouter extends BorderLayout {
-      private Rectangle sBounds;
-      private Rectangle tBounds;
-      private Rectangle fBounds;
-      private Rectangle dBounds;
+  private static class MyCheckBox extends JBCheckBox {
+    private MyCheckBox(@NotNull String actionId, boolean selected) {
+      super(layoutText(actionId), selected);
+      setOpaque(false);
+      setFocusable(false);
+    }
 
-      @Override
-      public void layoutContainer(@NotNull Container target) {
-        final JScrollPane scrollPane = UIUtil.getParentOfType(JScrollPane.class, files);
-        JComponent filesPane = scrollPane != null ? scrollPane : files;
-        if (sBounds == null || !target.isShowing()) {
-          super.layoutContainer(target);
-          sBounds = separator.getBounds();
-          tBounds = toolWindows.getBounds();
-          fBounds = filesPane.getBounds();
-          dBounds = descriptions.getBounds();
-        }
-        else {
-          final int h = target.getHeight();
-          final int w = target.getWidth();
-          sBounds.height = h - dBounds.height;
-          tBounds.height = h - dBounds.height;
-          fBounds.height = h - dBounds.height;
-          fBounds.width = w - sBounds.width - tBounds.width;
-          dBounds.width = w;
-          dBounds.y = h - dBounds.height;
-          separator.setBounds(sBounds);
-          toolWindows.setBounds(tBounds);
-          filesPane.setBounds(fBounds);
-          descriptions.setBounds(dBounds);
-        }
-      }
+    private static String layoutText(@NotNull String actionId) {
+      ShortcutSet shortcuts = getActiveKeymapShortcuts(actionId);
+      return "<html>"
+             + IdeBundle.message("recent.files.checkbox.label")
+             + " <font color=\"" + RecentLocationsAction.Holder.SHORTCUT_HEX_COLOR + "\">"
+             + KeymapUtil.getShortcutsText(shortcuts.getShortcuts()) + "</font>"
+             + "</html>";
     }
   }
 
-  private static class VirtualFilesRenderer extends ColoredListCellRenderer {
+  private static class VirtualFilesRenderer extends ColoredListCellRenderer<FileInfo> {
     private final SwitcherPanel mySwitcherPanel;
     boolean open;
 
@@ -1194,32 +1503,36 @@ public class Switcher extends AnAction implements DumbAware {
     }
 
     @Override
-    protected void customizeCellRenderer(@NotNull JList list, Object value, int index, boolean selected, boolean hasFocus) {
-      if (value instanceof FileInfo) {
-        Project project = mySwitcherPanel.project;
-        VirtualFile virtualFile = ((FileInfo)value).getFirst();
-        String renderedName = ((FileInfo)value).getNameForRendering();
-        setIcon(IconUtil.getIcon(virtualFile, Iconable.ICON_FLAG_READ_STATUS, project));
+    protected void customizeCellRenderer(@NotNull JList<? extends FileInfo> list,
+                                         FileInfo value, int index, boolean selected, boolean hasFocus) {
+      Project project = mySwitcherPanel.project;
+      VirtualFile virtualFile = value.getFirst();
+      String renderedName = value.getNameForRendering();
+      setIcon(IconUtil.getIcon(virtualFile, Iconable.ICON_FLAG_READ_STATUS, project));
 
-        FileStatus fileStatus = FileStatusManager.getInstance(project).getStatus(virtualFile);
-        open = FileEditorManager.getInstance(project).isFileOpen(virtualFile);
+      FileStatus fileStatus = FileStatusManager.getInstance(project).getStatus(virtualFile);
+      open = FileEditorManager.getInstance(project).isFileOpen(virtualFile);
 
-        boolean hasProblem = WolfTheProblemSolver.getInstance(project).isProblemFile(virtualFile);
-        TextAttributes attributes = new TextAttributes(fileStatus.getColor(), null, hasProblem ? JBColor.red : null, EffectType.WAVE_UNDERSCORE, Font.PLAIN);
-        append(renderedName, SimpleTextAttributes.fromTextAttributes(attributes));
+      boolean hasProblem = WolfTheProblemSolver.getInstance(project).isProblemFile(virtualFile);
+      TextAttributes attributes =
+        new TextAttributes(fileStatus.getColor(), null, hasProblem ? JBColor.red : null, EffectType.WAVE_UNDERSCORE, Font.PLAIN);
+      append(renderedName, SimpleTextAttributes.fromTextAttributes(attributes));
 
-        // calc color the same way editor tabs do this, i.e. including EPs
-        Color color = EditorTabPresentationUtil.getFileBackgroundColor(project, virtualFile);
+      // calc color the same way editor tabs do this, i.e. including EPs
+      Color color = EditorTabPresentationUtil.getFileBackgroundColor(project, virtualFile);
 
-        if (!selected && color != null) {
-          setBackground(color);
-        }
-        SpeedSearchUtil.applySpeedSearchHighlighting(mySwitcherPanel, this, false, selected);
+      if (!selected && color != null) {
+        setBackground(color);
+      }
+      SpeedSearchUtil.applySpeedSearchHighlighting(mySwitcherPanel, this, false, selected);
+
+      if (Registry.is("show.last.visited.timestamps")) {
+        IdeDocumentHistoryImpl.appendTimestamp(project, this, virtualFile);
       }
     }
   }
 
-  private static class FileInfo extends Pair<VirtualFile, EditorWindow> {
+  static class FileInfo extends Pair<VirtualFile, EditorWindow> {
     private final Project myProject;
     private String myNameForRendering;
 
@@ -1235,18 +1548,5 @@ public class Switcher extends AnAction implements DumbAware {
       }
       return myNameForRendering;
     }
-  }
-
-  @NotNull
-  public static JLabel createPaleLabel(@NotNull String text) {
-    return new JLabel(text) {
-      @Override
-      protected void paintComponent(@NotNull Graphics g) {
-        GraphicsConfig config = new GraphicsConfig(g);
-        ((Graphics2D)g).setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.3f));
-        super.paintComponent(g);
-        config.restore();
-      }
-    };
   }
 }

@@ -16,6 +16,8 @@
 package com.intellij.junit3;
 
 import com.intellij.rt.execution.junit.*;
+import com.intellij.rt.junit.DeafStream;
+import com.intellij.rt.junit.IdeaTestRunner;
 import junit.framework.*;
 import junit.textui.ResultPrinter;
 import junit.textui.TestRunner;
@@ -203,8 +205,8 @@ public class JUnit3IdeaTestRunner extends TestRunner implements IdeaTestRunner {
 
     public void endTest(Test test) {
       final long duration = System.currentTimeMillis() - myCurrentTestStart;
-      System.out.println("\n##teamcity[testFinished name=\'" + escapeName(getMethodName(test)) +
-                         (duration > 0 ? "\' duration=\'" + duration : "") + "\']");
+      System.out.println("\n##teamcity[testFinished name='" + escapeName(getMethodName(test)) +
+                         (duration > 0 ? "' duration='" + duration : "") + "']");
     }
 
     public void startTest(Test test) {
@@ -213,17 +215,17 @@ public class JUnit3IdeaTestRunner extends TestRunner implements IdeaTestRunner {
       if (className != null && !className.equals(myClassName)) {
         finishSuite();
         myClassName = className;
-        System.out.println("##teamcity[testSuiteStarted name =\'" + escapeName(myClassName) + 
-                           "\' locationHint=\'java:suite://" + escapeName(className) + "\']");
+        System.out.println("##teamcity[testSuiteStarted name ='" + escapeName(myClassName) +
+                           "' locationHint='java:suite://" + escapeName(className) + "']");
       }
       final String methodName = getMethodName(test);
-      System.out.println("##teamcity[testStarted name=\'" + escapeName(methodName) + 
-                         "\' locationHint=\'java:test://" + escapeName(className + "/" + methodName) + "\']");
+      System.out.println("##teamcity[testStarted name='" + escapeName(methodName) +
+                         "' locationHint='java:test://" + escapeName(className + "/" + methodName) + "']");
     }
 
     protected void finishSuite() {
       if (myClassName != null) {
-        System.out.println("##teamcity[testSuiteFinished name=\'" + escapeName(myClassName) + "\']");
+        System.out.println("##teamcity[testSuiteFinished name='" + escapeName(myClassName) + "']");
       }
     }
 

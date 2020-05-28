@@ -1,13 +1,16 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testGuiFramework.impl
 
 import com.intellij.diagnostic.MessagePool
 import com.intellij.ide.GeneralSettings
+import com.intellij.ide.RecentProjectsManager
 import com.intellij.ide.impl.ProjectUtil
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.TransactionGuard
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.project.ex.ProjectManagerEx
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.io.FileUtilRt
 import com.intellij.openapi.util.text.StringUtil
@@ -19,18 +22,26 @@ import com.intellij.openapi.wm.impl.welcomeScreen.WelcomeFrame
 import com.intellij.testGuiFramework.fixtures.IdeFrameFixture
 import com.intellij.testGuiFramework.fixtures.WelcomeFrameFixture
 import com.intellij.testGuiFramework.fixtures.newProjectWizard.NewProjectWizardFixture
-import com.intellij.testGuiFramework.framework.GuiTestUtil
 import com.intellij.testGuiFramework.framework.GuiTestPaths.failedTestVideoDirPath
+import com.intellij.testGuiFramework.framework.GuiTestUtil
 import com.intellij.testGuiFramework.framework.Timeouts
 import com.intellij.testGuiFramework.impl.GuiTestUtilKt.computeOnEdt
+import com.intellij.testGuiFramework.impl.GuiTestUtilKt.ignoreComponentLookupException
 import com.intellij.testGuiFramework.impl.GuiTestUtilKt.runOnEdt
 import com.intellij.testGuiFramework.impl.GuiTestUtilKt.waitUntil
+import com.intellij.testGuiFramework.launcher.GuiTestOptions
 import com.intellij.testGuiFramework.launcher.GuiTestOptions.screenRecorderJarDirPath
 import com.intellij.testGuiFramework.launcher.GuiTestOptions.testsToRecord
 import com.intellij.testGuiFramework.launcher.GuiTestOptions.videoDuration
+import com.intellij.testGuiFramework.remote.transport.MessageType
+import com.intellij.testGuiFramework.remote.transport.TransportMessage
 import com.intellij.testGuiFramework.util.Key
+import com.intellij.testGuiFramework.util.ScreenshotTaker
 import com.intellij.ui.Splash
+import com.intellij.ui.components.labels.ActionLink
 import com.intellij.util.concurrency.AppExecutorUtil
+import com.intellij.util.io.delete
+import com.intellij.util.io.isDirectory
 import com.intellij.util.lang.UrlClassLoader
 import org.fest.swing.core.Robot
 import org.fest.swing.exception.ComponentLookupException
@@ -42,23 +53,31 @@ import org.jdom.xpath.XPath
 import org.junit.Assert
 import org.junit.Assume
 import org.junit.AssumptionViolatedException
-import org.junit.rules.*
+import org.junit.rules.ExternalResource
+import org.junit.rules.RuleChain
+import org.junit.rules.TestRule
+import org.junit.rules.Timeout
 import org.junit.runner.Description
 import org.junit.runners.model.MultipleFailureException
 import org.junit.runners.model.Statement
+import java.awt.Container
 import java.awt.Dialog
 import java.awt.Frame
 import java.awt.KeyboardFocusManager
 import java.io.File
 import java.net.URL
+import java.nio.file.Path
 import java.time.Duration
 import java.util.*
 import java.util.concurrent.TimeUnit
 import javax.swing.JButton
 
-class GuiTestRule(private val projectsFolder: File) : TestRule {
-
+class GuiTestRule(enableScreenshotsDuringTest: Boolean) : TestRule {
   var CREATE_NEW_PROJECT_ACTION_NAME: String = "Create New Project"
+
+  val projectsFolder = GuiTestOptions.projectsDir.resolve(UUID.randomUUID().toString())
+
+  val LOG: Logger = Logger.getInstance(GuiTestRule::class.java.name)
 
   private val myRobotTestRule = RobotTestRule()
   private val myFatalErrorsFlusher = FatalErrorsFlusher()
@@ -72,12 +91,19 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
     .around(IdeHandling())
     .around(ScreenshotOnFailure())
     .aroundIfNotNull(createScreenRecordingRuleIfNeeded())
+    .let {
+      if (enableScreenshotsDuringTest)
+        it.around(ScreenshotsDuringTest(500))
+      else
+        it
+    }
 
   private val timeoutRule = Timeout(20, TimeUnit.MINUTES)
 
   override fun apply(base: Statement?, description: Description?): Statement {
     myTestName = "${description!!.className}#${description.methodName}"
-    myTestShortName = "${description.testClass.simpleName}#${description.methodName}"
+    myTestShortName = "${description.testClass.simpleName}-${description.methodName}"
+    GuiTestNameHolder.initialize(myTestShortName)
     //do not apply timeout rule if it is already applied to a test class
     return if (description.testClass.fields.any { it.type == Timeout::class.java })
       myRuleChain.apply(base, description)
@@ -112,10 +138,10 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
     if (jarDir == null) return null
 
     return File(jarDir)
-        .listFiles { f -> f.name.startsWith("ui-screenrecorder") && f.name.endsWith("jar") }
-        .firstOrNull()
-        ?.toURI()
-        ?.toURL()
+      .listFiles { f -> f.name.startsWith("ui-screenrecorder") && f.name.endsWith("jar") }
+      .firstOrNull()
+      ?.toURI()
+      ?.toURL()
   }
 
   inner class IdeHandling : TestRule {
@@ -123,8 +149,13 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
       return object : Statement() {
         @Throws(Throwable::class)
         override fun evaluate() {
-          Assume.assumeTrue("IDE error list is empty", GuiTestUtilKt.fatalErrorsFromIde().isEmpty())
-          assumeOnlyWelcomeFrameShowing()
+          try {
+            Assume.assumeTrue("IDE error list is empty", GuiTestUtilKt.fatalErrorsFromIde().isEmpty())
+            assumeOnlyWelcomeFrameShowing()
+          } catch (e: Exception) {
+            ScreenshotTaker.takeScreenshotAndHierarchy("welcomeFrameCheckFail")
+            throw e
+          }
           setUp()
           val errors = ArrayList<Throwable>()
           try {
@@ -150,18 +181,35 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
     }
 
     fun setUp() {
-      GuiTestUtil.setUpDefaultProjectCreationLocationPath(projectsFolder)
+      GuiTestUtil.setUpDefaultProjectCreationLocationPath()
       GeneralSettings.getInstance().isShowTipsOnStartup = false
       currentTestDateStart = Date()
     }
 
     fun tearDown(): List<Throwable> {
       val errors = mutableListOf<Throwable>()
+      LOG.info("tearDown: waiting for background tasks to finish...")
       errors.addAll(thrownFromRunning(Runnable { GuiTestUtilKt.waitForBackgroundTasks(robot()) }))
+      LOG.info("tearDown: check opened modal dialogs...")
       errors.addAll(checkForModalDialogs())
+      LOG.info("tearDown: tearDown project")
       errors.addAll(thrownFromRunning(Runnable { this.tearDownProject() }))
+      LOG.info("tearDown: check opened modal dialogs appeared after attempt to close the project...")
+      errors.addAll(checkForModalDialogs())
+      LOG.info("tearDown: waiting for welcome frame (return if necessary)...")
       errors.addAll(thrownFromRunning(Runnable { this.returnToTheFirstStepOfWelcomeFrame() }))
-      errors.addAll(GuiTestUtilKt.fatalErrorsFromIde(currentTestDateStart)) //do not add fatal errors from previous tests
+      LOG.info("tearDown: collecting fatal errors from IDE...")
+//      errors.addAll(GuiTestUtilKt.fatalErrorsFromIde(currentTestDateStart)) //do not add fatal errors from previous tests
+      LOG.info("tearDown: double checking return to the first step on a welcome frame")
+      if (!isWelcomeFrameFirstStep() || anyIdeFrame(Timeouts.seconds01) != null) {
+        LOG.warn("tearDown: IDE cannot return to welcome frame, need to restart IDE")
+        ScreenshotTaker.takeScreenshotAndHierarchy("thrownFromTearDown")
+        GuiTestThread.client?.send(TransportMessage(MessageType.RESTART_IDE_AFTER_TEST,
+                                                    "IDE cannot return to the Welcome frame")
+        )
+        //set last project creation path to null; avoid opening project of the failed test
+        RecentProjectsManager.getInstance().lastProjectCreationLocation = null
+      }
       return errors.toList()
     }
 
@@ -169,7 +217,7 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
       try {
         val ideFrameFixture = IdeFrameFixture.find(robot(), null, null, Timeouts.seconds02)
         if (ideFrameFixture.target().isShowing)
-            ideFrameFixture.closeProject()
+          ideFrameFixture.closeProjectAndWaitWelcomeFrame()
       }
       catch (e: ComponentLookupException) {
         // do nothing because ideFixture is already closed
@@ -177,22 +225,17 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
     }
 
     private fun returnToTheFirstStepOfWelcomeFrame() {
-      val welcomeFrameFixture = WelcomeFrameFixture.find(robot())
-
-      fun isFirstStep(): Boolean {
-        return try {
-          val actionLinkFixture = with(welcomeFrameFixture) {
-            actionLink(CREATE_NEW_PROJECT_ACTION_NAME, Timeouts.defaultTimeout)
-          }
-          actionLinkFixture.target().isShowing
-        }
-        catch (componentLookupException: ComponentLookupException) {
-          false
-        }
-      }
       for (i in 0..3) {
-        if (!isFirstStep()) GuiTestUtil.invokeActionViaShortcut(Key.ESCAPE.name)
+        if (!isWelcomeFrameFirstStep()) GuiTestUtil.invokeActionViaShortcut(Key.ESCAPE.name)
       }
+    }
+
+    //find first page with such actions like "Create New Project" without timeout
+    private fun isWelcomeFrameFirstStep(timeout: org.fest.swing.timing.Timeout = Timeouts.seconds01): Boolean {
+      val createNewProjectAction = GuiTestUtilKt.ignoreComponentLookupException {
+        WelcomeFrameFixture.find(robot(), timeout).let { robot().finder().find(it.target() as Container) { it is ActionLink && it.text.contains("New Project") } }
+      }
+      return createNewProjectAction?.isShowing ?: false
     }
 
 
@@ -202,7 +245,7 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
         emptyList()
       }
       catch (e: Throwable) {
-        ScreenshotOnFailure.takeScreenshot("$myTestName.thrownFromRunning")
+        ScreenshotTaker.takeScreenshotAndHierarchy("thrownFromRunning")
         listOf(e)
       }
 
@@ -221,7 +264,7 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
           }
           else {
             closedModalDialogSet.add(modalDialog)
-            ScreenshotOnFailure.takeScreenshot("$myTestName.checkForModalDialogFail")
+            ScreenshotTaker.takeScreenshotAndHierarchy("checkForModalDialogFail")
             if (isProcessIsRunningDialog(modalDialog))
               closeProcessIsRunningDialog(modalDialog)
             else
@@ -259,17 +302,26 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
       return null
     }
 
-
     private fun assumeOnlyWelcomeFrameShowing() {
+      var attemptsToReturnToWelcomeFrame = 0
       try {
-        WelcomeFrameFixture.find(robot())
-
+        //if IDE started with a previous project we need to close it firstly; let's give few attempts for it
+        while (!isWelcomeFrameFirstStep(Timeouts.seconds01) && attemptsToReturnToWelcomeFrame++ <= 3 ) {
+          val someIdeFrame = anyIdeFrame(Timeouts.seconds01)
+          if (someIdeFrame != null) {
+            LOG.warn("Opened IDE frame (${someIdeFrame.target().title}) detected. Let's close active project.")
+            someIdeFrame.closeProject()
+          } else {
+            LOG.warn("Trying to return to the first step of the welcome frame")
+            ignoreComponentLookupException { returnToTheFirstStepOfWelcomeFrame() }
+          }
+        }
+        WelcomeFrameFixture.find(robot(), Timeouts.seconds05)
       }
       catch (e: WaitTimedOutError) {
         throw AssumptionViolatedException("didn't find welcome frame", e)
       }
       GuiTestUtilKt.waitUntil("Splash is gone") { !GuiTestUtilKt.windowsShowing().any { it is Splash } }
-      Assume.assumeTrue("Only welcome frame is showing", GuiTestUtilKt.windowsShowing().size == 1)
     }
   }
 
@@ -295,7 +347,7 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
     return NewProjectWizardFixture.find(robot())
   }
 
-  fun findIdeFrame(projectName: String, projectPath: File): IdeFrameFixture {
+  fun findIdeFrame(projectName: String, projectPath: Path): IdeFrameFixture {
     return IdeFrameFixture.find(robot(), projectPath, projectName)
   }
 
@@ -305,7 +357,7 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
       runOnEdt {
         TransactionGuard.submitTransaction(ApplicationManager.getApplication(), Runnable {
           for (project in openProjects) {
-            Assert.assertTrue("Failed to close project ${project.name}", ProjectUtil.closeAndDispose(project))
+            Assert.assertTrue("Failed to close project ${project.name}", ProjectManagerEx.getInstanceEx().closeAndDispose(project))
           }
         })
       }
@@ -347,24 +399,24 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
 
   fun importProjectAndWaitForProjectSyncToFinish(projectDirName: String, gradleVersion: String?): IdeFrameFixture {
     val projectPath = setUpProject(projectDirName)
-    val toSelect = VfsUtil.findFileByIoFile(projectPath, false)
+    val toSelect = VfsUtil.findFile(projectPath, false)
     Assert.assertNotNull(toSelect)
     doImportProject(toSelect!!)
     //TODO: add wait to open project
     return findIdeFrame(projectPath)
   }
 
-  fun importProject(projectDirName: String): File {
+  fun importProject(projectDirName: String): Path {
     val projectPath = setUpProject(projectDirName)
-    val toSelect = VfsUtil.findFileByIoFile(projectPath, false)
+    val toSelect = VfsUtil.findFile(projectPath, false)
     Assert.assertNotNull(toSelect)
     doImportProject(toSelect!!)
     return projectPath
   }
 
-  fun importProject(projectFile: File): File {
+  fun importProject(projectFile: Path): Path {
     val projectPath = setUpProject(projectFile)
-    val toSelect = VfsUtil.findFileByIoFile(projectPath, false)
+    val toSelect = VfsUtil.findFile(projectPath, false)
     Assert.assertNotNull(toSelect)
     doImportProject(toSelect!!)
     return projectPath
@@ -378,41 +430,39 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
   }
 
 
-  private fun setUpProject(projectDirName: String): File {
+  private fun setUpProject(projectDirName: String): Path {
     val projectPath = copyProjectBeforeOpening(projectDirName)
     Assert.assertNotNull(projectPath)
     return projectPath
   }
 
-  private fun setUpProject(projectDirFile: File): File {
+  private fun setUpProject(projectDirFile: Path): Path {
     val projectPath = copyProjectBeforeOpening(projectDirFile)
     Assert.assertNotNull(projectPath)
     return projectPath
   }
 
-
-  fun copyProjectBeforeOpening(projectDirName: String): File {
+  fun copyProjectBeforeOpening(projectDirName: String): Path {
     val masterProjectPath = getMasterProjectDirPath(projectDirName)
 
     val projectPath = getTestProjectDirPath(projectDirName)
-    if (projectPath.isDirectory) {
-      FileUtilRt.delete(projectPath)
-      println(String.format("Deleted project path '%1\$s'", projectPath.path))
+    if (projectPath.isDirectory()) {
+      projectPath.delete()
+      println(String.format("Deleted project path '%1\$s'", projectPath.toString()))
     }
-    FileUtil.copyDir(masterProjectPath, projectPath)
-    println("Copied project '$projectDirName' to path '${projectPath.path}'")
+    FileUtil.copyDir(masterProjectPath, projectPath.toFile())
+    println("Copied project '$projectDirName' to path '${projectPath}'")
     return projectPath
   }
 
-  fun copyProjectBeforeOpening(projectDirFile: File): File {
-
-    val projectPath = getTestProjectDirPath(projectDirFile.name)
-    if (projectPath.isDirectory) {
-      FileUtilRt.delete(projectPath)
-      println(String.format("Deleted project path '%1\$s'", projectPath.path))
+  fun copyProjectBeforeOpening(projectDirFile: Path): Path {
+    val projectPath = getTestProjectDirPath(projectDirFile.fileName.toString())
+    if (projectPath.isDirectory()) {
+      projectPath.delete()
+      println(String.format("Deleted project path '%1\$s'", projectPath))
     }
-    FileUtil.copyDir(projectDirFile, projectPath)
-    println("Copied project '${projectDirFile.name}' to path '${projectPath.path}'")
+    FileUtil.copyDir(projectDirFile.toFile(), projectPath.toFile())
+    println("Copied project '${projectDirFile.fileName}' to path '${projectPath}'")
     return projectPath
   }
 
@@ -421,8 +471,8 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
     return File(GuiTestUtil.testProjectsRootDirPath, projectDirName)
   }
 
-  private fun getTestProjectDirPath(projectDirName: String): File {
-    return File(projectsFolder, projectDirName)
+  private fun getTestProjectDirPath(projectDirName: String): Path {
+    return projectsFolder.resolve(projectDirName)
   }
 
   fun cleanUpProjectForImport(projectPath: File) {
@@ -459,7 +509,7 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
     }
   }
 
-  fun findIdeFrame(projectPath: File, timeout: org.fest.swing.timing.Timeout = Timeouts.defaultTimeout): IdeFrameFixture {
+  fun findIdeFrame(projectPath: Path, timeout: org.fest.swing.timing.Timeout = Timeouts.defaultTimeout): IdeFrameFixture {
     return IdeFrameFixture.find(robot(), projectPath, null, timeout)
   }
 
@@ -467,6 +517,15 @@ class GuiTestRule(private val projectsFolder: File) : TestRule {
   fun findIdeFrame(timeout: org.fest.swing.timing.Timeout = Timeouts.defaultTimeout): IdeFrameFixture {
     return IdeFrameFixture.find(robot(), null, null, timeout)
   }
+
+  fun anyIdeFrame(timeout: org.fest.swing.timing.Timeout = Timeouts.defaultTimeout): IdeFrameFixture? {
+    return try {
+      IdeFrameFixture.find(robot(), null, null, timeout)
+    } catch (e: ComponentLookupException) {
+      null
+    }
+  }
+
 
   fun getTestName(): String {
     return myTestName

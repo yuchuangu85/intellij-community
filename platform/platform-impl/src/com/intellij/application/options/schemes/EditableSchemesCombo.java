@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options.schemes;
 
 import com.intellij.openapi.options.Scheme;
@@ -7,7 +7,7 @@ import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.DocumentAdapter;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.SimpleTextAttributes;
-import com.intellij.util.ui.JBUI;
+import com.intellij.ui.scale.JBUIScale;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -38,6 +38,7 @@ public class EditableSchemesCombo<T extends Scheme> {
 
   private final static KeyStroke ESC_KEY_STROKE = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0, false);
   private final static KeyStroke ENTER_KEY_STROKE = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0, false);
+  private final static Color MODIFIED_ITEM_FOREGROUND = JBColor.namedColor("ComboBox.modifiedItemForeground", JBColor.BLUE);
 
   public EditableSchemesCombo(@NotNull AbstractSchemesPanel<T, ?> schemesPanel) {
     mySchemesPanel = schemesPanel;
@@ -47,8 +48,8 @@ public class EditableSchemesCombo<T extends Scheme> {
     myRootPanel.add(myComboBox);
     myNameEditorField = createNameEditorField();
     myRootPanel.add(myNameEditorField);
-    myRootPanel.setPreferredSize(new Dimension(JBUI.scale(COMBO_WIDTH), myNameEditorField.getPreferredSize().height));
-    myRootPanel.setMaximumSize(new Dimension(JBUI.scale(COMBO_WIDTH), Short.MAX_VALUE));
+    myRootPanel.setPreferredSize(new Dimension(JBUIScale.scale(COMBO_WIDTH), myNameEditorField.getPreferredSize().height));
+    myRootPanel.setMaximumSize(new Dimension(JBUIScale.scale(COMBO_WIDTH), Short.MAX_VALUE));
   }
 
   private JTextField createNameEditorField() {
@@ -157,7 +158,7 @@ public class EditableSchemesCombo<T extends Scheme> {
                ? SimpleTextAttributes.REGULAR_ATTRIBUTES
                : SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES;
         if (mySchemesPanel.highlightNonDefaultSchemes() && model.canResetScheme(scheme) && model.differsFromDefault(scheme)) {
-          return baseAttributes.derive(-1, JBColor.BLUE, null, null);
+          return baseAttributes.derive(-1, MODIFIED_ITEM_FOREGROUND, null, null);
         }
         return baseAttributes;
       }
@@ -175,8 +176,10 @@ public class EditableSchemesCombo<T extends Scheme> {
     myNameEditData = new NameEditData(initialName, nameConsumer, isProjectScheme);
     myNameEditorField.setText(initialName);
     myLayout.last(myRootPanel);
-    final IdeFocusManager focusManager = IdeFocusManager.getGlobalInstance();
-    focusManager.doWhenFocusSettlesDown(() -> focusManager.requestFocus(myNameEditorField, true));
+    SwingUtilities.invokeLater(() -> {
+      final IdeFocusManager focusManager = IdeFocusManager.getGlobalInstance();
+      focusManager.doWhenFocusSettlesDown(() -> focusManager.requestFocus(myNameEditorField, true));
+    });
   }
 
   public void resetSchemes(@NotNull Collection<? extends T> schemes) {

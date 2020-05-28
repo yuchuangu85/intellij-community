@@ -1,21 +1,20 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.slicer;
 
 import com.intellij.analysis.AnalysisUIOptions;
 import com.intellij.ide.impl.ContentManagerWatcher;
+import com.intellij.lang.LangBundle;
 import com.intellij.openapi.components.*;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowAnchor;
 import com.intellij.openapi.wm.ToolWindowManager;
-import com.intellij.openapi.wm.impl.content.BaseLabel;
 import com.intellij.psi.ElementDescriptionUtil;
 import com.intellij.psi.PsiElement;
 import com.intellij.refactoring.util.RefactoringDescriptionLocation;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentManager;
-import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.regex.Pattern;
@@ -47,7 +46,7 @@ public class SliceManager implements PersistentStateComponent<SliceManager.Store
       if (myBackContentManager == null) {
         ToolWindow backToolWindow = ToolWindowManager.getInstance(myProject).registerToolWindow(BACK_TOOLWINDOW_ID, true, ToolWindowAnchor.BOTTOM, myProject);
         myBackContentManager = backToolWindow.getContentManager();
-        new ContentManagerWatcher(backToolWindow, myBackContentManager);
+        ContentManagerWatcher.watchContentManager(backToolWindow, myBackContentManager);
       }
       return myBackContentManager;
     }
@@ -55,7 +54,7 @@ public class SliceManager implements PersistentStateComponent<SliceManager.Store
     if (myForthContentManager == null) {
       ToolWindow forthToolWindow = ToolWindowManager.getInstance(myProject).registerToolWindow(FORTH_TOOLWINDOW_ID, true, ToolWindowAnchor.BOTTOM, myProject);
       myForthContentManager = forthToolWindow.getContentManager();
-      new ContentManagerWatcher(forthToolWindow, myForthContentManager);
+      ContentManagerWatcher.watchContentManager(forthToolWindow, myForthContentManager);
     }
     return myForthContentManager;
   }
@@ -64,13 +63,22 @@ public class SliceManager implements PersistentStateComponent<SliceManager.Store
     String dialogTitle = getElementDescription((dataFlowToThis ? BACK_TOOLWINDOW_ID : FORTH_TOOLWINDOW_ID) + " ", element, null);
 
     dialogTitle = Pattern.compile("(<style>.*</style>)|<[^<>]*>", Pattern.DOTALL).matcher(dialogTitle).replaceAll("");
-    SliceAnalysisParams params = handler.askForParams(element, dataFlowToThis, myStoredSettings, StringUtil.unescapeXml(dialogTitle));
+    SliceAnalysisParams params = handler.askForParams(element, myStoredSettings, StringUtil.unescapeXmlEntities(dialogTitle));
     if (params == null) return;
 
+    createToolWindow(element, params);
+  }
+
+  /**
+   * Opens the dataflow analysis toolwindow starting from the given element 
+   * 
+   * @param element root element
+   * @param params analysis parameters
+   */
+  public void createToolWindow(@NotNull PsiElement element, @NotNull SliceAnalysisParams params) {
     SliceRootNode rootNode = new SliceRootNode(myProject, new DuplicateMap(),
                                                LanguageSlicing.getProvider(element).createRootUsage(element, params));
-
-    createToolWindow(dataFlowToThis, rootNode, false, getElementDescription(null, element, null));
+    createToolWindow(params.dataFlowToThis, rootNode, false, getElementDescription(null, element, null));
   }
 
   public void createToolWindow(boolean dataFlowToThis, @NotNull SliceRootNode rootNode, boolean splitByLeafExpressions, @NotNull String displayName) {
@@ -120,7 +128,7 @@ public class SliceManager implements PersistentStateComponent<SliceManager.Store
     }
     String desc = ElementDescriptionUtil.getElementDescription(element, RefactoringDescriptionLocation.WITHOUT_PARENT);
     return "<html><body>" +
-           (prefix == null ? "" : prefix) + StringUtil.first(desc, 100, true)+(suffix == null ? "" : suffix) +
+           (prefix == null ? "" : prefix) + StringUtil.first(desc, 100, true) + (suffix == null ? "" : suffix) +
            "</body></html>";
   }
 
@@ -131,6 +139,6 @@ public class SliceManager implements PersistentStateComponent<SliceManager.Store
 
   @Override
   public void loadState(@NotNull StoredSettingsBean state) {
-    myStoredSettings.analysisUIOptions.save(state.analysisUIOptions);
+    myStoredSettings.analysisUIOptions.loadState(state.analysisUIOptions);
   }
 }

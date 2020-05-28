@@ -1,5 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
-
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.template.impl;
 
 import com.intellij.codeInsight.CodeInsightBundle;
@@ -15,20 +14,25 @@ import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.popup.JBPopup;
-import com.intellij.openapi.ui.popup.JBPopupAdapter;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
+import com.intellij.openapi.ui.popup.JBPopupListener;
 import com.intellij.openapi.ui.popup.LightweightWindowEvent;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.*;
 import com.intellij.ui.awt.RelativePoint;
+import com.intellij.ui.components.JBLabel;
+import com.intellij.ui.components.labels.DropDownLink;
+import com.intellij.ui.components.labels.LinkLabel;
+import com.intellij.ui.components.labels.LinkListener;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.util.containers.TreeTraversal;
+import com.intellij.util.ui.FormBuilder;
 import com.intellij.util.ui.GridBag;
 import com.intellij.util.ui.JBUI;
-import com.intellij.util.ui.PlatformColors;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.tree.TreeUtil;
 import com.intellij.util.ui.update.Activatable;
@@ -41,11 +45,14 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
 import java.awt.*;
-import java.awt.event.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
 import java.util.List;
 import java.util.*;
 
-public class LiveTemplateSettingsEditor extends JPanel {
+public final class LiveTemplateSettingsEditor extends JPanel {
   private final TemplateImpl myTemplate;
   private final Runnable myNodeChanged;
 
@@ -59,10 +66,6 @@ public class LiveTemplateSettingsEditor extends JPanel {
 
   private JButton myEditVariablesButton;
 
-  private static final String SPACE = CodeInsightBundle.message("template.shortcut.space");
-  private static final String TAB = CodeInsightBundle.message("template.shortcut.tab");
-  private static final String ENTER = CodeInsightBundle.message("template.shortcut.enter");
-  private static final String NONE = CodeInsightBundle.message("template.shortcut.none");
   private final Map<TemplateOptionalProcessor, Boolean> myOptions;
   private final TemplateContext myContext;
   private JBPopup myContextPopup;
@@ -72,7 +75,7 @@ public class LiveTemplateSettingsEditor extends JPanel {
   public LiveTemplateSettingsEditor(TemplateImpl template,
                                     final String defaultShortcut,
                                     Map<TemplateOptionalProcessor, Boolean> options,
-                                    TemplateContext context, final Runnable nodeChanged, boolean allowNoContext) {
+                                    TemplateContext context, final Runnable nodeChanged) {
     super(new BorderLayout());
     myOptions = options;
     myContext = context;
@@ -86,7 +89,7 @@ public class LiveTemplateSettingsEditor extends JPanel {
     myTemplateEditor = TemplateEditorUtil.createEditor(false, myTemplate.getString(), context);
     myTemplate.setId(null);
 
-    createComponents(allowNoContext);
+    createComponents();
 
     myKeyField.getDocument().addDocumentListener(new DocumentAdapter() {
       @Override
@@ -103,7 +106,7 @@ public class LiveTemplateSettingsEditor extends JPanel {
       }
     });
 
-    new UiNotifyConnector(this, new Activatable.Adapter() {
+    new UiNotifyConnector(this, new Activatable() {
       @Override
       public void hideNotify() {
         disposeContextPopup();
@@ -120,7 +123,7 @@ public class LiveTemplateSettingsEditor extends JPanel {
     TemplateEditorUtil.disposeTemplateEditor(myTemplateEditor);
   }
 
-  private void createComponents(boolean allowNoContexts) {
+  private void createComponents() {
     JPanel panel = new JPanel(new GridBagLayout());
 
     GridBag gb = new GridBag().setDefaultInsets(4, 4, 4, 4).setDefaultWeightY(1).setDefaultFill(GridBagConstraints.BOTH);
@@ -144,7 +147,7 @@ public class LiveTemplateSettingsEditor extends JPanel {
     myTemplateOptionsPanel.add(createTemplateOptionsPanel());
     panel.add(myTemplateOptionsPanel, gb.nextLine().next().next().coverColumn(2).weighty(1));
 
-    panel.add(createShortContextPanel(allowNoContexts), gb.nextLine().next().weighty(0).fillCellNone().anchor(GridBagConstraints.WEST));
+    panel.add(createShortContextPanel(), gb.nextLine().next().weighty(0).fillCellNone().anchor(GridBagConstraints.WEST));
 
     myTemplateEditor.getDocument().addDocumentListener(new DocumentListener() {
       @Override
@@ -170,7 +173,7 @@ public class LiveTemplateSettingsEditor extends JPanel {
     add(panel, BorderLayout.CENTER);
   }
 
-  private void applyVariables(final List<Variable> variables) {
+  private void applyVariables(final List<? extends Variable> variables) {
     myTemplate.removeAllParsed();
     for (Variable variable : variables) {
       myTemplate.addVariable(variable.getName(), variable.getExpressionString(), variable.getDefaultValueString(),
@@ -201,8 +204,7 @@ public class LiveTemplateSettingsEditor extends JPanel {
 
   private JPanel createTemplateOptionsPanel() {
     JPanel panel = new JPanel();
-    panel.setBorder(IdeBorderFactory.createTitledBorder(CodeInsightBundle.message("dialog.edit.template.options.title"),
-                                                        true));
+    panel.setBorder(IdeBorderFactory.createTitledBorder(CodeInsightBundle.message("dialog.edit.template.options.title")));
     panel.setLayout(new GridBagLayout());
     GridBagConstraints gbConstraints = new GridBagConstraints();
     gbConstraints.fill = GridBagConstraints.BOTH;
@@ -215,7 +217,7 @@ public class LiveTemplateSettingsEditor extends JPanel {
 
     gbConstraints.gridx = 1;
     gbConstraints.insets = JBUI.insetsLeft(4);
-    myExpandByCombo = new ComboBox<>(new String[]{myDefaultShortcutItem, SPACE, TAB, ENTER, NONE});
+    myExpandByCombo = new ComboBox<>(new String[]{myDefaultShortcutItem, getSpace(), getTab(), getEnter(), getNone()});
     myExpandByCombo.addItemListener(new ItemListener() {
       @Override
       public void itemStateChanged(@NotNull ItemEvent e) {
@@ -223,13 +225,13 @@ public class LiveTemplateSettingsEditor extends JPanel {
         if(myDefaultShortcutItem.equals(selectedItem)) {
           myTemplate.setShortcutChar(TemplateSettings.DEFAULT_CHAR);
         }
-        else if(TAB.equals(selectedItem)) {
+        else if(getTab().equals(selectedItem)) {
           myTemplate.setShortcutChar(TemplateSettings.TAB_CHAR);
         }
-        else if(ENTER.equals(selectedItem)) {
+        else if(getEnter().equals(selectedItem)) {
           myTemplate.setShortcutChar(TemplateSettings.ENTER_CHAR);
         }
-        else if (SPACE.equals(selectedItem)) {
+        else if (getSpace().equals(selectedItem)) {
           myTemplate.setShortcutChar(TemplateSettings.SPACE_CHAR);
         }
         else {
@@ -277,15 +279,9 @@ public class LiveTemplateSettingsEditor extends JPanel {
     return result;
   }
 
-  private JPanel createShortContextPanel(final boolean allowNoContexts) {
-    JPanel panel = new JPanel(new BorderLayout());
-
-    final JLabel ctxLabel = new JLabel();
-    final JLabel change = new JLabel();
-    change.setForeground(PlatformColors.BLUE);
-    change.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-    panel.add(ctxLabel, BorderLayout.CENTER);
-    panel.add(change, BorderLayout.EAST);
+  private JPanel createShortContextPanel() {
+    JLabel ctxLabel = new JBLabel();
+    LinkLabel<Object> change = new DropDownLink<>("Change", () -> {});
 
     final Runnable updateLabel = () -> {
       myExpandByCombo.setEnabled(isExpandableFromEditor());
@@ -314,17 +310,14 @@ public class LiveTemplateSettingsEditor extends JPanel {
         sb.append(ownName);
       }
 
-      String contexts = "Applicable in " + sb.toString();
-      change.setText("Change");
+      String contexts = "Applicable in " + sb;
+      change.setText(CodeInsightBundle.message("link.change.context"));
 
       final boolean noContexts = sb.length() == 0;
       if (noContexts) {
-        if (!allowNoContexts) {
-          ctxLabel.setForeground(JBColor.RED);
-        }
-        contexts = "No applicable contexts" + (allowNoContexts ? "" : " yet");
+        contexts = "No applicable contexts";
         ctxLabel.setIcon(AllIcons.General.BalloonWarning);
-        change.setText("Define");
+        change.setText(CodeInsightBundle.message("link.define.context"));
       }
       else {
         ctxLabel.setForeground(UIUtil.getLabelForeground());
@@ -336,11 +329,10 @@ public class LiveTemplateSettingsEditor extends JPanel {
       myTemplateOptionsPanel.add(createTemplateOptionsPanel());
     };
 
-    new ClickListener() {
+    change.setListener(new LinkListener<Object>() {
       @Override
-      public boolean onClick(@NotNull MouseEvent e, int clickCount) {
-        if (disposeContextPopup()) return false;
-
+      public void linkSelected(LinkLabel<Object> aSource, Object aLinkData) {
+        if (disposeContextPopup()) return;
         Pair<JPanel, CheckboxTree> pair = createPopupContextPanel(updateLabel, myContext);
         final JPanel content = pair.first;
         Dimension prefSize = content.getPreferredSize();
@@ -350,20 +342,18 @@ public class LiveTemplateSettingsEditor extends JPanel {
         myContextPopup = JBPopupFactory.getInstance().createComponentPopupBuilder(content, pair.second)
           .setRequestFocus(true)
           .setResizable(true).createPopup();
-        myContextPopup.show(new RelativePoint(change, new Point(change.getWidth() , -content.getPreferredSize().height - 10)));
-        myContextPopup.addListener(new JBPopupAdapter() {
+        myContextPopup.show(new RelativePoint(change, new Point(change.getWidth() , -content.getPreferredSize().height - JBUIScale.scale(4))));
+        myContextPopup.addListener(new JBPopupListener() {
           @Override
           public void onClosed(@NotNull LightweightWindowEvent event) {
             myLastSize = content.getSize();
           }
         });
-        return true;
       }
-    }.installOn(change);
+    }, null);
 
     updateLabel.run();
-
-    return panel;
+    return new FormBuilder().addLabeledComponent(ctxLabel, change).getPanel();
   }
 
   @NotNull
@@ -440,7 +430,7 @@ public class LiveTemplateSettingsEditor extends JPanel {
   }
 
   @NotNull
-  private static List<TemplateContextType> sortContexts(Collection<TemplateContextType> contextTypes) {
+  private static List<TemplateContextType> sortContexts(Collection<? extends TemplateContextType> contextTypes) {
     return ContainerUtil.sorted(contextTypes, (o1, o2) -> StringUtil.compare(presentableName(o1), presentableName(o2), true));
   }
 
@@ -482,7 +472,7 @@ public class LiveTemplateSettingsEditor extends JPanel {
   private void validateEditVariablesButton() {
     boolean hasVariables = !parseVariables().isEmpty();
     myEditVariablesButton.setEnabled(hasVariables);
-    myEditVariablesButton.setToolTipText(hasVariables ? null : "Disabled because the template has no variables (surrounded with $ signs)");
+    myEditVariablesButton.setToolTipText(hasVariables ? null : CodeInsightBundle.message("tooltip.disabled.because.the.template.has.no.variables.surrounded.with.signs"));
   }
 
   void resetUi() {
@@ -493,16 +483,16 @@ public class LiveTemplateSettingsEditor extends JPanel {
       myExpandByCombo.setSelectedItem(myDefaultShortcutItem);
     }
     else if(myTemplate.getShortcutChar() == TemplateSettings.TAB_CHAR) {
-      myExpandByCombo.setSelectedItem(TAB);
+      myExpandByCombo.setSelectedItem(getTab());
     }
     else if(myTemplate.getShortcutChar() == TemplateSettings.ENTER_CHAR) {
-      myExpandByCombo.setSelectedItem(ENTER);
+      myExpandByCombo.setSelectedItem(getEnter());
     }
     else if (myTemplate.getShortcutChar() == TemplateSettings.SPACE_CHAR) {
-      myExpandByCombo.setSelectedItem(SPACE);
+      myExpandByCombo.setSelectedItem(getSpace());
     }
     else {
-      myExpandByCombo.setSelectedItem(TemplateSettings.NONE_CHAR);
+      myExpandByCombo.setSelectedItem(getNone());
     }
 
     CommandProcessor.getInstance().executeCommand(
@@ -595,6 +585,22 @@ public class LiveTemplateSettingsEditor extends JPanel {
     Map<String,Variable> map = TemplateImplUtil.parseVariables(myTemplateEditor.getDocument().getCharsSequence());
     map.keySet().removeAll(TemplateImpl.INTERNAL_VARS_SET);
     return map;
+  }
+
+  private static String getSpace() {
+    return CodeInsightBundle.message("template.shortcut.space");
+  }
+
+  private static String getTab() {
+    return CodeInsightBundle.message("template.shortcut.tab");
+  }
+
+  private static String getEnter() {
+    return CodeInsightBundle.message("template.shortcut.enter");
+  }
+
+  private static String getNone() {
+    return CodeInsightBundle.message("template.shortcut.none");
   }
 }
 

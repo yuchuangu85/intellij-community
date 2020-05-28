@@ -121,21 +121,17 @@ public class UiUtils {
     selectionModel.setSelectionInterval(row, row);
     EventQueue.invokeLater(() -> {
       final ListWrappingTableModel tableModel = table.getModel();
-      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-        IdeFocusManager.getGlobalInstance().requestFocus(table, true);
-      });
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(table, true));
       final Rectangle rectangle = table.getCellRect(row, column, true);
       table.scrollRectToVisible(rectangle);
       table.editCellAt(row, column);
       final TableCellEditor editor = table.getCellEditor();
       final Component component = editor.getTableCellEditorComponent(table, tableModel.getValueAt(row, column), true, row, column);
-      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-        IdeFocusManager.getGlobalInstance().requestFocus(component, true);
-      });
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(component, true));
     });
   }
 
-  public static JPanel createTreeClassChooserList(final Collection<? super String> collection,
+  public static JPanel createTreeClassChooserList(final Collection<String> collection,
                                                   String borderTitle,
                                                   final String chooserTitle,
                                                   String... ancestorClasses) {
@@ -147,7 +143,7 @@ public class UiUtils {
       filter = new SubclassFilter(ancestorClasses);
     }
     final JPanel optionsPanel = new JPanel(new BorderLayout());
-    final JBList list = new JBList(collection);
+    final JBList<String> list = new JBList<>(collection);
 
     final JPanel panel = ToolbarDecorator.createDecorator(list)
       .disableUpDownActions()
@@ -167,7 +163,7 @@ public class UiUtils {
             return;
           }
           final String qualifiedName = selected.getQualifiedName();
-          final DefaultListModel model = (DefaultListModel)list.getModel();
+          final DefaultListModel<String> model = (DefaultListModel<String>)list.getModel();
           final int index = model.indexOf(qualifiedName);
           if (index < 0) {
             model.addElement(qualifiedName);

@@ -15,7 +15,7 @@ public abstract class RefJavaUtil {
   @Deprecated
   public abstract void addReferences(@NotNull PsiModifierListOwner psiFrom, @NotNull RefJavaElement ref, @Nullable PsiElement findIn);
 
-  public void addReferencesTo(@NotNull UDeclaration decl, @NotNull RefJavaElement ref, @Nullable UElement... findIn) {
+  public void addReferencesTo(@NotNull UDeclaration decl, @NotNull RefJavaElement ref, UElement @Nullable ... findIn) {
     throw new UnsupportedOperationException("Should be implemented");
   }
 
@@ -58,10 +58,6 @@ public abstract class RefJavaUtil {
   @Deprecated
   public boolean isMethodOnlyCallsSuper(PsiMethod derivedMethod) {
     throw new UnsupportedOperationException();
-  }
-
-  public static boolean isDeprecated(PsiElement psiResolved) {
-    return psiResolved instanceof PsiDocCommentOwner && ((PsiDocCommentOwner)psiResolved).isDeprecated();
   }
 
   @Nullable

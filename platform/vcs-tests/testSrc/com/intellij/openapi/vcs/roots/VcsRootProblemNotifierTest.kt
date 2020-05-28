@@ -1,24 +1,12 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 
 package com.intellij.openapi.vcs.roots
 
 import com.intellij.openapi.application.runWriteAction
 import com.intellij.openapi.extensions.Extensions
+import com.intellij.openapi.module.EmptyModuleType
+import com.intellij.openapi.module.Module
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.vcs.VcsConfiguration
@@ -27,23 +15,29 @@ import com.intellij.openapi.vcs.VcsRootError.Type.EXTRA_MAPPING
 import com.intellij.openapi.vcs.VcsRootErrorImpl
 import com.intellij.openapi.vcs.changes.committed.MockAbstractVcs
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.runInEdtAndGet
 import com.intellij.vcs.test.VcsPlatformTest
 import com.intellij.vcsUtil.VcsUtil.getFilePath
 import java.io.File
 
 class VcsRootProblemNotifierTest : VcsPlatformTest() {
+  private lateinit var rootModule: Module
 
   private lateinit var checker: VcsRootChecker
   private lateinit var vcs: MockAbstractVcs
-  private lateinit var notifier : VcsRootProblemNotifier
+  private lateinit var notifier: VcsRootProblemNotifier
 
   override fun setUp() {
     super.setUp()
 
-    vcs = MockAbstractVcs(myProject)
+    rootModule = doCreateRealModuleIn("foo", myProject, EmptyModuleType.getInstance())
+
+    vcs = object : MockAbstractVcs(myProject) {
+      override fun allowsNestedRoots(): Boolean = true
+    }
     checker = MockRootChecker(vcs)
-    getExtensionPoint().registerExtension(checker)
+    getExtensionPoint().registerExtension(checker, testRootDisposable)
     vcsManager.registerVcs(vcs)
 
     notifier = VcsRootProblemNotifier.getInstance(myProject)
@@ -52,8 +46,7 @@ class VcsRootProblemNotifierTest : VcsPlatformTest() {
 
   override fun tearDown() {
     try {
-      if (wasInit { checker }) getExtensionPoint().unregisterExtension(checker)
-      if (wasInit { vcs }) vcsManager.unregisterVcs(vcs)
+      if (::vcs.isInitialized) vcsManager.unregisterVcs(vcs)
       Registry.get("vcs.root.auto.add.nofity").resetToDefault()
     }
     finally {
@@ -73,6 +66,7 @@ class VcsRootProblemNotifierTest : VcsPlatformTest() {
   }
 
   fun `test single root deeply under project dir is auto-added and reported`() {
+    PsiTestUtil.addContentRoot(rootModule, projectRoot)
     val deepRoot = projectRoot.createDir("lib")
     deepRoot.createRepoDir()
 
@@ -106,17 +100,37 @@ class VcsRootProblemNotifierTest : VcsPlatformTest() {
   }
 
   fun `test root above project dir and deeply under project dir are auto-added and reported`() {
-    val deepRoot = projectRoot.createDir("lib")
+    PsiTestUtil.addContentRoot(rootModule, projectRoot)
+    val shallowRoot = projectRoot.createDir("lib")
+    shallowRoot.createRepoDir()
+    val deepRoot = projectRoot.createDir("some").createDir("deep").createDir("folder").createDir("lib")
     deepRoot.createRepoDir()
     val aboveRoot = testRootFile
     aboveRoot.createRepoDir()
 
     notifier.rescanAndNotifyIfNeeded()
 
-    assertSameElements(vcsManager.allVersionedRoots, aboveRoot, deepRoot)
-    assertSuccessfulNotification("mock Integration Enabled","""
+    assertSameElements(vcsManager.allVersionedRoots, aboveRoot, shallowRoot, deepRoot)
+    assertSuccessfulNotification("mock Integration Enabled", """
       ${getPath(aboveRoot.path)}
+      ${getPath(shallowRoot.path)}
       ${getPath(deepRoot.path)}
+      """.trimIndent())
+  }
+
+  fun `test root deeply under project dir are not auto-added without content root`() {
+    val shallowRoot = projectRoot.createDir("lib")
+    shallowRoot.createRepoDir()
+    val deepRoot = projectRoot.createDir("some").createDir("deep").createDir("folder").createDir("lib")
+    deepRoot.createRepoDir()
+    val aboveRoot = testRootFile
+    aboveRoot.createRepoDir()
+
+    notifier.rescanAndNotifyIfNeeded()
+
+    assertSameElements(vcsManager.allVersionedRoots, aboveRoot)
+    assertSuccessfulNotification("mock Integration Enabled", """
+      ${getPath(aboveRoot.path)}
       """.trimIndent())
   }
 
@@ -137,7 +151,7 @@ class VcsRootProblemNotifierTest : VcsPlatformTest() {
     assertSameElements(vcsManager.allVersionedRoots, projectRoot)
 
     val mapping = vcsManager.getDirectoryMappingFor(getFilePath(projectRoot))
-    vcsManager.removeDirectoryMapping(mapping)
+    vcsManager.removeDirectoryMapping(mapping!!)
     VcsConfiguration.getInstance(myProject).addIgnoredUnregisteredRoots(listOf(projectPath))
 
     notifier.rescanAndNotifyIfNeeded()
@@ -169,6 +183,7 @@ class VcsRootProblemNotifierTest : VcsPlatformTest() {
   }
 
   private fun createNestedRoots(): VirtualFile {
+    PsiTestUtil.addContentRoot(rootModule, projectRoot)
     projectRoot.createRepoDir()
     val subRoot = projectRoot.createDir("lib")
     subRoot.createRepoDir()

@@ -1,3 +1,4 @@
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.coverage.view;
 
 import com.intellij.codeInsight.navigation.NavigationUtil;
@@ -20,16 +21,17 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Arrays;
 import java.util.Collection;
 
-public class CoverageListNode extends AbstractTreeNode {
+public class CoverageListNode extends AbstractTreeNode<Object> {
   protected CoverageSuitesBundle myBundle;
   protected CoverageViewManager.StateBean myStateBean;
   private final FileStatusManager myFileStatusManager;
 
-  public CoverageListNode(Project project, 
+  public CoverageListNode(Project project,
                           @NotNull PsiNamedElement classOrPackage,
                           CoverageSuitesBundle bundle,
                           CoverageViewManager.StateBean stateBean) {
     super(project, classOrPackage);
+
     myName = ReadAction.compute(() -> classOrPackage.getName());
     myBundle = bundle;
     myStateBean = stateBean;
@@ -38,9 +40,9 @@ public class CoverageListNode extends AbstractTreeNode {
 
   @NotNull
   @Override
-  public Collection<? extends AbstractTreeNode> getChildren() {
+  public Collection<? extends AbstractTreeNode<?>> getChildren() {
     final Object[] children = CoverageViewTreeStructure.getChildren(this, myBundle, myStateBean);
-    return (Collection<CoverageListNode>)Arrays.asList((CoverageListNode[])children);
+    return Arrays.asList((CoverageListNode[])children);
   }
 
   @Override
@@ -128,10 +130,10 @@ public class CoverageListNode extends AbstractTreeNode {
 
   private boolean contains(VirtualFile file, PsiDirectory value) {
     if (myStateBean.myFlattenPackages) {
-      return Comparing.equal(((PsiDirectory)value).getVirtualFile(), file.getParent());
+      return Comparing.equal(value.getVirtualFile(), file.getParent());
     }
 
-    if (VfsUtilCore.isAncestor(((PsiDirectory)value).getVirtualFile(), file, false)) {
+    if (VfsUtilCore.isAncestor(value.getVirtualFile(), file, false)) {
       return true;
     }
 

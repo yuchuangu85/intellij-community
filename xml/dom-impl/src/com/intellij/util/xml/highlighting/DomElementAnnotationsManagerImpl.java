@@ -1,19 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.xml.highlighting;
 
 import com.intellij.codeInsight.daemon.HighlightDisplayKey;
@@ -25,20 +10,16 @@ import com.intellij.codeInspection.ex.InspectionToolWrapper;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.roots.ProjectRootManager;
-import com.intellij.openapi.util.Key;
 import com.intellij.profile.ProfileChangeAdapter;
 import com.intellij.profile.codeInspection.InspectionProjectProfileManager;
-import com.intellij.profile.codeInspection.ProjectInspectionProfileManager;
-import com.intellij.psi.util.CachedValue;
-import com.intellij.psi.util.CachedValueProvider;
-import com.intellij.psi.util.CachedValuesManager;
+import com.intellij.psi.impl.source.xml.XmlFileImpl;
 import com.intellij.psi.util.PsiModificationTracker;
 import com.intellij.psi.xml.XmlFile;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.util.EventDispatcher;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.messages.MessageBusConnection;
 import com.intellij.util.xml.DomElement;
 import com.intellij.util.xml.DomFileElement;
 import com.intellij.util.xml.DomUtil;
@@ -47,12 +28,11 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 public class DomElementAnnotationsManagerImpl extends DomElementAnnotationsManager {
-  public static final Object LOCK = new Object();
+  static final Object LOCK = new Object();
 
-  private static final Key<DomElementsProblemsHolderImpl> DOM_PROBLEM_HOLDER_KEY = Key.create("DomProblemHolder");
-  private static final Key<CachedValue<Boolean>> CACHED_VALUE_KEY = Key.create("DomProblemHolderCachedValue");
   private final EventDispatcher<DomHighlightingListener> myDispatcher = EventDispatcher.create(DomHighlightingListener.class);
 
   private static final DomElementsProblemsHolder EMPTY_PROBLEMS_HOLDER = new DomElementsProblemsHolder() {
@@ -90,11 +70,11 @@ public class DomElementAnnotationsManagerImpl extends DomElementAnnotationsManag
     }
 
   };
-  private final Project myProject;
+  private final Map<XmlTag, DomElementsProblemsHolderImpl> myHolders = ContainerUtil.createWeakMap();
 
   public DomElementAnnotationsManagerImpl(@NotNull Project project) {
-    myProject = project;
-    ProjectInspectionProfileManager.getInstance(project).addProfileChangeListener(new ProfileChangeAdapter() {
+    MessageBusConnection connection = project.getMessageBus().connect();
+    connection.subscribe(ProfileChangeAdapter.TOPIC, new ProfileChangeAdapter() {
       @Override
       public void profileActivated(InspectionProfile oldProfile, @Nullable InspectionProfile profile) {
         dropAnnotationsCache();
@@ -104,12 +84,15 @@ public class DomElementAnnotationsManagerImpl extends DomElementAnnotationsManag
       public void profileChanged(InspectionProfile profile) {
         dropAnnotationsCache();
       }
-    }, project);
+    });
+    connection.subscribe(PsiModificationTracker.TOPIC, this::dropAnnotationsCache);
   }
 
   @Override
   public void dropAnnotationsCache() {
-    incModificationCount();
+    synchronized (LOCK) {
+      myHolders.clear();
+    }
   }
 
   public final List<DomElementProblemDescriptor> appendProblems(@NotNull DomFileElement element, @NotNull DomElementAnnotationHolder annotationHolder, Class<? extends DomElementsInspection> inspectionClass) {
@@ -122,40 +105,37 @@ public class DomElementAnnotationsManagerImpl extends DomElementAnnotationsManag
     return Collections.unmodifiableList(holderImpl);
   }
 
+  @NotNull
   private DomElementsProblemsHolderImpl _getOrCreateProblemsHolder(final DomFileElement element) {
-    DomElementsProblemsHolderImpl holder;
-    final DomElement rootElement = element.getRootElement();
-    final XmlTag rootTag = rootElement.getXmlTag();
+    XmlTag rootTag = element.getRootElement().getXmlTag();
     if (rootTag == null) return new DomElementsProblemsHolderImpl(element);
 
-    holder = rootTag.getUserData(DOM_PROBLEM_HOLDER_KEY);
-    if (isHolderOutdated(element.getFile()) || holder == null) {
-      holder = new DomElementsProblemsHolderImpl(element);
-      rootTag.putUserData(DOM_PROBLEM_HOLDER_KEY, holder);
-      final CachedValue<Boolean> cachedValue = CachedValuesManager.getManager(myProject).createCachedValue(
-        () -> new CachedValueProvider.Result<>(Boolean.FALSE, element, PsiModificationTracker.OUT_OF_CODE_BLOCK_MODIFICATION_COUNT,
-                                               this, ProjectRootManager.getInstance(myProject)), false);
-      cachedValue.getValue();
-      element.getFile().putUserData(CACHED_VALUE_KEY, cachedValue);
-    }
-    return holder;
+    return myHolders.computeIfAbsent(rootTag, __ -> new DomElementsProblemsHolderImpl(element));
   }
 
-  public static boolean isHolderUpToDate(DomElement element) {
+  public boolean isHolderUpToDate(DomElement element) {
+    return !isHolderOutdated(DomUtil.getFile(element));
+  }
+
+  public void outdateProblemHolder(DomElement element) {
+    XmlTag rootTag = getRootTagIfParsed(DomUtil.getFile(element));
     synchronized (LOCK) {
-      return !isHolderOutdated(DomUtil.getFile(element));
+      if (rootTag != null) {
+        myHolders.remove(rootTag);
+      }
     }
   }
 
-  public static void outdateProblemHolder(final DomElement element) {
+  private boolean isHolderOutdated(XmlFile file) {
     synchronized (LOCK) {
-      DomUtil.getFile(element).putUserData(CACHED_VALUE_KEY, null);
+      XmlTag rootTag = getRootTagIfParsed(file);
+      return rootTag == null || !myHolders.containsKey(rootTag);
     }
   }
 
-  private static boolean isHolderOutdated(final XmlFile file) {
-    final CachedValue<Boolean> cachedValue = file.getUserData(CACHED_VALUE_KEY);
-    return cachedValue == null || !cachedValue.hasUpToDateValue();
+  @Nullable
+  private static XmlTag getRootTagIfParsed(@NotNull XmlFile file) {
+    return ((XmlFileImpl)file).isContentsLoaded() ? file.getRootTag() : null;
   }
 
   @Override
@@ -167,7 +147,7 @@ public class DomElementAnnotationsManagerImpl extends DomElementAnnotationsManag
     synchronized (LOCK) {
       final XmlTag tag = fileElement.getRootElement().getXmlTag();
       if (tag != null) {
-        final DomElementsProblemsHolder readyHolder = tag.getUserData(DOM_PROBLEM_HOLDER_KEY);
+        DomElementsProblemsHolder readyHolder = myHolders.get(tag);
         if (readyHolder != null) {
           return readyHolder;
         }
@@ -217,18 +197,22 @@ public class DomElementAnnotationsManagerImpl extends DomElementAnnotationsManag
       return problemHolder.getAllProblems(inspection);
     }
 
-    final DomElementAnnotationHolder holder = new DomElementAnnotationHolderImpl(onTheFly);
+    DomElementAnnotationHolder holder = new DomElementAnnotationHolderImpl(onTheFly, domFileElement);
     inspection.checkFileElement(domFileElement, holder);
     return appendProblems(domFileElement, holder, inspection.getClass());
   }
 
   public List<DomElementsInspection> getSuitableDomInspections(final DomFileElement fileElement, boolean enabledOnly) {
-    Class rootType = fileElement.getRootElementClass();
+    Class<?> rootType = fileElement.getRootElementClass();
     final InspectionProfile profile = getInspectionProfile(fileElement);
     final List<DomElementsInspection> inspections = new SmartList<>();
     for (final InspectionToolWrapper toolWrapper : profile.getInspectionTools(fileElement.getFile())) {
       if (!enabledOnly || profile.isToolEnabled(HighlightDisplayKey.find(toolWrapper.getShortName()), fileElement.getFile())) {
-        ContainerUtil.addIfNotNull(inspections, getSuitableInspection(toolWrapper.getTool(), rootType));
+        InspectionProfileEntry entry = toolWrapper.getTool();
+        if (entry instanceof DomElementsInspection &&
+            ContainerUtil.exists(((DomElementsInspection<?>)entry).getDomClasses(), cls -> cls.isAssignableFrom(rootType))) {
+          inspections.add((DomElementsInspection)entry);
+        }
       }
     }
     return inspections;
@@ -236,16 +220,6 @@ public class DomElementAnnotationsManagerImpl extends DomElementAnnotationsManag
 
   protected InspectionProfile getInspectionProfile(final DomFileElement fileElement) {
     return InspectionProjectProfileManager.getInstance(fileElement.getManager().getProject()).getCurrentProfile();
-  }
-
-  @Nullable
-  private static DomElementsInspection getSuitableInspection(InspectionProfileEntry entry, Class rootType) {
-    if (entry instanceof DomElementsInspection) {
-      if (((DomElementsInspection)entry).getDomClasses().contains(rootType)) {
-        return (DomElementsInspection) entry;
-      }
-    }
-    return null;
   }
 
   @Nullable public <T extends DomElement>  DomElementsInspection<T> getMockInspection(DomFileElement<? extends T> root) {

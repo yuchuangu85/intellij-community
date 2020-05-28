@@ -19,15 +19,17 @@ import com.intellij.openapi.externalSystem.ExternalSystemUiAware;
 import com.intellij.openapi.externalSystem.importing.ExternalProjectStructureCustomizer;
 import com.intellij.openapi.externalSystem.model.DataNode;
 import com.intellij.openapi.externalSystem.model.Key;
+import com.intellij.openapi.externalSystem.model.ProjectKeys;
 import com.intellij.openapi.externalSystem.model.project.Identifiable;
+import com.intellij.openapi.externalSystem.model.project.ModuleData;
 import com.intellij.openapi.util.Couple;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.gradle.model.data.GradleSourceSetData;
 
 import javax.swing.*;
-import java.util.Collections;
 import java.util.Set;
 
 /**
@@ -35,24 +37,22 @@ import java.util.Set;
  */
 public class GradleProjectStructureCustomizer extends ExternalProjectStructureCustomizer {
 
-  private final Set<Key<GradleSourceSetData>> myKeys = Collections.singleton(GradleSourceSetData.KEY);
-
   @NotNull
   @Override
   public Set<? extends Key<?>> getIgnorableDataKeys() {
-    return myKeys;
+    return getDataKeys();
   }
 
   @NotNull
   @Override
   public Set<? extends Key<?>> getPublicDataKeys() {
-    return myKeys;
+    return getDataKeys();
   }
 
   @NotNull
   @Override
   public Set<? extends Key<? extends Identifiable>> getDependencyAwareDataKeys() {
-    return myKeys;
+    return getDataKeys();
   }
 
   @Nullable
@@ -68,6 +68,15 @@ public class GradleProjectStructureCustomizer extends ExternalProjectStructureCu
       final GradleSourceSetData data = (GradleSourceSetData)node.getData();
       return Couple.of("Source Set", StringUtil.substringAfter(data.getExternalName(), ":"));
     }
+    if (node.getKey().equals(ProjectKeys.MODULE)) {
+      ModuleData moduleData = (ModuleData)node.getData();
+      return Couple.of(moduleData.getExternalName(), null);
+    }
     return super.getRepresentationName(node);
+  }
+
+  @NotNull
+  private static Set<? extends Key<? extends Identifiable>> getDataKeys() {
+    return ContainerUtil.set(GradleSourceSetData.KEY, ProjectKeys.MODULE);
   }
 }

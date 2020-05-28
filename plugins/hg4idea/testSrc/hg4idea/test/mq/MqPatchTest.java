@@ -17,7 +17,7 @@ package hg4idea.test.mq;
 
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.Consumer;
+import com.intellij.util.EmptyConsumer;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.vcs.log.Hash;
 import com.intellij.vcs.log.TimedVcsCommit;
@@ -65,7 +65,7 @@ public class MqPatchTest extends HgPlatformTest {
     touch(FILENAME, "f1");
     myRepository.refresh(false, true);
     hg("add " + FILENAME);
-    hg("commit -m \'" + MESSAGE + "\'");
+    hg("commit -m '" + MESSAGE + "'");
     HgTestUtil.updateDirectoryMappings(myProject, myRepository);
     myHgRepository = HgUtil.getRepositoryManager(myProject).getRepositoryForRoot(myRepository);
     assert myHgRepository != null;
@@ -102,8 +102,7 @@ public class MqPatchTest extends HgPlatformTest {
   }
 
   private TimedVcsCommit getLastRevisionDetails() throws VcsException {
-    //noinspection unchecked
-    return (TimedVcsCommit)ContainerUtil.getFirstItem(HgHistoryUtil.readAllHashes(myProject, myRepository, Consumer.EMPTY_CONSUMER,
+    return (TimedVcsCommit)ContainerUtil.getFirstItem(HgHistoryUtil.readAllHashes(myProject, myRepository, EmptyConsumer.getInstance(),
                                                                   Arrays.asList("-r", "tip")));
   }
 

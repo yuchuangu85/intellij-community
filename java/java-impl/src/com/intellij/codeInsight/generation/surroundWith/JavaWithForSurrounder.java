@@ -16,8 +16,8 @@
  */
 package com.intellij.codeInsight.generation.surroundWith;
 
-import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInsight.CodeInsightUtilCore;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
@@ -29,7 +29,7 @@ import org.jetbrains.annotations.NonNls;
 public class JavaWithForSurrounder extends JavaStatementsSurrounder{
   @Override
   public String getTemplateDescription() {
-    return CodeInsightBundle.message("surround.with.for.template");
+    return JavaBundle.message("surround.with.for.template");
   }
 
   @Override
@@ -47,7 +47,7 @@ public class JavaWithForSurrounder extends JavaStatementsSurrounder{
     PsiForStatement forStatement = (PsiForStatement)factory.createStatementFromText(text, null);
     forStatement = (PsiForStatement)codeStyleManager.reformat(forStatement);
 
-    forStatement = (PsiForStatement)container.addAfter(forStatement, statements[statements.length - 1]);
+    forStatement = (PsiForStatement)addAfter(forStatement, container, statements);
 
     PsiStatement body = forStatement.getBody();
     if (!(body instanceof PsiBlockStatement)) {
@@ -55,7 +55,7 @@ public class JavaWithForSurrounder extends JavaStatementsSurrounder{
     }
     PsiCodeBlock bodyBlock = ((PsiBlockStatement)body).getCodeBlock();
     SurroundWithUtil.indentCommentIfNecessary(bodyBlock, statements);
-    bodyBlock.addRange(statements[0], statements[statements.length - 1]);
+    addRangeWithinContainer(bodyBlock, container, statements, false);
     container.deleteChildRange(statements[0], statements[statements.length - 1]);
 
     forStatement = CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(forStatement);

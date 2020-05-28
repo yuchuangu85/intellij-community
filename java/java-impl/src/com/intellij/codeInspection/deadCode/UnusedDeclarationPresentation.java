@@ -1,12 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.deadCode;
 
+import com.intellij.analysis.AnalysisBundle;
+import com.intellij.codeHighlighting.HighlightDisplayLevel;
 import com.intellij.codeInsight.daemon.impl.HighlightInfoType;
-import com.intellij.codeInsight.intention.IntentionAction;
-import com.intellij.codeInspection.CommonProblemDescriptor;
-import com.intellij.codeInspection.GlobalJavaInspectionContext;
-import com.intellij.codeInspection.InspectionsBundle;
-import com.intellij.codeInspection.ProblemDescriptor;
+import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.ex.*;
 import com.intellij.codeInspection.reference.*;
 import com.intellij.codeInspection.ui.*;
@@ -21,10 +19,11 @@ import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Document;
-import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.AtomicNotNullLazyValue;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
@@ -32,20 +31,20 @@ import com.intellij.pom.Navigatable;
 import com.intellij.profile.codeInspection.ui.SingleInspectionProfilePanel;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PropertyUtilBase;
-import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.refactoring.safeDelete.SafeDeleteHandler;
 import com.intellij.ui.HyperlinkAdapter;
 import com.intellij.ui.ScrollPaneFactory;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.ArrayUtil;
-import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.ObjectUtils;
 import com.intellij.util.VisibilityUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.text.CharArrayUtil;
 import com.intellij.util.text.DateFormatUtil;
-import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.StartupUiUtil;
 import com.intellij.util.ui.UIUtil;
+import gnu.trove.TObjectIntHashMap;
 import org.jdom.Element;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -72,8 +71,18 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
     ConcurrentCollectionFactory.createMap(ContainerUtil.identityStrategy());
   private final Set<RefEntity> myExcludedElements = ConcurrentCollectionFactory.createConcurrentSet(ContainerUtil.identityStrategy());
 
-  private WeakUnreferencedFilter myFilter;
+  private final WeakUnreferencedFilter myFilter;
   private DeadHTMLComposer myComposer;
+  private final AtomicNotNullLazyValue<InspectionToolWrapper> myDummyWrapper = new AtomicNotNullLazyValue<InspectionToolWrapper>() {
+    @NotNull
+    @Override
+    protected InspectionToolWrapper compute() {
+      InspectionToolWrapper toolWrapper = new GlobalInspectionToolWrapper(new DummyEntryPointsEP());
+      toolWrapper.initialize(myContext);
+      return toolWrapper;
+    }
+  };
+
   @NonNls private static final String DELETE = "delete";
   @NonNls private static final String COMMENT = "comment";
 
@@ -95,13 +104,12 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
   public UnusedDeclarationPresentation(@NotNull InspectionToolWrapper toolWrapper, @NotNull GlobalInspectionContextImpl context) {
     super(toolWrapper, context);
     myQuickFixActions = createQuickFixes(toolWrapper);
+    myFilter = new WeakUnreferencedFilter(getTool(), getContext());
     ((EntryPointsManagerBase)getEntryPointsManager()).setAddNonJavaEntries(getTool().ADD_NONJAVA_TO_ENTRIES);
   }
 
+  @NotNull
   public RefFilter getFilter() {
-    if (myFilter == null) {
-      myFilter = new WeakUnreferencedFilter(getTool(), getContext());
-    }
     return myFilter;
   }
   private static class WeakUnreferencedFilter extends UnreferencedFilter {
@@ -156,7 +164,7 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
   }
 
   @Override
-  public void exportResults(@NotNull Consumer<Element> resultConsumer,
+  public void exportResults(@NotNull Consumer<? super Element> resultConsumer,
                             @NotNull RefEntity refEntity,
                             @NotNull Predicate<? super CommonProblemDescriptor> excludedDescriptions) {
     if (!(refEntity instanceof RefJavaElement)) return;
@@ -170,28 +178,28 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
 
       Element element = refEntity.getRefManager().export(refEntity, -1);
       if (element == null) return;
-      @NonNls Element problemClassElement = new Element(InspectionsBundle.message("inspection.export.results.problem.element.tag"));
+      @NonNls Element problemClassElement = new Element(INSPECTION_RESULTS_PROBLEM_CLASS_ELEMENT);
 
       final HighlightSeverity severity = getSeverity(refElement);
       final String attributeKey = HighlightInfoType.UNUSED_SYMBOL.getAttributesKey().getExternalName();
-      problemClassElement.setAttribute("severity", severity.myName);
-      problemClassElement.setAttribute("attribute_key", attributeKey);
+      problemClassElement.setAttribute(INSPECTION_RESULTS_SEVERITY_ATTRIBUTE, severity.myName);
+      problemClassElement.setAttribute(INSPECTION_RESULTS_ATTRIBUTE_KEY_ATTRIBUTE, attributeKey);
 
-      problemClassElement.addContent(InspectionsBundle.message("inspection.export.results.dead.code"));
+      problemClassElement.addContent(AnalysisBundle.message("inspection.export.results.dead.code"));
       element.addContent(problemClassElement);
 
-      @NonNls Element hintsElement = new Element("hints");
+      @NonNls Element hintsElement = new Element(INSPECTION_RESULTS_HINTS_ELEMENT);
 
       for (UnusedDeclarationHint hint : UnusedDeclarationHint.values()) {
-        @NonNls Element hintElement = new Element("hint");
-        hintElement.setAttribute("value", hint.toString().toLowerCase());
+        @NonNls Element hintElement = new Element(INSPECTION_RESULTS_HINT_ELEMENT);
+        hintElement.setAttribute(INSPECTION_RESULTS_VALUE_ATTRIBUTE, StringUtil.toLowerCase(hint.toString()));
         hintsElement.addContent(hintElement);
       }
       element.addContent(hintsElement);
 
 
-      Element descriptionElement = new Element(InspectionsBundle.message("inspection.export.results.description.tag"));
-      StringBuffer buf = new StringBuffer();
+      Element descriptionElement = new Element(INSPECTION_RESULTS_DESCRIPTION_ELEMENT);
+      StringBuilder buf = new StringBuilder();
       DeadHTMLComposer.appendProblemSynopsis((RefElement)refEntity, buf);
       descriptionElement.addContent(buf.toString());
       element.addContent(descriptionElement);
@@ -200,30 +208,27 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
     super.exportResults(resultConsumer, refEntity, excludedDescriptions);
   }
 
-  @NotNull
   @Override
-  public QuickFixAction[] getQuickFixes(@NotNull RefEntity... refElements) {
+  public QuickFixAction @NotNull [] getQuickFixes(RefEntity @NotNull ... refElements) {
     return Arrays.stream(refElements).anyMatch(element -> element instanceof RefJavaElement && getFilter().accepts((RefJavaElement)element) && !myFixedElements.containsKey(element) && element.isValid())
            ? myQuickFixActions
            : QuickFixAction.EMPTY;
   }
 
-  final QuickFixAction[] myQuickFixActions;
+  private final QuickFixAction[] myQuickFixActions;
 
-  @NotNull
-  private QuickFixAction[] createQuickFixes(@NotNull InspectionToolWrapper toolWrapper) {
+  private QuickFixAction @NotNull [] createQuickFixes(@NotNull InspectionToolWrapper toolWrapper) {
     return new QuickFixAction[]{new PermanentDeleteAction(toolWrapper), new CommentOutBin(toolWrapper), new MoveToEntries(toolWrapper)};
   }
-  private static final String DELETE_QUICK_FIX = InspectionsBundle.message("inspection.dead.code.safe.delete.quickfix");
 
   class PermanentDeleteAction extends QuickFixAction {
     PermanentDeleteAction(@NotNull InspectionToolWrapper toolWrapper) {
-      super(DELETE_QUICK_FIX, AllIcons.Actions.Cancel, null, toolWrapper);
+      super(AnalysisBundle.message("inspection.dead.code.safe.delete.quickfix"), AllIcons.Actions.Cancel, null, toolWrapper);
       copyShortcutFrom(ActionManager.getInstance().getAction("SafeDelete"));
     }
 
     @Override
-    protected boolean applyFix(@NotNull final RefEntity[] refElements) {
+    protected boolean applyFix(final RefEntity @NotNull [] refElements) {
       if (!super.applyFix(refElements)) return false;
 
       //filter only elements applicable to be deleted (exclude entry points)
@@ -241,10 +246,7 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
         //filter out elements inside classes to be deleted
         PsiElement[] elements = Arrays.stream(filteredRefElements).filter(e -> {
           RefEntity owner = e.getOwner();
-          if (owner != null && classes.contains(owner)) {
-            return false;
-          }
-          return true;
+          return owner == null || !classes.contains(owner);
         }).map(e -> e.getPsiElement())
           .filter(e -> e != null)
           .toArray(PsiElement[]::new);
@@ -267,7 +269,7 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
 
   class MoveToEntries extends QuickFixAction {
     MoveToEntries(@NotNull InspectionToolWrapper toolWrapper) {
-      super(InspectionsBundle.message("inspection.dead.code.entry.point.quickfix"), null, null, toolWrapper);
+      super(AnalysisBundle.message("inspection.dead.code.entry.point.quickfix"), null, null, toolWrapper);
     }
 
     @Override
@@ -285,7 +287,7 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
     }
 
     @Override
-    protected boolean applyFix(@NotNull RefEntity[] refElements) {
+    protected boolean applyFix(RefEntity @NotNull [] refElements) {
       final EntryPointsManager entryPointsManager = getEntryPointsManager();
       for (RefEntity refElement : refElements) {
         if (refElement instanceof RefElement) {
@@ -299,12 +301,12 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
 
   class CommentOutBin extends QuickFixAction {
     CommentOutBin(@NotNull InspectionToolWrapper toolWrapper) {
-      super(COMMENT_OUT_QUICK_FIX, null, KeyStroke.getKeyStroke(KeyEvent.VK_SLASH, SystemInfo.isMac ? InputEvent.META_MASK : InputEvent.CTRL_MASK),
+      super(AnalysisBundle.message("inspection.dead.code.comment.quickfix"), null, KeyStroke.getKeyStroke(KeyEvent.VK_SLASH, SystemInfo.isMac ? InputEvent.META_MASK : InputEvent.CTRL_MASK),
             toolWrapper);
     }
 
     @Override
-    protected boolean applyFix(@NotNull RefEntity[] refElements) {
+    protected boolean applyFix(RefEntity @NotNull [] refElements) {
       if (!super.applyFix(refElements)) return false;
       List<RefElement> deletedRefs = new ArrayList<>(1);
       final RefFilter filter = getFilter();
@@ -333,35 +335,26 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
     }
   }
 
-  private static final String COMMENT_OUT_QUICK_FIX = InspectionsBundle.message("inspection.dead.code.comment.quickfix");
-  private static class CommentOutFix implements IntentionAction {
-    private final PsiElement myElement;
+  private static class CommentOutFix implements QuickFix {
+    private final RefElement myElement;
 
-    private CommentOutFix(final PsiElement element) {
+    private CommentOutFix(RefElement element) {
       myElement = element;
     }
 
     @Override
     @NotNull
-    public String getText() {
-      return COMMENT_OUT_QUICK_FIX;
-    }
-
-    @Override
-    @NotNull
     public String getFamilyName() {
-      return getText();
+      return AnalysisBundle.message("inspection.dead.code.comment.quickfix");
     }
 
     @Override
-    public boolean isAvailable(@NotNull Project project, Editor editor, PsiFile file) {
-      return true;
-    }
-
-    @Override
-    public void invoke(@NotNull Project project, Editor editor, PsiFile file) throws IncorrectOperationException {
-      if (myElement != null && myElement.isValid()) {
-        commentOutDead(PsiTreeUtil.getParentOfType(myElement, PsiModifierListOwner.class));
+    public void applyFix(@NotNull Project project, @NotNull CommonProblemDescriptor descriptor) {
+      if (myElement != null) {
+        PsiElement element = myElement.getPsiElement();
+        if (element != null) {
+          commentOutDead(element);
+        }
       }
     }
 
@@ -381,7 +374,7 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
 
         int startOffset = textRange.getStartOffset();
         CharSequence chars = doc.getCharsSequence();
-        while (CharArrayUtil.regionMatches(chars, startOffset, InspectionsBundle.message("inspection.dead.code.comment"))) {
+        while (CharArrayUtil.regionMatches(chars, startOffset, AnalysisBundle.message("inspection.dead.code.comment"))) {
           int line = doc.getLineNumber(startOffset) + 1;
           if (line < doc.getLineCount()) {
             startOffset = doc.getLineStartOffset(line);
@@ -395,7 +388,7 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
         int line2 = doc.getLineNumber(endOffset - 1);
 
         if (line1 == line2) {
-          doc.insertString(startOffset, InspectionsBundle.message("inspection.dead.code.date.comment", date));
+          doc.insertString(startOffset, AnalysisBundle.message("inspection.dead.code.date.comment", date));
         }
         else {
           for (int i = line1; i <= line2; i++) {
@@ -403,47 +396,29 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
           }
 
           doc.insertString(doc.getLineStartOffset(Math.min(line2 + 1, doc.getLineCount() - 1)),
-                           InspectionsBundle.message("inspection.dead.code.stop.comment", date));
-          doc.insertString(doc.getLineStartOffset(line1), InspectionsBundle.message("inspection.dead.code.start.comment", date));
+                           AnalysisBundle.message("inspection.dead.code.stop.comment", date));
+          doc.insertString(doc.getLineStartOffset(line1), AnalysisBundle.message("inspection.dead.code.start.comment", date));
         }
       }
     }
   }
 
   @Override
-  public void createToolNode(@NotNull GlobalInspectionContextImpl context,
-                             @NotNull InspectionNode node,
-                             @NotNull InspectionRVContentProvider provider,
-                             @NotNull InspectionTreeNode parentNode,
-                             boolean showStructure,
-                             boolean groupByStructure) {
-    final EntryPointsNode entryPointsNode = new EntryPointsNode(context);
-    InspectionToolWrapper dummyToolWrapper = entryPointsNode.getToolWrapper();
-    InspectionToolPresentation presentation = context.getPresentation(dummyToolWrapper);
+  public void patchToolNode(@NotNull InspectionTreeNode node,
+                            @NotNull InspectionRVContentProvider provider,
+                            boolean showStructure,
+                            boolean groupByStructure) {
+    InspectionTreeModel model = myContext.getView().getTree().getInspectionTreeModel();
+    EntryPointsNode epNode = model.createCustomNode(myDummyWrapper.getValue(), () -> new EntryPointsNode(myDummyWrapper.getValue(), myContext, node), node);
+    InspectionToolPresentation presentation = myContext.getPresentation(myDummyWrapper.getValue());
     presentation.updateContent();
-    provider.appendToolNodeContent(context, entryPointsNode, node, showStructure, groupByStructure);
-    myToolNode = entryPointsNode;
+    provider.appendToolNodeContent(myContext, myDummyWrapper.getValue(), epNode, showStructure, groupByStructure);
   }
 
   @NotNull
   @Override
-  public RefElementNode createRefNode(@Nullable RefEntity entity) {
-    return new RefElementNode(entity, this) {
-      @Nullable
-      @Override
-      public String getTailText() {
-        final UnusedDeclarationHint hint = myFixedElements.get(getElement());
-        if (hint != null) {
-          return hint.getDescription();
-        }
-        return super.getTailText();
-      }
-
-      @Override
-      public boolean isQuickFixAppliedFromView() {
-        return myFixedElements.containsKey(getElement());
-      }
-    };
+  public RefElementNode createRefNode(@Nullable RefEntity entity, @NotNull InspectionTreeModel model, @NotNull InspectionTreeNode parent) {
+    return new UnusedDeclarationRefElementNode(entity, this, parent);
   }
 
   @Override
@@ -506,12 +481,12 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
     return PsiModifier.PUBLIC;
   }
 
-  protected static boolean compareVisibilities(RefJavaElement listOwner,
-                                               UnusedSymbolLocalInspectionBase localInspectionTool) {
+  private static boolean compareVisibilities(RefJavaElement listOwner,
+                                             UnusedSymbolLocalInspectionBase localInspectionTool) {
     return compareVisibilities(listOwner, getAcceptedVisibility(localInspectionTool, listOwner));
   }
 
-  protected static boolean compareVisibilities(RefJavaElement listOwner, final String acceptedVisibility) {
+  static boolean compareVisibilities(RefJavaElement listOwner, final String acceptedVisibility) {
     if (acceptedVisibility != null) {
       while (listOwner != null) {
         if (VisibilityUtil.compare(listOwner.getAccessModifier(), acceptedVisibility) >= 0) {
@@ -531,28 +506,29 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
 
   @Override
   public void ignoreElement(@NotNull RefEntity refEntity) {
-    if (refEntity instanceof RefElement) {
-      final CommonProblemDescriptor[] descriptors = getProblemElements().get(refEntity);
-      if (descriptors != null) {
-        final PsiElement psiElement = ReadAction.compute(() -> ((RefElement)refEntity).getPsiElement());
-        List<CommonProblemDescriptor> foreignDescriptors = new ArrayList<>();
-        for (CommonProblemDescriptor descriptor : descriptors) {
-          if (descriptor instanceof ProblemDescriptor) {
-            PsiElement problemElement = ReadAction.compute(() -> {
-              PsiElement element = ((ProblemDescriptor)descriptor).getPsiElement();
-              if (element instanceof PsiIdentifier) element = element.getParent();
-              return element;
-            });
-            if (problemElement == psiElement ||
-                problemElement instanceof PsiParameter &&
-                ReadAction.compute(() -> ((PsiParameter)problemElement).getDeclarationScope()) == psiElement) continue;
-          }
-          foreignDescriptors.add(descriptor);
-        }
-        if (foreignDescriptors.size() == descriptors.length) return;
-      }
+    RefEntity owner = refEntity;
+    if (refEntity instanceof RefParameter) {
+      owner = refEntity.getOwner();
     }
-    super.ignoreElement(refEntity);
+
+    final CommonProblemDescriptor[] descriptors = getProblemElements().get(owner);
+    if (descriptors != null) {
+      final PsiElement psiElement = ReadAction.compute(() -> ((RefElement)refEntity).getPsiElement());
+      List<CommonProblemDescriptor> foreignDescriptors = new ArrayList<>();
+      for (CommonProblemDescriptor descriptor : descriptors) {
+        if (descriptor instanceof ProblemDescriptor) {
+          PsiElement problemElement = ReadAction.compute(() -> {
+            PsiElement element = ((ProblemDescriptor)descriptor).getPsiElement();
+            if (element instanceof PsiIdentifier) element = element.getParent();
+            return element;
+          });
+          if (problemElement == psiElement) continue;
+        }
+        foreignDescriptors.add(descriptor);
+      }
+      if (foreignDescriptors.size() == descriptors.length) return;
+    }
+    super.ignoreElement(owner);
   }
 
   @Override
@@ -563,48 +539,41 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
 
   @Override
   @Nullable
-  public IntentionAction findQuickFixes(@NotNull final CommonProblemDescriptor descriptor, final String hint) {
-    if (descriptor instanceof ProblemDescriptor) {
+  public QuickFix findQuickFixes(@NotNull final CommonProblemDescriptor descriptor,
+                                 RefEntity entity,
+                                 String hint) {
+    if (entity instanceof RefElement) {
       if (DELETE.equals(hint)) {
-        return new PermanentDeleteFix(((ProblemDescriptor)descriptor).getPsiElement());
+        return new PermanentDeleteFix((RefElement)entity);
       }
       if (COMMENT.equals(hint)) {
-        return new CommentOutFix(((ProblemDescriptor)descriptor).getPsiElement());
+        return new CommentOutFix((RefElement)entity);
       }
-      return super.findQuickFixes(descriptor, hint);
+      if (entity instanceof RefParameter) {
+        return super.findQuickFixes(descriptor, entity, hint);
+      }
     }
     return null;
   }
 
+  private static class PermanentDeleteFix implements QuickFix {
+    private final RefElement myElement;
 
-  private static class PermanentDeleteFix implements IntentionAction {
-    private final PsiElement myElement;
-
-    private PermanentDeleteFix(final PsiElement element) {
+    private PermanentDeleteFix(@Nullable RefElement element) {
       myElement = element;
     }
 
     @Override
     @NotNull
-    public String getText() {
-      return DELETE_QUICK_FIX;
-    }
-
-    @Override
-    @NotNull
     public String getFamilyName() {
-      return getText();
+      return AnalysisBundle.message("inspection.dead.code.safe.delete.quickfix");
     }
 
-    @Override
-    public boolean isAvailable(@NotNull Project project, Editor editor, PsiFile file) {
-      return true;
-    }
 
     @Override
-    public void invoke(@NotNull Project project, Editor editor, PsiFile file) throws IncorrectOperationException {
+    public void applyFix(@NotNull Project project, @NotNull CommonProblemDescriptor descriptor) {
       if (myElement != null && myElement.isValid()) {
-        SafeDeleteHandler.invoke(myElement.getProject(), new PsiElement[]{PsiTreeUtil.getParentOfType(myElement, PsiModifierListOwner.class)}, false);
+        SafeDeleteHandler.invoke(project, new PsiElement[]{myElement.getPsiElement()}, false);
       }
     }
 
@@ -665,11 +634,11 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
       }
     });
     final StyleSheet css = ((HTMLEditorKit)htmlView.getEditorKit()).getStyleSheet();
-    css.addRule("p.problem-description-group {text-indent: " + JBUI.scale(9) + "px;font-weight:bold;}");
-    css.addRule("div.problem-description {margin-left: " + JBUI.scale(9) + "px;}");
-    css.addRule("ul {margin-left:" + JBUI.scale(10) + "px;text-indent: 0}");
-    css.addRule("code {font-family:" + UIUtil.getLabelFont().getFamily()  +  "}");
-    final StringBuffer buf = new StringBuffer();
+    css.addRule("p.problem-description-group {text-indent: " + JBUIScale.scale(9) + "px;font-weight:bold;}");
+    css.addRule("div.problem-description {margin-left: " + JBUIScale.scale(9) + "px;}");
+    css.addRule("ul {margin-left:" + JBUIScale.scale(10) + "px;text-indent: 0}");
+    css.addRule("code {font-family:" + StartupUiUtil.getLabelFont().getFamily() + "}");
+    final StringBuilder buf = new StringBuilder();
     getComposer().compose(buf, entity, false);
     final String text = buf.toString();
     SingleInspectionProfilePanel.readHTML(htmlView, SingleInspectionProfilePanel.toHTML(htmlView, text, false));
@@ -677,7 +646,45 @@ public class UnusedDeclarationPresentation extends DefaultInspectionToolPresenta
   }
 
   @Override
-  public int getProblemsCount(@NotNull InspectionTree tree) {
-    return 0;
+  public boolean showProblemCount() {
+    return false;
+  }
+
+  @ApiStatus.Internal
+  protected static class UnusedDeclarationRefElementNode extends RefElementNode {
+    UnusedDeclarationRefElementNode(@Nullable RefEntity entity,
+                                    @NotNull UnusedDeclarationPresentation presentation,
+                                    @NotNull InspectionTreeNode parent) {
+      super(entity, presentation, parent);
+    }
+
+    @Nullable
+    @Override
+    public String getTailText() {
+      final UnusedDeclarationHint hint = ((UnusedDeclarationPresentation)getPresentation()).myFixedElements.get(getElement());
+      if (hint != null) {
+        return hint.getDescription();
+      }
+      return super.getTailText();
+    }
+
+    @Override
+    public boolean isQuickFixAppliedFromView() {
+      return ((UnusedDeclarationPresentation)getPresentation()).myFixedElements.containsKey(getElement());
+    }
+
+    @Override
+    protected void visitProblemSeverities(@NotNull TObjectIntHashMap<HighlightDisplayLevel> counter) {
+      if (!isExcluded() && isLeaf() && !getPresentation().isProblemResolved(getElement()) && !getPresentation()
+        .isSuppressed(getElement())) {
+        HighlightSeverity severity = InspectionToolResultExporter.getSeverity(getElement(), null, getPresentation());
+        HighlightDisplayLevel level = HighlightDisplayLevel.find(severity);
+        if (!counter.adjustValue(level, 1)) {
+          counter.put(level, 1);
+        }
+        return;
+      }
+      super.visitProblemSeverities(counter);
+    }
   }
 }

@@ -17,6 +17,7 @@ package com.intellij.codeInsight.daemon.impl.quickfix;
 
 import com.intellij.codeInsight.intention.HighPriorityAction;
 import com.intellij.codeInspection.LocalQuickFixAndIntentionActionOnPsiElement;
+import com.intellij.java.analysis.JavaAnalysisBundle;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
@@ -34,7 +35,7 @@ public class RemoveTypeArgumentsFix extends LocalQuickFixAndIntentionActionOnPsi
   @NotNull
   @Override
   public String getText() {
-    return "Remove type arguments";
+    return JavaAnalysisBundle.message("inspection.redundant.type.remove.quickfix");
   }
 
   @NotNull
@@ -54,7 +55,7 @@ public class RemoveTypeArgumentsFix extends LocalQuickFixAndIntentionActionOnPsi
   @Override
   public void invoke(@NotNull Project project,
                      @NotNull PsiFile file,
-                     @Nullable("is null when called from inspection") Editor editor,
+                     @Nullable Editor editor,
                      @NotNull PsiElement startElement,
                      @NotNull PsiElement endElement) {
     final PsiVariable psiVariable = (PsiVariable)startElement;

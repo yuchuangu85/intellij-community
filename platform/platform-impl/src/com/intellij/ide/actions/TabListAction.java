@@ -1,23 +1,12 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.actions;
 
-import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.icons.AllIcons;
+import com.intellij.openapi.actionSystem.ActionPlaces;
 import com.intellij.openapi.actionSystem.AnActionEvent;
-import com.intellij.ui.tabs.impl.JBTabsImpl;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.project.DumbAwareAction;
+import com.intellij.ui.tabs.impl.MorePopupAware;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -25,25 +14,28 @@ import org.jetbrains.annotations.NotNull;
  *
  * @author yole
  */
-public class TabListAction extends AnAction {
+public class TabListAction extends DumbAwareAction {
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
-    JBTabsImpl tabs = e.getData(JBTabsImpl.NAVIGATION_ACTIONS_KEY);
-    if (tabs != null) {
-      tabs.showMorePopup(null);
+    MorePopupAware morePopupAware = e.getData(MorePopupAware.KEY);
+    if (morePopupAware != null) {
+      morePopupAware.showMorePopup();
     }
   }
 
   @Override
   public void update(@NotNull AnActionEvent e) {
-    e.getPresentation().setEnabled(isTabListAvailable(e));
+    e.getPresentation().setIcon(AllIcons.Actions.FindAndShowNextMatches);
+    if (ApplicationManager.getApplication().isHeadlessEnvironment()) {
+      e.getPresentation().setEnabledAndVisible(false);
+      return;
+    }
+    boolean available = isTabListAvailable(e) || e.getPlace() == ActionPlaces.TABS_MORE_TOOLBAR;
+    e.getPresentation().setEnabledAndVisible(available);
   }
 
   private static boolean isTabListAvailable(@NotNull AnActionEvent e) {
-    JBTabsImpl tabs = e.getData(JBTabsImpl.NAVIGATION_ACTIONS_KEY);
-    if (tabs == null || !tabs.isEditorTabs()) {
-      return false;
-    }
-    return tabs.canShowMorePopup();
+    MorePopupAware morePopupAware = e.getData(MorePopupAware.KEY);
+    return morePopupAware != null && morePopupAware.canShowMorePopup();
   }
 }

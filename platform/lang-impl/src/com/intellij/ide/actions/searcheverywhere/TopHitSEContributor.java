@@ -1,9 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.actions.searcheverywhere;
 
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.SearchTopHitProvider;
 import com.intellij.ide.actions.ActivateToolWindowAction;
 import com.intellij.ide.actions.GotoActionAction;
+import com.intellij.ide.ui.OptionsSearchTopHitProvider;
 import com.intellij.ide.ui.OptionsTopHitProvider;
 import com.intellij.ide.ui.search.BooleanOptionDescription;
 import com.intellij.ide.ui.search.OptionDescription;
@@ -25,22 +27,20 @@ import com.intellij.ui.ColoredListCellRenderer;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.ui.components.OnOffButton;
 import com.intellij.util.IconUtil;
+import com.intellij.util.Processor;
 import com.intellij.util.ui.EmptyIcon;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
-import javax.accessibility.Accessible;
-import javax.accessibility.AccessibleContext;
 import javax.swing.*;
 import java.awt.*;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
-public class TopHitSEContributor implements SearchEverywhereContributor<Void> {
+public class TopHitSEContributor implements SearchEverywhereContributor<Object> {
 
+  public static final int TOP_HIT_ELEMENT_PRIORITY = 100000;
   private final Collection<SearchTopHitProvider> myTopHitProviders = Arrays.asList(SearchTopHitProvider.EP_NAME.getExtensions());
 
   private final Project myProject;
@@ -62,12 +62,7 @@ public class TopHitSEContributor implements SearchEverywhereContributor<Void> {
   @NotNull
   @Override
   public String getGroupName() {
-    return "Top Hit";
-  }
-
-  @Override
-  public String includeNonProjectItemsText() {
-    return null;
+    return IdeBundle.message("search.everywhere.group.name.top.hit");
   }
 
   @Override
@@ -81,8 +76,8 @@ public class TopHitSEContributor implements SearchEverywhereContributor<Void> {
   }
 
   @Override
-  public void fetchElements(@NotNull String pattern, boolean everywhere, @Nullable SearchEverywhereContributorFilter<Void> filter,
-                            @NotNull ProgressIndicator progressIndicator, @NotNull Function<Object, Boolean> consumer) {
+  public void fetchElements(@NotNull String pattern,
+                            @NotNull ProgressIndicator progressIndicator, @NotNull Processor<? super Object> consumer) {
     fill(pattern, consumer);
   }
 
@@ -92,8 +87,8 @@ public class TopHitSEContributor implements SearchEverywhereContributor<Void> {
     List<SearchEverywhereCommandInfo> res = new ArrayList<>();
     final HashSet<String> found = new HashSet<>();
     for (SearchTopHitProvider provider : SearchTopHitProvider.EP_NAME.getExtensions()) {
-      if (provider instanceof OptionsTopHitProvider) {
-        final String providerId = ((OptionsTopHitProvider)provider).getId();
+      if (provider instanceof OptionsSearchTopHitProvider) {
+        final String providerId = ((OptionsSearchTopHitProvider)provider).getId();
         if (!found.contains(providerId)) {
           found.add(providerId);
           res.add(new SearchEverywhereCommandInfo(providerId, "", this));
@@ -129,13 +124,18 @@ public class TopHitSEContributor implements SearchEverywhereContributor<Void> {
     return false;
   }
 
+  @Override
+  public int getElementPriority(@NotNull Object element, @NotNull String searchPattern) {
+    return TOP_HIT_ELEMENT_PRIORITY;
+  }
+
   @NotNull
   @Override
-  public ListCellRenderer getElementsRenderer(@NotNull JList<?> list) {
+  public ListCellRenderer<? super Object> getElementsRenderer() {
     return new TopHitRenderer(myProject);
   }
 
-  private void fill(String pattern, Function<Object, Boolean> consumer) {
+  private void fill(@NotNull String pattern, @NotNull Processor<Object> consumer) {
     if (pattern.startsWith(SearchTopHitProvider.getTopHitAccelerator()) && !pattern.contains(" ")) {
       return;
     }
@@ -147,20 +147,17 @@ public class TopHitSEContributor implements SearchEverywhereContributor<Void> {
     fillFromExtensions(pattern, consumer);
   }
 
-  private void fillFromExtensions(String pattern, Function<Object, Boolean> consumer) {
+  private void fillFromExtensions(@NotNull String pattern, Processor<Object> consumer) {
     for (SearchTopHitProvider provider : myTopHitProviders) {
-      if (provider instanceof OptionsTopHitProvider && !((OptionsTopHitProvider)provider).isEnabled(myProject)) {
-        continue;
-      }
       boolean[] interrupted = {false};
-      provider.consumeTopHits(pattern, o -> interrupted[0] = consumer.apply(o), myProject);
+      provider.consumeTopHits(pattern, o -> interrupted[0] = !consumer.process(o), myProject);
       if (interrupted[0]) {
         return;
       }
     }
   }
 
-  private boolean fillActions(String pattern, Function<Object, Boolean> consumer) {
+  private boolean fillActions(String pattern, Processor<Object> consumer) {
     ActionManager actionManager = ActionManager.getInstance();
     List<String> actions = AbbreviationManager.getInstance().findActions(pattern);
     for (String actionId : actions) {
@@ -169,7 +166,7 @@ public class TopHitSEContributor implements SearchEverywhereContributor<Void> {
         continue;
       }
 
-      if (!consumer.apply(action)) {
+      if (!consumer.process(action)) {
         return true;
       }
     }
@@ -194,25 +191,9 @@ public class TopHitSEContributor implements SearchEverywhereContributor<Void> {
   private static class TopHitRenderer extends ColoredListCellRenderer<Object> {
 
     private final Project myProject;
-    private final MyAccessiblePanel myRendererPanel = new MyAccessiblePanel();
 
     private TopHitRenderer(Project project) {
       myProject = project;
-    }
-
-    private static class MyAccessiblePanel extends JPanel {
-      private Accessible myAccessible;
-      MyAccessiblePanel() {
-        super(new BorderLayout());
-        setOpaque(false);
-      }
-      void setAccessible(Accessible comp) {
-        myAccessible = comp;
-      }
-      @Override
-      public AccessibleContext getAccessibleContext() {
-        return accessibleContext = (myAccessible != null ? myAccessible.getAccessibleContext() : super.getAccessibleContext());
-      }
     }
 
     @Override
@@ -221,35 +202,17 @@ public class TopHitSEContributor implements SearchEverywhereContributor<Void> {
 
       if (value instanceof BooleanOptionDescription) {
         final JPanel panel = new JPanel(new BorderLayout());
-        panel.setBackground(UIUtil.getListBackground(selected));
-        panel.add(cmp, BorderLayout.CENTER);
-        final Component rightComponent;
+        panel.setBackground(UIUtil.getListBackground(selected, true));
 
         final OnOffButton button = new OnOffButton();
         button.setSelected(((BooleanOptionDescription)value).isOptionEnabled());
-        rightComponent = button;
 
-        panel.add(rightComponent, BorderLayout.EAST);
+        panel.add(cmp, BorderLayout.CENTER);
+        panel.add(button, BorderLayout.EAST);
         cmp = panel;
       }
 
-      Color bg = cmp.getBackground();
-      if (bg == null) {
-        cmp.setBackground(UIUtil.getListBackground(selected));
-        bg = cmp.getBackground();
-      }
-
-      myRendererPanel.removeAll();
-
-      JPanel wrapped = new JPanel(new BorderLayout());
-      wrapped.setBackground(bg);
-      wrapped.add(cmp, BorderLayout.CENTER);
-      myRendererPanel.add(wrapped, BorderLayout.CENTER);
-      if (cmp instanceof Accessible) {
-        myRendererPanel.setAccessible((Accessible)cmp);
-      }
-
-      return myRendererPanel;
+      return cmp;
     }
 
     @Override
@@ -322,7 +285,7 @@ public class TopHitSEContributor implements SearchEverywhereContributor<Void> {
     if (hit == null) {
       hit = value.getOption();
     }
-    hit = StringUtil.unescapeXml(hit);
+    hit = StringUtil.unescapeXmlEntities(hit);
     if (hit.length() > 60) {
       hit = hit.substring(0, 60) + "...";
     }

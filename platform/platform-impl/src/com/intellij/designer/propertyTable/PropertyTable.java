@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.designer.propertyTable;
 
 import com.intellij.designer.model.ErrorInfo;
@@ -6,6 +6,7 @@ import com.intellij.designer.model.PropertiesContainer;
 import com.intellij.designer.model.Property;
 import com.intellij.designer.model.PropertyContext;
 import com.intellij.designer.propertyTable.renderers.LabelPropertyRenderer;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.ui.search.SearchUtil;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.application.ApplicationManager;
@@ -20,34 +21,63 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.FileStatus;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.openapi.wm.ex.IdeFocusTraversalPolicy;
-import com.intellij.ui.*;
+import com.intellij.ui.ColorUtil;
+import com.intellij.ui.ColoredTableCellRenderer;
+import com.intellij.ui.SimpleColoredComponent;
+import com.intellij.ui.SimpleTextAttributes;
+import com.intellij.ui.SpeedSearchComparator;
+import com.intellij.ui.TableActions;
+import com.intellij.ui.TableSpeedSearch;
+import com.intellij.ui.TableUtil;
 import com.intellij.ui.table.JBTable;
 import com.intellij.util.ThrowableRunnable;
 import com.intellij.util.ui.UIUtil;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
-import javax.swing.*;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Graphics2D;
+import java.awt.Insets;
+import java.awt.KeyboardFocusManager;
+import java.awt.Rectangle;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.EventObject;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import javax.swing.AbstractAction;
+import javax.swing.AbstractCellEditor;
+import javax.swing.ActionMap;
+import javax.swing.Icon;
+import javax.swing.InputMap;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JTable;
+import javax.swing.KeyStroke;
+import javax.swing.ListSelectionModel;
+import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeEvent;
 import javax.swing.plaf.TableUI;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableCellEditor;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumnModel;
-import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.KeyEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.text.MessageFormat;
-import java.util.List;
-import java.util.*;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * @author Alexander Lobas
  */
 public abstract class PropertyTable extends JBTable {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.designer.propertyTable.PropertyTable");
+  private static final Logger LOG = Logger.getInstance(PropertyTable.class);
   private static final Comparator<String> GROUP_COMPARATOR = (o1, o2) -> StringUtil.compare(o1, o2, true);
   private static final Comparator<Property> PROPERTY_COMPARATOR = (o1, o2) -> StringUtil.compare(o1.getName(), o2.getName(), true);
 
@@ -81,7 +111,7 @@ public abstract class PropertyTable extends JBTable {
 
     setShowVerticalLines(false);
     setIntercellSpacing(new Dimension(0, 1));
-    setGridColor(UIUtil.getSlightlyDarkerColor(getBackground()));
+    setGridColor(ColorUtil.darker(getBackground(), 1));
 
     setColumnSelectionAllowed(false);
     setCellSelectionEnabled(false);
@@ -159,8 +189,8 @@ public abstract class PropertyTable extends JBTable {
     InputMap focusedInputMap = getInputMap(JComponent.WHEN_FOCUSED);
     InputMap ancestorInputMap = getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
 
-    actionMap.put("selectPreviousRow", new MySelectNextPreviousRowAction(false));
-    actionMap.put("selectNextRow", new MySelectNextPreviousRowAction(true));
+    actionMap.put(TableActions.Up.ID, new MySelectNextPreviousRowAction(false));
+    actionMap.put(TableActions.Down.ID, new MySelectNextPreviousRowAction(true));
 
     actionMap.put("startEditing", new MyStartEditingAction());
     focusedInputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0), "startEditing");
@@ -314,7 +344,7 @@ public abstract class PropertyTable extends JBTable {
   private void sortPropertiesAndCreateGroups(List<Property> rootProperties) {
     if (!mySorted && !myShowGroups) return;
 
-    Collections.sort(rootProperties, (o1, o2) -> {
+    rootProperties.sort((o1, o2) -> {
       if (o1.getParent() != null || o2.getParent() != null) {
         if (o1.getParent() == o2) return -1;
         if (o2.getParent() == o1) return 1;
@@ -404,7 +434,7 @@ public abstract class PropertyTable extends JBTable {
 
     if (size > 0) {
       List<Property> rootProperties = new ArrayList<>();
-      for (Property each : (Iterable<? extends Property>)getProperties(myContainers.get(0))) {
+      for (Property each : getProperties(myContainers.get(0))) {
         addIfNeeded(getCurrentComponent(), each, rootProperties);
       }
       sortPropertiesAndCreateGroups(rootProperties);
@@ -461,7 +491,7 @@ public abstract class PropertyTable extends JBTable {
     }
   }
 
-  private void fillProperties(PropertiesContainer<?> component, List<Property> properties) {
+  private void fillProperties(PropertiesContainer<?> component, List<? super Property> properties) {
     for (Property each : getProperties(component)) {
       if (addIfNeeded(component, each, properties)) {
         addExpandedChildren(component, each, properties);
@@ -469,7 +499,7 @@ public abstract class PropertyTable extends JBTable {
     }
   }
 
-  private void addExpandedChildren(PropertiesContainer<?> component, Property property, List<Property> properties) {
+  private void addExpandedChildren(PropertiesContainer<?> component, Property property, List<? super Property> properties) {
     if (isExpanded(property)) {
       for (Property child : getChildren(property)) {
         if (addIfNeeded(component, child, properties)) {
@@ -479,7 +509,7 @@ public abstract class PropertyTable extends JBTable {
     }
   }
 
-  private boolean addIfNeeded(PropertiesContainer<?> component, Property property, List<Property> properties) {
+  private boolean addIfNeeded(PropertiesContainer<?> component, Property property, List<? super Property> properties) {
     if (property.isExpert() && !myShowExpertProperties) {
       try {
         if (property.isDefaultRecursively(component)) {
@@ -509,7 +539,7 @@ public abstract class PropertyTable extends JBTable {
 
     for (int i = 0; i < size; i++) {
       Property nextProperty = properties.get(i);
-      if (Comparing.equal(nextProperty.getGroup(), property.getGroup()) && name.equals(nextProperty.getName())) {
+      if (Objects.equals(nextProperty.getGroup(), property.getGroup()) && name.equals(nextProperty.getName())) {
         return i;
       }
     }
@@ -841,7 +871,7 @@ public abstract class PropertyTable extends JBTable {
     }
 
     Messages.showMessageDialog(MessageFormat.format("Error setting value: {0}", message),
-                               "Invalid Input",
+                               IdeBundle.message("dialog.title.invalid.input"),
                                Messages.getErrorIcon());
   }
 
@@ -1129,9 +1159,6 @@ public abstract class PropertyTable extends JBTable {
         if (component instanceof JComboBox) {
           ComboBox.registerTableCellEditor((JComboBox)component, this);
         }
-        else if (component instanceof JCheckBox) {
-          if (UIUtil.isUnderAquaLookAndFeel()) UIUtil.applyStyle(UIUtil.ComponentStyle.SMALL, component);
-        }
 
         return component;
       }
@@ -1161,7 +1188,7 @@ public abstract class PropertyTable extends JBTable {
   public static void updateRenderer(JComponent component, boolean selected) {
     if (selected) {
       component.setForeground(UIUtil.getTableSelectionForeground());
-      component.setBackground(UIUtil.getTableSelectionBackground());
+      component.setBackground(UIUtil.getTableSelectionBackground(true));
     }
     else {
       component.setForeground(UIUtil.getTableForeground());
@@ -1299,10 +1326,6 @@ public abstract class PropertyTable extends JBTable {
 
           component.setBackground(selected ? UIUtil.getTreeSelectionBackground(tableHasFocus) : background);
           component.setFont(table.getFont());
-
-          if (component instanceof JCheckBox) {
-            if (UIUtil.isUnderAquaLookAndFeel()) UIUtil.applyStyle(UIUtil.ComponentStyle.SMALL, component);
-          }
 
           return component;
         }

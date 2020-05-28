@@ -6,7 +6,7 @@ import com.intellij.openapi.options.SearchableConfigurable;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.AbstractVcs;
 import com.intellij.openapi.vcs.ProjectLevelVcsManager;
-import org.jetbrains.annotations.Nls;
+import com.intellij.openapi.vcs.VcsBundle;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -49,7 +49,7 @@ public class VcsGeneralConfigurationConfigurable implements SearchableConfigurab
     if (mappings != null) {
       mappings.addVcsListener(new ModuleVcsListener() {
         @Override
-        public void activeVcsSetChanged(Collection<AbstractVcs> activeVcses) {
+        public void activeVcsSetChanged(Collection<? extends AbstractVcs> activeVcses) {
           myPanel.updateAvailableOptions(activeVcses);
         }
       });
@@ -75,10 +75,10 @@ public class VcsGeneralConfigurationConfigurable implements SearchableConfigurab
   public void disposeUIResources() {
     myPanel = null;
   }
+
   @Override
-  @Nls
   public String getDisplayName() {
-    return "Confirmation";
+    return VcsBundle.message("configurable.VcsGeneralConfigurationConfigurable.display.name");
   }
 
   @Override

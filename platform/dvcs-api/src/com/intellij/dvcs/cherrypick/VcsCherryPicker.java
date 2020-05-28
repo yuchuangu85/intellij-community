@@ -19,6 +19,7 @@ import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.vcs.VcsKey;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.vcs.log.VcsFullCommitDetails;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
@@ -39,6 +40,7 @@ public abstract class VcsCherryPicker {
    * @return CherryPick Action name for supported vcs
    */
   @NotNull
+  @Nls(capitalization = Nls.Capitalization.Title)
   public abstract String getActionTitle();
 
   /**
@@ -46,10 +48,10 @@ public abstract class VcsCherryPicker {
    *
    * @param commits to cherry-pick
    */
-  public abstract void cherryPick(@NotNull final List<VcsFullCommitDetails> commits);
+  public abstract void cherryPick(@NotNull final List<? extends VcsFullCommitDetails> commits);
 
   /**
    * Return true if cherry picker can manage all commits from roots
    */
-  public abstract boolean canHandleForRoots(@NotNull Collection<VirtualFile> roots);
+  public abstract boolean canHandleForRoots(@NotNull Collection<? extends VirtualFile> roots);
 }

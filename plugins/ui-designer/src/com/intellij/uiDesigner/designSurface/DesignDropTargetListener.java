@@ -27,7 +27,7 @@ import java.util.List;
  * @author yole
  */
 class DesignDropTargetListener implements DropTargetListener {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.designSurface.DesignDropTargetListener");
+  private static final Logger LOG = Logger.getInstance(DesignDropTargetListener.class);
 
   private DraggedComponentList myDraggedComponentList;
   private ComponentDragObject myComponentDragObject;
@@ -215,9 +215,7 @@ class DesignDropTargetListener implements DropTargetListener {
             PaletteToolWindowManager.getInstance(myEditor).clearActiveItem();
             myEditor.getActiveDecorationLayer().removeFeedback();
             myEditor.getLayeredPane().setCursor(null);
-            IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-              IdeFocusManager.getGlobalInstance().requestFocus(myEditor.getGlassLayer(), true);
-            });
+            IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(myEditor.getGlassLayer(), true));
             myEditor.getMainProcessor().setInsertFeedbackEnabled(true);
           });
         }

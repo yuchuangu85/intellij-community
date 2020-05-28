@@ -32,11 +32,11 @@ public abstract class CachingSimpleNode extends SimpleNode {
     super(aProject, aParentDescriptor);
   }
 
-  @NotNull
   @Override
-  public final SimpleNode[] getChildren() {
+  public final SimpleNode @NotNull [] getChildren() {
     if (myChildren == null) {
       myChildren = buildChildren();
+      if (myChildren == null) throw new NullPointerException("no children from " + getClass());
       onChildrenBuilt();
     }
 
@@ -52,8 +52,7 @@ public abstract class CachingSimpleNode extends SimpleNode {
     myChildren = null;
   }
 
-  @Nullable
-  protected SimpleNode[] getCached() {
+  protected SimpleNode @Nullable [] getCached() {
     return myChildren;
   }
 

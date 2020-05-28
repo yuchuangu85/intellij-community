@@ -4,6 +4,9 @@ package com.intellij.openapi.editor.impl;
 import com.intellij.codeInsight.daemon.GutterMark;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.editor.colors.EditorColorsManager;
+import com.intellij.openapi.editor.colors.EditorColorsScheme;
+import com.intellij.openapi.editor.colors.TextAttributesKey;
 import com.intellij.openapi.editor.ex.DocumentEx;
 import com.intellij.openapi.editor.ex.MarkupModelEx;
 import com.intellij.openapi.editor.ex.RangeHighlighterEx;
@@ -14,6 +17,7 @@ import com.intellij.openapi.util.Key;
 import com.intellij.util.BitUtil;
 import com.intellij.util.Consumer;
 import org.intellij.lang.annotations.MagicConstant;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -28,8 +32,9 @@ class RangeHighlighterImpl extends RangeMarkerImpl implements RangeHighlighterEx
   private static final Color NULL_COLOR = new Color(0, 0, 0); // must be new instance to work as a sentinel
   private static final Key<Boolean> VISIBLE_IF_FOLDED = Key.create("visible.folded");
 
-  private final MarkupModel myModel;
-  private TextAttributes myTextAttributes;
+  private final MarkupModelImpl myModel;
+  private TextAttributes myForcedTextAttributes;
+  private TextAttributesKey myTextAttributesKey;
   private LineMarkerRenderer myLineMarkerRenderer;
   private Color myErrorStripeColor;
   private Color myLineSeparatorColor;
@@ -57,16 +62,16 @@ class RangeHighlighterImpl extends RangeMarkerImpl implements RangeHighlighterEx
   @MagicConstant(flags = {CHANGED_MASK, RENDERERS_CHANGED_MASK, FONT_STYLE_OR_COLOR_CHANGED_MASK})
   private @interface ChangeStatus {}
 
-  RangeHighlighterImpl(@NotNull MarkupModel model,
+  RangeHighlighterImpl(@NotNull MarkupModelImpl model,
                        int start,
                        int end,
                        int layer,
                        @NotNull HighlighterTargetArea target,
-                       TextAttributes textAttributes,
+                       @Nullable TextAttributesKey textAttributesKey,
                        boolean greedyToLeft,
                        boolean greedyToRight) {
-    super((DocumentEx)model.getDocument(), start, end,false);
-    myTextAttributes = textAttributes;
+    super((DocumentEx)model.getDocument(), start, end, false, false);
+    myTextAttributesKey = textAttributesKey;
     setFlag(TARGET_AREA_IS_EXACT_MASK, target == HighlighterTargetArea.EXACT_RANGE);
     myModel = model;
 
@@ -83,20 +88,54 @@ class RangeHighlighterImpl extends RangeMarkerImpl implements RangeHighlighterEx
 
 
   @Override
-  public TextAttributes getTextAttributes() {
-    return myTextAttributes;
+  public TextAttributesKey getTextAttributesKey() {
+    return myTextAttributesKey;
+  }
+
+  @Override
+  @ApiStatus.Internal
+  public @Nullable TextAttributes getForcedTextAttributes() {
+    return myForcedTextAttributes;
+  }
+
+  @Override
+  @ApiStatus.Internal
+  public @Nullable Color getForcedErrorStripeMarkColor() {
+    return myErrorStripeColor;
+  }
+
+  @Override
+  public @Nullable TextAttributes getTextAttributes(@Nullable("when null, the global scheme will be used") EditorColorsScheme scheme) {
+    if (myForcedTextAttributes != null) return myForcedTextAttributes;
+    if (myTextAttributesKey == null) return null;
+
+    EditorColorsScheme colorScheme = scheme == null ? EditorColorsManager.getInstance().getGlobalScheme() : scheme;
+    return colorScheme.getAttributes(myTextAttributesKey);
   }
 
   @Override
   public void setTextAttributes(@NotNull TextAttributes textAttributes) {
-    TextAttributes old = myTextAttributes;
-    myTextAttributes = textAttributes;
-    if (old != textAttributes && (old == TextAttributes.ERASE_MARKER || textAttributes == TextAttributes.ERASE_MARKER)) {
+    TextAttributes old = myForcedTextAttributes;
+    if (old == textAttributes) return;
+
+    myForcedTextAttributes = textAttributes;
+
+    if (old == TextAttributes.ERASE_MARKER || textAttributes == TextAttributes.ERASE_MARKER ||
+        old == null && myTextAttributesKey != null) {
       fireChanged(false, true);
     }
     else if (!Comparing.equal(old, textAttributes)) {
       fireChanged(false, getFontStyle(old) != getFontStyle(textAttributes) ||
                          !Comparing.equal(getForegroundColor(old), getForegroundColor(textAttributes)));
+    }
+  }
+
+  @Override
+  public void setTextAttributesKey(@NotNull TextAttributesKey textAttributesKey) {
+    TextAttributesKey old = myTextAttributesKey;
+    myTextAttributesKey = textAttributesKey;
+    if (!Comparing.equal(old, textAttributesKey)) {
+      fireChanged(false, myForcedTextAttributes == null);
     }
   }
 
@@ -131,8 +170,12 @@ class RangeHighlighterImpl extends RangeMarkerImpl implements RangeHighlighterEx
 
   @Override
   public void setLineMarkerRenderer(LineMarkerRenderer renderer) {
+    boolean oldRenderedInGutter = isRenderedInGutter();
     LineMarkerRenderer old = myLineMarkerRenderer;
     myLineMarkerRenderer = renderer;
+    if (isRenderedInGutter() != oldRenderedInGutter) {
+      myModel.treeFor(this).updateRenderedFlags(this);
+    }
     if (!Comparing.equal(old, renderer)) {
       fireChanged(true, false);
     }
@@ -159,23 +202,28 @@ class RangeHighlighterImpl extends RangeMarkerImpl implements RangeHighlighterEx
 
   @Override
   public void setGutterIconRenderer(GutterIconRenderer renderer) {
+    boolean oldRenderedInGutter = isRenderedInGutter();
     GutterMark old = myGutterIconRenderer;
     myGutterIconRenderer = renderer;
+    if (isRenderedInGutter() != oldRenderedInGutter) {
+      myModel.treeFor(this).updateRenderedFlags(this);
+    }
     if (!Comparing.equal(old, renderer)) {
       fireChanged(true, false);
     }
   }
 
   @Override
-  public Color getErrorStripeMarkColor() {
+  public Color getErrorStripeMarkColor(@Nullable("when null, the global scheme will be used") EditorColorsScheme scheme) {
     if (myErrorStripeColor == NULL_COLOR) return null;
     if (myErrorStripeColor != null) return myErrorStripeColor;
-    if (myTextAttributes != null) return myTextAttributes.getErrorStripeColor();
-    return null;
+    if (myForcedTextAttributes != null) return myForcedTextAttributes.getErrorStripeColor();
+    TextAttributes textAttributes = getTextAttributes(scheme);
+    return textAttributes != null ? textAttributes.getErrorStripeColor() : null;
   }
 
   @Override
-  public void setErrorStripeMarkColor(Color color) {
+  public void setErrorStripeMarkColor(@Nullable Color color) {
     if (color == null) color = NULL_COLOR;
     Color old = myErrorStripeColor;
     myErrorStripeColor = color;
@@ -268,16 +316,41 @@ class RangeHighlighterImpl extends RangeMarkerImpl implements RangeHighlighterEx
     }
   }
 
+  @Override
+  public void setGreedyToLeft(boolean greedy) {
+    boolean old = isGreedyToLeft();
+    super.setGreedyToLeft(greedy);
+    if (old != greedy) {
+      fireChanged(false, false);
+    }
+  }
+
+  @Override
+  public void setGreedyToRight(boolean greedy) {
+    boolean old = isGreedyToRight();
+    super.setGreedyToRight(greedy);
+    if (old != greedy) {
+      fireChanged(false, false);
+    }
+  }
+
+  @Override
+  public void setStickingToRight(boolean value) {
+    boolean old = isStickingToRight();
+    super.setStickingToRight(value);
+    if (old != value) {
+      fireChanged(false, false);
+    }
+  }
+
   private void fireChanged(boolean renderersChanged, boolean fontStyleOrColorChanged) {
-    if (myModel instanceof MarkupModelEx) {
-      if (isFlagSet(IN_BATCH_CHANGE_MASK)) {
-        setFlag(CHANGED_MASK, true);
-        if (renderersChanged) setFlag(RENDERERS_CHANGED_MASK, true);
-        if (fontStyleOrColorChanged) setFlag(FONT_STYLE_OR_COLOR_CHANGED_MASK, true);
-      }
-      else {
-        ((MarkupModelEx)myModel).fireAttributesChanged(this, renderersChanged, fontStyleOrColorChanged);
-      }
+    if (isFlagSet(IN_BATCH_CHANGE_MASK)) {
+      setFlag(CHANGED_MASK, true);
+      if (renderersChanged) setFlag(RENDERERS_CHANGED_MASK, true);
+      if (fontStyleOrColorChanged) setFlag(FONT_STYLE_OR_COLOR_CHANGED_MASK, true);
+    }
+    else {
+      myModel.fireAttributesChanged(this, renderersChanged, fontStyleOrColorChanged);
     }
   }
 
@@ -364,11 +437,10 @@ class RangeHighlighterImpl extends RangeMarkerImpl implements RangeHighlighterEx
   }
 
   @Override
-  protected boolean unregisterInTree() {
-    if (!isValid()) return false;
+  protected void unregisterInTree() {
+    if (!isValid()) return;
     // we store highlighters in MarkupModel
     getMarkupModel().removeHighlighter(this);
-    return true;
   }
 
   @Override

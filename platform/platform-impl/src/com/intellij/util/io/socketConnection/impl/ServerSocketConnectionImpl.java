@@ -8,26 +8,28 @@ import com.intellij.util.io.socketConnection.AbstractResponse;
 import com.intellij.util.io.socketConnection.ConnectionStatus;
 import com.intellij.util.io.socketConnection.RequestResponseExternalizerFactory;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 
-/**
- * @author nik
- */
 public class ServerSocketConnectionImpl<Request extends AbstractRequest, Response extends AbstractResponse> extends SocketConnectionBase<Request,Response> {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.util.io.socketConnection.impl.ServerSocketConnectionImpl");
+  private static final Logger LOG = Logger.getInstance(ServerSocketConnectionImpl.class);
   private ServerSocket myServerSocket;
   private final int myDefaultPort;
-  private final int myConnectionAttempts;
+  private final int myPortChoiceAttempts;
+  @Nullable private final InetAddress myBindAddress;
 
   public ServerSocketConnectionImpl(int defaultPort,
-                                    int connectionAttempts,
+                                    @Nullable InetAddress bindAddress,
+                                    int portChoiceAttempts,
                                     @NotNull RequestResponseExternalizerFactory<Request, Response> factory) {
     super(factory);
     myDefaultPort = defaultPort;
-    myConnectionAttempts = connectionAttempts;
+    myPortChoiceAttempts = portChoiceAttempts;
+    myBindAddress = bindAddress;
   }
 
   @Override
@@ -48,10 +50,10 @@ public class ServerSocketConnectionImpl<Request extends AbstractRequest, Respons
   @NotNull
   private ServerSocket createSocket() throws IOException {
     IOException exc = null;
-    for (int i = 0; i < myConnectionAttempts; i++) {
+    for (int i = 0; i < myPortChoiceAttempts; i++) {
       int port = myDefaultPort + i;
       try {
-        return new ServerSocket(port);
+        return new ServerSocket(port, 0, myBindAddress);
       }
       catch (IOException e) {
         exc = e;

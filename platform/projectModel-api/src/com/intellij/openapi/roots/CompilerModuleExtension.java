@@ -4,6 +4,7 @@ package com.intellij.openapi.roots;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.pointers.VirtualFilePointer;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -72,7 +73,7 @@ public abstract class CompilerModuleExtension extends ModuleExtension {
 
   public abstract boolean isExcludeOutput();
 
-  public abstract VirtualFile[] getOutputRoots(boolean includeTests);
+  public abstract VirtualFile @NotNull [] getOutputRoots(boolean includeTests);
 
-  public abstract String[] getOutputRootUrls(boolean includeTests);
+  public abstract String @NotNull [] getOutputRootUrls(boolean includeTests);
 }

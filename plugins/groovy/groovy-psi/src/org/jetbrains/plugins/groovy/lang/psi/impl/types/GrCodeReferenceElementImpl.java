@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.impl.types;
 
 import com.intellij.lang.ASTNode;
@@ -11,13 +11,14 @@ import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.lang.lexer.TokenSets;
 import org.jetbrains.plugins.groovy.lang.parser.GroovyElementTypes;
+import org.jetbrains.plugins.groovy.lang.parser.GroovyStubElementTypes;
+import org.jetbrains.plugins.groovy.lang.psi.GrReferenceElement;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyElementVisitor;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElementFactory;
 import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult;
-import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrNewExpression;
+import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.annotation.GrAnnotation;
 import org.jetbrains.plugins.groovy.lang.psi.api.types.CodeReferenceKind;
 import org.jetbrains.plugins.groovy.lang.psi.api.types.GrCodeReferenceElement;
-import org.jetbrains.plugins.groovy.lang.psi.api.types.GrTypeArgumentList;
 import org.jetbrains.plugins.groovy.lang.psi.dataFlow.types.TypeInferenceHelper;
 import org.jetbrains.plugins.groovy.lang.psi.impl.GrReferenceElementImpl;
 import org.jetbrains.plugins.groovy.lang.psi.impl.PsiImplUtil;
@@ -25,7 +26,7 @@ import org.jetbrains.plugins.groovy.lang.resolve.GrCodeReferenceResolver;
 
 import java.util.Collection;
 
-import static org.jetbrains.plugins.groovy.lang.psi.impl.PsiImplUtilKt.doGetKind;
+import static org.jetbrains.plugins.groovy.lang.psi.impl.PsiImplUtilKt.*;
 import static org.jetbrains.plugins.groovy.lang.psi.util.PropertyUtilKt.getAccessorName;
 
 /**
@@ -33,7 +34,7 @@ import static org.jetbrains.plugins.groovy.lang.psi.util.PropertyUtilKt.getAcces
  * @date: 26.03.2007
  */
 public class GrCodeReferenceElementImpl extends GrReferenceElementImpl<GrCodeReferenceElement> implements GrCodeReferenceElement {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.plugins.groovy.lang.psi.impl.types.GrCodeReferenceElementImpl");
+  private static final Logger LOG = Logger.getInstance(GrCodeReferenceElementImpl.class);
 
   public GrCodeReferenceElementImpl(@NotNull ASTNode node) {
     super(node);
@@ -53,8 +54,8 @@ public class GrCodeReferenceElementImpl extends GrReferenceElementImpl<GrCodeRef
       myCachedTextSkipWhiteSpaceAndComments = whiteSpaceAndComments = PsiImplUtil.getTextSkipWhiteSpaceAndComments(getNode());
     }
     return whiteSpaceAndComments;
-  }  
-  
+  }
+
   @Override
   public PsiReference getReference() {
     return this;
@@ -70,15 +71,10 @@ public class GrCodeReferenceElementImpl extends GrReferenceElementImpl<GrCodeRef
     }
   }
 
+  @NotNull
   @Override
-  protected GrCodeReferenceElement bindWithQualifiedRef(@NotNull String qName) {
-    final GrCodeReferenceElement qualifiedRef = GroovyPsiElementFactory.getInstance(getProject()).createTypeOrPackageReference(qName);
-    final PsiElement list = getTypeArgumentList();
-    if (list != null) {
-      qualifiedRef.getNode().addChild(list.copy().getNode());
-    }
-    getNode().getTreeParent().replaceChild(getNode(), qualifiedRef.getNode());
-    return qualifiedRef;
+  protected GrReferenceElement<GrCodeReferenceElement> createQualifiedRef(@NotNull String qName) {
+    return GroovyPsiElementFactory.getInstance(getProject()).createCodeReference(qName);
   }
 
   @Override
@@ -231,37 +227,27 @@ public class GrCodeReferenceElementImpl extends GrReferenceElementImpl<GrCodeRef
   @NotNull
   @Override
   public Collection<? extends GroovyResolveResult> resolve(boolean incomplete) {
-    return TypeInferenceHelper.getCurrentContext().resolve(this, incomplete, GrCodeReferenceResolver.INSTANCE);
+    return TypeInferenceHelper.getTopContext().resolve(this, incomplete, GrCodeReferenceResolver.INSTANCE);
   }
 
-  @NotNull
   @Override
-  public PsiType[] getTypeArguments() {
-    GrTypeArgumentList typeArgumentList = getTypeArgumentList();
-    if (typeArgumentList != null && typeArgumentList.isDiamond()) {
-      return inferDiamondTypeArguments();
+  public PsiType @NotNull [] getTypeArguments() {
+    if (shouldInferTypeArguments(this)) {
+      return getDiamondTypes(this);
     }
     else {
       return super.getTypeArguments();
     }
   }
 
-  private PsiType[] inferDiamondTypeArguments() {
-    PsiElement parent = getParent();
-    if (!(parent instanceof GrNewExpression)) return PsiType.EMPTY_ARRAY;
-
-    PsiType lType = PsiImplUtil.inferExpectedTypeForDiamond((GrNewExpression)parent);
-
-    if (lType instanceof PsiClassType) {
-      return ((PsiClassType)lType).getParameters();
-    }
-
-    return PsiType.EMPTY_ARRAY;
-  }
-
   @NotNull
   @Override
   public CodeReferenceKind getKind() {
     return doGetKind(this);
+  }
+
+  @Override
+  public GrAnnotation @NotNull [] getAnnotations() {
+    return findChildrenByType(GroovyStubElementTypes.ANNOTATION, GrAnnotation.class);
   }
 }

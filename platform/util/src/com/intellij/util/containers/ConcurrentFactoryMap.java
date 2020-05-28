@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.containers;
 
 import com.intellij.openapi.util.RecursionGuard;
@@ -6,34 +6,28 @@ import com.intellij.openapi.util.RecursionManager;
 import com.intellij.util.ConcurrencyUtil;
 import com.intellij.util.Function;
 import com.intellij.util.ObjectUtils;
-import com.intellij.util.Producer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Supplier;
 
 /**
- * a ConcurrentMap which computes the value associated with the key (via {@link #create(Object)} method) on first {@link #get(Object)} access.
- * THREAD SAFE.
+ * ConcurrentMap which computes the value associated with the key (via {@link #create(Object)} method) on first {@link #get(Object)} access.
+ * This map is THREAD SAFE.
  * It's guaranteed that two {@link #get(Object)} method calls with the same key will return the same value (i.e. the created value stored atomically).
- * For not thread-safe (but possible faster and more memory-efficient) alternative please use {@link FactoryMap}
+ * For the not thread-safe (but possibly faster and more memory-efficient) alternative please use {@link FactoryMap} instead.
  */
 public abstract class ConcurrentFactoryMap<K,V> implements ConcurrentMap<K,V> {
-  private static final RecursionGuard ourGuard = RecursionManager.createGuard("factoryMap");
-
   private final ConcurrentMap<K, V> myMap = createMap();
 
-  /**
-   * Use {@link #createMap(Function)} instead
-   * TODO to remove in IDEA 2018
-   */
-  @Deprecated
-  public ConcurrentFactoryMap() {
+  private ConcurrentFactoryMap() {
+
   }
 
-  @Nullable
-  protected abstract V create(K key);
+  protected abstract @Nullable V create(K key);
 
   @Override
   public V get(Object key) {
@@ -41,7 +35,8 @@ public abstract class ConcurrentFactoryMap<K,V> implements ConcurrentMap<K,V> {
     K k = notNull(key);
     V value = map.get(k);
     if (value == null) {
-      RecursionGuard.StackStamp stamp = ourGuard.markStack();
+      RecursionGuard.StackStamp stamp = RecursionManager.markStack();
+      //noinspection unchecked
       value = create((K)key);
       if (stamp.mayCacheNow()) {
         V v = notNull(value);
@@ -51,8 +46,7 @@ public abstract class ConcurrentFactoryMap<K,V> implements ConcurrentMap<K,V> {
     return nullize(value);
   }
 
-  @Nullable
-  private static <T> T nullize(T value) {
+  private static @Nullable <T> T nullize(T value) {
     return value == FAKE_NULL() ? null : value;
   }
 
@@ -63,7 +57,7 @@ public abstract class ConcurrentFactoryMap<K,V> implements ConcurrentMap<K,V> {
 
   private static <T> T notNull(final Object key) {
     //noinspection unchecked
-    return key == null ? ConcurrentFactoryMap.<T>FAKE_NULL() : (T)key;
+    return key == null ? FAKE_NULL() : (T)key;
   }
 
   @Override
@@ -85,10 +79,9 @@ public abstract class ConcurrentFactoryMap<K,V> implements ConcurrentMap<K,V> {
     return nullize(v);
   }
 
-  @NotNull
   @Override
-  public Set<K> keySet() {
-    return new CollectionWrapper.Set<K>(myMap.keySet());
+  public @NotNull Set<K> keySet() {
+    return new CollectionWrapper.Set<>(myMap.keySet());
   }
 
   public boolean removeValue(Object value) {
@@ -118,42 +111,40 @@ public abstract class ConcurrentFactoryMap<K,V> implements ConcurrentMap<K,V> {
   }
 
   @Override
-  public void putAll(@NotNull final Map<? extends K, ? extends V> m) {
+  public void putAll(final @NotNull Map<? extends K, ? extends V> m) {
     for (Entry<? extends K, ? extends V> entry : m.entrySet()) {
       put(entry.getKey(), entry.getValue());
     }
   }
 
-  @NotNull
   @Override
-  public Collection<V> values() {
-    return new CollectionWrapper<V>(myMap.values());
+  public @NotNull Collection<V> values() {
+    return new CollectionWrapper<>(myMap.values());
   }
 
-  @NotNull
   @Override
-  public Set<Entry<K, V>> entrySet() {
+  public @NotNull Set<Entry<K, V>> entrySet() {
     return new CollectionWrapper.Set<Entry<K, V>>(myMap.entrySet()) {
       @Override
       public Object wrap(Object val) {
-        return val instanceof EntryWrapper ? ((EntryWrapper)val).myEntry : val;
+        //noinspection unchecked
+        return val instanceof EntryWrapper ? ((EntryWrapper<K, V>)val).myEntry : val;
       }
 
       @Override
       public Entry<K, V> unwrap(Entry<K, V> val) {
-        return val.getKey() == FAKE_NULL() || val.getValue() == FAKE_NULL() ? new EntryWrapper<K, V>(val) : val;
+        return val.getKey() == FAKE_NULL() || val.getValue() == FAKE_NULL() ? new EntryWrapper<>(val) : val;
       }
     };
   }
 
-  @NotNull
-  protected ConcurrentMap<K, V> createMap() {
-    return ContainerUtil.newConcurrentMap();
+  protected @NotNull ConcurrentMap<K, V> createMap() {
+    return new ConcurrentHashMap<>();
   }
 
   @Override
   public V putIfAbsent(@NotNull K key, V value) {
-    return nullize(myMap.putIfAbsent(ConcurrentFactoryMap.<K>notNull(key), ConcurrentFactoryMap.<V>notNull(value)));
+    return nullize(myMap.putIfAbsent(notNull(key), notNull(value)));
   }
 
   @Override
@@ -163,39 +154,39 @@ public abstract class ConcurrentFactoryMap<K,V> implements ConcurrentMap<K,V> {
 
   @Override
   public boolean replace(@NotNull K key, @NotNull V oldValue, @NotNull V newValue) {
-    return myMap.replace(ConcurrentFactoryMap.<K>notNull(key), ConcurrentFactoryMap.<V>notNull(oldValue), ConcurrentFactoryMap.<V>notNull(newValue));
+    return myMap.replace(notNull(key), notNull(oldValue), notNull(newValue));
   }
 
   @Override
   public V replace(@NotNull K key, @NotNull V value) {
-    return nullize(myMap.replace(ConcurrentFactoryMap.<K>notNull(key), ConcurrentFactoryMap.<V>notNull(value)));
+    return nullize(myMap.replace(notNull(key), notNull(value)));
   }
 
-  @NotNull
-  public static <T, V> ConcurrentMap<T, V> createMap(@NotNull final Function<? super T, ? extends V> computeValue) {
-    //noinspection deprecation
+  @Override
+  public String toString() {
+    return myMap.toString();
+  }
+
+  public static @NotNull <T, V> ConcurrentMap<T, V> createMap(final @NotNull Function<? super T, ? extends V> computeValue) {
     return new ConcurrentFactoryMap<T, V>() {
-      @Nullable
       @Override
-      protected V create(T key) {
+      protected @Nullable V create(T key) {
         return computeValue.fun(key);
       }
     };
   }
-  @NotNull
-  public static <K, V> ConcurrentMap<K, V> createMap(@NotNull final Function<? super K, ? extends V> computeValue, @NotNull final Producer<? extends ConcurrentMap<K, V>> mapCreator) {
-    //noinspection deprecation
+
+  public static @NotNull <K, V> ConcurrentMap<K, V> create(@NotNull Function<? super K, ? extends V> computeValue,
+                                                           @NotNull Supplier<? extends ConcurrentMap<K, V>> mapCreator) {
     return new ConcurrentFactoryMap<K, V>() {
-      @Nullable
       @Override
-      protected V create(K key) {
+      protected @Nullable V create(K key) {
         return computeValue.fun(key);
       }
 
-      @NotNull
       @Override
-      protected ConcurrentMap<K, V> createMap() {
-        return mapCreator.produce();
+      protected @NotNull ConcurrentMap<K, V> createMap() {
+        return mapCreator.get();
       }
     };
   }
@@ -203,22 +194,8 @@ public abstract class ConcurrentFactoryMap<K,V> implements ConcurrentMap<K,V> {
   /**
    * @return Concurrent factory map with weak keys, strong values
    */
-  @NotNull
-  public static <T, V> ConcurrentMap<T, V> createWeakMap(@NotNull Function<? super T, ? extends V> compute) {
-    return createMap(compute, new Producer<ConcurrentMap<T, V>>() {
-      @Override
-      public ConcurrentMap<T, V> produce() {return ContainerUtil.createConcurrentWeakMap();}
-    });
-  }
-
-  /**
-   * needed for compatibility in case of moronic subclassing
-   * TODO to remove in IDEA 2018
-   */
-  @Deprecated
-  public V getOrDefault(Object key, V defaultValue) {
-      V v;
-      return (v = get(key)) != null ? v : defaultValue;
+  public static @NotNull <T, V> ConcurrentMap<T, V> createWeakMap(@NotNull Function<? super T, ? extends V> compute) {
+    return create(compute, ContainerUtil::createConcurrentWeakMap);
   }
 
   private static class CollectionWrapper<K> extends AbstractCollection<K> {
@@ -228,11 +205,10 @@ public abstract class ConcurrentFactoryMap<K,V> implements ConcurrentMap<K,V> {
       myDelegate = delegate;
     }
 
-    @NotNull
     @Override
-    public Iterator<K> iterator() {
+    public @NotNull Iterator<K> iterator() {
       return new Iterator<K>() {
-        Iterator<K> it = myDelegate.iterator();
+        final Iterator<K> it = myDelegate.iterator();
         @Override
         public boolean hasNext() {
           return it.hasNext();
@@ -277,8 +253,8 @@ public abstract class ConcurrentFactoryMap<K,V> implements ConcurrentMap<K,V> {
     }
 
     protected static class EntryWrapper<K, V> implements Entry<K, V> {
-      final Entry<? extends K, V> myEntry;
-      private EntryWrapper(Entry<? extends K, V> entry) {
+      final Entry<? extends K, ? extends V> myEntry;
+      private EntryWrapper(Entry<? extends K, ? extends V> entry) {
         myEntry = entry;
       }
 
@@ -294,7 +270,7 @@ public abstract class ConcurrentFactoryMap<K,V> implements ConcurrentMap<K,V> {
 
       @Override
       public V setValue(V value) {
-        return myEntry.setValue(ConcurrentFactoryMap.<V>notNull(value));
+        return myEntry.setValue(notNull(value));
       }
 
       @Override
@@ -304,7 +280,8 @@ public abstract class ConcurrentFactoryMap<K,V> implements ConcurrentMap<K,V> {
 
       @Override
       public boolean equals(Object obj) {
-        return myEntry.equals(obj instanceof EntryWrapper ? ((EntryWrapper)obj).myEntry : obj);
+        //noinspection unchecked
+        return myEntry.equals(obj instanceof EntryWrapper ? ((EntryWrapper<K,V>)obj).myEntry : obj);
       }
     }
   }

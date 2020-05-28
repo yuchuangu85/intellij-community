@@ -18,17 +18,14 @@ package com.intellij.java.codeInsight.daemon.quickFix;
 import com.intellij.codeInsight.daemon.quickFix.LightQuickFixParameterizedTestCase;
 import com.intellij.codeInspection.LocalInspectionTool;
 import com.intellij.codeInspection.intermediaryVariable.ReturnSeparatedFromComputationInspection;
-import com.intellij.openapi.projectRoots.Sdk;
-import com.intellij.testFramework.IdeaTestUtil;
 import org.jetbrains.annotations.NotNull;
 
 /**
  * @author Pavel.Dolgov
  */
 public class ReturnSeparatedFromComputationFix8Test extends LightQuickFixParameterizedTestCase {
-  @NotNull
   @Override
-  protected LocalInspectionTool[] configureLocalInspectionTools() {
+  protected LocalInspectionTool @NotNull [] configureLocalInspectionTools() {
     return new LocalInspectionTool[]{new ReturnSeparatedFromComputationInspection()};
   }
 
@@ -37,8 +34,4 @@ public class ReturnSeparatedFromComputationFix8Test extends LightQuickFixParamet
     return "/codeInsight/daemonCodeAnalyzer/quickFix/returnSeparatedFromComputation8";
   }
 
-  @Override
-  protected Sdk getProjectJDK() {
-    return IdeaTestUtil.getMockJdk18();
-  }
 }

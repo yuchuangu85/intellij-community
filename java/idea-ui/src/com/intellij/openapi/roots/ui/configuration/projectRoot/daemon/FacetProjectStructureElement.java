@@ -23,9 +23,6 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * @author nik
- */
 public class FacetProjectStructureElement extends ProjectStructureElement {
   private final Facet myFacet;
 
@@ -43,6 +40,7 @@ public class FacetProjectStructureElement extends ProjectStructureElement {
     return Collections.emptyList();
   }
 
+  @NotNull
   @Override
   public String getPresentableText() {
     return "Facet '" + myFacet.getName() + "' in module '" + myFacet.getModule().getName() + "'";

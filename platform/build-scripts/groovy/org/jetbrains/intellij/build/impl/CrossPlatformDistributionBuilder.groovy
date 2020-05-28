@@ -1,6 +1,4 @@
-// Copyright 2000-2017 JetBrains s.r.o.
-// Use of this source code is governed by the Apache 2.0 license that can be
-// found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.intellij.build.impl
 
 import com.intellij.openapi.util.io.FileUtil
@@ -13,9 +11,6 @@ import org.jetbrains.intellij.build.impl.productInfo.ProductInfoValidator
 
 import java.util.regex.Pattern
 
-/**
- * @author nik
- */
 class CrossPlatformDistributionBuilder {
   private final BuildContext buildContext
 
@@ -23,7 +18,7 @@ class CrossPlatformDistributionBuilder {
     this.buildContext = buildContext
   }
 
-  void buildCrossPlatformZip(String winDistPath, String linuxDistPath, String macDistPath) {
+  String buildCrossPlatformZip(String winDistPath, String linuxDistPath, String macDistPath) {
     buildContext.messages.block("Building cross-platform zip") {
       def executableName = buildContext.productProperties.baseFileName
       def zipDir = "$buildContext.paths.temp/cross-platform-zip"
@@ -64,12 +59,27 @@ class CrossPlatformDistributionBuilder {
                                   LinuxDistributionBuilder.getFrameClass(buildContext)),
         new ProductInfoLaunchData(OsFamily.MACOS.osName, "MacOS/$executableName", null, "bin/mac/${executableName}.vmoptions", null)
       ])
-      String suffix = buildContext.bundledJreManager.jreSuffix()
-      String targetPath = "$buildContext.paths.artifacts/${buildContext.productProperties.getBaseArtifactName(buildContext.applicationInfo, buildContext.buildNumber)}${suffix}.zip"
+
+      def zipFileName = buildContext.productProperties.getCrossPlatformZipFileName(buildContext.applicationInfo, buildContext.buildNumber)
+      String targetPath = "$buildContext.paths.artifacts/$zipFileName"
+
+      List<String> extraExecutables = buildContext.linuxDistributionCustomizer.extraExecutables + buildContext.macDistributionCustomizer.extraExecutables
       buildContext.ant.zip(zipfile: targetPath, duplicate: "fail") {
         fileset(dir: buildContext.paths.distAll) {
           exclude(name: "bin/idea.properties")
+          extraExecutables.each {
+            exclude(name: it)
+          }
         }
+
+        if (!extraExecutables.isEmpty()) {
+          zipfileset(dir: buildContext.paths.distAll, filemode: "775") {
+            extraExecutables.each {
+              include(name: it)
+            }
+          }
+        }
+
         fileset(dir: zipDir)
         fileset(file: "$buildContext.paths.artifacts/dependencies.txt")
 
@@ -79,6 +89,7 @@ class CrossPlatformDistributionBuilder {
           exclude(name: "bin/${executableName}*.exe")
           exclude(name: "bin/idea.properties")
           exclude(name: "help/**")
+          exclude(name: "build.txt")
         }
         zipfileset(dir: "$winDistPath/bin", prefix: "bin/win") {
           include(name: "fsnotifier*.exe")
@@ -128,10 +139,6 @@ class CrossPlatformDistributionBuilder {
           buildContext.macDistributionCustomizer.extraExecutables.each {
             exclude(name: it)
           }
-
-          if (buildContext.macDistributionCustomizer.helpId) {
-            exclude(name: "Resources/${buildContext.macDistributionCustomizer.helpId}.help/**")
-          }
         }
         if (!buildContext.macDistributionCustomizer.extraExecutables.isEmpty()) {
           zipfileset(dir: "$macDistPath", filemode: "775") {
@@ -153,6 +160,8 @@ class CrossPlatformDistributionBuilder {
       }
       new ProductInfoValidator(buildContext).checkInArchive(targetPath, "")
       buildContext.notifyArtifactBuilt(targetPath)
+
+      targetPath
     }
   }
 

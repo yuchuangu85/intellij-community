@@ -24,9 +24,12 @@ import com.intellij.lang.Language;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.intellij.codeInsight.hints.HintUtilsKt.getLanguageForSettingKey;
 
 public class MethodInfoBlacklistFilter implements HintInfoFilter {
   private final List<Matcher> myMatchers;
@@ -58,13 +61,13 @@ public class MethodInfoBlacklistFilter implements HintInfoFilter {
   private static Set<String> fullBlacklist(Language language) {
     InlayParameterHintsProvider provider = InlayParameterHintsExtension.INSTANCE.forLanguage(language);
     if (provider == null) {
-      return ContainerUtil.newHashOrEmptySet(ContainerUtil.emptyIterable());
+      return Collections.emptySet();
     }
 
     Set<String> blackList = blacklist(language);
     Language dependentLanguage = provider.getBlackListDependencyLanguage();
     if (dependentLanguage != null) {
-      blackList.addAll(blacklist(dependentLanguage));
+      blackList = ContainerUtil.union(blackList, blacklist(dependentLanguage));
     }
     return blackList;
   }
@@ -74,10 +77,10 @@ public class MethodInfoBlacklistFilter implements HintInfoFilter {
     InlayParameterHintsProvider provider = InlayParameterHintsExtension.INSTANCE.forLanguage(language);
     if (provider != null) {
       ParameterNameHintsSettings settings = ParameterNameHintsSettings.getInstance();
-      Diff diff = settings.getBlackListDiff(language);
+      Diff diff = settings.getBlackListDiff(getLanguageForSettingKey(language));
       return diff.applyOn(provider.getDefaultBlackList());
     }
-    return ContainerUtil.newHashOrEmptySet(ContainerUtil.emptyIterable());
+    return Collections.emptySet();
   }
 
 }

@@ -1,6 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.openapi.roots.impl.libraries;
 
@@ -20,14 +18,16 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.EventDispatcher;
 import com.intellij.util.containers.ContainerUtil;
 import org.jdom.Element;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
+@ApiStatus.Internal
 public abstract class LibraryTableBase implements PersistentStateComponent<Element>, LibraryTable, Disposable {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.roots.impl.libraries.LibraryTableBase");
+  private static final Logger LOG = Logger.getInstance(LibraryTableBase.class);
   private final EventDispatcher<Listener> myDispatcher = EventDispatcher.create(Listener.class);
   private LibraryModel myModel = new LibraryModel();
   private boolean myFirstLoad = true;
@@ -78,8 +78,7 @@ public abstract class LibraryTableBase implements PersistentStateComponent<Eleme
   }
 
   @Override
-  @NotNull
-  public Library[] getLibraries() {
+  public Library @NotNull [] getLibraries() {
     return myModel.getLibraries();
   }
 
@@ -137,9 +136,9 @@ public abstract class LibraryTableBase implements PersistentStateComponent<Eleme
     return createLibrary(null);
   }
 
-  void fireLibraryRenamed(@NotNull LibraryImpl library) {
+  void fireLibraryRenamed(@NotNull LibraryImpl library, String oldName) {
     incrementModificationCount();
-    myDispatcher.getMulticaster().afterLibraryRenamed(library);
+    myDispatcher.getMulticaster().afterLibraryRenamed(library, oldName);
   }
 
   private void incrementModificationCount() {
@@ -188,7 +187,7 @@ public abstract class LibraryTableBase implements PersistentStateComponent<Eleme
     }
   }
 
-  private void fireAfterLibraryRemoved(Library library) {
+  private void fireAfterLibraryRemoved(@NotNull Library library) {
     myDispatcher.getMulticaster().afterLibraryRemoved(library);
   }
 
@@ -270,8 +269,7 @@ public abstract class LibraryTableBase implements PersistentStateComponent<Eleme
 
 
     @Override
-    @NotNull
-    public Library[] getLibraries() {
+    public Library @NotNull [] getLibraries() {
       return myLibraries.toArray(Library.EMPTY_ARRAY);
     }
 
@@ -287,13 +285,13 @@ public abstract class LibraryTableBase implements PersistentStateComponent<Eleme
 
     @NotNull
     @Override
-    public Library createLibrary(String name, @Nullable PersistentLibraryKind kind) {
+    public Library createLibrary(String name, @Nullable PersistentLibraryKind<?> kind) {
       return createLibrary(name, kind, null);
     }
 
     @NotNull
     @Override
-    public Library createLibrary(String name, @Nullable PersistentLibraryKind kind, @Nullable ProjectModelExternalSource externalSource) {
+    public Library createLibrary(String name, @Nullable PersistentLibraryKind<?> kind, @Nullable ProjectModelExternalSource externalSource) {
       assertWritable();
       final LibraryImpl library = new LibraryImpl(name, kind, LibraryTableBase.this, null, externalSource);
       myLibraries.add(library);

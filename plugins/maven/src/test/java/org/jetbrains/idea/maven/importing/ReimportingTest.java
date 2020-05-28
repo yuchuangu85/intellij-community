@@ -16,19 +16,19 @@
 package org.jetbrains.idea.maven.importing;
 
 import com.intellij.compiler.CompilerConfiguration;
+import com.intellij.idea.Bombed;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.module.ModifiableModuleModel;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.roots.ModuleOrderEntry;
 import com.intellij.openapi.roots.ModuleRootManager;
-import com.intellij.openapi.roots.impl.ModuleOrderEntryImpl;
 import com.intellij.openapi.roots.impl.OrderEntryUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.pom.java.LanguageLevel;
 import org.jetbrains.idea.maven.MavenImportingTestCase;
-import org.jetbrains.idea.maven.server.MavenServerManager;
 
+import java.util.Calendar;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.intellij.openapi.module.EffectiveLanguageLevelUtil.getEffectiveLanguageLevel;
@@ -244,13 +244,13 @@ public class ReimportingTest extends MavenImportingTestCase {
     assertModules("m1", "m2");
     ModuleOrderEntry dep = OrderEntryUtil.findModuleOrderEntry(ModuleRootManager.getInstance(getModule("m1")), getModule("m2"));
     assertNotNull(dep);
-    assertFalse(((ModuleOrderEntryImpl)dep).isProductionOnTestDependency());
+    assertFalse(dep.isProductionOnTestDependency());
 
     createModulePom("m1", createPomXmlWithModuleDependency("test-jar"));
     importProjects(m1, m2);
     ModuleOrderEntry dep2 = OrderEntryUtil.findModuleOrderEntry(ModuleRootManager.getInstance(getModule("m1")), getModule("m2"));
     assertNotNull(dep2);
-    assertTrue(((ModuleOrderEntryImpl)dep2).isProductionOnTestDependency());
+    assertTrue(dep2.isProductionOnTestDependency());
 
   }
 
@@ -346,7 +346,11 @@ public class ReimportingTest extends MavenImportingTestCase {
     assertEquals(0, counter.get());
   }
 
+  @Bombed(year = 2019, month = Calendar.APRIL, day = 1,
+    description = "need to distinguish inherited and explicitly defined properties",
+    user = "Alexander Bubenchikov")
   public void testParentVersionProperty() {
+    if (ignore()) return;
     String parentPomTemplate =
                     "<groupId>test</groupId>\n" +
                     "<artifactId>project</artifactId>\n" +

@@ -1,4 +1,4 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.java19modules;
 
 import com.intellij.analysis.AnalysisScope;
@@ -6,13 +6,13 @@ import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.daemon.impl.analysis.JavaModuleGraphUtil;
 import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.reference.*;
+import com.intellij.java.analysis.JavaAnalysisBundle;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
-import com.intellij.psi.impl.source.PsiJavaModuleReference;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.THashSet;
@@ -31,19 +31,11 @@ public class Java9RedundantRequiresStatementInspection extends GlobalJavaBatchIn
 
   private static final Key<Set<String>> IMPORTED_JAVA_PACKAGES = Key.create("imported_java_packages");
 
-  @Nls
-  @NotNull
   @Override
-  public String getDisplayName() {
-    return InspectionsBundle.message("inspection.redundant.requires.statement.name");
-  }
-
-  @Nullable
-  @Override
-  public CommonProblemDescriptor[] checkElement(@NotNull RefEntity refEntity,
-                                                @NotNull AnalysisScope scope,
-                                                @NotNull InspectionManager manager,
-                                                @NotNull GlobalInspectionContext globalContext) {
+  public CommonProblemDescriptor @Nullable [] checkElement(@NotNull RefEntity refEntity,
+                                                           @NotNull AnalysisScope scope,
+                                                           @NotNull InspectionManager manager,
+                                                           @NotNull GlobalInspectionContext globalContext) {
     if (refEntity instanceof RefJavaModule) {
       RefJavaModule refJavaModule = (RefJavaModule)refEntity;
 
@@ -62,10 +54,10 @@ public class Java9RedundantRequiresStatementInspection extends GlobalJavaBatchIn
                   isDependencyUnused(requiredModule.packagesExportedByModule, moduleImportedPackages, refJavaModule.getName())) {
                 PsiRequiresStatement requiresStatement = ContainerUtil.find(
                   psiJavaModule.getRequires(), statement -> requiredModuleName.equals(statement.getModuleName()));
-                if (requiresStatement != null) {
+                if (requiresStatement != null && !isSuppressedFor(requiresStatement)) {
                   CommonProblemDescriptor descriptor = manager.createProblemDescriptor(
                     requiresStatement,
-                    InspectionsBundle.message("inspection.redundant.requires.statement.description", requiredModuleName),
+                    JavaAnalysisBundle.message("inspection.redundant.requires.statement.description", requiredModuleName),
                     new DeleteRedundantRequiresStatementFix(requiredModuleName, moduleImportedPackages),
                     ProblemHighlightType.LIKE_UNUSED_SYMBOL, false);
                   descriptors.add(descriptor);
@@ -104,10 +96,6 @@ public class Java9RedundantRequiresStatementInspection extends GlobalJavaBatchIn
     return new RedundantRequiresStatementAnnotator();
   }
 
-  private static PsiJavaModule resolveRequiredModule(PsiRequiresStatement requiresStatement) {
-    return PsiJavaModuleReference.resolve(requiresStatement, requiresStatement.getModuleName(), false);
-  }
-
   private static class DeleteRedundantRequiresStatementFix implements LocalQuickFix {
     private final String myRequiredModuleName;
     private final Set<String> myImportedPackages;
@@ -121,14 +109,14 @@ public class Java9RedundantRequiresStatementInspection extends GlobalJavaBatchIn
     @NotNull
     @Override
     public String getFamilyName() {
-      return InspectionsBundle.message("inspection.redundant.requires.statement.fix.family");
+      return JavaAnalysisBundle.message("inspection.redundant.requires.statement.fix.family");
     }
 
     @Nls
     @NotNull
     @Override
     public String getName() {
-      return InspectionsBundle.message("inspection.redundant.requires.statement.fix.name", myRequiredModuleName);
+      return JavaAnalysisBundle.message("inspection.redundant.requires.statement.fix.name", myRequiredModuleName);
     }
 
     @Override
@@ -153,7 +141,7 @@ public class Java9RedundantRequiresStatementInspection extends GlobalJavaBatchIn
         .of(dependencyModule.getRequires().iterator())
         .filter(statement -> statement.hasModifierProperty(PsiModifier.TRANSITIVE))
         .filter(requiresStatement -> !directDependencies.contains(requiresStatement.getModuleName()))
-        .map(Java9RedundantRequiresStatementInspection::resolveRequiredModule)
+        .map(PsiRequiresStatement::resolve)
         .nonNull()
         .toList();
 
@@ -177,7 +165,7 @@ public class Java9RedundantRequiresStatementInspection extends GlobalJavaBatchIn
       if (parent instanceof PsiJavaModule) {
         PsiJavaModule currentModule = (PsiJavaModule)parent;
         Optional.of(statementToDelete)
-          .map(Java9RedundantRequiresStatementInspection::resolveRequiredModule)
+          .map(PsiRequiresStatement::resolve)
           .map(dependencyModule -> getReexportedDependencies(currentModule, dependencyModule))
           .ifPresent(reexportedDependencies -> addReexportedDependencies(reexportedDependencies, currentModule, statementToDelete));
       }
@@ -189,7 +177,7 @@ public class Java9RedundantRequiresStatementInspection extends GlobalJavaBatchIn
       if (!reexportedDependencies.isEmpty()) {
         PsiJavaParserFacade parserFacade = JavaPsiFacade.getInstance(currentModule.getProject()).getParserFacade();
         for (String dependencyName : reexportedDependencies) {
-          PsiStatement requiresStatement = parserFacade.createModuleStatementFromText(PsiKeyword.REQUIRES + ' ' + dependencyName);
+          PsiStatement requiresStatement = parserFacade.createModuleStatementFromText(PsiKeyword.REQUIRES + ' ' + dependencyName, null);
           currentModule.addAfter(requiresStatement, addingPlace);
         }
       }

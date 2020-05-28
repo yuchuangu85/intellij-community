@@ -1,23 +1,24 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.java.decompiler
 
 import com.intellij.application.options.CodeStyle
 import com.intellij.execution.filters.LineNumbersMapping
+import com.intellij.ide.highlighter.JavaClassFileType
 import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ex.ApplicationManagerEx
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
-import com.intellij.openapi.fileTypes.StdFileTypes
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.ui.DialogWrapper
-import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.util.text.StringUtil
+import com.intellij.openapi.util.text.Strings
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.newvfs.RefreshQueue
 import com.intellij.openapi.vfs.newvfs.events.VFileContentChangeEvent
@@ -26,8 +27,6 @@ import com.intellij.psi.PsiPackage
 import com.intellij.psi.compiled.ClassFileDecompilers
 import com.intellij.psi.impl.compiled.ClsFileImpl
 import com.intellij.ui.components.LegalNoticeDialog
-import com.intellij.util.ArrayUtil
-import com.intellij.util.containers.ContainerUtil
 import org.jetbrains.java.decompiler.main.decompiler.BaseDecompiler
 import org.jetbrains.java.decompiler.main.extern.IBytecodeProvider
 import org.jetbrains.java.decompiler.main.extern.IFernflowerPreferences
@@ -36,6 +35,7 @@ import java.io.File
 import java.io.IOException
 import java.util.*
 import java.util.concurrent.Callable
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Future
 import java.util.jar.Manifest
 
@@ -69,7 +69,7 @@ class IdeaDecompiler : ClassFileDecompilers.Light() {
 
   private val myLogger = lazy { IdeaLogger() }
   private val myOptions = lazy { getOptions() }
-  private val myFutures = ContainerUtil.newConcurrentMap<VirtualFile, Future<CharSequence>>()
+  private val myFutures = ConcurrentHashMap<VirtualFile, Future<CharSequence>>()
   @Volatile private var myLegalNoticeAccepted = false
 
   init {
@@ -81,11 +81,11 @@ class IdeaDecompiler : ClassFileDecompilers.Light() {
 
   private fun intercept() {
     val app = ApplicationManager.getApplication()
-    val connection = app.messageBus.connect(app)
+    val connection = app.messageBus.connect()
     connection.subscribe(FileEditorManagerListener.Before.FILE_EDITOR_MANAGER, object : FileEditorManagerListener.Before {
       override fun beforeFileOpened(source: FileEditorManager, file: VirtualFile) {
-        if (!myLegalNoticeAccepted && file.fileType === StdFileTypes.CLASS && ClassFileDecompilers.find(file) === this@IdeaDecompiler) {
-          myFutures[file] = app.executeOnPooledThread(Callable<CharSequence> { decompile(file) })
+        if (!myLegalNoticeAccepted && file.fileType === JavaClassFileType.INSTANCE && ClassFileDecompilers.find(file) === this@IdeaDecompiler) {
+          myFutures[file] = app.executeOnPooledThread(Callable { decompile(file) })
 
           val title = IdeaDecompilerBundle.message("legal.notice.title", StringUtil.last(file.path, 40, true))
           val message = IdeaDecompilerBundle.message("legal.notice.text")
@@ -108,7 +108,7 @@ class IdeaDecompiler : ClassFileDecompilers.Light() {
 
             DECLINE_EXIT_CODE -> {
               myFutures.remove(file)?.cancel(true)
-              PluginManagerCore.disablePlugin("org.jetbrains.java.decompiler")
+              PluginManagerCore.disablePlugin(PluginId.getId("org.jetbrains.java.decompiler"))
               ApplicationManagerEx.getApplicationEx().restart(true)
             }
 
@@ -139,8 +139,7 @@ class IdeaDecompiler : ClassFileDecompilers.Light() {
 
     try {
       val mask = "${file.nameWithoutExtension}$"
-      val files = mapOf(file.path to file) +
-          file.parent.children.filter { it.nameWithoutExtension.startsWith(mask) && it.fileType === StdFileTypes.CLASS }.map { it.path to it }
+      val files = listOf(file) + file.parent.children.filter { it.nameWithoutExtension.startsWith(mask) && it.fileType === JavaClassFileType.INSTANCE }
 
       val options = HashMap(myOptions.value)
       if (Registry.`is`("decompiler.use.line.mapping")) {
@@ -153,7 +152,7 @@ class IdeaDecompiler : ClassFileDecompilers.Light() {
       val provider = MyBytecodeProvider(files)
       val saver = MyResultSaver()
       val decompiler = BaseDecompiler(provider, saver, options, myLogger.value)
-      files.keys.forEach { path -> decompiler.addSource(File(path)) }
+      files.forEach { decompiler.addSource(File(it.path)) }
       decompiler.decompileContext()
 
       val mapping = saver.myMapping
@@ -169,23 +168,22 @@ class IdeaDecompiler : ClassFileDecompilers.Light() {
     catch (e: Exception) {
       if (e is IdeaLogger.InternalException && e.cause is IOException) {
         Logger.getInstance(IdeaDecompiler::class.java).warn(file.url, e)
-        return ArrayUtil.EMPTY_CHAR_SEQUENCE
+        return Strings.EMPTY_CHAR_SEQUENCE
       }
       if (ApplicationManager.getApplication().isUnitTestMode) {
         throw AssertionError(file.url, e)
       }
       else {
-        throw ClassFileDecompilers.Light.CannotDecompileException(e)
+        throw CannotDecompileException(e)
       }
     }
   }
 
-  private class MyBytecodeProvider(private val files: Map<String, VirtualFile>) : IBytecodeProvider {
-    override fun getBytecode(externalPath: String, internalPath: String?): ByteArray {
-      val path = FileUtil.toSystemIndependentName(externalPath)
-      val file = files[path] ?: throw AssertionError(path + " not in " + files.keys)
-      return file.contentsToByteArray(false)
-    }
+  private class MyBytecodeProvider(files: List<VirtualFile>) : IBytecodeProvider {
+    private val pathMap = files.map { File(it.path).absolutePath to it }.toMap()
+
+    override fun getBytecode(externalPath: String, internalPath: String?): ByteArray =
+      pathMap[externalPath]?.contentsToByteArray(false) ?: throw AssertionError(externalPath + " not in " + pathMap.keys)
   }
 
   private class MyResultSaver : IResultSaver {

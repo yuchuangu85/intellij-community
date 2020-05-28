@@ -4,9 +4,10 @@ package com.intellij.codeInspection.ex;
 import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.reference.RefElement;
 import com.intellij.codeInspection.reference.RefManagerImpl;
-import com.intellij.codeInspection.ui.InspectionToolPresentation;
+import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiLanguageInjectionHost;
 import com.intellij.psi.PsiNamedElement;
 import com.intellij.util.TripleFunction;
 import org.jetbrains.annotations.NotNull;
@@ -17,6 +18,11 @@ import java.util.*;
 public class BatchModeDescriptorsUtil {
   private static final TripleFunction<LocalInspectionTool, PsiElement, GlobalInspectionContext,RefElement> CONVERT =
     (tool, element, context) -> {
+      PsiLanguageInjectionHost injectionHost = InjectedLanguageManager.getInstance(context.getProject()).getInjectionHost(element);
+      if (injectionHost != null) {
+        element = injectionHost;
+      }
+
       final PsiNamedElement problemElement = getContainerElement(element, tool, context);
 
       RefElement refElement = context.getRefManager().getReference(problemElement);
@@ -31,7 +37,7 @@ public class BatchModeDescriptorsUtil {
                                     @NotNull GlobalInspectionContext context,
                                     @Nullable LocalInspectionTool tool,
                                     @NotNull TripleFunction<? super LocalInspectionTool, ? super PsiElement, ? super GlobalInspectionContext, ? extends RefElement> getProblemElementFunction,
-                                    @NotNull InspectionToolPresentation dpi) {
+                                    @NotNull InspectionToolResultExporter dpi) {
     if (descriptors.isEmpty()) return;
 
     Map<RefElement, List<ProblemDescriptor>> problems = new HashMap<>();
@@ -68,7 +74,7 @@ public class BatchModeDescriptorsUtil {
   }
 
   public static void addProblemDescriptors(@NotNull List<? extends ProblemDescriptor> descriptors,
-                                           @NotNull InspectionToolPresentation dpi,
+                                           @NotNull InspectionToolResultExporter dpi,
                                            boolean filterSuppressed,
                                            @NotNull GlobalInspectionContext inspectionContext,
                                            @NotNull LocalInspectionTool tool) {
@@ -87,8 +93,7 @@ public class BatchModeDescriptorsUtil {
     return container != null ? container : containerFromTool;
   }
 
-  @NotNull
-  public static CommonProblemDescriptor[] flattenDescriptors(@NotNull List<CommonProblemDescriptor[]> descriptors) {
+  public static CommonProblemDescriptor @NotNull [] flattenDescriptors(@NotNull List<CommonProblemDescriptor[]> descriptors) {
     return descriptors.stream().flatMap(ds -> Arrays.stream(ds)).toArray(CommonProblemDescriptor.ARRAY_FACTORY::create);
   }
 }

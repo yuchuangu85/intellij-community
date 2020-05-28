@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.navigator;
 
 import com.intellij.execution.RunManagerListener;
@@ -9,14 +9,15 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.*;
-import com.intellij.openapi.project.DumbAwareRunnable;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.WriteExternalException;
+import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowAnchor;
+import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.openapi.wm.ex.ToolWindowEx;
-import com.intellij.openapi.wm.ex.ToolWindowManagerEx;
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener;
+import com.intellij.ui.AppUIUtil;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
 import com.intellij.ui.content.ContentManager;
@@ -45,33 +46,26 @@ import java.awt.*;
 import java.util.Collections;
 import java.util.List;
 
-@State(name = "MavenProjectNavigator", storages = {@Storage(StoragePathMacros.WORKSPACE_FILE)})
-public class MavenProjectsNavigator extends MavenSimpleProjectComponent implements PersistentStateComponent<MavenProjectsNavigatorState>,
-                                                                                   Disposable, ProjectComponent {
+@State(name = "MavenProjectNavigator", storages = {
+  @Storage(StoragePathMacros.PRODUCT_WORKSPACE_FILE),
+  @Storage(value = StoragePathMacros.WORKSPACE_FILE, deprecated = true)
+})
+public final class MavenProjectsNavigator extends MavenSimpleProjectComponent implements PersistentStateComponent<MavenProjectsNavigatorState>, Disposable {
   public static final String TOOL_WINDOW_ID = "Maven";
+  public static final String TOOL_WINDOW_PLACE_ID = "Maven tool window";
 
   private MavenProjectsNavigatorState myState = new MavenProjectsNavigatorState();
 
-  private MavenProjectsManager myProjectsManager;
-  private final MavenTasksManager myTasksManager;
-  private final MavenShortcutsManager myShortcutsManager;
-
   private SimpleTree myTree;
   private MavenProjectsStructure myStructure;
-  private ToolWindowEx myToolWindow;
+  private ToolWindow myToolWindow;
 
   public static MavenProjectsNavigator getInstance(Project project) {
-    return project.getComponent(MavenProjectsNavigator.class);
+    return project.getService(MavenProjectsNavigator.class);
   }
 
-  public MavenProjectsNavigator(Project project,
-                                MavenProjectsManager projectsManager,
-                                MavenTasksManager tasksManager,
-                                MavenShortcutsManager shortcutsManager) {
+  public MavenProjectsNavigator(@NotNull Project project) {
     super(project);
-    myProjectsManager = projectsManager;
-    myTasksManager = tasksManager;
-    myShortcutsManager = shortcutsManager;
   }
 
   @Override
@@ -151,7 +145,7 @@ public class MavenProjectsNavigator extends MavenSimpleProjectComponent implemen
   }
 
   @Override
-  public void initComponent() {
+  public void initializeComponent() {
     if (!isNormalProject()) return;
     doInit();
   }
@@ -164,31 +158,27 @@ public class MavenProjectsNavigator extends MavenSimpleProjectComponent implemen
   }
 
   private void doInit() {
-    listenForProjectsChanges();
-    if (isUnitTestMode()) return;
-    MavenUtil.runWhenInitialized(myProject, (DumbAwareRunnable)() -> {
-      if (myProject.isDisposed()) return;
-      initToolWindow();
+    MavenProjectsManager.getInstance(myProject).addManagerListener(new MavenProjectsManager.Listener() {
+      @Override
+      public void activated() {
+        AppUIUtil.invokeLaterIfProjectAlive(myProject, () -> initToolWindow());
+        listenForProjectsChanges();
+        scheduleStructureUpdate();
+      }
     });
   }
 
   @Override
   public void dispose() {
     myToolWindow = null;
-    myProjectsManager = null;
   }
 
   private void listenForProjectsChanges() {
-    myProjectsManager.addProjectsTreeListener(new MyProjectsListener());
+    MavenProjectsManager.getInstance(myProject).addProjectsTreeListener(new MyProjectsListener());
 
-    myShortcutsManager.addListener(new MavenShortcutsManager.Listener() {
-      @Override
-      public void shortcutsUpdated() {
-        scheduleStructureRequest(() -> myStructure.updateGoals());
-      }
-    });
+    MavenShortcutsManager.getInstance(myProject).addListener(() -> scheduleStructureRequest(() -> myStructure.updateGoals()));
 
-    myTasksManager.addListener(new MavenTasksManager.Listener() {
+    MavenTasksManager.getInstance(myProject).addListener(new MavenTasksManager.Listener() {
       @Override
       public void compileTasksChanged() {
         scheduleStructureRequest(() -> myStructure.updateGoals());
@@ -238,8 +228,7 @@ public class MavenProjectsNavigator extends MavenSimpleProjectComponent implemen
     AnAction editSource = EmptyAction.wrap(ActionManager.getInstance().getAction("Maven.EditRunConfiguration"));
     editSource.registerCustomShortcutSet(CommonShortcuts.getEditSource(), myTree, myProject);
 
-    final ToolWindowManagerEx manager = ToolWindowManagerEx.getInstanceEx(myProject);
-    myToolWindow = (ToolWindowEx)manager.registerToolWindow(TOOL_WINDOW_ID, false, ToolWindowAnchor.RIGHT, myProject, true);
+    myToolWindow = ToolWindowManager.getInstance(myProject).registerToolWindow(TOOL_WINDOW_ID, false, ToolWindowAnchor.RIGHT, myProject, true);
     myToolWindow.setIcon(MavenIcons.ToolWindowMaven);
     final ContentFactory contentFactory = ServiceManager.getService(ContentFactory.class);
     final Content content = contentFactory.createContent(panel, "", false);
@@ -251,7 +240,7 @@ public class MavenProjectsNavigator extends MavenSimpleProjectComponent implemen
       boolean wasVisible = false;
 
       @Override
-      public void stateChanged() {
+      public void stateChanged(@NotNull ToolWindowManager toolWindowManager) {
         if (myToolWindow.isDisposed()) return;
         boolean visible = myToolWindow.isVisible();
         if (!visible || wasVisible) {
@@ -271,10 +260,11 @@ public class MavenProjectsNavigator extends MavenSimpleProjectComponent implemen
     group.add(actionManager.getAction("Maven.AlwaysShowArtifactId"));
     group.add(actionManager.getAction("Maven.ShowVersions"));
 
-    myToolWindow.setAdditionalGearActions(group);
+    ((ToolWindowEx)myToolWindow).setAdditionalGearActions(group);
   }
 
   private void initTree() {
+    MavenProjectsManager mavenProjectManager = MavenProjectsManager.getInstance(myProject);
     myTree = new SimpleTree() {
       private final JTextPane myPane = new JTextPane();
 
@@ -282,7 +272,7 @@ public class MavenProjectsNavigator extends MavenSimpleProjectComponent implemen
         myPane.setOpaque(false);
         String addIconText = "'+'";
         String refreshIconText = "'Reimport'";
-        String message = ProjectBundle.message("maven.navigator.nothing.to.display", addIconText, refreshIconText);
+        String message = MavenProjectBundle.message("maven.navigator.nothing.to.display", addIconText, refreshIconText);
         int firstEol = message.indexOf("\n");
         int addIconMarkerIndex = message.indexOf(addIconText);
         myPane.replaceSelection(message.substring(0, addIconMarkerIndex));
@@ -305,7 +295,10 @@ public class MavenProjectsNavigator extends MavenSimpleProjectComponent implemen
       @Override
       protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        if (myProjectsManager.hasProjects()) return;
+
+        if (mavenProjectManager.hasProjects()) {
+          return;
+        }
 
         myPane.setFont(getFont());
         myPane.setBackground(getBackground());
@@ -345,8 +338,17 @@ public class MavenProjectsNavigator extends MavenSimpleProjectComponent implemen
     }
 
     if (myToolWindow == null) return;
+
     MavenUtil.invokeLater(myProject, () -> {
-      if (!myToolWindow.isVisible()) return;
+      boolean hasMavenProjects = !MavenProjectsManager.getInstance(myProject).getProjects().isEmpty();
+
+      if (myToolWindow.isAvailable() != hasMavenProjects) {
+        myToolWindow.setAvailable(hasMavenProjects);
+
+        if (hasMavenProjects) {
+          myToolWindow.activate(null);
+        }
+      }
 
       boolean shouldCreate = myStructure == null;
       if (shouldCreate) {
@@ -362,19 +364,14 @@ public class MavenProjectsNavigator extends MavenSimpleProjectComponent implemen
   }
 
   private void initStructure() {
-    myStructure = new MavenProjectsStructure(myProject, myProjectsManager, myTasksManager, myShortcutsManager, this, myTree);
+    myStructure = new MavenProjectsStructure(myProject, MavenProjectsManager.getInstance(myProject), MavenTasksManager.getInstance(myProject), MavenShortcutsManager.getInstance(myProject), this, myTree);
   }
 
   private void scheduleStructureUpdate() {
     scheduleStructureRequest(() -> myStructure.update());
   }
 
-  private class MyProjectsListener implements MavenProjectsManager.Listener, MavenProjectsTree.Listener {
-    @Override
-    public void activated() {
-      scheduleStructureUpdate();
-    }
-
+  private final class MyProjectsListener implements MavenProjectsTree.Listener {
     @Override
     public void projectsIgnoredStateChanged(@NotNull final List<MavenProject> ignored, @NotNull final List<MavenProject> unignored, boolean fromImport) {
       scheduleStructureRequest(() -> myStructure.updateIgnored(ContainerUtil.concat(ignored, unignored)));

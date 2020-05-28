@@ -1,7 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.xmlb;
 
 import com.intellij.openapi.util.text.StringUtilRt;
+import com.intellij.serialization.MutableAccessor;
 import com.intellij.util.xmlb.annotations.Property;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
@@ -10,33 +11,35 @@ import org.jetbrains.annotations.Nullable;
 import java.awt.*;
 import java.util.List;
 
-class AccessorBindingWrapper extends Binding implements MultiNodeBinding {
-  protected final Binding myBinding;
+final class AccessorBindingWrapper implements MultiNodeBinding, NestedBinding {
+  private final Binding myBinding;
+  private final MutableAccessor myAccessor;
 
   private final boolean myFlat;
   private final Property.Style beanStyle;
 
-  AccessorBindingWrapper(@NotNull MutableAccessor accessor,
-                                @NotNull Binding binding,
-                                boolean flat,
-                                Property.Style beanStyle) {
-    super(accessor);
+  AccessorBindingWrapper(@NotNull MutableAccessor accessor, @NotNull Binding binding, boolean flat, Property.Style beanStyle) {
+    myAccessor = accessor;
 
     myBinding = binding;
     myFlat = flat;
     this.beanStyle = beanStyle;
   }
 
+  @Override
+  public @NotNull MutableAccessor getAccessor() {
+    return myAccessor;
+  }
+
   public boolean isFlat() {
     return myFlat;
   }
 
-  @Nullable
   @Override
-  public Object serialize(@NotNull Object o, @Nullable Object context, @Nullable SerializationFilter filter) {
+  public @Nullable Object serialize(@NotNull Object o, @Nullable Object context, @Nullable SerializationFilter filter) {
     Object value = myAccessor.read(o);
     if (value == null) {
-      throw new XmlSerializationException("Property " + myAccessor + " of object " + o + " (" + o.getClass() + ") must not be null");
+      return null;
     }
     if (myFlat) {
       Element element = (Element)context;
@@ -63,10 +66,9 @@ class AccessorBindingWrapper extends Binding implements MultiNodeBinding {
     return deserialize(context, element);
   }
 
-  @NotNull
-  public Object deserialize(@NotNull Object context, @NotNull Element element) {
+  public @NotNull Object deserialize(@NotNull Object context, @NotNull Element element) {
     Object currentValue = myAccessor.read(context);
-    if (myBinding instanceof BeanBinding && myAccessor.isFinal()) {
+    if (myBinding instanceof BeanBinding && !myAccessor.isWritable()) {
       ((BeanBinding)myBinding).deserializeInto(currentValue, element);
     }
     else {
@@ -99,11 +101,10 @@ class AccessorBindingWrapper extends Binding implements MultiNodeBinding {
     return context;
   }
 
-  @Nullable
   @Override
-  public Object deserializeList(@SuppressWarnings("NullableProblems") @NotNull Object context, @NotNull List<? extends Element> elements) {
+  public @NotNull Object deserializeList(@SuppressWarnings("NullableProblems") @NotNull Object context, @NotNull List<? extends Element> elements) {
     Object currentValue = myAccessor.read(context);
-    if (myBinding instanceof BeanBinding && myAccessor.isFinal()) {
+    if (myBinding instanceof BeanBinding && !myAccessor.isWritable()) {
       ((BeanBinding)myBinding).deserializeInto(currentValue, elements.get(0));
     }
     else {

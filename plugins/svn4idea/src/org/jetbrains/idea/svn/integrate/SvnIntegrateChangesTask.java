@@ -1,12 +1,12 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn.integrate;
 
+import com.intellij.configurationStore.StoreReloadManager;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.TransactionGuard;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.Task;
-import com.intellij.openapi.project.ex.ProjectManagerEx;
 import com.intellij.openapi.ui.MessageType;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Ref;
@@ -20,6 +20,7 @@ import com.intellij.openapi.vcs.update.*;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.vcs.ViewUpdateInfoNotification;
+import com.intellij.vcs.commit.SingleChangeListCommitWorkflowHandler;
 import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -87,7 +88,7 @@ public class SvnIntegrateChangesTask extends Task.Backgroundable {
     myHandler.setProgressIndicator(ProgressManager.getInstance().getProgressIndicator());
     myResolveWorker = new ResolveWorker(myInfo.isUnderProjectRoot(), myProject);
 
-    ProjectManagerEx.getInstanceEx().blockReloadingProjectOnExternalChanges();
+    StoreReloadManager.getInstance().blockReloadingProjectOnExternalChanges();
     myProjectLevelVcsManager.startBackgroundVcsOperation();
 
     try {
@@ -115,17 +116,17 @@ public class SvnIntegrateChangesTask extends Task.Backgroundable {
   }
 
   @NotNull
-  private static VcsException createError(@NotNull String... messages) {
+  private static VcsException createError(String @NotNull ... messages) {
     return createException(false, messages);
   }
 
   @NotNull
-  private static VcsException createWarning(@NotNull String... messages) {
+  private static VcsException createWarning(String @NotNull ... messages) {
     return createException(true, messages);
   }
 
   @NotNull
-  private static VcsException createException(boolean isWarning, @NotNull String... messages) {
+  private static VcsException createException(boolean isWarning, String @NotNull ... messages) {
     Collection<String> notEmptyMessages = ContainerUtil.mapNotNull(messages, message -> StringUtil.nullize(message, true));
 
     return new VcsException(notEmptyMessages).setIsWarning(isWarning);
@@ -158,8 +159,9 @@ public class SvnIntegrateChangesTask extends Task.Backgroundable {
     TransactionGuard.submitTransaction(myProject, () -> {
       try {
         afterExecution(wasCancelled);
-      } finally {
-        ProjectManagerEx.getInstanceEx().unblockReloadingProjectOnExternalChanges();
+      }
+      finally {
+        StoreReloadManager.getInstance().unblockReloadingProjectOnExternalChanges();
       }
     });
   }
@@ -282,7 +284,7 @@ public class SvnIntegrateChangesTask extends Task.Backgroundable {
   }
 
   private void showAlienCommit() {
-    final AlienDirtyScope dirtyScope = new AlienDirtyScope();
+    final AlienDirtyScope dirtyScope = new AlienDirtyScope(myVcs);
 
     if (myMergeTarget != null) {
       dirtyScope.addDir(myMergeTarget);
@@ -321,8 +323,11 @@ public class SvnIntegrateChangesTask extends Task.Backgroundable {
           VcsBalloonProblemNotifier.showOverVersionControlView(myVcs.getProject(), caughtError.get(), MessageType.ERROR);
         }
         else if (!changesBuilder.getChanges().isEmpty()) {
-          CommitChangeListDialog.commitAlienChanges(myProject, changesBuilder.getChanges(), myVcs, myMerger.getComment(),
-                                                    myMerger.getComment());
+          AlienCommitWorkflow workflow =
+            new AlienCommitWorkflow(myVcs, myMerger.getComment(), changesBuilder.getChanges(), myMerger.getComment());
+          AlienCommitChangeListDialog dialog = new AlienCommitChangeListDialog(workflow);
+
+          new SingleChangeListCommitWorkflowHandler(workflow, dialog).activate();
         }
       }
     }.queue();

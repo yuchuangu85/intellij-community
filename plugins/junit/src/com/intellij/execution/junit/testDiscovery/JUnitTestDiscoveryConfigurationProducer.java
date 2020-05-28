@@ -4,6 +4,7 @@ package com.intellij.execution.junit.testDiscovery;
 import com.intellij.execution.JavaTestConfigurationBase;
 import com.intellij.execution.Location;
 import com.intellij.execution.PsiLocation;
+import com.intellij.execution.configurations.ConfigurationFactory;
 import com.intellij.execution.configurations.RunConfiguration;
 import com.intellij.execution.configurations.RunProfileState;
 import com.intellij.execution.junit.JUnitConfiguration;
@@ -16,15 +17,17 @@ import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.util.Pair;
 import com.intellij.psi.PsiMethod;
-import com.intellij.rt.execution.junit.JUnitStarter;
+import com.intellij.rt.junit.JUnitStarter;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class JUnitTestDiscoveryConfigurationProducer extends TestDiscoveryConfigurationProducer {
-  protected JUnitTestDiscoveryConfigurationProducer() {
-    super(JUnitConfigurationType.getInstance());
+  @NotNull
+  @Override
+  public ConfigurationFactory getConfigurationFactory() {
+    return JUnitConfigurationType.getInstance().getConfigurationFactories()[0];
   }
 
   @Override
@@ -48,7 +51,7 @@ public class JUnitTestDiscoveryConfigurationProducer extends TestDiscoveryConfig
 
   @NotNull
   @Override
-  public RunProfileState createProfile(@NotNull Location<PsiMethod>[] testMethods,
+  public RunProfileState createProfile(Location<PsiMethod> @NotNull [] testMethods,
                                        Module module,
                                        RunConfiguration configuration,
                                        ExecutionEnvironment environment) {
@@ -67,6 +70,7 @@ public class JUnitTestDiscoveryConfigurationProducer extends TestDiscoveryConfig
         super.fillForkModule(perModule, toRoot.get(module), name);
       }
 
+      @NotNull
       @Override
       protected String getRunner() {
         return JUnitStarter.JUNIT4_PARAMETER;
@@ -74,7 +78,7 @@ public class JUnitTestDiscoveryConfigurationProducer extends TestDiscoveryConfig
     };
   }
 
-  private static Map<Module, Module> splitModulesIntoChunks(@NotNull Location<PsiMethod>[] testMethods, Module module) {
+  private static Map<Module, Module> splitModulesIntoChunks(Location<PsiMethod> @NotNull [] testMethods, Module module) {
     Map<Module, Module> toRoot = new HashMap<>();
     if (module == null) {
       Set<Module> usedModules = Arrays.stream(testMethods).map(Location::getModule).collect(Collectors.toSet());
@@ -88,7 +92,7 @@ public class JUnitTestDiscoveryConfigurationProducer extends TestDiscoveryConfig
           allDeps.computeIfAbsent(usedModule, __ -> new LinkedHashSet<>()).add(usedModule);
         }
 
-        
+
         Optional<Map.Entry<Module, Set<Module>>> maxDependency =
           allDeps.entrySet().stream().max(Comparator.comparingInt(e -> e.getValue().size()));
 

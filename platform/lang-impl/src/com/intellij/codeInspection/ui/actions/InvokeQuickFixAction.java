@@ -53,7 +53,8 @@ public class InvokeQuickFixAction extends AnAction {
   public void actionPerformed(@NotNull AnActionEvent e) {
     final ActionGroup fixes = (ActionGroup)ActionManager.getInstance().getAction("QuickFixes");
     if (fixes.getChildren(e).length == 0) {
-      Messages.showInfoMessage(myView, "There are no applicable quick fixes", "Nothing Found to Fix");
+      Messages.showInfoMessage(myView, InspectionsBundle.message("there.are.no.applicable.quick.fixes.message"),
+                               InspectionsBundle.message("nothing.found.to.fix.title"));
       return;
     }
     DataContext dataContext = e.getDataContext();
@@ -66,6 +67,6 @@ public class InvokeQuickFixAction extends AnAction {
   }
 
   static boolean cantApplyFixes(InspectionResultsView view) {
-    return view.isUpdating() && !view.getTree().areDescriptorNodesSelected();
+    return !view.getTree().areDescriptorNodesSelected();
   }
 }

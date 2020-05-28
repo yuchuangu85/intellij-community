@@ -17,10 +17,12 @@ package com.intellij.java.codeInsight.completion
 import com.intellij.JavaTestUtil
 import com.intellij.codeInsight.completion.CompletionType
 import com.intellij.codeInsight.completion.LightFixtureCompletionTestCase
+import groovy.transform.CompileStatic
 
 /**
  * @author peter
  */
+@CompileStatic
 class SmartTypeCompletionDfaTest extends LightFixtureCompletionTestCase {
   @Override
   protected String getBasePath() {
@@ -77,5 +79,7 @@ class SmartTypeCompletionDfaTest extends LightFixtureCompletionTestCase {
   void testNoInstanceofedValueInElseWithComplexIf() { doAntiTest() }
 
   void testInstanceofedInsideAnonymous() { doTest() }
+
+  void testCastToTypeWithWildcard() { doTest() }
 
 }

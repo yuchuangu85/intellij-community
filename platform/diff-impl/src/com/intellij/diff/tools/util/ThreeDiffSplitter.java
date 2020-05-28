@@ -1,25 +1,11 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.diff.tools.util;
 
 import com.intellij.diff.tools.util.DiffSplitter.Painter;
 import com.intellij.diff.util.Side;
-import com.intellij.icons.AllIcons;
 import com.intellij.openapi.util.registry.Registry;
-import com.intellij.util.ui.JBUI;
+import com.intellij.ui.scale.JBUIScale;
+import com.intellij.util.MathUtil;
 import org.jetbrains.annotations.CalledInAwt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -58,11 +44,6 @@ public class ThreeDiffSplitter extends JPanel {
     getDivider(side).setPainter(painter);
   }
 
-  public void repaintDividers() {
-    repaintDivider(Side.LEFT);
-    repaintDivider(Side.RIGHT);
-  }
-
   public void repaintDivider(@NotNull Side side) {
     getDivider(side).repaint();
   }
@@ -88,7 +69,7 @@ public class ThreeDiffSplitter extends JPanel {
   }
 
   private void setProportion(float proportion, @NotNull Side side) {
-    proportion = Math.min(1f, Math.max(0f, proportion));
+    proportion = MathUtil.clamp(proportion, 0f, 1f);
     float otherProportion = side.select(myProportion2, myProportion1);
     otherProportion = Math.min(otherProportion, 1f - proportion);
 
@@ -113,8 +94,7 @@ public class ThreeDiffSplitter extends JPanel {
     }
   }
 
-  @NotNull
-  private static int[] calcComponentsWidths(int width, float proportion1, float proportion2) {
+  private static int @NotNull [] calcComponentsWidths(int width, float proportion1, float proportion2) {
     int dividersTotalWidth = getDividerWidth() * 2;
     int contentsTotalWidth = Math.max(width - dividersTotalWidth, 0);
 
@@ -152,7 +132,7 @@ public class ThreeDiffSplitter extends JPanel {
   }
 
   private static int getDividerWidth() {
-    return JBUI.scale(Registry.intValue("diff.divider.width"));
+    return JBUIScale.scale(Registry.intValue("diff.divider.width"));
   }
 
   private class Divider extends JPanel {
@@ -160,11 +140,9 @@ public class ThreeDiffSplitter extends JPanel {
     @Nullable private Painter myPainter;
 
     Divider(@NotNull Side side) {
-      super(new GridBagLayout());
       mySide = side;
-      enableEvents(MouseEvent.MOUSE_EVENT_MASK | MouseEvent.MOUSE_MOTION_EVENT_MASK);
+      enableEvents(AWTEvent.MOUSE_EVENT_MASK | AWTEvent.MOUSE_MOTION_EVENT_MASK);
       setCursor(Cursor.getPredefinedCursor(Cursor.W_RESIZE_CURSOR));
-      add(new JLabel(AllIcons.General.SplitGlueH), new GridBagConstraints());
     }
 
     @Override

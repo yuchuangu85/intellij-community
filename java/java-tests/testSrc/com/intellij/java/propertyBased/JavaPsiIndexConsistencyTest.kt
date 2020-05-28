@@ -16,7 +16,6 @@
 package com.intellij.java.propertyBased
 
 import com.intellij.lang.java.lexer.JavaLexer
-import com.intellij.openapi.roots.LanguageLevelModuleExtensionImpl
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.pom.java.LanguageLevel
 import com.intellij.psi.JavaPsiFacade
@@ -27,7 +26,7 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.testFramework.IdeaTestUtil
 import com.intellij.testFramework.SkipSlowTestLocally
 import com.intellij.testFramework.fixtures.JavaCodeInsightTestFixture
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import com.intellij.testFramework.propertyBased.PsiIndexConsistencyTester
 import com.intellij.testFramework.propertyBased.PsiIndexConsistencyTester.Action
 import com.intellij.testFramework.propertyBased.PsiIndexConsistencyTester.Action.*
@@ -41,7 +40,7 @@ import org.junit.Assert
  * @author peter
  */
 @SkipSlowTestLocally
-class JavaPsiIndexConsistencyTest : LightCodeInsightFixtureTestCase() {
+class JavaPsiIndexConsistencyTest : LightJavaCodeInsightFixtureTestCase() {
 
   fun testFuzzActions() {
     val genAction: Generator<Action> = Generator.frequency(
@@ -55,13 +54,7 @@ class JavaPsiIndexConsistencyTest : LightCodeInsightFixtureTestCase() {
                                                    data.generate(Generator.booleans()),
                                                    data.generate(Generator.booleans())) })
     PropertyChecker.customized().forAll(Generator.listsOf(genAction)) { actions ->
-      val prevLevel = LanguageLevelModuleExtensionImpl.getInstance(myFixture.module).languageLevel
-      try {
-        PsiIndexConsistencyTester.runActions(JavaModel(myFixture), *actions.toTypedArray())
-      }
-      finally {
-        IdeaTestUtil.setModuleLanguageLevel(myFixture.module, prevLevel)
-      }
+      PsiIndexConsistencyTester.runActions(JavaModel(myFixture), *actions.toTypedArray())
       true
     }
 
@@ -113,7 +106,8 @@ class JavaPsiIndexConsistencyTest : LightCodeInsightFixtureTestCase() {
   private data class ChangeLanguageLevel(val level: LanguageLevel): Action {
     override fun performAction(model: Model) {
       PostponedFormatting.performAction(model)
-      IdeaTestUtil.setModuleLanguageLevel(model.fixture.module, level)
+      IdeaTestUtil.setModuleLanguageLevel(model.fixture.module, level, model.fixture.testRootDisposable)
+      model.refs.clear()
     }
   }
 

@@ -3,103 +3,49 @@
  */
 package com.intellij.codeInspection.ui;
 
-import com.intellij.codeHighlighting.HighlightDisplayLevel;
-import com.intellij.codeInsight.daemon.HighlightDisplayKey;
-import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInspection.CommonProblemDescriptor;
-import com.intellij.codeInspection.InspectionProfile;
-import com.intellij.codeInspection.ProblemDescriptionsProcessor;
+import com.intellij.codeInspection.InspectionToolResultExporter;
+import com.intellij.codeInspection.QuickFix;
 import com.intellij.codeInspection.ex.*;
-import com.intellij.codeInspection.reference.RefElement;
 import com.intellij.codeInspection.reference.RefEntity;
-import com.intellij.codeInspection.ui.util.SynchronizedBidiMultiMap;
-import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.Disposable;
-import com.intellij.profile.codeInspection.InspectionProjectProfileManager;
-import com.intellij.psi.PsiElement;
-import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import java.util.Collection;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Consumer;
-import java.util.function.Predicate;
 
-public interface InspectionToolPresentation extends ProblemDescriptionsProcessor {
+public interface InspectionToolPresentation extends InspectionToolResultExporter {
 
+  @Override
   @NotNull
   InspectionToolWrapper getToolWrapper();
 
-  void createToolNode(@NotNull GlobalInspectionContextImpl globalInspectionContext,
-                      @NotNull InspectionNode node,
-                      @NotNull InspectionRVContentProvider provider,
-                      @NotNull InspectionTreeNode parentNode,
-                      boolean showStructure,
-                      boolean groupBySeverity);
+  default void patchToolNode(@NotNull InspectionTreeNode node,
+                             @NotNull InspectionRVContentProvider provider,
+                             boolean showStructure,
+                             boolean groupBySeverity) {
 
-  @Nullable
-  InspectionNode getToolNode();
-
-  @NotNull
-  default RefElementNode createRefNode(@Nullable RefEntity entity) {
-    return new RefElementNode(entity, this);
   }
 
-  void updateContent();
-
-  boolean hasReportedProblems();
-
   @NotNull
-  Map<String, Set<RefEntity>> getContent();
-
-  boolean isProblemResolved(@Nullable CommonProblemDescriptor descriptor);
-
-  boolean isProblemResolved(@Nullable RefEntity entity);
-
-  @NotNull
-  Collection<RefEntity> getResolvedElements();
-
-  @NotNull
-  CommonProblemDescriptor[] getResolvedProblems(@NotNull RefEntity entity);
-
-  void suppressProblem(@NotNull CommonProblemDescriptor descriptor);
-
-  void suppressProblem(@NotNull RefEntity entity);
-
-  boolean isSuppressed(RefEntity element);
-
-  boolean isSuppressed(CommonProblemDescriptor descriptor);
-
-  @NotNull
-  CommonProblemDescriptor[] getSuppressedProblems(@NotNull RefEntity entity);
+  default RefElementNode createRefNode(@Nullable RefEntity entity,
+                                       @NotNull InspectionTreeModel model,
+                                       @NotNull InspectionTreeNode parent) {
+    return new RefElementNode(entity, this, parent);
+  }
 
   void cleanup();
   @Nullable
-  IntentionAction findQuickFixes(@NotNull CommonProblemDescriptor descriptor, final String hint);
+  QuickFix findQuickFixes(@NotNull CommonProblemDescriptor descriptor,
+                          RefEntity entity,
+                          String hint);
   @NotNull
   HTMLComposerImpl getComposer();
 
-  @NotNull
-  QuickFixAction[] getQuickFixes(@NotNull RefEntity... refElements);
-  @NotNull
-  SynchronizedBidiMultiMap<RefEntity, CommonProblemDescriptor> getProblemElements();
-  @NotNull
-  Collection<CommonProblemDescriptor> getProblemDescriptors();
-  void addProblemElement(@Nullable RefEntity refElement, boolean filterSuppressed, @NotNull CommonProblemDescriptor... descriptions);
+  QuickFixAction @NotNull [] getQuickFixes(RefEntity @NotNull ... refElements);
 
   @NotNull
   GlobalInspectionContextImpl getContext();
-
-  void exportResults(@NotNull Consumer<Element> resultConsumer,
-                     @NotNull RefEntity refEntity,
-                     @NotNull Predicate<? super CommonProblemDescriptor> isDescriptorExcluded);
-
-  void exportResults(@NotNull Consumer<Element> resultConsumer,
-                     @NotNull Predicate<? super RefEntity> isEntityExcluded,
-                     @NotNull Predicate<? super CommonProblemDescriptor> isProblemExcluded);
 
   /** Override the preview panel for the entity. */
   @Nullable
@@ -127,39 +73,13 @@ public interface InspectionToolPresentation extends ProblemDescriptionsProcessor
     return false;
   }
 
-  default int getProblemsCount(@NotNull InspectionTree tree) {
-    return tree.getSelectedDescriptors().length;
+  default boolean showProblemCount() {
+    return true;
   }
 
-  @Nullable
-  HighlightSeverity getSeverity(@NotNull RefElement element);
+  boolean isSuppressed(RefEntity element);
 
-  boolean isExcluded(@NotNull CommonProblemDescriptor descriptor);
+  boolean isSuppressed(CommonProblemDescriptor descriptor);
 
-  boolean isExcluded(@NotNull RefEntity entity);
-
-  void amnesty(@NotNull RefEntity element);
-
-  void exclude(@NotNull RefEntity element);
-
-  void amnesty(@NotNull CommonProblemDescriptor descriptor);
-
-  void exclude(@NotNull CommonProblemDescriptor descriptor);
-
-  static HighlightSeverity getSeverity(@Nullable RefEntity entity,
-                                       @Nullable PsiElement psiElement,
-                                       @NotNull InspectionToolPresentation presentation) {
-    HighlightSeverity severity;
-    if (entity instanceof RefElement){
-      final RefElement refElement = (RefElement)entity;
-      severity = presentation.getSeverity(refElement);
-    }
-    else {
-      final InspectionProfile profile = InspectionProjectProfileManager.getInstance(presentation.getContext().getProject()).getCurrentProfile();
-      final HighlightDisplayLevel
-        level = profile.getErrorLevel(HighlightDisplayKey.find(presentation.getToolWrapper().getShortName()), psiElement);
-      severity = level.getSeverity();
-    }
-    return severity;
-  }
+  CommonProblemDescriptor @NotNull [] getSuppressedProblems(@NotNull RefEntity entity);
 }

@@ -29,7 +29,7 @@ import java.util.Map;
  * @author yole
  */
 public class RenamePsiPackageProcessor extends RenamePsiElementProcessor {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.rename.RenamePsiPackageProcessor");
+  private static final Logger LOG = Logger.getInstance(RenamePsiPackageProcessor.class);
 
   @Override
   public boolean canProcessElement(@NotNull final PsiElement element) {
@@ -54,6 +54,7 @@ public class RenamePsiPackageProcessor extends RenamePsiElementProcessor {
         return new String[]{((PsiPackage)element).getQualifiedName()};
       }
 
+      @NotNull
       @Override
       public String getNewName() {
         final PsiPackage psiPackage = (PsiPackage)element;
@@ -89,6 +90,7 @@ public class RenamePsiPackageProcessor extends RenamePsiElementProcessor {
 
     return new MoveDirectoryWithClassesProcessor(project, directories, null, searchInComments,
                                                  searchInNonJavaFiles, false, null) {
+      @NotNull
       @Override
       public TargetDirectoryWrapper getTargetDirectory(final PsiDirectory dir) {
         final VirtualFile vFile = dir.getVirtualFile();
@@ -113,7 +115,7 @@ public class RenamePsiPackageProcessor extends RenamePsiElementProcessor {
   @Override
   public void renameElement(@NotNull final PsiElement element,
                             @NotNull final String newName,
-                            @NotNull final UsageInfo[] usages,
+                            final UsageInfo @NotNull [] usages,
                             @Nullable RefactoringElementListener listener) throws IncorrectOperationException {
     final PsiPackage psiPackage = (PsiPackage)element;
     final String shortName = StringUtil.getShortName(newName);
@@ -144,7 +146,7 @@ public class RenamePsiPackageProcessor extends RenamePsiElementProcessor {
     final String qualifiedNameAfterRename = getPackageQualifiedNameAfterRename(aPackage, newName, true);
     final PsiClass psiClass = JavaPsiFacade.getInstance(project).findClass(qualifiedNameAfterRename, GlobalSearchScope.allScope(project));
     if (psiClass != null) {
-      conflicts.putValue(psiClass, "Class with qualified name \'" + qualifiedNameAfterRename + "\'  already exist");
+      conflicts.putValue(psiClass, "Class with qualified name '" + qualifiedNameAfterRename + "'  already exist");
     }
   }
 

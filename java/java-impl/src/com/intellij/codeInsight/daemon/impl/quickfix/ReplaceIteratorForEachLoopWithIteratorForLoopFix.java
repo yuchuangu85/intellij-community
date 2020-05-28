@@ -16,15 +16,15 @@
 package com.intellij.codeInsight.daemon.impl.quickfix;
 
 import com.intellij.application.options.CodeStyle;
+import com.intellij.codeInsight.daemon.QuickFixBundle;
 import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.codeInsight.intention.impl.BaseIntentionAction;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
-import com.intellij.psi.codeStyle.CodeStyleManager;
-import com.intellij.psi.codeStyle.CodeStyleSettings;
-import com.intellij.psi.codeStyle.JavaCodeStyleManager;
-import com.intellij.psi.codeStyle.JavaCodeStyleSettings;
+import com.intellij.psi.codeStyle.*;
 import com.intellij.util.IncorrectOperationException;
+import com.siyeh.ig.psiutils.VariableNameGenerator;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
@@ -49,7 +49,7 @@ public class ReplaceIteratorForEachLoopWithIteratorForLoopFix implements Intenti
   @NotNull
   @Override
   public String getFamilyName() {
-    return "Replace 'for each' loop with iterator 'for' loop";
+    return QuickFixBundle.message("replace.for.each.loop.with.iterator.for.loop");
   }
 
   @Override
@@ -59,7 +59,7 @@ public class ReplaceIteratorForEachLoopWithIteratorForLoopFix implements Intenti
 
   @Override
   public boolean isAvailable(@NotNull Project project, Editor editor, PsiFile file) {
-    return myStatement.isValid() && myStatement.getManager().isInProject(myStatement);
+    return myStatement.isValid() && BaseIntentionAction.canModify(myStatement);
   }
 
   @Override
@@ -74,14 +74,12 @@ public class ReplaceIteratorForEachLoopWithIteratorForLoopFix implements Intenti
     }
     final PsiParameter iterationParameter = myStatement.getIterationParameter();
     final String iterationParameterName = iterationParameter.getName();
-    if (iterationParameterName == null) {
-      return;
-    }
     final PsiStatement forEachBody = myStatement.getBody();
 
     final PsiElementFactory elementFactory = JavaPsiFacade.getElementFactory(project);
     final JavaCodeStyleManager javaStyleManager = JavaCodeStyleManager.getInstance(project);
-    final String name = javaStyleManager.suggestUniqueVariableName("it", myStatement, true);
+    final String name = new VariableNameGenerator(myStatement, VariableKind.LOCAL_VARIABLE)
+      .byName("it", "iter", "iterator").generate(true);
     PsiForStatement newForLoop = (PsiForStatement)elementFactory.createStatementFromText(
       "for (Iterator " + name + " = initializer; " + name + ".hasNext();) { Object next = " + name + ".next(); }", myStatement);
 

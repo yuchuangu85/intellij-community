@@ -10,6 +10,7 @@ import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.compiler.options.ExcludeEntryDescription;
 import com.intellij.openapi.compiler.options.ExcludesConfiguration;
 import com.intellij.openapi.projectRoots.Sdk;
+import com.intellij.openapi.projectRoots.impl.JavaAwareProjectJdkTableImpl;
 import com.intellij.openapi.roots.LanguageLevelProjectExtension;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.pom.java.LanguageLevel;
@@ -21,7 +22,6 @@ import com.intellij.psi.search.searches.MethodReferencesSearch;
 import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.PointersKt;
 import com.intellij.testFramework.CompilerTester;
-import com.intellij.testFramework.IdeaTestUtil;
 import com.intellij.testFramework.SkipSlowTestLocally;
 import com.intellij.util.Consumer;
 import org.jetbrains.annotations.NotNull;
@@ -50,12 +50,16 @@ public class CompilerReferencesFindUsagesTest extends DaemonAnalyzerTestCase {
       CompilerReferenceService.IS_ENABLED_KEY.setValue(myDefaultEnableState);
       myCompilerTester.tearDown();
     }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
     finally {
       myCompilerTester = null;
       super.tearDown();
     }
   }
 
+  @NotNull
   @Override
   protected String getTestDataPath() {
     return JavaTestUtil.getJavaTestDataPath() + "/compiler/compilerReferenceFindUsages/";
@@ -63,7 +67,7 @@ public class CompilerReferencesFindUsagesTest extends DaemonAnalyzerTestCase {
 
   @Override
   protected Sdk getTestProjectJdk() {
-    return IdeaTestUtil.getMockJdk18();
+    return JavaAwareProjectJdkTableImpl.getInstanceEx().getInternalJdk();
   }
 
   public void testMethodUsageOnGetter() {

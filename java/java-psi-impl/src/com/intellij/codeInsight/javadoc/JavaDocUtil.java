@@ -6,9 +6,12 @@ import com.intellij.openapi.project.IndexNotReadyException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
+import com.intellij.psi.impl.source.javadoc.PsiDocMethodOrFieldRef;
 import com.intellij.psi.javadoc.PsiDocComment;
 import com.intellij.psi.javadoc.PsiDocTagValue;
 import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.util.MethodSignature;
+import com.intellij.psi.util.MethodSignatureUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.util.ArrayUtil;
@@ -22,7 +25,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class JavaDocUtil {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.javadoc.JavaDocUtil");
+  private static final Logger LOG = Logger.getInstance(JavaDocUtil.class);
 
   @NonNls private static final Pattern ourTypePattern = Pattern.compile("[ ]+[^ ^\\[^\\]]");
 
@@ -48,7 +51,7 @@ public class JavaDocUtil {
 
   /**
    * Extracts a reference to a source element from the beginning of the text.
-   * 
+   *
    * @return length of the extracted reference
    */
   public static int extractReference(String text) {
@@ -108,12 +111,11 @@ public class JavaDocUtil {
       else {
         String memberRefText = refText.substring(1);
         PsiElement scope = context;
-        while (true) {
-          if (scope instanceof PsiFile || scope == null) break;
+        while (scope != null && !(scope instanceof PsiFile)) {
           if (scope instanceof PsiClass) {
             PsiElement member = findReferencedMember((PsiClass)scope, memberRefText, context);
             if (member != null) {
-              return useNavigationElement ? member.getNavigationElement() :  member;
+              return useNavigationElement ? member.getNavigationElement() : member;
             }
           }
           scope = scope.getParent();
@@ -141,7 +143,7 @@ public class JavaDocUtil {
   }
 
   @Nullable
-  private static PsiElement findReferencedMember(PsiClass aClass, String memberRefText, PsiElement context) {
+  private static PsiElement findReferencedMember(@NotNull PsiClass aClass, @NotNull String memberRefText, PsiElement context) {
     int parenthIndex = memberRefText.indexOf('(');
     if (parenthIndex < 0) {
       String name = memberRefText;
@@ -159,7 +161,7 @@ public class JavaDocUtil {
       String name = memberRefText.substring(0, parenthIndex).trim();
       int rparenIndex = memberRefText.lastIndexOf(')');
       if (rparenIndex == -1) return null;
-      
+
       String parmsText = memberRefText.substring(parenthIndex + 1, rparenIndex).trim();
       StringTokenizer tokenizer = new StringTokenizer(parmsText.replaceAll("[*]", ""), ",");
       PsiType[] types = PsiType.createArray(tokenizer.countTokens());
@@ -182,33 +184,31 @@ public class JavaDocUtil {
           LOG.info(e);
         }
       }
-      PsiMethod[] methods = aClass.findMethodsByName(name, true);
-      MethodsLoop:
-      for (PsiMethod method : methods) {
-        PsiParameter[] parms = method.getParameterList().getParameters();
-        if (parms.length != types.length) continue;
 
-        for (int k = 0; k < parms.length; k++) {
-          PsiParameter parm = parms[k];
-          final PsiType parmType = parm.getType();
-          if (
-            types[k] != null &&
-            !TypeConversionUtil.erasure(parmType).getCanonicalText().equals(types[k].getCanonicalText()) &&
-            !parmType.getCanonicalText().equals(types[k].getCanonicalText()) &&
-            !TypeConversionUtil.isAssignable(parmType, types[k])
-            ) {
-            continue MethodsLoop;
-          }
-        }
+      MethodSignature methodSignature = MethodSignatureUtil.createMethodSignature(name, types, PsiTypeParameter.EMPTY_ARRAY,
+                                                                                  PsiSubstitutor.EMPTY, name.equals(aClass.getName()));
 
-        int hashIndex = memberRefText.indexOf('#',rparenIndex);
-        if (hashIndex != -1) {
-          int parameterNumber = Integer.parseInt(memberRefText.substring(hashIndex + 1));
-          if (parameterNumber < parms.length) return method.getParameterList().getParameters()[parameterNumber];
-        }
-        return method;
+      final PsiMethod[] allMethods;
+      if (context != null) {
+        allMethods = PsiDocMethodOrFieldRef.getAllMethods(aClass, context);
       }
-      return null;
+      else {
+        allMethods = aClass.findMethodsByName(name, true);
+      }
+
+      PsiMethod[] methods = PsiDocMethodOrFieldRef.findMethods(methodSignature, aClass, name, allMethods);
+
+      if (methods.length == 0) return null;
+
+      PsiMethod found = methods[0];
+
+      int hashIndex = memberRefText.indexOf('#', rparenIndex);
+      if (hashIndex != -1) {
+        PsiParameter[] params = found.getParameterList().getParameters();
+        int parameterNumber = Integer.parseInt(memberRefText.substring(hashIndex + 1));
+        if (parameterNumber < params.length) return params[parameterNumber];
+      }
+      return found;
     }
   }
 
@@ -271,6 +271,9 @@ public class JavaDocUtil {
                "#"+
                ((PsiParameterList)element.getParent()).getParameterIndex((PsiParameter)element);
       }
+    }
+    else if (element instanceof PsiNamedElement) {
+      return ((PsiNamedElement)element).getName();
     }
 
     return null;
@@ -348,8 +351,7 @@ public class JavaDocUtil {
         }
         if (refClass instanceof PsiClass) {
           PsiElement scope = context;
-          while (true) {
-            if (scope == null || scope instanceof PsiFile) break;
+          while (scope != null && !(scope instanceof PsiFile)) {
             if (scope.equals(refClass)) {
               return memberLabel;
             }
@@ -394,7 +396,7 @@ public class JavaDocUtil {
         }
       }
     }
-    return memberText.substring(0, parenthIndex + 1) + buffer.toString() + ")";
+    return memberText.substring(0, parenthIndex + 1) + buffer + ")";
   }
 
   public static PsiClassType[] getImplementsList(PsiClass aClass) {

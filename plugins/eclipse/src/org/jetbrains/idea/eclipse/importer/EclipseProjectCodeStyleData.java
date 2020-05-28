@@ -1,11 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.eclipse.importer;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.options.SchemeImportException;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.codeStyle.CodeStyleSettings;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
@@ -26,7 +27,8 @@ public class EclipseProjectCodeStyleData extends EclipseCodeStylePropertiesImpor
 
   private boolean myImportOrganizeImportsConfig;
 
-  private final static Map<String, String> PREDEFINED_ECLIPSE_PROFILES = ContainerUtil.newHashMap();
+  private final static Map<String, String> PREDEFINED_ECLIPSE_PROFILES = new HashMap<>();
+
   static {
     PREDEFINED_ECLIPSE_PROFILES.put("org.eclipse.jdt.ui.default.eclipse_profile", "Eclipse [built-in]");
     PREDEFINED_ECLIPSE_PROFILES.put("org.eclipse.jdt.ui.default.sun_profile", "Java Conventions [built-in]");
@@ -107,7 +109,7 @@ public class EclipseProjectCodeStyleData extends EclipseCodeStylePropertiesImpor
   @Nullable
   public CodeStyleSettings importCodeStyle() throws SchemeImportException {
     if (myCorePreferences != null) {
-      CodeStyleSettings settings = new CodeStyleSettings();
+      CodeStyleSettings settings = CodeStyleSettingsManager.getInstance().createSettings();
       importProperties(myCorePreferences, settings);
       if (myUiPreferences != null && myImportOrganizeImportsConfig) {
         importOptimizeImportsSettings(myUiPreferences, settings);

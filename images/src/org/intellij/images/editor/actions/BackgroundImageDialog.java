@@ -1,9 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.intellij.images.editor.actions;
 
 import com.intellij.application.options.colors.ColorAndFontOptions;
 import com.intellij.application.options.colors.SimpleEditorPreview;
 import com.intellij.icons.AllIcons;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
@@ -20,7 +21,6 @@ import com.intellij.openapi.roots.ui.configuration.actions.IconWithTextAction;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.TextComponentAccessor;
-import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.impl.IdeBackgroundUtil;
 import com.intellij.ui.*;
@@ -28,10 +28,12 @@ import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBPanelWithEmptyText;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.MathUtil;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.JBIterable;
 import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.StartupUiUtil;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.update.UiNotifyConnector;
 import org.intellij.images.fileTypes.ImageFileTypeManager;
@@ -48,10 +50,8 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ItemEvent;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
-import java.util.Enumeration;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 
 import static com.intellij.openapi.wm.impl.IdeBackgroundUtil.*;
 
@@ -82,7 +82,7 @@ public class BackgroundImageDialog extends DialogWrapper {
   private final JBCheckBox myFlipVerCb = new JBCheckBox();
 
   boolean myAdjusting;
-  private final Map<String, String> myResults = ContainerUtil.newHashMap();
+  private final Map<String, String> myResults = new HashMap<>();
 
   private final SimpleEditorPreview myEditorPreview;
   private final JComponent myIdePreview;
@@ -90,7 +90,7 @@ public class BackgroundImageDialog extends DialogWrapper {
   public BackgroundImageDialog(@NotNull Project project, @Nullable String selectedPath) {
     super(project, true);
     myProject = project;
-    setTitle("Background Image");
+    setTitle(IdeBundle.message("dialog.title.background.image"));
     myEditorPreview = createEditorPreview();
     myIdePreview = createFramePreview();
     myPropertyTmp = getSystemProp() + "#" + project.getLocationHash();
@@ -108,10 +108,9 @@ public class BackgroundImageDialog extends DialogWrapper {
     pack();
   }
 
-  @NotNull
   @Override
-  protected Action[] createActions() {
-    return ArrayUtil.append(super.createActions(), new AbstractAction("Clear and Close") {
+  protected Action @NotNull [] createActions() {
+    return ArrayUtil.append(super.createActions(), new AbstractAction(IdeBundle.message("button.clear.and.close")) {
       @Override
       public void actionPerformed(ActionEvent e) {
         doClearAction();
@@ -202,8 +201,8 @@ public class BackgroundImageDialog extends DialogWrapper {
     UIUtil.removeScrollBorder(myPreviewPanel);
     myPreviewPanel.setBorder(new SideBorder(JBColor.border(), SideBorder.ALL));
     DefaultActionGroup actionGroup = new DefaultActionGroup();
-    actionGroup.add(createToggleAction(EDITOR, "Editor and tools"));
-    actionGroup.add(createToggleAction(FRAME, "Empty frame"));
+    actionGroup.add(createToggleAction(EDITOR, IdeBundle.message("toggle.editor.and.tools")));
+    actionGroup.add(createToggleAction(FRAME, IdeBundle.message("toggle.empty.frame")));
     myToolbar = ActionManager.getInstance().createActionToolbar(getTitle(), actionGroup, true);
     JComponent toolbarComponent = myToolbar.getComponent();
     toolbarComponent.setBorder(JBUI.Borders.empty());
@@ -246,7 +245,7 @@ public class BackgroundImageDialog extends DialogWrapper {
         boolean b = e.getSource() == myOpacitySpinner;
         if (b) {
           int value = (Integer)myOpacitySpinner.getValue();
-          myOpacitySpinner.setValue(Math.min(Math.max(0, value), 100));
+          myOpacitySpinner.setValue(MathUtil.clamp(value, 0, 100));
           myOpacitySlider.setValue(value);
         }
         else {
@@ -260,7 +259,7 @@ public class BackgroundImageDialog extends DialogWrapper {
     myOpacitySlider.addChangeListener(opacitySync);
     myOpacitySlider.setValue(15);
     myOpacitySpinner.setValue(15);
-    boolean perProject = !Comparing.equal(getBackgroundSpec(myProject, getSystemProp(true)), getBackgroundSpec(null, getSystemProp(true)));
+    boolean perProject = !Objects.equals(getBackgroundSpec(myProject, getSystemProp(true)), getBackgroundSpec(null, getSystemProp(true)));
     myThisProjectOnlyCb.setSelected(perProject);
     myAdjusting = false;
   }
@@ -270,7 +269,7 @@ public class BackgroundImageDialog extends DialogWrapper {
       @Override
       public void update(@NotNull AnActionEvent e) {
         e.getPresentation().setText(text);
-        e.getPresentation().putClientProperty(Toggleable.SELECTED_PROPERTY, target.equals(myPreviewTarget));
+        Toggleable.setSelected(e.getPresentation(), target.equals(myPreviewTarget));
         super.update(e);
       }
 
@@ -381,7 +380,7 @@ public class BackgroundImageDialog extends DialogWrapper {
     List<String> items = getComboModel().getItems();
     PropertiesComponent.getInstance().setValue(
       getRecentItemsKey(),
-      StringUtil.join(items.subList(0, Math.min(items.size(), 5)), "\n"));
+      StringUtil.join(ContainerUtil.getFirstItems(items, 5), "\n"));
   }
 
   private CollectionComboBoxModel<String> getComboModel() {
@@ -455,12 +454,12 @@ public class BackgroundImageDialog extends DialogWrapper {
 
   @NotNull
   private static Color getSelectionBackground() {
-    return ColorUtil.mix(UIUtil.getListSelectionBackground(), UIUtil.getLabelBackground(), UIUtil.isUnderDarcula() ? .5 : .75);
+    return ColorUtil.mix(UIUtil.getListSelectionBackground(true), UIUtil.getLabelBackground(), StartupUiUtil.isUnderDarcula() ? .5 : .75);
   }
 
   private static void initFlipPanel(@NotNull JPanel p, @NotNull JBCheckBox flipHorCb, @NotNull JBCheckBox flipVerCb) {
-    flipHorCb.setToolTipText("Flip vertically");
-    flipVerCb.setToolTipText("Flip horizontally");
+    flipHorCb.setToolTipText(IdeBundle.message("tooltip.flip.vertically"));
+    flipVerCb.setToolTipText(IdeBundle.message("tooltip.flip.horizontally"));
     p.setLayout(new GridLayout(1, 2, 1, 1));
     Color color = getSelectionBackground();
     JBPanelWithEmptyText h = addClickablePanel(p, flipHorCb, color);
@@ -475,7 +474,7 @@ public class BackgroundImageDialog extends DialogWrapper {
     IdeBackgroundUtil.Anchor[] values = IdeBackgroundUtil.Anchor.values();
     String[] names = new String[values.length];
     for (int i = 0; i < names.length; i++) {
-      names[i] = values[i].name().replace('_', '-').toLowerCase(Locale.ENGLISH);
+      names[i] = StringUtil.toLowerCase(values[i].name().replace('_', '-'));
     }
     Color color = getSelectionBackground();
     p.setLayout(new GridLayout(3, 3, 1, 1));
@@ -492,7 +491,7 @@ public class BackgroundImageDialog extends DialogWrapper {
     String[] names = new String[values.length];
     BufferedImage image = sampleImage();
     for (int i = 0; i < names.length; i++) {
-      names[i] = values[i].name().replace('_', '-').toLowerCase(Locale.ENGLISH);
+      names[i] = StringUtil.toLowerCase(values[i].name().replace('_', '-'));
     }
     Color color = getSelectionBackground();
     p.setLayout(new GridLayout(1, values.length, 1, 1));
@@ -530,8 +529,7 @@ public class BackgroundImageDialog extends DialogWrapper {
       @Override
       public Dimension getPreferredSize() {
         Dimension d = super.getSize();
-        d.width = Math.max(d.width, d.height);
-        d.height = Math.max(d.width, d.height);
+        d.width = d.height = Math.max(d.width, d.height);
         return d;
       }
 

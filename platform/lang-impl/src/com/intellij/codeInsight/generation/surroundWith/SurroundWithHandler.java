@@ -1,17 +1,17 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.generation.surroundWith;
 
 import com.intellij.codeInsight.CodeInsightActionHandler;
 import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInsight.hint.HintManager;
-import com.intellij.codeInsight.template.CustomLiveTemplate;
 import com.intellij.codeInsight.template.TemplateManager;
-import com.intellij.codeInsight.template.impl.InvokeTemplateAction;
-import com.intellij.codeInsight.template.impl.TemplateImpl;
-import com.intellij.codeInsight.template.impl.TemplateManagerImpl;
-import com.intellij.codeInsight.template.impl.WrapWithCustomTemplateAction;
+import com.intellij.codeInsight.template.impl.SurroundWithLogger;
+import com.intellij.codeInsight.template.impl.SurroundWithTemplateHandler;
 import com.intellij.ide.DataManager;
+import com.intellij.ide.IdeBundle;
+import com.intellij.idea.ActionsBundle;
+import com.intellij.lang.LangBundle;
 import com.intellij.lang.Language;
 import com.intellij.lang.LanguageSurrounders;
 import com.intellij.lang.folding.CustomFoldingSurroundDescriptor;
@@ -32,7 +32,6 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.refactoring.rename.inplace.InplaceRefactoring;
 import com.intellij.util.DocumentUtil;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.text.CharArrayUtil;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
@@ -41,7 +40,6 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 
 public class SurroundWithHandler implements CodeInsightActionHandler {
-  private static final String CHOOSER_TITLE = CodeInsightBundle.message("surround.with.chooser.title");
   public static final TextRange CARET_IS_OK = new TextRange(0, 0);
 
   @Override
@@ -57,7 +55,7 @@ public class SurroundWithHandler implements CodeInsightActionHandler {
   public static void invoke(@NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file, Surrounder surrounder) {
     if (!EditorModificationUtil.checkModificationAllowed(editor)) return;
     if (file instanceof PsiCompiledElement) {
-      HintManager.getInstance().showErrorHint(editor, "Can't modify decompiled code");
+      HintManager.getInstance().showErrorHint(editor, LangBundle.message("hint.text.can.t.modify.decompiled.code"));
       return;
     }
 
@@ -66,7 +64,7 @@ public class SurroundWithHandler implements CodeInsightActionHandler {
       showPopup(editor, applicable);
     }
     else if (!ApplicationManager.getApplication().isUnitTestMode()) {
-      HintManager.getInstance().showErrorHint(editor, "Couldn't find Surround With variants applicable to the current context");
+      HintManager.getInstance().showErrorHint(editor, LangBundle.message("hint.text.couldn.t.find.surround"));
     }
   }
 
@@ -120,7 +118,7 @@ public class SurroundWithHandler implements CodeInsightActionHandler {
       return null;
     }
 
-    Map<Surrounder, PsiElement[]> surrounders = ContainerUtil.newLinkedHashMap();
+    Map<Surrounder, PsiElement[]> surrounders = new LinkedHashMap<>();
     for (SurroundDescriptor descriptor : surroundDescriptors) {
       final PsiElement[] elements = descriptor.getElementsToSurround(file, startOffset, endOffset);
       if (elements.length > 0) {
@@ -149,7 +147,7 @@ public class SurroundWithHandler implements CodeInsightActionHandler {
                                               PsiFile file,
                                               Surrounder surrounder,
                                               int startOffset,
-                                              int endOffset, List<SurroundDescriptor> surroundDescriptors) {
+                                              int endOffset, List<? extends SurroundDescriptor> surroundDescriptors) {
     assert ApplicationManager.getApplication().isUnitTestMode();
     for (SurroundDescriptor descriptor : surroundDescriptors) {
       final PsiElement[] elements = descriptor.getElementsToSurround(file, startOffset, endOffset);
@@ -168,7 +166,7 @@ public class SurroundWithHandler implements CodeInsightActionHandler {
     DataContext context = DataManager.getInstance().getDataContext(editor.getContentComponent());
     JBPopupFactory.ActionSelectionAid mnemonics = JBPopupFactory.ActionSelectionAid.MNEMONICS;
     DefaultActionGroup group = new DefaultActionGroup(applicable.toArray(AnAction.EMPTY_ARRAY));
-    JBPopupFactory.getInstance().createActionGroupPopup(CHOOSER_TITLE, group, context, mnemonics, true).showInBestPositionFor(editor);
+    JBPopupFactory.getInstance().createActionGroupPopup(CodeInsightBundle.message("surround.with.chooser.title"), group, context, mnemonics, true).showInBestPositionFor(editor);
   }
 
   static void doSurround(final Project project, final Editor editor, final Surrounder surrounder, final PsiElement[] elements) {
@@ -201,8 +199,7 @@ public class SurroundWithHandler implements CodeInsightActionHandler {
                                                      Editor editor,
                                                      PsiFile file,
                                                      Map<Surrounder, PsiElement[]> surrounders) {
-    final List<AnAction> applicable = new ArrayList<>();
-    boolean hasEnabledSurrounders = false;
+    List<AnAction> applicable = new ArrayList<>();
 
     Set<Character> usedMnemonicsSet = new HashSet<>();
 
@@ -224,32 +221,17 @@ public class SurroundWithHandler implements CodeInsightActionHandler {
         index++;
         usedMnemonicsSet.add(Character.toUpperCase(mnemonic));
         applicable.add(new InvokeSurrounderAction(surrounder, project, editor, elements, mnemonic));
-        hasEnabledSurrounders = true;
       }
     }
 
-    List<CustomLiveTemplate> customTemplates = TemplateManagerImpl.listApplicableCustomTemplates(editor, file, true);
-    List<TemplateImpl> templates = TemplateManagerImpl.listApplicableTemplateWithInsertingDummyIdentifier(editor, file, true);
-
-    if (!templates.isEmpty() || !customTemplates.isEmpty()) {
-      applicable.add(new Separator("Live templates"));
-    }
-
-    for (TemplateImpl template : templates) {
-      applicable.add(new InvokeTemplateAction(template, editor, project, usedMnemonicsSet));
-      hasEnabledSurrounders = true;
-    }
-
-    for (CustomLiveTemplate customTemplate : customTemplates) {
-      applicable.add(new WrapWithCustomTemplateAction(customTemplate, editor, file, usedMnemonicsSet));
-      hasEnabledSurrounders = true;
-    }
-
-    if (!templates.isEmpty() || !customTemplates.isEmpty()) {
+    List<AnAction> templateGroup = SurroundWithTemplateHandler.createActionGroup(editor, file, usedMnemonicsSet);
+    if (!templateGroup.isEmpty()) {
+      applicable.add(new Separator(IdeBundle.messagePointer("action.Anonymous.text.live.templates")));
+      applicable.addAll(templateGroup);
       applicable.add(Separator.getInstance());
       applicable.add(new ConfigureTemplatesAction());
     }
-    return hasEnabledSurrounders ? applicable : null;
+    return applicable.isEmpty() ? null : applicable;
   }
 
   private static class InvokeSurrounderAction extends AnAction {
@@ -272,13 +254,18 @@ public class SurroundWithHandler implements CodeInsightActionHandler {
         return;
       }
 
+      Language language = Language.ANY;
+      if (myElements != null && myElements.length != 0) {
+        language = myElements[0].getLanguage();
+      }
       WriteCommandAction.runWriteCommandAction(myProject, () -> doSurround(myProject, myEditor, mySurrounder, myElements));
+      SurroundWithLogger.logSurrounder(mySurrounder, language, myProject);
     }
   }
 
   private static class ConfigureTemplatesAction extends AnAction {
     private ConfigureTemplatesAction() {
-      super("Configure Live Templates...");
+      super(ActionsBundle.messagePointer("action.ConfigureTemplatesAction.text"));
     }
 
     @Override

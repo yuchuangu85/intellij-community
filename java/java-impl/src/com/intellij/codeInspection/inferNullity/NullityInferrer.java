@@ -15,8 +15,12 @@
  */
 package com.intellij.codeInspection.inferNullity;
 
+import com.intellij.codeInsight.Nullability;
+import com.intellij.codeInsight.NullabilityAnnotationInfo;
 import com.intellij.codeInsight.NullableNotNullManager;
 import com.intellij.codeInsight.intention.AddAnnotationFix;
+import com.intellij.java.JavaBundle;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.psi.*;
@@ -28,6 +32,7 @@ import com.intellij.psi.util.PsiUtil;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.Query;
+import com.siyeh.ig.psiutils.VariableAccessUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
@@ -158,7 +163,8 @@ public class NullityInferrer {
 
   public static void nothingFoundMessage(final Project project) {
     SwingUtilities.invokeLater(
-      () -> Messages.showInfoMessage(project, "No places found to infer @Nullable/@NotNull", "Infer Nullity Results"));
+      () -> Messages.showInfoMessage(project, JavaBundle.message("dialog.message.no.places.found.to.infer.nullable.notnull"),
+                                     JavaBundle.message("dialog.title.infer.nullity.results")));
   }
 
   private static void annotateNotNull(Project project,
@@ -235,18 +241,20 @@ public class NullityInferrer {
     }
   }
 
-  public void collect(List<UsageInfo> usages) {
+  void collect(List<? super UsageInfo> usages) {
     collect(usages, true);
     collect(usages, false);
   }
 
-  private void collect(List<UsageInfo> usages, boolean nullable) {
+  private void collect(List<? super UsageInfo> usages, boolean nullable) {
     final List<SmartPsiElementPointer<? extends PsiModifierListOwner>> set = nullable ? myNullableSet : myNotNullSet;
     for (SmartPsiElementPointer<? extends PsiModifierListOwner> elementPointer : set) {
-      final PsiModifierListOwner element = elementPointer.getElement();
-      if (element != null && !shouldIgnore(element)) {
-        usages.add(nullable ? new NullableUsageInfo(element) : new NotNullUsageInfo(element));
-      }
+      ReadAction.run(() -> {
+        PsiModifierListOwner element = elementPointer.getElement();
+        if (element != null && !shouldIgnore(element)) {
+          usages.add(nullable ? new NullableUsageInfo(element) : new NotNullUsageInfo(element));
+        }
+      });
     }
   }
 
@@ -353,7 +361,7 @@ public class NullityInferrer {
     private boolean sometimesNull;
 
     @Override
-    public void visitElement(PsiElement element) {
+    public void visitElement(@NotNull PsiElement element) {
       if (sometimesNull) return;
       super.visitElement(element);
     }
@@ -468,6 +476,14 @@ public class NullityInferrer {
     return myNullableSet.contains(pointer);
   }
 
+  private boolean hasNullability(@NotNull PsiModifierListOwner owner) {
+    NullableNotNullManager manager = NullableNotNullManager.getInstance(owner.getProject());
+    NullabilityAnnotationInfo info = manager.findEffectiveNullabilityInfo(owner);
+    if (info != null && !info.isInferred() && info.getNullability() != Nullability.UNKNOWN) return true;
+    final SmartPsiElementPointer<PsiModifierListOwner> pointer = myPointerManager.createSmartPsiElementPointer(owner);
+    return myNotNullSet.contains(pointer) || myNullableSet.contains(pointer);
+  }
+
   private class NullityInferrerVisitor extends JavaRecursiveElementWalkingVisitor{
 
     @Override
@@ -488,7 +504,7 @@ public class NullityInferrer {
         registerNotNullAnnotation(method);
         return;
       }
-      if (isNotNull(method) || isNullable(method)) {
+      if (hasNullability(method)) {
         return;
       }
       final PsiCodeBlock body = method.getBody();
@@ -502,7 +518,7 @@ public class NullityInferrer {
           public void visitLambdaExpression(PsiLambdaExpression expression) {}
 
           @Override
-          public void visitElement(PsiElement element) {
+          public void visitElement(@NotNull PsiElement element) {
             if (sometimesReturnsNull[0]) return;
             super.visitElement(element);
           }
@@ -555,8 +571,7 @@ public class NullityInferrer {
     @Override
     public void visitParameter(@NotNull PsiParameter parameter) {
       super.visitParameter(parameter);
-      if (parameter.getType() instanceof PsiPrimitiveType ||
-          isNotNull(parameter) || isNullable(parameter)) {
+      if (parameter.getType() instanceof PsiPrimitiveType || hasNullability(parameter)) {
         return;
       }
       final PsiElement grandParent = parameter.getDeclarationScope();
@@ -564,22 +579,18 @@ public class NullityInferrer {
         final PsiMethod method = (PsiMethod)grandParent;
         if (method.getBody() != null) {
 
-          for (PsiReference reference : ReferencesSearch.search(parameter, new LocalSearchScope(method))) {
-            final PsiElement place = reference.getElement();
-            if (place instanceof PsiReferenceExpression) {
-              final PsiReferenceExpression expr = (PsiReferenceExpression)place;
-              final PsiElement parent = PsiTreeUtil.skipParentsOfType(expr, PsiParenthesizedExpression.class, PsiTypeCastExpression.class);
-              if (processParameter(parameter, expr, parent)) return;
-              if (isNotNull(method)) {
-                PsiElement toReturn = parent;
-                if (parent instanceof PsiConditionalExpression &&
-                    ((PsiConditionalExpression)parent).getCondition() != expr) {  //todo check conditional operations
-                  toReturn = parent.getParent();
-                }
-                if (toReturn instanceof PsiReturnStatement) {
-                  registerNotNullAnnotation(parameter);
-                  return;
-                }
+          for (PsiReferenceExpression expr : VariableAccessUtils.getVariableReferences(parameter, method)) {
+            final PsiElement parent = PsiTreeUtil.skipParentsOfType(expr, PsiParenthesizedExpression.class, PsiTypeCastExpression.class);
+            if (processParameter(parameter, expr, parent)) return;
+            if (isNotNull(method)) {
+              PsiElement toReturn = parent;
+              if (parent instanceof PsiConditionalExpression &&
+                  ((PsiConditionalExpression)parent).getCondition() != expr) {  //todo check conditional operations
+                toReturn = parent.getParent();
+              }
+              if (toReturn instanceof PsiReturnStatement) {
+                registerNotNullAnnotation(parameter);
+                return;
               }
             }
           }

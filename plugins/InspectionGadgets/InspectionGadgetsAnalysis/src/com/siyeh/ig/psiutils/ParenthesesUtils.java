@@ -18,6 +18,7 @@ package com.siyeh.ig.psiutils;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiPrecedenceUtil;
+import com.intellij.psi.util.PsiUtil;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -91,13 +92,14 @@ public class ParenthesesUtils {
     return parent;
   }
 
+  /**
+   * @deprecated use {@link PsiUtil#skipParenthesizedExprDown(PsiExpression)} directly instead
+   */
+  @Deprecated
   @Contract("null -> null")
+  @Nullable
   public static PsiExpression stripParentheses(@Nullable PsiExpression expression) {
-    while (expression instanceof PsiParenthesizedExpression) {
-      final PsiParenthesizedExpression parenthesizedExpression = (PsiParenthesizedExpression)expression;
-      expression = parenthesizedExpression.getExpression();
-    }
-    return expression;
+    return PsiUtil.skipParenthesizedExprDown(expression);
   }
 
   public static void removeParentheses(@NotNull PsiExpression expression, boolean ignoreClarifyingParentheses) {
@@ -177,10 +179,9 @@ public class ParenthesesUtils {
   private static void removeParensFromParenthesizedExpression(@NotNull PsiParenthesizedExpression parenthesizedExpression,
                                                               boolean ignoreClarifyingParentheses) {
     final PsiExpression body = parenthesizedExpression.getExpression();
-    if (body == null) {
-      new CommentTracker().deleteAndRestoreComments(parenthesizedExpression);
-      return;
-    }
+    // Do not remove empty parentheses, as incorrect Java expression could become incorrect PSI
+    // E.g. ()+=foo is correct PSI, but removing () will yield an assignment without LExpression which is invalid.
+    if (body == null) return;
     final PsiElement parent = parenthesizedExpression.getParent();
     if (!(parent instanceof PsiExpression) || !areParenthesesNeeded(body, (PsiExpression)parent, ignoreClarifyingParentheses)) {
       PsiExpression newExpression = ExpressionUtils.replacePolyadicWithParent(parenthesizedExpression, body);
@@ -219,6 +220,7 @@ public class ParenthesesUtils {
   private static void removeParensFromPolyadicExpression(@NotNull PsiPolyadicExpression polyadicExpression,
                                                          boolean ignoreClarifyingParentheses) {
     for (PsiExpression operand : polyadicExpression.getOperands()) {
+      if (!operand.isValid()) break;
       removeParentheses(operand, ignoreClarifyingParentheses);
     }
   }

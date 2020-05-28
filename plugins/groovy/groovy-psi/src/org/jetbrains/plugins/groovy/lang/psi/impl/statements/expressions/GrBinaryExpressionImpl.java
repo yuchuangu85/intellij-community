@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions;
 
 import com.intellij.lang.ASTNode;
@@ -7,29 +7,31 @@ import com.intellij.psi.PsiType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyElementVisitor;
-import org.jetbrains.plugins.groovy.lang.psi.api.GroovyReference;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrBinaryExpression;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrExpression;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.GrOperatorExpressionImpl;
+import org.jetbrains.plugins.groovy.lang.resolve.api.GroovyCallReference;
 import org.jetbrains.plugins.groovy.lang.resolve.references.GrOperatorReference;
 
 import static org.jetbrains.plugins.groovy.lang.psi.GroovyTokenSets.BINARY_OPERATORS;
+import static org.jetbrains.plugins.groovy.lang.psi.util.PsiUtilKt.isFake;
+import static org.jetbrains.plugins.groovy.lang.resolve.references.GrOperatorReference.hasOperatorReference;
 
 /**
  * @author ilyas
  */
 public abstract class GrBinaryExpressionImpl extends GrOperatorExpressionImpl implements GrBinaryExpression {
 
-  private final GroovyReference myReference = new GrOperatorReference(this);
+  private final GroovyCallReference myReference = new GrOperatorReference(this);
 
   public GrBinaryExpressionImpl(@NotNull ASTNode node) {
     super(node);
   }
 
-  @NotNull
+  @Nullable
   @Override
-  public GroovyReference getReference() {
-    return myReference;
+  public GroovyCallReference getReference() {
+    return hasOperatorReference(this) && !isFake(this) ? myReference : null;
   }
 
   @Override

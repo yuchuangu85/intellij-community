@@ -16,6 +16,7 @@
 
 package com.maddyhome.idea.copyright.ui;
 
+import com.intellij.copyright.CopyrightBundle;
 import com.intellij.copyright.CopyrightManager;
 import com.intellij.openapi.editor.SpellCheckingEditorCustomizationProvider;
 import com.intellij.openapi.fileTypes.FileTypes;
@@ -28,6 +29,7 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.*;
 import com.intellij.util.DocumentUtil;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.JBUI;
 import com.maddyhome.idea.copyright.CopyrightProfile;
 import com.maddyhome.idea.copyright.pattern.EntityUtil;
 import com.maddyhome.idea.copyright.pattern.VelocityHelper;
@@ -92,13 +94,16 @@ public class CopyrightConfigurable extends NamedConfigurable<CopyrightProfile> {
       public void actionPerformed(ActionEvent e) {
         try {
           VelocityHelper.verify(myEditor.getDocument().getText());
-          Messages.showInfoMessage(myProject, "Velocity template is valid.", "Validation");
+          Messages.showInfoMessage(myProject, CopyrightBundle.message("dialog.message.velocity.template.is.valid"),
+                                   CopyrightBundle.message("dialog.title.validation"));
         }
         catch (Exception e1) {
-          Messages.showInfoMessage(myProject, "Velocity template contains error:\n" + e1.getMessage(), "Validation");
+          Messages.showInfoMessage(myProject, CopyrightBundle.message("dialog.message.velocity.template.contains.error.0", e1.getMessage()),
+                                   CopyrightBundle.message("dialog.title.validation"));
         }
       }
     });
+    myWholePanel.setBorder(JBUI.Borders.empty(5, 10, 10, 10));
     return myWholePanel;
   }
 
@@ -143,8 +148,14 @@ public class CopyrightConfigurable extends NamedConfigurable<CopyrightProfile> {
   @Override
   public void reset() {
     myDisplayName = myCopyrightProfile.getName();
-    SwingUtilities.invokeLater(() -> DocumentUtil.writeInRunUndoTransparentAction(
-      () -> myEditor.getDocument().setText(EntityUtil.decode(myCopyrightProfile.getNotice()))));
+    DocumentUtil.writeInRunUndoTransparentAction(() -> {
+      String notice = myCopyrightProfile.getNotice();
+      if (notice != null) {
+        myEditor.getDocument().setText(EntityUtil.decode(notice));
+        myEditor.setCaretPosition(0);
+        myEditor.revalidate();
+      }
+    });
     myKeywordTf.setText(myCopyrightProfile.getKeyword());
     myAllowReplaceTextField.setText(myCopyrightProfile.getAllowReplaceRegexp());
   }

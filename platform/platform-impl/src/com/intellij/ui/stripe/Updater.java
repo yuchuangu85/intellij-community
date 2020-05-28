@@ -1,14 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.stripe;
 
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzerSettings;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.ShortcutSet;
 import com.intellij.openapi.util.registry.Registry;
+import com.intellij.ui.ComponentUtil;
 import com.intellij.ui.components.JBScrollBar;
-import com.intellij.util.ui.JBUI;
-import com.intellij.util.ui.RegionPainter;
-import com.intellij.util.ui.UIUtil;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.ui.update.MergingUpdateQueue;
 import com.intellij.util.ui.update.Update;
 import org.jetbrains.annotations.NotNull;
@@ -20,9 +19,6 @@ import java.awt.event.MouseEvent;
 
 import static com.intellij.openapi.keymap.KeymapUtil.getActiveKeymapShortcuts;
 
-/**
- * @author Sergey.Malenkov
- */
 public abstract class Updater<Painter extends ErrorStripePainter> implements Disposable {
   private final Painter myPainter;
   private final JScrollBar myScrollBar;
@@ -49,18 +45,15 @@ public abstract class Updater<Painter extends ErrorStripePainter> implements Dis
     myScrollBar.addMouseListener(myMouseAdapter);
     myScrollBar.addMouseMotionListener(myMouseAdapter);
     myQueue = new MergingUpdateQueue("ErrorStripeUpdater", 100, true, myScrollBar, this);
-    UIUtil.putClientProperty(myScrollBar, JBScrollBar.TRACK, new RegionPainter<Object>() {
-      @Override
-      public void paint(Graphics2D g, int x, int y, int width, int height, Object object) {
-        DaemonCodeAnalyzerSettings settings = DaemonCodeAnalyzerSettings.getInstance();
-        myPainter.setMinimalThickness(settings == null ? 2 : Math.min(settings.getErrorStripeMarkMinHeight(), JBUI.scale(4)));
-        myPainter.setErrorStripeGap(Registry.intValue("error.stripe.gap", 0));
-        if (myPainter instanceof ExtraErrorStripePainter) {
-          ExtraErrorStripePainter extra = (ExtraErrorStripePainter)myPainter;
-          extra.setGroupSwap(!myScrollBar.getComponentOrientation().isLeftToRight());
-        }
-        myPainter.paint(g, x, y, width, height, object);
+    ComponentUtil.putClientProperty(myScrollBar, JBScrollBar.TRACK, (g, x, y, width, height, object) -> {
+      DaemonCodeAnalyzerSettings settings = DaemonCodeAnalyzerSettings.getInstance();
+      myPainter.setMinimalThickness(settings == null ? 2 : Math.min(settings.getErrorStripeMarkMinHeight(), JBUIScale.scale(4)));
+      myPainter.setErrorStripeGap(Registry.intValue("error.stripe.gap", 0));
+      if (myPainter instanceof ExtraErrorStripePainter) {
+        ExtraErrorStripePainter extra = (ExtraErrorStripePainter)myPainter;
+        extra.setGroupSwap(!myScrollBar.getComponentOrientation().isLeftToRight());
       }
+      myPainter.paint(g, x, y, width, height, object);
     });
   }
 
@@ -68,7 +61,7 @@ public abstract class Updater<Painter extends ErrorStripePainter> implements Dis
   public void dispose() {
     myScrollBar.removeMouseListener(myMouseAdapter);
     myScrollBar.removeMouseMotionListener(myMouseAdapter);
-    UIUtil.putClientProperty(myScrollBar, JBScrollBar.TRACK, null);
+    ComponentUtil.putClientProperty(myScrollBar, JBScrollBar.TRACK, null);
   }
 
   private int findErrorStripeIndex(Painter painter, int x, int y) {
@@ -143,73 +136,52 @@ public abstract class Updater<Painter extends ErrorStripePainter> implements Dis
   }
 
   public int findNextIndex(int current) {
-    int count = myPainter.getErrorStripeCount();
-    int foundIndex = -1;
-    int foundLayer = 0;
-    if (0 <= current && current < count) {
-      current++;
-      for (int index = current; index < count; index++) {
-        int layer = getLayer(index);
-        if (layer > foundLayer) {
-          foundIndex = index;
-          foundLayer = layer;
-        }
-      }
-      for (int index = 0; index < current; index++) {
-        int layer = getLayer(index);
-        if (layer > foundLayer) {
-          foundIndex = index;
-          foundLayer = layer;
-        }
-      }
+    SearchResult result = new SearchResult();
+    int max = myPainter.getErrorStripeCount() - 1;
+    if (0 <= current && current < max) {
+      result.updateForward(myPainter, current + 1, max);
+      result.updateForward(myPainter, 0, current);
     }
-    else {
-      for (int index = 0; index < count; index++) {
-        int layer = getLayer(index);
-        if (layer > foundLayer) {
-          foundIndex = index;
-          foundLayer = layer;
-        }
-      }
+    else if (0 <= max) {
+      result.updateForward(myPainter, 0, max);
     }
-    return foundIndex;
+    return result.index;
   }
 
   public int findPreviousIndex(int current) {
-    int count = myPainter.getErrorStripeCount();
-    int foundIndex = -1;
-    int foundLayer = 0;
-    if (0 <= current && current < count) {
-      current--;
-      for (int index = count - 1; index >= 0; index++) {
-        int layer = getLayer(index);
-        if (layer > foundLayer) {
-          foundIndex = index;
-          foundLayer = layer;
-        }
-      }
-      for (int index = current - 1; index >= 0; index++) {
-        int layer = getLayer(index);
-        if (layer > foundLayer) {
-          foundIndex = index;
-          foundLayer = layer;
-        }
-      }
+    SearchResult result = new SearchResult();
+    int max = myPainter.getErrorStripeCount() - 1;
+    if (0 < current && current <= max) {
+      result.updateBackward(myPainter, current - 1, 0);
+      result.updateBackward(myPainter, max, current);
     }
-    else {
-      for (int index = count - 1; index >= 0; index--) {
-        int layer = getLayer(index);
-        if (layer > foundLayer) {
-          foundIndex = index;
-          foundLayer = layer;
-        }
-      }
+    else if (0 <= max) {
+      result.updateBackward(myPainter, max, 0);
     }
-    return foundIndex;
+    return result.index;
   }
 
-  private int getLayer(int index) {
-    ErrorStripe stripe = myPainter.getErrorStripe(index);
-    return stripe == null ? -1 : stripe.getLayer();
+  private static final class SearchResult {
+    int layer;
+    int index = -1;
+
+    void updateForward(ErrorStripePainter painter, int index, int max) {
+      while (index <= max) update(painter, index++);
+    }
+
+    void updateBackward(ErrorStripePainter painter, int index, int min) {
+      while (min <= index) update(painter, index--);
+    }
+
+    void update(ErrorStripePainter painter, int index) {
+      ErrorStripe stripe = painter.getErrorStripe(index);
+      if (stripe != null) {
+        int layer = stripe.getLayer();
+        if (layer > this.layer) {
+          this.layer = layer;
+          this.index = index;
+        }
+      }
+    }
   }
 }

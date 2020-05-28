@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2016 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2019 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,12 +27,14 @@ import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.InspectionGadgetsFix;
 import com.siyeh.ig.psiutils.ClassUtils;
 import com.siyeh.ig.psiutils.ExpressionUtils;
+import org.intellij.lang.annotations.Pattern;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class PrivateMemberAccessBetweenOuterAndInnerClassInspection extends BaseInspection {
 
+  @Pattern(VALID_ID_PATTERN)
   @NotNull
   @Override
   public String getID() {
@@ -43,13 +45,6 @@ public class PrivateMemberAccessBetweenOuterAndInnerClassInspection extends Base
   @Override
   public String getAlternativeID() {
     return "PrivateMemberAccessBetweenOuterAndInnerClass";
-  }
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message(
-      "private.member.access.between.outer.and.inner.classes.display.name");
   }
 
   @Override
@@ -106,7 +101,7 @@ public class PrivateMemberAccessBetweenOuterAndInnerClassInspection extends Base
     @NotNull
     @Override
     public String getFamilyName() {
-      return "Make package-private";
+      return InspectionGadgetsBundle.message("make.package.private.fix.family.name");
     }
 
     @Override
@@ -193,18 +188,10 @@ public class PrivateMemberAccessBetweenOuterAndInnerClassInspection extends Base
       if (expression.getType() instanceof PsiArrayType) {
         return;
       }
-      final PsiClass containingClass = ClassUtils.getContainingClass(expression);
-      if (containingClass == null) {
-        return;
-      }
-      final JavaResolveResult resolveResult = expression.resolveMethodGenerics();
-      if (!resolveResult.isAccessible()) {
-        return;
-      }
-      final PsiMethod constructor = (PsiMethod)resolveResult.getElement();
+      final PsiMethod constructor = expression.resolveMethod();
+      final PsiClass aClass;
       if (constructor == null) {
-        final PsiJavaCodeReferenceElement classReference =
-          expression.getClassOrAnonymousClassReference();
+        final PsiJavaCodeReferenceElement classReference = expression.getClassOrAnonymousClassReference();
         if (classReference == null) {
           return;
         }
@@ -212,25 +199,21 @@ public class PrivateMemberAccessBetweenOuterAndInnerClassInspection extends Base
         if (!(target instanceof PsiClass)) {
           return;
         }
-        final PsiClass aClass = (PsiClass)target;
-        if (!aClass.hasModifierProperty(PsiModifier.PRIVATE)) {
+        aClass = (PsiClass)target;
+        if (aClass.isInterface() || !aClass.hasModifierProperty(PsiModifier.PRIVATE)) {
           return;
         }
-        if (aClass.equals(containingClass)) {
-          return;
-        }
-        registerNewExpressionError(expression, aClass);
       }
       else {
         if (!constructor.hasModifierProperty(PsiModifier.PRIVATE)) {
           return;
         }
-        final PsiClass aClass = constructor.getContainingClass();
-        if (containingClass.equals(aClass)) {
-          return;
-        }
-        registerNewExpressionError(expression, aClass);
+        aClass = constructor.getContainingClass();
       }
+      if (!isInnerClassAccess(expression, aClass)) {
+        return;
+      }
+      registerNewExpressionError(expression, aClass);
     }
 
     @Override
@@ -256,15 +239,19 @@ public class PrivateMemberAccessBetweenOuterAndInnerClassInspection extends Base
       if (value != null) {
         return; // no synthetic accessor created, compile time constant will be inlined by javac
       }
-      final PsiElement containingClass = ClassUtils.getContainingClass(expression);
-      if (containingClass == null) {
-        return;
-      }
-      final PsiClass memberClass = ClassUtils.getContainingClass(member);
-      if (memberClass == null || memberClass.equals(containingClass)) {
+      final PsiClass memberClass = member.getContainingClass();
+      if (!isInnerClassAccess(expression, memberClass)) {
         return;
       }
       registerError(referenceNameElement, memberClass, member);
+    }
+
+    private static boolean isInnerClassAccess(PsiExpression reference, PsiClass targetClass) {
+      final PsiClass sourceClass = ClassUtils.getContainingClass(reference);
+      return sourceClass != null &&
+             targetClass != null &&
+             sourceClass != targetClass &&
+             PsiUtil.getTopLevelClass(sourceClass) == PsiUtil.getTopLevelClass(targetClass);
     }
   }
 }

@@ -1,6 +1,7 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.uiDesigner.propertyInspector.properties;
 
+import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.ide.util.ClassFilter;
 import com.intellij.ide.util.TreeClassChooser;
 import com.intellij.ide.util.TreeClassChooserFactory;
@@ -8,7 +9,6 @@ import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonShortcuts;
 import com.intellij.openapi.editor.Document;
-import com.intellij.openapi.fileTypes.StdFileTypes;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.roots.ProjectRootManager;
@@ -65,7 +65,7 @@ public final class ClassToBindProperty extends Property<RadRootContainer, String
   }
 
   @Override
-  protected void setValueImpl(final RadRootContainer component, final String value) throws Exception {
+  protected void setValueImpl(final RadRootContainer component, final String value) {
     String className = value;
 
     if (className != null && className.length() == 0) {
@@ -75,7 +75,7 @@ public final class ClassToBindProperty extends Property<RadRootContainer, String
     component.setClassToBind(className);
   }
 
-  private final class MyEditor extends PropertyEditor<String> {
+  private static final class MyEditor extends PropertyEditor<String> {
     private final EditorTextField myEditorTextField;
     private Document myDocument;
     private final ComponentWithBrowseButton<EditorTextField> myTfWithButton;
@@ -85,7 +85,7 @@ public final class ClassToBindProperty extends Property<RadRootContainer, String
 
     MyEditor(final Project project) {
       myProject = project;
-      myEditorTextField = new EditorTextField("", project, StdFileTypes.JAVA) {
+      myEditorTextField = new EditorTextField("", project, JavaFileType.INSTANCE) {
         @Override
         protected boolean shouldHaveBorder() {
           return false;
@@ -107,7 +107,7 @@ public final class ClassToBindProperty extends Property<RadRootContainer, String
     }
 
     @Override
-    public String getValue() throws Exception {
+    public String getValue() {
       final String value = myDocument.getText();
       if (value.length() == 0 && myInitialValue == null) {
         return null;
@@ -169,9 +169,8 @@ public final class ClassToBindProperty extends Property<RadRootContainer, String
           setEditorText(result.getQualifiedName());
         }
 
-        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-          IdeFocusManager.getGlobalInstance().requestFocus(myEditorTextField, true);
-        }); // todo[anton] make it via providing proper parent
+        // todo[anton] make it via providing proper parent
+        IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(myEditorTextField, true));
       }
     }
 

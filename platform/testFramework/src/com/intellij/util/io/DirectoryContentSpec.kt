@@ -22,17 +22,34 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.UsefulTestCase
 import com.intellij.util.io.impl.*
 import java.io.File
+import java.nio.file.Path
 
 /**
  * Builds a data structure specifying content (files, their content, sub-directories, archives) of a directory. It can be used to either check
  * that a given directory matches this specification or to generate files in a directory accordingly to the specification.
- *
- * @author nik
  */
 inline fun directoryContent(content: DirectoryContentBuilder.() -> Unit): DirectoryContentSpec {
   val builder = DirectoryContentBuilderImpl(DirectorySpec())
   builder.content()
   return builder.result
+}
+
+/**
+ * Builds a data structure specifying content (files, their content, sub-directories, archives) of a zip file. It can be used to either check
+ * that a given zip file matches this specification or to generate a zip file accordingly to the specification.
+ */
+inline fun zipFile(content: DirectoryContentBuilder.() -> Unit): DirectoryContentSpec {
+  val builder = DirectoryContentBuilderImpl(ZipSpec())
+  builder.content()
+  return builder.result
+}
+
+/**
+ * Builds [DirectoryContentSpec] structure by an existing directory. Can be used to check that generated directory matched expected data
+ * from testData directory.
+ */
+fun directoryContentOf(dir: Path): DirectoryContentSpec {
+  return createSpecByDirectory(dir)
 }
 
 abstract class DirectoryContentBuilder {
@@ -78,8 +95,19 @@ interface DirectoryContentSpec {
 /**
  * Checks that contents of the given directory matches [spec].
  */
-fun File.assertMatches(spec: DirectoryContentSpec) {
-  assertDirectoryContentMatches(this, spec as DirectoryContentSpecImpl, "")
+@JvmOverloads
+fun File.assertMatches(spec: DirectoryContentSpec, fileTextMatcher: FileTextMatcher = FileTextMatcher.exact()) {
+  assertDirectoryContentMatches(this, spec as DirectoryContentSpecImpl, "", fileTextMatcher)
+}
+
+interface FileTextMatcher {
+  companion object {
+    @JvmStatic
+    fun ignoreBlankLines(): FileTextMatcher = FileTextMatchers.ignoreBlankLines
+    @JvmStatic
+    fun exact(): FileTextMatcher = FileTextMatchers.exact
+  }
+  fun matches(actualText: String, expectedText: String): Boolean
 }
 
 fun DirectoryContentSpec.generateInVirtualTempDir(): VirtualFile {

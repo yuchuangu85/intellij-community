@@ -1,17 +1,21 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.tree;
 
+import com.intellij.util.ArrayUtil;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
-import java.lang.reflect.Array;
 import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
+
+import static com.intellij.util.ui.tree.TreeUtil.EMPTY_TREE_PATH;
 
 public class TreePathUtil {
   /**
@@ -68,11 +72,10 @@ public class TreePathUtil {
    * or a path component is {@code null}
    * or a path component is converted to {@code null}
    */
-  public static <T> T[] convertTreePathToArray(@NotNull TreePath path, @NotNull Function<Object, ? extends T> converter, @NotNull Class<T> type) {
+  private static <T> T[] convertTreePathToArray(@NotNull TreePath path, @NotNull Function<Object, ? extends T> converter, @NotNull Class<T> type) {
     int count = path.getPathCount();
     if (count <= 0) return null;
-    //noinspection unchecked
-    T[] array = (T[])Array.newInstance(type, count);
+    T[] array = ArrayUtil.newArray(type, count);
     while (path != null && count > 0) {
       Object component = path.getLastPathComponent();
       if (component == null) return null;
@@ -92,7 +95,7 @@ public class TreePathUtil {
    * or a path component is converted to {@code null}
    */
   @SafeVarargs
-  public static <T> TreePath convertArrayToTreePath(@NotNull T... array) {
+  public static <T> TreePath convertArrayToTreePath(T @NotNull ... array) {
     return convertArrayToTreePath(array, object -> object);
   }
 
@@ -104,7 +107,7 @@ public class TreePathUtil {
    * or a path component is {@code null}
    * or a path component is converted to {@code null}
    */
-  public static <T> TreePath convertArrayToTreePath(@NotNull T[] array, @NotNull Function<? super T, Object> converter) {
+  public static <T> TreePath convertArrayToTreePath(T @NotNull [] array, @NotNull Function<? super T, Object> converter) {
     return array.length == 0 ? null : convertCollectionToTreePath(Arrays.asList(array), converter);
   }
 
@@ -186,8 +189,12 @@ public class TreePathUtil {
     return convertCollectionToTreePath(deque, converter);
   }
 
-  private static <I, O> O convert(I object, @NotNull Function<I, O> converter) {
+  private static <I, O> O convert(I object, @NotNull Function<? super I, ? extends O> converter) {
     return object == null ? null : converter.apply(object);
+  }
+
+  public static TreePath @NotNull [] toTreePathArray(@NotNull Collection<TreePath> collection) {
+    return collection.isEmpty() ? EMPTY_TREE_PATH : collection.toArray(EMPTY_TREE_PATH);
   }
 
   public static TreeNode toTreeNode(TreePath path) {
@@ -206,5 +213,52 @@ public class TreePathUtil {
 
   public static TreePath[] toTreePaths(TreeNode... nodes) {
     return nodes == null ? null : Stream.of(nodes).map(TreePathUtil::toTreePath).filter(Objects::nonNull).toArray(TreePath[]::new);
+  }
+
+  /**
+   * @param path      a tree path to iterate through ancestors
+   * @param predicate a predicate that tests every ancestor of the given path
+   * @return an ancestor of the given path, or {@code null} if the path does not have any applicable ancestor
+   */
+  public static TreePath findAncestor(TreePath path, @NotNull Predicate<TreePath> predicate) {
+    while (path != null) {
+      if (predicate.test(path)) return path;
+      path = path.getParentPath();
+    }
+    return null;
+  }
+
+  /**
+   * @param paths an array  of tree paths to iterate through
+   * @return a common ancestor for the given paths, or {@code null} if these paths do not have one
+   */
+  public static TreePath findCommonAncestor(TreePath... paths) {
+    if (ArrayUtil.isEmpty(paths)) return null;
+    if (paths.length == 1) return paths[0];
+    return findCommonAncestor(Arrays.asList(paths));
+  }
+
+  /**
+   * @param paths a collection of tree paths to iterate through
+   * @return a common ancestor for the given paths, or {@code null} if these paths do not have one
+   */
+  public static TreePath findCommonAncestor(@NotNull Iterable<? extends TreePath> paths) {
+    TreePath ancestor = null;
+    for (int i = 0; i < Integer.MAX_VALUE; i++) {
+      TreePath first = null;
+      for (TreePath path : paths) {
+        int count = path.getPathCount();
+        if (count <= i) return ancestor; // a path is too short
+        while (--count > i) path = path.getParentPath();
+        if (path == null) throw new IllegalStateException("unexpected");
+        if (first == null) first = path; // initialize with the first path in the given collection
+        if (first != path && !Objects.equals(first.getLastPathComponent(), path.getLastPathComponent())) {
+          return ancestor; // different components at the current index
+        }
+      }
+      if (first == null) return ancestor; // nothing to iterate
+      ancestor = createTreePath(ancestor, first.getLastPathComponent());
+    }
+    return ancestor;
   }
 }

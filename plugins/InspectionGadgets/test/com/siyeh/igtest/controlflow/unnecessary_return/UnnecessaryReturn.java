@@ -113,3 +113,45 @@ class Incomplete {
     };
   }
 }
+
+class Switch {
+  enum E { A, B, C}
+    void x(E e) {
+        switch (e) {
+            case A, B, C -> {
+                <warning descr="'return' is unnecessary as the last statement in a 'void' method">return</warning>;
+            }
+            default -> {
+                <warning descr="'return' is unnecessary as the last statement in a 'void' method">return</warning>;
+            }
+        }
+    }
+
+  void f(int n) {
+    int a;
+    switch (n) {
+      case 1 -> a = 0;
+      default -> {return;}
+    }
+    System.out.println("a = " + a);
+  }
+
+  void g(int n) {
+    switch (n) {
+      case 1:
+        return;
+      default:
+        <warning descr="'return' is unnecessary as the last statement in a 'void' method">return</warning>;
+    }
+  }
+}
+class Sample {
+  public static void main(String[] args) {
+    try {
+      throw new NullPointerException("1");
+    } finally {
+      System.out.println("boom");
+      return; //helps to avoid NullPointerException if present
+    }
+  }
+}

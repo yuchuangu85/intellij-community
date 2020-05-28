@@ -25,7 +25,14 @@ import org.jetbrains.jps.model.JpsElementTypeWithDefaultProperties;
  * <p>
  * Use {@link org.jetbrains.jps.model.ex.JpsElementTypeBase} as a base class for implementations of this interface
  * </p>
- * @author nik
  */
 public interface JpsModuleSourceRootType<P extends JpsElement> extends JpsElementType<P>, JpsElementTypeWithDefaultProperties<P> {
+
+  /**
+   * Returns {@code true} if roots of this type are supposed to contain test sources only. This information is used by the IDE to show files
+   * accordingly, process them during analysis only if 'Include test source' option is enabled, etc.
+   */
+  default boolean isForTests() {
+    return false;
+  }
 }

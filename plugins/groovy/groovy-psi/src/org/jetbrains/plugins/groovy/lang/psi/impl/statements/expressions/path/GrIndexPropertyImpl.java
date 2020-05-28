@@ -1,11 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.path;
 
 import com.intellij.lang.ASTNode;
-import com.intellij.openapi.util.AtomicNotNullLazyValue;
-import com.intellij.openapi.util.AtomicNullableLazyValue;
-import com.intellij.openapi.util.NotNullLazyValue;
-import com.intellij.openapi.util.NullableLazyValue;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiType;
 import org.jetbrains.annotations.NotNull;
@@ -17,11 +13,13 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrExpres
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.path.GrIndexProperty;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.GrExpressionImpl;
 import org.jetbrains.plugins.groovy.lang.psi.util.GroovyIndexPropertyUtil;
+import org.jetbrains.plugins.groovy.lang.resolve.api.GroovyMethodCallReference;
 import org.jetbrains.plugins.groovy.lang.resolve.references.GrGetAtReference;
-import org.jetbrains.plugins.groovy.lang.resolve.references.GrIndexPropertyReference;
 import org.jetbrains.plugins.groovy.lang.resolve.references.GrPutAtReference;
 
 import static org.jetbrains.plugins.groovy.lang.psi.GroovyElementTypes.T_Q;
+import static org.jetbrains.plugins.groovy.lang.psi.util.GroovyIndexPropertyUtil.isClassLiteral;
+import static org.jetbrains.plugins.groovy.lang.psi.util.GroovyIndexPropertyUtil.isSimpleArrayAccess;
 import static org.jetbrains.plugins.groovy.lang.psi.util.GroovyLValueUtil.isLValue;
 import static org.jetbrains.plugins.groovy.lang.psi.util.GroovyLValueUtil.isRValue;
 import static org.jetbrains.plugins.groovy.lang.resolve.ReferencesKt.referenceArray;
@@ -31,38 +29,28 @@ import static org.jetbrains.plugins.groovy.lang.resolve.ReferencesKt.referenceAr
  */
 public class GrIndexPropertyImpl extends GrExpressionImpl implements GrIndexProperty {
 
-  private final NullableLazyValue<GrIndexPropertyReference> myRValueReference = AtomicNullableLazyValue.createValue(
-    () -> isRValue(this) ? new GrGetAtReference(this) : null
-  );
-
-  private final NullableLazyValue<GrIndexPropertyReference> myLValueReference = AtomicNullableLazyValue.createValue(
-    () -> isLValue(this) ? new GrPutAtReference(this) : null
-  );
-
-  private final NotNullLazyValue<GroovyReference[]> myReferences = AtomicNotNullLazyValue.createValue(
-    () -> referenceArray(getRValueReference(), getLValueReference())
-  );
-
-  @Nullable
-  @Override
-  public GroovyReference getLValueReference() {
-    return myLValueReference.getValue();
-  }
-
-  @Nullable
-  @Override
-  public GroovyReference getRValueReference() {
-    return myRValueReference.getValue();
-  }
-
-  @NotNull
-  @Override
-  public GroovyReference[] getReferences() {
-    return myReferences.getValue();
-  }
+  private final GroovyMethodCallReference myRValueReference = new GrGetAtReference(this);
+  private final GroovyMethodCallReference myLValueReference = new GrPutAtReference(this);
 
   public GrIndexPropertyImpl(@NotNull ASTNode node) {
     super(node);
+  }
+
+  @Nullable
+  @Override
+  public GroovyMethodCallReference getRValueReference() {
+    return isRValue(this) && isIndexAccess() ? myRValueReference : null;
+  }
+
+  @Nullable
+  @Override
+  public GroovyMethodCallReference getLValueReference() {
+    return isLValue(this) && isIndexAccess() ? myLValueReference : null;
+  }
+
+  @Override
+  public GroovyReference @NotNull [] getReferences() {
+    return referenceArray(getRValueReference(), getLValueReference());
   }
 
   @Override
@@ -97,5 +85,9 @@ public class GrIndexPropertyImpl extends GrExpressionImpl implements GrIndexProp
   @Override
   public PsiType getNominalType() {
     return GroovyIndexPropertyUtil.getSimpleArrayAccessType(this);
+  }
+
+  private boolean isIndexAccess() {
+    return !isClassLiteral(this) && !isSimpleArrayAccess(this);
   }
 }

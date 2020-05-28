@@ -17,10 +17,12 @@ package git4idea.test;
 
 import com.intellij.openapi.project.Project;
 import git4idea.commands.GitAuthenticationGate;
+import git4idea.commands.GitAuthenticationMode;
 import git4idea.commands.GitHttpAuthService;
 import git4idea.commands.GitHttpAuthenticator;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.File;
 import java.util.Collection;
 
 public class GitHttpAuthTestService extends GitHttpAuthService {
@@ -31,8 +33,9 @@ public class GitHttpAuthTestService extends GitHttpAuthService {
   @Override
   public GitHttpAuthenticator createAuthenticator(@NotNull Project project,
                                                   @NotNull Collection<String> urls,
+                                                  @NotNull File workingDirectory,
                                                   @NotNull GitAuthenticationGate authenticationGate,
-                                                  boolean ignoreAuthenticationRequest) {
+                                                  @NotNull GitAuthenticationMode authenticationMode) {
     return myAuthenticator;
   }
 

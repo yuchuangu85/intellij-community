@@ -8,7 +8,7 @@ import gnu.trove.TObjectByteHashMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import javax.tools.JavaFileObject;
+import javax.tools.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
@@ -23,7 +23,7 @@ class DefaultFileOperations implements FileOperations {
   private static final File[] NULL_FILE_ARRAY = new File[0];
   private static final Archive NULL_ARCHIVE = new Archive() {
     @Override
-    public Iterable<JavaFileObject> list(String relPath, Set<JavaFileObject.Kind> kinds, boolean recurse) {
+    public Iterable<JavaFileObject> list(String relPath, Set<? extends JavaFileObject.Kind> kinds, boolean recurse) {
       return Collections.emptyList();
     }
     @Override
@@ -105,13 +105,13 @@ class DefaultFileOperations implements FileOperations {
 
   // returns null if the file is not a supported archive format that can be opened or the file does not exist
   @Override
-  public Archive openArchive(File root, final String contentEncoding) throws IOException {
+  public Archive openArchive(File root, final String contentEncoding, @NotNull final JavaFileManager.Location location) throws IOException {
     FileOperations.Archive arch = myArchiveCache.get(root);
     if (arch != null) {
       return arch == NULL_ARCHIVE ? null : arch;
     }
     try {
-      arch = new ZipArchive(root, contentEncoding);
+      arch = new ZipArchive(root, contentEncoding, location);
       myArchiveCache.put(root, arch);
       return arch;
     }
@@ -134,7 +134,7 @@ class DefaultFileOperations implements FileOperations {
     return StringUtilRt.endsWithIgnoreCase(name, ".jar") || StringUtilRt.endsWithIgnoreCase(name, ".zip");
   }
 
-  private void listRecursively(File fileOrDir, List<File> result) {
+  private void listRecursively(File fileOrDir, List<? super File> result) {
     final File[] files = listChildren(fileOrDir);
     if (files != null) {
       for (File file : files) {
@@ -160,8 +160,14 @@ class DefaultFileOperations implements FileOperations {
     private final ZipFile myZip;
     private final Map<String, Collection<ZipEntry>> myPaths = new THashMap<String, Collection<ZipEntry>>();
     private final Function<ZipEntry, JavaFileObject> myToFileObjectConverter;
+    private static final FileObjectKindFilter<ZipEntry> ourEntryFilter = new FileObjectKindFilter<ZipEntry>(new Function<ZipEntry, String>() {
+      @Override
+      public String fun(ZipEntry zipEntry) {
+        return zipEntry.getName();
+      }
+    });
 
-    ZipArchive(final File root, final String encodingName) throws IOException {
+    ZipArchive(final File root, final String encodingName, final JavaFileManager.Location location) throws IOException {
       myZip = new ZipFile(root, ZipFile.OPEN_READ);
       final Enumeration<? extends ZipEntry> entries = myZip.entries();
       while (entries.hasMoreElements()) {
@@ -179,15 +185,14 @@ class DefaultFileOperations implements FileOperations {
       myToFileObjectConverter = new Function<ZipEntry, JavaFileObject>() {
         @Override
         public JavaFileObject fun(ZipEntry zipEntry) {
-          return new ZipFileObject(root, myZip, zipEntry, encodingName);
+          return new ZipFileObject(root, myZip, zipEntry, encodingName, location);
         }
       };
     }
 
-
     @NotNull
     @Override
-    public Iterable<JavaFileObject> list(final String relPath, Set<JavaFileObject.Kind> kinds, boolean recurse) throws IOException{
+    public Iterable<JavaFileObject> list(final String relPath, Set<? extends JavaFileObject.Kind> kinds, boolean recurse) throws IOException{
       final Collection<ZipEntry> entries = myPaths.get(relPath);
       if (entries == null || entries.isEmpty()) {
         return Collections.emptyList();
@@ -206,9 +211,9 @@ class DefaultFileOperations implements FileOperations {
             }
           }
         }
-        return JpsJavacFileManager.convert(JpsJavacFileManager.merge(allChildren), myToFileObjectConverter);
+        return JpsJavacFileManager.convert(JpsJavacFileManager.filter(JpsJavacFileManager.merge(allChildren), ourEntryFilter.getFor(kinds)), myToFileObjectConverter);
       }
-      return JpsJavacFileManager.convert(entries, myToFileObjectConverter);
+      return JpsJavacFileManager.convert(JpsJavacFileManager.filter(entries, ourEntryFilter.getFor(kinds)), myToFileObjectConverter);
     }
 
     @Override

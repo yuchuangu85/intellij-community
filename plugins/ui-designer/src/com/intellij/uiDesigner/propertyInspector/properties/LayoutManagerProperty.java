@@ -1,8 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.uiDesigner.propertyInspector.properties;
 
-import com.intellij.openapi.util.Comparing;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.uiDesigner.UIFormXmlConstants;
 import com.intellij.uiDesigner.propertyInspector.InplaceContext;
 import com.intellij.uiDesigner.propertyInspector.Property;
@@ -17,6 +16,7 @@ import com.intellij.uiDesigner.radComponents.RadLayoutManager;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
+import java.util.Objects;
 
 /**
  * @author yole
@@ -31,21 +31,16 @@ public class LayoutManagerProperty extends Property<RadContainer, String> {
 
   private static class LayoutManagerEditor extends ComboBoxPropertyEditor<String> {
     LayoutManagerEditor() {
-      myCbx.setRenderer(new ListCellRendererWrapper<String>() {
-        @Override
-        public void customize(JList list, String value, int index, boolean selected, boolean hasFocus) {
-          setText(LayoutManagerRegistry.getLayoutManagerDisplayName(value));
-        }
-      });
+      myCbx.setRenderer(SimpleListCellRenderer.create("", LayoutManagerRegistry::getLayoutManagerDisplayName));
     }
 
     @Override
     public JComponent getComponent(RadComponent component, String value, InplaceContext inplaceContext) {
       if (UIFormXmlConstants.LAYOUT_XY.equals(value)) {
-        myCbx.setModel(new DefaultComboBoxModel(LayoutManagerRegistry.getLayoutManagerNames()));
+        myCbx.setModel(new DefaultComboBoxModel<>(LayoutManagerRegistry.getLayoutManagerNames()));
       }
       else {
-        myCbx.setModel(new DefaultComboBoxModel(LayoutManagerRegistry.getNonDeprecatedLayoutManagerNames()));
+        myCbx.setModel(new DefaultComboBoxModel<>(LayoutManagerRegistry.getNonDeprecatedLayoutManagerNames()));
       }
       myCbx.setSelectedItem(value);
       return myCbx;
@@ -74,7 +69,7 @@ public class LayoutManagerProperty extends Property<RadContainer, String> {
   @Override
   protected void setValueImpl(RadContainer component, String value) throws Exception {
     final RadLayoutManager oldLayout = component.getLayoutManager();
-    if (oldLayout != null && Comparing.equal(oldLayout.getName(), value)) {
+    if (oldLayout != null && Objects.equals(oldLayout.getName(), value)) {
       return;
     }
 

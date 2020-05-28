@@ -2,6 +2,7 @@
 package com.intellij.ide.projectWizard.kotlin.createProject
 
 import com.intellij.ide.projectWizard.kotlin.model.*
+import com.intellij.testGuiFramework.launcher.system.SystemInfo
 import com.intellij.testGuiFramework.framework.param.GuiTestSuiteParam
 import com.intellij.testGuiFramework.impl.gradleReimport
 import com.intellij.testGuiFramework.impl.waitAMoment
@@ -10,6 +11,7 @@ import com.intellij.testGuiFramework.util.logInfo
 import com.intellij.testGuiFramework.util.scenarios.openProjectStructureAndCheck
 import com.intellij.testGuiFramework.util.scenarios.projectStructureDialogModel
 import com.intellij.testGuiFramework.util.scenarios.projectStructureDialogScenarios
+import com.intellij.testGuiFramework.util.step
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
@@ -21,7 +23,9 @@ class CreateKotlinMPProjectGuiTest(private val testParameters: TestParameters) :
   data class TestParameters(
     val projectName: String,
     val project: ProjectProperties,
-    val suffixes: Map<TargetPlatform, String>) : Serializable {
+    val gradleGroup: String,
+    val suffixes: Map<TargetPlatform, String>,
+    val facets: Map<TargetPlatform, FacetStructure>) : Serializable {
     override fun toString() = projectName
   }
 
@@ -43,19 +47,20 @@ class CreateKotlinMPProjectGuiTest(private val testParameters: TestParameters) :
     if (!isIdeFrameRun()) return
     createKotlinMPProject(
       projectPath = projectFolder,
-      templateName = testParameters.project.frameworkName
+      templateName = testParameters.project.frameworkName,
+      projectSdk = "1.8"
     )
 
     waitAMoment()
-    waitForGradleReimport(projectName, waitForProject = false)
     editSettingsGradle()
     editBuildGradle(
       kotlinVersion = kotlinVersion,
       isKotlinDslUsed = false
     )
 
-    gradleReimport()
-    waitForGradleReimport(projectName, waitForProject = true)
+    step("reload gradle project after editing gradle files") {
+      gradleReimport()
+    }
     waitAMoment()
 
     projectStructureDialogScenarios.openProjectStructureAndCheck {
@@ -67,8 +72,8 @@ class CreateKotlinMPProjectGuiTest(private val testParameters: TestParameters) :
 
       testParameters.project.modules.forEach { platform: TargetPlatform ->
         listOf("Main", "Test").forEach { moduleKind: String ->
-          val path = arrayOf(projectName, "${projectName}_${testParameters.suffixes[platform]!!}$moduleKind", "Kotlin")
-          projectStructureDialogModel.checkFacetInOneModule(defaultFacetSettings[platform]!!, path = *path)
+          val path = arrayOf(projectName, "${testParameters.suffixes[platform]!!}$moduleKind", "Kotlin")
+          projectStructureDialogModel.checkFacetInOneModule(testParameters.facets[platform]!!, path = *path)
         }
       }
     }
@@ -76,12 +81,18 @@ class CreateKotlinMPProjectGuiTest(private val testParameters: TestParameters) :
   }
 
   companion object {
+    private val nativeSuffix = when(SystemInfo.getSystemType()){
+      SystemInfo.SystemType.WINDOWS -> "mingw"
+      SystemInfo.SystemType.UNIX -> "linux"
+      SystemInfo.SystemType.MAC -> "macos"
+    }
+
     private val suffixes = mapOf(
       TargetPlatform.JVM16 to "jvm",
       TargetPlatform.JVM18 to "jvm",
       TargetPlatform.JavaScript to "js",
       TargetPlatform.Common to "common",
-      TargetPlatform.Native to "mingw"
+      TargetPlatform.Native to nativeSuffix
     )
 
     private val mobileSuffixes = mapOf(
@@ -92,6 +103,21 @@ class CreateKotlinMPProjectGuiTest(private val testParameters: TestParameters) :
       TargetPlatform.Native to "ios"
     )
 
+    private val jsOptions = defaultFacetSettings[TargetPlatform.JavaScript]!!.jsOptions!!.copy(
+      generateSourceMap = true,
+      moduleKind = FacetJSModuleKind.UMD
+      )
+
+    private val defaultFacets = TargetPlatform.values().map { Pair(it, defaultFacetSettings[it]!!) }.toMap()
+    private val clientServerFacets = TargetPlatform.values().map {
+      if(it == TargetPlatform.JavaScript)
+        Pair(it, defaultFacets[it]!!.copy(jsOptions = jsOptions))
+      else
+      Pair(it, defaultFacetSettings[it]!!)
+    }.toMap()
+
+    private const val libraryGroup = "com.example"
+
     @JvmStatic
     @Parameterized.Parameters(name = "{0}")
     fun data(): Collection<TestParameters> {
@@ -99,22 +125,30 @@ class CreateKotlinMPProjectGuiTest(private val testParameters: TestParameters) :
         TestParameters(
           projectName = "kotlin_mpp_library",
           project = kotlinProjects.getValue(Projects.KotlinMPProjectLibrary),
-          suffixes = suffixes
+          suffixes = suffixes,
+          gradleGroup = libraryGroup,
+          facets = defaultFacets
         ),
         TestParameters(
           projectName = "kotlin_mpp_client_server",
           project = kotlinProjects.getValue(Projects.KotlinMPProjectClientServer),
-          suffixes = suffixes
+          suffixes = suffixes,
+          gradleGroup = "",
+          facets = clientServerFacets
         ),
         TestParameters(
           projectName = "kotlin_mpp_native",
           project = kotlinProjects.getValue(Projects.KotlinProjectNative),
-          suffixes = suffixes
+          suffixes = suffixes,
+          gradleGroup = "",
+          facets = defaultFacets
         ),
         TestParameters(
           projectName = "kotlin_mpp_mobile_library",
           project = kotlinProjects.getValue(Projects.KotlinMPProjectMobileLibrary),
-          suffixes = mobileSuffixes
+          suffixes = mobileSuffixes,
+          gradleGroup = libraryGroup,
+          facets = defaultFacets
         )
       )
     }

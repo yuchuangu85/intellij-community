@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xml;
 
 import com.intellij.lang.*;
@@ -27,16 +27,12 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 
-/**
- * @author Mike, ik
- */
 public class XmlParsingTest extends ParsingTestCase {
-
   public XmlParsingTest() {
     super("psi/xml", "xml", new XMLParserDefinition());
   }
 
-  protected XmlParsingTest(@NotNull String dataPath, @NotNull String fileExt, @NotNull ParserDefinition... definitions) {
+  protected XmlParsingTest(@NotNull String dataPath, @NotNull String fileExt, ParserDefinition @NotNull ... definitions) {
     super(dataPath, fileExt, definitions);
   }
 
@@ -197,7 +193,7 @@ public class XmlParsingTest extends ParsingTestCase {
       lexer.advance();
       count++;
     }
-    System.out.println("Plain lexing took " + (System.currentTimeMillis() - time) + "ms lexems count:" + count);
+    LOG.debug("Plain lexing took " + (System.currentTimeMillis() - time) + "ms lexems count:" + count);
   }
 
   private static void transformAllChildren(final ASTNode file) {
@@ -211,7 +207,7 @@ public class XmlParsingTest extends ParsingTestCase {
     long time = System.currentTimeMillis();
     final PsiFile file = createFile("test.xml", text);
     transformAllChildren(file.getNode());
-    System.out.println("Old parsing took " + (System.currentTimeMillis() - time) + "ms");
+    LOG.debug("Old parsing took " + (System.currentTimeMillis() - time) + "ms");
     int index = 0;
     while (index++ < 10) {
       newParsing(text);
@@ -222,7 +218,7 @@ public class XmlParsingTest extends ParsingTestCase {
       index++;
     }
     while ((firstLeaf = TreeUtil.nextLeaf(firstLeaf, null)) != null);
-    System.out.println("For " + index + " lexems");
+    LOG.debug("For " + index + " lexems");
   }
 
   public void _testReparsePerformance() throws Exception {
@@ -240,7 +236,7 @@ public class XmlParsingTest extends ParsingTestCase {
           final long tm = System.currentTimeMillis();
           doc.insertString(0, "<additional root=\"tag\"/>");
           PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
-          System.out.println("Reparsed for: " + (System.currentTimeMillis() - tm));
+          LOG.debug("Reparsed for: " + (System.currentTimeMillis() - tm));
         }
       }).useLegacyScaling().assertTiming());
   }
@@ -250,7 +246,7 @@ public class XmlParsingTest extends ParsingTestCase {
     long time = System.currentTimeMillis();
     final PsiFile file = createFile("test.xml", text);
     transformAllChildren(file.getNode());
-    System.out.println("Old parsing took " + (System.currentTimeMillis() - time) + "ms");
+    LOG.debug("Old parsing took " + (System.currentTimeMillis() - time) + "ms");
     int index = 0;
     while (index++ < 10) {
       newParsing(text);
@@ -261,7 +257,7 @@ public class XmlParsingTest extends ParsingTestCase {
       index++;
     }
     while ((firstLeaf = TreeUtil.nextLeaf(firstLeaf, null)) != null);
-    System.out.println("For " + index + " lexems");
+    LOG.debug("For " + index + " lexems");
   }
 
   private static void newParsing(final String text) {
@@ -269,7 +265,7 @@ public class XmlParsingTest extends ParsingTestCase {
 
     ASTFactory.lazy(XmlElementType.XML_FILE, text).getFirstChildNode(); // ensure parsed
 
-    System.out.println("parsed for " + (System.currentTimeMillis() - time) + "ms");
+    LOG.debug("parsed for " + (System.currentTimeMillis() - time) + "ms");
   }
 
   public void testXmlDecl() throws Exception {
@@ -469,6 +465,10 @@ public class XmlParsingTest extends ParsingTestCase {
     doTestXml("<a");
   }
 
+  public void testMissingClosingTagName() throws Exception {
+    doTestXml("<a></>");
+  }
+
   public void testProcessingInstruction1() throws Exception {
     doTestXml("<?This is=\"PI\"?>");
   }
@@ -533,7 +533,7 @@ public class XmlParsingTest extends ParsingTestCase {
         return null;
       }
     });
-    addExplicitExtension(LanguageParserDefinitions.INSTANCE, HTMLLanguage.INSTANCE, new HTMLParserDefinition());
+    registerParserDefinition(new HTMLParserDefinition());
     addExplicitExtension(LanguageASTFactory.INSTANCE, HTMLLanguage.INSTANCE, new XmlASTFactory());
     registerExtensionPoint(EmbeddedTokenTypesProvider.EXTENSION_POINT_NAME, EmbeddedTokenTypesProvider.class);
     myLanguage = HTMLLanguage.INSTANCE;

@@ -153,7 +153,6 @@ datatypes w = "http://whattf.org/datatype-draft"
 		&	link.attrs.rel
 		&	link.attrs.as?
 		&	link.attrs.integrity?
-		&	link.attrs.nonce?
 		&	shared-hyperlink.attrs.hreflang?
 		&	shared-hyperlink.attrs.media?
 		&	shared-hyperlink.attrs.type?
@@ -204,10 +203,6 @@ datatypes w = "http://whattf.org/datatype-draft"
 			attribute integrity {
 				common.data.integrity
 			}
-		link.attrs.nonce =
-			attribute nonce{
-				string
-			}
 		link.attrs.sizes =
 			attribute sizes {
 				w:string "any" | common.data.sizes
@@ -242,13 +237,10 @@ datatypes w = "http://whattf.org/datatype-draft"
 
 	style.elem =
 		element style { style.inner & style.attrs }
-	style.elem.w3c =
-		element style { style.inner & style.attrs } & W3Conly
 	style.attrs =
 		(	common.attrs
 		&	style.attrs.type?
 		&	style.attrs.media?
-		&	style.attrs.nonce?
 		#	style.attrs.title included in common.attrs
 		&	(	common.attrs.aria.role.presentation
 			|	common.attrs.aria.role.menuitem
@@ -262,15 +254,10 @@ datatypes w = "http://whattf.org/datatype-draft"
 			attribute media {
 				common.data.mediaquery
 			}
-		style.attrs.nonce =
-			attribute nonce{
-				string
-			}
 	style.inner =
 		( common.inner.anything )
 		
 	common.elem.metadata |= style.elem
-	common.elem.flow |= style.elem.w3c
 
 ## Name-Value Metadata: <meta name>
 

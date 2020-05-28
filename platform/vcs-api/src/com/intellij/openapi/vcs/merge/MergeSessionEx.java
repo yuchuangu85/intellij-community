@@ -12,22 +12,21 @@ import java.util.List;
  *
  * @author yole
  * @see MergeProvider2#createMergeSession
- * @since 8.1
  */
 public interface MergeSessionEx extends MergeSession {
   /**
    * Called when user executes "Accept Theirs" or "Accept Ours" action to update file content on disk to the selected version.
    *
+   * @param files
    * @param resolution AcceptedYours or AcceptedTheirs
    */
-  void acceptFilesRevisions(@NotNull List<VirtualFile> files, @NotNull MergeSessionEx.Resolution resolution) throws VcsException;
+  void acceptFilesRevisions(@NotNull List<? extends VirtualFile> files, @NotNull Resolution resolution) throws VcsException;
 
   /**
    * Called after conflict resolution for conflicting files.
    * @see  #conflictResolvedForFile
-   *
-   * @param files       the conflicting file.
+   *@param files       the conflicting file.
    * @param resolution the used resolution.
    */
-  void conflictResolvedForFiles(@NotNull List<VirtualFile> files, @NotNull Resolution resolution);
+  void conflictResolvedForFiles(@NotNull List<? extends VirtualFile> files, @NotNull Resolution resolution);
 }

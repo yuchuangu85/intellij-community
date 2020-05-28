@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.openapi.editor.impl;
 
@@ -14,13 +14,15 @@ import org.jetbrains.annotations.Nullable;
 
 public class FoldRegionImpl extends RangeMarkerWithGetterImpl implements FoldRegion {
   private static final Key<Boolean> MUTE_INNER_HIGHLIGHTERS = Key.create("mute.inner.highlighters");
+  private static final Key<Boolean> SHOW_GUTTER_MARK_FOR_SINGLE_LINE = Key.create("show.gutter.mark.for.single.line");
 
   private boolean myIsExpanded;
   private final EditorImpl myEditor;
-  private final String myPlaceholderText;
+  private String myPlaceholderText;
   private final FoldingGroup myGroup;
   private final boolean myShouldNeverExpand;
   private boolean myDocumentRegionWasChanged;
+  int mySizeBeforeUpdate; // temporary field used during update on document change
 
   FoldRegionImpl(@NotNull EditorImpl editor,
                  int startOffset,
@@ -127,27 +129,23 @@ public class FoldRegionImpl extends RangeMarkerWithGetterImpl implements FoldReg
     }
     super.changedUpdateImpl(e);
     if (isValid()) {
-      alignToSurrogateBoundaries();
+      alignToValidBoundaries();
     }
-    else {
-      myEditor.getFoldingModel().removeRegionFromGroup(this);
-    }
-    myEditor.getFoldingModel().clearCachedValues();
   }
 
   @Override
-  protected void onReTarget(int startOffset, int endOffset, int destOffset) {
-    alignToSurrogateBoundaries();
+  protected void onReTarget(@NotNull DocumentEvent e) {
+    alignToValidBoundaries();
   }
 
-  private void alignToSurrogateBoundaries() {
+  private void alignToValidBoundaries() {
     Document document = getDocument();
     int start = intervalStart();
     int end = intervalEnd();
-    if (DocumentUtil.isInsideSurrogatePair(document, start)) {
+    if (DocumentUtil.isInsideCharacterPair(document, start)) {
       setIntervalStart(start - 1);
     }
-    if (DocumentUtil.isInsideSurrogatePair(document, end)) {
+    if (DocumentUtil.isInsideCharacterPair(document, end)) {
       setIntervalEnd(end - 1);
     }
   }
@@ -160,6 +158,25 @@ public class FoldRegionImpl extends RangeMarkerWithGetterImpl implements FoldReg
   @Override
   public boolean areInnerHighlightersMuted() {
     return Boolean.TRUE.equals(getUserData(MUTE_INNER_HIGHLIGHTERS));
+  }
+
+  @Override
+  public void setGutterMarkEnabledForSingleLine(boolean value) {
+    if (value != isGutterMarkEnabledForSingleLine()) {
+      putUserData(SHOW_GUTTER_MARK_FOR_SINGLE_LINE, value ? Boolean.TRUE : null);
+      myEditor.getGutterComponentEx().repaint();
+    }
+  }
+
+  @Override
+  public boolean isGutterMarkEnabledForSingleLine() {
+    return Boolean.TRUE.equals(getUserData(SHOW_GUTTER_MARK_FOR_SINGLE_LINE));
+  }
+
+  @Override
+  public void setPlaceholderText(@NotNull String text) {
+    myPlaceholderText = text;
+    myEditor.getFoldingModel().onPlaceholderTextChanged(this);
   }
 
   @Override

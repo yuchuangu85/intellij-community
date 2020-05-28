@@ -21,7 +21,6 @@ import com.intellij.codeInsight.folding.JavaCodeFoldingSettings;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.folding.FoldingBuilderEx;
 import com.intellij.lang.folding.FoldingDescriptor;
-import com.intellij.lang.folding.NamedFoldingDescriptor;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.util.Comparing;
@@ -37,9 +36,8 @@ import java.util.List;
 
 public class SuppressWarningsFoldingBuilder extends FoldingBuilderEx {
   private static final Logger LOG = Logger.getInstance(SuppressWarningsFoldingBuilder.class);
-  @NotNull
   @Override
-  public FoldingDescriptor[] buildFoldRegions(@NotNull PsiElement root, @NotNull Document document, boolean quick) {
+  public FoldingDescriptor @NotNull [] buildFoldRegions(@NotNull PsiElement root, @NotNull Document document, boolean quick) {
     if (!(root instanceof PsiJavaFile) || quick || !JavaCodeFoldingSettings.getInstance().isCollapseSuppressWarnings()) {
       return FoldingDescriptor.EMPTY;
     }
@@ -51,8 +49,8 @@ public class SuppressWarningsFoldingBuilder extends FoldingBuilderEx {
       @Override
       public void visitAnnotation(PsiAnnotation annotation) {
         if (Comparing.strEqual(annotation.getQualifiedName(), SuppressWarnings.class.getName())) {
-          result.add(new NamedFoldingDescriptor(annotation.getNode(), annotation.getTextRange(), null, placeholderText(annotation), JavaCodeFoldingSettings.getInstance().isCollapseSuppressWarnings(), Collections
-            .emptySet()));
+          result.add(new FoldingDescriptor(annotation.getNode(), annotation.getTextRange(), null, placeholderText(annotation),
+                                           JavaCodeFoldingSettings.getInstance().isCollapseSuppressWarnings(), Collections.emptySet()));
         }
         super.visitAnnotation(annotation);
       }

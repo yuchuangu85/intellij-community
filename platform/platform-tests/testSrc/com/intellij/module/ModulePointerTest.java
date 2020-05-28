@@ -4,17 +4,15 @@ package com.intellij.module;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.WriteAction;
+import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.*;
 import com.intellij.openapi.module.impl.ModulePointerManagerImpl;
-import com.intellij.testFramework.PlatformTestCase;
+import com.intellij.testFramework.HeavyPlatformTestCase;
 import org.assertj.core.util.Maps;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * @author nik
- */
-public class ModulePointerTest extends PlatformTestCase {
+public class ModulePointerTest extends HeavyPlatformTestCase {
   public void testCreateByName() {
     final ModulePointer pointer = getPointerManager().create("m");
     assertSame(pointer, getPointerManager().create("m"));

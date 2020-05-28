@@ -22,9 +22,6 @@ import org.jetbrains.jps.model.JpsElementTypeWithDefaultProperties;
 
 import java.util.List;
 
-/**
- * @author nik
- */
 public interface JpsLibraryCollection {
   @NotNull
   <P extends JpsElement, LibraryType extends JpsLibraryType<P> & JpsElementTypeWithDefaultProperties<P>>
@@ -42,6 +39,8 @@ public interface JpsLibraryCollection {
   Iterable<JpsTypedLibrary<P>> getLibraries(@NotNull JpsLibraryType<P> type);
 
   void addLibrary(@NotNull JpsLibrary library);
+
+  void removeLibrary(@NotNull JpsLibrary library);
 
   @Nullable
   JpsLibrary findLibrary(@NotNull String name);

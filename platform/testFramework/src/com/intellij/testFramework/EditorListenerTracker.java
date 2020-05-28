@@ -1,24 +1,11 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testFramework;
 
 import com.intellij.openapi.editor.EditorFactory;
 import com.intellij.openapi.editor.impl.event.EditorEventMulticasterImpl;
-import com.intellij.openapi.project.ex.ProjectManagerEx;
 import com.intellij.openapi.vfs.encoding.EncodingManager;
+import com.intellij.psi.PsiDocumentManager;
+import com.intellij.psi.impl.PsiDocumentManagerBase;
 import com.intellij.util.containers.hash.LinkedHashMap;
 import org.jetbrains.annotations.TestOnly;
 import org.junit.Assert;
@@ -32,21 +19,16 @@ import java.util.Map;
  * @author cdr
  */
 @TestOnly
-public class EditorListenerTracker {
+public final class EditorListenerTracker {
   private final Map<Class<? extends EventListener>, List<? extends EventListener>> before;
-  private final boolean myDefaultProjectInitialized;
 
   public EditorListenerTracker() {
     EncodingManager.getInstance(); //adds listeners
     before = ((EditorEventMulticasterImpl)EditorFactory.getInstance().getEventMulticaster()).getListeners();
-    myDefaultProjectInitialized = ProjectManagerEx.getInstanceEx().isDefaultProjectInitialized();
   }
 
   public void checkListenersLeak() throws AssertionError {
     try {
-      // listeners may hang on default project
-      if (myDefaultProjectInitialized != ProjectManagerEx.getInstanceEx().isDefaultProjectInitialized()) return;
-
       EditorEventMulticasterImpl multicaster = (EditorEventMulticasterImpl)EditorFactory.getInstance().getEventMulticaster();
       Map<Class<? extends EventListener>, List<? extends EventListener>> after = multicaster.getListeners();
       Map<Class<? extends EventListener>, List<? extends EventListener>> leaked = new LinkedHashMap<>();
@@ -57,6 +39,18 @@ public class EditorListenerTracker {
         if (beforeList != null) {
           afterList.removeAll(beforeList);
         }
+        // listeners may hang on default project which comes and goes unpredictably, so just ignore them
+        afterList.removeIf(listener -> {
+          //noinspection CastConflictsWithInstanceof
+          if (listener instanceof PsiDocumentManager && ((PsiDocumentManagerBase)listener).isDefaultProject()) {
+            return true;
+          }
+
+          // app level listener
+          String name = listener.getClass().getName();
+          return name.startsWith("com.intellij.copyright.CopyrightManagerDocumentListener$") ||
+                 name.startsWith("com.jetbrains.liveEdit.highlighting.ElementHighlighterCaretListener");
+        });
         if (!afterList.isEmpty()) {
           leaked.put(aClass, afterList);
         }

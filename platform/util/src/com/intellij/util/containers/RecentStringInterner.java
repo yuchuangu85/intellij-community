@@ -17,7 +17,9 @@ package com.intellij.util.containers;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.util.LowMemoryWatcher;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -51,15 +53,12 @@ public class RecentStringInterner {
 
     assert Integer.highestOneBit(stripes) == stripes;
     myStripeMask = stripes - 1;
-    LowMemoryWatcher.register(new Runnable() {
-      @Override
-      public void run() {
-        clear();
-      }
-    }, parentDisposable);
+    LowMemoryWatcher.register(this::clear, parentDisposable);
   }
 
-  public String get(String s) {
+  @Nullable
+  @Contract("null -> null")
+  public String get(@Nullable String s) {
     if (s == null) return null;
     final int stripe = Math.abs(s.hashCode()) & myStripeMask;
     try {

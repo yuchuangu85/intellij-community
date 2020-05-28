@@ -17,14 +17,15 @@ package com.intellij.platform.templates;
 
 import com.intellij.CommonBundle;
 import com.intellij.ide.util.projectWizard.WizardContext;
+import com.intellij.lang.LangBundle;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.platform.ProjectTemplate;
 import com.intellij.platform.ProjectTemplatesFactory;
 import com.intellij.ui.CollectionListModel;
-import com.intellij.ui.ColoredListCellRenderer;
 import com.intellij.ui.ScrollPaneFactory;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.ToolbarDecorator;
 import com.intellij.ui.components.JBList;
 import com.intellij.util.ui.JBUI;
@@ -45,15 +46,15 @@ import java.util.Arrays;
 class ManageProjectTemplatesDialog extends DialogWrapper {
 
   private final JPanel myPanel;
-  private final JBList myTemplatesList;
+  private final JBList<ProjectTemplate> myTemplatesList;
   private final JTextPane myDescriptionPane;
 
   ManageProjectTemplatesDialog() {
     super(false);
-    setTitle("Manage Project Templates");
+    setTitle(LangBundle.message("dialog.title.manage.project.templates"));
     final ProjectTemplate[] templates =
       new ArchivedTemplatesFactory().createTemplates(ProjectTemplatesFactory.CUSTOM_GROUP, new WizardContext(null, getDisposable()));
-    myTemplatesList = new JBList(new CollectionListModel<ProjectTemplate>(Arrays.asList(templates)) {
+    myTemplatesList = new JBList<>(new CollectionListModel<ProjectTemplate>(Arrays.asList(templates)) {
       @Override
       public void remove(int index) {
         ProjectTemplate template = getElementAt(index);
@@ -63,13 +64,8 @@ class ManageProjectTemplatesDialog extends DialogWrapper {
         }
       }
     });
-    myTemplatesList.setEmptyText("No user-defined project templates");
-    myTemplatesList.setCellRenderer(new ColoredListCellRenderer() {
-      @Override
-      protected void customizeCellRenderer(@NotNull JList list, Object value, int index, boolean selected, boolean hasFocus) {
-        append(((ProjectTemplate)value).getName());
-      }
-    });
+    myTemplatesList.setEmptyText(LangBundle.message("status.text.no.user.defined.project.templates"));
+    myTemplatesList.setCellRenderer(SimpleListCellRenderer.create("", ProjectTemplate::getName));
     myTemplatesList.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
       @Override
       public void valueChanged(ListSelectionEvent e) {
@@ -101,9 +97,8 @@ class ManageProjectTemplatesDialog extends DialogWrapper {
     return (ProjectTemplate)myTemplatesList.getSelectedValue();
   }
 
-  @NotNull
   @Override
-  protected Action[] createActions() {
+  protected Action @NotNull [] createActions() {
     return new Action[]{ new DialogWrapperAction(CommonBundle.getCloseButtonText()) {
       @Override
       protected void doAction(ActionEvent e) {

@@ -6,7 +6,7 @@ import com.intellij.icons.AllIcons;
 import com.intellij.ide.DataManager;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.TransactionGuard;
+import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.FileTypes;
 import com.intellij.openapi.fileTypes.INativeFileType;
 import com.intellij.openapi.project.DumbAware;
@@ -30,13 +30,9 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
 
 public abstract class AutoScrollToSourceHandler {
-  private Alarm myAutoScrollAlarm;
-
-  protected AutoScrollToSourceHandler() {
-  }
+  private final Alarm myAutoScrollAlarm = new Alarm();
 
   public void install(final JTree tree) {
-    myAutoScrollAlarm = new Alarm();
     new ClickListener() {
       @Override
       public boolean onClick(@NotNull MouseEvent e, int clickCount) {
@@ -69,7 +65,6 @@ public abstract class AutoScrollToSourceHandler {
   }
 
   public void install(final JTable table) {
-    myAutoScrollAlarm = new Alarm();
     new ClickListener() {
       @Override
       public boolean onClick(@NotNull MouseEvent e, int clickCount) {
@@ -101,7 +96,6 @@ public abstract class AutoScrollToSourceHandler {
   }
 
   public void install(final JList jList) {
-    myAutoScrollAlarm = new Alarm();
     new ClickListener() {
       @Override
       public boolean onClick(@NotNull MouseEvent e, int clickCount) {
@@ -125,9 +119,7 @@ public abstract class AutoScrollToSourceHandler {
   }
 
   public void cancelAllRequests(){
-    if (myAutoScrollAlarm != null) {
-      myAutoScrollAlarm.cancelAllRequests();
-    }
+    myAutoScrollAlarm.cancelAllRequests();
   }
 
   public void onMouseClicked(final Component component) {
@@ -138,24 +130,27 @@ public abstract class AutoScrollToSourceHandler {
   }
 
   private void onSelectionChanged(final Component component) {
-    if (component != null && !component.isShowing()) return;
-
-    if (!isAutoScrollMode()) {
-      return;
+    if (component != null && component.isShowing() && isAutoScrollMode()) {
+      myAutoScrollAlarm.cancelAllRequests();
+      myAutoScrollAlarm.addRequest(
+        () -> {
+          if (component.isShowing()) { //for tests
+            if (!needToCheckFocus() || component.hasFocus()) {
+              scrollToSource(component);
+            }
+          }
+        },
+        500
+      );
     }
-    if (needToCheckFocus() && !component.hasFocus()) {
-      return;
-    }
+  }
 
-    myAutoScrollAlarm.cancelAllRequests();
-    myAutoScrollAlarm.addRequest(
-      () -> {
-        if (component.isShowing()) { //for tests
-          scrollToSource(component);
-        }
-      },
-      500
-    );
+  protected String getActionName() {
+    return UIBundle.message("autoscroll.to.source.action.name");
+  }
+
+  protected String getActionDescription() {
+    return UIBundle.message("autoscroll.to.source.action.description");
   }
 
   protected boolean needToCheckFocus(){
@@ -165,21 +160,26 @@ public abstract class AutoScrollToSourceHandler {
   protected abstract boolean isAutoScrollMode();
   protected abstract void setAutoScrollMode(boolean state);
 
+  /**
+   * @param file a file selected in a tree
+   * @return {@code false} if navigation to the file is prohibited
+   */
+  protected boolean isAutoScrollEnabledFor(@NotNull VirtualFile file) {
+    // Attempt to navigate to the virtual file with unknown file type will show a modal dialog
+    // asking to register some file type for this file. This behaviour is undesirable when auto scrolling.
+    FileType type = file.getFileType();
+    if (type == FileTypes.UNKNOWN || type instanceof INativeFileType) return false;
+    //IDEA-84881 Don't autoscroll to very large files
+    return file.getLength() <= PersistentFSConstants.getMaxIntellisenseFileSize();
+  }
+
   protected void scrollToSource(final Component tree) {
     DataContext dataContext=DataManager.getInstance().getDataContext(tree);
-    getReady(dataContext).doWhenDone(() -> TransactionGuard.submitTransaction(ApplicationManager.getApplication(), () -> {
+    getReady(dataContext).doWhenDone(() -> ApplicationManager.getApplication().invokeLater(() -> {
       DataContext context = DataManager.getInstance().getDataContext(tree);
       final VirtualFile vFile = CommonDataKeys.VIRTUAL_FILE.getData(context);
-      if (vFile != null) {
-        // Attempt to navigate to the virtual file with unknown file type will show a modal dialog
-        // asking to register some file type for this file. This behaviour is undesirable when autoscrolling.
-        if (vFile.getFileType() == FileTypes.UNKNOWN || vFile.getFileType() instanceof INativeFileType) return;
-
-        //IDEA-84881 Don't autoscroll to very large files
-        if (vFile.getLength() > PersistentFSConstants.getMaxIntellisenseFileSize()) return;
-      }
       Navigatable[] navigatables = CommonDataKeys.NAVIGATABLE_ARRAY.getData(context);
-      if (navigatables != null && navigatables.length == 1) {
+      if (navigatables != null && navigatables.length == 1 && (vFile == null || isAutoScrollEnabledFor(vFile))) {
         OpenSourceUtil.navigateToSource(false, true, navigatables[0]);
       }
     }));
@@ -187,13 +187,12 @@ public abstract class AutoScrollToSourceHandler {
 
   @NotNull
   public ToggleAction createToggleAction() {
-    return new AutoscrollToSourceAction();
+    return new AutoscrollToSourceAction(getActionName(), getActionDescription());
   }
 
   private class AutoscrollToSourceAction extends ToggleAction implements DumbAware {
-    AutoscrollToSourceAction() {
-      super(UIBundle.message("autoscroll.to.source.action.name"), UIBundle.message("autoscroll.to.source.action.description"),
-            AllIcons.General.AutoscrollToSource);
+    AutoscrollToSourceAction(String actionName, String actionDescription) {
+      super(actionName, actionDescription, AllIcons.General.AutoscrollToSource);
     }
 
     @Override

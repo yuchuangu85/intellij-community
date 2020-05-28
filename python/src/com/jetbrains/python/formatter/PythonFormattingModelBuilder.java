@@ -17,7 +17,6 @@ package com.jetbrains.python.formatter;
 
 import com.intellij.formatting.*;
 import com.intellij.lang.ASTNode;
-import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.codeStyle.CodeStyleSettings;
@@ -38,7 +37,7 @@ import static com.jetbrains.python.PyTokenTypes.*;
 @SuppressWarnings("UseOfSystemOutOrSystemErr")
 public class PythonFormattingModelBuilder implements FormattingModelBuilderEx, CustomFormattingModelBuilder {
   private static final boolean DUMP_FORMATTING_AST = false;
-  static final TokenSet STATEMENT_OR_DECLARATION = PythonDialectsTokenSetProvider.INSTANCE.getStatementTokens();
+  static final TokenSet STATEMENT_OR_DECLARATION = PythonDialectsTokenSetProvider.getInstance().getStatementTokens();
 
   @NotNull
   @Override
@@ -113,6 +112,8 @@ public class PythonFormattingModelBuilder implements FormattingModelBuilderEx, C
       .between(COMMA, RBRACKET).spaceIf(commonSettings.SPACE_WITHIN_BRACKETS | commonSettings.SPACE_AFTER_COMMA)
       .withinPair(LBRACKET, RBRACKET).spaceIf(commonSettings.SPACE_WITHIN_BRACKETS)
 
+      .withinPair(FSTRING_FRAGMENT_START, FSTRING_FRAGMENT_END).spaces(0)
+
       .before(COLON).spaceIf(pySettings.SPACE_BEFORE_PY_COLON)
       .afterInside(LPAR, FROM_IMPORT_STATEMENT).spaces(0, pySettings.FROM_IMPORT_NEW_LINE_AFTER_LEFT_PARENTHESIS)
       .betweenInside(COMMA, RPAR, FROM_IMPORT_STATEMENT).spaceIf(commonSettings.SPACE_AFTER_COMMA,
@@ -141,7 +142,7 @@ public class PythonFormattingModelBuilder implements FormattingModelBuilderEx, C
       .aroundInside(EQ, ASSIGNMENT_STATEMENT).spaceIf(commonSettings.SPACE_AROUND_ASSIGNMENT_OPERATORS)
       .aroundInside(EQ, NAMED_PARAMETER).spaceIf(pySettings.SPACE_AROUND_EQ_IN_NAMED_PARAMETER)
       .aroundInside(EQ, KEYWORD_ARGUMENT_EXPRESSION).spaceIf(pySettings.SPACE_AROUND_EQ_IN_KEYWORD_ARGUMENT)
-
+      .around(COLONEQ).spaceIf(commonSettings.SPACE_AROUND_ASSIGNMENT_OPERATORS)
       .around(AUG_ASSIGN_OPERATIONS).spaceIf(commonSettings.SPACE_AROUND_ASSIGNMENT_OPERATORS)
       .aroundInside(ADDITIVE_OPERATIONS, BINARY_EXPRESSION).spaceIf(commonSettings.SPACE_AROUND_ADDITIVE_OPERATORS)
       .aroundInside(STAR_OPERATORS, STAR_PARAMETERS).none()

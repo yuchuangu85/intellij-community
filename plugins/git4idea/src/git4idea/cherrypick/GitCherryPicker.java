@@ -1,13 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.cherrypick;
 
 import com.intellij.dvcs.cherrypick.VcsCherryPicker;
+import com.intellij.dvcs.ui.DvcsBundle;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vcs.VcsKey;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.ArrayUtil;
 import com.intellij.vcs.log.Hash;
 import com.intellij.vcs.log.VcsFullCommitDetails;
 import git4idea.GitApplyChangesProcess;
@@ -16,10 +16,12 @@ import git4idea.GitVcs;
 import git4idea.commands.Git;
 import git4idea.commands.GitCommandResult;
 import git4idea.commands.GitLineHandlerListener;
+import git4idea.config.GitVcsApplicationSettings;
 import git4idea.config.GitVcsSettings;
 import git4idea.repo.GitRepository;
 import git4idea.repo.GitRepositoryManager;
 import kotlin.Unit;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
@@ -29,27 +31,24 @@ import java.util.List;
 import static git4idea.GitProtectedBranchesKt.isCommitPublished;
 
 public class GitCherryPicker extends VcsCherryPicker {
-
   private static final Logger LOG = Logger.getInstance(GitCherryPicker.class);
 
   @NotNull private final Project myProject;
-  @NotNull private final Git myGit;
   @NotNull private final GitRepositoryManager myRepositoryManager;
   @NotNull private final GitVcsSettings mySettings;
 
-  public GitCherryPicker(@NotNull Project project, @NotNull Git git) {
+  public GitCherryPicker(@NotNull Project project) {
     myProject = project;
-    myGit = git;
     myRepositoryManager = GitUtil.getRepositoryManager(myProject);
     mySettings = GitVcsSettings.getInstance(myProject);
   }
 
   @Override
-  public void cherryPick(@NotNull List<VcsFullCommitDetails> commits) {
+  public void cherryPick(@NotNull List<? extends VcsFullCommitDetails> commits) {
     GitApplyChangesProcess applyProcess = new GitApplyChangesProcess(myProject, commits, isAutoCommit(), "cherry-pick", "applied",
                                                                      (repository, commit, autoCommit, listeners) ->
-      myGit.cherryPick(repository, commit.asString(), autoCommit, shouldAddSuffix(repository, commit),
-                       ArrayUtil.toObjectArray(listeners, GitLineHandlerListener.class)),
+      Git.getInstance().cherryPick(repository, commit.asString(), autoCommit, shouldAddSuffix(repository, commit),
+                                   listeners.toArray(new GitLineHandlerListener[0])),
       result -> isNothingToCommitMessage(result),
       (repository, commit) -> createCommitMessage(repository, commit),
       true,
@@ -79,7 +78,7 @@ public class GitCherryPicker extends VcsCherryPicker {
    * We control the cherry-pick workflow ourselves + we want to use partial commits ('git commit --only'), which is prohibited during
    * cherry-pick, i.e. until the CHERRY_PICK_HEAD exists.
    */
-  private Unit cancelCherryPick(@NotNull GitRepository repository) {
+  private static Unit cancelCherryPick(@NotNull GitRepository repository) {
     if (isAutoCommit()) {
       removeCherryPickHead(repository);
     }
@@ -105,18 +104,20 @@ public class GitCherryPicker extends VcsCherryPicker {
     return GitVcs.getKey();
   }
 
+
+  @Override
   @NotNull
-  @Override
+  @Nls(capitalization = Nls.Capitalization.Title)
   public String getActionTitle() {
-    return "Cherry-Pick";
+    return DvcsBundle.message("cherry.pick.action.text");
   }
 
-  private boolean isAutoCommit() {
-    return GitVcsSettings.getInstance(myProject).isAutoCommitOnCherryPick();
+  private static boolean isAutoCommit() {
+    return GitVcsApplicationSettings.getInstance().isAutoCommitOnCherryPick();
   }
 
   @Override
-  public boolean canHandleForRoots(@NotNull Collection<VirtualFile> roots) {
-    return roots.stream().allMatch(r -> myRepositoryManager.getRepositoryForRoot(r) != null);
+  public boolean canHandleForRoots(@NotNull Collection<? extends VirtualFile> roots) {
+    return roots.stream().allMatch(r -> myRepositoryManager.getRepositoryForRootQuick(r) != null);
   }
 }

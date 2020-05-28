@@ -1,15 +1,18 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.console;
 
 import com.intellij.AppTopics;
+import com.intellij.CommonBundle;
 import com.intellij.codeInsight.lookup.LookupManager;
+import com.intellij.execution.ExecutionBundle;
 import com.intellij.execution.console.ConsoleHistoryModel.Entry;
 import com.intellij.ide.scratch.ScratchFileService;
+import com.intellij.idea.ActionsBundle;
+import com.intellij.lang.LangBundle;
 import com.intellij.lang.Language;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.command.undo.UndoConstants;
 import com.intellij.openapi.diagnostic.Logger;
@@ -31,14 +34,16 @@ import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.vfs.VfsUtilCore;
+import com.intellij.openapi.vfs.SafeWriteRequestor;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.encoding.EncodingRegistry;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiFileFactory;
 import com.intellij.testFramework.LightVirtualFile;
+import com.intellij.util.ObjectUtils;
 import com.intellij.util.PathUtil;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.io.SafeFileOutputStream;
+import com.intellij.util.messages.MessageBusConnection;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
@@ -46,18 +51,15 @@ import org.jetbrains.annotations.TestOnly;
 import javax.swing.*;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
+import java.io.*;
+import java.nio.charset.Charset;
 import java.util.*;
 
 /**
  * @author gregsh
  */
-public class ConsoleHistoryController {
-
-  private static final Logger LOG = Logger.getInstance("com.intellij.execution.console.ConsoleHistoryController");
-
+public class ConsoleHistoryController implements Disposable {
+  private static final Logger LOG = Logger.getInstance(ConsoleHistoryController.class);
 
   private final static Map<LanguageConsoleView, ConsoleHistoryController> ourControllers =
     ContainerUtil.createConcurrentWeakMap(ContainerUtil.identityStrategy());
@@ -70,6 +72,9 @@ public class ConsoleHistoryController {
   private ModelHelper myHelper;
   private long myLastSaveStamp;
 
+  /**
+   * @deprecated use {@link #ConsoleHistoryController(ConsoleRootType, String, LanguageConsoleView)} or {@link #ConsoleHistoryController(ConsoleRootType, String, LanguageConsoleView, ConsoleHistoryModel)}
+   */
   @Deprecated
   public ConsoleHistoryController(@NotNull String type, @Nullable String persistenceId, @NotNull LanguageConsoleView console) {
     this(new ConsoleRootType(type, null) { }, persistenceId, console);
@@ -91,7 +96,11 @@ public class ConsoleHistoryController {
     myHelper = new ModelHelper(myHelper.myRootType, myHelper.myId, model);
   }
 
-  //@Nullable
+  @Override
+  public void dispose() {
+  }
+
+  @Nullable
   public static ConsoleHistoryController getController(@NotNull LanguageConsoleView console) {
     return ourControllers.get(console);
   }
@@ -132,27 +141,27 @@ public class ConsoleHistoryController {
   }
 
   public void install() {
-    class Listener implements ProjectEx.ProjectSaved, FileDocumentManagerListener {
+    MessageBusConnection busConnection = myConsole.getProject().getMessageBus().connect(myConsole);
+    busConnection.subscribe(ProjectEx.ProjectSaved.TOPIC, new ProjectEx.ProjectSaved() {
+      @Override
+      public void duringSave(@NotNull Project project) {
+        saveHistory();
+      }
+    });
+    busConnection.subscribe(AppTopics.FILE_DOCUMENT_SYNC, new FileDocumentManagerListener() {
       @Override
       public void beforeDocumentSaving(@NotNull Document document) {
         if (document == myConsole.getEditorDocument()) {
           saveHistory();
         }
       }
-
-      @Override
-      public void saved(@NotNull Project project) {
-        saveHistory();
-      }
-    }
-    Listener listener = new Listener();
-    ApplicationManager.getApplication().getMessageBus().connect(myConsole).subscribe(ProjectEx.ProjectSaved.TOPIC, listener);
-    myConsole.getProject().getMessageBus().connect(myConsole).subscribe(AppTopics.FILE_DOCUMENT_SYNC, listener);
+    });
 
     ConsoleHistoryController original = ourControllers.put(myConsole, this);
     LOG.assertTrue(original == null,
                    "History controller already installed for: " + myConsole.getTitle());
-    Disposer.register(myConsole, new Disposable() {
+    Disposer.register(myConsole, this);
+    Disposer.register(this, new Disposable() {
       @Override
       public void dispose() {
         ConsoleHistoryController controller = getController(myConsole);
@@ -192,9 +201,9 @@ public class ConsoleHistoryController {
    * @return true if some text has been loaded; otherwise false
    */
   public boolean loadHistory(String id) {
-    String prev = myHelper.getContent();
+    CharSequence prev = myHelper.getContent();
     boolean result = myHelper.loadHistory(id);
-    String userValue = myHelper.getContent();
+    CharSequence userValue = myHelper.getContent();
     if (prev != userValue && userValue != null) {
       setConsoleText(new Entry(userValue, -1), false, false);
     }
@@ -202,7 +211,10 @@ public class ConsoleHistoryController {
   }
 
   private void saveHistory() {
-    if (myLastSaveStamp == getCurrentTimeStamp()) return;
+    if (myLastSaveStamp == getCurrentTimeStamp()) {
+      return;
+    }
+
     myHelper.setContent(myConsole.getEditorDocument().getText());
     myHelper.saveHistory();
     myLastSaveStamp = getCurrentTimeStamp();
@@ -231,7 +243,7 @@ public class ConsoleHistoryController {
         myHelper.setContent(text);
         myHelper.getModel().setContent(text);
       }
-      String text = StringUtil.notNullize(command.getText());
+      CharSequence text = ObjectUtils.chooseNotNull(command.getText(), "");
       int offset;
       if (regularMode) {
         if (myMultiline) {
@@ -257,7 +269,7 @@ public class ConsoleHistoryController {
     });
   }
 
-  protected int insertTextMultiline(String text, Editor editor, Document document) {
+  protected int insertTextMultiline(CharSequence text, Editor editor, Document document) {
     TextRange selection = EditorUtil.getSelectionInAnyMode(editor);
 
     int start = document.getLineStartOffset(document.getLineNumber(selection.getStartOffset()));
@@ -284,8 +296,8 @@ public class ConsoleHistoryController {
     public void actionPerformed(@NotNull final AnActionEvent e) {
       boolean hasHistory = getModel().hasHistory(); // need to check before next line's side effect
       Entry command = myNext ? getModel().getHistoryNext() : getModel().getHistoryPrev();
-      if (!myMultiline && command == null) return;
-      setConsoleText(command, myNext && !hasHistory, true);
+      if (!myMultiline && command == null || !hasHistory && !myNext) return;
+      setConsoleText(command, !hasHistory, true);
     }
 
     @Override
@@ -335,8 +347,14 @@ public class ConsoleHistoryController {
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
-      String title = myConsole.getTitle() + " History";
+      String title = LangBundle.message("dialog.title.history", myConsole.getTitle());
       final ContentChooser<String> chooser = new ContentChooser<String>(myConsole.getProject(), title, true, true) {
+        {
+          setOKButtonText(ActionsBundle.actionText(IdeActions.ACTION_EDITOR_PASTE));
+          setOKButtonMnemonic('P');
+          setCancelButtonText(CommonBundle.getCloseButtonText());
+          setUseNumbering(false);
+        }
 
         @Override
         protected void removeContentAt(String content) {
@@ -366,7 +384,7 @@ public class ConsoleHistoryController {
             StringUtil.convertLineSeparators(text), false, true);
           VirtualFile virtualFile = psiFile.getViewProvider().getVirtualFile();
           if (virtualFile instanceof LightVirtualFile) ((LightVirtualFile)virtualFile).setWritable(false);
-          Document document = FileDocumentManager.getInstance().getDocument(virtualFile);
+          Document document = Objects.requireNonNull(FileDocumentManager.getInstance().getDocument(virtualFile));
           EditorFactory editorFactory = EditorFactory.getInstance();
           EditorEx editor = (EditorEx)editorFactory.createViewer(document, project);
           editor.getSettings().setFoldingOutlineShown(false);
@@ -382,17 +400,18 @@ public class ConsoleHistoryController {
       chooser.setContentIcon(null);
       chooser.setSplitterOrientation(false);
       chooser.setSelectedIndex(Math.max(0, getModel().getHistorySize() - 1));
+
       if (chooser.showAndGet() && myConsole.getCurrentEditor().getComponent().isShowing()) {
         setConsoleText(new Entry(chooser.getSelectedText(), -1), false, true);
       }
     }
   }
 
-  public static class ModelHelper {
+  public static final class ModelHelper implements SafeWriteRequestor {
     private final ConsoleRootType myRootType;
     private final String myId;
     private final ConsoleHistoryModel myModel;
-    private String myContent;
+    private CharSequence myContent;
 
     public ModelHelper(ConsoleRootType rootType, String id, ConsoleHistoryModel model) {
       myRootType = rootType;
@@ -412,18 +431,29 @@ public class ConsoleHistoryController {
       return myId;
     }
 
-    public String getContent() {
+    public CharSequence getContent() {
       return myContent;
+    }
+
+    @Nullable
+    File getFile(String id) {
+      if (myRootType.isHidden()) return null;
+      String rootPath = ScratchFileService.getInstance().getRootPath(HistoryRootType.getInstance());
+      return new File(FileUtil.toSystemDependentName(rootPath + "/" + getHistoryName(myRootType, id)));
+    }
+
+    @NotNull
+    Charset getCharset() {
+      return EncodingRegistry.getInstance().getDefaultCharset();
     }
 
     public boolean loadHistory(String id) {
       try {
-        VirtualFile file = myRootType.isHidden() ? null :
-                           HistoryRootType.getInstance().findFile(null, getHistoryName(myRootType, id), ScratchFileService.Option.existing_only);
-        if (file == null) {
+        File file = getFile(id);
+        if (file == null || !file.exists()) {
           return false;
         }
-        String[] split = FileUtil.loadFile(VfsUtilCore.virtualToIoFile(file), file.getCharset()).split(myRootType.getEntrySeparator());
+        String[] split = FileUtil.loadFile(file, getCharset()).split(myRootType.getEntrySeparator());
         getModel().resetEntries(Arrays.asList(split));
         return true;
       }
@@ -433,20 +463,22 @@ public class ConsoleHistoryController {
     }
 
     private void saveHistory() {
-      try {
-        if (getModel().isEmpty()) return;
-        WriteAction.run(() -> {
-          VirtualFile file = HistoryRootType.getInstance().findFile(null, getHistoryName(myRootType, myId), ScratchFileService.Option.create_if_missing);
-          try (Writer out = new OutputStreamWriter(new SafeFileOutputStream(VfsUtilCore.virtualToIoFile(file)), file.getCharset())) {
-            boolean first = true;
-            for (String entry : getModel().getEntries()) {
-              if (first) first = false;
-              else out.write(myRootType.getEntrySeparator());
-              out.write(entry);
-            }
-            out.flush();
-          }
-        });
+      if (getModel().isEmpty()) return;
+      File file = getFile(myId);
+      if (file == null) return;
+      File dir = file.getParentFile();
+      if (dir == null || dir.exists() && !dir.isDirectory() || !dir.exists() && !dir.mkdirs()) {
+        LOG.error("Unable to create " + file.getPath());
+        return;
+      }
+      try (Writer out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), getCharset()))) {
+        boolean first = true;
+        for (String entry : getModel().getEntries()) {
+          if (first) first = false;
+          else out.write(myRootType.getEntrySeparator());
+          out.write(entry);
+        }
+        out.flush();
       }
       catch (Exception ex) {
         LOG.error(ex);
@@ -469,8 +501,8 @@ public class ConsoleHistoryController {
     catch (final IOException e) {
       LOG.warn(e);
       ApplicationManager.getApplication().invokeLater(() -> {
-        String message = String.format("Unable to open '%s/%s'\nReason: %s", rootType.getId(), pathName, e.getLocalizedMessage());
-        Messages.showErrorDialog(message, "Unable to Open File");
+        String message = ExecutionBundle.message("dialog.message.unable.to.open.file", rootType.getId(), pathName, e.getLocalizedMessage());
+        Messages.showErrorDialog(message, ExecutionBundle.message("dialog.title.unable.to.open.file"));
       });
       return null;
     }

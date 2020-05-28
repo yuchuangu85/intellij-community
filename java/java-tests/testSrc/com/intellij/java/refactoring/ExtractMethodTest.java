@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.refactoring;
 
 import com.intellij.JavaTestUtil;
@@ -38,8 +24,8 @@ import com.intellij.refactoring.extractMethod.ExtractMethodProcessor;
 import com.intellij.refactoring.extractMethod.PrepareFailedException;
 import com.intellij.refactoring.introduceVariable.IntroduceVariableBase;
 import com.intellij.refactoring.util.duplicates.Match;
-import com.intellij.testFramework.LightCodeInsightTestCase;
-import com.intellij.util.ArrayUtil;
+import com.intellij.testFramework.LightJavaCodeInsightTestCase;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -47,7 +33,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-public class ExtractMethodTest extends LightCodeInsightTestCase {
+public class ExtractMethodTest extends LightJavaCodeInsightTestCase {
   @NonNls private static final String BASE_PATH = "/refactoring/extractMethod/";
   private boolean myCatchOnNewLine = true;
 
@@ -277,10 +263,14 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
   }
 
   private void doTestWithJava17() throws Exception {
+    doTestWithLanguageLevel(LanguageLevel.JDK_1_7);
+  }
+
+  private void doTestWithLanguageLevel(LanguageLevel languageLevel) throws Exception {
     LanguageLevelProjectExtension projectExtension = LanguageLevelProjectExtension.getInstance(getProject());
     LanguageLevel oldLevel = projectExtension.getLanguageLevel();
     try {
-      projectExtension.setLanguageLevel(LanguageLevel.JDK_1_7);
+      projectExtension.setLanguageLevel(languageLevel);
       doTest();
     }
     finally {
@@ -569,7 +559,7 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
   public void testNullableCheck() throws Exception {
     doTest();
   }
-  
+
   public void testNullableCheck1() throws Exception {
     doTest();
   }
@@ -673,10 +663,10 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
   public void testRedundantCast() throws Exception {
     doTest();
   }
-  
+
   public void testDisabledParam() throws Exception {
     doTestDisabledParam();
-  } 
+  }
 
   public void testTypeParamsList() throws Exception {
     doTest();
@@ -701,7 +691,7 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
   public void testFromLambdaBodyToAnonymous() throws Exception {
     doTest();
   }
-  
+
   public void testFromLambdaBodyToToplevelInsideCodeBlock() throws Exception {
     doTest();
   }
@@ -715,9 +705,9 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
   }
 
   public void testMethod2Interface() throws Exception {
-    doTest();
+    doTestWithLanguageLevel(LanguageLevel.JDK_1_8);
   }
-  
+
   public void testMethod2InterfaceFromStatic() throws Exception {
     doTest();
   }
@@ -947,6 +937,26 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
     doDuplicatesTest();
   }
 
+  public void testParametrizedDuplicateExpression() throws Exception {
+    doDuplicatesTest();
+  }
+  
+  public void testPatternVariable() throws Exception {
+    doTestWithLanguageLevel(LanguageLevel.JDK_14_PREVIEW);
+  }
+
+  public void testPatternVariableIntroduced() throws Exception {
+    doExitPointsTest(false);
+  }
+
+  public void testPatternVariableIntroduced2() throws Exception {
+    doExitPointsTest(false);
+  }
+
+  public void testPatternVariableIntroduced3() throws Exception {
+    doTestWithLanguageLevel(LanguageLevel.JDK_14_PREVIEW);
+  }
+
   public void testSuggestChangeSignatureWithChangedParameterName() throws Exception {
     configureByFile(BASE_PATH + getTestName(false) + ".java");
     boolean success = performExtractMethod(true, true, getEditor(), getFile(), getProject(), false, null, false, "p");
@@ -957,7 +967,7 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
   public void testTargetAnonymous() throws Exception {
     doTest();
   }
-  
+
   public void testSimpleMethodsInOneLine() throws Exception {
     CodeStyleSettings settings = CodeStyleSettingsManager.getSettings(getProject());
     CommonCodeStyleSettings javaSettings = settings.getCommonSettings(JavaLanguage.INSTANCE);
@@ -970,6 +980,14 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
   }
 
   public void testExtractUnresolvedLambdaExpression() throws Exception {
+    doTest();
+  }
+
+  public void testNoNPE1() throws Exception {
+    doTest();
+  }
+
+  public void testNoNPE2() throws Exception {
     doTest();
   }
 
@@ -1006,7 +1024,7 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
   }
 
   public void testMultipleVarsInMethodNoReturnStatementAndAssignment() throws Exception {
-    //return type should not be suggested but still 
+    //return type should not be suggested but still
     doTestReturnTypeChanged(PsiType.INT);
   }
 
@@ -1168,6 +1186,15 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
     doTest();
   }
 
+  public void testEmptyParenthesis() throws Exception {
+    try {
+      doTest();
+      fail("Should not work for empty parenthesis");
+    }
+    catch (PrepareFailedException ignore) {
+    }
+  }
+
   public void testQualifyWhenConflictingNamePresent() throws Exception {
     final CommonCodeStyleSettings settings = CodeStyleSettingsManager.getSettings(getProject()).getCommonSettings(JavaLanguage.INSTANCE);
     settings.ELSE_ON_NEW_LINE = true;
@@ -1321,6 +1348,10 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
     doDuplicatesTest();
   }
 
+  public void testOneVariableExpression() throws Exception {
+    doDuplicatesTest();
+  }
+
   public void testInterfaceMethodVisibility() throws Exception {
     final String doesNotExist = "foo.bar.baz.DoesNotExist";
     final NullableNotNullManager nullManager = NullableNotNullManager.getInstance(getProject());
@@ -1342,8 +1373,8 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
       checkResultByFile(BASE_PATH + getTestName(false) + "_after.java");
     }
     finally {
-      nullManager.setNullables(ArrayUtil.toStringArray(nullables));
-      nullManager.setNotNulls(ArrayUtil.toStringArray(notNulls));
+      nullManager.setNullables(ArrayUtilRt.toStringArray(nullables));
+      nullManager.setNotNulls(ArrayUtilRt.toStringArray(notNulls));
       nullManager.setDefaultNullable(defaultNullable);
       nullManager.setDefaultNotNull(defaultNotNull);
     }
@@ -1363,6 +1394,40 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
 
   public void testCallChainExpression() throws Exception {
     doTest();
+  }
+
+  public void testFromDefaultMethodInInterface() throws Exception {
+    doTest();
+  }
+
+  public void testFromPrivateMethodInInterface() throws Exception {
+    doTest();
+  }
+
+  public void testFromStaticMethodInInterface() throws Exception {
+    doTest();
+  }
+
+  public void testDisjunctionType() throws Exception {
+    doTest();
+  }
+
+  public void testExtractFromAnnotation() throws Exception {
+    try {
+      doTest();
+      fail("Should not work for annotations");
+    }
+    catch (PrepareFailedException ignore) {
+    }
+  }
+
+  public void testExtractFromAnnotation1() throws Exception {
+    try {
+      doTest();
+      fail("Should not work for annotations");
+    }
+    catch (PrepareFailedException ignore) {
+    }
   }
 
   private void doTestDisabledParam() throws PrepareFailedException {
@@ -1413,7 +1478,7 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
     assertEquals(shouldSucceed, success);
   }
 
-  void doTest() throws Exception {
+  private void doTest() throws Exception {
     final CommonCodeStyleSettings settings = CodeStyleSettingsManager.getSettings(getProject()).getCommonSettings(JavaLanguage.INSTANCE);
     settings.ELSE_ON_NEW_LINE = true;
     settings.CATCH_ON_NEW_LINE = myCatchOnNewLine;
@@ -1436,60 +1501,64 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
     checkResultByFile(BASE_PATH + getTestName(false) + "_after.java");
   }
 
-  private static boolean performAction(boolean doRefactor, boolean replaceAllDuplicates) throws Exception {
+  private boolean performAction(boolean doRefactor, boolean replaceAllDuplicates) throws Exception {
     return performExtractMethod(doRefactor, replaceAllDuplicates, getEditor(), getFile(), getProject());
   }
 
-  public static boolean performExtractMethod(boolean doRefactor, boolean replaceAllDuplicates, Editor editor, PsiFile file, Project project)
-    throws PrepareFailedException, IncorrectOperationException {
+  public static boolean performExtractMethod(boolean doRefactor,
+                                             boolean replaceAllDuplicates,
+                                             @NotNull Editor editor,
+                                             @NotNull PsiFile file,
+                                             @NotNull Project project) throws PrepareFailedException, IncorrectOperationException {
     return performExtractMethod(doRefactor, replaceAllDuplicates, editor, file, project, false);
   }
 
-  public static boolean performExtractMethod(boolean doRefactor, boolean replaceAllDuplicates, Editor editor, PsiFile file, Project project,
-                                             final boolean extractChainedConstructor)
-    throws PrepareFailedException, IncorrectOperationException {
-    return performExtractMethod(doRefactor, replaceAllDuplicates, editor, file, project, extractChainedConstructor, ArrayUtil.EMPTY_INT_ARRAY);
+  private static boolean performExtractMethod(boolean doRefactor,
+                                              boolean replaceAllDuplicates,
+                                              @NotNull Editor editor,
+                                              @NotNull PsiFile file,
+                                              @NotNull Project project,
+                                              final boolean extractChainedConstructor) throws PrepareFailedException, IncorrectOperationException {
+    return performExtractMethod(doRefactor, replaceAllDuplicates, editor, file, project, extractChainedConstructor,
+                                ArrayUtilRt.EMPTY_INT_ARRAY);
   }
 
-  public static boolean performExtractMethod(boolean doRefactor,
-                                             boolean replaceAllDuplicates,
-                                             Editor editor,
-                                             PsiFile file,
-                                             Project project,
-                                             final boolean extractChainedConstructor,
-                                             int... disabledParams)
-    throws PrepareFailedException, IncorrectOperationException {
+  private static boolean performExtractMethod(boolean doRefactor,
+                                              boolean replaceAllDuplicates,
+                                              @NotNull Editor editor,
+                                              @NotNull PsiFile file,
+                                              @NotNull Project project,
+                                              final boolean extractChainedConstructor,
+                                              int @NotNull ... disabledParams) throws PrepareFailedException, IncorrectOperationException {
     return performExtractMethod(doRefactor, replaceAllDuplicates, editor, file, project, extractChainedConstructor, null, false, null, disabledParams);
   }
 
-  public static boolean performExtractMethod(boolean doRefactor,
-                                             boolean replaceAllDuplicates,
-                                             Editor editor,
-                                             PsiFile file,
-                                             Project project,
-                                             final boolean extractChainedConstructor,
-                                             PsiType returnType,
-                                             boolean makeStatic,
-                                             String newNameOfFirstParam,
-                                             int... disabledParams)
-    throws PrepareFailedException, IncorrectOperationException {
+  private static boolean performExtractMethod(boolean doRefactor,
+                                              boolean replaceAllDuplicates,
+                                              @NotNull Editor editor,
+                                              @NotNull PsiFile file,
+                                              @NotNull Project project,
+                                              final boolean extractChainedConstructor,
+                                              PsiType returnType,
+                                              boolean makeStatic,
+                                              String newNameOfFirstParam,
+                                              int @NotNull ... disabledParams) throws PrepareFailedException, IncorrectOperationException {
     return performExtractMethod(doRefactor, replaceAllDuplicates, editor, file, project, extractChainedConstructor, returnType, makeStatic,
                                 newNameOfFirstParam, null, null, disabledParams);
   }
 
-  public static boolean performExtractMethod(boolean doRefactor,
-                                             boolean replaceAllDuplicates,
-                                             Editor editor,
-                                             PsiFile file,
-                                             Project project,
-                                             final boolean extractChainedConstructor,
-                                             PsiType returnType,
-                                             boolean makeStatic,
-                                             String newNameOfFirstParam,
-                                             PsiClass targetClass,
-                                             @Nullable @PsiModifier.ModifierConstant String methodVisibility,
-                                             int... disabledParams)
-    throws PrepareFailedException, IncorrectOperationException {
+  private static boolean performExtractMethod(boolean doRefactor,
+                                              boolean replaceAllDuplicates,
+                                              @NotNull Editor editor,
+                                              @NotNull PsiFile file,
+                                              @NotNull Project project,
+                                              final boolean extractChainedConstructor,
+                                              PsiType returnType,
+                                              boolean makeStatic,
+                                              String newNameOfFirstParam,
+                                              PsiClass targetClass,
+                                              @Nullable @PsiModifier.ModifierConstant String methodVisibility,
+                                              int @NotNull ... disabledParams) throws PrepareFailedException, IncorrectOperationException {
     int startOffset = editor.getSelectionModel().getSelectionStart();
     int endOffset = editor.getSelectionModel().getSelectionEnd();
 
@@ -1523,10 +1592,8 @@ public class ExtractMethodTest extends LightCodeInsightTestCase {
       processor.testPrepare(returnType, makeStatic);
       if (methodVisibility != null) processor.setMethodVisibility(methodVisibility);
       processor.testNullability();
-      if (disabledParams != null) {
-        for (int param : disabledParams) {
-          processor.doNotPassParameter(param);
-        }
+      for (int param : disabledParams) {
+        processor.doNotPassParameter(param);
       }
       if (newNameOfFirstParam != null) {
         processor.changeParamName(0, newNameOfFirstParam);

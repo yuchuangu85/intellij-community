@@ -32,7 +32,7 @@ import java.util.List;
  * Includes information about the number of pushed commits (or -1 if undefined),
  * and tells whether the repository was updated after the push was rejected.
  *
- * @see git4idea.push.GitPushNativeResult
+ * @see GitPushNativeResult
  */
 public class GitPushRepoResult {
 
@@ -42,12 +42,13 @@ public class GitPushRepoResult {
     UP_TO_DATE,
     FORCED,
     REJECTED_NO_FF,
+    REJECTED_STALE_INFO,
     REJECTED_OTHER,
     ERROR,
     NOT_PUSHED
   }
 
-  static Comparator<Type> TYPE_COMPARATOR = (o1, o2) -> o1.ordinal() - o2.ordinal();
+  static Comparator<Type> TYPE_COMPARATOR = Comparator.naturalOrder();
 
   @NotNull private final Type myType;
   private final int myCommits;
@@ -157,7 +158,9 @@ public class GitPushRepoResult {
       case NEW_REF:
         return Type.NEW_BRANCH;
       case REJECTED:
-        return nativeResult.isNonFFUpdate() ? Type.REJECTED_NO_FF : Type.REJECTED_OTHER;
+        if (nativeResult.isNonFFUpdate()) return Type.REJECTED_NO_FF;
+        if (nativeResult.isStaleInfo()) return Type.REJECTED_STALE_INFO;
+        return Type.REJECTED_OTHER;
       case UP_TO_DATE:
         return Type.UP_TO_DATE;
       case ERROR:

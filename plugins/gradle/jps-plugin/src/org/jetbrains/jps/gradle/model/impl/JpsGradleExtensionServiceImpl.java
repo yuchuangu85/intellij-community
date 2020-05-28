@@ -21,7 +21,6 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.util.containers.ConcurrentFactoryMap;
 import com.intellij.util.xmlb.XmlSerializer;
 import gnu.trove.THashMap;
-import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.builders.storage.BuildDataPaths;
@@ -44,7 +43,7 @@ import java.util.Map;
  */
 public class JpsGradleExtensionServiceImpl extends JpsGradleExtensionService {
   private static final Logger LOG = Logger.getInstance(JpsGradleExtensionServiceImpl.class);
-  private static final JpsElementChildRole<JpsSimpleElement<Boolean>> PRODUCTION_ON_TEST_ROLE = JpsElementChildRoleBase.create("production on test");
+  private static final JpsElementChildRole<JpsSimpleElement<Boolean>> PRODUCTION_ON_TEST_ROLE = JpsElementChildRoleBase.create("gradle production on test");
   private final Map<File, GradleProjectConfiguration> myLoadedConfigs =
     new THashMap<>(FileUtil.FILE_HASHING_STRATEGY);
   private final Map<File, Boolean> myConfigFileExists = ConcurrentFactoryMap.createMap(key -> key.exists());
@@ -66,12 +65,12 @@ public class JpsGradleExtensionServiceImpl extends JpsGradleExtensionService {
     return module.getContainer().getChild(JpsGradleModuleExtensionImpl.ROLE);
   }
 
-  @NotNull
   @Override
-  public JpsGradleModuleExtension getOrCreateExtension(@NotNull JpsModule module, Element rootElement) {
+  @NotNull
+  public JpsGradleModuleExtension getOrCreateExtension(@NotNull JpsModule module, @Nullable String moduleType) {
     JpsGradleModuleExtension extension = module.getContainer().getChild(JpsGradleModuleExtensionImpl.ROLE);
     if (extension == null) {
-      extension = new JpsGradleModuleExtensionImpl(rootElement.getAttributeValue("external.system.module.type"));
+      extension = new JpsGradleModuleExtensionImpl(moduleType);
       module.getContainer().setChild(JpsGradleModuleExtensionImpl.ROLE, extension);
     }
     return extension;

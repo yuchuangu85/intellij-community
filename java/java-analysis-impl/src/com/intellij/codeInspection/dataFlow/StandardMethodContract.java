@@ -1,23 +1,11 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.dataFlow;
 
-import com.intellij.codeInspection.dataFlow.value.DfaConstValue;
-import com.intellij.codeInspection.dataFlow.value.DfaRelationValue;
+import com.intellij.codeInspection.dataFlow.value.DfaValue;
 import com.intellij.codeInspection.dataFlow.value.DfaValueFactory;
+import com.intellij.codeInspection.dataFlow.value.RelationType;
+import com.intellij.codeInspection.util.InspectionMessage;
+import com.intellij.java.analysis.JavaAnalysisBundle;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.containers.ContainerUtil;
@@ -39,9 +27,9 @@ import java.util.stream.Stream;
  * @author peter
  */
 public final class StandardMethodContract extends MethodContract {
-  private final @NotNull ValueConstraint[] myParameters;
+  private final ValueConstraint @NotNull [] myParameters;
 
-  public StandardMethodContract(@NotNull ValueConstraint[] parameters, @NotNull ContractReturnValue returnValue) {
+  public StandardMethodContract(ValueConstraint @NotNull [] parameters, @NotNull ContractReturnValue returnValue) {
     super(returnValue);
     myParameters = parameters;
   }
@@ -55,11 +43,10 @@ public final class StandardMethodContract extends MethodContract {
   }
 
   public List<ValueConstraint> getConstraints() {
-    return Collections.unmodifiableList(Arrays.asList(myParameters));
+    return ContainerUtil.immutableList(myParameters);
   }
 
-  @NotNull
-  public StandardMethodContract withReturnValue(@NotNull ContractReturnValue returnValue) {
+  public @NotNull StandardMethodContract withReturnValue(@NotNull ContractReturnValue returnValue) {
     return returnValue.equals(getReturnValue()) ? this : new StandardMethodContract(myParameters, returnValue);
   }
 
@@ -83,6 +70,16 @@ public final class StandardMethodContract extends MethodContract {
       if (condition == constraint || condition == ValueConstraint.ANY_VALUE) {
         result[i] = constraint;
       } else if (constraint == ValueConstraint.ANY_VALUE) {
+        result[i] = condition;
+      }
+      else if (condition == ValueConstraint.NOT_NULL_VALUE &&
+               (constraint == ValueConstraint.TRUE_VALUE || constraint == ValueConstraint.FALSE_VALUE)) {
+        // java.lang.Boolean
+        result[i] = constraint;
+      }
+      else if (constraint == ValueConstraint.NOT_NULL_VALUE &&
+               (condition == ValueConstraint.TRUE_VALUE || condition == ValueConstraint.FALSE_VALUE)) {
+        // java.lang.Boolean
         result[i] = condition;
       }
       else {
@@ -116,6 +113,29 @@ public final class StandardMethodContract extends MethodContract {
   }
 
   /**
+   * Try merge two contracts into one preserving their full meaning
+   * @param other other contract to merge into this
+   * @return merged contract or null if unable to merge
+   */
+  public StandardMethodContract tryCollapse(StandardMethodContract other) {
+    if(!other.getReturnValue().equals(getReturnValue())) return null;
+    ValueConstraint[] thisParameters = this.myParameters;
+    ValueConstraint[] thatParameters = other.myParameters;
+    if (thatParameters.length != thisParameters.length) return null;
+    ValueConstraint[] result = null;
+    for (int i = 0; i < thisParameters.length; i++) {
+      ValueConstraint thisConstraint = thisParameters[i];
+      ValueConstraint thatConstraint = thatParameters[i];
+      if (thisConstraint != thatConstraint) {
+        if (result != null || !thisConstraint.canBeNegated() || thisConstraint.negate() != thatConstraint) return null;
+        result = thisParameters.clone();
+        result[i] = ValueConstraint.ANY_VALUE;
+      }
+    }
+    return result == null ? null : new StandardMethodContract(result, getReturnValue());
+  }
+
+  /**
    * Converts list of contracts which are equivalent to the passed list, but independent on the order
    * (e.g. {@code "null -> null, _ -> !null"} will be converted to {@code "null -> null, !null -> !null"}). Also removes unreachable
    * contracts if any.
@@ -124,8 +144,8 @@ public final class StandardMethodContract extends MethodContract {
    * @return list of equivalent non-intersecting contracts or null if the result is too big or the input list contains errors
    * (e.g. contracts with different parameter count)
    */
-  @Nullable("When result is too big or contracts are erroneous")
-  public static List<StandardMethodContract> toNonIntersectingContracts(List<StandardMethodContract> contracts) {
+  public static @Nullable("When result is too big or contracts are erroneous") List<StandardMethodContract> 
+  toNonIntersectingStandardContracts(List<StandardMethodContract> contracts) {
     if (contracts.isEmpty()) return contracts;
     int paramCount = contracts.get(0).getParameterCount();
     List<StandardMethodContract> result = new ArrayList<>();
@@ -140,8 +160,7 @@ public final class StandardMethodContract extends MethodContract {
     return result;
   }
 
-  @NotNull
-  public static ValueConstraint[] createConstraintArray(int paramCount) {
+  public static ValueConstraint @NotNull [] createConstraintArray(int paramCount) {
     ValueConstraint[] args = new ValueConstraint[paramCount];
     Arrays.fill(args, ValueConstraint.ANY_VALUE);
     return args;
@@ -177,48 +196,72 @@ public final class StandardMethodContract extends MethodContract {
                       .toList();
   }
 
-  public static List<StandardMethodContract> parseContract(String text) throws ParseException {
-    List<StandardMethodContract> result = ContainerUtil.newArrayList();
+  public static List<StandardMethodContract> parseContract(@NotNull String text) throws ParseException {
+    if (StringUtil.isEmptyOrSpaces(text)) return Collections.emptyList();
+
+    List<StandardMethodContract> result = new ArrayList<>();
     String[] split = StringUtil.replace(text, " ", "").split(";");
     for (int clauseIndex = 0; clauseIndex < split.length; clauseIndex++) {
       String clause = split[clauseIndex];
-      String arrow = "->";
-      int arrowIndex = clause.indexOf(arrow);
-      if (arrowIndex < 0) {
-        throw ParseException.forClause("A contract clause must be in form arg1, ..., argN -> return-value", text, clauseIndex);
-      }
-
-      String beforeArrow = clause.substring(0, arrowIndex);
-      ValueConstraint[] args;
-      if (StringUtil.isNotEmpty(beforeArrow)) {
-        String[] argStrings = beforeArrow.split(",");
-        args = new ValueConstraint[argStrings.length];
-        for (int i = 0; i < args.length; i++) {
-          args[i] = parseConstraint(argStrings[i], text, clauseIndex, i);
-        }
-      }
-      else {
-        args = new ValueConstraint[0];
-      }
-      String returnValueString = clause.substring(arrowIndex + arrow.length());
-      ContractReturnValue returnValue = ContractReturnValue.valueOf(returnValueString);
-      if (returnValue == null) {
-        throw ParseException.forReturnValue(
-          "Return value should be one of: null, !null, true, false, this, new, paramN, fail, _. Found: " + returnValueString,
-          text, clauseIndex);
-      }
-      result.add(new StandardMethodContract(args, returnValue));
+      result.add(fromText(text, clauseIndex, clause));
     }
     return result;
   }
 
+  /**
+   * Create single contract from text. Used to initialize some hard-coded contracts only.
+   * @param clause contract clause like "_, null -> false"
+   * @return created contract
+   * @throws RuntimeException in case of parse error
+   * @see HardcodedContracts
+   */
+  static @NotNull StandardMethodContract fromText(@NotNull String clause) {
+    try {
+      return fromText(clause, 0, clause);
+    }
+    catch (ParseException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static @NotNull StandardMethodContract fromText(@NotNull String text, int clauseIndex, @NotNull String clause)
+    throws ParseException {
+    String arrow = "->";
+    int arrowIndex = clause.indexOf(arrow);
+    if (arrowIndex < 0) {
+      throw ParseException.forClause(JavaAnalysisBundle.message("inspection.contract.checker.clause.syntax"), text, clauseIndex);
+    }
+
+    String beforeArrow = clause.substring(0, arrowIndex);
+    ValueConstraint[] args;
+    if (StringUtil.isNotEmpty(beforeArrow)) {
+      String[] argStrings = beforeArrow.split(",");
+      args = new ValueConstraint[argStrings.length];
+      for (int i = 0; i < args.length; i++) {
+        args[i] = parseConstraint(argStrings[i], text, clauseIndex, i);
+      }
+    }
+    else {
+      args = new ValueConstraint[0];
+    }
+    String returnValueString = clause.substring(arrowIndex + arrow.length());
+    ContractReturnValue returnValue = ContractReturnValue.valueOf(returnValueString);
+    if (returnValue == null) {
+      String possibleValues = "null, !null, true, false, this, new, paramN, fail, _";
+      String message = JavaAnalysisBundle.message("inspection.contract.checker.unknown.return.value", possibleValues, returnValueString);
+      throw ParseException.forReturnValue(message, text, clauseIndex);
+    }
+    return new StandardMethodContract(args, returnValue);
+  }
+
   private static ValueConstraint parseConstraint(String name, String text, int clauseIndex, int constraintIndex) throws ParseException {
-    if (StringUtil.isEmpty(name)) throw new ParseException("Constraint should not be empty");
+    if (StringUtil.isEmpty(name)) throw new ParseException(JavaAnalysisBundle.message("inspection.contract.checker.empty.constraint"));
     for (ValueConstraint constraint : ValueConstraint.values()) {
       if (constraint.toString().equals(name)) return constraint;
     }
-    throw ParseException
-      .forConstraint("Constraint should be one of: null, !null, true, false, _. Found: " + name, text, clauseIndex, constraintIndex);
+    String allowedClause = StreamEx.of(ValueConstraint.values()).joining(", ");
+    String message = JavaAnalysisBundle.message("inspection.contract.checker.unknown.constraint", allowedClause, name);
+    throw ParseException.forConstraint(message, text, clauseIndex, constraintIndex);
   }
 
   public enum ValueConstraint {
@@ -241,9 +284,9 @@ public final class StandardMethodContract extends MethodContract {
     }
 
     @Nullable
-    DfaConstValue getComparisonValue(DfaValueFactory factory) {
-      if (this == NULL_VALUE || this == NOT_NULL_VALUE) return factory.getConstFactory().getNull();
-      if (this == TRUE_VALUE || this == FALSE_VALUE) return factory.getConstFactory().getTrue();
+    DfaValue getComparisonValue(DfaValueFactory factory) {
+      if (this == NULL_VALUE || this == NOT_NULL_VALUE) return factory.getNull();
+      if (this == TRUE_VALUE || this == FALSE_VALUE) return factory.getBoolean(true);
       return null;
     }
 
@@ -268,7 +311,7 @@ public final class StandardMethodContract extends MethodContract {
       else {
         return ContractValue.booleanValue(true);
       }
-      return ContractValue.condition(left, DfaRelationValue.RelationType.equivalence(!shouldUseNonEqComparison()), ContractValue.argument(argumentIndex));
+      return ContractValue.condition(left, RelationType.equivalence(!shouldUseNonEqComparison()), ContractValue.argument(argumentIndex));
     }
 
     /**
@@ -305,21 +348,20 @@ public final class StandardMethodContract extends MethodContract {
   public static class ParseException extends Exception {
     private final @Nullable TextRange myRange;
 
-    ParseException(String message) {
+    ParseException(@InspectionMessage String message) {
       this(message, null);
     }
 
-    ParseException(String message, @Nullable TextRange range) {
+    ParseException(@InspectionMessage String message, @Nullable TextRange range) {
       super(message);
       myRange = range != null && range.isEmpty() ? null : range;
     }
 
-    @Nullable
-    public TextRange getRange() {
+    public @Nullable TextRange getRange() {
       return myRange;
     }
 
-    static ParseException forConstraint(String message, String text, int clauseNumber, int constraintNumber) {
+    static ParseException forConstraint(@InspectionMessage String message, String text, int clauseNumber, int constraintNumber) {
       TextRange range = findClauseRange(text, clauseNumber);
       if (range == null) {
         return new ParseException(message);
@@ -345,7 +387,7 @@ public final class StandardMethodContract extends MethodContract {
       return new ParseException(message, new TextRange(start, end));
     }
 
-    static ParseException forReturnValue(String message, String text, int clauseNumber) {
+    static ParseException forReturnValue(@InspectionMessage String message, String text, int clauseNumber) {
       TextRange range = findClauseRange(text, clauseNumber);
       if (range == null) {
         return new ParseException(message);
@@ -362,7 +404,7 @@ public final class StandardMethodContract extends MethodContract {
       return new ParseException(message, new TextRange(index, range.getEndOffset()));
     }
 
-    static ParseException forClause(String message, String text, int clauseNumber) {
+    static ParseException forClause(@InspectionMessage String message, String text, int clauseNumber) {
       TextRange range = findClauseRange(text, clauseNumber);
       return range == null ? new ParseException(message) : new ParseException(message, range);
     }

@@ -1,40 +1,28 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.todo;
 
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.containers.ContainerUtil;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author Vladimir Kondratyev
  */
 final class FileTree {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.ide.todo.FileTree");
+  private static final Logger LOG = Logger.getInstance(FileTree.class);
 
   private final Map<VirtualFile, List<VirtualFile>> myDirectory2Children;
   private final Set<VirtualFile> myFiles;
   private final Map<VirtualFile, List<VirtualFile>> myStrictDirectory2Children;
 
   FileTree() {
-    myDirectory2Children = ContainerUtil.newConcurrentMap();
+    myDirectory2Children = new ConcurrentHashMap<>();
     myFiles = ContainerUtil.newConcurrentSet();
-    myStrictDirectory2Children = ContainerUtil.newConcurrentMap();
+    myStrictDirectory2Children = new ConcurrentHashMap<>();
   }
 
   void add(VirtualFile file) {
@@ -121,9 +109,7 @@ final class FileTree {
     for (VirtualFile dir : myStrictDirectory2Children.keySet()) {
       List<VirtualFile> children = myStrictDirectory2Children.get(dir);
       LOG.assertTrue(children != null);
-      if (children.contains(file)) {
-        children.remove(file);
-      }
+      children.remove(file);
     }
     // We have remove also all removed (empty) directories
     if (dirsToBeRemoved != null) {
@@ -208,12 +194,15 @@ final class FileTree {
     return filesList;
   }
 
-  private void collectFiles(VirtualFile dir, List<VirtualFile> filesList) {
+  private void collectFiles(VirtualFile dir, List<? super VirtualFile> filesList) {
     List<VirtualFile> children = myDirectory2Children.get(dir);
     if (children != null) {
       for (VirtualFile child : children) {
+        ProgressManager.checkCanceled();
         if (!child.isDirectory()) {
-          LOG.assertTrue(!filesList.contains(child));
+          if (LOG.isDebugEnabled()) {
+            LOG.assertTrue(!filesList.contains(child));
+          }
           filesList.add(child);
         }
         else {

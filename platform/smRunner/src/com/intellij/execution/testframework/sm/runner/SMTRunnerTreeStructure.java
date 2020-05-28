@@ -28,10 +28,10 @@ import java.util.List;
  */
 public class SMTRunnerTreeStructure extends TestTreeViewStructure<SMTestProxy>
 {
-  private final Object myRootNode;
+  private final SMTestProxy.SMRootTestProxy myRootNode;
   private final Project myProject;
 
-  public SMTRunnerTreeStructure(final Project project, final Object rootNode) {
+  public SMTRunnerTreeStructure(final Project project, final SMTestProxy.SMRootTestProxy rootNode) {
     myProject = project;
     myRootNode = rootNode;
   }
@@ -55,9 +55,8 @@ public class SMTRunnerTreeStructure extends TestTreeViewStructure<SMTestProxy>
                                        (NodeDescriptor<SMTestProxy>)parentDesc);
   }
 
-  @NotNull
   @Override
-  public Object[] getChildElements(@NotNull final Object element) {
+  public Object @NotNull [] getChildElements(@NotNull final Object element) {
     final List<? extends SMTestProxy> results =
         ((SMTestProxy)element).getChildren(getFilter());
 
@@ -72,7 +71,7 @@ public class SMTRunnerTreeStructure extends TestTreeViewStructure<SMTestProxy>
 
   @NotNull
   @Override
-  public Object getRootElement() {
+  public SMTestProxy.SMRootTestProxy getRootElement() {
     return myRootNode;
   }
 }

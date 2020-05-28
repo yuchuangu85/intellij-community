@@ -1,10 +1,12 @@
 """ pydevd_vars deals with variables:
     resolution/conversion to XML.
 """
+import math
 import pickle
 
+from _pydev_bundle.pydev_imports import quote
 from _pydev_imps._pydev_saved_modules import thread
-from _pydevd_bundle.pydevd_constants import get_frame, get_thread_id, xrange
+from _pydevd_bundle.pydevd_constants import get_frame, get_current_thread_id, xrange, NUMPY_NUMERIC_TYPES, NUMPY_FLOATING_POINT_TYPES
 from _pydevd_bundle.pydevd_custom_frames import get_custom_frame
 from _pydevd_bundle.pydevd_xml import ExceptionOnEvaluate, get_type, var_to_xml
 
@@ -14,13 +16,19 @@ except ImportError:
     from io import StringIO
 import sys  # @Reimport
 
+try:
+    from collections import OrderedDict
+except:
+    OrderedDict = dict
+
 from _pydev_imps._pydev_saved_modules import threading
 import traceback
 from _pydevd_bundle import pydevd_save_locals
 from _pydev_bundle.pydev_imports import Exec, execfile
-from _pydevd_bundle.pydevd_utils import to_string
+from _pydevd_bundle.pydevd_utils import to_string, VariableWithOffset
 
 SENTINEL_VALUE = []
+DEFAULT_DF_FORMAT = "s"
 
 # ------------------------------------------------------------------------------------------------------ class for errors
 
@@ -44,7 +52,7 @@ def _iter_frames(initialFrame):
 
 def dump_frames(thread_id):
     sys.stdout.write('dumping frames\n')
-    if thread_id != get_thread_id(threading.currentThread()):
+    if thread_id != get_current_thread_id(threading.currentThread()):
         raise VariableError("find_frame: must execute on same thread")
 
     curFrame = get_frame()
@@ -85,7 +93,7 @@ def get_additional_frames_by_id(thread_id):
 def find_frame(thread_id, frame_id):
     """ returns a frame on the thread that has a given frame_id """
     try:
-        curr_thread_id = get_thread_id(threading.currentThread())
+        curr_thread_id = get_current_thread_id(threading.currentThread())
         if thread_id != curr_thread_id:
             try:
                 return get_custom_frame(thread_id, frame_id)  # I.e.: thread_id could be a stackless frame id + thread_id.
@@ -137,13 +145,18 @@ def find_frame(thread_id, frame_id):
                 else:
                     msgFrames += '  -  '
 
-            errMsg = '''find_frame: frame not found.
-    Looking for thread_id:%s, frame_id:%s
-    Current     thread_id:%s, available frames:
-    %s\n
-    ''' % (thread_id, lookingFor, curr_thread_id, msgFrames)
-
-            sys.stderr.write(errMsg)
+# Note: commented this error message out (it may commonly happen 
+# if a message asking for a frame is issued while a thread is paused
+# but the thread starts running before the message is actually 
+# handled).
+# Leaving code to uncomment during tests.  
+#             err_msg = '''find_frame: frame not found.
+#     Looking for thread_id:%s, frame_id:%s
+#     Current     thread_id:%s, available frames:
+#     %s\n
+#     ''' % (thread_id, lookingFor, curr_thread_id, msgFrames)
+# 
+#             sys.stderr.write(err_msg)
             return None
 
         return frameFound
@@ -162,13 +175,13 @@ def getVariable(thread_id, frame_id, scope, attrs):
     BY_ID means we'll traverse the list of all objects alive to get the object.
 
     :attrs: after reaching the proper scope, we have to get the attributes until we find
-            the proper location (i.e.: obj\tattr1\tattr2)
+            the proper location (i.e.: obj\tattr1\tattr2).
 
     :note: when BY_ID is used, the frame_id is considered the id of the object to find and
            not the frame (as we don't care about the frame in this case).
     """
     if scope == 'BY_ID':
-        if thread_id != get_thread_id(threading.currentThread()):
+        if thread_id != get_current_thread_id(threading.currentThread()):
             raise VariableError("getVariable: must execute on same thread")
 
         try:
@@ -229,6 +242,23 @@ def getVariable(thread_id, frame_id, scope, attrs):
     return var
 
 
+def get_offset(attrs):
+    """
+    Extract offset from the given attributes.
+
+    :param attrs: The string of a compound variable fields split by tabs.
+      If an offset is given, it must go the first element.
+    :return: The value of offset if given or 0.
+    """
+    offset = 0
+    if attrs is not None:
+        try:
+            offset = int(attrs.split('\t')[0])
+        except ValueError:
+            pass
+    return offset
+
+
 def resolve_compound_variable_fields(thread_id, frame_id, scope, attrs):
     """
     Resolve compound variable in debugger scopes by its name and attributes
@@ -239,16 +269,24 @@ def resolve_compound_variable_fields(thread_id, frame_id, scope, attrs):
     :param attrs: after reaching the proper scope, we have to get the attributes until we find
             the proper location (i.e.: obj\tattr1\tattr2)
     :return: a dictionary of variables's fields
+
+    :note: PyCharm supports progressive loading of large collections and uses the `attrs`
+           parameter to pass the offset, e.g. 300\t\\obj\tattr1\tattr2 should return
+           the value of attr2 starting from the 300th element. This hack makes it possible
+           to add the support of progressive loading without extending of the protocol.
     """
+    offset = get_offset(attrs)
+
+    orig_attrs, attrs = attrs, attrs.split('\t', 1)[1] if offset else attrs
 
     var = getVariable(thread_id, frame_id, scope, attrs)
 
     try:
         _type, _typeName, resolver = get_type(var)
-        return _typeName, resolver.get_dictionary(var)
+        return _typeName, resolver.get_dictionary(VariableWithOffset(var, offset) if offset else var)
     except:
         sys.stderr.write('Error evaluating: thread_id: %s\nframe_id: %s\nscope: %s\nattrs: %s\n' % (
-            thread_id, frame_id, scope, attrs,))
+            thread_id, frame_id, scope, orig_attrs,))
         traceback.print_exc()
 
 
@@ -278,6 +316,10 @@ def resolve_compound_var_object_fields(var, attrs):
     :param attrs: a sequence of variable's attributes separated by \t (i.e.: obj\tattr1\tattr2)
     :return: a dictionary of variables's fields
     """
+    offset = get_offset(attrs)
+
+    attrs = attrs.split('\t', 1)[1] if offset else attrs
+
     attr_list = attrs.split('\t')
 
     for k in attr_list:
@@ -286,7 +328,7 @@ def resolve_compound_var_object_fields(var, attrs):
 
     try:
         type, _typeName, resolver = get_type(var)
-        return resolver.get_dictionary(var)
+        return resolver.get_dictionary(VariableWithOffset(var, offset) if offset else var)
     except:
         traceback.print_exc()
 
@@ -406,28 +448,28 @@ def change_attr_expression(thread_id, frame_id, attr, expression, dbg, value=SEN
             if result:
                 return result
 
+        if value is SENTINEL_VALUE:
+            # It is possible to have variables with names like '.0', ',,,foo', etc in scope by setting them with
+            # `sys._getframe().f_locals`. In particular, the '.0' variable name is used to denote the list iterator when we stop in
+            # list comprehension expressions. This variable evaluates to 0. by `eval`, which is not what we want and this is the main
+            # reason we have to check if the expression exists in the global and local scopes before trying to evaluate it.
+            value = frame.f_locals.get(expression) or frame.f_globals.get(expression) or eval(expression, frame.f_globals, frame.f_locals)
+
         if attr[:7] == "Globals":
             attr = attr[8:]
             if attr in frame.f_globals:
-                if value is SENTINEL_VALUE:
-                    value = eval(expression, frame.f_globals, frame.f_locals)
                 frame.f_globals[attr] = value
                 return frame.f_globals[attr]
         else:
             if pydevd_save_locals.is_save_locals_available():
-                if value is SENTINEL_VALUE:
-                    value = eval(expression, frame.f_globals, frame.f_locals)
                 frame.f_locals[attr] = value
                 pydevd_save_locals.save_locals(frame)
                 return frame.f_locals[attr]
 
             # default way (only works for changing it in the topmost frame)
-            if value is SENTINEL_VALUE:
-                value = eval(expression, frame.f_globals, frame.f_locals)
             result = value
             Exec('%s=%s' % (attr, expression), frame.f_globals, frame.f_locals)
             return result
-
 
     except Exception:
         traceback.print_exc()
@@ -475,8 +517,12 @@ def array_to_xml(array, name, roffset, coffset, rows, cols, format):
         else:
             value = array[row][col]
         return value
-    xml += array_data_to_xml(rows, cols, lambda r: (get_value(r, c) for c in range(cols)))
+    xml += array_data_to_xml(rows, cols, lambda r: (get_value(r, c) for c in range(cols)), format)
     return xml
+
+
+class ExceedingArrayDimensionsException(Exception):
+    pass
 
 
 def array_to_meta_xml(array, name, format):
@@ -502,7 +548,7 @@ def array_to_meta_xml(array, name, format):
     l = len(array.shape)
     reslice = ""
     if l > 2:
-        raise Exception("%s has more than 2 dimensions." % slice)
+        raise ExceedingArrayDimensionsException()
     elif l == 1:
         # special case with 1D arrays arr[i, :] - row, but arr[:, i] - column with equal shape and ndim
         # http://stackoverflow.com/questions/16837946/numpy-a-2-rows-1-column-file-loadtxt-returns-1row-2-columns
@@ -534,9 +580,19 @@ def array_to_meta_xml(array, name, format):
         slice += reslice
 
     bounds = (0, 0)
-    if type in "biufc":
+    if type in NUMPY_NUMERIC_TYPES:
         bounds = (array.min(), array.max())
     return array, slice_to_xml(slice, rows, cols, format, type, bounds), rows, cols, format
+
+
+def get_column_formatter_by_type(initial_format, column_type):
+    if column_type in NUMPY_NUMERIC_TYPES and initial_format:
+        if column_type in NUMPY_FLOATING_POINT_TYPES and initial_format.strip() == DEFAULT_DF_FORMAT:
+            # use custom formatting for floats when default formatting is set
+            return array_default_format(column_type)
+        return initial_format
+    else:
+        return array_default_format(column_type)
 
 
 def array_default_format(type):
@@ -567,7 +623,22 @@ def dataframe_to_xml(df, name, roffset, coffset, rows, cols, format):
     dim = len(df.axes)
     num_rows = df.shape[0]
     num_cols = df.shape[1] if dim > 1 else 1
-    xml = slice_to_xml(name, num_rows, num_cols, "", "", (0, 0))
+    format = format.replace('%', '')
+
+    if not format:
+        if num_rows > 0 and num_cols == 1:  # series or data frame with one column
+            try:
+                kind = df.dtype.kind
+            except AttributeError:
+                try:
+                    kind = df.dtypes[0].kind
+                except IndexError:
+                    kind = 'O'
+            format = array_default_format(kind)
+        else:
+            format = array_default_format(DEFAULT_DF_FORMAT)
+
+    xml = slice_to_xml(name, num_rows, num_cols, format, "", (0, 0))
 
     if (rows, cols) == (-1, -1):
         rows, cols = num_rows, num_cols
@@ -581,7 +652,7 @@ def dataframe_to_xml(df, name, roffset, coffset, rows, cols, format):
         for col in range(cols):
             dtype = df.dtypes.iloc[coffset + col].kind
             dtypes[col] = dtype
-            if dtype in "biufc":
+            if dtype in NUMPY_NUMERIC_TYPES:
                 cvalues = df.iloc[:, coffset + col]
                 bounds = (cvalues.min(), cvalues.max())
             else:
@@ -590,40 +661,41 @@ def dataframe_to_xml(df, name, roffset, coffset, rows, cols, format):
     else:
         dtype = df.dtype.kind
         dtypes[0] = dtype
-        col_bounds[0] = (df.min(), df.max()) if dtype in "biufc" else (0, 0)
+        col_bounds[0] = (df.min(), df.max()) if dtype in NUMPY_NUMERIC_TYPES else (0, 0)
 
     df = df.iloc[roffset: roffset + rows, coffset: coffset + cols] if dim > 1 else df.iloc[roffset: roffset + rows]
     rows = df.shape[0]
     cols = df.shape[1] if dim > 1 else 1
-    format = format.replace('%', '')
 
     def col_to_format(c):
-        return format if dtypes[c] == 'f' and format else array_default_format(dtypes[c])
+        return get_column_formatter_by_type(format, dtypes[c])
+
+    iat = df.iat if dim == 1 or len(df.columns.unique()) == len(df.columns) else df.iloc
 
     xml += header_data_to_xml(rows, cols, dtypes, col_bounds, col_to_format, df, dim)
-    xml += array_data_to_xml(rows, cols, lambda r: (("%" + col_to_format(c)) % (df.iat[r, c] if dim > 1 else df.iat[r])
-                                                    for c in range(cols)))
+    xml += array_data_to_xml(rows, cols, lambda r: (("%" + col_to_format(c)) % (iat[r, c] if dim > 1 else iat[r])
+                                                    for c in range(cols)), format)
     return xml
 
 
-def array_data_to_xml(rows, cols, get_row):
+def array_data_to_xml(rows, cols, get_row, format):
     xml = "<arraydata rows=\"%s\" cols=\"%s\"/>\n" % (rows, cols)
     for row in range(rows):
         xml += "<row index=\"%s\"/>\n" % to_string(row)
         for value in get_row(row):
-            xml += var_to_xml(value, '')
+            xml += var_to_xml(value, '', format=format)
     return xml
 
 
 def slice_to_xml(slice, rows, cols, format, type, bounds):
     return '<array slice=\"%s\" rows=\"%s\" cols=\"%s\" format=\"%s\" type=\"%s\" max=\"%s\" min=\"%s\"/>' % \
-           (slice, rows, cols, format, type, bounds[1], bounds[0])
+           (slice, rows, cols, quote(format), type, bounds[1], bounds[0])
 
 
 def header_data_to_xml(rows, cols, dtypes, col_bounds, col_to_format, df, dim):
     xml = "<headerdata rows=\"%s\" cols=\"%s\">\n" % (rows, cols)
     for col in range(cols):
-        col_label = get_label(df.axes[1].values[col]) if dim > 1 else str(col)
+        col_label = quote(get_label(df.axes[1].values[col]) if dim > 1 else str(col))
         bounds = col_bounds[col]
         col_format = "%" + col_to_format(col)
         xml += '<colheader index=\"%s\" label=\"%s\" type=\"%s\" format=\"%s\" max=\"%s\" min=\"%s\" />\n' % \
@@ -633,11 +705,27 @@ def header_data_to_xml(rows, cols, dtypes, col_bounds, col_to_format, df, dim):
     xml += "</headerdata>\n"
     return xml
 
-TYPE_TO_XML_CONVERTERS = {"ndarray": array_to_xml, "DataFrame": dataframe_to_xml, "Series": dataframe_to_xml}
+
+def is_able_to_format_number(format):
+    try:
+        format % math.pi
+    except Exception:
+        return False
+    return True
+
+
+TYPE_TO_XML_CONVERTERS = {
+    "ndarray": array_to_xml,
+    "DataFrame": dataframe_to_xml,
+    "Series": dataframe_to_xml,
+    "GeoDataFrame": dataframe_to_xml,
+    "GeoSeries": dataframe_to_xml
+}
 
 
 def table_like_struct_to_xml(array, name, roffset, coffset, rows, cols, format):
     _, type_name, _ = get_type(array)
+    format = format if is_able_to_format_number(format) else '%'
     if type_name in TYPE_TO_XML_CONVERTERS:
         return "<xml>%s</xml>" % TYPE_TO_XML_CONVERTERS[type_name](array, name, roffset, coffset, rows, cols, format)
     else:

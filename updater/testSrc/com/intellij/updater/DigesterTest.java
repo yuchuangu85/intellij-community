@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.updater;
 
+import com.intellij.openapi.util.io.IoTestUtil;
 import org.junit.Test;
 
 import java.io.File;
@@ -8,7 +9,7 @@ import java.io.IOException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.*;
-import static org.junit.Assume.assumeTrue;
+import static org.junit.Assume.assumeFalse;
 
 public class DigesterTest extends UpdaterTestCase {
   @Test
@@ -47,7 +48,7 @@ public class DigesterTest extends UpdaterTestCase {
 
   @Test
   public void testSymlinks() throws Exception {
-    assumeTrue(!UtilsTest.IS_WINDOWS);
+    IoTestUtil.assumeSymLinkCreationIsSupported();
 
     File simpleLink = getTempFile("Readme.simple.link");
     Utils.createLink("Readme.txt", simpleLink);
@@ -64,7 +65,18 @@ public class DigesterTest extends UpdaterTestCase {
       fail("Absolute links should cause indigestion");
     }
     catch (IOException e) {
-      assertThat(e.getMessage()).startsWith("Absolute link");
+      assertThat(e.getMessage()).startsWith("An absolute link");
     }
+  }
+
+  @Test
+  public void testExecutables() throws Exception {
+    assumeFalse("Windows-allergic", Utils.IS_WINDOWS);
+
+    File testFile = new File(tempDir.getRoot(), "idea.bat");
+    Utils.copy(new File(dataDir, "bin/idea.bat"), testFile, false);
+    assertEquals(CHECKSUMS.IDEA_BAT, Digester.digestRegularFile(testFile, false));
+    Utils.setExecutable(testFile);
+    assertEquals(CHECKSUMS.IDEA_BAT | Digester.EXECUTABLE, Digester.digestRegularFile(testFile, false));
   }
 }

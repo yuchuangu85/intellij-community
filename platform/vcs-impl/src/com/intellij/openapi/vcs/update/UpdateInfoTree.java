@@ -13,6 +13,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.PanelWithActionsAndCloseButton;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Pair;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.*;
 import com.intellij.openapi.vcs.changes.committed.CommittedChangesBrowserUseCase;
 import com.intellij.openapi.vcs.changes.committed.CommittedChangesCache;
@@ -21,6 +22,7 @@ import com.intellij.openapi.vcs.changes.committed.RefreshIncomingChangesAction;
 import com.intellij.openapi.vcs.versionBrowser.CommittedChangeList;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.pointers.VirtualFilePointer;
 import com.intellij.psi.search.scope.packageSet.NamedScope;
 import com.intellij.psi.search.scope.packageSet.NamedScopesHolder;
@@ -40,8 +42,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import javax.swing.event.TreeSelectionEvent;
-import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
@@ -53,8 +53,6 @@ import java.util.List;
 import java.util.*;
 
 public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
-  private VirtualFile mySelectedFile;
-  private FilePath mySelectedUrl;
   private final Tree myTree = new Tree();
   @NotNull private final Project myProject;
   private final UpdatedFiles myUpdatedFiles;
@@ -68,7 +66,7 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
   private boolean myCanGroupByChangeList = false;
   private boolean myGroupByChangeList = false;
   private JLabel myLoadingChangeListsLabel;
-  private List<CommittedChangeList> myCommittedChangeLists;
+  private List<? extends CommittedChangeList> myCommittedChangeLists;
   private final JPanel myCenterPanel = new JPanel(new CardLayout());
   @NonNls private static final String CARD_STATUS = "Status";
   @NonNls private static final String CARD_CHANGES = "Changes";
@@ -105,7 +103,7 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
 
     myVcsConfiguration = VcsConfiguration.getInstance(myProject);
     myFileStatusManager = FileStatusManager.getInstance(myProject);
-    myFileStatusManager.addFileStatusListener(myFileStatusListener);
+    myFileStatusManager.addFileStatusListener(myFileStatusListener, this);
     createTree();
     init();
     myTreeExpander = new DefaultTreeExpander(myTree);
@@ -115,10 +113,6 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
   @Override
   public void dispose() {
     Disposer.dispose(myRoot);
-    if (myFileStatusListener != null) {
-      myFileStatusManager.removeFileStatusListener(myFileStatusListener);
-      myFileStatusListener = null;
-    }
   }
 
   public void setCanGroupByChangeList(final boolean canGroupByChangeList) {
@@ -161,24 +155,6 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
     SelectionSaver.installOn(myTree);
     createTreeModel();
 
-    myTree.addTreeSelectionListener(new TreeSelectionListener() {
-      @Override
-      public void valueChanged(TreeSelectionEvent e) {
-        AbstractTreeNode treeNode = (AbstractTreeNode)e.getPath().getLastPathComponent();
-        VirtualFilePointer pointer = null;
-        if (treeNode instanceof FileTreeNode) {
-          pointer = ((FileTreeNode)treeNode).getFilePointer();
-        }
-        if (pointer != null) {
-          mySelectedUrl = getFilePath(pointer);
-          mySelectedFile = pointer.getFile();
-        }
-        else {
-          mySelectedUrl = null;
-          mySelectedFile = null;
-        }
-      }
-    });
     myTree.setCellRenderer(new UpdateTreeCellRenderer());
     TreeUtil.installActions(myTree);
     new TreeSpeedSearch(myTree, path -> {
@@ -229,8 +205,10 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
       return null;
     }
     if (CommonDataKeys.NAVIGATABLE.is(dataId)) {
-      if (mySelectedFile == null || !mySelectedFile.isValid()) return null;
-      return new OpenFileDescriptor(myProject, mySelectedFile);
+      VirtualFilePointer pointer = getSelectedFilePointer();
+      if (pointer == null || !pointer.isValid()) return null;
+      VirtualFile selectedFile = pointer.getFile();
+      return selectedFile != null ? new OpenFileDescriptor(myProject, selectedFile) : null;
     }
     else if (CommonDataKeys.VIRTUAL_FILE_ARRAY.is(dataId)) {
       return getVirtualFileArray();
@@ -245,7 +223,8 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
         return myTreeExpander;
       }
     } else if (VcsDataKeys.UPDATE_VIEW_SELECTED_PATH.is(dataId)) {
-      return mySelectedUrl;
+      VirtualFilePointer pointer = getSelectedFilePointer();
+      return pointer != null ? getFilePath(pointer) : null;
     } else if (VcsDataKeys.UPDATE_VIEW_FILES_ITERABLE.is(dataId)) {
       return myTreeIterable;
     } else if (VcsDataKeys.LABEL_BEFORE.is(dataId)) {
@@ -288,7 +267,10 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
           final FileTreeNode treeNode = (FileTreeNode)o;
           VirtualFilePointer filePointer = treeNode.getFilePointer();
 
-          myNext = getFilePath(filePointer);
+          FilePath filePath = getFilePath(filePointer);
+          if (filePath == null) continue;
+
+          myNext = filePath;
           myStatus = FileStatus.MODIFIED;
 
           final GroupTreeNode parent = findParentGroupTreeNode(treeNode.getParent());
@@ -328,6 +310,14 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
     }
   }
 
+  @Nullable
+  private VirtualFilePointer getSelectedFilePointer() {
+    TreePath path = myTree.getSelectionPath();
+    if (path == null) return null;
+    AbstractTreeNode treeNode = (AbstractTreeNode)path.getLastPathComponent();
+    return treeNode instanceof FileTreeNode ? ((FileTreeNode)treeNode).getFilePointer() : null;
+  }
+
   private VirtualFile[] getVirtualFileArray() {
     ArrayList<VirtualFile> result = new ArrayList<>();
     TreePath[] selectionPaths = myTree.getSelectionPaths();
@@ -340,8 +330,7 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
     return VfsUtil.toVirtualFileArray(result);
   }
 
-  @Nullable
-  private File[] getFileArray() {
+  private File @Nullable [] getFileArray() {
     ArrayList<File> result = new ArrayList<>();
     TreePath[] selectionPaths = myTree.getSelectionPaths();
     if (selectionPaths != null) {
@@ -376,7 +365,7 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
     }
   }
 
-  public void setChangeLists(final List<CommittedChangeList> receivedChanges) {
+  public void setChangeLists(final List<? extends CommittedChangeList> receivedChanges) {
     final boolean hasEmptyCaches = CommittedChangesCache.getInstance(myProject).hasEmptyCaches();
 
     ApplicationManager.getApplication().invokeLater(() -> {
@@ -404,7 +393,7 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
 
   private class MyGroupByPackagesAction extends ToggleAction implements DumbAware {
     MyGroupByPackagesAction() {
-      super(VcsBundle.message("action.name.group.by.packages"), null, PlatformIcons.GROUP_BY_PACKAGES);
+      super(VcsBundle.messagePointer("action.name.group.by.packages"), PlatformIcons.GROUP_BY_PACKAGES);
     }
 
     @Override
@@ -427,7 +416,7 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
 
   private class GroupByChangeListAction extends ToggleAction implements DumbAware {
     GroupByChangeListAction() {
-      super(VcsBundle.message("update.info.group.by.changelist"), null, AllIcons.Actions.ShowAsTree);
+      super(VcsBundle.messagePointer("update.info.group.by.changelist"), AllIcons.Actions.ShowAsTree);
     }
 
     @Override
@@ -493,7 +482,8 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
 
   private class FilterAction extends ToggleAction implements DumbAware {
     FilterAction() {
-      super("Scope Filter", VcsBundle.getString("settings.filter.update.project.info.by.scope"), AllIcons.General.Filter);
+      super(VcsBundle.messagePointer("action.ToggleAction.text.scope.filter"),
+            () -> VcsBundle.getString("settings.filter.update.project.info.by.scope"), AllIcons.General.Filter);
     }
 
     @Override
@@ -514,8 +504,10 @@ public class UpdateInfoTree extends PanelWithActionsAndCloseButton {
     }
   }
 
-  @NotNull
+  @Nullable
   private static FilePath getFilePath(@NotNull VirtualFilePointer filePointer) {
-    return VcsUtil.getFilePath(filePointer.getPresentableUrl(), false);
+    String path = VirtualFileManager.extractPath(filePointer.getUrl());
+    if (StringUtil.isEmpty(path)) return null; // pointer disposed
+    return VcsUtil.getFilePath(path, false);
   }
 }

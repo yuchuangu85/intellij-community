@@ -1,85 +1,83 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.ui;
 
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.ui.search.BooleanOptionDescription;
 import com.intellij.ide.ui.search.OptionDescription;
-import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.NlsContexts.Label;
 import com.intellij.util.containers.ContainerUtil;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
+
+import static com.intellij.ide.ui.OptionsTopHitProvider.messageApp;
 
 /**
  * @author Konstantin Bulenkov
  */
-public class EditorOptionsTopHitProvider extends OptionsTopHitProvider {
+public final class EditorOptionsTopHitProvider implements OptionsTopHitProvider.ApplicationLevelProvider {
   public static final String ID = "editor";
 
   private static final Collection<OptionDescription> ourOptions = ContainerUtil.immutableList(
-    editorUI("Appearance: " + messageIde("checkbox.use.antialiased.font.in.editor"), "ANTIALIASING_IN_EDITOR"),
-    editorUI("Appearance: " + messageIde("checkbox.use.lcd.rendered.font.in.editor"), "USE_LCD_RENDERING_IN_EDITOR"),
-    editorApp("Appearance: Caret blinking", "IS_CARET_BLINKING"),
-    editorApp("Appearance: " + messageApp("checkbox.use.block.caret"), "IS_BLOCK_CURSOR"),
-    editorApp("Appearance: Show right margin", "IS_RIGHT_MARGIN_SHOWN"),
-    editorCode("Appearance: " + messageApp("checkbox.show.method.separators"), "SHOW_METHOD_SEPARATORS"),
-    editorApp("Appearance: " + messageApp("checkbox.show.whitespaces"), "IS_WHITESPACES_SHOWN"),
-    editorApp("Appearance: Show leading whitespaces", "IS_LEADING_WHITESPACES_SHOWN"),
-    editorApp("Appearance: Show inner whitespaces", "IS_INNER_WHITESPACES_SHOWN"),
-    editorApp("Appearance: Show trailing whitespaces", "IS_TRAILING_WHITESPACES_SHOWN"),
-    editorApp("Appearance: Show vertical indent guides", "IS_INDENT_GUIDES_SHOWN"),
-    editorCode("Appearance: " + messageApp("checkbox.show.small.icons.in.gutter"), "SHOW_SMALL_ICONS_IN_GUTTER"),
+    editorApp(IdeBundle.message("label.appearance.caret.blinking"), "IS_CARET_BLINKING"),
+    editorApp(IdeBundle.message("label.option.appearance", messageApp("checkbox.use.block.caret")), "IS_BLOCK_CURSOR"),
+    editorApp(IdeBundle.message("label.appearance.show.right.margin"), "IS_RIGHT_MARGIN_SHOWN"),
+    editorCode(IdeBundle.message("label.option.appearance", messageApp("checkbox.show.method.separators")), "SHOW_METHOD_SEPARATORS"),
+    editorApp(IdeBundle.message("label.option.appearance", messageApp("checkbox.show.whitespaces")), "IS_WHITESPACES_SHOWN"),
+    editorApp(IdeBundle.message("label.appearance.show.leading.whitespaces"), "IS_LEADING_WHITESPACES_SHOWN"),
+    editorApp(IdeBundle.message("label.appearance.show.inner.whitespaces"), "IS_INNER_WHITESPACES_SHOWN"),
+    editorApp(IdeBundle.message("label.appearance.show.trailing.whitespaces"), "IS_TRAILING_WHITESPACES_SHOWN"),
+    editorApp(IdeBundle.message("label.appearance.show.vertical.indent.guides"), "IS_INDENT_GUIDES_SHOWN"),
     editorTabs(messageApp("group.tab.closing.policy") + ": " +
-               messageApp("radio.close.non.modified.files.first"), "CLOSE_NON_MODIFIED_FILES_FIRST")
+               messageApp("radio.close.non.modified.files.first"), "closeNonModifiedFilesFirst")
   );
 
   @NotNull
   @Override
-  public Collection<OptionDescription> getOptions(@Nullable Project project) {
+  public Collection<OptionDescription> getOptions() {
     return ourOptions;
   }
 
+  @NotNull
   @Override
   public String getId() {
     return ID;
   }
 
-  static BooleanOptionDescription editor(String option, String field) {
+  static BooleanOptionDescription editor(@Label String option, @NonNls String field) {
     return option(option, field, "preferences.editor");
   }
 
-  static BooleanOptionDescription editorTabs(String option, String field) {
+  static BooleanOptionDescription editorTabs(@Label String option, @NonNls String field) {
     return AppearanceOptionsTopHitProvider.option(option, field, "editor.preferences.tabs");
   }
 
-  static BooleanOptionDescription option(String option, String field, String configurableId) {
+  static BooleanOptionDescription option(@Label String option, @NonNls String field, @NonNls String configurableId) {
     return new EditorOptionDescription(field, option, configurableId);
   }
 
-  static BooleanOptionDescription editorApp(String option, String field) {
+  static BooleanOptionDescription editorApp(@Label String option, @NonNls String field) {
     return option(option, field, "editor.preferences.appearance");
   }
 
-  static BooleanOptionDescription editorUI(String option, String field) {
-    return AppearanceOptionsTopHitProvider.option(option, field, "editor.preferences.appearance");
-  }
-
-  static BooleanOptionDescription editorCode(String option, String field) {
+  static BooleanOptionDescription editorCode(@Label String option, @NonNls String field) {
     return new DaemonCodeAnalyzerOptionDescription(field, option, "editor.preferences.appearance");
   }
 
-  public static class Ex extends OptionsTopHitProvider implements CoveredByToggleActions {
+  public static class Ex implements OptionsTopHitProvider.CoveredByToggleActions, ApplicationLevelProvider {
     private static final Collection<OptionDescription> ourOptions = ContainerUtil.immutableList(
-      editorApp("Appearance: " + messageApp("checkbox.show.line.numbers"), "ARE_LINE_NUMBERS_SHOWN"),
-      editorApp("Appearance: " + messageApp("checkbox.show.gutter.icons"), "ARE_GUTTER_ICONS_SHOWN")
+      editorApp(IdeBundle.message("label.option.appearance", messageApp("checkbox.show.line.numbers")), "ARE_LINE_NUMBERS_SHOWN"),
+      editorApp(IdeBundle.message("label.option.appearance", messageApp("checkbox.show.gutter.icons")), "ARE_GUTTER_ICONS_SHOWN")
     );
 
     @NotNull
     @Override
-    public Collection<OptionDescription> getOptions(@Nullable Project project) {
+    public Collection<OptionDescription> getOptions() {
       return ourOptions;
     }
 
+    @NotNull
     @Override
     public String getId() {
       return ID;

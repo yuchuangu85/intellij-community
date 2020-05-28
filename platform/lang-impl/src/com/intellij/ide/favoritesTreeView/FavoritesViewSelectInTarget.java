@@ -1,23 +1,11 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.favoritesTreeView;
 
 import com.intellij.ide.SelectInManager;
 import com.intellij.ide.StandardTargetWeights;
 import com.intellij.ide.impl.SelectInTargetPsiWrapper;
+import com.intellij.notebook.editor.BackedVirtualFile;
+import com.intellij.openapi.extensions.ExtensionNotApplicableException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.ActionCallback;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -27,6 +15,7 @@ import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFileSystemItem;
 import com.intellij.psi.util.PsiUtilCore;
+import com.intellij.util.PlatformUtils;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
@@ -34,18 +23,22 @@ import org.jetbrains.annotations.NotNull;
  * @author anna
  * @author Konstantin Bulenkov
  */
-public class FavoritesViewSelectInTarget extends SelectInTargetPsiWrapper {
-  public FavoritesViewSelectInTarget(final Project project) {
+final class FavoritesViewSelectInTarget extends SelectInTargetPsiWrapper {
+  FavoritesViewSelectInTarget(final Project project) {
     super(project);
+
+    if (PlatformUtils.isPyCharmEducational()) {
+      throw ExtensionNotApplicableException.INSTANCE;
+    }
   }
 
   public String toString() {
-    return SelectInManager.FAVORITES;
+    return SelectInManager.getFavorites();
   }
 
   @Override
   public String getToolWindowId() {
-    return SelectInManager.FAVORITES;
+    return SelectInManager.getFavorites();
   }
 
   @Override
@@ -58,6 +51,7 @@ public class FavoritesViewSelectInTarget extends SelectInTargetPsiWrapper {
     PsiElement toSelect = findElementToSelect(element, null);
     if (toSelect != null) {
       VirtualFile virtualFile = PsiUtilCore.getVirtualFile(toSelect);
+      virtualFile = BackedVirtualFile.getOriginFileIfBacked(virtualFile);
       select(toSelect, virtualFile, requestFocus);
     }
   }
@@ -94,12 +88,13 @@ public class FavoritesViewSelectInTarget extends SelectInTargetPsiWrapper {
   }
 
   public static String findSuitableFavoritesList(VirtualFile file, Project project, final String currentSubId) {
-    return FavoritesManager.getInstance(project).getFavoriteListName(currentSubId, file);
+    FavoritesManager manager = FavoritesManager.getInstance(project);
+    return manager != null ? manager.getFavoriteListName(currentSubId, file) : null;
   }
 
   @Override
   public String getMinorViewId() {
-    return FavoritesProjectViewPane.ID;
+    return FavoritesViewTreeBuilder.ID;
   }
 
   @Override

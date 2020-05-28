@@ -11,7 +11,7 @@ import java.util.Collections;
 
 public abstract class JsonBySchemaHeavyCompletionTestBase extends JsonSchemaHeavyAbstractTest {
   protected void baseCompletionTest(@SuppressWarnings("SameParameterValue") final String folder,
-                                  @SuppressWarnings("SameParameterValue") final String testFile, @NotNull String... items) throws Exception {
+                                  @SuppressWarnings("SameParameterValue") final String testFile, String @NotNull ... items) throws Exception {
     baseTest(folder, testFile, () -> {
       complete();
       assertStringItems(items);
@@ -21,9 +21,23 @@ public abstract class JsonBySchemaHeavyCompletionTestBase extends JsonSchemaHeav
   protected void baseInsertTest(@SuppressWarnings("SameParameterValue") final String folder, final String testFile) throws Exception {
     baseTest(folder, testFile, () -> {
       final CodeCompletionHandlerBase handlerBase = new CodeCompletionHandlerBase(CompletionType.BASIC);
-      handlerBase.invokeCompletion(getProject(), getEditor());
+      handlerBase.invokeCompletion(getProject(), myFixture.getEditor());
       if (myItems != null) {
-        selectItem(myItems[0]);
+        selectItem(myItems[0], (char)0);
+      }
+      try {
+        checkResultByFile("/" + folder + "/" + testFile + "_after." + getExtensionWithoutDot());
+      }
+      catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
+  }
+
+  protected void baseReplaceTest(@SuppressWarnings("SameParameterValue") final String folder, @SuppressWarnings("SameParameterValue") final String testFile) throws Exception {
+    baseTest(folder, testFile, () -> {
+      if (myItems != null) {
+        selectItem(myItems[0], '\t');
       }
       try {
         checkResultByFile("/" + folder + "/" + testFile + "_after." + getExtensionWithoutDot());
@@ -40,7 +54,7 @@ public abstract class JsonBySchemaHeavyCompletionTestBase extends JsonSchemaHeav
     skeleton(new JsonSchemaHeavyAbstractTest.Callback() {
       @Override
       public void registerSchemes() {
-        final String moduleDir = getModuleDir(getProject());
+        final String moduleDir = getUrlUnderTestRoot(folder);
 
         final UserDefinedJsonSchemaConfiguration base =
           new UserDefinedJsonSchemaConfiguration("base", JsonSchemaVersion.SCHEMA_4, moduleDir + "/Schema.json", false,
@@ -52,7 +66,7 @@ public abstract class JsonBySchemaHeavyCompletionTestBase extends JsonSchemaHeav
 
       @Override
       public void configureFiles() {
-        configureByFiles(null, "/" + folder + "/" + testFile + "." + getExtensionWithoutDot(), "/" + folder + "/Schema.json");
+        myFixture.configureByFiles( "/" + folder + "/" + testFile + "." + getExtensionWithoutDot(), "/" + folder + "/Schema.json");
       }
 
       @Override
@@ -71,7 +85,7 @@ public abstract class JsonBySchemaHeavyCompletionTestBase extends JsonSchemaHeav
 
       @Override
       public void configureFiles() {
-        configureByFiles(null, "/" + folder + "/" + testFile + "." + getExtensionWithoutDot());
+        myFixture.configureByFiles("/" + folder + "/" + testFile + "." + getExtensionWithoutDot());
       }
 
       @Override

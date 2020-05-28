@@ -1,10 +1,9 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.parser.partial;
 
 import com.intellij.java.parser.JavaParsingTestCase;
 import com.intellij.lang.java.parser.JavaParser;
+import com.intellij.pom.java.LanguageLevel;
 
 public class StatementParserTest extends JavaParsingTestCase {
   public StatementParserTest() {
@@ -27,6 +26,14 @@ public class StatementParserTest extends JavaParsingTestCase {
 
   public void testBreakNormal0() { doParserTest("break;"); }
   public void testBreakNormal1() { doParserTest("break LABEL;"); }
+  public void testBreakIncomplete() { doParserTest("break"); }
+
+  public void testYield() { doParserTest("yield yield;"); }
+  public void testYieldNested() { doParserTest("yield switch (0) { default: yield 42; };"); }
+  public void testYieldIncomplete0() { doParserTest("yield "); }
+  public void testYieldIncomplete1() { doParserTest("yield x"); }
+  public void testYieldCall() { doParserTest("foo.yield();"); }
+  public void testYieldCompatibility() { setLanguageLevel(LanguageLevel.JDK_12); doParserTest("yield(2);"); }
 
   public void testContinueNormal0() { doParserTest("continue;"); }
   public void testContinueNormal1() { doParserTest("continue LABEL;"); }
@@ -101,10 +108,27 @@ public class StatementParserTest extends JavaParsingTestCase {
   public void testSwitchIncomplete5() { doParserTest("switch(\n foo();"); }
 
   public void testSwitchLabelsNormal() { doParserTest("case 1: break; default: break;"); }
+  public void testSwitchLabelsMultiple() { doParserTest("case 1, 2: break;"); }
   public void testSwitchLabelsIncomplete0() { doParserTest("case"); }
   public void testSwitchLabelsIncomplete1() { doParserTest("case 2"); }
   public void testSwitchLabelsIncomplete2() { doParserTest("default"); }
   public void testSwitchLabelsIncomplete3() { doParserTest("default 3:"); }
+  public void testSwitchLabelsIncomplete4() { doParserTest("case :"); }
+  public void testSwitchLabelsIncomplete5() { doParserTest("case 1, : break;"); }
+
+  public void testSwitchRules0() { doParserTest("default ->"); }
+  public void testSwitchRules1() { doParserTest("default -> return;"); }
+  public void testSwitchRules2() { doParserTest("case 1 -> { }"); }
+  public void testSwitchRules3() { doParserTest("case 1 -> { };;"); }
+  public void testSwitchRules4() { doParserTest("case 1 -> throw new Exception()"); }
+  public void testSwitchRules5() { doParserTest("case 1 -> throw new Exception();"); }
+  public void testSwitchRules6() { doParserTest("case 1 -> digit = '1'"); }
+  public void testSwitchRules7() { doParserTest("case 1 -> '1';"); }
+  public void testSwitchRules8() { doParserTest("case 1 -> ;"); }
+  public void testSwitchRules9() { doParserTest("case b -> f(b);"); }
+  public void testSwitchRules10() { doParserTest("case (b) -> f(b);"); }
+  public void testSwitchRules11() { doParserTest("case 1, 2 -> { }"); }
+  public void testSwitchRules12() { doParserTest("case 1, -> { }"); }
 
   public void testSyncNormal() { doParserTest("synchronized(o){}"); }
   public void testSyncIncomplete0() { doParserTest("synchronized"); }
@@ -160,6 +184,9 @@ public class StatementParserTest extends JavaParsingTestCase {
   public void testWhileIncomplete3() { doParserTest("while(cond"); }
   public void testWhileIncomplete4() { doParserTest("while(cond)"); }
   public void testWhileIncomplete5() { doParserTest("while() foo();"); }
+
+  public void testConstructorRef() { doParserTest("Foo::new"); }
+  public void testConstructorWithTypeParamsRef() { doParserTest("Foo<Integer>::new"); }
 
   private void doBlockParserTest(String text) {
     doParserTest(text, builder -> JavaParser.INSTANCE.getStatementParser().parseCodeBlockDeep(builder, true));

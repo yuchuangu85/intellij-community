@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.yaml.parser;
 
 import com.intellij.lang.ASTNode;
@@ -15,9 +15,6 @@ import org.jetbrains.yaml.YAMLTokenTypes;
 
 import java.util.List;
 
-/**
- * @author oleg
- */
 public class YAMLParser implements PsiParser, YAMLTokenTypes {
   public static final TokenSet HASH_STOP_TOKENS = TokenSet.create(RBRACE, COMMA);
   public static final TokenSet ARRAY_STOP_TOKENS = TokenSet.create(RBRACKET, COMMA);
@@ -228,13 +225,26 @@ public class YAMLParser implements PsiParser, YAMLTokenTypes {
       nodeType = parseScalarValue(minIndent);
     }
     else if (tokenType == STAR) {
+      PsiBuilder.Marker aliasMarker = mark();
       advanceLexer(); // symbol *
       if (getTokenType() == YAMLTokenTypes.ALIAS) {
         advanceLexer(); // alias name
-        nodeType = YAMLElementTypes.ALIAS_NODE;
+        aliasMarker.done(YAMLElementTypes.ALIAS_NODE);
+        if (getTokenType() == COLON) {
+          // Alias is used as key name
+          eolSeen = false;
+          int indentAddition = getShorthandIndentAddition();
+          nodeType = parseSimpleScalarKeyValueFromColon(indent, indentAddition);
+        }
+        else {
+          // simple ALIAS_NODE was constructed and marker should be dropped
+          marker.drop();
+          return YAMLElementTypes.ALIAS_NODE;
+        }
       }
       else {
         // Should be impossible now (because of lexer rules)
+        aliasMarker.drop();
         nodeType = null;
       }
     }
@@ -441,6 +451,11 @@ public class YAMLParser implements PsiParser, YAMLTokenTypes {
     int indentAddition = getShorthandIndentAddition();
     advanceLexer();
 
+    return parseSimpleScalarKeyValueFromColon(indent, indentAddition);
+  }
+
+  @NotNull
+  private IElementType parseSimpleScalarKeyValueFromColon(int indent, int indentAddition) {
     assert getTokenType() == COLON : "Expected colon";
     advanceLexer();
 

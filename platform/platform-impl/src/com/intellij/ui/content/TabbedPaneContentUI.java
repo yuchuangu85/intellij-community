@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.content;
 
+import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.ui.*;
@@ -25,7 +26,7 @@ import java.util.List;
  * @author Anton Katilin
  * @author Vladimir Kondratyev
  */
-public class TabbedPaneContentUI implements ContentUI, PropertyChangeListener {
+public final class TabbedPaneContentUI implements ContentUI, PropertyChangeListener {
   public static final String POPUP_PLACE = "TabbedPanePopup";
 
   private ContentManager myManager;
@@ -103,7 +104,7 @@ public class TabbedPaneContentUI implements ContentUI, PropertyChangeListener {
 
   private Content getSelectedContent() {
     JComponent selectedComponent = myTabbedPaneWrapper.getSelectedComponent();
-    return myManager.getContent(selectedComponent);
+    return selectedComponent == null ? null : myManager.getContent(selectedComponent);
   }
 
   private class MyTabbedPaneWrapper extends TabbedPaneWrapper.AsJTabbedPane {
@@ -243,11 +244,9 @@ public class TabbedPaneContentUI implements ContentUI, PropertyChangeListener {
         group.add(new TabbedContentAction.MyNextTabAction(myManager));
         group.add(new TabbedContentAction.MyPreviousTabAction(myManager));
         final List<AnAction> additionalActions = myManager.getAdditionalPopupActions(content);
-        if (additionalActions != null) {
+        if (!additionalActions.isEmpty()) {
           group.addSeparator();
-          for (AnAction anAction : additionalActions) {
-            group.add(anAction);
-          }
+          group.addAll(additionalActions);
         }
         ActionPopupMenu menu = ActionManager.getInstance().createActionPopupMenu(POPUP_PLACE, group);
         menu.getComponent().show(myTabbedPaneWrapper.getComponent(), x, y);
@@ -273,7 +272,7 @@ public class TabbedPaneContentUI implements ContentUI, PropertyChangeListener {
     }
   }
 
-  private class MyContentManagerListener extends ContentManagerAdapter {
+  private class MyContentManagerListener implements ContentManagerListener {
     @Override
     public void contentAdded(@NotNull ContentManagerEvent event) {
       Content content = event.getContent();
@@ -316,10 +315,6 @@ public class TabbedPaneContentUI implements ContentUI, PropertyChangeListener {
   }
 
   @Override
-  public void beforeDispose() {
-  }
-
-  @Override
   public boolean canChangeSelectionTo(@NotNull Content content, boolean implicit) {
     return true;
   }
@@ -339,16 +334,13 @@ public class TabbedPaneContentUI implements ContentUI, PropertyChangeListener {
   @NotNull
   @Override
   public String getPreviousContentActionName() {
-    return "Select Previous Tab";
+    return IdeBundle.message("action.text.select.previous.tab");
   }
 
   @NotNull
   @Override
   public String getNextContentActionName() {
-    return "Select Next Tab";
+    return IdeBundle.message("action.text.select.next.tab");
   }
 
-  @Override
-  public void dispose() {
-  }
 }

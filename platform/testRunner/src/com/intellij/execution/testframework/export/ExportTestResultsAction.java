@@ -1,11 +1,16 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.testframework.export;
 
+import com.intellij.CommonBundle;
 import com.intellij.execution.ExecutionBundle;
 import com.intellij.execution.configurations.RunConfiguration;
 import com.intellij.execution.testframework.TestFrameworkRunningModel;
+import com.intellij.execution.testframework.TestRunnerBundle;
 import com.intellij.ide.BrowserUtil;
-import com.intellij.openapi.actionSystem.*;
+import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.actionSystem.CommonDataKeys;
+import com.intellij.openapi.actionSystem.DataContext;
+import com.intellij.openapi.actionSystem.ex.ActionUtil;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Attachment;
 import com.intellij.openapi.diagnostic.Logger;
@@ -55,11 +60,10 @@ public class ExportTestResultsAction extends DumbAwareAction {
 
   public static ExportTestResultsAction create(String toolWindowId, RunConfiguration runtimeConfiguration, JComponent component) {
     ExportTestResultsAction action = new ExportTestResultsAction();
-    AnAction sourceAction = ActionManager.getInstance().getAction(ID);
-    action.copyFrom(sourceAction);
+    ActionUtil.copyFrom(action, ID);
     action.myToolWindowId = toolWindowId;
     action.myRunConfiguration = runtimeConfiguration;
-    action.registerCustomShortcutSet(sourceAction.getShortcutSet(), component);
+    action.registerCustomShortcutSet(action.getShortcutSet(), component);
     return action;
   }
 
@@ -103,7 +107,8 @@ public class ExportTestResultsAction extends DumbAwareAction {
                    && Messages.showOkCancelDialog(project,
                                                   ExecutionBundle.message("export.test.results.file.exists.message", filename),
                                                   ExecutionBundle.message("export.test.results.file.exists.title"),
-                                                  "Overwrite", "Cancel",
+                                                  TestRunnerBundle.message("inspections.settings.overwrite.action.text"),
+                                                  CommonBundle.getCancelButtonText(),
                                                   Messages.getQuestionIcon()
       ) != Messages.OK;
     }

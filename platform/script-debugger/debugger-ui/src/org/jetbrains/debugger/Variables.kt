@@ -19,6 +19,7 @@ import com.intellij.openapi.util.text.StringUtil
 import com.intellij.util.SmartList
 import com.intellij.xdebugger.frame.XCompositeNode
 import com.intellij.xdebugger.frame.XValueChildrenList
+import com.intellij.xdebugger.settings.XDebuggerSettingsManager
 import org.jetbrains.concurrency.Obsolescent
 import org.jetbrains.concurrency.Promise
 import org.jetbrains.concurrency.then
@@ -75,12 +76,14 @@ fun processScopeVariables(scope: Scope,
 
     addAditionalVariables(additionalVariables, properties, memberFilter)
 
-    val comparator = if (memberFilter.hasNameMappings()) Comparator { o1, o2 ->
-      naturalCompare(memberFilter.rawNameToSource(o1), memberFilter.rawNameToSource(o2))
+    if (XDebuggerSettingsManager.getInstance().dataViewSettings.isSortValues) {
+      val comparator = if (memberFilter.hasNameMappings()) Comparator { o1, o2 ->
+        naturalCompare(memberFilter.rawNameToSource(o1), memberFilter.rawNameToSource(o2))
+      }
+      else NATURAL_NAME_COMPARATOR
+      properties.sortWith(comparator)
+      functions.sortWith(comparator)
     }
-    else NATURAL_NAME_COMPARATOR
-    properties.sortWith(comparator)
-    functions.sortWith(comparator)
 
     if (!properties.isEmpty()) {
       node.addChildren(createVariablesList(properties, context, memberFilter), functions.isEmpty() && isLast)
@@ -133,7 +136,9 @@ fun filterAndSort(variables: List<Variable>, memberFilter: MemberFilter): List<V
       result.add(variable)
     }
   }
-  result.sortWith(NATURAL_NAME_COMPARATOR)
+  if (XDebuggerSettingsManager.getInstance().dataViewSettings.isSortValues) {
+    result.sortWith(NATURAL_NAME_COMPARATOR)
+  }
 
   addAditionalVariables(additionalVariables, result, memberFilter)
   return result
@@ -145,13 +150,15 @@ private fun addAditionalVariables(additionalVariables: Collection<Variable>,
                                   functions: MutableList<Variable>? = null) {
   val oldSize = result.size
   ol@ for (variable in additionalVariables) {
+    if (!memberFilter.isMemberVisible(variable)) continue
+
     for (i in 0..(oldSize - 1)) {
       val vmVariable = result[i]
       if (memberFilter.rawNameToSource(vmVariable) == memberFilter.rawNameToSource(variable)) {
         // we prefer additionalVariable here because it is more smart variable (e.g. NavigatableVariable)
         val vmValue = vmVariable.value
         // to avoid evaluation, use vm value directly
-        if (vmValue != null && variable.value == null) {
+        if (vmValue != null) {
           variable.value = vmValue
         }
 

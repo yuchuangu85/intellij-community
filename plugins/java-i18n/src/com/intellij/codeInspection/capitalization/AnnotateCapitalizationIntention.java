@@ -18,6 +18,8 @@ package com.intellij.codeInspection.capitalization;
 import com.intellij.codeInsight.AnnotationUtil;
 import com.intellij.codeInsight.intention.AddAnnotationFix;
 import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.codeInsight.intention.impl.BaseIntentionAction;
+import com.intellij.java.i18n.JavaI18nBundle;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Editor;
@@ -44,7 +46,7 @@ public class AnnotateCapitalizationIntention implements IntentionAction {
   public boolean isAvailable(@NotNull Project project, Editor editor, PsiFile file) {
     PsiModifierListOwner element = getElement(editor, file);
     if (element == null ||
-        (!ApplicationManager.getApplication().isUnitTestMode() && element.getManager().isInProject(element)) ||
+        (!ApplicationManager.getApplication().isUnitTestMode() && BaseIntentionAction.canModify(element)) ||
         AnnotationUtil.findAnnotation(element, Nls.class.getName()) != null) return false;
     return true;
   }
@@ -59,7 +61,7 @@ public class AnnotateCapitalizationIntention implements IntentionAction {
   @NotNull
   @Override
   public String getFamilyName() {
-    return "Annotate capitalization type";
+    return JavaI18nBundle.message("intention.family.annotate.capitalization.type");
   }
 
   @Override

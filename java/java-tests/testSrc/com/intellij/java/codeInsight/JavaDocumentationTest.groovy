@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.codeInsight
 
 import com.intellij.codeInsight.documentation.DocumentationManager
@@ -9,14 +9,14 @@ import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiExpressionList
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.util.PsiTreeUtil
-import com.intellij.testFramework.PlatformTestUtil
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import com.intellij.util.ui.UIUtil
-
+import groovy.transform.CompileStatic
 /**
  * @author peter
  */
-class JavaDocumentationTest extends LightCodeInsightFixtureTestCase {
+@CompileStatic
+class JavaDocumentationTest extends LightJavaCodeInsightFixtureTestCase {
   void testConstructorDoc() {
     configure """\
       class Foo { Foo() {} Foo(int param) {} }
@@ -172,7 +172,7 @@ class JavaDocumentationTest extends LightCodeInsightFixtureTestCase {
         JavaPsiFacade.getInstance(project).findClass('Foo', it.resolveScope)?.findMethodBySignature(it, false)
       }
     }
-    PlatformTestUtil.registerExtension DocumentationDelegateProvider.EP_NAME, provider, myFixture.testRootDisposable
+    DocumentationDelegateProvider.EP_NAME.getPoint().registerExtension(provider, myFixture.testRootDisposable)
 
     configure '''\
 class Foo {
@@ -207,13 +207,47 @@ class Bar {
     def actual = JavaExternalDocumentationTest.getDocumentationText(myFixture.project, input)
 
     def expected =
-      "<html>Candidates for method call <b>s.regionMatches()</b> are:<br>" +
+      "<html><div class='content-only'>Candidates for method call <b>s.regionMatches()</b> are:<br>" +
       "<br>" +
       "&nbsp;&nbsp;<a href=\"psi_element://java.lang.String#regionMatches(int, java.lang.String, int, int)\">boolean regionMatches(int, String, int, int)</a><br>" +
       "&nbsp;&nbsp;<a href=\"psi_element://java.lang.String#regionMatches(boolean, int, java.lang.String, int, int)\">boolean regionMatches(boolean, int, String, int, int)</a><br>" +
-      "</html>"
+      "</div>"
 
     assert actual == expected
+  }
+
+  void "test navigation updates decoration"() {
+    def input = """\
+      class Foo {
+        void foo(String s) {
+          s.region<caret>Matches()
+        } 
+      }""".stripIndent()
+
+    def documentationManager = DocumentationManager.getInstance(myFixture.project)
+    JavaExternalDocumentationTest.getDocumentationText(myFixture.project, input) { component ->
+      def expected =
+        "<html><div class='content-only'>Candidates for method call <b>s.regionMatches()</b> are:<br>" +
+        "<br>" +
+        "&nbsp;&nbsp;<a href=\"psi_element://java.lang.String#regionMatches(int, java.lang.String, int, int)\">boolean regionMatches(int, String, int, int)</a><br>" +
+        "&nbsp;&nbsp;<a href=\"psi_element://java.lang.String#regionMatches(boolean, int, java.lang.String, int, int)\">boolean regionMatches(boolean, int, String, int, int)</a><br>" +
+        "</div>"
+
+      assert component.decoratedText == expected
+
+      documentationManager.navigateByLink(component, "psi_element://java.lang.String#regionMatches(int, java.lang.String, int, int)")
+      try {
+        JavaExternalDocumentationTest.waitTillDone(documentationManager.getLastAction())
+      }
+      catch (InterruptedException e) {
+        throw new RuntimeException(e)
+      }
+
+      // Here we check that the covering module (SDK in this case) is rendered in decorated info
+      assert component.decoratedText.contains("<div class='bottom'><icon src='AllIcons.Nodes.PpLibFolder'>&nbsp;&lt; java 1.7 ></div>")
+    }
+
+
   }
 
   private void configure(String text) {
@@ -222,7 +256,7 @@ class Bar {
 
   void doTestCtrlHoverDoc(String inputFile, String expectedDoc) {
     configure inputFile.stripIndent()
-    String doc = CtrlMouseHandler.getInfo(myFixture.editor, CtrlMouseHandler.BrowseMode.Declaration)
+    String doc = CtrlMouseHandler.getGoToDeclarationOrUsagesText(myFixture.editor)
     assert UIUtil.getHtmlBody(doc) == expectedDoc
   }
 }

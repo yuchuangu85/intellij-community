@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.intellij.build.images
 
 import com.intellij.openapi.util.io.FileUtilRt
@@ -6,113 +6,149 @@ import com.intellij.openapi.util.text.StringUtil
 import com.intellij.util.LineSeparator
 import com.intellij.util.containers.ContainerUtil
 import com.intellij.util.diff.Diff
+import com.intellij.util.io.exists
 import org.jetbrains.jps.model.JpsSimpleElement
 import org.jetbrains.jps.model.java.JavaSourceRootProperties
 import org.jetbrains.jps.model.java.JavaSourceRootType
 import org.jetbrains.jps.model.module.JpsModule
 import org.jetbrains.jps.util.JpsPathUtil
 import java.io.File
-import java.nio.charset.StandardCharsets
 import java.nio.file.*
 import java.util.*
 import java.util.concurrent.atomic.AtomicInteger
 
 data class ModifiedClass(val module: JpsModule, val file: Path, val result: CharSequence)
 
-class IconsClassGenerator(private val projectHome: File, val util: JpsModule, private val writeChangesToDisk: Boolean = true) {
+internal data class IconsClassInfo(val customLoad: Boolean,
+                                   val packageName: String,
+                                   val className: String,
+                                   val outFile: Path,
+                                   val images: List<ImagePaths>)
+
+internal open class IconsClassGenerator(private val projectHome: File, val modules: List<JpsModule>, private val writeChangesToDisk: Boolean = true) {
+  private val util: JpsModule by lazy {
+    modules.find { it.name == "intellij.platform.util" } ?: error("Can't load module 'util'")
+  }
+
   private val processedClasses = AtomicInteger()
   private val processedIcons = AtomicInteger()
   private val processedPhantom = AtomicInteger()
   private val modifiedClasses = ContainerUtil.createConcurrentList<ModifiedClass>()
+  private val obsoleteClasses = ContainerUtil.createConcurrentList<Path>()
 
-  fun processModule(module: JpsModule) {
-    val customLoad: Boolean
+  internal open fun getIconsClassInfo(module: JpsModule) : List<IconsClassInfo> {
     val packageName: String
     val className: String
     val outFile: Path
-    if ("intellij.platform.icons" == module.name) {
-      customLoad = false
-      packageName = "com.intellij.icons"
-      className = "AllIcons"
+    when (module.name) {
+      "intellij.platform.icons" -> {
+        packageName = "com.intellij.icons"
+        className = "AllIcons"
 
-      val dir = util.getSourceRoots(JavaSourceRootType.SOURCE).first().file.absolutePath + "/com/intellij/icons"
-      outFile = Paths.get(dir, "AllIcons.java")
-    }
-    else {
-      customLoad = true
-      packageName = "icons"
-
-      val firstRoot = module.getSourceRoots(JavaSourceRootType.SOURCE).firstOrNull() ?: return
-
-      val firstRootDir = firstRoot.file.toPath().resolve("icons")
-      var oldClassName: String?
-      // this is added to remove unneeded empty directories created by previous version of this script
-      if (firstRootDir.toFile().isDirectory()) {
-        try {
-          Files.delete(firstRootDir)
-          println("deleting empty directory $firstRootDir")
-        }
-        catch (ignore: DirectoryNotEmptyException) {
-        }
-
-        oldClassName = findIconClass(firstRootDir)
+        val dir = util.getSourceRoots(JavaSourceRootType.SOURCE).first().file.absolutePath + "/com/intellij/icons"
+        outFile = Paths.get(dir, "AllIcons.java")
       }
-      else {
-        oldClassName = null
+      "intellij.android.artwork" -> {
+        // backward compatibility - AndroidIcons class should be not modified
+        packageName = "icons"
+        className = "AndroidArtworkIcons"
+
+        val dir = module.getSourceRoots(JavaSourceRootType.SOURCE).first().file.absolutePath
+        outFile = Paths.get(dir, "icons", "AndroidArtworkIcons.java")
       }
+      else -> {
+        packageName = "icons"
 
-      val generatedRoot = module.getSourceRoots(JavaSourceRootType.SOURCE).find { it.properties.isForGeneratedSources }
-      val targetRoot = (generatedRoot ?: firstRoot).file.toPath().resolve("icons")
+        val firstRoot = module.getSourceRoots(JavaSourceRootType.SOURCE).firstOrNull() ?: return emptyList()
 
-      if (generatedRoot != null && oldClassName != null) {
-        val oldFile = firstRootDir.resolve("$oldClassName.java")
-        println("deleting $oldFile from source root which isn't marked as 'generated'")
-        Files.delete(oldFile)
-      }
-      if (oldClassName == null) {
-        try {
-          oldClassName = findIconClass(targetRoot)
-        }
-        catch (ignored: NoSuchFileException) {
-        }
-      }
-
-      className = oldClassName ?: directoryName(module) + "Icons"
-      outFile = targetRoot.resolve("$className.java")
-    }
-
-    val oldText = if (outFile.toFile().exists()) Files.readAllBytes(outFile).toString(StandardCharsets.UTF_8) else null
-    val newText = generate(module, className, packageName, customLoad, getCopyrightComment(oldText))
-
-    val oldLines = oldText?.lines() ?: emptyList()
-    val newLines = newText?.lines() ?: emptyList()
-
-    if (newLines.isNotEmpty()) {
-      processedClasses.incrementAndGet()
-
-      if (oldLines != newLines) {
-        if (writeChangesToDisk) {
-          val separator = getSeparators(oldText)
-          Files.createDirectories(outFile.parent)
-          Files.write(outFile, newLines.joinToString(separator = separator.separatorString).toByteArray())
-          println("Updated icons class: ${outFile.fileName}")
-        }
-        else {
-          val sb = StringBuilder()
-          var ch = Diff.buildChanges(oldLines.toTypedArray(), newLines.toTypedArray())
-          while (ch != null) {
-            val deleted = oldLines.subList(ch.line0, ch.line0 + ch.deleted)
-            val inserted = newLines.subList(ch.line1, ch.line1 + ch.inserted)
-
-            if (sb.isNotEmpty()) sb.append("=".repeat(20)).append("\n")
-            deleted.forEach { sb.append("-").append(it).append("\n") }
-            inserted.forEach { sb.append("+").append(it).append("\n") }
-
-            ch = ch.link
+        val firstRootDir = firstRoot.file.toPath().resolve("icons")
+        var oldClassName: String?
+        // this is added to remove unneeded empty directories created by previous version of this script
+        if (Files.isDirectory(firstRootDir)) {
+          try {
+            Files.delete(firstRootDir)
+            println("deleting empty directory $firstRootDir")
+          }
+          catch (ignore: DirectoryNotEmptyException) {
           }
 
-          modifiedClasses.add(ModifiedClass(module, outFile, sb))
+          oldClassName = findIconClass(firstRootDir)
         }
+        else {
+          oldClassName = null
+        }
+
+        val generatedRoot = module.getSourceRoots(JavaSourceRootType.SOURCE).find { it.properties.isForGeneratedSources }
+        val targetRoot = (generatedRoot ?: firstRoot).file.toPath().resolve("icons")
+
+        if (generatedRoot != null && oldClassName != null && firstRoot != generatedRoot) {
+          val oldFile = firstRootDir.resolve("$oldClassName.java")
+          println("deleting $oldFile from source root which isn't marked as 'generated'")
+          Files.delete(oldFile)
+        }
+        if (oldClassName == null) {
+          try {
+            oldClassName = findIconClass(targetRoot)
+          }
+          catch (ignored: NoSuchFileException) {
+          }
+        }
+
+        className = oldClassName ?: directoryName(module).let {
+          if (it.endsWith("Icons")) it else "${it}Icons"
+        }
+        outFile = targetRoot.resolve("$className.java")
+      }
+    }
+    return listOf(IconsClassInfo(true, packageName, className, outFile, images(module, className)))
+  }
+
+  fun processModule(module: JpsModule) {
+    for (iconsClassInfo in getIconsClassInfo(module)) {
+      val outFile = iconsClassInfo.outFile
+      val oldText = try {
+        Files.readAllBytes(outFile).toString(Charsets.UTF_8)
+      }
+      catch (ignored: NoSuchFileException) {
+        null
+      }
+      val newText = writeClass(getCopyrightComment(oldText), iconsClassInfo)
+      if (newText.isNullOrEmpty()) {
+        if (Files.exists(outFile)) {
+          obsoleteClasses.add(outFile)
+        }
+        continue
+      }
+
+      processedClasses.incrementAndGet()
+
+      val newLines = newText.lines()
+      val oldLines = oldText?.lines() ?: emptyList()
+      if (oldLines == newLines) {
+        continue
+      }
+
+      if (writeChangesToDisk) {
+        val separator = getSeparators(oldText)
+        Files.createDirectories(outFile.parent)
+        Files.write(outFile, newLines.joinToString(separator = separator.separatorString).toByteArray())
+        println("Updated icons class: ${outFile.fileName}")
+      }
+      else {
+        val sb = StringBuilder()
+        var ch = Diff.buildChanges(oldLines.toTypedArray(), newLines.toTypedArray())
+        while (ch != null) {
+          val deleted = oldLines.subList(ch.line0, ch.line0 + ch.deleted)
+          val inserted = newLines.subList(ch.line1, ch.line1 + ch.inserted)
+
+          if (sb.isNotEmpty()) sb.append("=".repeat(20)).append("\n")
+          deleted.forEach { sb.append("-").append(it).append("\n") }
+          inserted.forEach { sb.append("+").append(it).append("\n") }
+
+          ch = ch.link
+        }
+
+        modifiedClasses.add(ModifiedClass(module, outFile, sb))
       }
     }
   }
@@ -120,6 +156,15 @@ class IconsClassGenerator(private val projectHome: File, val util: JpsModule, pr
   fun printStats() {
     println()
     println("Generated classes: ${processedClasses.get()}. Processed icons: ${processedIcons.get()}. Phantom icons: ${processedPhantom.get()}")
+    if (obsoleteClasses.isNotEmpty()) {
+      println("\nObsolete classes:")
+      println(obsoleteClasses.joinToString("\n"))
+      println("\nObsolete class it is class for icons that cannot be found anymore. Possible reasons:")
+      println("1. Icons not located under resources root.\n   Solution - move icons to resources root or fix existing root type (must be \"resources\")")
+      println("2. Icons were removed but not class.\n   Solution - remove class.")
+      println("3. Icons located under resources root named \"compatibilityResources\". \"compatibilityResources\" for icons that not used externally as icon class fields, " +
+              "but maybe referenced directly by path.\n   Solution - remove class or move icons to another resources root")
+    }
   }
 
   fun getModifiedClasses(): List<ModifiedClass> = modifiedClasses
@@ -150,23 +195,28 @@ class IconsClassGenerator(private val projectHome: File, val util: JpsModule, pr
     return StringUtil.detectSeparators(text) ?: LineSeparator.LF
   }
 
-  private fun generate(module: JpsModule, className: String, packageName: String, customLoad: Boolean, copyrightComment: String): String? {
-    val imageCollector = ImageCollector(projectHome.toPath(), iconsOnly = true, className = className)
-
+  private fun images(module: JpsModule, className: String) : List<ImagePaths> {
+    val imageCollector = ImageCollector(projectHome.toPath(), iconsOnly = true)
     val images = imageCollector.collect(module, includePhantom = true)
-    if (images.isEmpty()) {
-      return null
-    }
-
     imageCollector.printUsedIconRobots()
+    return images
+  }
 
+  private fun writeClass(copyrightComment: String, info: IconsClassInfo): CharSequence? {
+    val images = info.images
+    if (images.isEmpty()) return null
     val answer = StringBuilder()
     answer.append(copyrightComment)
-    append(answer, "package $packageName;\n", 0)
-    append(answer, "import com.intellij.openapi.util.IconLoader;", 0)
+    append(answer, "package ${info.packageName};\n", 0)
+    append(answer, "import com.intellij.ui.IconManager;", 0)
+    append(answer, "import org.jetbrains.annotations.NotNull;", 0)
     append(answer, "", 0)
     append(answer, "import javax.swing.*;", 0)
     append(answer, "", 0)
+    if (images.any(ImagePaths::scheduledForRemoval)) {
+      append(answer, "import org.jetbrains.annotations.ApiStatus.ScheduledForRemoval;", 0)
+      append(answer, "", 0)
+    }
 
     // IconsGeneratedSourcesFilter depends on following comment, if you going to change the text
     // please do corresponding changes in IconsGeneratedSourcesFilter as well
@@ -175,35 +225,34 @@ class IconsClassGenerator(private val projectHome: File, val util: JpsModule, pr
     append(answer, " * DO NOT EDIT IT BY HAND, run \"Generate icon classes\" configuration instead", 0)
     append(answer, " */", 0)
 
-
     answer.append("public")
     // backward compatibility
-    if (className != "AllIcons") {
+    if (info.className != "AllIcons") {
       answer.append(" final")
     }
-    answer.append(" class ").append(className).append(" {\n")
-    if (customLoad) {
-      append(answer, "private static Icon load(String path) {", 1)
-      append(answer, "return IconLoader.getIcon(path, ${className}.class);", 2)
+    answer.append(" class ").append(info.className).append(" {\n")
+    if (info.customLoad) {
+      append(answer, "private static @NotNull Icon load(@NotNull String path) {", 1)
+      append(answer, "return $iconLoaderCode.getIcon(path, ${info.className}.class);", 2)
       append(answer, "}", 1)
       append(answer, "", 0)
 
       val customExternalLoad = images.any { it.deprecation?.replacementContextClazz != null }
       if (customExternalLoad) {
-        append(answer, "private static Icon load(String path, Class<?> clazz) {", 1)
-        append(answer, "return IconLoader.getIcon(path, clazz);", 2)
+        append(answer, "private static @NotNull Icon load(@NotNull String path, @NotNull Class<?> clazz) {", 1)
+        append(answer, "return $iconLoaderCode.getIcon(path, clazz);", 2)
         append(answer, "}", 1)
         append(answer, "", 0)
       }
     }
 
     val inners = StringBuilder()
-    processIcons(images, inners, customLoad, 0)
+    processIcons(images, inners, info.customLoad, 0)
     if (inners.isEmpty()) return null
 
     answer.append(inners)
     append(answer, "}", 0)
-    return answer.toString()
+    return answer
   }
 
   private fun processIcons(images: List<ImagePaths>, answer: StringBuilder, customLoad: Boolean, depth: Int) {
@@ -235,10 +284,7 @@ class IconsClassGenerator(private val projectHome: File, val util: JpsModule, pr
         processIcons(group, inners, customLoad, depth + 1)
 
         if (inners.isNotEmpty()) {
-          append(answer, "", level)
-          append(answer, "public final static class " + className(key) + " {", level)
-          append(answer, inners.toString(), 0)
-          append(answer, "}", level)
+          appendInnerClass(className(key), answer, inners.toString(), level)
         }
       }
 
@@ -246,6 +292,15 @@ class IconsClassGenerator(private val projectHome: File, val util: JpsModule, pr
         appendImage(image, answer, level, customLoad)
       }
     }
+  }
+
+  internal open fun appendInnerClass(className: String,
+                                     answer: StringBuilder,
+                                     body: String, level: Int) {
+      append(answer, "", level)
+      append(answer, "public final static class $className {", level)
+      append(answer, body, 0)
+      append(answer, "}", level)
   }
 
   private fun appendImage(image: ImagePaths,
@@ -273,13 +328,16 @@ class IconsClassGenerator(private val projectHome: File, val util: JpsModule, pr
     if (image.deprecated) {
       append(answer, "@Deprecated", level)
     }
+    if (image.scheduledForRemoval) {
+      append(answer, "@ScheduledForRemoval(inVersion = \"${image.scheduledForRemovalRelease}\")", level)
+    }
 
     val sourceRoot = image.sourceRoot
     var rootPrefix = "/"
     if (sourceRoot.rootType == JavaSourceRootType.SOURCE) {
       @Suppress("UNCHECKED_CAST")
       val packagePrefix = (sourceRoot.properties as JpsSimpleElement<JavaSourceRootProperties>).data.packagePrefix
-      if (!packagePrefix.isEmpty()) {
+      if (packagePrefix.isNotEmpty()) {
         rootPrefix += packagePrefix.replace('.', '/') + "/"
       }
     }
@@ -288,14 +346,14 @@ class IconsClassGenerator(private val projectHome: File, val util: JpsModule, pr
     val deprecation = image.deprecation
 
     if (deprecation?.replacementContextClazz != null) {
-      val method = if (customLoad) "load" else "IconLoader.getIcon"
+      val method = if (customLoad) "load" else "$iconLoaderCode.getIcon"
       append(answer,
-             "public static final Icon $iconName = $method(\"${deprecation.replacement}\", ${deprecation.replacementContextClazz}.class);",
+             "public static final @NotNull Icon $iconName = $method(\"${deprecation.replacement}\", ${deprecation.replacementContextClazz}.class);",
              level)
       return
     }
     else if (deprecation?.replacementReference != null) {
-      append(answer, "public static final Icon $iconName = ${deprecation.replacementReference};", level)
+      append(answer, "public static final @NotNull Icon $iconName = ${deprecation.replacementReference};", level)
       return
     }
 
@@ -306,25 +364,23 @@ class IconsClassGenerator(private val projectHome: File, val util: JpsModule, pr
     }
     else {
       imageFile = sourceRootFile.resolve(deprecation.replacement.removePrefix("/").removePrefix(File.separator))
-      assert(isIcon(imageFile)) { "Overriding icon should be valid: $iconName - $imageFile" }
+      assert(isIcon(imageFile)) {
+        "Invalid deprecation replacement '${deprecation.replacement}': $imageFile is not an icon"
+      }
     }
 
-    val size = if (imageFile.toFile().exists()) imageSize(imageFile) else null
-    val comment: String
-    when {
-      size != null -> comment = " // ${size.width}x${size.height}"
-      image.phantom -> comment = ""
-      else -> error("Can't get icon size: $imageFile")
+    val size = if (imageFile.exists()) imageSize(imageFile) else null
+    val javaDoc = when {
+      size != null -> "/** ${size.width}x${size.height} */ "
+      !image.phantom -> error("Can't get icon size: $imageFile")
+      else -> ""
     }
-
-    val method = if (customLoad) "load" else "IconLoader.getIcon"
+    val method = if (customLoad) "load" else "$iconLoaderCode.getIcon"
     val relativePath = rootPrefix + FileUtilRt.toSystemIndependentName(sourceRootFile.relativize(imageFile).toString())
-    append(answer,
-           "public static final Icon $iconName = $method(\"$relativePath\");$comment",
-           level)
+    append(answer, "${javaDoc}public static final @NotNull Icon $iconName = $method(\"$relativePath\");", level)
   }
 
-  private fun append(answer: StringBuilder, text: String, level: Int) {
+  protected fun append(answer: StringBuilder, text: String, level: Int) {
     if (text.isNotBlank()) {
       for (i in 0 until level) {
         answer.append("  ")
@@ -392,11 +448,11 @@ class IconsClassGenerator(private val projectHome: File, val util: JpsModule, pr
       }
     }
 
-    if (Character.isJavaIdentifierStart(sb.first())) {
-      return sb.toString()
+    return if (Character.isJavaIdentifierStart(sb.first())) {
+      sb.toString()
     }
     else {
-      return "_" + sb.toString()
+      "_$sb"
     }
   }
 
@@ -408,3 +464,5 @@ class IconsClassGenerator(private val projectHome: File, val util: JpsModule, pr
   // legacy ordering
   private val NAME_COMPARATOR: Comparator<String> = compareBy { it.toLowerCase() + "." }
 }
+
+private const val iconLoaderCode = "IconManager.getInstance()"

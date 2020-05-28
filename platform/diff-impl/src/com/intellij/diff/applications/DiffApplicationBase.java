@@ -15,16 +15,12 @@
  */
 package com.intellij.diff.applications;
 
-import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.ApplicationStarterEx;
+import com.intellij.openapi.application.ApplicationStarterBase;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileTypes.PlainTextFileType;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectLocator;
 import com.intellij.openapi.project.ProjectManager;
-import com.intellij.openapi.ui.Messages;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
@@ -32,8 +28,8 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.IdeFrame;
 import com.intellij.openapi.wm.ex.WindowManagerEx;
 import com.intellij.testFramework.LightVirtualFile;
-import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -44,80 +40,18 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-@SuppressWarnings({"UseOfSystemOutOrSystemErr", "CallToPrintStackTrace"})
-public abstract class DiffApplicationBase extends ApplicationStarterEx {
+public abstract class DiffApplicationBase extends ApplicationStarterBase {
   protected static final String NULL_PATH = "/dev/null";
 
   protected static final Logger LOG = Logger.getInstance(DiffApplicationBase.class);
 
-  protected abstract boolean checkArguments(@NotNull String[] args);
-
-  @NotNull
-  protected abstract String getUsageMessage();
-
-  protected abstract void processCommand(@NotNull String[] args, @Nullable String currentDirectory)
-    throws Exception;
+  protected DiffApplicationBase(@NotNull @NonNls String commandName, int... possibleArgumentsCount) {
+    super(commandName, possibleArgumentsCount);
+  }
 
   //
   // Impl
   //
-
-  @Override
-  public boolean isHeadless() {
-    return false;
-  }
-
-  @Override
-  public void processExternalCommandLine(@NotNull String[] args, @Nullable String currentDirectory) {
-    if (!checkArguments(args)) {
-      Messages.showMessageDialog(getUsageMessage(), StringUtil.toTitleCase(getCommandName()), Messages.getInformationIcon());
-      return;
-    }
-    try {
-      processCommand(args, currentDirectory);
-    }
-    catch (Exception e) {
-      Messages.showMessageDialog(String.format("Error showing %s: %s", getCommandName(), e.getMessage()),
-                                 StringUtil.toTitleCase(getCommandName()),
-                                 Messages.getErrorIcon());
-    }
-    finally {
-      saveAll();
-    }
-  }
-
-  private static void saveAll() {
-    FileDocumentManager.getInstance().saveAllDocuments();
-    ApplicationManager.getApplication().saveSettings();
-  }
-
-  @Override
-  public void premain(String[] args) {
-    if (!checkArguments(args)) {
-      System.out.println(getUsageMessage());
-      System.exit(1);
-    }
-  }
-
-  @Override
-  public void main(String[] args) {
-    try {
-      processCommand(args, null);
-    }
-    catch (Exception e) {
-      e.printStackTrace();
-      System.exit(1);
-    }
-    catch (Throwable t) {
-      t.printStackTrace();
-      System.exit(2);
-    }
-    finally {
-      saveAll();
-    }
-
-    System.exit(0);
-  }
 
   @NotNull
   public static List<VirtualFile> findFiles(@NotNull List<String> filePaths, @Nullable String currentDirectory) throws Exception {
@@ -167,17 +101,10 @@ public abstract class DiffApplicationBase extends ApplicationStarterEx {
   }
 
   @NotNull
-  public List<VirtualFile> replaceNullsWithEmptyFile(@NotNull List<VirtualFile> contents) {
-    return ContainerUtil.map(contents, file -> {
-      return ObjectUtils.notNull(file, () -> new LightVirtualFile(NULL_PATH, PlainTextFileType.INSTANCE, ""));
-    });
+  public static List<VirtualFile> replaceNullsWithEmptyFile(@NotNull List<? extends VirtualFile> contents) {
+    return ContainerUtil.map(contents, file -> file != null ? file : new LightVirtualFile(NULL_PATH, PlainTextFileType.INSTANCE, ""));
   }
 
-
-  @Override
-  public boolean canProcessExternalCommandLine() {
-    return true;
-  }
 
   @Nullable
   protected static Project guessProject(@NotNull List<? extends VirtualFile> files) {

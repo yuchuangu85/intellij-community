@@ -1,48 +1,36 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testFramework;
 
 import com.intellij.lang.TokenWrapper;
 import com.intellij.lexer.Lexer;
 import com.intellij.openapi.editor.highlighter.HighlighterIterator;
+import com.intellij.openapi.util.Trinity;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.tree.TokenSet;
 import com.intellij.testFramework.fixtures.IdeaTestExecutionPolicy;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * @author peter
  */
 public abstract class LexerTestCase extends UsefulTestCase {
-  protected void doTest(@NonNls String text) {
+  protected void doTest(String text) {
     doTest(text, null);
   }
 
-  protected void doTest(@NonNls String text, @Nullable String expected) {
+  protected void doTest(String text, @Nullable String expected) {
     doTest(text, expected, createLexer());
   }
 
-  protected void doTest(@NonNls String text, @Nullable String expected, @NotNull Lexer lexer) {
+  protected void doTest(String text, @Nullable String expected, @NotNull Lexer lexer) {
     String result = printTokens(text, 0, lexer);
 
     if (expected != null) {
@@ -105,6 +93,48 @@ public abstract class LexerTestCase extends UsefulTestCase {
     return printTokens(text, start, createLexer());
   }
 
+  protected void checkCorrectRestartOnEveryToken(@NotNull String text) {
+    Lexer mainLexer = createLexer();
+    List<Trinity<IElementType, Integer, Integer>> allTokens = tokenize(text, 0, 0, mainLexer);
+    Lexer auxLexer = createLexer();
+    auxLexer.start(text);
+    int index = 0;
+    while (true) {
+      IElementType type = auxLexer.getTokenType();
+      if (type == null) {
+        break;
+      }
+      List<Trinity<IElementType, Integer, Integer>> subTokens = tokenize(text, auxLexer.getTokenStart(), auxLexer.getState(), mainLexer);
+      if (!allTokens.subList(index++, allTokens.size()).equals(subTokens)) {
+        assertEquals("Restarting impossible from offset " + auxLexer.getTokenStart() + " - " + auxLexer.getTokenText() + "\n" +
+                     "All tokens <type, offset, lexer state>: " + allTokens + "\n",
+                     allTokens.subList(index - 1, allTokens.size()),
+                     subTokens);
+      }
+      auxLexer.advance();
+    }
+  }
+
+  @NotNull
+  private static List<Trinity<IElementType, Integer, Integer>> tokenize(@NotNull String text,
+                                                                        int start,
+                                                                        int state,
+                                                                        @NotNull Lexer lexer) {
+    List<Trinity<IElementType, Integer, Integer>> allTokens = new ArrayList<>();
+    try {
+      lexer.start(text, start, text.length(), state);
+    }
+    catch (Throwable t) {
+      LOG.error("Restarting impossible from offset " + start, t);
+      throw new RuntimeException(t);
+    }
+    while (lexer.getTokenType() != null) {
+      allTokens.add(Trinity.create(lexer.getTokenType(), lexer.getTokenStart(), lexer.getState()));
+      lexer.advance();
+    }
+    return allTokens;
+  }
+
   public static String printTokens(CharSequence text, int start, Lexer lexer) {
     lexer.start(text, start, text.length());
     StringBuilder result = new StringBuilder();
@@ -133,12 +163,12 @@ public abstract class LexerTestCase extends UsefulTestCase {
     return tokenType + " ('" + getTokenText(tokenType, fileText, start, end) + "')\n";
   }
 
-  protected void doFileTest(@NonNls String fileExt) {
+  protected void doFileTest(String fileExt) {
     doTest(loadTestDataFile("." + fileExt));
   }
 
   @NotNull
-  protected String loadTestDataFile(@NonNls String fileExt) {
+  protected String loadTestDataFile(String fileExt) {
     String fileName = getPathToTestDataFile(fileExt);
     String text = "";
     try {
@@ -157,11 +187,9 @@ public abstract class LexerTestCase extends UsefulTestCase {
 
   @NotNull
   private static String getTokenText(IElementType tokenType, CharSequence sequence, int start, int end) {
-    if (tokenType instanceof TokenWrapper) {
-      return ((TokenWrapper)tokenType).getValue();
-    }
-
-    return StringUtil.replace(sequence.subSequence(start, end).toString(), "\n", "\\n");
+    return tokenType instanceof TokenWrapper
+           ? ((TokenWrapper)tokenType).getValue()
+           : StringUtil.replace(sequence.subSequence(start, end).toString(), "\n", "\\n");
   }
 
   protected abstract Lexer createLexer();

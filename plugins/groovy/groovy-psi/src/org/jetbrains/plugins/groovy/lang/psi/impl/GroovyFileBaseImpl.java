@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.impl;
 
 import com.intellij.extapi.psi.PsiFileBase;
@@ -24,7 +24,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.GroovyFileType;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyTokenTypes;
 import org.jetbrains.plugins.groovy.lang.lexer.TokenSets;
-import org.jetbrains.plugins.groovy.lang.parser.GroovyElementTypes;
+import org.jetbrains.plugins.groovy.lang.parser.GroovyStubElementTypes;
 import org.jetbrains.plugins.groovy.lang.psi.GrControlFlowOwner;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyElementVisitor;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFileBase;
@@ -86,8 +86,7 @@ public abstract class GroovyFileBaseImpl extends PsiFileBase implements GroovyFi
   }
 
   @Override
-  @NotNull
-  public GrTypeDefinition[] getTypeDefinitions() {
+  public GrTypeDefinition @NotNull [] getTypeDefinitions() {
     final StubElement<?> stub = getGreenStub();
     if (stub != null) {
       return stub.getChildrenByType(TokenSets.TYPE_DEFINITIONS, GrTypeDefinition.ARRAY_FACTORY);
@@ -97,19 +96,17 @@ public abstract class GroovyFileBaseImpl extends PsiFileBase implements GroovyFi
   }
 
   @Override
-  @NotNull
-  public GrMethod[] getMethods() {
+  public GrMethod @NotNull [] getMethods() {
     final StubElement<?> stub = getGreenStub();
     if (stub != null) {
-      return stub.getChildrenByType(GroovyElementTypes.METHOD_DEFINITION, GrMethod.ARRAY_FACTORY);
+      return stub.getChildrenByType(GroovyStubElementTypes.METHOD, GrMethod.ARRAY_FACTORY);
     }
 
-    return calcTreeElement().getChildrenAsPsiElements(GroovyElementTypes.METHOD_DEFINITION, GrMethod.ARRAY_FACTORY);
+    return calcTreeElement().getChildrenAsPsiElements(GroovyStubElementTypes.METHOD, GrMethod.ARRAY_FACTORY);
   }
 
   @Override
-  @NotNull
-  public GrTopStatement[] getTopStatements() {
+  public GrTopStatement @NotNull [] getTopStatements() {
     return findChildrenByClass(GrTopStatement.class);
   }
 
@@ -133,9 +130,8 @@ public abstract class GroovyFileBaseImpl extends PsiFileBase implements GroovyFi
     }
   }
 
-  @NotNull
   @Override
-  public GrStatement[] getStatements() {
+  public GrStatement @NotNull [] getStatements() {
     return findChildrenByClass(GrStatement.class);
   }
 
@@ -182,8 +178,7 @@ public abstract class GroovyFileBaseImpl extends PsiFileBase implements GroovyFi
   }
 
   @Override
-  @NotNull
-  public PsiClass[] getClasses() {
+  public PsiClass @NotNull [] getClasses() {
     return getTypeDefinitions();
   }
 
@@ -200,10 +195,10 @@ public abstract class GroovyFileBaseImpl extends PsiFileBase implements GroovyFi
     assert isValid();
     Instruction[] result = SoftReference.dereference(myControlFlow);
     if (result == null) {
-      result = new ControlFlowBuilder(getProject()).buildControlFlow(this);
+      result = new ControlFlowBuilder().buildControlFlow(this);
       myControlFlow = new SoftReference<>(result);
     }
-    return ControlFlowBuilder.assertValidPsi(result);
+    return result;
   }
 
   @Override

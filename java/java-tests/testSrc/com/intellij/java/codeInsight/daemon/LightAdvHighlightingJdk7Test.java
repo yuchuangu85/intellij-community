@@ -1,21 +1,6 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.codeInsight.daemon;
 
-import com.intellij.ToolExtensionPoints;
 import com.intellij.codeInsight.daemon.LightDaemonAnalyzerTestCase;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInspection.InspectionProfileEntry;
@@ -23,13 +8,13 @@ import com.intellij.codeInspection.compiler.JavacQuirksInspection;
 import com.intellij.codeInspection.deadCode.UnusedDeclarationInspection;
 import com.intellij.codeInspection.deadCode.UnusedDeclarationInspectionBase;
 import com.intellij.codeInspection.defUse.DefUseInspection;
+import com.intellij.codeInspection.ex.EntryPointsManagerBase;
 import com.intellij.codeInspection.redundantCast.RedundantCastInspection;
 import com.intellij.codeInspection.reference.EntryPoint;
 import com.intellij.codeInspection.reference.RefElement;
 import com.intellij.codeInspection.uncheckedWarnings.UncheckedWarningLocalInspection;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.extensions.ExtensionPoint;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.projectRoots.JavaSdkVersion;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.util.text.StringUtil;
@@ -103,7 +88,7 @@ public class LightAdvHighlightingJdk7Test extends LightDaemonAnalyzerTestCase {
   public void testResolveConflictDiamonds() { doTest(false, false); }
 
   public void testDynamicallyAddIgnoredAnnotations() {
-    ExtensionPoint<EntryPoint> point = Extensions.getRootArea().getExtensionPoint(ToolExtensionPoints.DEAD_CODE_TOOL);
+    ExtensionPoint<EntryPoint> point = EntryPointsManagerBase.DEAD_CODE_EP_NAME.getPoint();
     EntryPoint extension = new EntryPoint() {
       @NotNull @Override public String getDisplayName() { return "duh"; }
       @Override public boolean isEntryPoint(@NotNull RefElement refElement, @NotNull PsiElement psiElement) { return false; }
@@ -121,16 +106,10 @@ public class LightAdvHighlightingJdk7Test extends LightDaemonAnalyzerTestCase {
     List<HighlightInfo> infos = doHighlighting(HighlightSeverity.WARNING);
     assertEquals(2, infos.size()); // unused class and unused method
 
-    try {
-      point.registerExtension(extension);
+    point.registerExtension(extension, getTestRootDisposable());
 
-      infos = doHighlighting(HighlightSeverity.WARNING);
-      HighlightInfo info = assertOneElement(infos);
-      assertEquals("Class 'WithMain' is never used", info.getDescription());
-    }
-    finally {
-      point.unregisterExtension(extension);
-    }
+    infos = doHighlighting(HighlightSeverity.WARNING);
+    assertEmpty(infos);
   }
 
   public void testNumericLiterals() { doTest(false, false); }
@@ -141,6 +120,7 @@ public class LightAdvHighlightingJdk7Test extends LightDaemonAnalyzerTestCase {
   public void testUncheckedGenericsArrayCreation() { doTest(true, false); }
   public void testGenericsArrayCreation() { doTest(false, false); }
   public void testPreciseRethrow() { doTest(false, false); }
+  public void testPreciseRethrowCaptured() { doTest(false, false); }
   public void testPreciseRethrowNonAssignableToException() { doTest(false, false); }
   public void testPreciseRethrowOfOneExceptionInTheBlock() { doTest(false, false); }
   public void testPreciseRethrowWithRuntimeExceptionDeclared() { doTest(false, false); }
@@ -188,7 +168,7 @@ public class LightAdvHighlightingJdk7Test extends LightDaemonAnalyzerTestCase {
   public void testIntersectionTypeCast() { doTest(false, false); }
   public void testUsedMethodCalledViaReflectionInTheSameFile() { doTest(true, false); }
   public void testCatchSubclassOfThrownException() { doTest(true, false); }
-
+  public void testNoUncheckedWarningOnRawSubstitutor() { doTest(true, false); }
   public void testArrayInitializerTypeCheckVariableType() { doTest(false, false);}
 
   public void testJavaUtilCollections_NoVerify() {

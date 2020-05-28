@@ -15,6 +15,7 @@
  */
 package com.intellij.util.indexing.impl;
 
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.util.SmartList;
 import com.intellij.util.indexing.ValueContainer;
 import gnu.trove.TIntArrayList;
@@ -23,12 +24,14 @@ import gnu.trove.TIntObjectHashMap;
 import java.util.List;
 
 class FileId2ValueMapping<Value> {
+  private static final Logger LOG = Logger.getInstance(FileId2ValueMapping.class);
+
   private final TIntObjectHashMap<Value> id2ValueMap;
   private final ValueContainerImpl<Value> valueContainer;
   private boolean myOnePerFileValidationEnabled = true;
 
   FileId2ValueMapping(ValueContainerImpl<Value> _valueContainer) {
-    id2ValueMap = new TIntObjectHashMap<Value>();
+    id2ValueMap = new TIntObjectHashMap<>();
     valueContainer = _valueContainer;
 
     TIntArrayList removedFileIdList = null;
@@ -43,7 +46,7 @@ class FileId2ValueMapping<Value> {
         if (previousValue != null) {  // delay removal of duplicated id -> value mapping since it will affect valueIterator we are using
           if (removedFileIdList == null) {
             removedFileIdList = new TIntArrayList();
-            removedValueList = new SmartList<Value>();
+            removedValueList = new SmartList<>();
           }
           removedFileIdList.add(id);
           removedValueList.add(previousValue);
@@ -70,10 +73,10 @@ class FileId2ValueMapping<Value> {
     if (mapped != null) {
       valueContainer.removeValue(inputId, mapped);
     }
-    if (DebugAssertions.EXTRA_SANITY_CHECKS && myOnePerFileValidationEnabled) {
+    if (IndexDebugProperties.EXTRA_SANITY_CHECKS && myOnePerFileValidationEnabled) {
       for (final InvertedIndexValueIterator<Value> valueIterator = valueContainer.getValueIterator(); valueIterator.hasNext();) {
         valueIterator.next();
-        DebugAssertions.assertTrue(!valueIterator.getValueAssociationPredicate().contains(inputId));
+        LOG.assertTrue(!valueIterator.getValueAssociationPredicate().contains(inputId));
       }
     }
     return mapped != null;

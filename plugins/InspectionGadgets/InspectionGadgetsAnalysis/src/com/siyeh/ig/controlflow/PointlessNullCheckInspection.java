@@ -1,21 +1,8 @@
-/*
- * Copyright 2011-2016 Jetbrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.siyeh.ig.controlflow;
 
 import com.intellij.codeInspection.dataFlow.*;
+import com.intellij.codeInspection.dataFlow.StandardMethodContract.ValueConstraint;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
@@ -26,15 +13,12 @@ import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.InspectionGadgetsFix;
 import com.siyeh.ig.fixes.RemoveRedundantPolyadicOperandFix;
-import com.siyeh.ig.psiutils.BoolUtils;
-import com.siyeh.ig.psiutils.ExpressionUtils;
-import com.siyeh.ig.psiutils.SideEffectChecker;
-import com.siyeh.ig.psiutils.VariableAccessUtils;
-import org.jetbrains.annotations.Nls;
+import com.siyeh.ig.psiutils.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
@@ -42,12 +26,6 @@ import java.util.stream.Stream;
 import static com.intellij.util.ObjectUtils.tryCast;
 
 public class PointlessNullCheckInspection extends BaseInspection {
-  @Nls
-  @NotNull
-  @Override
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("pointless.nullcheck.display.name");
-  }
 
   @NotNull
   @Override
@@ -163,7 +141,15 @@ public class PointlessNullCheckInspection extends BaseInspection {
       if (qualifier != null && SideEffectChecker.mayHaveSideEffects(qualifier)) return null;
       PsiMethod method = call.resolveMethod();
       if (method == null) return null;
-      List<? extends MethodContract> contracts = JavaMethodContractUtil.getMethodCallContracts(method, call);
+      List<? extends MethodContract> contracts;
+      if (MethodUtils.isEquals(method)) {
+        // Contracts for equals are tuned for some classes to (this == arg#0) -> true; () -> false
+        // so let's rewrite this to (null == arg#0) -> false which is more relevant to this inspection
+        ValueConstraint[] nullArg = {ValueConstraint.NULL_VALUE};
+        contracts = Collections.singletonList(new StandardMethodContract(nullArg, ContractReturnValue.returnFalse()));
+      } else {
+        contracts = JavaMethodContractUtil.getMethodCallContracts(method, call);
+      }
       if (contracts.isEmpty()) return null;
       MethodContract contract = tryCast(contracts.get(0), StandardMethodContract.class);
       if (contract == null || !contract.getReturnValue().equals(ContractReturnValue.returnFalse())) return null;

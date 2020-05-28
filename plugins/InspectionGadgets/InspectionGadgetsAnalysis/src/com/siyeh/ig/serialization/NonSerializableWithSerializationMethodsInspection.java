@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2013 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2019 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,17 +34,8 @@ public class NonSerializableWithSerializationMethodsInspection extends BaseInspe
   }
 
   @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("non.serializable.class.with.readwriteobject.display.name");
-  }
-
-  @Override
   protected InspectionGadgetsFix buildFix(Object... infos) {
     final PsiClass aClass = (PsiClass)infos[2];
-    if (aClass instanceof PsiAnonymousClass) {
-      return null;
-    }
     return DelegatingFixFactory.createMakeSerializableFix(aClass);
   }
 

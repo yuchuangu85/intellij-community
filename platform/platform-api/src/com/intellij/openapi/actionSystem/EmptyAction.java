@@ -1,21 +1,9 @@
-/*
- * Copyright 2000-2010 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.actionSystem;
 
 import com.intellij.openapi.actionSystem.ex.ActionUtil;
+import com.intellij.openapi.util.NlsActions;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -24,13 +12,12 @@ import javax.swing.*;
 /**
  * This class purpose is to reserve action-id in a plugin.xml so the action appears in Keymap.
  * Then Keymap assignments can be used for non-registered actions created on runtime.
- *
+ * <p>
  * Another usage is to override (hide) already registered actions by means of plugin.xml, see {@link EmptyActionGroup} as well.
- *
- * @see EmptyActionGroup
  *
  * @author Gregory.Shrago
  * @author Konstantin Bulenkov
+ * @see EmptyActionGroup
  */
 public final class EmptyAction extends AnAction {
   private boolean myEnabled;
@@ -42,11 +29,14 @@ public final class EmptyAction extends AnAction {
     myEnabled = enabled;
   }
 
-  public EmptyAction(@Nullable String text, @Nullable String description, @Nullable Icon icon) {
+  public EmptyAction(@Nullable @NlsActions.ActionText String text,
+                     @Nullable @NlsActions.ActionDescription String description, @Nullable Icon icon) {
     super(text, description, icon);
   }
 
-  public static AnAction createEmptyAction(@Nullable String name, @Nullable Icon icon, boolean alwaysEnabled) {
+  public static AnAction createEmptyAction(@Nullable @Nls(capitalization = Nls.Capitalization.Title) String name,
+                                           @Nullable Icon icon,
+                                           boolean alwaysEnabled) {
     final EmptyAction emptyAction = new EmptyAction(name, null, icon);
     emptyAction.myEnabled = alwaysEnabled;
     return emptyAction;
@@ -93,7 +83,7 @@ public final class EmptyAction extends AnAction {
            new MyDelegatingAction(action);
   }
 
-  public static class MyDelegatingAction extends AnAction {
+  public static class MyDelegatingAction extends AnAction implements ActionWithDelegate<AnAction> {
     @NotNull private final AnAction myDelegate;
 
     public MyDelegatingAction(@NotNull AnAction action) {
@@ -126,6 +116,12 @@ public final class EmptyAction extends AnAction {
     public boolean isInInjectedContext() {
       return myDelegate.isInInjectedContext();
     }
+
+    @NotNull
+    @Override
+    public AnAction getDelegate() {
+      return myDelegate;
+    }
   }
 
   public static class MyDelegatingActionGroup extends ActionGroup {
@@ -136,7 +132,7 @@ public final class EmptyAction extends AnAction {
       copyFrom(action);
       setEnabledInModalContext(action.isEnabledInModalContext());
     }
-    
+
     @NotNull
     public ActionGroup getDelegate() {
       return myDelegate;
@@ -147,9 +143,8 @@ public final class EmptyAction extends AnAction {
       return myDelegate.isPopup();
     }
 
-    @NotNull
     @Override
-    public AnAction[] getChildren(@Nullable final AnActionEvent e) {
+    public AnAction @NotNull [] getChildren(@Nullable final AnActionEvent e) {
       return myDelegate.getChildren(e);
     }
 
@@ -191,6 +186,12 @@ public final class EmptyAction extends AnAction {
     @Override
     public boolean disableIfNoVisibleChildren() {
       return myDelegate.disableIfNoVisibleChildren();
+    }
+  }
+
+  public static class DelegatingCompactActionGroup extends MyDelegatingActionGroup implements CompactActionGroup {
+    public DelegatingCompactActionGroup(@NotNull ActionGroup action) {
+      super(action);
     }
   }
 }

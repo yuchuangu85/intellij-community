@@ -1,9 +1,12 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.ui;
 
 import com.intellij.openapi.actionSystem.ActionToolbar;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.DataProvider;
+import com.intellij.ui.JBColor;
+import com.intellij.ui.components.JBPanelWithEmptyText;
+import com.intellij.ui.paint.LinePainter2D;
 import com.intellij.ui.switcher.QuickActionProvider;
 import com.intellij.util.containers.JBIterable;
 import com.intellij.util.ui.UIUtil;
@@ -18,8 +21,7 @@ import java.awt.event.ContainerEvent;
 import java.util.Collections;
 import java.util.List;
 
-public class SimpleToolWindowPanel extends JPanel implements QuickActionProvider, DataProvider {
-
+public class SimpleToolWindowPanel extends JBPanelWithEmptyText implements QuickActionProvider, DataProvider {
   private JComponent myToolbar;
   private JComponent myContent;
 
@@ -61,8 +63,24 @@ public class SimpleToolWindowPanel extends JPanel implements QuickActionProvider
     });
   }
 
+  public boolean isVertical() {
+    return myVertical;
+  }
+
+  public void setVertical(boolean vertical) {
+    if (myVertical == vertical) return;
+    removeAll();
+    myVertical = vertical;
+    setContent(myContent);
+    setToolbar(myToolbar);
+  }
+
   public boolean isToolbarVisible() {
     return myToolbar != null && myToolbar.isVisible();
+  }
+
+  public @Nullable JComponent getToolbar() {
+    return myToolbar;
   }
 
   public void setToolbar(@Nullable JComponent c) {
@@ -70,11 +88,15 @@ public class SimpleToolWindowPanel extends JPanel implements QuickActionProvider
       remove(myToolbar);
     }
     myToolbar = c;
+    if (myToolbar instanceof ActionToolbar) {
+      ((ActionToolbar)myToolbar).setOrientation(myVertical ? SwingConstants.HORIZONTAL : SwingConstants.VERTICAL);
+    }
 
     if (c != null) {
       if (myVertical) {
         add(c, BorderLayout.NORTH);
-      } else {
+      }
+      else {
         add(c, BorderLayout.WEST);
       }
     }
@@ -84,8 +106,7 @@ public class SimpleToolWindowPanel extends JPanel implements QuickActionProvider
   }
 
   @Override
-  @Nullable
-  public Object getData(@NotNull @NonNls String dataId) {
+  public @Nullable Object getData(@NotNull @NonNls String dataId) {
     return QuickActionProvider.KEY.is(dataId) && myProvideQuickActions ? this : null;
   }
 
@@ -95,11 +116,12 @@ public class SimpleToolWindowPanel extends JPanel implements QuickActionProvider
   }
 
   @Override
-  @NotNull
-  public List<AnAction> getActions(boolean originalProvider) {
+  public @NotNull List<AnAction> getActions(boolean originalProvider) {
     JBIterable<ActionToolbar> toolbars = UIUtil.uiTraverser(myToolbar).traverse().filter(ActionToolbar.class);
-    if (toolbars.size() == 0) return Collections.emptyList();
-    return toolbars.flatten(toolbar -> toolbar.getActions()).toList();
+    if (toolbars.size() == 0) {
+      return Collections.emptyList();
+    }
+    return toolbars.flatten(ActionToolbar::getActions).toList();
   }
 
   @Override
@@ -107,7 +129,11 @@ public class SimpleToolWindowPanel extends JPanel implements QuickActionProvider
     return this;
   }
 
-  public void setContent(JComponent c) {
+  public @Nullable JComponent getContent() {
+    return myContent;
+  }
+
+  public void setContent(@NotNull JComponent c) {
     if (myContent != null) {
       remove(myContent);
     }
@@ -124,17 +150,18 @@ public class SimpleToolWindowPanel extends JPanel implements QuickActionProvider
   }
 
   @Override
-  protected void paintComponent(final Graphics g) {
+  protected void paintComponent(Graphics g) {
     super.paintComponent(g);
 
     if (myToolbar != null && myToolbar.getParent() == this && myContent != null && myContent.getParent() == this) {
-      g.setColor(UIUtil.getBorderColor());
+      g.setColor(JBColor.border());
       if (myVertical) {
-        final int y = (int)myToolbar.getBounds().getMaxY();
-        UIUtil.drawLine(g, 0, y, getWidth(), y);
-      } else {
+        int y = (int)myToolbar.getBounds().getMaxY();
+        LinePainter2D.paint((Graphics2D)g, 0, y, getWidth(), y);
+      }
+      else {
         int x = (int)myToolbar.getBounds().getMaxX();
-        UIUtil.drawLine(g, x, 0, x, getHeight());
+        LinePainter2D.paint((Graphics2D)g, x, 0, x, getHeight());
       }
     }
   }

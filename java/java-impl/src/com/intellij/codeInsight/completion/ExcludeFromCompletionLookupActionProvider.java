@@ -20,10 +20,12 @@ import com.intellij.codeInsight.lookup.Lookup;
 import com.intellij.codeInsight.lookup.LookupActionProvider;
 import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.LookupElementAction;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.Consumer;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -65,8 +67,8 @@ public class ExcludeFromCompletionLookupActionProvider implements LookupActionPr
     private final Project myProject;
     private final String myToExclude;
 
-    ExcludeFromCompletionAction(Project project, String s) {
-      super(null, "Exclude '" + s + "' from completion");
+    ExcludeFromCompletionAction(@NotNull Project project, @NotNull String s) {
+      super(null, JavaBundle.message("exclude.0.from.completion", s));
       myProject = project;
       myToExclude = s;
     }

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package org.jetbrains.plugins.groovy.refactoring;
 
@@ -21,7 +21,7 @@ import com.intellij.psi.impl.source.tree.LeafPsiElement;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.*;
 import com.intellij.refactoring.util.RefactoringUtil;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
@@ -53,6 +53,8 @@ import org.jetbrains.plugins.groovy.lang.psi.api.util.GrVariableDeclarationOwner
 import org.jetbrains.plugins.groovy.lang.psi.util.GroovyPropertyUtils;
 
 import java.util.*;
+
+import static org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil.isPlusPlusOrMinusMinus;
 
 /**
  * @author ilyas
@@ -170,7 +172,7 @@ public abstract class GroovyRefactoringUtil {
     editor.getSelectionModel().setSelection(start, end);
   }
 
-  @NotNull public static PsiElement[] findStatementsInRange(PsiFile file, int startOffset, int endOffset, boolean strict) {
+  public static PsiElement @NotNull [] findStatementsInRange(PsiFile file, int startOffset, int endOffset, boolean strict) {
     if (!(file instanceof GroovyFileBase)) return PsiElement.EMPTY_ARRAY;
     Language language = GroovyLanguage.INSTANCE;
     PsiElement element1 = file.getViewProvider().findElementAt(startOffset, language);
@@ -371,7 +373,7 @@ public abstract class GroovyRefactoringUtil {
       modifiers = finalModifiers;
     }
     else {
-      modifiers = ArrayUtil.EMPTY_STRING_ARRAY;
+      modifiers = ArrayUtilRt.EMPTY_STRING_ARRAY;
     }
     GrVariableDeclaration decl =
       factory.createVariableDeclaration(modifiers, (GrExpression)org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil
@@ -424,14 +426,6 @@ public abstract class GroovyRefactoringUtil {
       result = Math.max(result, childResult);
     }
     return result;
-  }
-
-  public static boolean isPlusPlusOrMinusMinus(PsiElement element) {
-    if (element instanceof GrUnaryExpression) {
-      IElementType operandSign = ((GrUnaryExpression)element).getOperationTokenType();
-      return operandSign == GroovyTokenTypes.mDEC || operandSign == GroovyTokenTypes.mINC;
-    }
-    return false;
   }
 
   public static boolean isCorrectReferenceName(String newName, Project project) {
@@ -526,7 +520,7 @@ public abstract class GroovyRefactoringUtil {
    *    while(true) {a=foo()}
    * @param statement
    * @return corresponding statement inside block if it has been created or statement itself.
-   * @throws com.intellij.util.IncorrectOperationException
+   * @throws IncorrectOperationException
    */
 
   @NotNull
@@ -600,17 +594,14 @@ public abstract class GroovyRefactoringUtil {
     return parent instanceof GrStatementOwner ? ((GrStatementOwner) parent) : null;
   }
 
-  @Nullable
-  public static PsiType getType(@Nullable PsiParameter myParameter) {
-    if (myParameter == null) return null;
+  @NotNull
+  private static PsiType getType(@NotNull PsiParameter myParameter) {
     PsiType type = myParameter.getType();
     return type instanceof PsiEllipsisType ? ((PsiEllipsisType)type).toArrayType() : type;
   }
 
-    @Nullable
-  public static PsiType getSubstitutedType(@Nullable GrParameter parameter) {
-    if (parameter == null) return null;
-
+  @NotNull
+  public static PsiType getSubstitutedType(@NotNull GrParameter parameter) {
     final PsiType type = getType(parameter);
 
     if (type instanceof PsiArrayType) {
@@ -677,17 +668,17 @@ public abstract class GroovyRefactoringUtil {
         private final Set<PsiTypeParameter> myTypeParams = new HashSet<>();
 
         @Override
-        public Boolean visitType(final PsiType type) {
+        public Boolean visitType(@NotNull final PsiType type) {
           return false;
         }
 
         @Override
-        public Boolean visitArrayType(final PsiArrayType arrayType) {
+        public Boolean visitArrayType(@NotNull final PsiArrayType arrayType) {
           return arrayType.getComponentType().accept(this);
         }
 
         @Override
-        public Boolean visitClassType(final PsiClassType classType) {
+        public Boolean visitClassType(@NotNull final PsiClassType classType) {
           final PsiClass aClass = classType.resolve();
           if (aClass instanceof PsiTypeParameter) {
             myTypeParams.add((PsiTypeParameter)aClass);
@@ -701,7 +692,7 @@ public abstract class GroovyRefactoringUtil {
         }
 
         @Override
-        public Boolean visitWildcardType(final PsiWildcardType wildcardType) {
+        public Boolean visitWildcardType(@NotNull final PsiWildcardType wildcardType) {
           final PsiType bound = wildcardType.getBound();
           if (bound != null) {
             bound.accept(this);

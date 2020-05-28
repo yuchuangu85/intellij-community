@@ -80,7 +80,7 @@ class SyncCompletion extends CompletionThreadingBase {
 }
 
 class AsyncCompletion extends CompletionThreadingBase {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.completion.AsyncCompletion");
+  private static final Logger LOG = Logger.getInstance(AsyncCompletion.class);
   private final ArrayList<CompletionResult> myBatchList = new ArrayList<>();
   private final LinkedBlockingQueue<Computable<Boolean>> myQueue = new LinkedBlockingQueue<>();
 
@@ -93,7 +93,8 @@ class AsyncCompletion extends CompletionThreadingBase {
         startSemaphore.up();
         ProgressManager.checkCanceled();
         runnable.run();
-      } catch (ProcessCanceledException ignored) {
+      }
+      catch (ProcessCanceledException ignored) {
       }
     }, progressIndicator));
     startSemaphore.waitFor();
@@ -166,7 +167,10 @@ class AsyncCompletion extends CompletionThreadingBase {
   }
 
   static void tryReadOrCancel(ProgressIndicator indicator, Runnable runnable) {
-    if (!ApplicationManagerEx.getApplicationEx().tryRunReadAction(runnable)) {
+    if (!ApplicationManagerEx.getApplicationEx().tryRunReadAction(() -> {
+      indicator.checkCanceled();
+      runnable.run();
+    })) {
       indicator.cancel();
       indicator.checkCanceled();
     }

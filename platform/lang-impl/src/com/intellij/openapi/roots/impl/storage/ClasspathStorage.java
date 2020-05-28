@@ -1,12 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.roots.impl.storage;
 
 import com.intellij.ProjectTopics;
 import com.intellij.application.options.PathMacrosCollector;
-import com.intellij.configurationStore.StateStorageBase;
-import com.intellij.configurationStore.StateStorageManager;
-import com.intellij.configurationStore.StateStorageManagerKt;
-import com.intellij.configurationStore.StorageUtilKt;
+import com.intellij.configurationStore.*;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.application.ApplicationManager;
@@ -17,6 +14,7 @@ import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.project.ModuleListener;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.ProjectBundle;
 import com.intellij.openapi.roots.ModifiableRootModel;
 import com.intellij.openapi.roots.ModuleRootModel;
 import com.intellij.openapi.roots.impl.ModuleRootManagerImpl;
@@ -60,8 +58,9 @@ public final class ClasspathStorage extends StateStorageBase<Boolean> {
     ClasspathStorageProvider provider = getProvider(storageType);
     if (provider == null) {
       if (module.getUserData(ERROR_NOTIFIED_KEY) == null) {
-        Notification n = new Notification(StorageUtilKt.NOTIFICATION_GROUP_ID, "Cannot load module '" + module.getName() + "'",
-                                          "Support for " + storageType + " format is not installed.", NotificationType.ERROR);
+        Notification n = new Notification(StorageUtilKt.NOTIFICATION_GROUP_ID,
+                                          ProjectBundle.message("notification.title.cannot.load.module.0", module.getName()),
+                                          ProjectBundle.message("notification.content.support.for.0.format.is.not.installed", storageType), NotificationType.ERROR);
         n.notify(module.getProject());
         module.putUserData(ERROR_NOTIFIED_KEY, Boolean.TRUE);
         LOG.info("Classpath storage provider " + storageType + " not found");
@@ -79,17 +78,21 @@ public final class ClasspathStorage extends StateStorageBase<Boolean> {
     busConnection.subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
       @Override
       public void after(@NotNull List<? extends VFileEvent> events) {
-        if (paths.isEmpty()) return;
+        if (paths.isEmpty()) {
+          return;
+        }
+
         for (VFileEvent event : events) {
-          if (!event.isFromRefresh() || !(event instanceof VFileContentChangeEvent)) {
+          if (!event.isFromRefresh() ||
+              !(event instanceof VFileContentChangeEvent) ||
+              !StateStorageManagerKt.isFireStorageFileChangedEvent(event)) {
             continue;
           }
 
           String eventPath = event.getPath();
-
           for (String path : paths) {
             if (path.equals(eventPath)) {
-              module.getMessageBus().syncPublisher(StateStorageManagerKt.getSTORAGE_TOPIC()).storageFileChanged(event, ClasspathStorage.this, module);
+              StoreReloadManager.getInstance().storageFilesChanged(Collections.singletonMap(module, Collections.singletonList(ClasspathStorage.this)));
               return;
             }
           }
@@ -190,10 +193,15 @@ public final class ClasspathStorage extends StateStorageBase<Boolean> {
   }
 
   @Override
-  public void analyzeExternalChangesAndUpdateIfNeed(@NotNull Set<? super String> componentNames) {
+  public void analyzeExternalChangesAndUpdateIfNeeded(@NotNull Set<? super String> componentNames) {
     // if some file changed, so, changed
     componentNames.add("NewModuleRootManager");
     getStorageDataRef().set(false);
+  }
+
+  @Override
+  public boolean isUseVfsForWrite() {
+    return true;
   }
 
   @Nullable

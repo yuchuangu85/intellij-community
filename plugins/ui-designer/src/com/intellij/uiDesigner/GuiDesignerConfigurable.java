@@ -18,7 +18,7 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.PsiShortNamesCache;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.uiDesigner.compiler.AsmCodeGenerator;
 import com.intellij.uiDesigner.make.FormSourceCodeGenerator;
 import com.intellij.uiDesigner.radComponents.LayoutManagerRegistry;
@@ -32,7 +32,7 @@ import javax.swing.*;
  * @author Vladimir Kondratyev
  */
 public final class GuiDesignerConfigurable implements SearchableConfigurable, Configurable.NoScroll {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.GuiDesignerConfigurable");
+  private static final Logger LOG = Logger.getInstance(GuiDesignerConfigurable.class);
   private final Project myProject;
   private MyGeneralUI myGeneralUI;
 
@@ -74,6 +74,10 @@ public final class GuiDesignerConfigurable implements SearchableConfigurable, Co
     if (myGeneralUI.myChkCopyFormsRuntime.isSelected() != configuration.COPY_FORMS_RUNTIME_TO_OUTPUT) {
       return true;
     }
+    
+    if (myGeneralUI.myChkUseDynamicBundles.isSelected() != configuration.USE_DYNAMIC_BUNDLES) {
+      return true;
+    }
 
     if (!Comparing.equal(configuration.DEFAULT_LAYOUT_MANAGER, myGeneralUI.myLayoutManagerCombo.getSelectedItem())) {
       return true;
@@ -102,6 +106,7 @@ public final class GuiDesignerConfigurable implements SearchableConfigurable, Co
     configuration.INSTRUMENT_CLASSES = myGeneralUI.myRbInstrumentClasses.isSelected();
     configuration.DEFAULT_FIELD_ACCESSIBILITY = (String)myGeneralUI .myDefaultFieldAccessibilityCombo.getSelectedItem();
     configuration.RESIZE_HEADERS = myGeneralUI.myResizeHeaders.isSelected();
+    configuration.USE_DYNAMIC_BUNDLES = myGeneralUI.myChkUseDynamicBundles.isSelected();
 
     if (configuration.INSTRUMENT_CLASSES && !myProject.isDefault()) {
       final DispatchThreadProgressWindow progressWindow = new DispatchThreadProgressWindow(false, myProject);
@@ -123,14 +128,10 @@ public final class GuiDesignerConfigurable implements SearchableConfigurable, Co
       myGeneralUI.myRbInstrumentSources.setSelected(true);
     }
     myGeneralUI.myChkCopyFormsRuntime.setSelected(configuration.COPY_FORMS_RUNTIME_TO_OUTPUT);
+    myGeneralUI.myChkUseDynamicBundles.setSelected(configuration.USE_DYNAMIC_BUNDLES);
 
-    myGeneralUI.myLayoutManagerCombo.setModel(new DefaultComboBoxModel(LayoutManagerRegistry.getNonDeprecatedLayoutManagerNames()));
-    myGeneralUI.myLayoutManagerCombo.setRenderer(new ListCellRendererWrapper<String>() {
-      @Override
-      public void customize(JList list, String value, int index, boolean selected, boolean hasFocus) {
-        setText(LayoutManagerRegistry.getLayoutManagerDisplayName(value));
-      }
-    });
+    myGeneralUI.myLayoutManagerCombo.setModel(new DefaultComboBoxModel<>(LayoutManagerRegistry.getNonDeprecatedLayoutManagerNames()));
+    myGeneralUI.myLayoutManagerCombo.setRenderer(SimpleListCellRenderer.create("", LayoutManagerRegistry::getLayoutManagerDisplayName));
     myGeneralUI.myLayoutManagerCombo.setSelectedItem(configuration.DEFAULT_LAYOUT_MANAGER);
 
     myGeneralUI.myDefaultFieldAccessibilityCombo.setSelectedItem(configuration.DEFAULT_FIELD_ACCESSIBILITY);
@@ -148,8 +149,9 @@ public final class GuiDesignerConfigurable implements SearchableConfigurable, Co
     public JRadioButton myRbInstrumentClasses;
     public JRadioButton myRbInstrumentSources;
     public JCheckBox myChkCopyFormsRuntime;
-    private JComboBox myLayoutManagerCombo;
-    private JComboBox myDefaultFieldAccessibilityCombo;
+    public JCheckBox myChkUseDynamicBundles;
+    private JComboBox<String> myLayoutManagerCombo;
+    private JComboBox<String> myDefaultFieldAccessibilityCombo;
     private JCheckBox myResizeHeaders;
   }
 

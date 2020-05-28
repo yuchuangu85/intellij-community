@@ -7,10 +7,9 @@ import org.jetbrains.plugins.groovy.GroovyLanguage
 import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult
 import org.jetbrains.plugins.groovy.lang.psi.impl.GrMethodReferenceExpressionImpl
 import org.jetbrains.plugins.groovy.lang.psi.impl.GrMethodReferenceExpressionImpl.Companion.CONSTRUCTOR_REFERENCE_NAME
-import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil.getConstructorCandidates
 import org.jetbrains.plugins.groovy.lang.resolve.ResolveUtil.unwrapClassType
+import org.jetbrains.plugins.groovy.lang.resolve.impl.getAllConstructorResults
 import org.jetbrains.plugins.groovy.lang.resolve.processors.MethodReferenceProcessor
-import org.jetbrains.plugins.groovy.lang.resolve.processors.StaticMethodReferenceProcessor
 
 internal object GrMethodReferenceResolver : GroovyResolver<GrMethodReferenceExpressionImpl> {
 
@@ -18,23 +17,17 @@ internal object GrMethodReferenceResolver : GroovyResolver<GrMethodReferenceExpr
     val name = ref.referenceName ?: return emptyList()
     val type = ref.qualifier?.type ?: return emptyList()
 
-    val instanceContext = run {
+    val methods = run {
       val processor = MethodReferenceProcessor(name)
       type.processReceiverType(processor, ResolveState.initial(), ref)
       processor.results
     }
 
-    val unwrapped = unwrapClassType(type) ?: return instanceContext
-
-    val staticContext = run {
-      val processor = StaticMethodReferenceProcessor(name)
-      unwrapped.processReceiverType(processor, ResolveState.initial(), ref)
-      processor.results
-    }
+    val unwrapped = unwrapClassType(type) ?: return methods
 
     val constructors = if (name == CONSTRUCTOR_REFERENCE_NAME) {
       when (unwrapped) {
-        is PsiClassType -> getConstructorCandidates(unwrapped, null, ref).toList()
+        is PsiClassType -> getAllConstructorResults(unwrapped, ref).toList()
         is PsiArrayType -> fakeArrayConstructors(unwrapped, ref.manager)
         else -> emptyList()
       }
@@ -43,7 +36,7 @@ internal object GrMethodReferenceResolver : GroovyResolver<GrMethodReferenceExpr
       emptyList()
     }
 
-    return instanceContext + staticContext + constructors
+    return methods + constructors
   }
 
   private fun fakeArrayConstructors(type: PsiArrayType, manager: PsiManager): List<GroovyResolveResult> {

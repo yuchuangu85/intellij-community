@@ -1,7 +1,6 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.yaml.psi.impl;
 
-import com.intellij.extapi.psi.StubBasedPsiElementBase;
 import com.intellij.lang.ASTNode;
 import com.intellij.navigation.ItemPresentation;
 import com.intellij.navigation.ItemPresentationProviders;
@@ -22,19 +21,11 @@ import org.jetbrains.yaml.YAMLElementTypes;
 import org.jetbrains.yaml.YAMLTokenTypes;
 import org.jetbrains.yaml.YAMLUtil;
 import org.jetbrains.yaml.psi.*;
-import org.jetbrains.yaml.psi.stubs.YAMLKeyStub;
 
 import javax.swing.*;
 
-/**
- * @author oleg
- */
-public class YAMLKeyValueImpl extends StubBasedPsiElementBase<YAMLKeyStub> implements YAMLKeyValue {
+public class YAMLKeyValueImpl extends YAMLPsiElementImpl implements YAMLKeyValue {
   public static final Icon YAML_KEY_ICON = PlatformIcons.PROPERTY_ICON;
-
-  public YAMLKeyValueImpl(@NotNull YAMLKeyStub stub) {
-    super(stub, YAMLElementTypes.KEY_VALUE_PAIR);
-  }
 
   public YAMLKeyValueImpl(@NotNull final ASTNode node) {
     super(node);
@@ -48,14 +39,21 @@ public class YAMLKeyValueImpl extends StubBasedPsiElementBase<YAMLKeyStub> imple
   @Override
   @Nullable
   public PsiElement getKey() {
-    final PsiElement result = findChildByType(YAMLTokenTypes.SCALAR_KEY);
-    if (result != null) {
-      return result;
+    PsiElement colon = findChildByType(YAMLTokenTypes.COLON);
+    if (colon == null) {
+      return null;
     }
-    if (isExplicit()) {
-      return findKey();
+    ASTNode node = colon.getNode();
+    do {
+      node = node.getTreePrev();
+    } while(YAMLElementTypes.BLANK_ELEMENTS.contains(PsiUtilCore.getElementType(node)));
+
+    if (node == null || PsiUtilCore.getElementType(node) == YAMLTokenTypes.QUESTION) {
+      return null;
     }
-    return null;
+    else {
+      return node.getPsi();
+    }
   }
 
   @Nullable
@@ -73,11 +71,6 @@ public class YAMLKeyValueImpl extends StubBasedPsiElementBase<YAMLKeyStub> imple
   @Override
   @NotNull
   public String getKeyText() {
-    YAMLKeyStub stub = getGreenStub();
-    if (stub != null) {
-      return stub.getKeyText();
-    }
-
     final PsiElement keyElement = getKey();
     if (keyElement == null) {
       return "";
@@ -98,6 +91,9 @@ public class YAMLKeyValueImpl extends StubBasedPsiElementBase<YAMLKeyStub> imple
   @Nullable
   public YAMLValue getValue() {
     for (PsiElement child = getLastChild(); child != null; child = child.getPrevSibling()) {
+      if (PsiUtilCore.getElementType(child) == YAMLTokenTypes.COLON) {
+        return null;
+      }
       if (child instanceof YAMLValue) {
         return ((YAMLValue)child);
       }
@@ -139,16 +135,6 @@ public class YAMLKeyValueImpl extends StubBasedPsiElementBase<YAMLKeyStub> imple
     else {
       add(value);
     }
-  }
-
-  @NotNull
-  @Override
-  public String getConfigFullPath() {
-    YAMLKeyStub stub = getGreenStub();
-    if (stub != null) {
-      return stub.getKeyPath();
-    }
-    return YAMLUtil.getConfigFullName(this);
   }
 
   private void adjustWhitespaceToContentType(boolean isScalar) {
@@ -218,8 +204,7 @@ public class YAMLKeyValueImpl extends StubBasedPsiElementBase<YAMLKeyStub> imple
    * registrar.registerReferenceProvider(PlatformPatterns.psiElement(YAMLKeyValue.class), ReferenceProvider);
    */
   @Override
-  @NotNull
-  public PsiReference[] getReferences() {
+  public PsiReference @NotNull [] getReferences() {
     return ReferenceProvidersRegistry.getReferencesFromProviders(this);
   }
 
@@ -235,25 +220,6 @@ public class YAMLKeyValueImpl extends StubBasedPsiElementBase<YAMLKeyStub> imple
     }
     else {
       super.accept(visitor);
-    }
-  }
-
-  @Nullable
-  private PsiElement findKey() {
-    PsiElement colon = findChildByType(YAMLTokenTypes.COLON);
-    if (colon == null) {
-      return null;
-    }
-    ASTNode node = colon.getNode();
-    do {
-      node = node.getTreePrev();
-    } while(YAMLElementTypes.BLANK_ELEMENTS.contains(PsiUtilCore.getElementType(node)));
-
-    if (node == null || PsiUtilCore.getElementType(node) == YAMLTokenTypes.QUESTION) {
-      return null;
-    }
-    else {
-      return node.getPsi();
     }
   }
 }

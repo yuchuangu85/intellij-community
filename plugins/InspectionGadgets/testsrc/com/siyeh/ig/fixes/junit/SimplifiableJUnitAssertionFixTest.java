@@ -19,7 +19,7 @@ import com.intellij.testFramework.IdeaTestUtil;
 import com.intellij.testFramework.builders.JavaModuleFixtureBuilder;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.IGQuickFixesTestCase;
-import com.siyeh.ig.junit.SimplifiableJUnitAssertionInspection;
+import com.siyeh.ig.testFrameworks.SimplifiableAssertionInspection;
 
 /**
  * @author Bas Leijdekkers
@@ -38,6 +38,7 @@ public class SimplifiableJUnitAssertionFixTest extends IGQuickFixesTestCase {
   public void testFalseToNotEqualsJUnit4() { doTest(); }
   public void testObjectEqualsToEquals() { doTest(); }
   public void testTrueToArrayEquals() { doTest(); }
+  public void testNegatedTrue() { doTest(); }
 
   @Override
   protected void tuneFixture(JavaModuleFixtureBuilder builder) throws Exception {
@@ -48,7 +49,7 @@ public class SimplifiableJUnitAssertionFixTest extends IGQuickFixesTestCase {
   @Override
   protected void setUp() throws Exception {
     super.setUp();
-    myFixture.enableInspections(new SimplifiableJUnitAssertionInspection());
+    myFixture.enableInspections(new SimplifiableAssertionInspection());
     myRelativePath = "junit/simplifiable_junit_assertion";
     myDefaultHint = InspectionGadgetsBundle.message("simplify.junit.assertion.simplify.quickfix");
 
@@ -71,7 +72,9 @@ public class SimplifiableJUnitAssertionFixTest extends IGQuickFixesTestCase {
     myFixture.addClass("package org.junit;" +
                        "public class Assert {" +
                        "    public static void assertTrue(boolean condition) {}" +
+                       "    public static void assertTrue(String message, boolean condition) {}" +
                        "    public static void assertFalse(boolean condition) {}" +
+                       "    public static void assertFalse(String message, boolean condition) {}" +
                        "    public static void assertEquals(boolean expected, boolean actual) {}" +
                        "    public static void assertNotEquals(long expected, long actual) {}" +
                        "    public static void assertArrayEquals(int[] expected, int[] actual) {}" +

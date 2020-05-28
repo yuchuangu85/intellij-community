@@ -1,36 +1,27 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.stats.sender
 
-import com.intellij.stats.network.service.RequestService
+import com.intellij.ide.util.PropertiesComponent
+import com.intellij.openapi.components.service
 import com.intellij.stats.network.assertNotEDT
+import com.intellij.stats.network.service.RequestService
 import com.intellij.stats.storage.FilePathProvider
 import java.io.File
 
-class StatisticSenderImpl(
-        private val requestService: RequestService,
-        private val filePathProvider: FilePathProvider
-): StatisticSender {
+class StatisticSenderImpl: StatisticSender {
+    companion object {
+        const val DAILY_LIMIT = 15 * 1024 * 1024 // 15 mb
+    }
+
+    private val limitWatcher = DailyLimitSendingWatcher(DAILY_LIMIT, PersistentSentDataInfo(PropertiesComponent.getInstance()))
 
     override fun sendStatsData(url: String) {
         assertNotEDT()
-        val filesToSend = filePathProvider.getDataFiles()
+        if (limitWatcher.isLimitReached()) return
+        val filesToSend = service<FilePathProvider>().getDataFiles()
         filesToSend.forEach {
-            if (it.length() > 0) {
+            if (it.length() > 0 && !limitWatcher.isLimitReached()) {
                 val isSentSuccessfully = sendContent(url, it)
                 if (isSentSuccessfully) {
                     it.delete()
@@ -43,8 +34,11 @@ class StatisticSenderImpl(
     }
 
     private fun sendContent(url: String, file: File): Boolean {
-        val data = requestService.postZipped(url, file)
+        val data = service<RequestService>().postZipped(url, file)
         if (data != null && data.code >= 200 && data.code < 300) {
+            if (data.sentDataSize != null) {
+                limitWatcher.dataSent(data.sentDataSize)
+            }
             return true
         }
         return false

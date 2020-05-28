@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.hierarchy.type;
 
 import com.intellij.codeInsight.AnnotationTargetUtil;
@@ -6,12 +6,11 @@ import com.intellij.ide.hierarchy.HierarchyNodeDescriptor;
 import com.intellij.ide.hierarchy.HierarchyTreeStructure;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
-import com.intellij.psi.util.PsiUtil;
-import com.intellij.util.ArrayUtil;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ArrayUtilRt;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -22,8 +21,7 @@ public final class SupertypesHierarchyTreeStructure extends HierarchyTreeStructu
   }
 
   @Override
-  @NotNull
-  protected final Object[] buildChildren(@NotNull final HierarchyNodeDescriptor descriptor) {
+  protected final Object @NotNull [] buildChildren(@NotNull final HierarchyNodeDescriptor descriptor) {
     final Object element = ((TypeHierarchyNodeDescriptor)descriptor).getPsiClass();
     if (element instanceof PsiClass) {
       final PsiClass psiClass = (PsiClass)element;
@@ -37,25 +35,23 @@ public final class SupertypesHierarchyTreeStructure extends HierarchyTreeStructu
       }
       return descriptors.toArray(new HierarchyNodeDescriptor[0]);
     } else if (element instanceof PsiFunctionalExpression) {
-      final PsiClass functionalInterfaceClass = PsiUtil.resolveClassInType(((PsiFunctionalExpression)element).getFunctionalInterfaceType());
+      final PsiClass functionalInterfaceClass = LambdaUtil.resolveFunctionalInterfaceClass((PsiFunctionalExpression)element);
       if (functionalInterfaceClass != null) {
         return new HierarchyNodeDescriptor[] {new TypeHierarchyNodeDescriptor(myProject, descriptor, functionalInterfaceClass, false)};
       }
     }
-    return ArrayUtil.EMPTY_OBJECT_ARRAY;
+    return ArrayUtilRt.EMPTY_OBJECT_ARRAY;
   }
 
-  @NotNull
-  private static PsiClass[] getSupers(@NotNull PsiClass psiClass) {
+  private static PsiClass @NotNull [] getSupers(@NotNull PsiClass psiClass) {
     if (psiClass.isAnnotationType()) {
       return getMetaAnnotations(psiClass);
     }
     return psiClass.getSupers();
   }
 
-  @NotNull
-  private static PsiClass[] getMetaAnnotations(@NotNull PsiClass psiClass) {
-    Set<PsiClass> supers = ContainerUtil.newHashSet();
+  private static PsiClass @NotNull [] getMetaAnnotations(@NotNull PsiClass psiClass) {
+    Set<PsiClass> supers = new HashSet<>();
     final PsiModifierList modifierList = psiClass.getModifierList();
     if (modifierList != null) {
       for (PsiAnnotation annotation : modifierList.getAnnotations()) {

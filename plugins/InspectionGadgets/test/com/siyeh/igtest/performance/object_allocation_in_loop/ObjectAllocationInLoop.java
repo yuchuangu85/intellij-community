@@ -2,6 +2,7 @@ package com.siyeh.igtest.performance.object_allocation_in_loop;
 
 import java.util.regex.*;
 import java.util.function.*;
+import java.util.*;
 
 class ObjectAllocationInLoop {
 
@@ -73,6 +74,37 @@ class ObjectAllocationInLoop {
         int x = 5;
         return x;
       };
+    }
+  }
+
+  // IDEA-206221
+  public static Map<Integer, Boolean> viaLoop(List<Boolean> values) {
+    Map<Integer, Boolean> result = new HashMap<>();
+    for (Boolean value : values) {
+      result.merge(key(), value, (oldValue, newValue) -> Boolean.FALSE.equals(oldValue) ? newValue : oldValue);
+    }
+    return result;
+  }
+
+  static native Integer key();
+
+  final int CONST = 10;
+  
+  void concat() {
+    for (int i = 0; i < 10; i++) {
+      String s = <warning descr="Object allocation via string concatenation in loop">"value: " + i</warning>;
+      String s2 = "value: " + CONST;
+      System.out.println(s);
+      System.out.println(s2);
+    }
+  }
+  
+  void arrayInit() {
+    for (int i = 0; i < 10; i++) {
+      int[] i1 = <warning descr="Array allocation in loop">{0}</warning>;
+      int[][] i2 = <warning descr="Array allocation in loop">{{0}}</warning>;
+      int[] i3 = new <warning descr="Array allocation in loop">int</warning>[] {0};
+      int[] i4 = new <warning descr="Array allocation in loop">int</warning>[10];
     }
   }
 }

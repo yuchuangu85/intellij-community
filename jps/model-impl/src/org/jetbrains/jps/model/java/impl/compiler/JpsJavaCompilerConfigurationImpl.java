@@ -17,23 +17,16 @@ package org.jetbrains.jps.model.java.impl.compiler;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.jps.model.JpsElementChildRole;
 import org.jetbrains.jps.model.ex.JpsCompositeElementBase;
-import org.jetbrains.jps.model.ex.JpsElementChildRoleBase;
-import org.jetbrains.jps.model.java.compiler.JpsCompilerExcludes;
-import org.jetbrains.jps.model.java.compiler.JpsJavaCompilerConfiguration;
-import org.jetbrains.jps.model.java.compiler.JpsJavaCompilerOptions;
-import org.jetbrains.jps.model.java.compiler.ProcessorConfigProfile;
+import org.jetbrains.jps.model.ex.JpsFactoryElementChildRoleBase;
+import org.jetbrains.jps.model.java.compiler.*;
 import org.jetbrains.jps.model.module.JpsModule;
 
 import java.io.File;
 import java.util.*;
 
-/**
- * @author nik
- */
 public class JpsJavaCompilerConfigurationImpl extends JpsCompositeElementBase<JpsJavaCompilerConfigurationImpl> implements JpsJavaCompilerConfiguration {
-  public static final JpsElementChildRole<JpsJavaCompilerConfiguration> ROLE = JpsElementChildRoleBase.create("compiler configuration");
+  public static final JpsFactoryElementChildRoleBase<JpsJavaCompilerConfiguration> ROLE = JpsFactoryElementChildRoleBase.create("compiler configuration", () -> new JpsJavaCompilerConfigurationImpl());
   private boolean myAddNotNullAssertions = true;
   private List<String> myNotNullAnnotations = Collections.singletonList(NotNull.class.getName());
   private boolean myClearOutputDirectoryOnRebuild = true;
@@ -49,6 +42,7 @@ public class JpsJavaCompilerConfigurationImpl extends JpsCompositeElementBase<Jp
   private String myJavaCompilerId = "Javac";
   private Map<JpsModule, ProcessorConfigProfile> myAnnotationProcessingProfileMap;
   private ResourcePatterns myCompiledPatterns;
+  private JpsValidationConfiguration myValidationConfiguration = new JpsValidationConfigurationImpl(false, Collections.emptySet());
 
   public JpsJavaCompilerConfigurationImpl() {
   }
@@ -103,6 +97,17 @@ public class JpsJavaCompilerConfigurationImpl extends JpsCompositeElementBase<Jp
   @Override
   public JpsCompilerExcludes getValidationExcludes() {
     return myValidationExcludes;
+  }
+
+  @NotNull
+  @Override
+  public JpsValidationConfiguration getValidationConfiguration() {
+    return myValidationConfiguration;
+  }
+
+  @Override
+  public void setValidationConfiguration(boolean validateOnBuild, @NotNull Set<String> disabledValidators) {
+    myValidationConfiguration = new JpsValidationConfigurationImpl(validateOnBuild, disabledValidators);
   }
 
   @NotNull

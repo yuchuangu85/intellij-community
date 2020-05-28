@@ -1,6 +1,7 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.externalSystem.service.execution;
 
+import com.intellij.execution.ExecutionBundle;
 import com.intellij.execution.configurations.ConfigurationFactory;
 import com.intellij.execution.configurations.ConfigurationType;
 import com.intellij.execution.configurations.RunConfiguration;
@@ -17,6 +18,8 @@ import com.intellij.openapi.externalSystem.util.ExternalSystemUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.NotNullLazyValue;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.DeprecatedMethodException;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -28,7 +31,7 @@ import java.util.List;
  */
 public abstract class AbstractExternalSystemTaskConfigurationType implements ConfigurationType {
   @NotNull private final ProjectSystemId myExternalSystemId;
-  @NotNull private final ConfigurationFactory[] myFactories = new ConfigurationFactory[1];
+  private final ConfigurationFactory @NotNull [] myFactories = new ConfigurationFactory[1];
 
   @NotNull private final NotNullLazyValue<Icon> myIcon = new NotNullLazyValue<Icon>() {
     @NotNull
@@ -51,7 +54,23 @@ public abstract class AbstractExternalSystemTaskConfigurationType implements Con
       public RunConfiguration createTemplateConfiguration(@NotNull Project project) {
         return doCreateConfiguration(myExternalSystemId, project, this, "");
       }
+
+      @Override
+      public @NotNull String getId() {
+        return getConfigurationFactoryId();
+      }
     };
+  }
+
+  /**
+   * This method must be overriden and a proper ID must be returned from it (it'll be used as a key in run configuration file).
+   */
+  @NonNls
+  @NotNull
+  protected String getConfigurationFactoryId() {
+    DeprecatedMethodException.reportDefaultImplementation(getClass(), "getConfigurationFactoryId",
+      "The default implementation delegates to 'ProjectSystemId::getReadableName' which is supposed to be localized but return value of this method must not be localized.");
+    return myExternalSystemId.getReadableName();
   }
 
   @NotNull
@@ -123,6 +142,9 @@ public abstract class AbstractExternalSystemTaskConfigurationType implements Con
                                     @Nullable String executionName,
                                     @NotNull String tasksPrefix,
                                     @NotNull String tasksPostfix) {
+    if (!StringUtil.isEmpty(executionName)) {
+      return executionName;
+    }
     boolean isTasksAbsent = taskNames.isEmpty();
     String rootProjectPath = null;
     if (externalProjectPath != null) {
@@ -143,7 +165,8 @@ public abstract class AbstractExternalSystemTaskConfigurationType implements Con
     }
     if (!StringUtil.isEmptyOrSpaces(projectName)) {
       buffer.append(projectName);
-    } else {
+    }
+    else if (!StringUtil.isEmptyOrSpaces(externalProjectPath)) {
       buffer.append(externalProjectPath);
     }
 
@@ -161,6 +184,9 @@ public abstract class AbstractExternalSystemTaskConfigurationType implements Con
     }
     if (!isTasksAbsent) buffer.append(tasksPostfix);
 
+    if (buffer.length() == 0) {
+      buffer.append(ExecutionBundle.message("run.configuration.unnamed.name.prefix"));
+    }
     return buffer.toString();
   }
 }

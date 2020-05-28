@@ -1,7 +1,6 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.env;
 
-import com.google.common.collect.Lists;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.ide.util.projectWizard.EmptyModuleBuilder;
 import com.intellij.openapi.application.WriteAction;
@@ -9,12 +8,13 @@ import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleType;
 import com.intellij.openapi.module.ModuleTypeManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.ex.ProjectManagerEx;
 import com.intellij.openapi.projectRoots.ProjectJdkTable;
 import com.intellij.openapi.projectRoots.Sdk;
-import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.newvfs.RefreshQueueImpl;
 import com.intellij.testFramework.EdtTestUtil;
 import com.intellij.testFramework.LightProjectDescriptor;
 import com.intellij.testFramework.PsiTestUtil;
@@ -22,7 +22,9 @@ import com.intellij.testFramework.builders.ModuleFixtureBuilder;
 import com.intellij.testFramework.fixtures.*;
 import com.intellij.testFramework.fixtures.impl.ModuleFixtureBuilderImpl;
 import com.intellij.testFramework.fixtures.impl.ModuleFixtureImpl;
+import com.intellij.util.ui.UIUtil;
 import com.jetbrains.extensions.ModuleExtKt;
+import com.jetbrains.python.PyNames;
 import com.jetbrains.python.PythonModuleTypeBase;
 import com.jetbrains.python.PythonTestUtil;
 import com.jetbrains.python.packaging.PyCondaPackageManagerImpl;
@@ -37,6 +39,7 @@ import org.jetbrains.annotations.Nullable;
 import org.junit.Assert;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Semaphore;
@@ -91,6 +94,11 @@ public abstract class PyExecutionFixtureTestTask extends PyTestTask {
     myRelativeTestDataPath = relativeTestDataPath;
   }
 
+  @Nullable
+  protected String getRelativeTestDataPath() {
+    return myRelativeTestDataPath;
+  }
+
   /**
    * Debug output of this classes will be captured and reported in case of test failure
    */
@@ -140,6 +148,7 @@ public abstract class PyExecutionFixtureTestTask extends PyTestTask {
 
     final Module module = myFixture.getModule();
     assert module != null;
+    PlatformPythonModuleType.ensureModuleRegistered();
 
     if (StringUtil.isNotEmpty(myRelativeTestDataPath)) {
       myFixture.copyDirectoryToProject(myRelativeTestDataPath, ".").getPath();
@@ -166,12 +175,12 @@ public abstract class PyExecutionFixtureTestTask extends PyTestTask {
    */
   @NotNull
   protected List<String> getContentRoots() {
-    return Lists.newArrayList();
+    return new ArrayList<>();
   }
 
   protected String getFilePath(@NotNull final String path) {
     final VirtualFile virtualFile = myFixture.getTempDirFixture().getFile(path);
-    assert virtualFile != null && virtualFile.exists() : String.format("No file in %s", myFixture.getTempDirPath());
+    assert virtualFile != null && virtualFile.exists() : String.format("No file '%s' in %s", path, myFixture.getTempDirPath());
     return virtualFile.getPath();
   }
 
@@ -188,16 +197,20 @@ public abstract class PyExecutionFixtureTestTask extends PyTestTask {
   public void tearDown() throws Exception {
     if (myFixture != null) {
       EdtTestUtil.runInEdtAndWait(() -> {
+        UIUtil.dispatchAllInvocationEvents();
+        while (RefreshQueueImpl.isRefreshInProgress()) {
+          UIUtil.dispatchAllInvocationEvents();
+        }
         for (Sdk sdk : ProjectJdkTable.getInstance().getSdksOfType(PythonSdkType.getInstance())) {
           WriteAction.run(() -> ProjectJdkTable.getInstance().removeJdk(sdk));
         }
       });
       // Teardown should be called on main thread because fixture teardown checks for
       // thread leaks, and blocked main thread is considered as leaked
-      final Project project = myFixture.getProject();
+      Project project = myFixture.getProject();
       myFixture.tearDown();
-      if (project != null && ! project.isDisposed()) {
-        Disposer.dispose(project);
+      if (project != null && !project.isDisposed()) {
+        ProjectManagerEx.getInstanceEx().forceCloseProject(project);
       }
       myFixture = null;
     }
@@ -207,13 +220,6 @@ public abstract class PyExecutionFixtureTestTask extends PyTestTask {
   @Nullable
   protected LightProjectDescriptor getProjectDescriptor() {
     return null;
-  }
-
-  protected void disposeProcess(ProcessHandler h) {
-    h.destroyProcess();
-    if (!waitFor(h)) {
-      new Throwable("Can't stop process").printStackTrace();
-    }
   }
 
   protected boolean waitFor(ProcessHandler p) {
@@ -233,6 +239,7 @@ public abstract class PyExecutionFixtureTestTask extends PyTestTask {
       super(new PlatformPythonModuleType(), fixtureBuilder);
     }
 
+    @NotNull
     @Override
     protected ModuleFixture instantiateFixture() {
       return new ModuleFixtureImpl(this);
@@ -240,11 +247,21 @@ public abstract class PyExecutionFixtureTestTask extends PyTestTask {
   }
 
   public static class PlatformPythonModuleType extends PythonModuleTypeBase<EmptyModuleBuilder> {
+
+    private static final String MODULE_ID = PyNames.PYTHON_MODULE_ID;
+
     @NotNull
     public static PlatformPythonModuleType getInstance() {
-      return (PlatformPythonModuleType)ModuleTypeManager.getInstance().findByID(PYTHON_MODULE);
+      ensureModuleRegistered();
+      return (PlatformPythonModuleType)ModuleTypeManager.getInstance().findByID(PyNames.PYTHON_MODULE_ID);
     }
 
+    static void ensureModuleRegistered() {
+      ModuleTypeManager moduleManager = ModuleTypeManager.getInstance();
+      if (!(moduleManager.findByID(MODULE_ID) instanceof PythonModuleTypeBase)) {
+        moduleManager.registerModuleType(new PlatformPythonModuleType());
+      }
+    }
 
     @NotNull
     @Override

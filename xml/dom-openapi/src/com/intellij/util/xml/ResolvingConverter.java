@@ -15,9 +15,10 @@
  */
 package com.intellij.util.xml;
 
-import com.intellij.codeInsight.CodeInsightBundle;
+import com.intellij.analysis.AnalysisBundle;
 import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInspection.LocalQuickFix;
+import com.intellij.codeInspection.util.InspectionMessage;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.ResolvingHint;
 import com.intellij.psi.xml.XmlTag;
@@ -37,9 +38,10 @@ import java.util.Set;
  */
 public abstract class ResolvingConverter<T> extends Converter<T> implements ResolvingHint {
 
+  @InspectionMessage
   @Override
   public String getErrorMessage(@Nullable String s, final ConvertContext context) {
-    return CodeInsightBundle.message("error.cannot.resolve.default.message", s);
+    return AnalysisBundle.message("error.cannot.resolve.default.message", s);
   }
 
   /**
@@ -52,6 +54,8 @@ public abstract class ResolvingConverter<T> extends Converter<T> implements Reso
   /**
    * @return additional reference variants. They won't resolve to anywhere, but won't be highlighted as errors.
    * They will also appear in the completion dropdown.
+   * 
+   * @deprecated implement {@link #getAdditionalVariants(ConvertContext)}
    */
   @Deprecated
   @NotNull
@@ -199,6 +203,9 @@ public abstract class ResolvingConverter<T> extends Converter<T> implements Reso
     }
   }
 
+  /**
+   * @deprecated unnecessary
+   */
   @Deprecated
   public static final ResolvingConverter EMPTY_CONVERTER = new ResolvingConverter() {
     @Override
@@ -218,7 +225,9 @@ public abstract class ResolvingConverter<T> extends Converter<T> implements Reso
     }
   };
 
-  /** @see com.intellij.util.xml.converters.values.BooleanValueConverter */
+  /**
+   * @deprecated see {@link com.intellij.util.xml.converters.values.BooleanValueConverter}
+   */
   @Deprecated
   public static final Converter<Boolean> BOOLEAN_CONVERTER = new ResolvingConverter<Boolean>() {
     @Override

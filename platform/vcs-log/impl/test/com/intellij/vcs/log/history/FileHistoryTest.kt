@@ -1,7 +1,6 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.vcs.log.history
 
-import com.intellij.openapi.util.Couple
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.vcs.FilePath
 import com.intellij.openapi.vcs.LocalFilePath
@@ -15,20 +14,19 @@ import com.intellij.vcs.log.graph.asTestGraphString
 import com.intellij.vcs.log.graph.graph
 import com.intellij.vcs.log.graph.impl.facade.BaseController
 import com.intellij.vcs.log.graph.impl.facade.FilteredController
-import gnu.trove.THashMap
 import gnu.trove.TIntObjectHashMap
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenCustomHashMap
 import org.junit.Assert
 import org.junit.Assume.assumeFalse
 import org.junit.Test
 
 class FileHistoryTest {
-
-  fun LinearGraph.assert(startCommit: Int, startPath: FilePath, fileNamesData: FileNamesData, result: TestGraphBuilder.() -> Unit) {
+  fun LinearGraph.assert(startCommit: Int, startPath: FilePath, fileNamesData: FileHistoryData, result: TestGraphBuilder.() -> Unit) {
     val permanentGraphInfo = TestPermanentGraphInfo(this)
     val baseController = BaseController(permanentGraphInfo)
     val filteredController = object : FilteredController(baseController, permanentGraphInfo, fileNamesData.getCommits()) {}
 
-    val historyBuilder = FileHistoryBuilder(startCommit, startPath, fileNamesData)
+    val historyBuilder = FileHistoryBuilder(startCommit, startPath, fileNamesData, EMPTY_HISTORY)
     historyBuilder.accept(filteredController, permanentGraphInfo)
 
     val expectedResultGraph = graph(result)
@@ -277,15 +275,158 @@ class FileHistoryTest {
       7()
     }
   }
+
+  /*
+   * Two file histories: `create initialFile.txt, rename to file.txt, rename to otherFile.txt` and some time later `create file.txt`
+   */
+  @Test
+  fun twoFileByTheSameName() {
+    val file = LocalFilePath("file.txt", false)
+    val otherFile = LocalFilePath("otherFile.txt", false)
+    val initialFile = LocalFilePath("initialFile.txt", false)
+    val fileNamesData = FileNamesDataBuilder(file)
+      .addChange(file, 0, listOf(MODIFIED), listOf(1))
+      .addChange(otherFile, 1, listOf(MODIFIED), listOf(2))
+      .addChange(file, 2, listOf(ADDED), listOf(3))
+      .addChange(otherFile, 3, listOf(ADDED), listOf(4))
+      .addChange(file, 3, listOf(REMOVED), listOf(4))
+      .addRename(4, 3, file, otherFile)
+      .addChange(file, 5, listOf(ADDED), listOf(6))
+      .addChange(initialFile, 5, listOf(REMOVED), listOf(6))
+      .addRename(6, 5, initialFile, file)
+      .addChange(initialFile, 6, listOf(ADDED), listOf(6))
+      .build()
+
+    graph {
+      0(1)
+      1(2)
+      2(3)
+      3(4)
+      4(5)
+      5(6)
+      6()
+    }.assert(0, file, fileNamesData) {
+      0(2.dot)
+      2()
+    }
+  }
+
+  @Test
+  fun revertedDeletion() {
+    val file = LocalFilePath("file.txt", false)
+    val renamedFile = LocalFilePath("renamedFile.txt", false)
+    val fileNamesData = FileNamesDataBuilder(file)
+      .addChange(renamedFile, 0, listOf(ADDED), listOf(1))
+      .addChange(file, 0, listOf(REMOVED), listOf(1))
+      .addRename(1, 0, file, renamedFile)
+      .addChange(file, 1, listOf(ADDED), listOf(2))
+      .addChange(file, 3, listOf(REMOVED), listOf(4))
+      .addChange(file, 4, listOf(MODIFIED), listOf(5))
+      .addChange(file, 5, listOf(ADDED), listOf(6))
+      .build()
+
+    graph {
+      0(1)
+      1(2)
+      2(3)
+      3(4)
+      4(5)
+      5(6)
+      6()
+    }.assert(0, renamedFile, fileNamesData) {
+      0(1)
+      1(3.dot)
+      3(4)
+      4(5)
+      5()
+    }
+  }
+
+
+  @Test
+  fun modifyRenameConflict() {
+    val file = LocalFilePath("file.txt", false)
+    val renamedFile = LocalFilePath("renamedFile.txt", false)
+
+    val fileNamesData = FileNamesDataBuilder(file)
+      .addChange(renamedFile, 0, listOf(MODIFIED), listOf(1))
+
+      .addChange(renamedFile, 1, listOf(MODIFIED, ADDED), listOf(3, 2))
+      .addChange(file, 1, listOf(NOT_CHANGED, REMOVED), listOf(3, 2))
+      .addRename(2, 1, file, renamedFile)
+
+      .addChange(file, 2, listOf(MODIFIED), listOf(5))
+
+      .addChange(renamedFile, 4, listOf(ADDED), listOf(5))
+      .addChange(file, 4, listOf(REMOVED), listOf(5))
+      .addRename(5, 4, file, renamedFile)
+
+      .addChange(file, 5, listOf(MODIFIED), listOf(6))
+      .addChange(file, 6, listOf(ADDED), listOf(6))
+      .build()
+
+    // in order to trigger the bug, parent commits for node 1 in the filtered graph should be in the different order
+    // than in the permanent graph
+    // this is achieved by filtering out node 3, since in the filtered graph usual edges go first, and only then dotted edges
+
+    graph {
+      0(1)
+      1(3, 2)
+      2(5)
+      3(4)
+      4(5)
+      5(6)
+      6()
+    }.assert(0, renamedFile, fileNamesData) {
+      0(1)
+      1(4.dot, 2.u)
+      2(5)
+      4(5)
+      5(6)
+      6()
+    }
+  }
+
+  @Test
+  fun renamedDirectoryHack() {
+    val directory = LocalFilePath("community/platform", true)
+    val directoryBeforeRename = LocalFilePath("platform", true)
+
+    val fileNamesData = FileNamesDataBuilder(directory)
+      .addChange(directory, 0, listOf(MODIFIED), listOf(1))
+      .addChange(directoryBeforeRename, 1, listOf(MODIFIED), listOf(2)) // unrelated modification
+      .addChange(directory, 2, listOf(ADDED, ADDED), listOf(3, 4))
+      .addChange(directoryBeforeRename, 2, listOf(REMOVED, REMOVED), listOf(3, 4))
+      .addRename(3, 2, directoryBeforeRename, directory)
+      .addChange(directoryBeforeRename, 5, listOf(MODIFIED), listOf(7))
+      .addChange(directoryBeforeRename, 6, listOf(MODIFIED), listOf(8)) // unrelated modification
+      .build()
+
+    graph {
+      0(1)
+      1(2)
+      2(3, 4)
+      3(5)
+      4(6)
+      5(7)
+      6(8)
+      7()
+      8()
+    }.assert(0, directory, fileNamesData) {
+      0(2.dot)
+      2(5.dot)
+      5()
+    }
+  }
 }
 
 private class FileNamesDataBuilder(private val path: FilePath) {
   private val commitsMap: MutableMap<FilePath, TIntObjectHashMap<TIntObjectHashMap<VcsLogPathsIndex.ChangeKind>>> =
-    THashMap(FILE_PATH_HASHING_STRATEGY)
-  private val renamesMap: MultiMap<Couple<Int>, Couple<FilePath>> = MultiMap.createSmart()
+    Object2ObjectOpenCustomHashMap(FILE_PATH_HASHING_STRATEGY)
+  private val renamesMap: MultiMap<EdgeData<Int>, EdgeData<FilePath>> = MultiMap()
 
   fun addRename(parent: Int, child: Int, beforePath: FilePath, afterPath: FilePath): FileNamesDataBuilder {
-    renamesMap.putValue(Couple(parent, child), Couple(beforePath, afterPath))
+    renamesMap.putValue(EdgeData(parent, child), EdgeData(beforePath, afterPath))
     return this
   }
 
@@ -294,16 +435,18 @@ private class FileNamesDataBuilder(private val path: FilePath) {
     return this
   }
 
-  fun build(): FileNamesData {
-    return object : FileNamesData(path) {
-      override fun findRename(parent: Int, child: Int, accept: (Couple<FilePath>) -> Boolean): Couple<FilePath>? {
-        return renamesMap[Couple(parent, child)].find { accept(it) }
+  fun build(): FileHistoryData {
+    return object : FileHistoryData(path) {
+      override fun findRename(parent: Int, child: Int, path: FilePath, isChildPath: Boolean): EdgeData<FilePath>? {
+        return renamesMap[EdgeData(parent, child)].find {
+          FILE_PATH_HASHING_STRATEGY.equals(if (isChildPath) it.child else it.parent, path)
+        }
       }
 
       override fun getAffectedCommits(path: FilePath): TIntObjectHashMap<TIntObjectHashMap<VcsLogPathsIndex.ChangeKind>> {
         return commitsMap[path] ?: TIntObjectHashMap()
       }
-    }
+    }.build()
   }
 }
 

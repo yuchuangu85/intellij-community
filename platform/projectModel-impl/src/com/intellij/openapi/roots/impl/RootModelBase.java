@@ -1,6 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.roots.impl;
 
 import com.intellij.openapi.module.Module;
@@ -8,23 +6,21 @@ import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.roots.*;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.SmartList;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.jps.model.module.JpsModuleSourceRootType;
 
 import java.util.*;
 
-/**
- * @author nik
- */
+@ApiStatus.Internal
 public abstract class RootModelBase implements ModuleRootModel {
   @Override
-  @NotNull
-  public VirtualFile[] getContentRoots() {
-    final ArrayList<VirtualFile> result = new ArrayList<>();
-
-    for (ContentEntry contentEntry : getContent()) {
+  public VirtualFile @NotNull [] getContentRoots() {
+    Collection<ContentEntry> content = getContent();
+    List<VirtualFile> result = new ArrayList<>(content.size());
+    for (ContentEntry contentEntry : content) {
       final VirtualFile file = contentEntry.getFile();
       if (file != null) {
         result.add(file);
@@ -34,31 +30,29 @@ public abstract class RootModelBase implements ModuleRootModel {
   }
 
   @Override
-  @NotNull
-  public String[] getContentRootUrls() {
-    if (getContent().isEmpty()) return ArrayUtil.EMPTY_STRING_ARRAY;
-    final ArrayList<String> result = new ArrayList<>(getContent().size());
+  public String @NotNull [] getContentRootUrls() {
+    Collection<ContentEntry> content = getContent();
+    if (content.isEmpty()) return ArrayUtilRt.EMPTY_STRING_ARRAY;
+    List<String> result = new ArrayList<>(content.size());
 
-    for (ContentEntry contentEntry : getContent()) {
+    for (ContentEntry contentEntry : content) {
       result.add(contentEntry.getUrl());
     }
 
-    return ArrayUtil.toStringArray(result);
+    return ArrayUtilRt.toStringArray(result);
   }
 
   @Override
-  @NotNull
-  public String[] getExcludeRootUrls() {
+  public String @NotNull [] getExcludeRootUrls() {
     final List<String> result = new SmartList<>();
     for (ContentEntry contentEntry : getContent()) {
       result.addAll(contentEntry.getExcludeFolderUrls());
     }
-    return ArrayUtil.toStringArray(result);
+    return ArrayUtilRt.toStringArray(result);
   }
 
   @Override
-  @NotNull
-  public VirtualFile[] getExcludeRoots() {
+  public VirtualFile @NotNull [] getExcludeRoots() {
     final List<VirtualFile> result = new SmartList<>();
     for (ContentEntry contentEntry : getContent()) {
       Collections.addAll(result, contentEntry.getExcludeFolderFiles());
@@ -67,14 +61,12 @@ public abstract class RootModelBase implements ModuleRootModel {
   }
 
   @Override
-  @NotNull
-  public String[] getSourceRootUrls() {
+  public String @NotNull [] getSourceRootUrls() {
     return getSourceRootUrls(true);
   }
 
   @Override
-  @NotNull
-  public String[] getSourceRootUrls(boolean includingTests) {
+  public String @NotNull [] getSourceRootUrls(boolean includingTests) {
     List<String> result = new SmartList<>();
     for (ContentEntry contentEntry : getContent()) {
       final SourceFolder[] sourceFolders = contentEntry.getSourceFolders();
@@ -84,18 +76,16 @@ public abstract class RootModelBase implements ModuleRootModel {
         }
       }
     }
-    return ArrayUtil.toStringArray(result);
+    return ArrayUtilRt.toStringArray(result);
   }
 
   @Override
-  @NotNull
-  public VirtualFile[] getSourceRoots() {
+  public VirtualFile @NotNull [] getSourceRoots() {
     return getSourceRoots(true);
   }
 
   @Override
-  @NotNull
-  public VirtualFile[] getSourceRoots(final boolean includingTests) {
+  public VirtualFile @NotNull [] getSourceRoots(final boolean includingTests) {
     List<VirtualFile> result = new SmartList<>();
     for (ContentEntry contentEntry : getContent()) {
       final SourceFolder[] sourceFolders = contentEntry.getSourceFolders();
@@ -131,9 +121,8 @@ public abstract class RootModelBase implements ModuleRootModel {
     return result;
   }
 
-  @NotNull
   @Override
-  public ContentEntry[] getContentEntries() {
+  public ContentEntry @NotNull [] getContentEntries() {
     final Collection<ContentEntry> content = getContent();
     return content.toArray(new ContentEntry[0]);
   }
@@ -167,7 +156,7 @@ public abstract class RootModelBase implements ModuleRootModel {
   }
 
   @Override
-  public <R> R processOrder(RootPolicy<R> policy, R initialValue) {
+  public <R> R processOrder(@NotNull RootPolicy<R> policy, R initialValue) {
     R result = initialValue;
     for (OrderEntry orderEntry : getOrderEntries()) {
       result = orderEntry.accept(policy, result);
@@ -176,22 +165,19 @@ public abstract class RootModelBase implements ModuleRootModel {
   }
 
   @Override
-  @NotNull
-  public String[] getDependencyModuleNames() {
+  public String @NotNull [] getDependencyModuleNames() {
     List<String> result = orderEntries().withoutSdk().withoutLibraries().withoutModuleSourceEntries()
       .process(new CollectDependentModules(), new ArrayList<>());
-    return ArrayUtil.toStringArray(result);
+    return ArrayUtilRt.toStringArray(result);
   }
 
   @Override
-  @NotNull
-  public Module[] getModuleDependencies() {
+  public Module @NotNull [] getModuleDependencies() {
     return getModuleDependencies(true);
   }
 
   @Override
-  @NotNull
-  public Module[] getModuleDependencies(boolean includeTests) {
+  public Module @NotNull [] getModuleDependencies(boolean includeTests) {
     OrderEntry[] entries = getOrderEntries();
     List<Module> result = null;
 

@@ -1,20 +1,7 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.tabs;
 
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.util.ui.TimedDeadzone;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -27,14 +14,18 @@ public interface JBTabsPresentation {
 
   void setHideTabs(boolean hideTabs);
 
+  /**
+   * @deprecated You should implement {@link JBTabsBorder} abstract class
+   */
+  @Deprecated
   JBTabsPresentation setPaintBorder(int top, int left, int right, int bottom);
+  /**
+   * @deprecated You should implement {@link JBTabsBorder} abstract class
+   */
+  @Deprecated
   JBTabsPresentation setTabSidePaintBorder(int size);
 
   JBTabsPresentation setPaintFocus(boolean paintFocus);
-
-  JBTabsPresentation setAlwaysPaintSelectedTab(final boolean paintSelected);
-
-  JBTabsPresentation setStealthTabMode(boolean stealthTabMode);
 
   JBTabsPresentation setSideComponentVertical(boolean vertical);
 
@@ -54,7 +45,13 @@ public interface JBTabsPresentation {
 
   JBTabsPresentation setInnerInsets(Insets innerInsets);
 
-  JBTabsPresentation setGhostsAlwaysVisible(boolean visible);
+  /**
+   * @deprecated This logic is no longer supported, please remove calls of this method
+   */
+  @Deprecated
+  default JBTabsPresentation setGhostsAlwaysVisible(boolean visible) {
+    return this;
+  }
 
   JBTabsPresentation setFocusCycle(final boolean root);
 
@@ -79,4 +76,12 @@ public interface JBTabsPresentation {
   JBTabsPosition getTabsPosition();
 
   JBTabsPresentation setTabDraggingEnabled(boolean enabled);
+
+  JBTabsPresentation setAlphabeticalMode(boolean alphabeticalMode);
+
+  JBTabsPresentation setSupportsCompression(boolean supportsCompression);
+
+  void setFirstTabOffset(int offset);
+
+  JBTabsPresentation setEmptyText(@Nullable @NlsContexts.StatusText String text);
 }

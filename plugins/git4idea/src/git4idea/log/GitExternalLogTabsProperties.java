@@ -1,21 +1,20 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.log;
 
-import com.intellij.openapi.components.*;
-import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectManager;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.components.PersistentStateComponent;
+import com.intellij.openapi.components.RoamingType;
+import com.intellij.openapi.components.State;
+import com.intellij.openapi.components.Storage;
 import com.intellij.util.xmlb.annotations.XCollection;
 import com.intellij.util.xmlb.annotations.XMap;
 import com.intellij.vcs.log.impl.*;
 import com.intellij.vcs.log.impl.VcsLogProjectTabsProperties.RecentGroup;
+import com.intellij.vcs.log.util.FilterConfigMigrationUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
-
-import static com.intellij.vcs.log.ui.filter.BranchFilterPopupComponent.BRANCH_FILTER_NAME;
-import static com.intellij.vcs.log.ui.filter.UserFilterPopupComponent.USER_FILER_NAME;
 
 @State(
   name = "Git.Log.External.Tabs.Properties",
@@ -23,15 +22,9 @@ import static com.intellij.vcs.log.ui.filter.UserFilterPopupComponent.USER_FILER
     @Storage(value = "git.external.log.tabs.xml", roamingType = RoamingType.DISABLED)
   }
 )
-public class GitExternalLogTabsProperties implements PersistentStateComponent<GitExternalLogTabsProperties.State>, VcsLogTabsProperties {
-  @NotNull private final VcsLogApplicationSettings myAppSettings;
-  @NotNull private final ProjectManager myProjectManager;
+public final class GitExternalLogTabsProperties
+  implements PersistentStateComponent<GitExternalLogTabsProperties.State>, VcsLogTabsProperties {
   private State myState = new State();
-
-  public GitExternalLogTabsProperties(@NotNull VcsLogApplicationSettings settings, @NotNull ProjectManager projectManager) {
-    myAppSettings = settings;
-    myProjectManager = projectManager;
-  }
 
   @Nullable
   @Override
@@ -42,66 +35,41 @@ public class GitExternalLogTabsProperties implements PersistentStateComponent<Gi
   @Override
   public void loadState(@NotNull State state) {
     myState = state;
+
+    if (!myState.oldMeFiltersMigrated) {
+      myState.TAB_STATES.values().forEach(tabState -> {
+        FilterConfigMigrationUtil.migrateRecentUserFilters(tabState.RECENT_FILTERS);
+        FilterConfigMigrationUtil.migrateTabUserFilters(tabState.FILTERS);
+      });
+      myState.oldMeFiltersMigrated = true;
+    }
   }
 
   @NotNull
   @Override
   public MainVcsLogUiProperties createProperties(@NotNull String id) {
     if (!myState.TAB_STATES.containsKey(id)) {
-      myState.TAB_STATES.put(id, createOrMigrateTabState(id));
+      myState.TAB_STATES.put(id, new TabState());
     }
     return new MyVcsLogUiProperties(id);
   }
 
-  @NotNull
-  private TabState createOrMigrateTabState(@NotNull String id) {
-    // migration from VcsLogProjectTabsProperties, to remove after 2018.3 release
-    Project[] projects = myProjectManager.getOpenProjects();
-    for (Project project : projects) {
-      VcsLogProjectTabsProperties projectTabsProperties = ServiceManager.getServiceIfCreated(project, VcsLogProjectTabsProperties.class);
-      if (projectTabsProperties != null) {
-        VcsLogUiPropertiesImpl.State oldState = projectTabsProperties.removeTabState(id);
-        if (oldState != null) {
-          TabState newState = new TabState();
-          newState.SHOW_DETAILS_IN_CHANGES = oldState.SHOW_DETAILS_IN_CHANGES;
-          newState.LONG_EDGES_VISIBLE = oldState.LONG_EDGES_VISIBLE;
-          newState.BEK_SORT_TYPE = oldState.BEK_SORT_TYPE;
-          newState.SHOW_ROOT_NAMES = oldState.SHOW_ROOT_NAMES;
-          newState.RECENT_FILTERS.put(BRANCH_FILTER_NAME, convertToRecentGroups(oldState.RECENTLY_FILTERED_BRANCH_GROUPS));
-          newState.RECENT_FILTERS.put(USER_FILER_NAME, convertToRecentGroups(oldState.RECENTLY_FILTERED_USER_GROUPS));
-          newState.HIGHLIGHTERS.putAll(oldState.HIGHLIGHTERS);
-          newState.FILTERS.putAll(oldState.FILTERS);
-          newState.COLUMN_WIDTH.putAll(oldState.COLUMN_WIDTH);
-          newState.COLUMN_ORDER.addAll(oldState.COLUMN_ORDER);
-          newState.TEXT_FILTER_SETTINGS.MATCH_CASE = oldState.TEXT_FILTER_SETTINGS.MATCH_CASE;
-          newState.TEXT_FILTER_SETTINGS.REGEX = oldState.TEXT_FILTER_SETTINGS.REGEX;
-          return newState;
-        }
-      }
-    }
-    return new TabState();
-  }
-
-  @NotNull
-  private static List<RecentGroup> convertToRecentGroups(Deque<VcsLogUiPropertiesImpl.UserGroup> groups) {
-    return new ArrayList<>(ContainerUtil.map2List(groups, RecentGroup::new));
-  }
-
   public static class State {
     @XMap
-    public Map<String, TabState> TAB_STATES = ContainerUtil.newTreeMap();
+    public Map<String, TabState> TAB_STATES = new TreeMap<>();
+    public boolean oldMeFiltersMigrated = false;
   }
 
   public static class TabState extends VcsLogUiPropertiesImpl.State {
     @XCollection
-    public Map<String, List<RecentGroup>> RECENT_FILTERS = ContainerUtil.newHashMap();
+    public Map<String, List<RecentGroup>> RECENT_FILTERS = new HashMap<>();
   }
 
   private class MyVcsLogUiProperties extends VcsLogUiPropertiesImpl<TabState> {
     @NotNull private final String myId;
 
     MyVcsLogUiProperties(@NotNull String id) {
-      super(myAppSettings);
+      super(ApplicationManager.getApplication().getService(VcsLogApplicationSettings.class));
       myId = id;
     }
 

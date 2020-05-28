@@ -16,7 +16,7 @@
  */
 package com.intellij.codeInsight.generation.surroundWith;
 
-import com.intellij.codeInsight.CodeInsightBundle;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
@@ -38,7 +38,7 @@ import java.util.Collection;
 public class JavaWithRunnableSurrounder extends JavaStatementsSurrounder{
   @Override
   public String getTemplateDescription() {
-    return CodeInsightBundle.message("surround.with.runnable.template");
+    return JavaBundle.message("surround.with.runnable.template");
   }
 
   @Override
@@ -53,7 +53,7 @@ public class JavaWithRunnableSurrounder extends JavaStatementsSurrounder{
     PsiDeclarationStatement declarationStatement = (PsiDeclarationStatement)factory.createStatementFromText(text, null);
     declarationStatement = (PsiDeclarationStatement)codeStyleManager.reformat(declarationStatement);
 
-    declarationStatement = (PsiDeclarationStatement)container.addAfter(declarationStatement, statements[statements.length - 1]);
+    declarationStatement = (PsiDeclarationStatement)addAfter(declarationStatement, container, statements);
 
     final PsiVariable variable = (PsiVariable)declarationStatement.getDeclaredElements()[0];
 
@@ -71,8 +71,8 @@ public class JavaWithRunnableSurrounder extends JavaStatementsSurrounder{
 
     makeVariablesFinal(body, body);
 
-    final int textOffset = variable.getNameIdentifier().getTextOffset();
     PsiDocumentManager.getInstance(project).doPostponedOperationsAndUnblockDocument(editor.getDocument());
+    final int textOffset = variable.getNameIdentifier().getTextOffset();
     editor.getCaretModel().moveToOffset(textOffset);
     editor.getSelectionModel().removeSelection();
     new VariableInplaceRenamer(variable, editor){

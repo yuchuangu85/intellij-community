@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.search;
 
 import com.intellij.compiler.CompilerReferenceService;
@@ -8,7 +8,6 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.java.JavaBinaryPlusExpressionIndex;
@@ -19,16 +18,13 @@ import com.intellij.psi.util.MethodSignatureUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.PsiUtilCore;
-import com.intellij.util.ArrayUtil;
-import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.ObjectUtils;
 import com.intellij.util.Processor;
 import com.intellij.util.indexing.FileBasedIndex;
 import gnu.trove.THashMap;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Objects;
 
 public class ImplicitToStringSearcher extends QueryExecutorBase<PsiExpression, ImplicitToStringSearch.SearchParameters> {
   private static final Logger LOG = Logger.getInstance(ImplicitToStringSearcher.class);
@@ -37,7 +33,6 @@ public class ImplicitToStringSearcher extends QueryExecutorBase<PsiExpression, I
   public void processQuery(@NotNull ImplicitToStringSearch.SearchParameters parameters, @NotNull Processor<? super PsiExpression> consumer) {
     PsiMethod targetMethod = parameters.getTargetMethod();
     Project project = PsiUtilCore.getProjectInReadAction(targetMethod);
-    if (project == null) return;
     PsiClass aClass = ReadAction.compute(() -> targetMethod.getContainingClass());
     if (aClass == null) return;
     DumbService dumbService = DumbService.getInstance(project);
@@ -58,13 +53,19 @@ public class ImplicitToStringSearcher extends QueryExecutorBase<PsiExpression, I
     });
 
     PsiManager psiManager = PsiManager.getInstance(project);
-    for (Map.Entry<VirtualFile, int[]> entry : fileOffsets.entrySet()) {
-      VirtualFile file = entry.getKey();
-      int[] offsets = entry.getValue();
-      ProgressManager.checkCanceled();
-      if (!processFile(file, offsets, psiManager, targetMethod, consumer)) {
-        return;
+    psiManager.startBatchFilesProcessingMode();
+    try {
+      for (Map.Entry<VirtualFile, int[]> entry : fileOffsets.entrySet()) {
+        VirtualFile file = entry.getKey();
+        int[] offsets = entry.getValue();
+        ProgressManager.checkCanceled();
+        if (!processFile(file, offsets, psiManager, targetMethod, consumer, dumbService)) {
+          return;
+        }
       }
+    }
+    finally {
+      psiManager.finishBatchFilesProcessingMode();
     }
   }
 
@@ -72,9 +73,10 @@ public class ImplicitToStringSearcher extends QueryExecutorBase<PsiExpression, I
                                      int[] offsets,
                                      PsiManager manager,
                                      PsiMethod targetMethod,
-                                     Processor<? super PsiExpression> consumer) {
-    return ReadAction.compute(() -> {
-      PsiFile psiFile = ObjectUtils.notNull(manager.findFile(file));
+                                     Processor<? super PsiExpression> consumer,
+                                     DumbService dumbService) {
+    return dumbService.runReadActionInSmartMode(() -> {
+      PsiFile psiFile = Objects.requireNonNull(manager.findFile(file));
       if (!(psiFile instanceof PsiJavaFile)) {
         LOG.error("Non-java file " + psiFile + "; " + file);
         return true;

@@ -2,10 +2,12 @@
 package com.jetbrains.python.console
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressIndicatorProvider
 import com.intellij.openapi.project.Project
+import com.jetbrains.python.PyBundle
 import com.jetbrains.python.console.protocol.PythonConsoleBackendService
 import com.jetbrains.python.console.protocol.PythonConsoleFrontendService
 import com.jetbrains.python.console.transport.client.TNettyClientTransport
@@ -62,8 +64,19 @@ class PydevConsoleCommunicationClient(project: Project,
    */
   fun connect() {
     ApplicationManager.getApplication().executeOnPooledThread {
-      // TODO handle exception scenario
-      clientTransport.open()
+      try {
+        clientTransport.open()
+      }
+      catch (e: Exception) {
+        LOG.warn(e)
+
+        stateLock.withLock {
+          isClosed = true
+
+          stateChanged.signalAll()
+        }
+        return@executeOnPooledThread
+      }
 
       val clientProtocol = TBinaryProtocol(clientTransport)
       val client = PythonConsoleBackendService.Client(clientProtocol)
@@ -136,7 +149,7 @@ class PydevConsoleCommunicationClient(project: Project,
     // if client exists then try to gracefully `close()` it
     try {
       client?.apply {
-        progressIndicator?.text2 = "Sending close message to Python Console..."
+        progressIndicator?.text2 = PyBundle.message("debugger.sending.close.message")
 
         close()
         dispose()
@@ -147,7 +160,7 @@ class PydevConsoleCommunicationClient(project: Project,
     }
 
     _pythonConsoleProcess.let {
-      progressIndicator?.text2 = "Waiting for Python Console process to finish..."
+      progressIndicator?.text2 = PyBundle.message("debugger.waiting.to.finish")
 
       // TODO move under the future!
       try {
@@ -170,4 +183,8 @@ class PydevConsoleCommunicationClient(project: Project,
   }
 
   override fun isCommunicationClosed(): Boolean = stateLock.withLock { isClosed }
+
+  companion object {
+    private val LOG: Logger = Logger.getInstance(Logger::class.java)
+  }
 }

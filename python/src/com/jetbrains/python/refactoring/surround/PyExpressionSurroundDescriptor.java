@@ -12,11 +12,10 @@ import org.jetbrains.annotations.NotNull;
 
 public class PyExpressionSurroundDescriptor implements SurroundDescriptor {
   private static final Surrounder[] SURROUNDERS = {new PyWithParenthesesSurrounder(), new PyIfExpressionSurrounder(),
-    new PyWhileExpressionSurrounder(), new PyIsNoneSurrounder(), new PyIsNotNoneSurrounder()};
+    new PyWhileExpressionSurrounder(), new PyIsNoneSurrounder(), new PyIsNotNoneSurrounder(), new PyLenExpressionStatementSurrounder()};
 
   @Override
-  @NotNull
-  public PsiElement[] getElementsToSurround(PsiFile file, int startOffset, int endOffset) {
+  public PsiElement @NotNull [] getElementsToSurround(PsiFile file, int startOffset, int endOffset) {
     final PsiElement element = PyRefactoringUtil.findExpressionInRange(file, startOffset, endOffset);
     if (!(element instanceof PyExpression)) {
       return PsiElement.EMPTY_ARRAY;
@@ -25,8 +24,7 @@ public class PyExpressionSurroundDescriptor implements SurroundDescriptor {
   }
 
   @Override
-  @NotNull
-  public Surrounder[] getSurrounders() {
+  public Surrounder @NotNull [] getSurrounders() {
     return SURROUNDERS;
   }
 

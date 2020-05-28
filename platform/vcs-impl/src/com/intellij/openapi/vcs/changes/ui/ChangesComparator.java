@@ -15,6 +15,7 @@
  */
 package com.intellij.openapi.vcs.changes.ui;
 
+import com.intellij.ide.util.treeView.FileNameComparator;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.ChangeListChange;
@@ -31,6 +32,8 @@ public class ChangesComparator {
   private static final Comparator<VirtualFile> VIRTUAL_FILE_TREE = new VirtualFileComparator(false);
   private static final Comparator<Change> CHANGE_FLAT = new ChangeComparator(true);
   private static final Comparator<Change> CHANGE_TREE = new ChangeComparator(false);
+  private static final Comparator<FilePath> FILE_PATH_FLAT = new FilePathComparator(true);
+  private static final Comparator<FilePath> FILE_PATH_TREE = new FilePathComparator(false);
 
   @NotNull
   public static Comparator<Change> getInstance(boolean flattened) {
@@ -42,16 +45,17 @@ public class ChangesComparator {
     return flattened ? VIRTUAL_FILE_FLAT : VIRTUAL_FILE_TREE;
   }
 
+  @NotNull
+  public static Comparator<FilePath> getFilePathComparator(boolean flattened) {
+    return flattened ? FILE_PATH_FLAT : FILE_PATH_TREE;
+  }
 
   private static int comparePaths(@NotNull FilePath filePath1, @NotNull FilePath filePath2, boolean flattened) {
-    if (!flattened) {
-      return HierarchicalFilePathComparator.IGNORE_CASE.compare(filePath1, filePath2);
-    }
-    else {
-      int delta = filePath1.getName().compareToIgnoreCase(filePath2.getName());
+    if (flattened) {
+      int delta = FileNameComparator.INSTANCE.compare(filePath1.getName(), filePath2.getName());
       if (delta != 0) return delta;
-      return filePath1.getPath().compareTo(filePath2.getPath());
     }
+    return HierarchicalFilePathComparator.NATURAL.compare(filePath1, filePath2);
   }
 
   private static class VirtualFileComparator implements Comparator<VirtualFile> {
@@ -64,6 +68,19 @@ public class ChangesComparator {
     @Override
     public int compare(VirtualFile o1, VirtualFile o2) {
       return comparePaths(VcsUtil.getFilePath(o1), VcsUtil.getFilePath(o2), myFlattened);
+    }
+  }
+
+  private static class FilePathComparator implements Comparator<FilePath> {
+    private final boolean myFlattened;
+
+    FilePathComparator(boolean flattened) {
+      myFlattened = flattened;
+    }
+
+    @Override
+    public int compare(FilePath o1, FilePath o2) {
+      return comparePaths(o1, o2, myFlattened);
     }
   }
 

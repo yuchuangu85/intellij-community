@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.compiler.backwardRefs;
 
 import com.intellij.compiler.CompilerDirectHierarchyInfo;
@@ -26,6 +26,7 @@ import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.ModificationTracker;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileWithId;
+import com.intellij.openapi.vfs.newvfs.ManagingFS;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
@@ -37,9 +38,7 @@ import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
 import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.util.containers.ConcurrentFactoryMap;
-import com.intellij.util.indexing.FileBasedIndex;
 import com.intellij.util.indexing.StorageException;
-import com.intellij.util.io.PersistentEnumeratorBase;
 import com.intellij.util.messages.MessageBusConnection;
 import gnu.trove.THashSet;
 import gnu.trove.TIntHashSet;
@@ -59,7 +58,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.intellij.psi.search.GlobalSearchScope.getScopeRestrictedByFileTypes;
 import static com.intellij.psi.search.GlobalSearchScope.notScope;
@@ -81,49 +79,46 @@ public abstract class CompilerReferenceServiceBase<Reader extends CompilerRefere
 
   protected volatile Reader myReader;
 
-  public CompilerReferenceServiceBase(Project project, FileDocumentManager fileDocumentManager,
-                                      PsiDocumentManager psiDocumentManager,
+  public CompilerReferenceServiceBase(Project project,
                                       CompilerReferenceReaderFactory<? extends Reader> readerFactory,
                                       BiConsumer<MessageBusConnection, Set<String>> compilationAffectedModulesSubscription) {
     myProject = project;
     myReaderFactory = readerFactory;
     myProjectFileIndex = ProjectRootManager.getInstance(project).getFileIndex();
-    myFileTypes = Stream.of(LanguageCompilerRefAdapter.INSTANCES).flatMap(a -> a.getFileTypes().stream()).collect(Collectors.toSet());
-    myDirtyScopeHolder = new DirtyScopeHolder(this, fileDocumentManager, psiDocumentManager, compilationAffectedModulesSubscription);
+    myFileTypes = LanguageCompilerRefAdapter.EP_NAME.getExtensionList().stream().flatMap(a -> a.getFileTypes().stream()).collect(Collectors.toSet());
+    myDirtyScopeHolder = new DirtyScopeHolder(this, FileDocumentManager.getInstance(), PsiDocumentManager.getInstance(project), compilationAffectedModulesSubscription);
   }
 
-   @Override
+  @Override
   public void projectOpened() {
     if (CompilerReferenceService.isEnabled()) {
-      myDirtyScopeHolder.installVFSListener();
+      myDirtyScopeHolder.installVFSListener(myProject);
 
       if (!ApplicationManager.getApplication().isUnitTestMode()) {
         CompilerManager compilerManager = CompilerManager.getInstance(myProject);
-        ApplicationManager.getApplication().executeOnPooledThread(() -> {
-          boolean isUpToDate;
-          File buildDir = BuildManager.getInstance().getProjectSystemDirectory(myProject);
+        boolean isUpToDate;
+        File buildDir = BuildManager.getInstance().getProjectSystemDirectory(myProject);
 
-          boolean validIndexExists = buildDir != null
-                                     && CompilerReferenceIndex.exists(buildDir)
-                                     && !CompilerReferenceIndex.versionDiffers(buildDir, myReaderFactory.expectedIndexVersion());
+        boolean validIndexExists = buildDir != null
+                                   && CompilerReferenceIndex.exists(buildDir)
+                                   && !CompilerReferenceIndex.versionDiffers(buildDir, myReaderFactory.expectedIndexVersion());
 
-          if (validIndexExists) {
-            CompileScope projectCompileScope = compilerManager.createProjectCompileScope(myProject);
-            isUpToDate = compilerManager.isUpToDate(projectCompileScope);
+        if (validIndexExists) {
+          CompileScope projectCompileScope = compilerManager.createProjectCompileScope(myProject);
+          isUpToDate = compilerManager.isUpToDate(projectCompileScope);
+        } else {
+          isUpToDate = false;
+        }
+        executeOnBuildThread(() -> {
+          if (isUpToDate) {
+            openReaderIfNeeded(IndexOpenReason.UP_TO_DATE_CACHE);
           } else {
-            isUpToDate = false;
+            markAsOutdated(validIndexExists);
           }
-          executeOnBuildThread(() -> {
-            if (isUpToDate) {
-              openReaderIfNeed(IndexOpenReason.UP_TO_DATE_CACHE);
-            } else {
-              markAsOutdated(validIndexExists);
-            }
-          });
         });
       }
 
-      Disposer.register(myProject, () -> closeReaderIfNeed(IndexCloseReason.PROJECT_CLOSED));
+      Disposer.register(myProject, () -> closeReaderIfNeeded(IndexCloseReason.PROJECT_CLOSED));
     }
   }
 
@@ -387,7 +382,7 @@ public abstract class CompilerReferenceServiceBase<Reader extends CompilerRefere
     }
   }
 
-  protected void closeReaderIfNeed(IndexCloseReason reason) {
+  protected void closeReaderIfNeeded(IndexCloseReason reason) {
     myOpenCloseLock.lock();
     try {
       if (reason == IndexCloseReason.COMPILATION_STARTED) {
@@ -403,7 +398,7 @@ public abstract class CompilerReferenceServiceBase<Reader extends CompilerRefere
     }
   }
 
-  protected void openReaderIfNeed(IndexOpenReason reason) {
+  protected void openReaderIfNeeded(IndexOpenReason reason) {
     myCompilationCount.increment();
     myOpenCloseLock.lock();
     try {
@@ -467,7 +462,7 @@ public abstract class CompilerReferenceServiceBase<Reader extends CompilerRefere
 
     public static ElementPlace get(VirtualFile file, ProjectFileIndex index) {
       if (file == null) return null;
-      return index.isInSourceContent(file) ? SRC : ((index.isInLibrarySource(file) || index.isInLibraryClasses(file)) ? LIB : null);
+      return index.isInSourceContent(file) ? SRC : (index.isInLibrary(file) ? LIB : null);
     }
   }
 
@@ -538,12 +533,12 @@ public abstract class CompilerReferenceServiceBase<Reader extends CompilerRefere
   @TestOnly
   @Nullable
   public Set<VirtualFile> getReferentFiles(@NotNull PsiElement element) {
-    FileBasedIndex fileIndex = FileBasedIndex.getInstance();
+    ManagingFS managingFS = ManagingFS.getInstance();
     final TIntHashSet ids = getReferentFileIds(element);
     if (ids == null) return null;
     Set<VirtualFile> fileSet = new THashSet<>();
     ids.forEach(id -> {
-      final VirtualFile vFile = fileIndex.findFileById(myProject, id);
+      final VirtualFile vFile = managingFS.findFileById(id);
       assert vFile != null;
       fileSet.add(vFile);
       return true;
@@ -607,7 +602,7 @@ public abstract class CompilerReferenceServiceBase<Reader extends CompilerRefere
     LOG.error("an exception during " + actionName + " calculation", e);
     Throwable unwrapped = e instanceof RuntimeException ? e.getCause() : e;
     if (requireIndexRebuild(unwrapped)) {
-      closeReaderIfNeed(IndexCloseReason.AN_EXCEPTION);
+      closeReaderIfNeeded(IndexCloseReason.AN_EXCEPTION);
     }
     return null;
   }

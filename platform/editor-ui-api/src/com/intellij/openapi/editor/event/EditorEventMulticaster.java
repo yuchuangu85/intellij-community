@@ -11,18 +11,30 @@ import org.jetbrains.annotations.NotNull;
  * @see com.intellij.openapi.editor.EditorFactory#getEventMulticaster()
  */
 public interface EditorEventMulticaster {
+  /**
+   * @deprecated Use {@link #addDocumentListener(DocumentListener, Disposable)} instead to avoid leaking listeners
+   */
+  @Deprecated
   void addDocumentListener(@NotNull DocumentListener listener);
 
   void addDocumentListener(@NotNull DocumentListener listener, @NotNull Disposable parentDisposable);
 
   void removeDocumentListener(@NotNull DocumentListener listener);
 
+  /**
+   * @deprecated Use {@link #addEditorMouseListener(EditorMouseListener, Disposable)} instead to avoid leaking listeners
+   */
+  @Deprecated
   void addEditorMouseListener(@NotNull EditorMouseListener listener);
 
   void addEditorMouseListener(@NotNull EditorMouseListener listener, @NotNull Disposable parentDisposable);
 
   void removeEditorMouseListener(@NotNull EditorMouseListener listener);
 
+  /**
+   * @deprecated Use {@link #addEditorMouseMotionListener(EditorMouseMotionListener, Disposable)} instead to avoid leaking listeners
+   */
+  @Deprecated
   void addEditorMouseMotionListener(@NotNull EditorMouseMotionListener listener);
 
   void addEditorMouseMotionListener(@NotNull EditorMouseMotionListener listener, @NotNull Disposable parentDisposable);
@@ -30,8 +42,7 @@ public interface EditorEventMulticaster {
   void removeEditorMouseMotionListener(@NotNull EditorMouseMotionListener listener);
 
   /**
-   * Use {@link EditorEventListener#TOPIC}
-   * @deprecated
+   * @deprecated Use {@link #addCaretListener(CaretListener, Disposable)} instead to avoid leaking listeners
    */
   @Deprecated
   void addCaretListener(@NotNull CaretListener listener);
@@ -40,13 +51,25 @@ public interface EditorEventMulticaster {
 
   void removeCaretListener(@NotNull CaretListener listener);
 
+  /**
+   * @deprecated Use {@link #addSelectionListener(SelectionListener, Disposable)} instead to avoid leaking listeners
+   */
+  @Deprecated
   void addSelectionListener(@NotNull SelectionListener listener);
 
   void addSelectionListener(@NotNull SelectionListener listener, @NotNull Disposable parentDisposable);
 
   void removeSelectionListener(@NotNull SelectionListener listener);
 
+  /**
+   * @deprecated Use {@link #addVisibleAreaListener(VisibleAreaListener, Disposable)} instead to avoid leaking listeners
+   */
+  @Deprecated
   void addVisibleAreaListener(@NotNull VisibleAreaListener listener);
+
+  default void addVisibleAreaListener(@NotNull VisibleAreaListener listener, @NotNull Disposable parent) {
+    throw new IllegalStateException("Not implemented");
+  }
 
   void removeVisibleAreaListener(@NotNull VisibleAreaListener listener);
 }

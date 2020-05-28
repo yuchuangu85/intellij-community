@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.util.projectWizard.importSources.impl;
 
 import com.intellij.icons.AllIcons;
@@ -47,13 +47,13 @@ import java.util.*;
 /**
  * @author Eugene Zhuravlev
  */
-public class ProjectFromSourcesBuilderImpl extends ProjectImportBuilder implements ProjectFromSourcesBuilder {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.ide.util.projectWizard.importSources.impl.ProjectFromSourcesBuilderImpl");
+public final class ProjectFromSourcesBuilderImpl extends ProjectImportBuilder implements ProjectFromSourcesBuilder {
+  private static final Logger LOG = Logger.getInstance(ProjectFromSourcesBuilderImpl.class);
   private static final String NAME = "Existing Sources";
   private String myBaseProjectPath;
   private final List<ProjectConfigurationUpdater> myUpdaters = new ArrayList<>();
   private final Map<ProjectStructureDetector, ProjectDescriptor> myProjectDescriptors = new LinkedHashMap<>();
-  private MultiMap<ProjectStructureDetector, DetectedProjectRoot> myRoots = MultiMap.emptyInstance();
+  private MultiMap<ProjectStructureDetector, DetectedProjectRoot> myRoots = MultiMap.empty();
   private final WizardContext myContext;
   private final ModulesProvider myModulesProvider;
   private Set<String> myModuleNames;
@@ -284,7 +284,7 @@ public class ProjectFromSourcesBuilderImpl extends ProjectImportBuilder implemen
   }
 
   @Override
-  public void setupModulesByContentRoots(ProjectDescriptor projectDescriptor, Collection<DetectedProjectRoot> roots) {
+  public void setupModulesByContentRoots(ProjectDescriptor projectDescriptor, Collection<? extends DetectedProjectRoot> roots) {
     if (projectDescriptor.getModules().isEmpty()) {
       List<ModuleDescriptor> modules = new ArrayList<>();
       for (DetectedProjectRoot root : roots) {

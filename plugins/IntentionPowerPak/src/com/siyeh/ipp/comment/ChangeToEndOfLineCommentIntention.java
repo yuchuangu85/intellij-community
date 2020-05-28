@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2020 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,11 @@
  */
 package com.siyeh.ipp.comment;
 
+import com.intellij.application.options.CodeStyle;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
-import com.intellij.psi.codeStyle.CodeStyleManager;
+import com.intellij.util.text.CharArrayUtil;
 import com.siyeh.ipp.base.Intention;
 import com.siyeh.ipp.base.PsiElementPredicate;
 import org.jetbrains.annotations.NotNull;
@@ -32,31 +34,99 @@ public class ChangeToEndOfLineCommentIntention extends Intention {
 
   @Override
   public void processIntention(@NotNull PsiElement element) {
-    final PsiComment comment = (PsiComment)element;
-    final Project project = comment.getProject();
-    final CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
-    final PsiElement parent = comment.getParent();
+    final PsiComment oldComment = (PsiComment)element;
+    final PsiElement parent = oldComment.getParent();
     assert parent != null;
-    final PsiElementFactory factory = JavaPsiFacade.getInstance(project).getElementFactory();
-    final String commentText = comment.getText();
-    final PsiElement whitespace = comment.getNextSibling();
+    final String commentText = oldComment.getText();
     final String text = commentText.substring(2, commentText.length() - 2);
     final String[] lines = text.split("\n");
-    for (int i = lines.length - 1; i >= 1; i--) {
-      final PsiComment nextComment =
-        factory.createCommentFromText("//" + lines[i].trim(),
-                                      parent);
-      parent.addAfter(nextComment, comment);
-      if (whitespace != null) {
-        final PsiParserFacade parserFacade = PsiParserFacade.SERVICE.getInstance(project);
-        final PsiElement newWhiteSpace =
-          parserFacade.createWhiteSpaceFromText(whitespace.getText());
-        parent.addAfter(newWhiteSpace, comment);
+
+    final int tabSize = getTabSize(oldComment);
+    final int textColumn = getTextStartColumn(text, tabSize);
+    final int commentColumn = getCommentStartColumn(oldComment, tabSize);
+    final int column = textColumn >= 0 ? textColumn : commentColumn - textColumn + 1;
+    trimLinesWithAlignment(lines, tabSize, column);
+
+    final Project project = oldComment.getProject();
+    // newline followed by space convinces formatter to indent line
+    final PsiElement ws = PsiParserFacade.SERVICE.getInstance(project).createWhiteSpaceFromText("\n ");
+    final PsiElementFactory factory = JavaPsiFacade.getInstance(project).getElementFactory();
+    final int last = lines[lines.length - 1].trim().isEmpty() ? lines.length - 2 : lines.length - 1;
+    final int first = lines[0].trim().isEmpty() ? 1 : 0;
+    for (int i = last; i > first; i--) {
+      parent.addAfter(factory.createCommentFromText("// " + lines[i], parent), oldComment);
+      if (commentColumn > 0) parent.addAfter(ws, oldComment);
+    }
+    String firstLine = (textColumn >= 0 ? "// " : "//") + (first >= lines.length ? "" : lines[first]);
+    oldComment.replace(factory.createCommentFromText(firstLine, parent));
+  }
+
+  private static int getTabSize(@NotNull PsiElement element) {
+    PsiFile file = element.getContainingFile();
+    return file == null ? 1 : Math.max(1, CodeStyle.getIndentOptions(file).TAB_SIZE);
+  }
+
+  private static int getTextStartColumn(@NotNull String text, int tabSize) {
+    int column = 0;
+    boolean newlineSeen = false;
+    for (int i = 0; i < text.length(); i++) {
+      char c = text.charAt(i);
+      if (c == '\n') newlineSeen = true;
+      else if (c == ' ' || c == '\t') {
+        if (column >= 0) column = nextColumn(column, c, tabSize);
+      }
+      else break;
+    }
+    return newlineSeen ? column : -column - 1;
+  }
+
+  private static int getCommentStartColumn(@NotNull PsiComment element, int tabSize) {
+    PsiFile file = element.getContainingFile();
+    if (file == null) return 0;
+    String text = file.getText();
+    if (text == null) return 0;
+    int elementOffset = element.getTextRange().getStartOffset();
+    int lineStart = CharArrayUtil.shiftBackwardUntil(text, elementOffset - 1, "\n") + 1;
+    int column = 0;
+    for (int i = lineStart; i < elementOffset; i++) {
+      column = nextColumn(column, text.charAt(i), tabSize);
+    }
+    return column;
+  }
+
+  private static void trimLinesWithAlignment(String @NotNull [] lines, int tabSize, int firstLineStartColumn) {
+    if (lines.length == 1) {
+      lines[0] = StringUtil.trimTrailing(lines[0]);
+    }
+    else {
+      int minIndent = firstLineStartColumn;
+      for (int i = 1; i < lines.length; i++) {
+        final String line = lines[i];
+        int column = 0;
+        for (int j = 0; j < line.length(); j++) {
+          char c = line.charAt(j);
+          if (" \t".indexOf(c) == -1) {
+            if (column < minIndent) minIndent = column;
+            break;
+          }
+          column = nextColumn(column, c, tabSize);
+          if (column >= minIndent) break;
+        }
+      }
+      for (int i = 1; i < lines.length; i++) {
+        final String line = lines[i];
+        int column = 0;
+        int trimOffset = 0;
+        for (; trimOffset < line.length(); trimOffset++) {
+          column = nextColumn(column, line.charAt(trimOffset), tabSize);
+          if (column > minIndent) break;
+        }
+        lines[i] = StringUtil.trimTrailing(line.substring(trimOffset));
       }
     }
-    final PsiComment newComment =
-      factory.createCommentFromText("//" + lines[0].trim(), parent);
-    final PsiElement replacedComment = comment.replace(newComment);
-    codeStyleManager.reformat(replacedComment);
+  }
+
+  private static int nextColumn(int currentColumn, char c, int tabSize) {
+    return c == '\t' ? ((currentColumn / tabSize) + 1) * tabSize : currentColumn + 1;
   }
 }

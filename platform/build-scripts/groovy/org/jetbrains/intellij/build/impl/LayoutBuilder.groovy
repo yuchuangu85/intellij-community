@@ -1,44 +1,39 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 
 
 package org.jetbrains.intellij.build.impl
 
-import com.intellij.openapi.util.MultiValuesMap
+
 import com.intellij.util.PathUtilRt
+import com.intellij.util.SystemProperties
+import com.intellij.util.containers.MultiMap
+import com.intellij.util.containers.Stack
 import org.apache.tools.ant.AntClassLoader
 import org.jetbrains.intellij.build.CompilationContext
+import org.jetbrains.intellij.build.impl.projectStructureMapping.*
+import org.jetbrains.jps.model.artifact.JpsArtifact
 import org.jetbrains.jps.model.artifact.JpsArtifactService
+import org.jetbrains.jps.model.artifact.elements.JpsArchivePackagingElement
+import org.jetbrains.jps.model.artifact.elements.JpsLibraryFilesPackagingElement
+import org.jetbrains.jps.model.java.JpsProductionModuleOutputPackagingElement
+import org.jetbrains.jps.model.java.JpsTestModuleOutputPackagingElement
 import org.jetbrains.jps.model.library.JpsLibrary
 import org.jetbrains.jps.model.library.JpsOrderRootType
 import org.jetbrains.jps.model.module.JpsModule
+import org.jetbrains.jps.model.module.JpsModuleReference
 
 import java.util.regex.Pattern
 /**
  * Use this class to pack output of modules and libraries into JARs and lay out them by directories. It delegates the actual work to
  * {@link jetbrains.antlayout.tasks.LayoutTask}.
- *
- * @author nik
  */
 class LayoutBuilder {
+  public static final Pattern JAR_NAME_WITH_VERSION_PATTERN = ~/(.*)-\d+(?:\.\d+)*\.jar*/
+  
   private final AntBuilder ant
   private final boolean compressJars
-  final Set<String> usedModules = new LinkedHashSet<>()
-  private final MultiValuesMap<String, String> moduleOutputPatches = new MultiValuesMap<>(true)
+  private final MultiMap<String, String> moduleOutputPatches = MultiMap.createLinked()
   private final CompilationContext context
 
   LayoutBuilder(CompilationContext context, boolean compressJars) {
@@ -46,7 +41,7 @@ class LayoutBuilder {
     this.context = context
     this.compressJars = compressJars
 
-    def contextLoaderRef = "GANT_CONTEXT_CLASS_LOADER";
+    def contextLoaderRef = "GANT_CONTEXT_CLASS_LOADER"
     if (!ant.project.hasReference(contextLoaderRef)) {
       ClassLoader contextLoader = Thread.currentThread().contextClassLoader
       if (!(contextLoader instanceof AntClassLoader)) {
@@ -62,7 +57,7 @@ class LayoutBuilder {
    * when calling {@link LayoutSpec#jar} and call {@link LayoutSpec#modulePatches} from its body to apply the patches to the JAR.
    */
   void patchModuleOutput(String moduleName, String pathToDirectoryWithPatchedFiles) {
-    moduleOutputPatches.put(moduleName, pathToDirectoryWithPatchedFiles)
+    moduleOutputPatches.putValue(moduleName, pathToDirectoryWithPatchedFiles)
   }
 
   /**
@@ -70,7 +65,11 @@ class LayoutBuilder {
    * variables of its method only. It cannot refer to its fields or methods because data's 'owner' field is changed to support the internal DSL.
    */
   void layout(String targetDirectory, @DelegatesTo(LayoutSpec) Closure data) {
-    def spec = new LayoutSpec()
+    process(targetDirectory, new ProjectStructureMapping(), true, data)
+  }
+
+  void process(String targetDirectory, ProjectStructureMapping mapping, boolean copyFiles, @DelegatesTo(LayoutSpec) Closure data) {
+    def spec = new LayoutSpec(mapping, copyFiles)
     //we cannot set 'spec' as delegate because 'delegate' will be overwritten by AntBuilder
     def body = data.rehydrate(null, spec, data.thisObject)
     body.resolveStrategy = Closure.OWNER_FIRST
@@ -80,15 +79,31 @@ class LayoutBuilder {
   }
 
   class LayoutSpec {
+    final ProjectStructureMapping projectStructureMapping
+    final Stack<String> currentPath = new Stack<>()
+    private final boolean copyFiles
+
+    LayoutSpec(ProjectStructureMapping projectStructureMapping, boolean copyFiles) {
+      this.copyFiles = copyFiles
+      this.projectStructureMapping = projectStructureMapping
+    }
+
     /**
      * Create a JAR file with name {@code relativePath} (it may also include parent directories names for the JAR) into the current place
      * in the layout. The content of the JAR is specified by {@code body}.
      */
-    def jar(String relativePath, boolean preserveDuplicates = false, boolean mergeManifests = true, Closure body) {
+    void jar(String relativePath, boolean preserveDuplicates = false, boolean mergeManifests = true, Closure body) {
       def directory = PathUtilRt.getParentPath(relativePath)
       if (directory == "") {
-        ant.jar(name: relativePath, compress: compressJars, duplicate: preserveDuplicates ? "preserve" : "fail",
-                filesetmanifest: mergeManifests ? "merge" : "skip", body)
+        currentPath.push(relativePath)
+        if (copyFiles) {
+          ant.jar(name: relativePath, compress: compressJars, duplicate: preserveDuplicates ? "preserve" : "fail",
+                  filesetmanifest: mergeManifests ? "merge" : "skip", body)
+        }
+        else {
+          body()
+        }
+        currentPath.pop()
       }
       else {
         dir(directory) {
@@ -101,10 +116,17 @@ class LayoutBuilder {
      * Create a Zip file with name {@code relativePath} (it may also include parent directories names for the JAR) into the current place
      * in the layout. The content of the JAR is specified by {@code body}.
      */
-    def zip(String relativePath, Closure body) {
+    void zip(String relativePath, Closure body) {
       def directory = PathUtilRt.getParentPath(relativePath)
       if (directory == "") {
-        ant.zip(name: relativePath, body)
+        currentPath.push(relativePath)
+        if (copyFiles) {
+          ant.zip(name: relativePath, body)
+        }
+        else {
+          body()
+        }
+        currentPath.pop()
       }
       else {
         dir(directory) {
@@ -117,13 +139,20 @@ class LayoutBuilder {
      * Create a directory (or several nested directories) {@code relativePath} in the current place in the layout. The content of the
      * directory is specified by {@code body}.
      */
-    def dir(String relativePath, Closure body) {
+    void dir(String relativePath, Closure body) {
       def parent = PathUtilRt.getParentPath(relativePath)
       if (relativePath.empty) {
         body()
       }
       else if (parent.empty) {
-        ant.dir(name: relativePath, body)
+        currentPath.push(relativePath)
+        if (copyFiles) {
+          ant.dir(name: relativePath, body)
+        }
+        else {
+          body()
+        }
+        currentPath.pop()
       }
       else {
         dir(parent) {
@@ -136,9 +165,9 @@ class LayoutBuilder {
      * Include the patched outputs of {@code moduleNames} modules to the current place in the layout. This method is supposed to be called
      * in the {@code body} of {@link #jar} with 'preserveDuplicates' set to {@code true}
      */
-    def modulePatches(Collection<String> moduleNames, Closure body = {}) {
+    void modulePatches(Collection<String> moduleNames, Closure body = {}) {
       moduleNames.each { String moduleName ->
-        moduleOutputPatches.get(moduleName)?.each {
+        moduleOutputPatches.get(moduleName).each {
           ant.fileset(dir: it, body)
           context.messages.debug(" include $it with pathces for module '$moduleName'")
         }
@@ -148,18 +177,27 @@ class LayoutBuilder {
     /**
      * Include production output of {@code moduleName} to the current place in the layout
      */
-    def module(String moduleName, Closure body = {}) {
-      usedModules << moduleName
-      ant.module(name: moduleName, body)
+    void module(String moduleName, Closure body = {}) {
+      projectStructureMapping.addEntry(new ModuleOutputEntry(getCurrentPathString(), moduleName))
+      if (copyFiles) {
+        ant.module(name: moduleName, body)
+      }
       context.messages.debug(" include output of module '$moduleName'")
     }
 
     /**
      * Include test output of {@code moduleName} to the current place in the layout
      */
-    def moduleTests(String moduleName, Closure body = {}) {
-      ant.moduleTests(name: moduleName, body)
+    void moduleTests(String moduleName, Closure body = {}) {
+      projectStructureMapping.addEntry(new ModuleTestOutputEntry(getCurrentPathString(), moduleName))
+      if (copyFiles) {
+        ant.moduleTests(name: moduleName, body)
+      }
       context.messages.debug(" include tests of module '$moduleName'")
+    }
+
+    private String getCurrentPathString() {
+      currentPath.join("/")
     }
 
     /**
@@ -167,7 +205,7 @@ class LayoutBuilder {
      * @param removeVersionFromJarName if {@code true} versions will be removed from the JAR names. <strong>It may be used to temporary
      * keep names of JARs included into bootstrap classpath only.</strong>
      */
-    def projectLibrary(String libraryName, boolean removeVersionFromJarName = false) {
+    void projectLibrary(String libraryName, boolean removeVersionFromJarName = false) {
       def library = context.project.libraryCollection.findLibrary(libraryName)
       if (library == null) {
         throw new IllegalArgumentException("Cannot find library $libraryName in the project")
@@ -178,25 +216,28 @@ class LayoutBuilder {
     /**
      * Include output of a project artifact {@code artifactName} to the current place in the layout
      */
-    def artifact(String artifactName) {
+    void artifact(String artifactName) {
       def artifact = JpsArtifactService.instance.getArtifacts(context.project).find {it.name == artifactName}
       if (artifact == null) {
         throw new IllegalArgumentException("Cannot find artifact $artifactName in the project")
       }
 
-      if (artifact.outputFilePath != artifact.outputPath) {
-        ant.fileset(file: artifact.outputFilePath)
+      if (copyFiles) {
+        if (artifact.outputFilePath != artifact.outputPath) {
+          ant.fileset(file: artifact.outputFilePath)
+        }
+        else {
+          ant.fileset(dir: artifact.outputPath)
+        }
       }
-      else {
-        ant.fileset(dir: artifact.outputPath)
-      }
+      addArtifactMapping(artifact)
       context.messages.debug(" include artifact '$artifactName'")
     }
 
     /**
      * Include JARs added as classes roots of a module library {@code libraryName} from module {@code moduleName} to the current place in the layout
      */
-    def moduleLibrary(String moduleName, String libraryName) {
+    void moduleLibrary(String moduleName, String libraryName) {
       def module = findModule(moduleName)
       def library = module.libraryCollection.libraries.find {getLibraryName(it) == libraryName}
       if (library == null) {
@@ -205,22 +246,26 @@ class LayoutBuilder {
       jpsLibrary(library)
     }
 
-    private static final Pattern JAR_NAME_WITH_VERSION_PATTERN = ~/(.*)-\d+(?:\.\d+)*\.jar*/
-
     /**
      * @param removeVersionFromJarName if {@code true} versions will be removed from the JAR names. <strong>It may be used to temporary
      *      * keep names of JARs included into bootstrap classpath only.</strong>
      **/
-    def jpsLibrary(JpsLibrary library, boolean removeVersionFromJarName = false) {
+    void jpsLibrary(JpsLibrary library, boolean removeVersionFromJarName = false) {
       library.getFiles(JpsOrderRootType.COMPILED).each {
         def matcher = it.name =~ JAR_NAME_WITH_VERSION_PATTERN
         if (removeVersionFromJarName && matcher.matches()) {
           def newName = matcher.group(1) + ".jar"
-          ant.renamedFile(filePath: it.absolutePath, newName: newName)
+          if (copyFiles) {
+            ant.renamedFile(filePath: it.absolutePath, newName: newName)
+          }
+          addLibraryMapping(library, newName, it.absolutePath)
           context.messages.debug(" include $newName (renamed from $it.absolutePath) from library '${getLibraryName(library)}'")
         }
         else {
-          ant.fileset(file: it.absolutePath)
+          if (copyFiles) {
+            ant.fileset(file: it.absolutePath)
+          }
+          addLibraryMapping(library, it.name, it.absolutePath)
           context.messages.debug(" include $it.name ($it.absolutePath) from library '${getLibraryName(library)}'")
         }
       }
@@ -229,7 +274,7 @@ class LayoutBuilder {
     /**
      * Include files and directories specified in {@code inner} into the current place in this layout
      */
-    def include(@DelegatesTo(LayoutSpec) Closure inner) {
+    void include(@DelegatesTo(LayoutSpec) Closure inner) {
       def body = inner.rehydrate(null, this, inner.thisObject)
       body.resolveStrategy = Closure.OWNER_FIRST
       body()
@@ -239,17 +284,50 @@ class LayoutBuilder {
       context.findRequiredModule(name)
     }
 
-    private String getLibraryName(JpsLibrary lib) {
+    static String getLibraryName(JpsLibrary lib) {
       def name = lib.name
       if (name.startsWith("#")) {
         if (lib.getRoots(JpsOrderRootType.COMPILED).size() != 1) {
           def urls = lib.getRoots(JpsOrderRootType.COMPILED).collect { it.url }
-          throw new IllegalStateException("Non-single entry module library $name: $urls");
+          throw new IllegalStateException("Non-single entry module library $name: $urls")
         }
         File file = lib.getFiles(JpsOrderRootType.COMPILED)[0]
         return file.name
       }
       return name
+    }
+
+    private void addLibraryMapping(JpsLibrary library, String outputFileName, String libraryFilePath) {
+      def outputFilePath = getCurrentPathString().isEmpty() ? outputFileName : getCurrentPathString() + "/" + outputFileName
+      def parentReference = library.createReference().parentReference
+      if (parentReference instanceof JpsModuleReference) {
+        def projectHome = context.paths.projectHome + File.separator
+        def mavenLocalRepo = new File(SystemProperties.getUserHome(), ".m2/repository").absolutePath + File.separator
+        String shortenedPath = libraryFilePath.replace(projectHome, "\$PROJECT_DIR\$/").replace(mavenLocalRepo, "\$MAVEN_REPOSITORY\$/")
+        projectStructureMapping.addEntry(new ModuleLibraryFileEntry(outputFilePath, shortenedPath))
+      }
+      else {
+        projectStructureMapping.addEntry(new ProjectLibraryEntry(outputFilePath, library.name))
+      }
+    }
+
+    private void addArtifactMapping(JpsArtifact artifact) {
+      def rootElement = artifact.getRootElement()
+      String artifactFilePath = getCurrentPathString()
+      if ((rootElement instanceof JpsArchivePackagingElement)) {
+        artifactFilePath += "/$rootElement.archiveName"
+      }
+      rootElement.children.each {
+        if (it instanceof JpsProductionModuleOutputPackagingElement) {
+          projectStructureMapping.addEntry(new ModuleOutputEntry(artifactFilePath, it.moduleReference.moduleName))
+        }
+        else if (it instanceof JpsTestModuleOutputPackagingElement) {
+          projectStructureMapping.addEntry(new ModuleTestOutputEntry(artifactFilePath, it.moduleReference.moduleName))
+        }
+        else if (it instanceof JpsLibraryFilesPackagingElement) {
+          addLibraryMapping(it.libraryReference.resolve(), artifactFilePath)
+        }
+      }
     }
   }
 }

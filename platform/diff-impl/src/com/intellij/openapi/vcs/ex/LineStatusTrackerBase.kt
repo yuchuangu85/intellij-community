@@ -18,17 +18,18 @@ package com.intellij.openapi.vcs.ex
 import com.intellij.diff.util.DiffUtil
 import com.intellij.diff.util.Side
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.LineNumberConstants
 import com.intellij.openapi.application.Application
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.WriteThread
 import com.intellij.openapi.command.CommandProcessor
 import com.intellij.openapi.command.undo.UndoConstants
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.diff.DiffBundle
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.impl.DocumentImpl
-import com.intellij.openapi.localVcs.UpToDateLineNumberProvider.ABSENT_LINE_NUMBER
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
-import com.intellij.openapi.vcs.VcsBundle
 import com.intellij.openapi.vcs.ex.DocumentTracker.Block
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.containers.nullize
@@ -36,19 +37,19 @@ import org.jetbrains.annotations.CalledInAwt
 import org.jetbrains.annotations.TestOnly
 import java.util.*
 
-abstract class LineStatusTrackerBase<R : Range> {
+abstract class LineStatusTrackerBase<R : Range> : LineStatusTrackerI<R> {
   protected val application: Application = ApplicationManager.getApplication()
 
   open val project: Project?
 
-  val document: Document
-  val vcsDocument: Document
+  final override val document: Document
+  final override val vcsDocument: Document
 
   protected val disposable: Disposable = Disposer.newDisposable()
   protected val documentTracker: DocumentTracker
   protected abstract val renderer: LineStatusMarkerRenderer
 
-  var isReleased: Boolean = false
+  final override var isReleased: Boolean = false
     private set
 
   protected var isInitialized: Boolean = false
@@ -78,14 +79,14 @@ abstract class LineStatusTrackerBase<R : Range> {
 
   protected open fun fireLinesUnchanged(startLine: Int, endLine: Int) {}
 
-  open val virtualFile: VirtualFile? get() = null
+  override val virtualFile: VirtualFile? get() = null
 
   protected abstract fun Block.toRange(): R
 
   protected open fun createDocumentTrackerHandler(): DocumentTracker.Handler = MyDocumentTrackerHandler()
 
 
-  fun getRanges(): List<R>? {
+  override fun getRanges(): List<R>? {
     application.assertReadAccessAllowed()
     LOCK.read {
       if (!isValid()) return null
@@ -151,7 +152,7 @@ abstract class LineStatusTrackerBase<R : Range> {
   }
 
   @CalledInAwt
-  fun doFrozen(task: Runnable) {
+  override fun doFrozen(task: Runnable) {
     documentTracker.doFrozen({ task.run() })
   }
 
@@ -165,7 +166,7 @@ abstract class LineStatusTrackerBase<R : Range> {
     }
 
     if (!application.isDispatchThread || LOCK.isHeldByCurrentThread) {
-      application.invokeLater(runnable)
+      WriteThread.submit(runnable)
     }
     else {
       runnable.run()
@@ -223,7 +224,7 @@ abstract class LineStatusTrackerBase<R : Range> {
   }
 
   @CalledInAwt
-  protected fun updateInnerRanges() {
+  protected fun resetInnerRanges() {
     LOCK.write {
       if (isDetectWhitespaceChangedLines()) {
         for (block in blocks) {
@@ -235,21 +236,19 @@ abstract class LineStatusTrackerBase<R : Range> {
           block.ourData.innerRanges = null
         }
       }
-
-      updateHighlighters()
     }
   }
 
-  fun isOperational(): Boolean = LOCK.read {
+  override fun isOperational(): Boolean = LOCK.read {
     return isInitialized && !isReleased
   }
 
-  fun isValid(): Boolean = LOCK.read {
+  override fun isValid(): Boolean = LOCK.read {
     return isOperational() && !documentTracker.isFrozen()
   }
 
 
-  fun findRange(range: Range): R? = findBlock(range)?.toRange()
+  override fun findRange(range: Range): R? = findBlock(range)?.toRange()
 
   protected fun findBlock(range: Range): Block? {
     LOCK.read {
@@ -266,7 +265,7 @@ abstract class LineStatusTrackerBase<R : Range> {
     }
   }
 
-  fun getNextRange(line: Int): R? {
+  override fun getNextRange(line: Int): R? {
     LOCK.read {
       if (!isValid()) return null
       for (block in blocks) {
@@ -278,7 +277,7 @@ abstract class LineStatusTrackerBase<R : Range> {
     }
   }
 
-  fun getPrevRange(line: Int): R? {
+  override fun getPrevRange(line: Int): R? {
     LOCK.read {
       if (!isValid()) return null
       for (block in blocks.reversed()) {
@@ -290,7 +289,7 @@ abstract class LineStatusTrackerBase<R : Range> {
     }
   }
 
-  fun getRangesForLines(lines: BitSet): List<R>? {
+  override fun getRangesForLines(lines: BitSet): List<R>? {
     LOCK.read {
       if (!isValid()) return null
       val result = ArrayList<R>()
@@ -303,7 +302,7 @@ abstract class LineStatusTrackerBase<R : Range> {
     }
   }
 
-  fun getRangeForLine(line: Int): R? {
+  override fun getRangeForLine(line: Int): R? {
     LOCK.read {
       if (!isValid()) return null
       for (block in blocks) {
@@ -317,7 +316,7 @@ abstract class LineStatusTrackerBase<R : Range> {
 
 
   @CalledInAwt
-  fun rollbackChanges(range: Range) {
+  override fun rollbackChanges(range: Range) {
     val newRange = findBlock(range)
     if (newRange != null) {
       runBulkRollback { it == newRange }
@@ -325,7 +324,7 @@ abstract class LineStatusTrackerBase<R : Range> {
   }
 
   @CalledInAwt
-  fun rollbackChanges(lines: BitSet) {
+  override fun rollbackChanges(lines: BitSet) {
     runBulkRollback { it.isSelectedByLine(lines) }
   }
 
@@ -333,7 +332,7 @@ abstract class LineStatusTrackerBase<R : Range> {
   protected fun runBulkRollback(condition: (Block) -> Boolean) {
     if (!isValid()) return
 
-    updateDocument(Side.RIGHT, VcsBundle.message("command.name.rollback.change")) {
+    updateDocument(Side.RIGHT, DiffBundle.message("rollback.change.command.name")) {
       documentTracker.partiallyApplyBlocks(Side.RIGHT, condition) { block, shift ->
         fireLinesUnchanged(block.start + shift, block.start + shift + (block.vcsEnd - block.vcsStart))
       }
@@ -341,11 +340,11 @@ abstract class LineStatusTrackerBase<R : Range> {
   }
 
 
-  fun isLineModified(line: Int): Boolean {
+  override fun isLineModified(line: Int): Boolean {
     return isRangeModified(line, line + 1)
   }
 
-  fun isRangeModified(startLine: Int, endLine: Int): Boolean {
+  override fun isRangeModified(startLine: Int, endLine: Int): Boolean {
     if (startLine == endLine) return false
     assert(startLine < endLine)
 
@@ -359,17 +358,17 @@ abstract class LineStatusTrackerBase<R : Range> {
     }
   }
 
-  fun transferLineToFromVcs(line: Int, approximate: Boolean): Int {
+  override fun transferLineFromVcs(line: Int, approximate: Boolean): Int {
     return transferLine(line, approximate, true)
   }
 
-  fun transferLineToVcs(line: Int, approximate: Boolean): Int {
+  override fun transferLineToVcs(line: Int, approximate: Boolean): Int {
     return transferLine(line, approximate, false)
   }
 
   private fun transferLine(line: Int, approximate: Boolean, fromVcs: Boolean): Int {
     LOCK.read {
-      if (!isValid()) return if (approximate) line else ABSENT_LINE_NUMBER
+      if (!isValid()) return if (approximate) line else LineNumberConstants.ABSENT_LINE_NUMBER
 
       var result = line
 
@@ -380,7 +379,7 @@ abstract class LineStatusTrackerBase<R : Range> {
         val endLine2 = if (fromVcs) block.end else block.vcsEnd
 
         if (line in startLine1 until endLine1) {
-          return if (approximate) startLine2 else ABSENT_LINE_NUMBER
+          return if (approximate) startLine2 else LineNumberConstants.ABSENT_LINE_NUMBER
         }
 
         if (endLine1 > line) return result
@@ -407,7 +406,7 @@ abstract class LineStatusTrackerBase<R : Range> {
 
 
   companion object {
-    @JvmStatic protected val LOG: Logger = Logger.getInstance("#com.intellij.openapi.vcs.ex.LineStatusTracker")
+    @JvmStatic protected val LOG: Logger = Logger.getInstance(LineStatusTrackerBase::class.java)
 
     @JvmStatic protected val Block.start: Int get() = range.start2
     @JvmStatic protected val Block.end: Int get() = range.end2
@@ -421,4 +420,8 @@ abstract class LineStatusTrackerBase<R : Range> {
 
   @TestOnly
   fun getDocumentTrackerInTestMode(): DocumentTracker = documentTracker
+
+  override fun toString(): String {
+    return "${javaClass.name}(file=${virtualFile?.path}, isReleased=$isReleased)@${Integer.toHexString(hashCode())}"
+  }
 }

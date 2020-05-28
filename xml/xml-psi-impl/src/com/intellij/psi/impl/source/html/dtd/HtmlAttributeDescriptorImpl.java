@@ -15,11 +15,16 @@
  */
 package com.intellij.psi.impl.source.html.dtd;
 
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.xml.XmlElement;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.xml.XmlAttributeDescriptor;
 import com.intellij.xml.impl.BasicXmlAttributeDescriptor;
 import com.intellij.xml.impl.XmlEnumerationDescriptor;
+import org.jetbrains.annotations.NotNull;
+
+import java.util.Collection;
 
 /**
  * @author Maxim.Mossienko
@@ -71,13 +76,19 @@ public class HtmlAttributeDescriptorImpl extends BasicXmlAttributeDescriptor {
 
   @Override
   public String validateValue(XmlElement context, String value) {
-    if (!myCaseSensitive) value = value.toLowerCase();
+    if (!myCaseSensitive) value = StringUtil.toLowerCase(value);
     return delegate.validateValue(context, value);
   }
 
   @Override
   public PsiElement getDeclaration() {
     return delegate.getDeclaration();
+  }
+
+  @NotNull
+  @Override
+  public Collection<PsiElement> getDeclarations() {
+    return delegate.getDeclarations();
   }
 
   @Override
@@ -102,9 +113,21 @@ public class HtmlAttributeDescriptorImpl extends BasicXmlAttributeDescriptor {
 
   @Override
   public PsiElement getValueDeclaration(XmlElement attributeValue, String value) {
-    String s = myCaseSensitive ? value : value.toLowerCase();
+    String searchValue = null;
+    if (!myCaseSensitive) {
+      String[] enumeratedValues = isEnumerated() ? getEnumeratedValues() : null;
+      if (enumeratedValues != null) {
+        searchValue = ContainerUtil.find(getEnumeratedValues(), v -> v.equalsIgnoreCase(value));
+      }
+      if (searchValue == null) {
+        searchValue = StringUtil.toLowerCase(value);
+      }
+    } else {
+      searchValue = value;
+    }
+    //noinspection unchecked
     return delegate instanceof XmlEnumerationDescriptor ?
-           ((XmlEnumerationDescriptor)delegate).getValueDeclaration(attributeValue, s) :
+           ((XmlEnumerationDescriptor<XmlElement>)delegate).getValueDeclaration(attributeValue, searchValue) :
            super.getValueDeclaration(attributeValue, value);
   }
 

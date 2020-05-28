@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.debugger.pydev;
 
 import com.google.common.collect.Collections2;
@@ -35,7 +35,7 @@ public class ClientModeMultiProcessDebugger implements ProcessDebugger {
   /**
    * Guarded by {@link #myDebuggersObject}.
    */
-  private final List<RemoteDebugger> myDebuggers = Lists.newArrayList();
+  private final List<RemoteDebugger> myDebuggers = new ArrayList<>();
 
   private final ThreadRegistry myThreadRegistry = new ThreadRegistry();
 
@@ -82,7 +82,14 @@ public class ClientModeMultiProcessDebugger implements ProcessDebugger {
   private RemoteDebugger tryToConnectRemoteDebugger() throws Exception {
     RemoteDebugger debugger = new RemoteDebugger(myDebugProcess, myHost, myPort) {
       @Override
-      protected void onProcessCreatedEvent() {
+      protected void onProcessCreatedEvent(int commandSequence) {
+        try {
+          ProcessCreatedMsgReceivedCommand command = new ProcessCreatedMsgReceivedCommand(this, commandSequence);
+          command.execute();
+        }
+        catch (PyDebuggerException e) {
+          LOG.info(e);
+        }
         myExecutor.incrementRequests();
       }
     };
@@ -129,7 +136,9 @@ public class ClientModeMultiProcessDebugger implements ProcessDebugger {
     myExecutor.incrementRequests();
 
     // waiting for the first connected thread
-    myConnectedLatch.await(60, TimeUnit.SECONDS);
+    if (!myConnectedLatch.await(60, TimeUnit.SECONDS)) {
+      throw new IOException("Connection to the debugger script at " + myHost + ":" + myPort + " timed out");
+    }
   }
 
   @Override
@@ -187,6 +196,12 @@ public class ClientModeMultiProcessDebugger implements ProcessDebugger {
   @Override
   public XValueChildrenList loadFrame(String threadId, String frameId) throws PyDebuggerException {
     return debugger(threadId).loadFrame(threadId, frameId);
+  }
+
+  @Override
+  public List<Pair<String, Boolean>> getSmartStepIntoVariants(String threadId, String frameId, int startContextLine, int endContextLine)
+    throws PyDebuggerException {
+    return debugger(threadId).getSmartStepIntoVariants(threadId, frameId, startContextLine, endContextLine);
   }
 
   @Override
@@ -289,6 +304,7 @@ public class ClientModeMultiProcessDebugger implements ProcessDebugger {
     if (!isDebuggersEmpty()) {
       //here we add process id to thread name in case there are more then one process
       return Collections.unmodifiableCollection(Collections2.transform(threads, t -> {
+        if (t == null) return null;
         String threadName = ThreadRegistry.threadName(t.getName(), t.getId());
         PyThreadInfo newThread =
           new PyThreadInfo(t.getId(), threadName, t.getFrames(),
@@ -304,7 +320,7 @@ public class ClientModeMultiProcessDebugger implements ProcessDebugger {
   }
 
   private List<PyThreadInfo> collectAllThreads() {
-    List<PyThreadInfo> result = Lists.newArrayList();
+    List<PyThreadInfo> result = new ArrayList<>();
 
     //collect threads and add them to registry to faster access
     //we don't register mainDebugger as it is default if there is no mapping
@@ -330,7 +346,7 @@ public class ClientModeMultiProcessDebugger implements ProcessDebugger {
       }
     }
     if (!allConnected) {
-      List<RemoteDebugger> newList = Lists.newArrayList();
+      List<RemoteDebugger> newList = new ArrayList<>();
       for (RemoteDebugger d : debuggers) {
         if (d.isConnected()) {
           newList.add(d);
@@ -388,8 +404,8 @@ public class ClientModeMultiProcessDebugger implements ProcessDebugger {
   }
 
   @Override
-  public void smartStepInto(String threadId, String functionName) {
-    debugger(threadId).smartStepInto(threadId, functionName);
+  public void smartStepInto(String threadId, String frameId, String functionName, int callOrder, int contextStartLine, int contextEndLine) {
+    debugger(threadId).smartStepInto(threadId, frameId, functionName, callOrder, contextStartLine, contextEndLine);
   }
 
   @Override

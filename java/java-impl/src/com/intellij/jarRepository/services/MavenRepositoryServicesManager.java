@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.jarRepository.services;
 
 import com.intellij.jarRepository.RemoteRepositoryDescription;
@@ -12,16 +12,15 @@ import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.SmartList;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xmlb.annotations.Property;
 import com.intellij.util.xmlb.annotations.XCollection;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -32,15 +31,12 @@ import java.util.List;
   storages = @Storage("mavenServices.xml")
 )
 public class MavenRepositoryServicesManager implements PersistentStateComponent<MavenRepositoryServicesManager> {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.repository.services.MavenRepositoryServicesManager");
+  private static final Logger LOG = Logger.getInstance(MavenRepositoryServicesManager.class);
   private final List<String> myUrls = new ArrayList<>();
 
-  public static final List<String> DEFAULT_SERVICES = Collections.unmodifiableList(Arrays.asList(
-    "https://oss.sonatype.org/service/local/",
-    "https://repo.jfrog.org/artifactory/api/",
-    "https://repository.jboss.org/nexus/service/local/",
-    "https://jcenter.bintray.com"
-  ));
+  public static final List<String> DEFAULT_SERVICES = ContainerUtil
+    .immutableList("https://oss.sonatype.org/service/local/", "https://repo.jfrog.org/artifactory/api/",
+                   "https://repository.jboss.org/nexus/service/local/", "https://jcenter.bintray.com");
 
   public MavenRepositoryServicesManager() {
     myUrls.addAll(DEFAULT_SERVICES);
@@ -51,13 +47,12 @@ public class MavenRepositoryServicesManager implements PersistentStateComponent<
     return ServiceManager.getService(project, MavenRepositoryServicesManager.class);
   }
 
-  @NotNull
-  public static MavenRepositoryService[] getServices() {
+  public static MavenRepositoryService @NotNull [] getServices() {
     return new MavenRepositoryService[]{new NexusRepositoryService(), new ArtifactoryRepositoryService(), new BintrayRepositoryService()};
   }
 
   public static String[] getServiceUrls(final Project project) {
-    return ArrayUtil.toStringArray(getInstance(project).getUrls());
+    return ArrayUtilRt.toStringArray(getInstance(project).getUrls());
   }
 
   @NotNull

@@ -23,18 +23,15 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * @author nik
- */
 public class ExternalLibraryDescriptor {
   private static final Logger LOG = Logger.getInstance(ExternalLibraryDescriptor.class);
-  private final String myLibraryGroupId;
-  private final String myLibraryArtifactId;
+  @NotNull private final String myLibraryGroupId;
+  @NotNull private final String myLibraryArtifactId;
   private final String myMinVersion;
   private final String myMaxVersion;
   private final String myPreferredVersion;
 
-  public ExternalLibraryDescriptor(String libraryGroupId, String libraryArtifactId) {
+  public ExternalLibraryDescriptor(@NotNull String libraryGroupId, @NotNull String libraryArtifactId) {
     this(libraryGroupId, libraryArtifactId, null, null, null);
   }
 
@@ -88,6 +85,7 @@ public class ExternalLibraryDescriptor {
     return myPreferredVersion;
   }
 
+  @NotNull
   public String getPresentableName() {
     return myLibraryArtifactId;
   }

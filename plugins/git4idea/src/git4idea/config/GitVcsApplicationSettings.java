@@ -1,7 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.config;
 
 import com.intellij.openapi.components.*;
+import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -9,20 +10,16 @@ import org.jetbrains.annotations.Nullable;
  * The application wide settings for the git
  */
 @State(name = "Git.Application.Settings", storages = @Storage(value = "git.xml", roamingType = RoamingType.PER_OS))
-public class GitVcsApplicationSettings implements PersistentStateComponent<GitVcsApplicationSettings.State> {
+public final class GitVcsApplicationSettings implements PersistentStateComponent<GitVcsApplicationSettings.State> {
   private State myState = new State();
 
-  public enum SshExecutable {
-    BUILT_IN,
-    NATIVE,
-  }
-
-  public static class State {
+  public static final class State {
     public String myPathToGit = null;
-    public SshExecutable SSH_EXECUTABLE = SshExecutable.NATIVE;
 
     public boolean ANNOTATE_IGNORE_SPACES = true;
     public AnnotateDetectMovementsOption ANNOTATE_DETECT_INNER_MOVEMENTS = AnnotateDetectMovementsOption.NONE;
+    public boolean AUTO_COMMIT_ON_CHERRY_PICK = true;
+    public boolean USE_CREDENTIAL_HELPER = false;
   }
 
   public static GitVcsApplicationSettings getInstance() {
@@ -59,19 +56,6 @@ public class GitVcsApplicationSettings implements PersistentStateComponent<GitVc
     myState.myPathToGit = pathToGit;
   }
 
-  public void setIdeaSsh(@NotNull SshExecutable executable) {
-    myState.SSH_EXECUTABLE = executable;
-  }
-
-  @Nullable
-  SshExecutable getIdeaSsh() {
-    return myState.SSH_EXECUTABLE;
-  }
-
-  public boolean isUseIdeaSsh() {
-    return getIdeaSsh() == SshExecutable.BUILT_IN;
-  }
-
   public boolean isIgnoreWhitespaces() {
     return myState.ANNOTATE_IGNORE_SPACES;
   }
@@ -87,6 +71,22 @@ public class GitVcsApplicationSettings implements PersistentStateComponent<GitVc
 
   public void setAnnotateDetectMovementsOption(@NotNull AnnotateDetectMovementsOption value) {
     myState.ANNOTATE_DETECT_INNER_MOVEMENTS = value;
+  }
+
+  public void setAutoCommitOnCherryPick(boolean autoCommit) {
+    myState.AUTO_COMMIT_ON_CHERRY_PICK = autoCommit;
+  }
+
+  public boolean isAutoCommitOnCherryPick() {
+    return myState.AUTO_COMMIT_ON_CHERRY_PICK;
+  }
+
+  public void setUseCredentialHelper(boolean useCredentialHelper) {
+    myState.USE_CREDENTIAL_HELPER = useCredentialHelper;
+  }
+
+  public boolean isUseCredentialHelper() {
+    return myState.USE_CREDENTIAL_HELPER;
   }
 
   public enum AnnotateDetectMovementsOption {

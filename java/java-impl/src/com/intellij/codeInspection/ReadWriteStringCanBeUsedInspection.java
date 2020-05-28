@@ -1,7 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection;
 
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.project.Project;
+import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
@@ -22,11 +24,14 @@ public class ReadWriteStringCanBeUsedInspection extends AbstractBaseJavaLocalIns
     .parameterTypes("java.nio.file.Path");
   private static final CallMatcher STRING_GET_BYTES = CallMatcher.exactInstanceCall(CommonClassNames.JAVA_LANG_STRING, "getBytes")
     .parameterTypes("java.nio.charset.Charset");
+  private static final CallMatcher CHARSET_FOR_NAME = CallMatcher.staticCall("java.nio.charset.Charset", "forName")
+    .parameterTypes(CommonClassNames.JAVA_LANG_STRING);
 
   @NotNull
   @Override
   public PsiElementVisitor buildVisitor(@NotNull ProblemsHolder holder, boolean isOnTheFly) {
-    if (!PsiUtil.isLanguageLevel11OrHigher(holder.getFile())) {
+    LanguageLevel level = PsiUtil.getLanguageLevel(holder.getFile());
+    if (level.isLessThan(LanguageLevel.JDK_11)) {
       return PsiElementVisitor.EMPTY_VISITOR;
     }
     return new JavaElementVisitor() {
@@ -35,8 +40,16 @@ public class ReadWriteStringCanBeUsedInspection extends AbstractBaseJavaLocalIns
         if (FILES_WRITE.test(call)) {
           PsiMethodCallExpression bytesExpression = tryCast(ExpressionUtils.resolveExpression(call.getArgumentList().getExpressions()[1]), PsiMethodCallExpression.class);
           if (STRING_GET_BYTES.test(bytesExpression) && bytesExpression.getMethodExpression().getQualifierExpression() != null) {
-            holder.registerProblem(call, "Can be replaced with 'Files.writeString()'",
-                                   new ReplaceWithWriteStringFix());
+            // Do not suggest for UTF-8 before Java 12 due to JDK-8209576
+            ProblemHighlightType highlight;
+            String message = JavaBundle.message("inspection.message.can.be.replaced.with.files.writestring");
+            if (level.isAtLeast(LanguageLevel.JDK_12) || isNonUtf8Charset(bytesExpression.getArgumentList().getExpressions()[0])) {
+              highlight = ProblemHighlightType.GENERIC_ERROR_OR_WARNING;
+            } else {
+              highlight = ProblemHighlightType.INFORMATION;
+              if (!isOnTheFly) return;
+            }
+            holder.registerProblem(call, message, highlight, new ReplaceWithWriteStringFix(highlight == ProblemHighlightType.INFORMATION));
           }
         } else if (FILES_READ_ALL_BYTES.test(call)) {
           PsiExpressionList expressionList = tryCast(PsiUtil.skipParenthesizedExprUp(call.getParent()), PsiExpressionList.class);
@@ -47,7 +60,7 @@ public class ReadWriteStringCanBeUsedInspection extends AbstractBaseJavaLocalIns
               PsiExpression[] args = expressionList.getExpressions();
               if (args.length == 2 && PsiTreeUtil.isAncestor(args[0], call, false) &&
                   TypeUtils.typeEquals("java.nio.charset.Charset", args[1].getType())) {
-                holder.registerProblem(newExpression, "Can be replaced with 'Files.readString()'",
+                holder.registerProblem(newExpression, JavaBundle.message("inspection.message.can.be.replaced.with.files.readstring"),
                                        new ReplaceWithReadStringFix());
               }
             }
@@ -58,6 +71,7 @@ public class ReadWriteStringCanBeUsedInspection extends AbstractBaseJavaLocalIns
   }
 
   private static class ReplaceWithReadStringFix implements LocalQuickFix {
+
     @Nls(capitalization = Nls.Capitalization.Sentence)
     @NotNull
     @Override
@@ -87,6 +101,19 @@ public class ReadWriteStringCanBeUsedInspection extends AbstractBaseJavaLocalIns
   }
 
   private static class ReplaceWithWriteStringFix implements LocalQuickFix {
+    private final boolean myMayNotWork;
+
+    private ReplaceWithWriteStringFix(boolean mayNotWork) {
+      myMayNotWork = mayNotWork;
+    }
+
+    @Nls(capitalization = Nls.Capitalization.Sentence)
+    @NotNull
+    @Override
+    public String getName() {
+      return myMayNotWork ? JavaBundle.message("quickfix.text.0.may.not.work.before.jdk.11.0.2", getFamilyName()) : getFamilyName();
+    }
+
     @Nls(capitalization = Nls.Capitalization.Sentence)
     @NotNull
     @Override
@@ -113,7 +140,7 @@ public class ReadWriteStringCanBeUsedInspection extends AbstractBaseJavaLocalIns
       if (!isUtf8Charset(charsetExpression)) {
         argumentList.addAfter(ct.markUnchanged(charsetExpression), bytesArg);
       }
-      PsiLocalVariable variable = ExpressionUtils.resolveLocalVariable(PsiUtil.skipParenthesizedExprDown(bytesArg));
+      PsiLocalVariable variable = ExpressionUtils.resolveLocalVariable(bytesArg);
       ct.replaceAndRestoreComments(bytesArg, stringExpression);
       if (variable != null) {
         ct = new CommentTracker();
@@ -122,16 +149,50 @@ public class ReadWriteStringCanBeUsedInspection extends AbstractBaseJavaLocalIns
       }
     }
   }
-
   static boolean isUtf8Charset(PsiExpression expression) {
-    PsiReferenceExpression ref = tryCast(PsiUtil.skipParenthesizedExprDown(expression), PsiReferenceExpression.class);
-    if (ref == null) return false;
-    if (!"UTF_8".equals(ref.getReferenceName())) {
-      return false;
+    expression = PsiUtil.skipParenthesizedExprDown(expression);
+    if (expression instanceof PsiReferenceExpression) {
+      PsiReferenceExpression ref = (PsiReferenceExpression)expression;
+      if (!"UTF_8".equals(ref.getReferenceName())) {
+        return false;
+      }
+      PsiField target = tryCast(ref.resolve(), PsiField.class);
+      return target != null &&
+             target.getContainingClass() != null &&
+             "java.nio.charset.StandardCharsets".equals(target.getContainingClass().getQualifiedName());
     }
-    PsiField target = tryCast(ref.resolve(), PsiField.class);
-    return target != null &&
-           target.getContainingClass() != null &&
-           "java.nio.charset.StandardCharsets".equals(target.getContainingClass().getQualifiedName());
+    if (expression instanceof PsiMethodCallExpression && CHARSET_FOR_NAME.test((PsiMethodCallExpression)expression)) {
+      PsiExpression arg = ((PsiMethodCallExpression)expression).getArgumentList().getExpressions()[0];
+      Object value = ExpressionUtils.computeConstantExpression(arg);
+      return value instanceof String && ((String)value).equalsIgnoreCase("utf-8");
+    }
+    return false;
+  }
+
+  static boolean isNonUtf8Charset(PsiExpression expression) {
+    for (int i = 0; i < 3; i++) {
+      expression = PsiUtil.skipParenthesizedExprDown(expression);
+      if (expression instanceof PsiReferenceExpression) {
+        PsiField target = tryCast(((PsiReferenceExpression)expression).resolve(), PsiField.class);
+        if (target != null) {
+          if ("UTF_8".equals(target.getName())) return false;
+          if (target.getContainingClass() != null &&
+              "java.nio.charset.StandardCharsets".equals(target.getContainingClass().getQualifiedName())) {
+            return true;
+          }
+          if (target.hasModifierProperty(PsiModifier.FINAL)) {
+            expression = target.getInitializer();
+            continue;
+          }
+        }
+      }
+      if (expression instanceof PsiMethodCallExpression && CHARSET_FOR_NAME.test((PsiMethodCallExpression)expression)) {
+        PsiExpression arg = ((PsiMethodCallExpression)expression).getArgumentList().getExpressions()[0];
+        Object value = ExpressionUtils.computeConstantExpression(arg);
+        return value instanceof String && !((String)value).equalsIgnoreCase("utf-8");
+      }
+      break;
+    }
+    return false;
   }
 }

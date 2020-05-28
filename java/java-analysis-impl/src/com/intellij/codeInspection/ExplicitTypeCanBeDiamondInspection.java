@@ -1,8 +1,8 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection;
 
-import com.intellij.codeInsight.daemon.GroupNames;
 import com.intellij.codeInsight.intention.HighPriorityAction;
+import com.intellij.java.analysis.JavaAnalysisBundle;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
@@ -20,14 +20,7 @@ public class ExplicitTypeCanBeDiamondInspection extends AbstractBaseJavaLocalIns
   @NotNull
   @Override
   public String getGroupDisplayName() {
-    return GroupNames.LANGUAGE_LEVEL_SPECIFIC_GROUP_NAME;
-  }
-
-  @Nls
-  @NotNull
-  @Override
-  public String getDisplayName() {
-    return "Explicit type can be replaced with <>";
+    return InspectionsBundle.message("group.names.language.level.specific.issues.and.migration.aids");
   }
 
   @Override
@@ -52,11 +45,16 @@ public class ExplicitTypeCanBeDiamondInspection extends AbstractBaseJavaLocalIns
           LOG.assertTrue(classReference != null);
           final PsiReferenceParameterList parameterList = classReference.getParameterList();
           LOG.assertTrue(parameterList != null);
+          for (PsiTypeElement typeElement : parameterList.getTypeParameterElements()) {
+            if (typeElement.getAnnotations().length > 0) {
+              return;
+            }
+          }
           final PsiElement firstChild = parameterList.getFirstChild();
           final PsiElement lastChild = parameterList.getLastChild();
           final TextRange range = new TextRange(firstChild != null && firstChild.getNode().getElementType() == JavaTokenType.LT ? 1 : 0,
                                                 parameterList.getTextLength() - (lastChild != null && lastChild.getNode().getElementType() == JavaTokenType.GT ? 1 : 0));
-          holder.registerProblem(parameterList, "Explicit type argument #ref #loc can be replaced with <>", ProblemHighlightType.LIKE_UNUSED_SYMBOL, range, new ReplaceWithDiamondFix());
+          holder.registerProblem(parameterList, JavaAnalysisBundle.message("explicit.type.argument.ref.loc.can.be.replaced.with"), ProblemHighlightType.LIKE_UNUSED_SYMBOL, range, new ReplaceWithDiamondFix());
         }
       }
     };
@@ -66,7 +64,7 @@ public class ExplicitTypeCanBeDiamondInspection extends AbstractBaseJavaLocalIns
     @NotNull
     @Override
     public String getFamilyName() {
-      return "Replace with <>";
+      return InspectionsBundle.message("quickfix.family.replace.with.diamond");
     }
 
     @Override

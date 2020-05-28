@@ -16,6 +16,8 @@
 package com.intellij.openapi.util;
 
 /**
+ * Please use {@link java.util.function.Predicate} instead.
+ *
  * Returns {@code true} or {@code false} for the given input object.
  * <p/>
  * See {@link Conditions} for chained conditions.
@@ -25,6 +27,10 @@ package com.intellij.openapi.util;
 public interface Condition<T> {
   boolean value(T t);
 
+  /**
+   * @deprecated use {@link Conditions#notNull()} instead
+   */
+  @Deprecated
   Condition<Object> NOT_NULL = new Condition<Object>() {
     public boolean value(final Object object) {
       return object != null;
@@ -37,9 +43,10 @@ public interface Condition<T> {
   };
 
   /**
-   * @see Conditions#alwaysTrue()
+   * @deprecated use {@link Conditions#alwaysTrue()} instead
    */
-  Condition TRUE = new Condition() {
+  @Deprecated
+  Condition<Object> TRUE = new Condition<Object>() {
     public boolean value(final Object object) {
       return true;
     }
@@ -50,9 +57,10 @@ public interface Condition<T> {
     }
   };
   /**
-   * @see Conditions#alwaysFalse()
+   * @deprecated use {@link Conditions#alwaysFalse()} instead
    */
-  Condition FALSE = new Condition() {
+  @Deprecated
+  Condition<Object> FALSE = new Condition<Object>() {
     public boolean value(final Object object) {
       return false;
     }

@@ -1,8 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.daemon.impl;
 
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzerSettings;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.editor.Editor;
@@ -10,14 +11,16 @@ import com.intellij.openapi.editor.ex.EditorMarkupModel;
 import com.intellij.openapi.editor.ex.ErrorStripTooltipRendererProvider;
 import com.intellij.openapi.editor.impl.EditorMarkupModelImpl;
 import com.intellij.openapi.editor.markup.ErrorStripeRenderer;
+import com.intellij.openapi.fileEditor.FileEditor;
+import com.intellij.openapi.fileEditor.FileEditorManager;
+import com.intellij.openapi.fileEditor.TextEditor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
-import com.intellij.ui.PopupHandler;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public class ErrorStripeUpdateManager {
+public final class ErrorStripeUpdateManager implements Disposable {
   public static ErrorStripeUpdateManager getInstance(Project project) {
     return ServiceManager.getService(project, ErrorStripeUpdateManager.class);
   }
@@ -25,9 +28,21 @@ public class ErrorStripeUpdateManager {
   private final Project myProject;
   private final PsiDocumentManager myPsiDocumentManager;
 
-  public ErrorStripeUpdateManager(Project project, PsiDocumentManager psiDocumentManager) {
+  public ErrorStripeUpdateManager(Project project) {
     myProject = project;
-    myPsiDocumentManager = psiDocumentManager;
+    myPsiDocumentManager = PsiDocumentManager.getInstance(myProject);
+    TrafficLightRendererContributor.EP_NAME.addChangeListener(() -> {
+      for (FileEditor fileEditor : FileEditorManager.getInstance(project).getAllEditors()) {
+        if (fileEditor instanceof TextEditor) {
+          TextEditor textEditor = (TextEditor)fileEditor;
+          repaintErrorStripePanel(textEditor.getEditor());
+        }
+      }
+    }, this);
+  }
+
+  @Override
+  public void dispose() {
   }
 
   @SuppressWarnings("WeakerAccess") // Used in Rider
@@ -37,8 +52,8 @@ public class ErrorStripeUpdateManager {
 
     PsiFile file = myPsiDocumentManager.getPsiFile(editor.getDocument());
     final EditorMarkupModel markup = (EditorMarkupModel) editor.getMarkupModel();
-    markup.setErrorPanelPopupHandler(createPopup(file));
-    markup.setErrorStripTooltipRendererProvider(createTooltipRenderer());
+    markup.setErrorPanelPopupHandler(new DaemonEditorPopup(myProject, editor));
+    markup.setErrorStripTooltipRendererProvider(createTooltipRenderer(editor));
     markup.setMinMarkHeight(DaemonCodeAnalyzerSettings.getInstance().getErrorStripeMarkMinHeight());
     setOrRefreshErrorStripeRenderer(markup, file);
   }
@@ -54,7 +69,7 @@ public class ErrorStripeUpdateManager {
       TrafficLightRenderer tlr = (TrafficLightRenderer) renderer;
       EditorMarkupModelImpl markupModelImpl = (EditorMarkupModelImpl) editorMarkupModel;
       tlr.refresh(markupModelImpl);
-      markupModelImpl.repaintVerticalScrollBar();
+      markupModelImpl.repaintTrafficLightIcon();
       if (tlr.isValid()) return;
     }
     Editor editor = editorMarkupModel.getEditor();
@@ -64,13 +79,8 @@ public class ErrorStripeUpdateManager {
   }
 
   @NotNull
-  private static PopupHandler createPopup(@Nullable PsiFile psiFile) {
-    return new DaemonEditorPopup(psiFile);
-  }
-
-  @NotNull
-  private ErrorStripTooltipRendererProvider createTooltipRenderer() {
-    return new DaemonTooltipRendererProvider(myProject);
+  private ErrorStripTooltipRendererProvider createTooltipRenderer(Editor editor) {
+    return new DaemonTooltipRendererProvider(myProject, editor);
   }
 
   @Nullable
@@ -81,6 +91,6 @@ public class ErrorStripeUpdateManager {
         return renderer;
       }
     }
-    return new TrafficLightRenderer(myProject, editor.getDocument(), file);
+    return new TrafficLightRenderer(myProject, editor.getDocument());
   }
 }

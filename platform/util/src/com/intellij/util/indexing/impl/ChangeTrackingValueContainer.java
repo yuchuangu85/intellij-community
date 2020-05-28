@@ -21,7 +21,6 @@ import com.intellij.util.indexing.ValueContainer;
 import com.intellij.util.io.DataExternalizer;
 import com.intellij.util.io.DataInputOutputUtil;
 import gnu.trove.TIntHashSet;
-import gnu.trove.TIntProcedure;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.DataOutput;
@@ -52,7 +51,7 @@ public class ChangeTrackingValueContainer<Value> extends UpdatableValueContainer
       merged.addValue(inputId, value);
     }
 
-    if (myAdded == null) myAdded = new ValueContainerImpl<Value>();
+    if (myAdded == null) myAdded = new ValueContainerImpl<>();
     myAdded.addValue(inputId, value);
   }
 
@@ -119,17 +118,14 @@ public class ChangeTrackingValueContainer<Value> extends UpdatableValueContainer
           (newMerged.size() > ValueContainerImpl.NUMBER_OF_VALUES_THRESHOLD ||
            (myAdded != null && myAdded.size() > ValueContainerImpl.NUMBER_OF_VALUES_THRESHOLD))) {
         // Calculate file ids that have Value mapped to avoid O(NumberOfValuesInMerged) during removal
-        fileId2ValueMapping = new FileId2ValueMapping<Value>(newMerged);
+        fileId2ValueMapping = new FileId2ValueMapping<>(newMerged);
       }
       final FileId2ValueMapping<Value> finalFileId2ValueMapping = fileId2ValueMapping;
       if (myInvalidated != null) {
-        myInvalidated.forEach(new TIntProcedure() {
-          @Override
-          public boolean execute(int inputId) {
-            if (finalFileId2ValueMapping != null) finalFileId2ValueMapping.removeFileId(inputId);
-            else newMerged.removeAssociatedValue(inputId);
-            return true;
-          }
+        myInvalidated.forEach(inputId -> {
+          if (finalFileId2ValueMapping != null) finalFileId2ValueMapping.removeFileId(inputId);
+          else newMerged.removeAssociatedValue(inputId);
+          return true;
         });
       }
 
@@ -139,20 +135,17 @@ public class ChangeTrackingValueContainer<Value> extends UpdatableValueContainer
           fileId2ValueMapping.disableOneValuePerFileValidation();
         }
 
-        myAdded.forEach(new ValueContainer.ContainerAction<Value>() {
-          @Override
-          public boolean perform(final int inputId, final Value value) {
-            // enforcing "one-value-per-file for particular key" invariant
-            if (finalFileId2ValueMapping != null) finalFileId2ValueMapping.removeFileId(inputId);
-            else newMerged.removeAssociatedValue(inputId);
+        myAdded.forEach((inputId, value) -> {
+          // enforcing "one-value-per-file for particular key" invariant
+          if (finalFileId2ValueMapping != null) finalFileId2ValueMapping.removeFileId(inputId);
+          else newMerged.removeAssociatedValue(inputId);
 
-            newMerged.addValue(inputId, value);
-            if (finalFileId2ValueMapping != null) finalFileId2ValueMapping.associateFileIdToValue(inputId, value);
-            return true;
-          }
+          newMerged.addValue(inputId, value);
+          if (finalFileId2ValueMapping != null) finalFileId2ValueMapping.associateFileIdToValue(inputId, value);
+          return true;
         });
       }
-      setNeedsCompacting(((UpdatableValueContainer)fromDisk).needsCompacting());
+      setNeedsCompacting(((UpdatableValueContainer<Value>)fromDisk).needsCompacting());
 
       myMerged = newMerged;
       return newMerged;

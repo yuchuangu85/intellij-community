@@ -1,9 +1,12 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.rename.inplace;
 
+import com.intellij.CommonBundle;
 import com.intellij.codeInsight.template.impl.TemplateManagerImpl;
 import com.intellij.codeInsight.template.impl.TemplateState;
+import com.intellij.ide.IdeBundle;
 import com.intellij.injected.editor.EditorWindow;
+import com.intellij.lang.LangBundle;
 import com.intellij.lang.Language;
 import com.intellij.lang.LanguageExtension;
 import com.intellij.lang.injection.InjectedLanguageManager;
@@ -23,6 +26,7 @@ import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
+import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.refactoring.RefactoringActionHandler;
 import com.intellij.refactoring.RefactoringBundle;
@@ -90,8 +94,9 @@ public class VariableInplaceRenamer extends InplaceRefactoring {
     final String stringToSearch = myElementToRename.getName();
     final PsiFile currentFile = PsiDocumentManager.getInstance(myProject).getPsiFile(myEditor.getDocument());
     if (!StringUtil.isEmptyOrSpaces(stringToSearch)) {
-      TextOccurrencesUtil
-        .processUsagesInStringsAndComments(myElementToRename, stringToSearch, true, (psiElement, textRange) -> {
+      TextOccurrencesUtil.processUsagesInStringsAndComments(
+        myElementToRename, GlobalSearchScope.projectScope(myElementToRename.getProject()),
+        stringToSearch, true, (psiElement, textRange) -> {
           if (psiElement.getContainingFile() == currentFile) {
             stringUsages.add(Pair.create(psiElement, textRange));
           }
@@ -208,7 +213,8 @@ public class VariableInplaceRenamer extends InplaceRefactoring {
         return;
       }
       JBPopupFactory.getInstance()
-        .createConfirmation("Inserted identifier is not valid", "Continue editing", "Cancel",
+        .createConfirmation(LangBundle.message("popup.title.inserted.identifier.valid"), IdeBundle.message("button.continue.editing"),
+                            CommonBundle.getCancelButtonText(),
                             () -> createInplaceRenamerToRestart(variable, myEditor, newName).performInplaceRefactoring(nameSuggestions), 0).showInBestPositionFor(myEditor);
     }
   }
@@ -232,9 +238,7 @@ public class VariableInplaceRenamer extends InplaceRefactoring {
         return;
       }
       if (elementToRename != null) {
-        WriteCommandAction.writeCommandAction(myProject).withName(getCommandName()).run(() -> {
-          renameSynthetic(newName);
-        });
+        WriteCommandAction.writeCommandAction(myProject).withName(getCommandName()).run(() -> renameSynthetic(newName));
       }
       for (AutomaticRenamerFactory renamerFactory : AutomaticRenamerFactory.EP_NAME.getExtensionList()) {
         if (elementToRename != null && renamerFactory.isApplicable(elementToRename)) {

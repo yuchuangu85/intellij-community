@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.completion;
 
 import com.intellij.codeInsight.ExpectedTypesProvider;
@@ -20,12 +20,10 @@ import com.intellij.util.Consumer;
 import com.intellij.util.JavaPsiConstructorUtil;
 import com.intellij.util.PlatformIcons;
 import com.intellij.util.ProcessingContext;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static com.intellij.patterns.PlatformPatterns.psiElement;
 
@@ -113,7 +111,7 @@ class SameSignatureCallParametersProvider extends CompletionProvider<CompletionP
 
   private static Set<Pair<PsiMethod, PsiSubstitutor>> getCallCandidates(PsiCall expression) {
     PsiMethod chosenMethod = CompletionMemory.getChosenMethod(expression);
-    Set<Pair<PsiMethod, PsiSubstitutor>> candidates = ContainerUtil.newLinkedHashSet();
+    Set<Pair<PsiMethod, PsiSubstitutor>> candidates = new LinkedHashSet<>();
     JavaResolveResult[] results;
     if (expression instanceof PsiMethodCallExpression) {
       results = ((PsiMethodCallExpression)expression).getMethodExpression().multiResolve(false);
@@ -148,7 +146,7 @@ class SameSignatureCallParametersProvider extends CompletionProvider<CompletionP
       return place;
     }
 
-    Map<String, PsiType> requiredNames = ContainerUtil.newHashMap();
+    Map<String, PsiType> requiredNames = new HashMap<>();
     final PsiParameter[] parameters = place.getParameterList().getParameters();
     final PsiParameter[] callParams = invoked.getParameterList().getParameters();
     if (callParams.length > parameters.length) {
@@ -161,7 +159,7 @@ class SameSignatureCallParametersProvider extends CompletionProvider<CompletionP
       PsiParameter callParam = callParams[i];
       PsiParameter parameter = parameters[i];
       requiredNames.put(callParam.getName(), substitutor.substitute(callParam.getType()));
-      if (checkNames && !Comparing.equal(parameter.getName(), callParam.getName()) ||
+      if (checkNames && !Objects.equals(parameter.getName(), callParam.getName()) ||
           !Comparing.equal(parameter.getType(), substitutor.substitute(callParam.getType()))) {
         sameTypes = false;
       }

@@ -26,9 +26,6 @@ import com.intellij.facet.FacetManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * @author nik
- */
 public class DefaultModulesProvider implements ModulesProvider {
 
   @NotNull
@@ -43,13 +40,12 @@ public class DefaultModulesProvider implements ModulesProvider {
   }
 
   @Override
-  @NotNull
-  public Module[] getModules() {
+  public Module @NotNull [] getModules() {
     return ModuleManager.getInstance(myProject).getModules();
   }
 
   @Override
-  public Module getModule(String name) {
+  public Module getModule(@NotNull String name) {
     return ModuleManager.getInstance(myProject).findModuleByName(name);
   }
 
@@ -58,6 +54,7 @@ public class DefaultModulesProvider implements ModulesProvider {
     return ModuleRootManager.getInstance(module);
   }
 
+  @NotNull
   @Override
   public FacetModel getFacetModel(@NotNull Module module) {
     return FacetManager.getInstance(module);

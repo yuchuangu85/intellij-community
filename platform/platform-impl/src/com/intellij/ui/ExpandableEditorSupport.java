@@ -1,10 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui;
 
 import com.intellij.openapi.editor.Editor;
-import com.intellij.openapi.editor.FoldRegion;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.ex.FoldingModelEx;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.components.JBScrollBar;
 import com.intellij.ui.components.fields.ExpandableSupport;
 import com.intellij.ui.components.fields.ExtendableTextComponent;
@@ -14,10 +14,25 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.List;
+import java.util.Objects;
+
+import static java.util.Arrays.asList;
 
 public class ExpandableEditorSupport extends ExpandableSupport<EditorTextField> {
   public ExpandableEditorSupport(@NotNull EditorTextField field) {
     super(field, null, null);
+    field.addSettingsProvider(editor -> {
+      initFieldEditor(editor, field.getBackground());
+      updateFieldFolding(editor);
+    });
+  }
+
+  public ExpandableEditorSupport(@NotNull EditorTextField field,
+                                 @NotNull Function<? super String, ? extends List<String>> parser,
+                                 @NotNull Function<? super List<String>, String> joiner) {
+    super(field, text -> StringUtil.join(parser.fun(text), "\n"),
+          text -> joiner.fun(asList(StringUtil.splitByLines(text))));
     field.addSettingsProvider(editor -> {
       initFieldEditor(editor, field.getBackground());
       updateFieldFolding(editor);
@@ -29,7 +44,7 @@ public class ExpandableEditorSupport extends ExpandableSupport<EditorTextField> 
     label.setBorder(JBUI.Borders.empty(5, 3, 5, 7));
     editor.getContentComponent().putClientProperty(Expandable.class, this);
     editor.getScrollPane().setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-    editor.getScrollPane().setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+    editor.getScrollPane().setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
     editor.getScrollPane().getVerticalScrollBar().setBackground(background);
     editor.getScrollPane().getVerticalScrollBar().add(JBScrollBar.LEADING, label);
     editor.getScrollPane().setViewportBorder(JBUI.Borders.empty(4, 6));
@@ -49,8 +64,7 @@ public class ExpandableEditorSupport extends ExpandableSupport<EditorTextField> 
       model.clearFoldRegions();
       for (int i = 0; i < text.length(); i++) {
         if (text.charAt(i) == '\n') {
-          FoldRegion region = model.createFoldRegion(i, i + 1, " \u23ce ", null, true);
-          if (region != null) region.setExpanded(false);
+          model.createFoldRegion(i, i + 1, " \u23ce ", null, true);
         }
       }
     });
@@ -59,7 +73,7 @@ public class ExpandableEditorSupport extends ExpandableSupport<EditorTextField> 
   @NotNull
   @Override
   protected Content prepare(@NotNull EditorTextField field, @NotNull Function<? super String, String> onShow) {
-    EditorTextField popup = new EditorTextField(onShow.fun(field.getText()));
+    EditorTextField popup = createPopupEditor(field, onShow.fun(field.getText()));
     Color background = field.getBackground();
     popup.setBackground(background);
     popup.setOneLineMode(false);
@@ -88,6 +102,16 @@ public class ExpandableEditorSupport extends ExpandableSupport<EditorTextField> 
         if (editor instanceof EditorEx) updateFieldFolding((EditorEx)editor);
       }
     };
+  }
+
+  @NotNull
+  protected EditorTextField createPopupEditor(@NotNull EditorTextField field, @NotNull String text) {
+    if (Objects.equals(text, field.getText())) {
+      return new EditorTextField(field.getDocument(), field.getProject(), field.getFileType());
+    }
+    else {
+      return new EditorTextField(text, field.getProject(), field.getFileType());
+    }
   }
 
   private static void copyCaretPosition(@NotNull Editor destination, Editor source) {

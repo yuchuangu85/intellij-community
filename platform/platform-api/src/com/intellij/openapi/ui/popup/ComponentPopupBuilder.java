@@ -1,27 +1,15 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.ui.popup;
 
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Condition;
+import com.intellij.openapi.util.NlsContexts.PopupAdvertisement;
 import com.intellij.openapi.util.Pair;
 import com.intellij.ui.ActiveComponent;
 import com.intellij.util.BooleanFunction;
 import com.intellij.util.Processor;
+import com.intellij.openapi.util.NlsContexts;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -29,15 +17,13 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionListener;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.util.List;
 
-/**
- * @author max
- */
 public interface ComponentPopupBuilder {
   @NotNull
-  ComponentPopupBuilder setTitle(String title);
+  ComponentPopupBuilder setTitle(@NlsContexts.PopupTitle String title);
 
   @NotNull
   ComponentPopupBuilder setResizable(boolean forceResizable);
@@ -52,7 +38,7 @@ public interface ComponentPopupBuilder {
   ComponentPopupBuilder setFocusable(boolean focusable);
 
   @NotNull
-  ComponentPopupBuilder setRequestFocusCondition(Project project, Condition<Project> condition);
+  ComponentPopupBuilder setRequestFocusCondition(@NotNull Project project, @NotNull Condition<? super Project> condition);
 
   /**
    * @see com.intellij.openapi.util.DimensionService
@@ -61,16 +47,16 @@ public interface ComponentPopupBuilder {
   ComponentPopupBuilder setDimensionServiceKey(@Nullable Project project, @NonNls String key, boolean useForXYLocation);
 
   @NotNull
-  ComponentPopupBuilder setCancelCallback(Computable<Boolean> shouldProceed);
+  ComponentPopupBuilder setCancelCallback(@NotNull Computable<Boolean> shouldProceed);
 
   @NotNull
   ComponentPopupBuilder setCancelOnClickOutside(boolean cancel);
 
   @NotNull
-  ComponentPopupBuilder addListener(JBPopupListener listener);
+  ComponentPopupBuilder addListener(@NotNull JBPopupListener listener);
 
   @NotNull
-  ComponentPopupBuilder setCancelOnMouseOutCallback(MouseChecker shouldCancel);
+  ComponentPopupBuilder setCancelOnMouseOutCallback(@NotNull MouseChecker shouldCancel);
 
   @NotNull
   JBPopup createPopup();
@@ -119,16 +105,16 @@ public interface ComponentPopupBuilder {
   ComponentPopupBuilder setModalContext(boolean modal);
 
   @NotNull
-  ComponentPopupBuilder setFocusOwners(@NotNull Component[] focusOwners);
+  ComponentPopupBuilder setFocusOwners(Component @NotNull [] focusOwners);
 
   /**
    * Adds "advertising" text to the bottom (e.g.: hints in code completion popup).
    */
   @NotNull
-  ComponentPopupBuilder setAdText(@Nullable String text);
+  ComponentPopupBuilder setAdText(@Nullable @PopupAdvertisement String text);
 
   @NotNull
-  ComponentPopupBuilder setAdText(@Nullable String text, int textAlignment);
+  ComponentPopupBuilder setAdText(@Nullable @PopupAdvertisement String text, int textAlignment);
 
   @NotNull
   ComponentPopupBuilder setShowShadow(boolean show);
@@ -137,7 +123,7 @@ public interface ComponentPopupBuilder {
   ComponentPopupBuilder setCommandButton(@NotNull ActiveComponent commandButton);
 
   @NotNull
-  ComponentPopupBuilder setCouldPin(@Nullable Processor<JBPopup> callback);
+  ComponentPopupBuilder setCouldPin(@Nullable Processor<? super JBPopup> callback);
 
   @NotNull
   ComponentPopupBuilder setKeyboardActions(@NotNull List<? extends Pair<ActionListener, KeyStroke>> keyboardActions);
@@ -154,13 +140,22 @@ public interface ComponentPopupBuilder {
    * Allows to define custom strategy for processing {@link JBPopup#dispatchKeyEvent(KeyEvent)}.
    */
   @NotNull
-  ComponentPopupBuilder setKeyEventHandler(@NotNull BooleanFunction<KeyEvent> handler);
+  ComponentPopupBuilder setKeyEventHandler(@NotNull BooleanFunction<? super KeyEvent> handler);
 
   @NotNull
   ComponentPopupBuilder setShowBorder(boolean show);
 
   @NotNull
+  ComponentPopupBuilder setNormalWindowLevel(boolean b);
+
+  @NotNull
   default ComponentPopupBuilder setBorderColor(Color color) {
     return this;
   }
+
+  /**
+   * Set a handler to be called when popup is closed via {@link JBPopup#closeOk(InputEvent)}.
+   */
+  @NotNull
+  ComponentPopupBuilder setOkHandler(@Nullable Runnable okHandler);
 }

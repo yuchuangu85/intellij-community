@@ -2,6 +2,7 @@
 package com.intellij.internal
 
 import com.intellij.ide.util.BrowseFilesListener
+import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.openapi.application.ApplicationNamesInfo
@@ -12,8 +13,8 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.*
 import com.intellij.openapi.updateSettings.impl.UpdateChecker
+import com.intellij.openapi.util.JDOMUtil
 import com.intellij.ui.ScrollPaneFactory
-import com.intellij.util.loadElement
 import com.intellij.util.text.nullize
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
@@ -32,7 +33,7 @@ class ShowUpdateInfoDialogAction : DumbAwareAction() {
     val dialog = MyDialog(e.project)
     if (dialog.showAndGet()) {
       try {
-        UpdateChecker.testPlatformUpdate(dialog.updateXmlText(), dialog.patchFilePath(), dialog.forceUpdate())
+        UpdateChecker.testPlatformUpdate(AnAction.getEventProject(e), dialog.updateXmlText (), dialog.patchFilePath(), dialog.forceUpdate())
       }
       catch (ex: Exception) {
         Messages.showErrorDialog(e.project, "${ex.javaClass.name}: ${ex.message}", "Something Went Wrong")
@@ -88,7 +89,9 @@ class ShowUpdateInfoDialogAction : DumbAwareAction() {
         return ValidationInfo("Please paste something here", textArea)
       }
 
-      try { loadElement(completeUpdateInfoXml(text)) }
+      try {
+        JDOMUtil.load(completeUpdateInfoXml(text))
+      }
       catch (e: Exception) {
         return ValidationInfo(e.message ?: "Error: ${e.javaClass.name}", textArea)
       }
@@ -104,7 +107,7 @@ class ShowUpdateInfoDialogAction : DumbAwareAction() {
     internal fun patchFilePath() = fileField.field.text.nullize(nullizeSpaces = true)
 
     private fun completeUpdateInfoXml(text: String) =
-      when (loadElement(text).name) {
+      when (JDOMUtil.load(text).name) {
         "products" -> text
         "channel" -> {
           val productName = ApplicationNamesInfo.getInstance().fullProductName

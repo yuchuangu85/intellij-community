@@ -1,19 +1,18 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.psi.impl.source.resolve.reference.impl.providers;
 
+import com.intellij.analysis.AnalysisBundle;
 import com.intellij.codeInsight.daemon.EmptyResolveMessageProvider;
 import com.intellij.codeInspection.LocalQuickFix;
 import com.intellij.codeInspection.LocalQuickFixProvider;
-import com.intellij.lang.LangBundle;
 import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.FileTypeRegistry;
 import com.intellij.openapi.fileTypes.UnknownFileType;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.RecursionManager;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.io.FileUtil;
@@ -27,9 +26,10 @@ import com.intellij.psi.impl.source.resolve.reference.impl.CachingReference;
 import com.intellij.psi.impl.source.resolve.reference.impl.PsiMultiReference;
 import com.intellij.psi.search.PsiFileSystemItemProcessor;
 import com.intellij.refactoring.rename.BindablePsiReference;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.indexing.IndexingBundle;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -47,7 +47,7 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
                                       LocalQuickFixProvider,
                                       EmptyResolveMessageProvider, BindablePsiReference {
 
-  private static final Logger LOG = Logger.getInstance("#com.intellij.psi.impl.source.resolve.reference.impl.providers.FileReference");
+  private static final Logger LOG = Logger.getInstance(FileReference.class);
 
   public static final FileReference[] EMPTY = new FileReference[0];
 
@@ -116,19 +116,22 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
   }
 
   @Override
-  @NotNull
-  public ResolveResult[] multiResolve(final boolean incompleteCode) {
+  public ResolveResult @NotNull [] multiResolve(final boolean incompleteCode) {
     PsiFile file = getElement().getContainingFile();
     return ResolveCache.getInstance(file.getProject()).resolveWithCaching(this, MyResolver.INSTANCE, false, false, file);
   }
 
-  @NotNull
-  protected ResolveResult[] innerResolve(boolean caseSensitive, @NotNull PsiFile containingFile) {
+  protected ResolveResult @NotNull [] innerResolve(boolean caseSensitive, @NotNull PsiFile containingFile) {
     final String referenceText = getText();
     if (referenceText.isEmpty() && myIndex == 0) {
       return new ResolveResult[]{new PsiElementResolveResult(containingFile)};
     }
-    final Collection<PsiFileSystemItem> contexts = getContexts();
+
+    final Collection<PsiFileSystemItem> contexts = RecursionManager.doPreventingRecursion(this, false, () -> getContexts());
+    if (contexts == null) {
+      LOG.error("Recursion occurred for " + getClass() + " on " + getElement().getText());
+      return ResolveResult.EMPTY_ARRAY;
+    }
     final Collection<ResolveResult> result = new THashSet<>();
     for (final PsiFileSystemItem context : contexts) {
       innerResolveInContext(referenceText, context, result, caseSensitive);
@@ -282,13 +285,12 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
   }
 
   @Override
-  @NotNull
-  public Object[] getVariants() {
+  public Object @NotNull [] getVariants() {
     FileReferenceCompletion completion = FileReferenceCompletion.getInstance();
     if (completion != null) {
       return completion.getFileReferenceCompletionVariants(this);
     }
-    return ArrayUtil.EMPTY_OBJECT_ARRAY;
+    return ArrayUtilRt.EMPTY_OBJECT_ARRAY;
   }
 
   /**
@@ -511,7 +513,7 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
   }
 
   protected PsiElement fixRefText(String name) {
-    return ElementManipulators.getManipulator(getElement()).handleContentChange(getElement(), getRangeInElement(), name);
+    return ElementManipulators.handleContentChange(getElement(), getRangeInElement(), name);
   }
 
   /* Happens when it's been moved to another folder */
@@ -532,8 +534,7 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
     }
   }
 
-  @NotNull
-  protected static FileReferenceHelper[] getHelpers() {
+  protected static FileReferenceHelper @NotNull [] getHelpers() {
     return FileReferenceHelperRegistrar.getHelpers();
   }
 
@@ -544,8 +545,8 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
   @NotNull
   @Override
   public String getUnresolvedMessagePattern() {
-    return LangBundle.message("error.cannot.resolve")
-           + " " + (LangBundle.message(isLast() ? "terms.file" : "terms.directory"))
+    return AnalysisBundle.message("error.cannot.resolve")
+           + " " + IndexingBundle.message(isLast() ? "terms.file" : "terms.directory")
            + " '" + StringUtil.escapePattern(decode(getCanonicalText())) + "'";
   }
 
@@ -572,12 +573,11 @@ public class FileReference implements PsiFileReference, FileReferenceOwner, PsiP
     return myFileReferenceSet.getLastReference();
   }
 
-  static class MyResolver implements ResolveCache.PolyVariantContextResolver<FileReference> {
+  private static class MyResolver implements ResolveCache.PolyVariantContextResolver<FileReference> {
     static final MyResolver INSTANCE = new MyResolver();
 
-    @NotNull
     @Override
-    public ResolveResult[] resolve(@NotNull FileReference ref, @NotNull PsiFile containingFile, boolean incompleteCode) {
+    public ResolveResult @NotNull [] resolve(@NotNull FileReference ref, @NotNull PsiFile containingFile, boolean incompleteCode) {
       return ref.innerResolve(ref.getFileReferenceSet().isCaseSensitive(), containingFile);
     }
   }

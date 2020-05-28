@@ -1,10 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 @file:JvmName("CreateFieldFromUsage")
 
 package com.intellij.lang.java.request
 
 import com.intellij.codeInsight.daemon.impl.quickfix.CreateFieldFromUsageFix
 import com.intellij.codeInsight.intention.IntentionAction
+import com.intellij.lang.java.JavaLanguage
 import com.intellij.lang.java.actions.toJavaClassOrNull
 import com.intellij.lang.jvm.JvmClass
 import com.intellij.lang.jvm.JvmClassKind
@@ -13,6 +14,7 @@ import com.intellij.lang.jvm.actions.CreateFieldRequest
 import com.intellij.lang.jvm.actions.EP_NAME
 import com.intellij.lang.jvm.actions.groupActionsByType
 import com.intellij.psi.*
+import com.intellij.psi.impl.PsiImplUtil
 import com.intellij.psi.util.PsiUtil.resolveClassInClassTypeOnly
 import com.intellij.psi.util.PsiUtilCore
 import com.intellij.psi.util.parentOfType
@@ -25,7 +27,7 @@ fun generateActions(ref: PsiReferenceExpression): List<IntentionAction> {
     extensions.flatMap { ext ->
       ext.createAddFieldActions(clazz, request)
     }
-  }.groupActionsByType()
+  }.groupActionsByType(JavaLanguage.INSTANCE)
 }
 
 private fun checkReference(ref: PsiReferenceExpression): Boolean {
@@ -66,7 +68,7 @@ private class CreateFieldRequests(val myRef: PsiReferenceExpression) {
       }
     }
     else {
-      val baseClass = extractBaseClassFromSwitchStatement()
+      val baseClass = resolveClassInClassTypeOnly(PsiImplUtil.getSwitchLabel(myRef)?.enclosingSwitchStatement?.expression?.type)
       if (baseClass != null) {
         processHierarchy(baseClass)
       }
@@ -74,12 +76,6 @@ private class CreateFieldRequests(val myRef: PsiReferenceExpression) {
         processOuterAndImported()
       }
     }
-  }
-
-  private fun extractBaseClassFromSwitchStatement(): PsiClass? {
-    val parent = myRef.parent as? PsiSwitchLabelStatement ?: return null
-    val switchStatement = parent.parentOfType<PsiSwitchStatement>() ?: return null
-    return resolveClassInClassTypeOnly(switchStatement.expression?.type)
   }
 
   private fun processHierarchy(baseClass: PsiClass) {

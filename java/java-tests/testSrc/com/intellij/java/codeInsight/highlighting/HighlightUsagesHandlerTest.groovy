@@ -1,33 +1,30 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.codeInsight.highlighting
 
 import com.intellij.JavaTestUtil
 import com.intellij.codeInsight.daemon.impl.HighlightInfoType
 import com.intellij.codeInsight.daemon.impl.IdentifierHighlighterPassFactory
 import com.intellij.codeInsight.highlighting.HighlightUsagesHandler
+import com.intellij.codeInsight.highlighting.HighlightUsagesHandlerBase
 import com.intellij.codeInspection.sillyAssignment.SillyAssignmentInspection
+import com.intellij.openapi.util.Segment
+import com.intellij.openapi.util.TextRange
+import com.intellij.pom.java.LanguageLevel
+import com.intellij.psi.PsiElement
 import com.intellij.psi.impl.source.tree.injected.MyTestInjector
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
-
+import com.intellij.testFramework.IdeaTestUtil
+import com.intellij.testFramework.LightProjectDescriptor
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 /**
  * @author cdr
  */
-class HighlightUsagesHandlerTest extends LightCodeInsightFixtureTestCase {
+class HighlightUsagesHandlerTest extends LightJavaCodeInsightFixtureTestCase {
   final String basePath = JavaTestUtil.relativeJavaTestDataPath
+
+  @Override
+  protected LightProjectDescriptor getProjectDescriptor() {
+    return JAVA_14
+  }
 
   void testHighlightImport() {
     configureFile()
@@ -106,6 +103,15 @@ class HighlightUsagesHandlerTest extends LightCodeInsightFixtureTestCase {
     checkUnselect()
   }
 
+  void testBreakInSwitchExpr() {
+    IdeaTestUtil.withLevel module, LanguageLevel.JDK_13_PREVIEW, {
+      configureFile()
+      ctrlShiftF7()
+      assertRangeText 'switch', 'yield', 'yield'
+      checkUnselect()
+    }
+  }
+
   void testBreakInDoWhile() {
     configureFile()
     ctrlShiftF7()
@@ -180,8 +186,8 @@ class HighlightUsagesHandlerTest extends LightCodeInsightFixtureTestCase {
   }
 
   void testSuppressedWarningsInInjectionHighlights() {
-    MyTestInjector testInjector = new MyTestInjector(getPsiManager());
-    testInjector.injectAll(myFixture.getTestRootDisposable());
+    MyTestInjector testInjector = new MyTestInjector(getPsiManager())
+    testInjector.injectAll(myFixture.getTestRootDisposable())
     myFixture.configureByText 'Foo.java', '''
       public class Foo {
         public static void a(boolean b, String c) {
@@ -281,6 +287,66 @@ class HighlightUsagesHandlerTest extends LightCodeInsightFixtureTestCase {
     assertRangeText 'in', 'FileInputStream', 'FileInputStream', 'catch'
   }
 
+  void testMethodParameterEndOfIdentifier() {
+    configureFile()
+    assertElementUnderCaretRangesAndTexts("28:33 param", "60:65 param", "68:73 param")
+  }
+
+  void testRecordComponents() {
+    myFixture.configureByText 'A.java', '''
+      record A(String s) {
+        void test() {
+          <caret>s();
+          s();
+          String a = s;
+        }
+      }'''.stripIndent()
+    ctrlShiftF7()
+    assertRangesAndTexts "17:18 s", "42:43 s", "51:52 s", "71:72 s"
+  }
+
+  void testCompactConstructorParameters() {
+    myFixture.configureByText 'A.java', '''
+      record A(String s) {
+        A {
+          <caret>s;
+        }
+      }'''.stripIndent()
+    ctrlShiftF7()
+    assertRangesAndTexts "17:18 s", "32:33 s"
+  }
+
+  @Override
+  protected void setUp() throws Exception {
+    super.setUp()
+    myFixture.setReadEditorMarkupModel(true)
+  }
+
+  /**
+   * @param expected sorted by startOffset
+   */
+  private void assertRangesAndTexts(String... expected) {
+    def highlighters = myFixture.editor.markupModel.allHighlighters
+    assertSegments(highlighters, expected)
+  }
+
+  private void assertElementUnderCaretRangesAndTexts(String... expected) {
+    IdentifierHighlighterPassFactory.doWithHighlightingEnabled {
+      def infos = myFixture.doHighlighting()
+      Segment[] segments = infos.findAll {
+        it.severity == HighlightInfoType.ELEMENT_UNDER_CARET_SEVERITY
+      }
+      assertSegments(segments, expected)
+    }
+  }
+
+  private void assertSegments(Segment[] highlighters, String... expected) {
+    def actual = highlighters
+      .sort { it.startOffset }
+      .collect { "$it.startOffset:$it.endOffset ${myFixture.file.text.substring(it.startOffset, it.endOffset)}".toString() }
+    assertSameElements(actual, expected)
+  }
+
   private void configureFile() {
     def testName = getTestName(false)
     def file = myFixture.copyFileToProject "/codeInsight/highlightUsagesHandler/${testName}.java", "${testName}.java"
@@ -300,5 +366,32 @@ class HighlightUsagesHandlerTest extends LightCodeInsightFixtureTestCase {
   private void checkUnselect() {
     ctrlShiftF7()
     assertRangeText()
+  }
+
+  void testCaretOnExceptionInMethodThrowsDeclarationMustHighlightPlacesThrowingThisException() {
+    String s = '''
+      import java.io.*;
+      class A {
+        public static void deserialize(File file) throws <caret>IOException, java.lang.RuntimeException, ClassNotFoundException {
+          boolean length = file.createNewFile();
+          if (length == false) throw new RuntimeException();
+          file.getCanonicalPath();
+          if (length == true) throw new ClassNotFoundException();
+        }
+      }'''
+    myFixture.configureByText 'A.java', s.stripIndent()
+
+    HighlightUsagesHandlerBase<PsiElement> handler = HighlightUsagesHandler.createCustomHandler(myFixture.editor, myFixture.file)
+    assertNotNull(handler)
+    List<PsiElement> targets = handler.targets
+    assertEquals(1, targets.size())
+
+    handler.computeUsages(targets)
+    List<TextRange> readUsages = handler.readUsages
+    List<String> expected = Arrays.asList('IOException', 'file.createNewFile', 'file.getCanonicalPath')
+    assertEquals(expected.size(), readUsages.size())
+
+    List<String> textUsages = readUsages.collect { myFixture.file.text.substring(it.startOffset, it.endOffset) }
+    assertSameElements(expected, textUsages)
   }
 }

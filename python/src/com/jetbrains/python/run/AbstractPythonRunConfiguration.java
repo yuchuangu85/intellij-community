@@ -1,7 +1,6 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.run;
 
-import com.google.common.collect.Lists;
 import com.intellij.diagnostic.logging.LogConfigurationPanel;
 import com.intellij.execution.ExecutionBundle;
 import com.intellij.execution.configuration.AbstractRunConfiguration;
@@ -24,15 +23,18 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.PathMappingSettings;
 import com.intellij.util.PlatformUtils;
+import com.intellij.util.xmlb.annotations.Transient;
 import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.PythonModuleTypeBase;
 import com.jetbrains.python.sdk.PythonEnvUtil;
 import com.jetbrains.python.sdk.PythonSdkType;
+import com.jetbrains.python.sdk.PythonSdkUtil;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -85,9 +87,9 @@ public abstract class AbstractPythonRunConfiguration<T extends AbstractPythonRun
 
   public static List<Module> getValidModules(Project project) {
     final Module[] modules = ModuleManager.getInstance(project).getModules();
-    List<Module> result = Lists.newArrayList();
+    List<Module> result = new ArrayList<>();
     for (Module module : modules) {
-      if (PythonSdkType.findPythonSdk(module) != null) {
+      if (PythonSdkUtil.findPythonSdk(module) != null) {
         result.add(module);
       }
     }
@@ -176,7 +178,7 @@ public abstract class AbstractPythonRunConfiguration<T extends AbstractPythonRun
         }
       }
       else {
-        Sdk sdk = PythonSdkType.findPythonSdk(getModule());
+        Sdk sdk = PythonSdkUtil.findPythonSdk(getModule());
         if (sdk == null) {
           throw new RuntimeConfigurationError(PyBundle.message("runcfg.unittest.no_module_sdk"));
         }
@@ -188,7 +190,7 @@ public abstract class AbstractPythonRunConfiguration<T extends AbstractPythonRun
   public String getSdkHome() {
     String sdkHome = mySdkHome;
     if (StringUtil.isEmptyOrSpaces(mySdkHome)) {
-      final Sdk projectJdk = PythonSdkType.findPythonSdk(getModule());
+      final Sdk projectJdk = PythonSdkUtil.findPythonSdk(getModule());
       if (projectJdk != null) {
         sdkHome = projectJdk.getHomePath();
       }
@@ -200,7 +202,7 @@ public abstract class AbstractPythonRunConfiguration<T extends AbstractPythonRun
   public String getInterpreterPath() {
     String sdkHome;
     if (myUseModuleSdk) {
-      Sdk sdk = PythonSdkType.findPythonSdk(getModule());
+      Sdk sdk = PythonSdkUtil.findPythonSdk(getModule());
       if (sdk == null) return null;
       sdkHome = sdk.getHomePath();
     }
@@ -213,10 +215,10 @@ public abstract class AbstractPythonRunConfiguration<T extends AbstractPythonRun
   @Nullable
   public Sdk getSdk() {
     if (myUseModuleSdk) {
-      return PythonSdkType.findPythonSdk(getModule());
+      return PythonSdkUtil.findPythonSdk(getModule());
     }
     else {
-      return PythonSdkType.findSdkByPath(getSdkHome());
+      return PythonSdkUtil.findSdkByPath(getSdkHome());
     }
   }
 
@@ -301,6 +303,7 @@ public abstract class AbstractPythonRunConfiguration<T extends AbstractPythonRun
 
   @Override
   @Nullable
+  @Transient
   public Module getModule() {
     return getConfigurationModule().getModule();
   }
@@ -360,7 +363,7 @@ public abstract class AbstractPythonRunConfiguration<T extends AbstractPythonRun
     Sdk sdk = getSdk();
     if (sdk != null && interpreterPath != null) {
       patchCommandLineFirst(commandLine, interpreterPath);
-      patchCommandLineForVirtualenv(commandLine, interpreterPath);
+      patchCommandLineForVirtualenv(commandLine, sdk);
       patchCommandLineForBuildout(commandLine, interpreterPath);
       patchCommandLineLast(commandLine, interpreterPath);
     }
@@ -389,7 +392,7 @@ public abstract class AbstractPythonRunConfiguration<T extends AbstractPythonRun
   }
 
   /**
-   * Gets called after {@link #patchCommandLineForVirtualenv(GeneralCommandLine, String)}
+   * Gets called after {@link #patchCommandLineForVirtualenv(GeneralCommandLine, Sdk)}
    * Does nothing here, real implementations should use alter running script name or use engulfer.
    *
    * @param commandLine
@@ -402,10 +405,10 @@ public abstract class AbstractPythonRunConfiguration<T extends AbstractPythonRun
    * Alters PATH so that a virtualenv is activated, if present.
    *
    * @param commandLine
-   * @param sdkHome
+   * @param sdk
    */
-  protected void patchCommandLineForVirtualenv(GeneralCommandLine commandLine, String sdkHome) {
-    PythonSdkType.patchCommandLineForVirtualenv(commandLine, sdkHome, isPassParentEnvs());
+  protected void patchCommandLineForVirtualenv(@NotNull GeneralCommandLine commandLine, @NotNull Sdk sdk) {
+    PythonSdkType.patchCommandLineForVirtualenv(commandLine, sdk);
   }
 
   protected void setUnbufferedEnv() {

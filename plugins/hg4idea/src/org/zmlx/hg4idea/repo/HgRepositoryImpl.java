@@ -2,7 +2,7 @@
 
 package org.zmlx.hg4idea.repo;
 
-import com.intellij.dvcs.repo.AsyncFilesManagerListener;
+import com.intellij.dvcs.ignore.VcsIgnoredHolderUpdateListener;
 import com.intellij.dvcs.repo.RepositoryImpl;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.diagnostic.Logger;
@@ -11,6 +11,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.AbstractVcs;
+import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.changes.ChangesViewI;
 import com.intellij.openapi.vcs.changes.ChangesViewManager;
 import com.intellij.openapi.vfs.VfsUtilCore;
@@ -39,7 +40,6 @@ public class HgRepositoryImpl extends RepositoryImpl implements HgRepository {
   @NotNull private Set<String> myOpenedBranches = Collections.emptySet();
 
   @NotNull private volatile HgConfig myConfig;
-  private boolean myIsFresh = true;
   private final HgLocalIgnoredHolder myLocalIgnoredHolder;
 
 
@@ -52,7 +52,8 @@ public class HgRepositoryImpl extends RepositoryImpl implements HgRepository {
     assert myHgDir != null : ".hg directory wasn't found under " + rootDir.getPresentableUrl();
     myReader = new HgRepositoryReader(vcs, VfsUtilCore.virtualToIoFile(myHgDir));
     myConfig = HgConfig.getInstance(getProject(), rootDir);
-    myLocalIgnoredHolder = new HgLocalIgnoredHolder(this);
+    myLocalIgnoredHolder = new HgLocalIgnoredHolder(this, HgUtil.getRepositoryManager(getProject()));
+    myLocalIgnoredHolder.setupListeners();
     Disposer.register(this, myLocalIgnoredHolder);
     myLocalIgnoredHolder.addUpdateStateListener(new MyIgnoredHolderAsyncListener(getProject()));
     update();
@@ -88,11 +89,11 @@ public class HgRepositoryImpl extends RepositoryImpl implements HgRepository {
     return myInfo.getState();
   }
 
-  @Nullable
-  @Override
   /**
    * Return active bookmark name if exist or heavy branch name otherwise
    */
+  @Nullable
+  @Override
   public String getCurrentBranchName() {
     String branchOrBookMarkName = getCurrentBookmark();
     if (StringUtil.isEmptyOrSpaces(branchOrBookMarkName)) {
@@ -198,11 +199,6 @@ public class HgRepositoryImpl extends RepositoryImpl implements HgRepository {
   }
 
   @Override
-  public boolean isFresh() {
-    return myIsFresh;
-  }
-
-  @Override
   public void update() {
     HgRepoInfo currentInfo = readRepoInfo();
     // update only if something changed!!!   if update every time - new log will be refreshed every time, too.
@@ -232,7 +228,6 @@ public class HgRepositoryImpl extends RepositoryImpl implements HgRepository {
 
   @NotNull
   private HgRepoInfo readRepoInfo() {
-    myIsFresh = myIsFresh && myReader.isFresh();
     //in GitRepositoryImpl there are temporary state object for reader fields storing! Todo Check;
     return
       new HgRepoInfo(myReader.readCurrentBranch(), myReader.readCurrentRevision(), myReader.readCurrentTipRevision(), myReader.readState(),
@@ -246,25 +241,30 @@ public class HgRepositoryImpl extends RepositoryImpl implements HgRepository {
     myConfig = HgConfig.getInstance(getProject(), getRoot());
   }
 
+  @NotNull
   @Override
-  public HgLocalIgnoredHolder getLocalIgnoredHolder() {
+  public HgLocalIgnoredHolder getIgnoredFilesHolder() {
     return myLocalIgnoredHolder;
   }
 
-  private static class MyIgnoredHolderAsyncListener implements AsyncFilesManagerListener {
+  private static class MyIgnoredHolderAsyncListener implements VcsIgnoredHolderUpdateListener {
     @NotNull private final ChangesViewI myChangesViewI;
+    @NotNull private final Project myProject;
 
     MyIgnoredHolderAsyncListener(@NotNull Project project) {
       myChangesViewI = ChangesViewManager.getInstance(project);
+      myProject = project;
     }
 
     @Override
     public void updateStarted() {
-      myChangesViewI.scheduleRefresh();
+      myChangesViewI.scheduleRefresh();//TODO optimize: remove additional refresh
     }
 
     @Override
-    public void updateFinished() {
+    public void updateFinished(@NotNull Collection<FilePath> ignoredPaths, boolean isFullRescan) {
+      if(myProject.isDisposed()) return;
+
       myChangesViewI.scheduleRefresh();
     }
   }

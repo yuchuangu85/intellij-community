@@ -58,7 +58,7 @@ public class MavenDomGutterAnnotator implements Annotator {
         setPopupTitle(MavenDomBundle.message("navigate.parent.dependency.title")).
         setCellRenderer(MyListCellRenderer.INSTANCE).
         setTooltipText(MavenDomBundle.message("overriding.dependency.title")).
-        install(holder, dependency.getXmlTag());
+        createGutterIcon(holder, dependency.getXmlTag());
     }
   }
 
@@ -74,7 +74,7 @@ public class MavenDomGutterAnnotator implements Annotator {
       iconBuilder.
         setTargets(managingDependency).
         setTooltipText(generateTooltip(managingDependency)).
-        install(holder, tag);
+        createGutterIcon(holder, tag);
     }
   }
 
@@ -133,7 +133,7 @@ public class MavenDomGutterAnnotator implements Annotator {
       iconBuilder.
         setTargets(Collections.singletonList(managingPlugin)).
         setTooltipText(MavenDomBundle.message("overriden.plugin.title")).
-        install(holder, xmlTag);
+        createGutterIcon(holder, xmlTag);
     }
   }
 
@@ -152,7 +152,7 @@ public class MavenDomGutterAnnotator implements Annotator {
         setPopupTitle(MavenDomBundle.message("navigate.parent.plugin.title")).
         setCellRenderer(MyListCellRenderer.INSTANCE).
         setTooltipText(MavenDomBundle.message("overriding.plugin.title")).
-        install(holder, xmlTag);
+        createGutterIcon(holder, xmlTag);
     }
   }
 
@@ -164,7 +164,7 @@ public class MavenDomGutterAnnotator implements Annotator {
       NavigationGutterIconBuilder.create(MavenIcons.ParentProject, MavenProjectConverter.INSTANCE).
         setTargets(parent).
         setTooltipText(MavenDomBundle.message("parent.pom.title")).
-        install(holder, mavenDomParent.getXmlElement());
+        createGutterIcon(holder, mavenDomParent.getXmlElement());
     }
   }
 
@@ -179,7 +179,7 @@ public class MavenDomGutterAnnotator implements Annotator {
           setCellRenderer(MyListCellRenderer.INSTANCE).
           setPopupTitle(MavenDomBundle.message("navigate.children.poms.title")).
           setTooltipText(MavenDomBundle.message("children.poms.title")).
-          install(holder, model.getXmlElement());
+          createGutterIcon(holder, model.getXmlElement());
       }
     }
   }
@@ -217,7 +217,7 @@ public class MavenDomGutterAnnotator implements Annotator {
 
     res.append("</dependency>");
 
-    return StringUtil.escapeXml(res.toString()).replace(" ", "&nbsp;");
+    return StringUtil.escapeXmlEntities(res.toString()).replace(" ", "&nbsp;");
   }
 
   private static class MyListCellRenderer extends PsiElementListCellRenderer<XmlTag> {

@@ -1,13 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.updateSettings.impl;
 
 import com.intellij.openapi.application.ApplicationInfo;
-import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.components.*;
 import com.intellij.openapi.updateSettings.UpdateStrategyCustomization;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.net.NetUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -17,25 +14,16 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-@State(name = "UpdatesConfigurable", storages = @Storage(value = "updates.xml", roamingType = RoamingType.DISABLED, exportable = true))
+@State(name = "UpdatesConfigurable", storages = @Storage(value = "updates.xml", roamingType = RoamingType.DISABLED, exportable = true), reportStatistic = true)
 public class UpdateSettings implements PersistentStateComponent<UpdateOptions> {
-  public static final String TOOLBOX_PM = "Toolbox";
-  public static final String SNAP_PM = "Snap";
-
   public static UpdateSettings getInstance() {
     return ServiceManager.getService(UpdateSettings.class);
   }
 
-  private final String myPackageManager = StringUtil.nullize(System.getProperty("ide.no.platform.update"), true);
   private UpdateOptions myState = new UpdateOptions();
 
   public boolean isPlatformUpdateEnabled() {
-    return getPackageManagerName() == null;
-  }
-
-  @Nullable
-  public String getPackageManagerName() {
-    return "true".equalsIgnoreCase(myPackageManager) ? TOOLBOX_PM : PathManager.isSnap() ? SNAP_PM : myPackageManager;
+    return ExternalUpdateManager.ACTUAL == null;
   }
 
   @NotNull
@@ -77,14 +65,6 @@ public class UpdateSettings implements PersistentStateComponent<UpdateOptions> {
 
   public Map<String, String> getExternalUpdateChannels() {
     return myState.getExternalUpdateChannels();
-  }
-
-  public boolean isSecureConnection() {
-    return myState.isUseSecureConnection();
-  }
-
-  public void setSecureConnection(boolean value) {
-    myState.setUseSecureConnection(value);
   }
 
   public long getLastTimeChecked() {
@@ -131,6 +111,7 @@ public class UpdateSettings implements PersistentStateComponent<UpdateOptions> {
     }
 
     UpdateSettingsProviderHelper.addPluginRepositories(hosts);
+    ContainerUtil.removeDuplicates(hosts);
     return hosts;
   }
 
@@ -141,10 +122,6 @@ public class UpdateSettings implements PersistentStateComponent<UpdateOptions> {
   public void saveLastCheckedInfo() {
     myState.setLastTimeChecked(System.currentTimeMillis());
     myState.setLastBuildChecked(ApplicationInfo.getInstance().getBuild().asString());
-  }
-
-  public boolean canUseSecureConnection() {
-    return myState.isUseSecureConnection() && NetUtils.isSniEnabled();
   }
 
   public boolean isThirdPartyPluginsAllowed() {

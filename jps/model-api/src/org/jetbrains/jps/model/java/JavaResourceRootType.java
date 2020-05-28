@@ -19,15 +19,20 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.jps.model.ex.JpsElementTypeBase;
 import org.jetbrains.jps.model.module.JpsModuleSourceRootType;
 
-/**
- * @author nik
- */
 public class JavaResourceRootType extends JpsElementTypeBase<JavaResourceRootProperties> implements
                                                                                          JpsModuleSourceRootType<JavaResourceRootProperties> {
-  public static final JavaResourceRootType RESOURCE = new JavaResourceRootType();
-  public static final JavaResourceRootType TEST_RESOURCE = new JavaResourceRootType();
+  public static final JavaResourceRootType RESOURCE = new JavaResourceRootType(false);
+  public static final JavaResourceRootType TEST_RESOURCE = new JavaResourceRootType(true);
 
-  private JavaResourceRootType() {
+  private final boolean myForTests;
+
+  private JavaResourceRootType(boolean isForTests) {
+    myForTests = isForTests;
+  }
+
+  @Override
+  public boolean isForTests() {
+    return myForTests;
   }
 
   @NotNull

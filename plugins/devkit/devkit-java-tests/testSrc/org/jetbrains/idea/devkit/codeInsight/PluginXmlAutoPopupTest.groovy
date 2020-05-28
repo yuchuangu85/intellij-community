@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 JetBrains s.r.o.
+ * Copyright 2000-2019 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,14 @@
  */
 package org.jetbrains.idea.devkit.codeInsight
 
-import com.intellij.codeInsight.completion.CompletionAutoPopupTestCase
+import com.intellij.codeInsight.completion.JavaCompletionAutoPopupTestCase
+import groovy.transform.CompileStatic
 
 /**
  * @author peter
  */
-class PluginXmlAutoPopupTest extends CompletionAutoPopupTestCase {
+@CompileStatic
+class PluginXmlAutoPopupTest extends JavaCompletionAutoPopupTestCase {
 
   void "test autopopup for class references"() {
     myFixture.addClass("public class FooFooFooFooFoo { }")
@@ -31,9 +33,9 @@ class PluginXmlAutoPopupTest extends CompletionAutoPopupTestCase {
   </extensionPoints>
 </idea-plugin>
 '''
-    type 'o'
-    assert lookup
-    assert myFixture.lookupElementStrings == ['FooFooFooFooFoo']
+    myTester.typeWithPauses('o')
+    assertNotNull(myFixture.getLookup())
+    assertSameElements(myFixture.lookupElementStrings, ['FooFooFooFooFoo'])
   }
 
   void "test no autopopup when only word completion is available"() {
@@ -44,8 +46,7 @@ class PluginXmlAutoPopupTest extends CompletionAutoPopupTestCase {
   </extensionPoints>
 </idea-plugin>
 '''
-    type 'e'
-    assert !lookup
+    myTester.typeWithPauses('e')
+    assertNull(myFixture.getLookup())
   }
-
 }

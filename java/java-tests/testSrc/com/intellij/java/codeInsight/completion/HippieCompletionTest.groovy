@@ -16,11 +16,14 @@
 package com.intellij.java.codeInsight.completion
 
 import com.intellij.openapi.actionSystem.IdeActions
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
+import groovy.transform.CompileStatic
+
 /**
  * @author peter
  */
-class HippieCompletionTest extends LightCodeInsightFixtureTestCase {
+@CompileStatic
+class HippieCompletionTest extends LightJavaCodeInsightFixtureTestCase {
 
   void testDollars() {
     myFixture.configureByText "a.txt", '''
@@ -31,6 +34,38 @@ $some_lon<caret>
     myFixture.checkResult '''
 $some_long_variable_name = Obj::instance();
 $some_long_variable_name<caret>
+'''
+  }
+
+  void testLooping() {
+    myFixture.configureByText "a.txt", '''
+String word = name.substring(wordStart, index);
+wor<caret>
+'''
+    complete()
+    myFixture.checkResult '''
+String word = name.substring(wordStart, index);
+wordStart<caret>
+'''
+    complete()
+    myFixture.checkResult '''
+String word = name.substring(wordStart, index);
+word<caret>
+'''
+    complete()
+    myFixture.checkResult '''
+String word = name.substring(wordStart, index);
+wor<caret>
+'''
+    complete()
+    myFixture.checkResult '''
+String word = name.substring(wordStart, index);
+wordStart<caret>
+'''
+    complete()
+    myFixture.checkResult '''
+String word = name.substring(wordStart, index);
+word<caret>
 '''
   }
 

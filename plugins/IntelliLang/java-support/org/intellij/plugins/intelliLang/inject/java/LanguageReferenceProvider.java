@@ -15,7 +15,6 @@
  */
 package org.intellij.plugins.intelliLang.inject.java;
 
-import com.intellij.openapi.util.Comparing;
 import com.intellij.patterns.PatternCondition;
 import com.intellij.patterns.StandardPatterns;
 import com.intellij.psi.*;
@@ -24,10 +23,12 @@ import org.intellij.plugins.intelliLang.Configuration;
 import org.intellij.plugins.intelliLang.util.AnnotationUtilEx;
 import org.intellij.plugins.intelliLang.util.PsiUtilEx;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.uast.ULiteralExpression;
+import org.jetbrains.uast.UExpression;
+
+import java.util.Objects;
 
 import static com.intellij.patterns.PsiJavaPatterns.literalExpression;
-import static com.intellij.patterns.uast.UastPatterns.stringLiteralExpression;
+import static com.intellij.patterns.uast.UastPatterns.injectionHostUExpression;
 import static com.intellij.psi.UastReferenceRegistrar.registerUastReferenceProvider;
 
 /**
@@ -38,21 +39,21 @@ public final class LanguageReferenceProvider extends PsiReferenceContributor {
   @Override
   public void registerReferenceProviders(@NotNull PsiReferenceRegistrar registrar) {
     final Configuration configuration = Configuration.getInstance();
-    registerUastReferenceProvider(registrar, stringLiteralExpression().annotationParam(StandardPatterns.string().with(
+    registerUastReferenceProvider(registrar, injectionHostUExpression().annotationParam(StandardPatterns.string().with(
       new PatternCondition<String>(
         "isLanguageAnnotation") {
         @Override
         public boolean accepts(@NotNull final String s, final ProcessingContext context) {
-          return Comparing.equal(configuration.getAdvancedConfiguration().getLanguageAnnotationClass(), s);
+          return Objects.equals(configuration.getAdvancedConfiguration().getLanguageAnnotationClass(), s);
         }
-      }), "value"), new UastLiteralReferenceProvider() {
+      }), "value"), new UastInjectionHostReferenceProvider() {
 
-      @NotNull
+
       @Override
-      public PsiReference[] getReferencesByULiteral(@NotNull ULiteralExpression uLiteral,
-                                                    @NotNull PsiLanguageInjectionHost host,
-                                                    @NotNull ProcessingContext context) {
-        return new PsiReference[]{new ULiteralLanguageReference(uLiteral, host)};
+      public PsiReference @NotNull [] getReferencesForInjectionHost(@NotNull UExpression uExpression,
+                                                                    @NotNull PsiLanguageInjectionHost host,
+                                                                    @NotNull ProcessingContext context) {
+        return new PsiReference[]{new ULiteralLanguageReference(uExpression, host)};
       }
     }, PsiReferenceRegistrar.DEFAULT_PRIORITY);
     registrar.registerReferenceProvider(literalExpression().with(new PatternCondition<PsiLiteralExpression>("isStringLiteral") {
@@ -61,9 +62,14 @@ public final class LanguageReferenceProvider extends PsiReferenceContributor {
         return PsiUtilEx.isStringOrCharacterLiteral(expression);
       }
     }), new PsiReferenceProvider() {
-      @NotNull
+
       @Override
-      public PsiReference[] getReferencesByElement(@NotNull PsiElement psiElement, @NotNull ProcessingContext context) {
+      public boolean acceptsTarget(@NotNull PsiElement target) {
+        return target instanceof PsiLiteral;
+      }
+
+      @Override
+      public PsiReference @NotNull [] getReferencesByElement(@NotNull PsiElement psiElement, @NotNull ProcessingContext context) {
         final PsiLiteralExpression expression = (PsiLiteralExpression)psiElement;
         final PsiModifierListOwner owner =
           AnnotationUtilEx.getAnnotatedElementFor(expression, AnnotationUtilEx.LookupType.PREFER_DECLARATION);

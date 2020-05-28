@@ -91,6 +91,10 @@ class NormalCompletionOrderingTest extends CompletionSortingTestCase {
     checkPreferredItems(0, "booleanMethod", "voidMethod", "AN_OBJECT", "BOOLEAN", "class")
   }
 
+  void testPreferClassLiteralWhenClassIsExpected() {
+    checkPreferredItems(0, "class")
+  }
+
   void testJComponentInstanceMembers() throws Throwable {
     checkPreferredItems(0, "getAccessibleContext", "getUI", "getUIClassID")
   }
@@ -241,6 +245,10 @@ class NormalCompletionOrderingTest extends CompletionSortingTestCase {
     checkPreferredItems(0, "return", "rLocal", "rParam", "rMethod")
   }
 
+  void testPreferReturnBeforeExpression2() {
+    checkPreferredItems(0, "return", "retainAll")
+  }
+
   void testPreferReturnInSingleStatementPlace() {
     checkPreferredItems 0, "return", "registerKeyboardAction"
   }
@@ -264,6 +272,12 @@ class NormalCompletionOrderingTest extends CompletionSortingTestCase {
     myFixture.type('\n);\nmethodX(cons')
     myFixture.completeBasic()
     assertPreferredItems 0, 'constx1', 'constx2', 'const1', 'const2'
+  }
+
+  void testPreferExpectedEnumConstantsInComparison() {
+    checkPreferredItems 0, 'MyEnum.const1', 'MyEnum', 'MyEnum.const2'
+    incUseCount(lookup, myFixture.lookupElementStrings.indexOf('String')) // select some unrelated class
+    assertPreferredItems 0, 'MyEnum.const1', 'MyEnum', 'MyEnum.const2'
   }
 
   void testPreferElse() {
@@ -383,8 +397,6 @@ interface TxANotAnno {}
     final LookupImpl lookup = invokeCompletion("/../smartTypeSorting/JComponentAddNew.java")
     assertPreferredItems(0, "FooBean3", "JComponent", "Component")
     incUseCount(lookup, 2) //Component
-    assertPreferredItems(1, "Component", "FooBean3", "JComponent")
-    incUseCount(lookup, 0) //Component
     assertPreferredItems(0, "Component", "FooBean3", "JComponent")
   }
 
@@ -398,6 +410,10 @@ interface TxANotAnno {}
 
   void testDispreferReturnInVoidMethodTopLevel() {
     checkPreferredItems 0, 'reaction', 'rezet', 'return'
+  }
+
+  void testDispreferReturnAsLoopBody() {
+    checkPreferredItems 0, 'returnMethod', 'return'
   }
 
   void testDispreferReturnInVoidLambda() {
@@ -576,7 +592,7 @@ interface TxANotAnno {}
   }
 
   void testPreferAnnotationsToInterfaceKeyword() {
-    checkPreferredItems 0, 'Deprecated', 'Override'
+    checkPreferredItems 0, 'Override/Implement methods...', 'Override', 'Deprecated'
   }
 
   void testPreferThrownExceptionsInCatch() {
@@ -865,6 +881,14 @@ class Foo {
 
   void testDispreferMultiMethodInterfaceAfterNew() {
     checkPreferredItems 1, 'Intf', 'IntfImpl'
+  }
+
+  void testDispreferAlreadyCalledBuilderMethods() {
+    checkPreferredItems 0, 'addInt', 'append', 'c', 'd', 'mayCallManyTimes', 'putLong'
+  }
+
+  void testSelectAbstractClassWithNoAbstractMethods() {
+    checkPreferredItems 0, 'AbstractListener', 'Listener'
   }
 
   void testPreferPrintln() {

@@ -23,18 +23,22 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Document
 import com.intellij.psi.*
 import com.intellij.psi.impl.source.PsiClassImpl
+import com.intellij.psi.impl.source.PsiFieldImpl
 import com.intellij.psi.impl.source.PsiFileImpl
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.AnnotatedElementsSearch
 import com.intellij.psi.search.searches.ClassInheritorsSearch
 import com.intellij.psi.search.searches.DirectClassInheritorsSearch
+import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.PsiUtil
 import com.intellij.testFramework.PsiTestUtil
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
+import groovy.transform.CompileStatic
 
 import java.util.concurrent.Callable
 
-class JavaStubsTest extends LightCodeInsightFixtureTestCase {
+@CompileStatic
+class JavaStubsTest extends LightJavaCodeInsightFixtureTestCase {
 
   void "test resolve from annotation method default"() {
     def cls = myFixture.addClass("""
@@ -345,6 +349,24 @@ class A {
     PsiTestUtil.checkStubsMatchText(file)
   }
 
+  void "test remove type argument list after space"() {
+    def file = myFixture.addFileToProject('a.java', 'class A { A <B>a; }')
+    WriteCommandAction.runWriteCommandAction(project) {
+      myFixture.findClass("A").fields[0].typeElement.innermostComponentReferenceElement.parameterList.delete()
+    }
+    PsiTestUtil.checkStubsMatchText(file)
+    PsiTestUtil.checkFileStructure(file)
+  }
+
+  void "test remove modifier making a comment a class javadoc"() {
+    def file = myFixture.addFileToProject('a.java', 'import foo; final /** @deprecated */ public class A { }')
+    WriteCommandAction.runWriteCommandAction(project) {
+      myFixture.findClass("A").modifierList.children[0].delete()
+    }
+    PsiTestUtil.checkFileStructure(file)
+    PsiTestUtil.checkStubsMatchText(file)
+  }
+
   void "test add reference into broken extends list"() {
     def file = myFixture.addFileToProject('a.java', 'class A extends.ends Foo { int a; }')
     WriteCommandAction.runWriteCommandAction(project) {
@@ -358,4 +380,35 @@ class A {
     PsiTestUtil.checkStubsMatchText(file)
   }
 
+  void "test removing orphan annotation"() {
+    String text = """\
+public class Foo {
+    public Foo() {
+    }
+
+    @Override
+  public void initSteps {
+  }
+}"""
+    PsiFile psiFile = myFixture.addFileToProject("a.java", text)
+    WriteCommandAction.runWriteCommandAction(project) {
+      PsiTreeUtil.findChildOfType(psiFile, PsiAnnotation).delete()
+    }
+    PsiTestUtil.checkStubsMatchText(psiFile)
+  }
+
+  void "test local record"() {
+    PsiTestUtil.checkStubsMatchText(myFixture.addFileToProject('a.java', 'class A {\n' +
+                                                                         '  void test() {\n' +
+                                                                         '    record A(String s) { }\n' +
+                                                                         '  }\n' +
+                                                                         '}\n'))
+  }
+
+  void "test field with missing initializer"() {
+    def file = myFixture.addFileToProject('a.java', 'class A { int a = ; } ')
+    def clazz = myFixture.findClass('A')
+    assert PsiFieldImpl.getDetachedInitializer(clazz.fields[0]) == null
+    assert !((PsiFileImpl) file).contentsLoaded
+  }
 }

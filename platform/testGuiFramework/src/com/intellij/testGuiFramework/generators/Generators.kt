@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 @file:Suppress("unused")
 
 package com.intellij.testGuiFramework.generators
@@ -28,10 +14,9 @@ import com.intellij.openapi.editor.impl.EditorComponentImpl
 import com.intellij.openapi.ui.*
 import com.intellij.openapi.util.Ref
 import com.intellij.openapi.util.text.StringUtil
-import com.intellij.openapi.wm.impl.IdeFrameImpl
-import com.intellij.openapi.wm.impl.ToolWindowImpl
-import com.intellij.openapi.wm.impl.ToolWindowManagerImpl
-import com.intellij.openapi.wm.impl.WindowManagerImpl
+import com.intellij.openapi.wm.ToolWindow
+import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.openapi.wm.ex.WindowManagerEx
 import com.intellij.openapi.wm.impl.welcomeScreen.FlatWelcomeFrame
 import com.intellij.testGuiFramework.cellReader.ExtendedJListCellReader
 import com.intellij.testGuiFramework.cellReader.ExtendedJTableCellReader
@@ -49,6 +34,7 @@ import com.intellij.testGuiFramework.generators.Utils.getCellText
 import com.intellij.testGuiFramework.generators.Utils.getJTreePath
 import com.intellij.testGuiFramework.generators.Utils.getJTreePathItemsString
 import com.intellij.testGuiFramework.generators.Utils.withRobot
+import com.intellij.testGuiFramework.impl.GuiTestUtilKt
 import com.intellij.testGuiFramework.impl.GuiTestUtilKt.getComponentText
 import com.intellij.testGuiFramework.impl.GuiTestUtilKt.isTextComponent
 import com.intellij.testGuiFramework.impl.GuiTestUtilKt.onHeightCenter
@@ -86,8 +72,8 @@ import javax.swing.tree.TreePath
 
 //**********COMPONENT GENERATORS**********
 
-private val leftButton = MouseEvent.BUTTON1
-private val rightButton = MouseEvent.BUTTON3
+private const val leftButton = MouseEvent.BUTTON1
+private const val rightButton = MouseEvent.BUTTON3
 
 private fun MouseEvent.isLeftButton() = (this.button == leftButton)
 private fun MouseEvent.isRightButton() = (this.button == rightButton)
@@ -201,7 +187,7 @@ class CheckboxTreeGenerator : ComponentCodeGenerator<CheckboxTree> {
     return withRobot {
       val checkboxComponent = CheckboxTreeDriver(it).getCheckboxComponent(cmp, treePath) ?: throw Exception(
         "Checkbox component from cell renderer is null")
-      val pathBounds = cmp.getPathBounds(treePath)
+      val pathBounds = GuiTestUtilKt.computeOnEdt { cmp.getPathBounds(treePath) }!!
       val checkboxTreeBounds = Rectangle(pathBounds.x + checkboxComponent.x, pathBounds.y + checkboxComponent.y, checkboxComponent.width,
                                          checkboxComponent.height)
       checkboxTreeBounds.contains(cp)
@@ -213,7 +199,7 @@ class CheckboxTreeGenerator : ComponentCodeGenerator<CheckboxTree> {
     return if (wasClickOnCheckBox(cmp, cp))
       "checkboxTree($path).clickCheckbox()"
     else
-      "checkboxTree($path).clickLabel()"
+      "checkboxTree($path).clickPath()"
   }
 }
 
@@ -487,15 +473,15 @@ class ToolWindowGenerator : LocalContextCodeGenerator<Component>() {
     return Point(rectangle.centerX.toInt(), rectangle.centerY.toInt())
   }
 
-  private fun getToolWindow(pointOnScreen: Point): ToolWindowImpl? {
-    if (WindowManagerImpl.getInstance().findVisibleFrame() !is IdeFrameImpl) return null
-    val ideFrame = WindowManagerImpl.getInstance().findVisibleFrame() as IdeFrameImpl
-    ideFrame.project ?: return null
-    val toolWindowManager = ToolWindowManagerImpl.getInstance(ideFrame.project!!)
+  private fun getToolWindow(pointOnScreen: Point): ToolWindow? {
+    val project = WindowManagerEx.getInstanceEx().findFirstVisibleFrameHelper()?.project ?: return null
+    val toolWindowManager = ToolWindowManager.getInstance(project)
     val visibleToolWindows = toolWindowManager.toolWindowIds
+      .asSequence()
       .map { toolWindowId -> toolWindowManager.getToolWindow(toolWindowId) }
-      .filter { toolwindow -> toolwindow.isVisible }
-    return visibleToolWindows.filterIsInstance<ToolWindowImpl>().find { it.component.containsLocationOnScreen(pointOnScreen) }
+      .filter { toolwindow -> toolwindow?.isVisible ?: false }
+    return visibleToolWindows
+      .find { it!!.component.containsLocationOnScreen(pointOnScreen) }
   }
 
   override fun acceptor(): (Component) -> Boolean = { component ->
@@ -510,14 +496,12 @@ class ToolWindowGenerator : LocalContextCodeGenerator<Component>() {
 
   override fun generate(cmp: Component): String {
     val pointOnScreen = cmp.centerOnScreen() ?: throw IllegalComponentStateException("Unable to get center on screen for component: $cmp")
-    val toolWindow: ToolWindowImpl = getToolWindow(pointOnScreen)!!
+    val toolWindow = getToolWindow(pointOnScreen)!!
     return """toolwindow(id = "${toolWindow.id}") {"""
   }
-
 }
 
-class ToolWindowContextGenerator : LocalContextCodeGenerator<Component>() {
-
+internal class ToolWindowContextGenerator : LocalContextCodeGenerator<Component>() {
   override fun priority(): Int = 2
 
   private fun Component.containsLocationOnScreen(locationOnScreen: Point): Boolean {
@@ -542,15 +526,15 @@ class ToolWindowContextGenerator : LocalContextCodeGenerator<Component>() {
            this.contains(Point(component.bounds.x + component.width, component.bounds.y + component.height))
   }
 
-  private fun getToolWindow(pointOnScreen: Point): ToolWindowImpl? {
-    if (WindowManagerImpl.getInstance().findVisibleFrame() !is IdeFrameImpl) return null
-    val ideFrame = WindowManagerImpl.getInstance().findVisibleFrame() as IdeFrameImpl
-    ideFrame.project ?: return null
-    val toolWindowManager = ToolWindowManagerImpl.getInstance(ideFrame.project!!)
+  private fun getToolWindow(pointOnScreen: Point): ToolWindow? {
+    val project = WindowManagerEx.getInstanceEx().findFirstVisibleFrameHelper()?.project ?: return null
+    val toolWindowManager = ToolWindowManager.getInstance(project)
     val visibleToolWindows = toolWindowManager.toolWindowIds
+      .asSequence()
       .map { toolWindowId -> toolWindowManager.getToolWindow(toolWindowId) }
-      .filter { toolwindow -> toolwindow.isVisible }
-    return visibleToolWindows.filterIsInstance<ToolWindowImpl>().find { it.component.containsLocationOnScreen(pointOnScreen) }
+      .filter { toolwindow -> toolwindow?.isVisible ?: false }
+    return visibleToolWindows
+      .find { it!!.component.containsLocationOnScreen(pointOnScreen) }
   }
 
   override fun acceptor(): (Component) -> Boolean = { component ->
@@ -563,7 +547,7 @@ class ToolWindowContextGenerator : LocalContextCodeGenerator<Component>() {
   }
 
   override fun generate(cmp: Component): String {
-    val toolWindow: ToolWindowImpl = getToolWindow(cmp.centerOnScreen()!!)!!
+    val toolWindow = getToolWindow(cmp.centerOnScreen()!!)!!
     val tabName = toolWindow.contentManager.selectedContent?.tabName
     return if (tabName != null) """content(tabName = "${tabName}") {"""
     else "content {"
@@ -695,7 +679,6 @@ object Generators {
     }
     else return File(url.toURI()).listFiles().map { file -> file.toURI().path }
   }
-
 }
 
 object Utils {

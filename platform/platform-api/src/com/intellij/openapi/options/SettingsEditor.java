@@ -99,6 +99,7 @@ public abstract class SettingsEditor<Settings> implements Disposable {
 
   @Override
   public final void dispose() {
+    myListeners.clear();
   }
 
   protected void uninstallWatcher() {
@@ -106,7 +107,7 @@ public abstract class SettingsEditor<Settings> implements Disposable {
   }
 
   protected void installWatcher(JComponent c) {
-    myWatcher = new UserActivityWatcher();
+    myWatcher = createWatcher();
     myWatcher.register(c);
     UserActivityListener userActivityListener = new UserActivityListener() {
       @Override
@@ -115,6 +116,11 @@ public abstract class SettingsEditor<Settings> implements Disposable {
       }
     };
     myWatcher.addUserActivityListener(userActivityListener, this);
+  }
+
+  @NotNull
+  protected UserActivityWatcher createWatcher() {
+    return new UserActivityWatcher();
   }
 
   public final void addSettingsEditorListener(SettingsEditorListener<Settings> listener) {
@@ -126,8 +132,8 @@ public abstract class SettingsEditor<Settings> implements Disposable {
   }
 
   protected final void fireEditorStateChanged() {
-    if (myIsInUpdate || myListeners == null) return;
-    for (SettingsEditorListener listener : myListeners) {
+    if (myIsInUpdate) return;
+    for (SettingsEditorListener<Settings> listener : myListeners) {
       listener.stateChanged(this);
     }
   }

@@ -23,6 +23,7 @@ import com.intellij.vcsUtil.VcsUtil;
 import git4idea.GitUtil;
 import git4idea.branch.GitBranchPair;
 import git4idea.commands.*;
+import git4idea.i18n.GitBundle;
 import git4idea.merge.GitConflictResolver;
 import git4idea.merge.GitMerger;
 import git4idea.repo.GitRepository;
@@ -33,7 +34,6 @@ import org.jetbrains.annotations.NotNull;
 import java.io.File;
 import java.util.*;
 
-import static com.intellij.util.ObjectUtils.assertNotNull;
 import static java.util.Arrays.asList;
 
 /**
@@ -68,7 +68,7 @@ public class GitMergeUpdater extends GitUpdater {
     String originalText = myProgressIndicator.getText();
     myProgressIndicator.setText("Merging" + GitUtil.mention(myRepository) + "...");
     try {
-      GitCommandResult result = myGit.merge(myRepository, assertNotNull(myBranchPair.getDest()).getName(),
+      GitCommandResult result = myGit.merge(myRepository, myBranchPair.getTarget().getName(),
                                             asList("--no-stat", "-v"), mergeLineListener, untrackedFilesDetector,
                                             GitStandardProgressAnalyzer.createListener(myProgressIndicator));
       myProgressIndicator.setText(originalText);
@@ -134,8 +134,8 @@ public class GitMergeUpdater extends GitUpdater {
     }
 
     // git log --name-status master..origin/master
-    String currentBranch = myBranchPair.getBranch().getName();
-    String remoteBranch = myBranchPair.getDest().getName();
+    String currentBranch = myBranchPair.getSource().getName();
+    String remoteBranch = myBranchPair.getTarget().getName();
     try {
       GitRepository repository = GitUtil.getRepositoryManager(myProject).getRepositoryForRoot(myRoot);
       if (repository == null) {
@@ -249,15 +249,15 @@ public class GitMergeUpdater extends GitUpdater {
     private final VirtualFile myRoot;
 
     MyConflictResolver(Project project, @NotNull Git git, GitMerger merger, VirtualFile root) {
-      super(project, git, Collections.singleton(root), makeParams(project));
+      super(project, Collections.singleton(root), makeParams(project));
       myMerger = merger;
       myRoot = root;
     }
     
     private static Params makeParams(Project project) {
       Params params = new Params(project);
-      params.setErrorNotificationTitle("Can't complete update");
-      params.setMergeDescription("Merge conflicts detected. Resolve them before continuing update.");
+      params.setErrorNotificationTitle(GitBundle.message("merge.update.project.generic.error.title"));
+      params.setMergeDescription(GitBundle.message("merge.update.project.conflict.merge.description.label"));
       return params;
     }
 

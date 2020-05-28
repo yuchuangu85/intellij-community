@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testFramework
 
 import com.intellij.openapi.util.io.FileUtilRt
@@ -32,6 +18,36 @@ import java.nio.file.Paths
 import kotlin.properties.Delegates
 
 class TemporaryDirectory : ExternalResource() {
+  companion object {
+    @JvmStatic
+    fun generateTemporaryPath(fileName: String): Path {
+      val tempDirectory = Paths.get(FileUtilRt.getTempDirectory())
+      var path = tempDirectory.resolve(fileName)
+
+      if (!path.exists()) {
+        return path
+      }
+
+      var i = 0
+      var ext = FileUtilRt.getExtension(fileName)
+      if (ext.isNotEmpty()) {
+        ext = ".$ext"
+      }
+      val name = FileUtilRt.getNameWithoutExtension(fileName)
+
+      do {
+        path = tempDirectory.resolve("${name}_$i$ext")
+        i++
+      }
+      while (path.exists() && i < 9)
+
+      if (path.exists()) {
+        throw IOException("Cannot generate unique random path with '$name' prefix under '$path'")
+      }
+      return path
+    }
+  }
+
   private val paths = SmartList<Path>()
 
   private var sanitizedName: String by Delegates.notNull()
@@ -83,19 +99,6 @@ class TemporaryDirectory : ExternalResource() {
   }
 }
 
-fun generateTemporaryPath(fileName: String?): Path {
-  val tempDirectory = Paths.get(FileUtilRt.getTempDirectory())
-  var path = tempDirectory.resolve(fileName)
-  var i = 0
-  while (path.exists() && i < 9) {
-    path = tempDirectory.resolve("${fileName}_$i")
-    i++
-  }
+fun VirtualFile.writeChild(relativePath: String, data: String) = VfsTestUtil.createFile(this, relativePath, data)
 
-  if (path.exists()) {
-    throw IOException("Cannot generate unique random path")
-  }
-  return path
-}
-
-fun VirtualFile.writeChild(relativePath: String, data: String): VirtualFile = VfsTestUtil.createFile(this, relativePath, data)
+fun VirtualFile.writeChild(relativePath: String, data: ByteArray) = VfsTestUtil.createFile(this, relativePath, data)

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.buildout.config;
 
 import com.intellij.lang.ASTNode;
@@ -7,9 +7,6 @@ import com.intellij.lang.PsiParser;
 import com.intellij.psi.tree.IElementType;
 import org.jetbrains.annotations.NotNull;
 
-/**
- * @author traff
- */
 public class BuildoutCfgParser implements PsiParser, BuildoutCfgElementTypes, BuildoutCfgTokenTypes {
   @Override
   @NotNull
@@ -25,7 +22,7 @@ public class BuildoutCfgParser implements PsiParser, BuildoutCfgElementTypes, Bu
     return builder.getTreeBuilt();
   }
 
-  private class Parsing {
+  private static class Parsing {
     private final PsiBuilder myBuilder;
 
     Parsing(PsiBuilder builder) {

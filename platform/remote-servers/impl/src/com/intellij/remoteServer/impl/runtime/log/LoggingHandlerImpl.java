@@ -16,11 +16,9 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 
-/**
- * @author nik
- */
 public class LoggingHandlerImpl extends LoggingHandlerBase implements LoggingHandler {
   private final ConsoleView myConsole;
+  private boolean myClosed = false;
 
   public LoggingHandlerImpl(String presentableName, @NotNull Project project) {
     super(presentableName);
@@ -73,7 +71,11 @@ public class LoggingHandlerImpl extends LoggingHandlerBase implements LoggingHan
 
   @Override
   public boolean isClosed() {
-    return false;
+    return myClosed;
+  }
+
+  public void close() {
+    myClosed = true;
   }
 
   public static class Colored extends LoggingHandlerImpl {

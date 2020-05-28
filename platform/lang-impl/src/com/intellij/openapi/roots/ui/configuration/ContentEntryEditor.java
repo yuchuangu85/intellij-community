@@ -38,6 +38,7 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.EventListener;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -135,7 +136,8 @@ public abstract class ContentEntryEditor implements ContentRootPanel.ActionCallb
   }
 
   @Override
-  public void deleteContentFolder(ContentEntry contentEntry, ContentFolder folder) {
+  public void deleteContentFolder(ContentEntry contentEntry, ContentFolderRef folderRef) {
+    ContentFolder folder = folderRef.getContentFolder();
     if (folder instanceof SourceFolder) {
       removeSourceFolder((SourceFolder)folder);
       update();
@@ -148,8 +150,8 @@ public abstract class ContentEntryEditor implements ContentRootPanel.ActionCallb
   }
 
   @Override
-  public void navigateFolder(ContentEntry contentEntry, ContentFolder contentFolder) {
-    final VirtualFile file = contentFolder.getFile();
+  public void navigateFolder(ContentEntry contentEntry, ContentFolderRef contentFolderRef) {
+    final VirtualFile file = contentFolderRef.getFile();
     if (file != null) { // file can be deleted externally
       myEventDispatcher.getMulticaster().navigationRequested(this, file);
     }
@@ -303,20 +305,32 @@ public abstract class ContentEntryEditor implements ContentRootPanel.ActionCallb
   public static boolean isExcludedOrUnderExcludedDirectory(@Nullable Project project,
                                                            @NotNull ContentEntry entry,
                                                            @NotNull VirtualFile file) {
-    Set<VirtualFile> excludedFiles = ContainerUtil.newHashSet(entry.getExcludeFolderFiles());
-    if (project != null) {
-      for (DirectoryIndexExcludePolicy policy : DirectoryIndexExcludePolicy.getExtensions(project)) {
-        ContainerUtil.addAllNotNull(excludedFiles, policy.getExcludeRootsForProject());
-      }
-    }
+    return isExcludedOrUnderExcludedDirectory(entry, getEntryExcludedUrls(project, entry), file);
+  }
+
+  public static boolean isExcludedOrUnderExcludedDirectory(@NotNull ContentEntry entry,
+                                                           @NotNull Set<String> excludedUrls, 
+                                                           @NotNull VirtualFile file) {
     Set<VirtualFile> sourceRoots = ContainerUtil.set(entry.getSourceFolderFiles());
     VirtualFile parent = file;
     while (parent != null) {
-      if (excludedFiles.contains(parent)) return true;
+      if (excludedUrls.contains(parent.getUrl())) return true;
       if (sourceRoots.contains(parent)) return false;
       parent = parent.getParent();
     }
     return false;
+  }
+
+  @NotNull
+  public static Set<String> getEntryExcludedUrls(@Nullable Project project,
+                                                 @NotNull ContentEntry entry) {
+    Set<String> excludedUrls = new HashSet<>(entry.getExcludeFolderUrls());
+    if (project != null) {
+      for (DirectoryIndexExcludePolicy policy : DirectoryIndexExcludePolicy.getExtensions(project)) {
+        ContainerUtil.addAll(excludedUrls, policy.getExcludeUrlsForProject());
+      }
+    }
+    return excludedUrls;
   }
 
   @Nullable

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.platform.templates;
 
 import com.intellij.facet.frameworks.beans.Artifact;
@@ -38,7 +38,7 @@ public abstract class ArchivedProjectTemplate implements ProjectTemplate {
   protected final String myDisplayName;
   @Nullable private final String myCategory;
 
-  private List<WizardInputField> myInputFields = Collections.emptyList();
+  private List<WizardInputField<?>> myInputFields = Collections.emptyList();
   private List<String> myFrameworks = new ArrayList<>();
   private List<Artifact> myArtifacts = new ArrayList<>();
 
@@ -58,7 +58,7 @@ public abstract class ArchivedProjectTemplate implements ProjectTemplate {
     return getModuleType().getIcon();
   }
 
-  protected abstract ModuleType getModuleType();
+  protected abstract ModuleType<?> getModuleType();
 
   @NotNull
   @Override
@@ -67,7 +67,7 @@ public abstract class ArchivedProjectTemplate implements ProjectTemplate {
   }
 
   @NotNull
-  public List<WizardInputField> getInputFields() {
+  public List<WizardInputField<?>> getInputFields() {
     return myInputFields;
   }
 
@@ -98,7 +98,7 @@ public abstract class ArchivedProjectTemplate implements ProjectTemplate {
     return null;
   }
 
-  public void handleUnzippedDirectories(File dir, List<? super File> filesToRefresh) throws IOException {
+  public void handleUnzippedDirectories(@NotNull File dir, @NotNull List<? super File> filesToRefresh) throws IOException {
     filesToRefresh.add(dir);
   }
 
@@ -118,7 +118,7 @@ public abstract class ArchivedProjectTemplate implements ProjectTemplate {
     myInputFields = getFields(element);
   }
 
-  private static List<WizardInputField> getFields(Element templateElement) {
+  private static List<WizardInputField<?>> getFields(Element templateElement) {
     return ContainerUtil
       .mapNotNull(templateElement.getChildren(INPUT_FIELD), element -> {
         ProjectTemplateParameterFactory factory = WizardInputField.getFactoryById(element.getText());

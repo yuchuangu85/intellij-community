@@ -1,33 +1,25 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.dashboard;
 
+import com.intellij.openapi.util.Conditions;
+import com.intellij.ui.ComponentUtil;
 import com.intellij.ui.content.*;
+import com.intellij.util.containers.JBIterable;
+import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.Collections;
 
 /**
  * PanelContentUI simply shows selected content in a panel.
  *
  * @author konstantin.aleev
  */
-class PanelContentUI implements ContentUI {
+final class PanelContentUI implements ContentUI {
   private JPanel myPanel;
+  private ContentManager myContentManager;
 
   PanelContentUI() {
   }
@@ -40,7 +32,9 @@ class PanelContentUI implements ContentUI {
 
   @Override
   public void setManager(@NotNull ContentManager manager) {
-    manager.addContentManagerListener(new ContentManagerAdapter() {
+    assert myContentManager == null;
+    myContentManager = manager;
+    manager.addContentManagerListener(new ContentManagerListener() {
       @Override
       public void selectionChanged(@NotNull final ContentManagerEvent event) {
         initUI();
@@ -59,6 +53,19 @@ class PanelContentUI implements ContentUI {
       return;
     }
     myPanel = new JPanel(new BorderLayout());
+    ComponentUtil
+      .putClientProperty(myPanel, UIUtil.NOT_IN_HIERARCHY_COMPONENTS, (Iterable<? extends Component>)(Iterable<JComponent>)() -> {
+        if (myContentManager == null || myContentManager.getContentCount() == 0) {
+          return Collections.emptyIterator();
+        }
+        return JBIterable.of(myContentManager.getContents())
+          .map(content -> {
+            JComponent component = content.getComponent();
+            return component != null && myPanel != component.getParent() ? component : null;
+          })
+          .filter(Conditions.notNull())
+          .iterator();
+      });
   }
 
   private void showContent(@NotNull Content content) {
@@ -94,10 +101,6 @@ class PanelContentUI implements ContentUI {
   }
 
   @Override
-  public void beforeDispose() {
-  }
-
-  @Override
   public boolean canChangeSelectionTo(@NotNull Content content, boolean implicit) {
     return true;
   }
@@ -124,9 +127,5 @@ class PanelContentUI implements ContentUI {
   @Override
   public String getNextContentActionName() {
     return "";
-  }
-
-  @Override
-  public void dispose() {
   }
 }

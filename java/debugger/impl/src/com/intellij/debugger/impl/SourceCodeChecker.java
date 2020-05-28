@@ -1,8 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.impl;
 
 import com.intellij.codeInsight.hint.HintManager;
-import com.intellij.debugger.DebuggerBundle;
+import com.intellij.debugger.JavaDebuggerBundle;
 import com.intellij.debugger.NoDataException;
 import com.intellij.debugger.SourcePosition;
 import com.intellij.debugger.engine.DebugProcessImpl;
@@ -39,11 +39,8 @@ import org.jetbrains.annotations.TestOnly;
 
 import java.util.List;
 
-/**
- * @author egor
- */
 public class SourceCodeChecker {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.debugger.impl.SourceCodeChecker");
+  private static final Logger LOG = Logger.getInstance(SourceCodeChecker.class);
 
   private SourceCodeChecker() {
   }
@@ -126,16 +123,21 @@ public class SourceCodeChecker {
           LOG.debug("Source check failed: method " + method.name() + " not found in sources");
         }
         if (!res) {
-          FileEditor editor = FileEditorManager.getInstance(project).getSelectedEditor(position.getFile().getVirtualFile());
-          if (editor instanceof TextEditor) {
-            AppUIUtil.invokeOnEdt(() -> HintManager.getInstance().showErrorHint(((TextEditor)editor).getEditor(),
-                                                                                DebuggerBundle.message("warning.source.code.not.match")));
-          }
-          else {
-            XDebuggerManagerImpl.NOTIFICATION_GROUP
-              .createNotification(DebuggerBundle.message("warning.source.code.not.match"), NotificationType.WARNING)
-              .notify(project);
-          }
+          VirtualFile virtualFile = position.getFile().getVirtualFile();
+          AppUIUtil.invokeOnEdt(() -> {
+            if (!project.isDisposed()) {
+              FileEditor editor = FileEditorManager.getInstance(project).getSelectedEditor(virtualFile);
+              if (editor instanceof TextEditor) {
+                HintManager.getInstance().showErrorHint(((TextEditor)editor).getEditor(),
+                                                        JavaDebuggerBundle.message("warning.source.code.not.match"));
+              }
+              else {
+                XDebuggerManagerImpl.NOTIFICATION_GROUP
+                  .createNotification(JavaDebuggerBundle.message("warning.source.code.not.match"), NotificationType.WARNING)
+                  .notify(project);
+              }
+            }
+          });
           return ThreeState.NO;
         }
         return ThreeState.YES;

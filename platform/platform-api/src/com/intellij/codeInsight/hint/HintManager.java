@@ -1,28 +1,16 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.hint;
 
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.ui.awt.RelativePoint;
+import com.intellij.openapi.util.NlsContexts.HintText;
 import org.intellij.lang.annotations.MagicConstant;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import java.awt.*;
+import javax.swing.event.HyperlinkListener;
 
 /**
  * @author cdr
@@ -39,8 +27,6 @@ public abstract class HintManager {
   public static final short RIGHT = 4;
   public static final short RIGHT_UNDER = 5;
   public static final short DEFAULT = 6;
-
-  public abstract boolean isHint(Window window);
 
   @MagicConstant(intValues = {ABOVE, UNDER, LEFT, RIGHT, RIGHT_UNDER, DEFAULT})
   public @interface PositionFlags {}
@@ -64,18 +50,22 @@ public abstract class HintManager {
 
   public abstract void showHint(@NotNull JComponent component, @NotNull RelativePoint p, @HideFlags int flags, int timeout);
 
-  public abstract void showErrorHint(@NotNull Editor editor, @NotNull String text);
-  public abstract void showErrorHint(@NotNull Editor editor, @NotNull String text, @PositionFlags short position);
+  public abstract void showErrorHint(@NotNull Editor editor, @NotNull @HintText String text);
+  public abstract void showErrorHint(@NotNull Editor editor, @NotNull @HintText String text, @PositionFlags short position);
 
-  public abstract void showInformationHint(@NotNull Editor editor, @NotNull String text);
+  public void showInformationHint(@NotNull Editor editor, @NotNull @HintText String text) {
+    showInformationHint(editor, text, ABOVE);
+  }
+  public abstract void showInformationHint(@NotNull Editor editor, @NotNull @HintText String text, @PositionFlags short position);
+  public abstract void showInformationHint(@NotNull Editor editor, @NotNull @HintText String text, @Nullable HyperlinkListener listener);
 
   public abstract void showInformationHint(@NotNull Editor editor, @NotNull JComponent component);
 
-  public abstract void showQuestionHint(@NotNull Editor editor, @NotNull String hintText, int offset1, int offset2, @NotNull QuestionAction action);
+  public abstract void showQuestionHint(@NotNull Editor editor, @NotNull @HintText String hintText, int offset1, int offset2, @NotNull QuestionAction action);
 
   public abstract boolean hideHints(@HideFlags int mask, boolean onlyOne, boolean editorChanged);
 
-  public abstract void showErrorHint(@NotNull Editor editor, @NotNull String hintText, int offset1, int offset2, @PositionFlags short constraint, @HideFlags int flags, int timeout);
+  public abstract void showErrorHint(@NotNull Editor editor, @NotNull @HintText String hintText, int offset1, int offset2, @PositionFlags short constraint, @HideFlags int flags, int timeout);
 
   public abstract void hideAllHints();
 

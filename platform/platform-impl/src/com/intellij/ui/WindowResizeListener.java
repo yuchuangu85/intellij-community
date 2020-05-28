@@ -1,32 +1,19 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.ui;
 
 import com.intellij.util.ui.JBInsets;
+import org.jetbrains.annotations.ApiStatus;
 
-import javax.swing.Icon;
+import javax.swing.*;
 import java.awt.*;
+import java.awt.event.HierarchyEvent;
+import java.awt.event.HierarchyListener;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static java.awt.Cursor.*;
 import static javax.swing.SwingUtilities.convertPointFromScreen;
 
-/**
- * @author Sergey Malenkov
- */
 public class WindowResizeListener extends WindowMouseListener {
   private final Insets myBorder;
   private final Icon myCorner;
@@ -137,26 +124,88 @@ public class WindowResizeListener extends WindowMouseListener {
 
   @Override
   void updateBounds(Rectangle bounds, Component view, int dx, int dy) {
-    Dimension minimum = view.getMinimumSize();
-    if (myType == NE_RESIZE_CURSOR || myType == E_RESIZE_CURSOR || myType == SE_RESIZE_CURSOR || myType == DEFAULT_CURSOR) {
+    Dimension minimum = getMinimumSize(view);
+    if (myCursorType == NE_RESIZE_CURSOR || myCursorType == E_RESIZE_CURSOR || myCursorType == SE_RESIZE_CURSOR || myCursorType == DEFAULT_CURSOR) {
       bounds.width += fixMinSize(dx, bounds.width, minimum.width);
     }
-    else if (myType == NW_RESIZE_CURSOR || myType == W_RESIZE_CURSOR || myType == SW_RESIZE_CURSOR) {
+    else if (myCursorType == NW_RESIZE_CURSOR || myCursorType == W_RESIZE_CURSOR || myCursorType == SW_RESIZE_CURSOR) {
       dx = fixMinSize(-dx, bounds.width, minimum.width);
       bounds.x -= dx;
       bounds.width += dx;
     }
-    if (myType == SW_RESIZE_CURSOR || myType == S_RESIZE_CURSOR || myType == SE_RESIZE_CURSOR || myType == DEFAULT_CURSOR) {
+    if (myCursorType == SW_RESIZE_CURSOR || myCursorType == S_RESIZE_CURSOR || myCursorType == SE_RESIZE_CURSOR || myCursorType == DEFAULT_CURSOR) {
       bounds.height += fixMinSize(dy, bounds.height, minimum.height);
     }
-    else if (myType == NW_RESIZE_CURSOR || myType == N_RESIZE_CURSOR || myType == NE_RESIZE_CURSOR) {
+    else if (myCursorType == NW_RESIZE_CURSOR || myCursorType == N_RESIZE_CURSOR || myCursorType == NE_RESIZE_CURSOR) {
       dy = fixMinSize(-dy, bounds.height, minimum.height);
       bounds.y -= dy;
       bounds.height += dy;
     }
   }
 
+  @Override
+  protected void setCursorType(int cursorType) {
+    super.setCursorType(cursorType);
+    //noinspection AssignmentToStaticFieldFromInstanceMethod
+    ourIsResizing = myCursorType >= SW_RESIZE_CURSOR && myCursorType <= E_RESIZE_CURSOR;
+  }
+
+  /** Note: default implementation takes Component.getTreeLock() */
+  protected Dimension getMinimumSize(Component comp) {
+    return comp.getMinimumSize();
+  }
+
   private static int fixMinSize(int delta, int value, int min) {
     return delta + value < min ? min - value : delta;
+  }
+
+  /**
+   * @author tav
+   */
+  @ApiStatus.Experimental
+  public static class ToolkitListener extends WindowResizeListener {
+    private final ToolkitListenerHelper myHelper;
+    private final AtomicReference<Dimension> myMinSize = new AtomicReference<>();
+
+    public ToolkitListener(Component content, Insets border, Icon corner) {
+      super(content, border, corner);
+      myHelper = new ToolkitListenerHelper(this);
+      myMinSize.set(content.getMinimumSize());
+      Window window = ComponentUtil.getWindow(content);
+      if (window != null) window.addHierarchyListener(new HierarchyListener() {
+        @Override
+        public void hierarchyChanged(HierarchyEvent e) {
+          if (e.getID() == HierarchyEvent.HIERARCHY_CHANGED) {
+            myMinSize.set(content.getMinimumSize());
+          }
+          else if (e.getID() == HierarchyEvent.SHOWING_CHANGED && !window.isShowing()) {
+            window.removeHierarchyListener(this);
+          }
+        }
+      });
+    }
+
+    @Override
+    protected void setBounds(Component comp, Rectangle bounds) {
+      myHelper.setBounds(comp, bounds, () -> super.setBounds(comp, bounds));
+    }
+
+    @Override
+    protected void setCursor(Component content, Cursor cursor) {
+      myHelper.setCursor(content, cursor, () -> super.setCursor(content, cursor));
+    }
+
+    @Override
+    protected Dimension getMinimumSize(Component comp) {
+      return myMinSize.get();
+    }
+
+    public void addTo(Component comp) {
+      myHelper.addTo(comp);
+    }
+
+    public void removeFrom(Component comp) {
+      myHelper.removeFrom(comp);
+    }
   }
 }

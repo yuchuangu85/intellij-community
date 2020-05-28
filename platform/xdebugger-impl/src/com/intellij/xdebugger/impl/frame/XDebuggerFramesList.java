@@ -4,11 +4,11 @@ package com.intellij.xdebugger.impl.frame;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataKey;
-import com.intellij.openapi.actionSystem.DataProvider;
 import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.popup.ListItemDescriptorAdapter;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiManager;
@@ -19,11 +19,11 @@ import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.ui.popup.list.GroupedItemsListRenderer;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.TextTransferable;
+import com.intellij.util.ui.UIUtil;
 import com.intellij.xdebugger.XDebuggerBundle;
 import com.intellij.xdebugger.XSourcePosition;
 import com.intellij.xdebugger.frame.XStackFrame;
 import com.intellij.xml.util.XmlStringUtil;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -34,9 +34,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * @author nik
- */
 public class XDebuggerFramesList extends DebuggerFramesList {
   private final Project myProject;
   private final Map<VirtualFile, Color> myFileColors = new HashMap<>();
@@ -83,26 +80,22 @@ public class XDebuggerFramesList extends DebuggerFramesList {
     myProject = project;
 
     doInit();
-    setDataProvider(new DataProvider() {
-      @Nullable
-      @Override
-      public Object getData(@NotNull @NonNls String dataId) {
-        if (mySelectedFrame != null) {
-          if (CommonDataKeys.VIRTUAL_FILE.is(dataId)) {
-            return getFile(mySelectedFrame);
-          }
-          else if (CommonDataKeys.PSI_FILE.is(dataId)) {
-            VirtualFile file = getFile(mySelectedFrame);
-            if (file != null && file.isValid()) {
-              return PsiManager.getInstance(myProject).findFile(file);
-            }
+    setDataProvider(dataId -> {
+      if (mySelectedFrame != null) {
+        if (CommonDataKeys.VIRTUAL_FILE.is(dataId)) {
+          return getFile(mySelectedFrame);
+        }
+        else if (CommonDataKeys.PSI_FILE.is(dataId)) {
+          VirtualFile file = getFile(mySelectedFrame);
+          if (file != null && file.isValid()) {
+            return PsiManager.getInstance(myProject).findFile(file);
           }
         }
-        if (FRAMES_LIST.is(dataId)) {
-          return XDebuggerFramesList.this;
-        }
-        return null;
       }
+      if (FRAMES_LIST.is(dataId)) {
+        return XDebuggerFramesList.this;
+      }
+      return null;
     });
 
     // This is a workaround for the performance issue IDEA-187063
@@ -133,7 +126,7 @@ public class XDebuggerFramesList extends DebuggerFramesList {
   @Override
   protected void onFrameChanged(final Object selectedValue) {
     if (mySelectedFrame != selectedValue) {
-      SwingUtilities.invokeLater(() -> repaint());
+      SwingUtilities.invokeLater(this::repaint);
       if (selectedValue instanceof XStackFrame) {
         mySelectedFrame = (XStackFrame)selectedValue;
       }
@@ -216,6 +209,10 @@ public class XDebuggerFramesList extends DebuggerFramesList {
           setBackground(c);
         }
       }
+      else if (Registry.is("debugger.new.debug.tool.window.view")){
+        setBackground(UIUtil.getListSelectionBackground(hasFocus));
+      }
+
       stackFrame.customizePresentation(this);
     }
 

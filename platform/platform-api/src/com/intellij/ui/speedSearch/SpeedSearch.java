@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.speedSearch;
 
 import com.intellij.openapi.keymap.KeymapUtil;
@@ -32,7 +18,7 @@ import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 
 public class SpeedSearch extends SpeedSearchSupply implements KeyListener {
-  public static final String PUNCTUATION_MARKS = "*_-\"'/.#$>: ,;?!@%^&";
+  public static final String PUNCTUATION_MARKS = "*_-+\"'/.#$>: ,;?!@%^&";
 
   private final PropertyChangeSupport myChangeSupport = new PropertyChangeSupport(this);
   private final boolean myMatchAllOccurrences;
@@ -94,7 +80,7 @@ public class SpeedSearch extends SpeedSearchSupply implements KeyListener {
       // for example: key-char on ctrl-J PRESSED is \n
       // see https://en.wikipedia.org/wiki/Control_character
       char ch = e.getKeyChar();
-      if (Character.isLetterOrDigit(ch) || PUNCTUATION_MARKS.indexOf(ch) != -1) {
+      if (Character.isLetterOrDigit(ch) || !startedWithWhitespace(ch) && PUNCTUATION_MARKS.indexOf(ch) != -1) {
         type(Character.toString(ch));
         e.consume();
       }
@@ -103,6 +89,10 @@ public class SpeedSearch extends SpeedSearchSupply implements KeyListener {
     if (!old.equalsIgnoreCase(myString)) {
       update();
     }
+  }
+
+  private boolean startedWithWhitespace(char ch) {
+    return !isHoldingFilter() && Character.isWhitespace(ch);
   }
 
   public void update() {
@@ -141,7 +131,7 @@ public class SpeedSearch extends SpeedSearchSupply implements KeyListener {
       String pattern = "*" + string;
       NameUtil.MatchingCaseSensitivity caseSensitivity = NameUtil.MatchingCaseSensitivity.NONE;
       String separators = "";
-      myMatcher = myMatchAllOccurrences ? new AllOccurrencesMatcher(pattern, caseSensitivity, separators)
+      myMatcher = myMatchAllOccurrences ? AllOccurrencesMatcher.create(pattern, caseSensitivity, separators)
                                         : new FixingLayoutMatcher(pattern, caseSensitivity, separators);
     }
     catch (Exception e) {

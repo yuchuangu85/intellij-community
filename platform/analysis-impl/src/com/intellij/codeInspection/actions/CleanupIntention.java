@@ -16,13 +16,14 @@
 
 package com.intellij.codeInspection.actions;
 
+import com.intellij.analysis.AnalysisBundle;
 import com.intellij.analysis.AnalysisScope;
 import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInsight.intention.LowPriorityAction;
 import com.intellij.codeInspection.InspectionManager;
-import com.intellij.codeInspection.InspectionsBundle;
 import com.intellij.codeInspection.ex.GlobalInspectionContextBase;
+import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.profile.codeInspection.InspectionProjectProfileManager;
@@ -44,15 +45,15 @@ public abstract class CleanupIntention implements IntentionAction, LowPriorityAc
   @Override
   @NotNull
   public String getFamilyName() {
-    return InspectionsBundle.message("cleanup.in.scope");
+    return AnalysisBundle.message("cleanup.in.scope");
   }
 
   @Override
   public void invoke(@NotNull final Project project, final Editor editor, final PsiFile file) throws IncorrectOperationException {
     if (!FileModificationService.getInstance().preparePsiElementForWrite(file)) return;
     final InspectionManager managerEx = InspectionManager.getInstance(project);
-    final GlobalInspectionContextBase globalContext = (GlobalInspectionContextBase)managerEx.createNewGlobalContext(false);
-    final AnalysisScope scope = getScope(project, file);
+    final GlobalInspectionContextBase globalContext = (GlobalInspectionContextBase)managerEx.createNewGlobalContext();
+    final AnalysisScope scope = getScope(project, InjectedLanguageManager.getInstance(project).getTopLevelFile(file));
     if (scope != null) {
       globalContext.codeCleanup(scope, InspectionProjectProfileManager.getInstance(project).getCurrentProfile(), getText(), null, false);
     }

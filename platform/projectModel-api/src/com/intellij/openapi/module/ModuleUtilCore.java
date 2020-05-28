@@ -1,4 +1,4 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.module;
 
 import com.intellij.openapi.application.ReadAction;
@@ -11,7 +11,6 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiFileSystemItem;
 import com.intellij.util.PathUtilRt;
-import java.util.HashSet;
 import com.intellij.util.graph.Graph;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -67,7 +66,10 @@ public class ModuleUtilCore {
 
   @Nullable
   public static Module findModuleForFile(@NotNull VirtualFile file, @NotNull Project project) {
-    return ProjectFileIndex.SERVICE.getInstance(project).getModuleForFile(file);
+    if (project.isDefault()) {
+      return null;
+    }
+    return ProjectFileIndex.getInstance(project).getModuleForFile(file);
   }
 
   @Nullable
@@ -92,7 +94,7 @@ public class ModuleUtilCore {
           return element.getUserData(KEY_MODULE);
         }
       }
-      if (fileIndex.isInLibrarySource(vFile) || fileIndex.isInLibraryClasses(vFile)) {
+      if (fileIndex.isInLibrary(vFile)) {
         final List<OrderEntry> orderEntries = fileIndex.getOrderEntriesForFile(vFile);
         if (orderEntries.isEmpty()) {
           return null;

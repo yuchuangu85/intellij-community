@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2015 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2019 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,13 +26,6 @@ public class SingleClassImportInspection extends BaseInspection {
 
   @Override
   @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message(
-      "single.class.import.display.name");
-  }
-
-  @Override
-  @NotNull
   public String buildErrorString(Object... infos) {
     return InspectionGadgetsBundle.message(
       "single.class.import.problem.descriptor");
@@ -45,32 +38,16 @@ public class SingleClassImportInspection extends BaseInspection {
 
   @Override
   public BaseInspectionVisitor buildVisitor() {
-    return new PackageImportVisitor();
+    return new SingleClassImportVisitor();
   }
 
-  private static class PackageImportVisitor extends BaseInspectionVisitor {
+  private static class SingleClassImportVisitor extends BaseInspectionVisitor {
 
     @Override
-    public void visitClass(@NotNull PsiClass aClass) {
-      // no call to super, so it doesn't drill down
-      final PsiElement parent = aClass.getParent();
-      if (!(parent instanceof PsiJavaFile)) {
-        return;
-      }
-      final PsiJavaFile file = (PsiJavaFile)parent;
-      if (!file.getClasses()[0].equals(aClass)) {
-        return;
-      }
-      final PsiImportList importList = file.getImportList();
-      if (importList == null) {
-        return;
-      }
-      final PsiImportStatement[] importStatements =
-        importList.getImportStatements();
-      for (final PsiImportStatement importStatement : importStatements) {
-        if (!importStatement.isOnDemand()) {
-          registerError(importStatement);
-        }
+    public void visitImportStatement(PsiImportStatement statement) {
+      super.visitImportStatement(statement);
+      if (!statement.isOnDemand()) {
+        registerError(statement);
       }
     }
   }

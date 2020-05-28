@@ -17,7 +17,6 @@
 package com.intellij.pom.tree.events.impl;
 
 import com.intellij.lang.ASTNode;
-import com.intellij.pom.tree.events.ChangeInfo;
 import com.intellij.pom.tree.events.TreeChange;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.impl.source.tree.CompositeElement;
@@ -32,8 +31,7 @@ import java.util.*;
 public class TreeChangeImpl implements TreeChange, Comparable<TreeChangeImpl> {
   private final CompositeElement myParent;
   private final List<CompositeElement> mySuperParents;
-  private final LinkedHashSet<TreeElement> myInitialChildren = new LinkedHashSet<>();
-  private final Map<TreeElement, Integer> myInitialLengths = new HashMap<>();
+  private final LinkedHashMap<TreeElement, Integer> myInitialLengths = new LinkedHashMap<>();
   private final Set<TreeElement> myContentChangeChildren = new HashSet<>();
   private Map<TreeElement, ChangeInfoImpl> myChanges;
 
@@ -42,7 +40,6 @@ public class TreeChangeImpl implements TreeChange, Comparable<TreeChangeImpl> {
     assert myParent.getPsi() != null : myParent.getElementType() + " of " + myParent.getClass();
     mySuperParents = JBIterable.generate(parent.getTreeParent(), TreeElement::getTreeParent).toList();
     for (TreeElement child : getCurrentChildren()) {
-      myInitialChildren.add(child);
       myInitialLengths.put(child, child.getTextLength());
     }
   }
@@ -90,15 +87,16 @@ public class TreeChangeImpl implements TreeChange, Comparable<TreeChangeImpl> {
   }
 
   private Map<TreeElement, ChangeInfoImpl> getAllChanges() {
-    if (myChanges == null) {
-      myChanges = new ChildrenDiff().calcChanges();
+    Map<TreeElement, ChangeInfoImpl> changes = myChanges;
+    if (changes == null) {
+      myChanges = changes = new ChildrenDiff().calcChanges();
     }
-    return myChanges;
+    return changes;
   }
   
   private class ChildrenDiff {
     LinkedHashSet<TreeElement> currentChildren = getCurrentChildren().addAllTo(new LinkedHashSet<>());
-    Iterator<TreeElement> itOld = myInitialChildren.iterator();
+    Iterator<TreeElement> itOld = myInitialLengths.keySet().iterator();
     Iterator<TreeElement> itNew = currentChildren.iterator();
     TreeElement oldChild, newChild;
     int oldOffset = 0;
@@ -124,7 +122,7 @@ public class TreeChangeImpl implements TreeChange, Comparable<TreeChangeImpl> {
           advanceOld(); advanceNew();
         } else {
           boolean oldDisappeared = oldChild != null && !currentChildren.contains(oldChild);
-          boolean newAppeared = newChild != null && !myInitialChildren.contains(newChild);
+          boolean newAppeared = newChild != null && !myInitialLengths.containsKey(newChild);
           addChange(new ChangeInfoImpl(oldDisappeared ? oldChild : null, newAppeared ? newChild : null,
                                        oldOffset,
                                        oldDisappeared ? myInitialLengths.get(oldChild) : 0));
@@ -165,16 +163,18 @@ public class TreeChangeImpl implements TreeChange, Comparable<TreeChangeImpl> {
   }
 
   @Override
-  @NotNull
-  public TreeElement[] getAffectedChildren() {
+  public TreeElement @NotNull [] getAffectedChildren() {
     return getAllChanges().keySet().toArray(TreeElement.EMPTY_ARRAY);
   }
 
   @Override
-  public ChangeInfo getChangeByChild(ASTNode child) {
+  public ChangeInfoImpl getChangeByChild(ASTNode child) {
     return getAllChanges().get((TreeElement)child);
   }
 
+  public List<TreeElement> getInitialChildren() {
+    return new ArrayList<>(myInitialLengths.keySet());
+  }
 
   public String toString() {
     return myParent + ": " + getAllChanges().values();
@@ -187,9 +187,8 @@ public class TreeChangeImpl implements TreeChange, Comparable<TreeChangeImpl> {
 
   public void markChildChanged(@NotNull TreeElement child, int lengthDelta) {
     myContentChangeChildren.add(child);
-    Integer oldLength = myInitialLengths.get(child);
-    if (oldLength != null && lengthDelta != 0) {
-      myInitialLengths.put(child, oldLength - lengthDelta);
+    if (lengthDelta != 0) {
+      myInitialLengths.computeIfPresent(child, (c, oldLength) -> oldLength - lengthDelta);
     }
     clearCache();
   }

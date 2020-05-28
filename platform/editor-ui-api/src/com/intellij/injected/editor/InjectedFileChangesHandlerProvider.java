@@ -16,10 +16,7 @@ import java.util.List;
  *
  * If an implementation is not defined for the particular language
  * then {@link com.intellij.psi.impl.source.tree.injected.changesHandler.CommonInjectedFileChangesHandler} will be used by default
- *
- * @since 2018.3
  */
-@ApiStatus.Experimental
 public interface InjectedFileChangesHandlerProvider {
   LanguageExtension<InjectedFileChangesHandlerProvider> EP =
     new LanguageExtension<>("com.intellij.editor.injectedFileChangesHandlerProvider");

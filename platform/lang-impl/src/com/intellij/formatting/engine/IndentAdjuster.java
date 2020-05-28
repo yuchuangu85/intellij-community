@@ -36,7 +36,7 @@ public class IndentAdjuster {
    * 
    * @return new current block if we need to rollback, null otherwise
    */
-  public LeafBlockWrapper adjustIndent(LeafBlockWrapper block) {
+  LeafBlockWrapper adjustIndent(LeafBlockWrapper block) {
     AlignmentImpl alignment = CoreFormatterUtil.getAlignment(block);
     WhiteSpace whiteSpace = block.getWhiteSpace();
 
@@ -105,14 +105,14 @@ public class IndentAdjuster {
     }
   }
 
-  public IndentInfo adjustLineIndent(FormatProcessor.ChildAttributesInfo info) {
+  public IndentInfo adjustLineIndent(FormatProcessor.ChildAttributesInfo info, AbstractBlockWrapper child) {
     AbstractBlockWrapper parent = info.parent;
     ChildAttributes childAttributes = info.attributes;
     int index = info.index;
 
     AlignWhiteSpace alignWhiteSpace = getAlignOffsetBefore(childAttributes.getAlignment());
     if (alignWhiteSpace == null) {
-      return parent.calculateChildOffset(myBlockIndentOptions.getIndentOptions(parent), childAttributes, index).createIndentInfo();
+      return parent.calculateChildOffset(myBlockIndentOptions.getIndentOptions(child), childAttributes, index).createIndentInfo();
     }
     else {
       return new IndentInfo(0, alignWhiteSpace.indentSpaces, alignWhiteSpace.alignSpaces);

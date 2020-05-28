@@ -16,7 +16,7 @@
  */
 package com.intellij.codeInsight.generation.surroundWith;
 
-import com.intellij.codeInsight.CodeInsightBundle;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
@@ -28,7 +28,7 @@ import org.jetbrains.annotations.NonNls;
 public class JavaWithDoWhileSurrounder extends JavaStatementsSurrounder{
   @Override
   public String getTemplateDescription() {
-    return CodeInsightBundle.message("surround.with.dowhile.template");
+    return JavaBundle.message("surround.with.dowhile.template");
   }
 
   @Override
@@ -46,7 +46,7 @@ public class JavaWithDoWhileSurrounder extends JavaStatementsSurrounder{
     PsiDoWhileStatement doWhileStatement = (PsiDoWhileStatement)factory.createStatementFromText(text, null);
     doWhileStatement = (PsiDoWhileStatement)codeStyleManager.reformat(doWhileStatement);
 
-    doWhileStatement = (PsiDoWhileStatement)container.addAfter(doWhileStatement, statements[statements.length - 1]);
+    doWhileStatement = (PsiDoWhileStatement)addAfter(doWhileStatement, container, statements);
 
     PsiStatement body = doWhileStatement.getBody();
     if (!(body instanceof PsiBlockStatement)) {
@@ -54,7 +54,7 @@ public class JavaWithDoWhileSurrounder extends JavaStatementsSurrounder{
     }
     PsiCodeBlock bodyBlock = ((PsiBlockStatement)body).getCodeBlock();
     SurroundWithUtil.indentCommentIfNecessary(bodyBlock, statements);
-    bodyBlock.addRange(statements[0], statements[statements.length - 1]);
+    addRangeWithinContainer(bodyBlock, container, statements, false);
     container.deleteChildRange(statements[0], statements[statements.length - 1]);
 
     PsiExpression condition = doWhileStatement.getCondition();

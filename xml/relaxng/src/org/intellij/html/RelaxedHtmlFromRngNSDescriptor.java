@@ -19,7 +19,7 @@ import com.intellij.html.RelaxedHtmlNSDescriptor;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.psi.xml.XmlDocument;
 import com.intellij.psi.xml.XmlTag;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.xml.XmlElementDescriptor;
 import com.intellij.xml.impl.schema.AnyXmlElementDescriptor;
 import com.intellij.xml.util.HtmlUtil;
@@ -28,13 +28,16 @@ import org.intellij.plugins.relaxNG.model.descriptors.RngNsDescriptor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Arrays;
+import java.util.List;
+
+import static com.intellij.xml.util.HtmlUtil.MATH_ML_NAMESPACE;
+import static com.intellij.xml.util.HtmlUtil.SVG_NAMESPACE;
 
 /**
  * @author Eugene.Kudelevsky
  */
 public class RelaxedHtmlFromRngNSDescriptor extends RngNsDescriptor implements RelaxedHtmlNSDescriptor {
-  private static final Logger LOG = Logger.getInstance("#org.intellij.html.RelaxedHtmlFromRngNSDescriptor");
+  private static final Logger LOG = Logger.getInstance(RelaxedHtmlFromRngNSDescriptor.class);
 
   @Override
   public XmlElementDescriptor getElementDescriptor(@NotNull XmlTag tag) {
@@ -65,14 +68,30 @@ public class RelaxedHtmlFromRngNSDescriptor extends RngNsDescriptor implements R
   }
 
   @Override
-  @NotNull
-  public XmlElementDescriptor[] getRootElementsDescriptors(@Nullable final XmlDocument doc) {
+  public XmlElementDescriptor @NotNull [] getRootElementsDescriptors(@Nullable final XmlDocument doc) {
     final XmlElementDescriptor[] descriptors = super.getRootElementsDescriptors(doc);
-    /**
-     * HTML 5 descriptor list contains not only HTML elements, but also SVG and MathML. To prevent conflicts
-     * we need to prioritize HTML ones {@link org.intellij.html.RelaxedHtmlFromRngElementDescriptor#compareTo(Object)}
-     */
-    Arrays.sort(descriptors);
-    return ArrayUtil.mergeArrays(descriptors, HtmlUtil.getCustomTagDescriptors(doc));
+    List<XmlElementDescriptor> rootElements = ContainerUtil.filter(descriptors, descriptor -> isRootTag((RelaxedHtmlFromRngElementDescriptor)descriptor));
+    ContainerUtil.addAll(rootElements, HtmlUtil.getCustomTagDescriptors(doc));
+    return rootElements.toArray(XmlElementDescriptor.EMPTY_ARRAY);
+  }
+
+  @Override
+  public XmlElementDescriptor @NotNull [] getAllElementsDescriptors(@Nullable XmlDocument document) {
+    return super.getRootElementsDescriptors(document);
+  }
+
+  protected boolean isRootTag(RelaxedHtmlFromRngElementDescriptor descriptor) {
+    return descriptor.isHtml() ||
+           "svg".equals(descriptor.getName()) ||
+           "math".equals(descriptor.getName());
+  }
+
+  @Override
+  public XmlElementDescriptor getElementDescriptor(String localName, String namespace) {
+    XmlElementDescriptor descriptor = super.getElementDescriptor(localName, namespace);
+    if (descriptor != null) return descriptor;
+    descriptor =  super.getElementDescriptor(localName, MATH_ML_NAMESPACE);
+    if (descriptor != null) return descriptor;
+    return super.getElementDescriptor(localName, SVG_NAMESPACE);
   }
 }

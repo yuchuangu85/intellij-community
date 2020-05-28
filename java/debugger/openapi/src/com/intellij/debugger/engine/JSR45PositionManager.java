@@ -3,7 +3,7 @@
  */
 package com.intellij.debugger.engine;
 
-import com.intellij.debugger.DebuggerBundle;
+import com.intellij.debugger.JavaDebuggerBundle;
 import com.intellij.debugger.NoDataException;
 import com.intellij.debugger.PositionManager;
 import com.intellij.debugger.SourcePosition;
@@ -14,6 +14,7 @@ import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.LanguageFileType;
 import com.intellij.openapi.util.Computable;
 import com.intellij.psi.PsiFile;
+import com.intellij.util.containers.ContainerUtil;
 import com.sun.jdi.*;
 import com.sun.jdi.request.ClassPrepareRequest;
 import org.jetbrains.annotations.NonNls;
@@ -23,13 +24,12 @@ import java.io.File;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * @author Eugene Zhuravlev
  */
 public abstract class JSR45PositionManager<Scope> implements PositionManager {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.debugger.engine.JSR45PositionManager");
+  private static final Logger LOG = Logger.getInstance(JSR45PositionManager.class);
   protected final DebugProcess      myDebugProcess;
   protected final Scope myScope;
   private final String myStratumId;
@@ -43,7 +43,7 @@ public abstract class JSR45PositionManager<Scope> implements PositionManager {
     myDebugProcess = debugProcess;
     myScope = scope;
     myStratumId = stratumId;
-    myFileTypes = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(acceptedFileTypes)));
+    myFileTypes = ContainerUtil.immutableSet(acceptedFileTypes);
     mySourcesFinder = sourcesFinder;
     String generatedClassPattern = getGeneratedClassesPackage();
     if(generatedClassPattern.length() == 0) {
@@ -160,7 +160,7 @@ public abstract class JSR45PositionManager<Scope> implements PositionManager {
         }
         catch (InternalError ignored) {
           myDebugProcess.printToConsole(
-            DebuggerBundle.message("internal.error.locations.of.line", type.name()));
+            JavaDebuggerBundle.message("internal.error.locations.of.line", type.name()));
         }
         return null;
       }
@@ -176,7 +176,7 @@ public abstract class JSR45PositionManager<Scope> implements PositionManager {
   }
 
   protected List<String> getRelativeSourePathsByType(final ReferenceType type) throws AbsentInformationException {
-    return type.sourcePaths(myStratumId).stream().map(this::getRelativePath).collect(Collectors.toList());
+    return ContainerUtil.map(type.sourcePaths(myStratumId), this::getRelativePath);
   }
 
   protected List<Location> getLocationsOfLine(final ReferenceType type, final String fileName,

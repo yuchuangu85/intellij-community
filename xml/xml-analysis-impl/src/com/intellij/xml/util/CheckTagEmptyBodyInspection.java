@@ -16,22 +16,20 @@
 
 package com.intellij.xml.util;
 
-import com.intellij.codeInspection.LocalQuickFix;
 import com.intellij.codeInspection.ProblemsHolder;
-import com.intellij.codeInspection.XmlInspectionGroupNames;
 import com.intellij.codeInspection.XmlSuppressableInspectionTool;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.xml.XMLLanguage;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
-import com.intellij.psi.PsiElementVisitor;
-import com.intellij.psi.PsiFile;
-import com.intellij.psi.XmlElementVisitor;
+import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.psi.*;
 import com.intellij.psi.xml.XmlChildRole;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.psi.xml.XmlTokenType;
-import com.intellij.xml.XmlBundle;
+import com.intellij.util.IncorrectOperationException;
 import com.intellij.xml.XmlExtension;
+import com.intellij.xml.analysis.XmlAnalysisBundle;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
@@ -57,11 +55,10 @@ public class CheckTagEmptyBodyInspection extends XmlSuppressableInspectionTool {
 
             if (node != null &&
                 node.getElementType() == XmlTokenType.XML_END_TAG_START) {
-              final LocalQuickFix localQuickFix = new Fix();
               holder.registerProblem(
                 tag,
-                XmlBundle.message("xml.inspections.tag.empty.body"),
-                isCollapsibleTag(tag) ? localQuickFix : null
+                XmlAnalysisBundle.message("xml.inspections.tag.empty.body"),
+                isCollapsibleTag(tag) ? new Fix(tag) : null
               );
             }
           }
@@ -71,22 +68,10 @@ public class CheckTagEmptyBodyInspection extends XmlSuppressableInspectionTool {
   }
 
   static boolean isCollapsibleTag(final XmlTag tag) {
-    final String name = tag.getName().toLowerCase();
+    final String name = StringUtil.toLowerCase(tag.getName());
     return tag.getLanguage() == XMLLanguage.INSTANCE ||
            "link".equals(name) || "br".equals(name) || "meta".equals(name) || "img".equals(name) || "input".equals(name) || "hr".equals(name) ||
            XmlExtension.isCollapsible(tag);
-  }
-
-  @Override
-  @NotNull
-  public String getGroupDisplayName() {
-    return XmlInspectionGroupNames.XML_INSPECTIONS;
-  }
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return XmlBundle.message("xml.inspections.check.tag.empty.body");
   }
 
   @Override
@@ -96,8 +81,22 @@ public class CheckTagEmptyBodyInspection extends XmlSuppressableInspectionTool {
     return "CheckTagEmptyBody";
   }
 
-  @SuppressWarnings("IntentionDescriptionNotFoundInspection")
   public static class Fix extends CollapseTagIntention {
+    private final SmartPsiElementPointer<XmlTag> myPointer;
+
+    public Fix(XmlTag tag) {
+      myPointer = SmartPointerManager.getInstance(tag.getProject()).createSmartPsiElementPointer(tag);
+    }
+
+    @Override
+    public void invoke(@NotNull Project project, Editor editor, PsiFile file) throws IncorrectOperationException {
+      XmlTag tag = myPointer.getElement();
+      if (tag == null) {
+        return;
+      }
+      applyFix(project, tag);
+    }
+
     @Override
     public boolean isAvailable(@NotNull Project project, Editor editor, PsiFile file) {
       return true;

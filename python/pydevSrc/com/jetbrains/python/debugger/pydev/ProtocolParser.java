@@ -1,9 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.debugger.pydev;
 
-import com.google.common.collect.Lists;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.io.URLUtil;
 import com.jetbrains.python.debugger.*;
 import com.thoughtworks.xstream.io.naming.NoNameCoder;
 import com.thoughtworks.xstream.io.xml.XppReader;
@@ -12,8 +12,7 @@ import org.jetbrains.annotations.NotNull;
 import org.xmlpull.mxp1.MXParser;
 
 import java.io.StringReader;
-import java.io.UnsupportedEncodingException;
-import java.net.URLDecoder;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -29,7 +28,8 @@ public class ProtocolParser {
     if (!"call_signature".equals(reader.getNodeName())) {
       throw new PyDebuggerException("Expected <call_signature>, found " + reader.getNodeName());
     }
-    final String file = readString(reader, "file", "");
+    String file = reader.getAttribute("file");
+    if (file == null) file = "";
     final String name = readString(reader, "name", "");
     PySignature signature = new PySignature(file, name);
 
@@ -67,7 +67,7 @@ public class ProtocolParser {
       throw new PyDebuggerException("Expected <threading_event> or <asyncio_event>, found " + reader.getNodeName());
     }
 
-    final Long time = Long.parseLong(readString(reader, "time", ""));
+    final long time = Long.parseLong(readString(reader, "time", ""));
     final String name = readString(reader, "name", "");
     final String thread_id = readString(reader, "thread_id", "");
     final String type = readString(reader, "type", "");
@@ -156,15 +156,6 @@ public class ProtocolParser {
     return payload;
   }
 
-  public static String decode(final String value) throws PyDebuggerException {
-    try {
-      return URLDecoder.decode(value, "UTF-8");
-    }
-    catch (UnsupportedEncodingException e) {
-      throw new PyDebuggerException("Unable to decode: " + value + ", reason: " + e.getMessage());
-    }
-  }
-
   public static String encodeExpression(final String expression) {
     return StringUtil.replace(expression, "\n", "@LINE@");
   }
@@ -219,10 +210,10 @@ public class ProtocolParser {
 
     final String id = readString(reader, "id", null);
     final String name = readString(reader, "name", null);
-    final String file = readString(reader, "file", null);
+    final String file = reader.getAttribute("file");
     final int line = readInt(reader, "line", 0);
 
-    return new PyStackFrameInfo(threadId, id, name, positionConverter.create(file, line));
+    return new PyStackFrameInfo(threadId, id, name, positionConverter.convertPythonToFrame(file, line));
   }
 
   @NotNull
@@ -286,12 +277,13 @@ public class ProtocolParser {
     final String isReturnedValue = readString(reader, "isRetVal", "");
     final String isIPythonHidden = readString(reader, "isIPythonHidden", "");
     final String isErrorOnEval = readString(reader, "isErrorOnEval", "");
+    String shape = readString(reader, "shape", "");
 
     if (value.startsWith(type + ": ")) {  // drop unneeded prefix
       value = value.substring(type.length() + 2);
     }
-
-    return new PyDebugValue(name, type, qualifier, value, "True".equals(isContainer), "True".equals(isReturnedValue),
+    if (shape.isEmpty()) shape = null;
+    return new PyDebugValue(name, type, qualifier, value, "True".equals(isContainer), shape, "True".equals(isReturnedValue),
                             "True".equals(isIPythonHidden), "True".equals(isErrorOnEval), frameAccessor);
   }
 
@@ -311,7 +303,7 @@ public class ProtocolParser {
       result.setType(readString(reader, "type", null));
       result.setMax(readString(reader, "max", null));
       result.setMin(readString(reader, "min", null));
-      result.setValue(new PyDebugValue(slice, null, null, null, false, false, false, false, frameAccessor));
+      result.setValue(new PyDebugValue(slice, null, null, null, false, null, false, false, false, frameAccessor));
       reader.moveUp();
     }
     if ("headerdata".equals(reader.peekNextChild())) {
@@ -323,9 +315,22 @@ public class ProtocolParser {
     return result.createArrayChunk();
   }
 
+  public static @NotNull List<Pair<String, Boolean>> parseSmartStepIntoVariants(String text) throws PyDebuggerException {
+    XppReader reader = openReader(text, false);
+    List<Pair<String, Boolean>> variants = new ArrayList<>();
+    while (reader.hasMoreChildren()) {
+      reader.moveDown();
+      String variantName = read(reader, "name", true);
+      Boolean isVisited = read(reader, "isVisited", true).equals("true");
+      variants.add(Pair.create(variantName, isVisited));
+      reader.moveUp();
+    }
+    return variants;
+  }
+
   private static void parseArrayHeaderData(XppReader reader, ArrayChunkBuilder result) throws PyDebuggerException {
-    List<String> rowHeaders = Lists.newArrayList();
-    List<ArrayChunk.ColHeader> colHeaders = Lists.newArrayList();
+    List<String> rowHeaders = new ArrayList<>();
+    List<ArrayChunk.ColHeader> colHeaders = new ArrayList<>();
     reader.moveDown();
     while (reader.hasMoreChildren()) {
       reader.moveDown();
@@ -397,6 +402,12 @@ public class ProtocolParser {
     return values;
   }
 
+  public static String parseWarning(final String text) throws PyDebuggerException {
+    final XppReader reader = openReader(text, true);
+    reader.moveDown();
+    return readString(reader, "id", null);
+  }
+
   private static XppReader openReader(final String text, final boolean checkForContent) throws PyDebuggerException {
     final XppReader reader = new XppReader(new StringReader(text), new MXParser(), new NoNameCoder());
     if (checkForContent && !reader.hasMoreChildren()) {
@@ -429,6 +440,6 @@ public class ProtocolParser {
     if (value == null && isRequired) {
       throw new PyDebuggerException("Attribute not found: " + name);
     }
-    return value == null ? null : decode(value);
+    return value == null ? null : URLUtil.decode(value);
   }
 }

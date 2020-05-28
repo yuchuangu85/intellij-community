@@ -21,7 +21,6 @@ import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.Splitter;
 import com.intellij.openapi.vcs.changes.ui.SimpleChangesBrowser;
 import com.intellij.ui.components.JBLabel;
-import com.intellij.util.ArrayUtil;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.vcs.log.VcsFullCommitDetails;
@@ -100,7 +99,7 @@ class CompareBranchesLogPanel extends JPanel {
   }
 
   private JComponent createNorthPanel() {
-    final ComboBox<Repository> repoSelector = new ComboBox<>(ArrayUtil.toObjectArray(myCompareInfo.getRepositories(), Repository.class));
+    final ComboBox<Repository> repoSelector = new ComboBox<>(myCompareInfo.getRepositories().toArray(new Repository[0]));
     repoSelector.setRenderer(new RepositoryComboboxListCellRenderer());
     repoSelector.setSelectedItem(myInitialRepo);
 
@@ -114,7 +113,7 @@ class CompareBranchesLogPanel extends JPanel {
     });
 
     JPanel repoSelectorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-    JBLabel label = new JBLabel("Repository: ");
+    JBLabel label = new JBLabel(DvcsBundle.message("label.repository"));
     label.setLabelFor(repoSelectorPanel);
     label.setDisplayedMnemonic(KeyEvent.VK_R);
     repoSelectorPanel.add(label);

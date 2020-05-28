@@ -24,7 +24,6 @@ import com.intellij.util.JavaPsiConstructorUtil;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.Processor;
 import com.intellij.util.containers.MultiMap;
-import com.intellij.util.containers.hash.HashMap;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -32,8 +31,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 
 public class FindSuperElementsHelper {
-  @NotNull
-  public static PsiElement[] findSuperElements(@NotNull PsiElement element) {
+  public static PsiElement @NotNull [] findSuperElements(@NotNull PsiElement element) {
     if (element instanceof PsiClass) {
       PsiClass aClass = (PsiClass) element;
       List<PsiClass> allSupers = new ArrayList<>(Arrays.asList(aClass.getSupers()));
@@ -88,7 +86,7 @@ public class FindSuperElementsHelper {
     Map<PsiMethod, SiblingInfo> result = null;
     for (PsiClass psiClass : byClass.keySet()) {
       SiblingInheritorSearcher searcher = new SiblingInheritorSearcher(byClass.get(psiClass), psiClass);
-      ClassInheritorsSearch.search(psiClass, psiClass.getUseScope(), true, true, false).forEach(searcher);
+      ClassInheritorsSearch.search(psiClass, psiClass.getUseScope(), true, true, false).allowParallelProcessing().forEach(searcher);
       Map<PsiMethod, SiblingInfo> searcherResult = searcher.getResult();
       if (!searcherResult.isEmpty()) {
         if (result == null) result = new HashMap<>();
@@ -168,10 +166,6 @@ public class FindSuperElementsHelper {
     @Nullable
     private SiblingInfo findSibling(@NotNull PsiClass inheritor, @NotNull PsiClass anInterface, @NotNull PsiMethod method) {
       for (PsiMethod superMethod : anInterface.findMethodsByName(method.getName(), true)) {
-        PsiElement navigationElement = superMethod.getNavigationElement();
-        if (!(navigationElement instanceof PsiMethod)) continue; // Kotlin
-        superMethod = (PsiMethod)navigationElement;
-        ProgressManager.checkCanceled();
         PsiClass superInterface = superMethod.getContainingClass();
         if (superInterface == null || myContainingClass.isInheritor(superInterface, true)) {
           // if containingClass implements the superInterface then it's not a sibling inheritance but a pretty boring the usual one
@@ -179,7 +173,10 @@ public class FindSuperElementsHelper {
         }
 
         if (isOverridden(inheritor, method, superMethod, superInterface)) {
-          return new SiblingInfo(superMethod, inheritor);
+          PsiElement navigationElement = superMethod.getNavigationElement();
+          if (!(navigationElement instanceof PsiMethod)) continue; // Kotlin
+
+          return new SiblingInfo((PsiMethod)navigationElement, inheritor);
         }
       }
       return null;

@@ -16,15 +16,15 @@
 package com.intellij.packageDependencies.actions;
 
 import com.intellij.analysis.AnalysisScope;
-import com.intellij.analysis.AnalysisScopeBundle;
+import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.notification.NotificationGroup;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.MessageType;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.ToolWindowId;
-import com.intellij.packageDependencies.BackwardDependenciesBuilder;
 import com.intellij.packageDependencies.DependenciesBuilder;
 import com.intellij.packageDependencies.DependencyVisitorFactory;
+import com.intellij.packageDependencies.ForwardDependenciesBuilder;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.search.GlobalSearchScope;
 import org.jetbrains.annotations.NotNull;
@@ -34,9 +34,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * @author nik
- */
 public class AnalyzeDependenciesOnSpecifiedTargetHandler extends DependenciesHandlerBase {
   private static final NotificationGroup NOTIFICATION_GROUP =
     NotificationGroup.toolWindowGroup("Dependencies", ToolWindowId.DEPENDENCIES);
@@ -49,22 +46,12 @@ public class AnalyzeDependenciesOnSpecifiedTargetHandler extends DependenciesHan
 
   @Override
   protected String getProgressTitle() {
-    return AnalysisScopeBundle.message("package.dependencies.progress.title");
+    return CodeInsightBundle.message("package.dependencies.progress.title");
   }
 
   @Override
   protected String getPanelDisplayName(AnalysisScope scope) {
-    return AnalysisScopeBundle.message("package.dependencies.on.toolwindow.title", scope.getDisplayName(), myTargetScope.getDisplayName());
-  }
-
-  @Override
-  protected String getPanelDisplayName(List<? extends DependenciesBuilder> builders) {
-    return getPanelDisplayName(getForwardScope(builders));
-  }
-
-  private static AnalysisScope getForwardScope(List<? extends DependenciesBuilder> builders) {
-    final DependenciesBuilder builder = builders.get(0);
-    return builder instanceof BackwardDependenciesBuilder ? ((BackwardDependenciesBuilder)builder).getForwardScope() : builder.getScope();
+    return CodeInsightBundle.message("package.dependencies.on.toolwindow.title", scope.getDisplayName(), myTargetScope.getDisplayName());
   }
 
   @Override
@@ -76,12 +63,12 @@ public class AnalyzeDependenciesOnSpecifiedTargetHandler extends DependenciesHan
         }
       }
     }
-    final String source = StringUtil.decapitalize(getForwardScope(builders).getDisplayName());
+    final String source = StringUtil.decapitalize(getPanelDisplayName(builders));
     final String target = StringUtil.decapitalize(myTargetScope.getDisplayName());
-    String message = AnalysisScopeBundle.message("no.dependencies.found.message", source, target);
+    String message = CodeInsightBundle.message("no.dependencies.found.message", source, target);
     if (DependencyVisitorFactory.VisitorOptions.fromSettings(myProject).skipImports()) {
       message += " ";
-      message += AnalysisScopeBundle.message("dependencies.in.imports.message");
+      message += CodeInsightBundle.message("dependencies.in.imports.message");
     }
     NOTIFICATION_GROUP.createNotification(message, MessageType.INFO).notify(myProject);
     return false;
@@ -89,6 +76,6 @@ public class AnalyzeDependenciesOnSpecifiedTargetHandler extends DependenciesHan
 
   @Override
   protected DependenciesBuilder createDependenciesBuilder(AnalysisScope scope) {
-    return new BackwardDependenciesBuilder(myProject, new AnalysisScope(myTargetScope, myProject), scope);
+    return new ForwardDependenciesBuilder(myProject, scope, myTargetScope);
   }
 }

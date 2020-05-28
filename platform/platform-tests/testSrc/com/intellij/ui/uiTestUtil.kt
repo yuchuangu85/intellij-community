@@ -1,9 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui
 
 import com.intellij.ide.ui.laf.IntelliJLaf
 import com.intellij.ide.ui.laf.darcula.DarculaLaf
-import com.intellij.openapi.application.invokeAndWaitIfNeed
+import com.intellij.openapi.application.AppUIExecutor
+import com.intellij.openapi.application.impl.coroutineDispatchingContext
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.rt.execution.junit.FileComparisonFailure
@@ -17,9 +18,10 @@ import com.intellij.util.io.exists
 import com.intellij.util.io.inputStream
 import com.intellij.util.io.sanitizeFileName
 import com.intellij.util.io.write
+import com.intellij.util.ui.JBHtmlEditorKit
 import com.intellij.util.ui.TestScaleHelper
-import com.intellij.util.ui.UIUtil
 import com.intellij.util.ui.paint.ImageComparator
+import kotlinx.coroutines.withContext
 import org.junit.rules.ExternalResource
 import org.junit.rules.TestName
 import org.junit.runners.model.MultipleFailureException
@@ -65,14 +67,14 @@ open class RestoreScaleRule : ExternalResource() {
   }
 }
 
-fun changeLafIfNeed(lafName: String) {
+internal suspend fun changeLafIfNeeded(lafName: String) {
   System.setProperty("idea.ui.set.password.echo.char", "true")
 
   if (UIManager.getLookAndFeel().name == lafName) {
     return
   }
 
-  invokeAndWaitIfNeed {
+  withContext(AppUIExecutor.onUiThread().coroutineDispatchingContext()) {
     UIManager.setLookAndFeel(MetalLookAndFeel())
     val laf = if (lafName == "IntelliJ") IntelliJLaf() else DarculaLaf()
     UIManager.setLookAndFeel(laf)
@@ -80,7 +82,7 @@ fun changeLafIfNeed(lafName: String) {
     if (lafName == "Darcula") {
       // static init it is hell - UIUtil static init is called too early, so, call it to init properly
       // (otherwise null stylesheet added and it leads to NPE on set comment text)
-      UIManager.getDefaults().put("javax.swing.JLabel.userStyleSheet", UIUtil.JBHtmlEditorKit.createStyleSheet())
+      UIManager.getDefaults().put("javax.swing.JLabel.userStyleSheet", JBHtmlEditorKit.createStyleSheet())
     }
   }
 }
@@ -103,10 +105,10 @@ fun getSnapshotRelativePath(lafName: String): String {
 }
 
 @Throws(FileComparisonFailure::class)
-fun validateBounds(component: Container, snapshotDir: Path, snapshotName: String, isUpdateSnapshots: Boolean = isUpdateSnapshotsGlobal) {
+fun validateBounds(component: Container, snapshotDir: Path, snapshotName: String) {
   val actualSerializedLayout: String
   if (component.layout is MigLayout) {
-    actualSerializedLayout = serializeLayout(component)
+    actualSerializedLayout = serializeLayout(component, isIncludeCellBounds = false, isIncludeComponentBounds = false)
   }
   else {
     val dumperOptions = DumperOptions()
@@ -116,11 +118,11 @@ fun validateBounds(component: Container, snapshotDir: Path, snapshotName: String
       .dump(linkedMapOf("bounds" to dumpComponentBounds(component)))
   }
 
-  compareSnapshot(snapshotDir.resolve("$snapshotName.yml"), actualSerializedLayout, isUpdateSnapshots)
+  compareFileContent(actualSerializedLayout, snapshotDir.resolve("$snapshotName.yml"))
 }
 
 @Throws(FileComparisonFailure::class)
-internal fun compareSvgSnapshot(snapshotFile: Path, newData: String, isUpdateSnapshots: Boolean) {
+internal fun compareSvgSnapshot(snapshotFile: Path, newData: String, updateIfMismatch: Boolean) {
   if (!snapshotFile.exists()) {
     System.out.println("Write a new snapshot ${snapshotFile.fileName}")
     snapshotFile.write(newData)
@@ -129,17 +131,13 @@ internal fun compareSvgSnapshot(snapshotFile: Path, newData: String, isUpdateSna
 
   val uri = snapshotFile.toUri().toURL()
 
-  fun updateSnapshot() {
-    System.out.println("UPDATED snapshot ${snapshotFile.fileName}")
-    snapshotFile.write(newData)
-  }
-
   val old = try {
     snapshotFile.inputStream().use { SVGLoader.load(uri, it, 1.0) } as BufferedImage
   }
   catch (e: Exception) {
-    if (isUpdateSnapshots) {
-      updateSnapshot()
+    if (updateIfMismatch) {
+      System.out.println("UPDATED snapshot ${snapshotFile.fileName}")
+      snapshotFile.write(newData)
       return
     }
 
@@ -153,38 +151,10 @@ internal fun compareSvgSnapshot(snapshotFile: Path, newData: String, isUpdateSna
   }
 
   try {
-    compareFileContent(newData, snapshotFile)
+    compareFileContent(newData, snapshotFile, updateIfMismatch = updateIfMismatch)
   }
   catch (e: FileComparisonFailure) {
-    if (isUpdateSnapshots) {
-      updateSnapshot()
-      return
-    }
-    else {
-      throw MultipleFailureException(listOf(AssertionError(imageMismatchError.toString()), e))
-    }
-  }
-}
-
-@Throws(FileComparisonFailure::class)
-internal fun compareSnapshot(snapshotFile: Path, newData: String, isUpdateSnapshots: Boolean) {
-  if (!snapshotFile.exists()) {
-    System.out.println("Write a new snapshot ${snapshotFile.fileName}")
-    snapshotFile.write(newData)
-    return
-  }
-
-  try {
-    compareFileContent(newData, snapshotFile)
-  }
-  catch (e: FileComparisonFailure) {
-    if (isUpdateSnapshots) {
-      System.out.println("UPDATED snapshot ${snapshotFile.fileName}")
-      snapshotFile.write(newData)
-    }
-    else {
-      throw e
-    }
+    throw MultipleFailureException(listOf(AssertionError(imageMismatchError.toString()), e))
   }
 }
 
@@ -206,13 +176,10 @@ internal fun dumpComponentBounds(component: Container): Map<String, IntArray> {
 }
 
 internal fun getComponentKey(c: Component, index: Int): String {
-  if (c is JLabel && !c.text.isNullOrEmpty()) {
-    return StringUtil.removeHtmlTags(c.text)
-  }
-  if (c is AbstractButton && c.text.isNotEmpty()) {
-    return StringUtil.removeHtmlTags(c.text)
-  }
-  else {
-    return "${c.javaClass.simpleName} #${index}"
+  return when {
+    c is JLabel && !c.text.isNullOrEmpty() -> StringUtil.removeHtmlTags(c.text, true).removeSuffix(":") + " [label]"
+    c is AbstractButton && c.text.isNotEmpty() -> StringUtil.removeHtmlTags(c.text, true)
+    c is TitledSeparator -> c.text + " [titledSeparator]"
+    else -> "${c.javaClass.simpleName} #${index}"
   }
 }

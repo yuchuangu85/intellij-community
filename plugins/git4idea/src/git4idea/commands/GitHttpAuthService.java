@@ -18,12 +18,14 @@ package git4idea.commands;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Computable;
+import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.util.text.StringUtilRt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.git4idea.http.GitAskPassApp;
 import org.jetbrains.git4idea.http.GitAskPassXmlRpcHandler;
 import org.jetbrains.git4idea.ssh.GitXmlRpcHandlerService;
-import org.jetbrains.git4idea.util.ScriptGenerator;
 
+import java.io.File;
 import java.util.Collection;
 import java.util.UUID;
 
@@ -34,10 +36,6 @@ public abstract class GitHttpAuthService extends GitXmlRpcHandlerService<GitHttp
 
   protected GitHttpAuthService() {
     super("intellij-git-askpass", GitAskPassXmlRpcHandler.HANDLER_NAME, GitAskPassApp.class);
-  }
-
-  @Override
-  protected void customizeScriptGenerator(@NotNull ScriptGenerator generator) {
   }
 
   @NotNull
@@ -52,24 +50,35 @@ public abstract class GitHttpAuthService extends GitXmlRpcHandlerService<GitHttp
   @NotNull
   public abstract GitHttpAuthenticator createAuthenticator(@NotNull Project project,
                                                            @NotNull Collection<String> urls,
+                                                           @NotNull File workingDirectory,
                                                            @NotNull GitAuthenticationGate authenticationGate,
-                                                           boolean ignoreAuthenticationRequest);
+                                                           @NotNull GitAuthenticationMode authenticationMode);
 
   /**
    * Internal handler implementation class, it is made public to be accessible via XML RPC.
    */
   public class InternalRequestHandlerDelegate implements GitAskPassXmlRpcHandler {
-    @NotNull
     @Override
-    public String askUsername(String token, @NotNull String url) {
-      return getDefaultValueIfCancelled(() -> getHandler(UUID.fromString(token)).askUsername(url), "");
-    }
+    public @NotNull String handleInput(@NotNull String handlerNo, @NotNull String arg) {
+      GitHttpAuthenticator handler = getHandler(UUID.fromString(handlerNo));
 
-    @NotNull
-    @Override
-    public String askPassword(String token, @NotNull String url) {
-      return getDefaultValueIfCancelled(() -> getHandler(UUID.fromString(token)).askPassword(url), "");
+      boolean usernameNeeded = StringUtilRt.startsWithIgnoreCase(arg, "username");
+
+      String[] split = arg.split(" ");
+      String url = split.length > 2 ? parseUrl(split[2]) : "";
+
+      return getDefaultValueIfCancelled(() -> {
+        return usernameNeeded ? handler.askUsername(url) : handler.askPassword(url);
+      }, "");
     }
+  }
+
+  private static String parseUrl(@NotNull String url) {
+    // un-quote and remove the trailing colon
+    url = StringUtil.trimStart(url, "'");
+    url = StringUtil.trimEnd(url, ":");
+    url = StringUtil.trimEnd(url, "'");
+    return url;
   }
 
   @NotNull
@@ -108,6 +117,11 @@ public abstract class GitHttpAuthService extends GitXmlRpcHandlerService<GitHttp
 
     @Override
     public boolean wasCancelled() {
+      return false;
+    }
+
+    @Override
+    public boolean wasRequested() {
       return false;
     }
   };

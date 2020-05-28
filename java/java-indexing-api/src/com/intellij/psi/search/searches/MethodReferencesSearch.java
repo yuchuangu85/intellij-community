@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.search.searches;
 
 import com.intellij.openapi.application.DumbAwareSearchParameters;
@@ -13,11 +13,8 @@ import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * @author max
- */
 public class MethodReferencesSearch extends ExtensibleQueryFactory<PsiReference, MethodReferencesSearch.SearchParameters> {
-  public static final ExtensionPointName<QueryExecutor> EP_NAME = ExtensionPointName.create("com.intellij.methodReferencesSearch");
+  public static final ExtensionPointName<QueryExecutor<PsiReference, MethodReferencesSearch.SearchParameters>> EP_NAME = ExtensionPointName.create("com.intellij.methodReferencesSearch");
   public static final MethodReferencesSearch INSTANCE = new MethodReferencesSearch();
 
   public static class SearchParameters implements DumbAwareSearchParameters {
@@ -34,7 +31,7 @@ public class MethodReferencesSearch extends ExtensibleQueryFactory<PsiReference,
       myScope = scope;
       myStrictSignatureSearch = strictSignatureSearch;
       isSharedOptimizer = optimizer != null;
-      myOptimizer = optimizer != null ? optimizer : new SearchRequestCollector(new SearchSession());
+      myOptimizer = optimizer != null ? optimizer : new SearchRequestCollector(new SearchSession(method));
       myProject = PsiUtilCore.getProjectInReadAction(method);
     }
 
@@ -76,7 +73,7 @@ public class MethodReferencesSearch extends ExtensibleQueryFactory<PsiReference,
 
 
     /**
-     * @return Same as {@link #getScopeDeterminedByUser()}. Searchers most likely need to use {@link #getEffectiveSearchScope()}.
+     * @deprecated Same as {@link #getScopeDeterminedByUser()}. Searchers most likely need to use {@link #getEffectiveSearchScope()}.
      */
     @Deprecated
     @NotNull
@@ -88,13 +85,17 @@ public class MethodReferencesSearch extends ExtensibleQueryFactory<PsiReference,
     public SearchScope getEffectiveSearchScope () {
       SearchScope scope = myEffectiveScope;
       if (scope == null) {
+        if (!myMethod.isValid()) return GlobalSearchScope.EMPTY_SCOPE;
+
         myEffectiveScope = scope = myScope.intersectWith(PsiSearchHelper.getInstance(myMethod.getProject()).getUseScope(myMethod));
       }
       return scope;
     }
   }
 
-  private MethodReferencesSearch() {}
+  private MethodReferencesSearch() {
+    super(EP_NAME);
+  }
 
   public static Query<PsiReference> search(@NotNull PsiMethod method, SearchScope scope, final boolean strictSignatureSearch) {
     return search(new SearchParameters(method, scope, strictSignatureSearch));
@@ -107,7 +108,7 @@ public class MethodReferencesSearch extends ExtensibleQueryFactory<PsiReference,
 
   public static void searchOptimized(final PsiMethod method, SearchScope scope, final boolean strictSignatureSearch,
                                      SearchRequestCollector collector, final boolean inReadAction,
-                                     PairProcessor<PsiReference, SearchRequestCollector> processor) {
+                                     PairProcessor<? super PsiReference, ? super SearchRequestCollector> processor) {
     final SearchRequestCollector nested = new SearchRequestCollector(collector.getSearchSession());
     collector.searchQuery(new QuerySearchRequest(search(new SearchParameters(method, scope, strictSignatureSearch, nested)), nested,
                                                  inReadAction, processor));
@@ -133,7 +134,7 @@ public class MethodReferencesSearch extends ExtensibleQueryFactory<PsiReference,
     return search(method, true);
   }
 
-  private static UniqueResultsQuery<PsiReference, ReferenceDescriptor> uniqueResults(@NotNull Query<PsiReference> composite) {
+  private static UniqueResultsQuery<PsiReference, ReferenceDescriptor> uniqueResults(@NotNull Query<? extends PsiReference> composite) {
     return new UniqueResultsQuery<>(composite, ContainerUtil.canonicalStrategy(), ReferenceDescriptor.MAPPER);
   }
 }

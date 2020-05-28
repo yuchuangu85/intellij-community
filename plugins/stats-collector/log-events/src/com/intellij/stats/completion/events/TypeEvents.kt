@@ -4,19 +4,17 @@ package com.intellij.stats.completion.events
 
 import com.intellij.stats.completion.Action
 import com.intellij.stats.completion.LogEventVisitor
-import com.intellij.stats.completion.LookupEntryInfo
+import com.intellij.stats.completion.LookupState
 
 
 class BackspaceEvent(
         userId: String,
         sessionId: String,
-        completionListIds: List<Int>,
-        newCompletionListItems: List<LookupEntryInfo>,
-        selectedPosition: Int,
+        lookupState: LookupState,
         @JvmField var queryLength: Int,
+        bucket: String,
         timestamp: Long)
-    : LookupStateLogData(userId, sessionId, Action.BACKSPACE, completionListIds,
-        newCompletionListItems, selectedPosition, timestamp) {
+    : LookupStateLogData(userId, sessionId, Action.BACKSPACE, lookupState, bucket, timestamp) {
 
     override fun accept(visitor: LogEventVisitor) {
         visitor.visit(this)
@@ -27,13 +25,11 @@ class BackspaceEvent(
 class TypeEvent(
         userId: String,
         sessionId: String,
-        completionListIds: List<Int>,
-        newCompletionListItems: List<LookupEntryInfo>,
-        selectedPosition: Int,
+        lookupState: LookupState,
         @JvmField var queryLength: Int,
+        bucket: String,
         timestamp: Long)
-    : LookupStateLogData(userId, sessionId, Action.TYPE, completionListIds,
-        newCompletionListItems, selectedPosition, timestamp) {
+    : LookupStateLogData(userId, sessionId, Action.TYPE, lookupState, bucket, timestamp) {
 
     override fun accept(visitor: LogEventVisitor) {
         visitor.visit(this)

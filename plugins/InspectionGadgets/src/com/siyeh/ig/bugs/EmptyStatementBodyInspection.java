@@ -62,12 +62,6 @@ public class EmptyStatementBodyInspection extends BaseInspection {
 
   @Override
   @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("statement.with.empty.body.display.name");
-  }
-
-  @Override
-  @NotNull
   public String buildErrorString(Object... infos) {
     return InspectionGadgetsBundle.message("statement.with.empty.body.problem.descriptor");
   }
@@ -125,7 +119,10 @@ public class EmptyStatementBodyInspection extends BaseInspection {
     @Override
     public void visitForeachStatement(@NotNull PsiForeachStatement statement) {
       super.visitForeachStatement(statement);
-      checkLoopStatement(statement);
+      final PsiStatement body = statement.getBody();
+      if (body != null && isEmpty(body)) {
+        registerStatementError(statement, createFix(statement, statement.getIteratedValue()));
+      }
     }
 
     private void checkLoopStatement(PsiLoopStatement statement) {

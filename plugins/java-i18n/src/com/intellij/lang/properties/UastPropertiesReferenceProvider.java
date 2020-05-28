@@ -3,11 +3,12 @@ package com.intellij.lang.properties;
 
 import com.intellij.codeInspection.i18n.JavaI18nUtil;
 import com.intellij.lang.properties.references.PropertyReference;
+import com.intellij.lang.properties.references.PropertyReferenceBase;
 import com.intellij.openapi.util.Ref;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiLanguageInjectionHost;
 import com.intellij.psi.PsiReference;
-import com.intellij.psi.UastLiteralReferenceProvider;
+import com.intellij.psi.UastInjectionHostReferenceProvider;
 import com.intellij.util.ProcessingContext;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.uast.*;
@@ -15,7 +16,7 @@ import org.jetbrains.uast.*;
 /**
  * @author cdr
  */
-class UastPropertiesReferenceProvider extends UastLiteralReferenceProvider {
+class UastPropertiesReferenceProvider extends UastInjectionHostReferenceProvider {
 
   private final boolean myDefaultSoft;
 
@@ -25,20 +26,20 @@ class UastPropertiesReferenceProvider extends UastLiteralReferenceProvider {
 
   @Override
   public boolean acceptsTarget(@NotNull PsiElement target) {
-    return target instanceof IProperty;
+    return PropertyReferenceBase.isPropertyPsi(target);
   }
 
-  @NotNull
+
   @Override
-  public PsiReference[] getReferencesByULiteral(@NotNull ULiteralExpression element,
-                                                @NotNull PsiLanguageInjectionHost host,
-                                                @NotNull ProcessingContext context) {
+  public PsiReference @NotNull [] getReferencesForInjectionHost(@NotNull UExpression element,
+                                                                @NotNull PsiLanguageInjectionHost host,
+                                                                @NotNull ProcessingContext context) {
     Object value = null;
     String bundleName = null;
     boolean soft = myDefaultSoft;
 
     if (canBePropertyKeyRef(element)) {
-      value = element.getValue();
+      value = element.evaluate();
 
       final Ref<UExpression> resourceBundleValue = Ref.create();
       if (JavaI18nUtil.mustBePropertyKey(element, resourceBundleValue)) {
@@ -73,7 +74,7 @@ class UastPropertiesReferenceProvider extends UastLiteralReferenceProvider {
         return (psi == thenExprSrc || psi == elseExprSrc) && canBePropertyKeyRef((UExpression)parent);
       }
       else {
-        return parent instanceof UCallExpression;
+        return parent instanceof UCallExpression || parent instanceof UNamedExpression;
       }
     }
     else {

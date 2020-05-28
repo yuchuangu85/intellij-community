@@ -15,8 +15,10 @@ import com.intellij.openapi.options.colors.RainbowColorSettingsPage;
 import com.intellij.psi.codeStyle.DisplayPriority;
 import com.intellij.psi.codeStyle.DisplayPrioritySortable;
 import com.intellij.util.PlatformUtils;
+import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.PythonFileType;
 import com.jetbrains.python.PythonLanguage;
+import com.jetbrains.python.psi.LanguageLevel;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -29,44 +31,44 @@ import java.util.Map;
  */
 public class PythonColorsPage implements RainbowColorSettingsPage, InspectionColorSettingsPage, DisplayPrioritySortable {
   private static final AttributesDescriptor[] ATTRS = new AttributesDescriptor[] {
-    new AttributesDescriptor("Number", PyHighlighter.PY_NUMBER),
-    new AttributesDescriptor("Keyword", PyHighlighter.PY_KEYWORD),
-    new AttributesDescriptor("Line Comment", PyHighlighter.PY_LINE_COMMENT),
+    new AttributesDescriptor(PyBundle.message("python.colors.number"), PyHighlighter.PY_NUMBER),
+    new AttributesDescriptor(PyBundle.message("python.colors.keyword"), PyHighlighter.PY_KEYWORD),
+    new AttributesDescriptor(PyBundle.message("python.colors.line.comment"), PyHighlighter.PY_LINE_COMMENT),
 
-    new AttributesDescriptor("String//Binary (bytes)", PyHighlighter.PY_BYTE_STRING),
-    new AttributesDescriptor("String//Text (unicode)", PyHighlighter.PY_UNICODE_STRING),
-    new AttributesDescriptor("String//Escape sequence//Valid", PyHighlighter.PY_VALID_STRING_ESCAPE),
-    new AttributesDescriptor("String//Escape sequence//Invalid", PyHighlighter.PY_INVALID_STRING_ESCAPE),
-    new AttributesDescriptor("String//f-string//Expression braces", PyHighlighter.PY_FSTRING_FRAGMENT_BRACES),
-    new AttributesDescriptor("String//f-string//Type conversion", PyHighlighter.PY_FSTRING_FRAGMENT_TYPE_CONVERSION),
-    new AttributesDescriptor("String//f-string//Format specifier start", PyHighlighter.PY_FSTRING_FRAGMENT_COLON),
+    new AttributesDescriptor(PyBundle.message("python.colors.string.binary.bytes"), PyHighlighter.PY_BYTE_STRING),
+    new AttributesDescriptor(PyBundle.message("python.colors.string.text.unicode"), PyHighlighter.PY_UNICODE_STRING),
+    new AttributesDescriptor(PyBundle.message("python.colors.string.escape.sequence.valid"), PyHighlighter.PY_VALID_STRING_ESCAPE),
+    new AttributesDescriptor(PyBundle.message("python.colors.string.escape.sequence.invalid"), PyHighlighter.PY_INVALID_STRING_ESCAPE),
+    new AttributesDescriptor(PyBundle.message("python.colors.string.f.string.expression.braces"), PyHighlighter.PY_FSTRING_FRAGMENT_BRACES),
+    new AttributesDescriptor(PyBundle.message("python.colors.string.f.string.type.conversion"), PyHighlighter.PY_FSTRING_FRAGMENT_TYPE_CONVERSION),
+    new AttributesDescriptor(PyBundle.message("python.colors.string.f.string.format.specifier.start"), PyHighlighter.PY_FSTRING_FRAGMENT_COLON),
 
-    new AttributesDescriptor("Docstring//Text", PyHighlighter.PY_DOC_COMMENT),
-    new AttributesDescriptor("Docstring//Tag", PyHighlighter.PY_DOC_COMMENT_TAG),
+    new AttributesDescriptor(PyBundle.message("python.colors.docstring.text"), PyHighlighter.PY_DOC_COMMENT),
+    new AttributesDescriptor(PyBundle.message("python.colors.docstring.tag"), PyHighlighter.PY_DOC_COMMENT_TAG),
     
-    new AttributesDescriptor("Braces and Operators//Operation sign", PyHighlighter.PY_OPERATION_SIGN),
-    new AttributesDescriptor("Braces and Operators//Parentheses", PyHighlighter.PY_PARENTHS),
-    new AttributesDescriptor("Braces and Operators//Brackets", PyHighlighter.PY_BRACKETS),
-    new AttributesDescriptor("Braces and Operators//Braces", PyHighlighter.PY_BRACES),
-    new AttributesDescriptor("Braces and Operators//Comma", PyHighlighter.PY_COMMA),
-    new AttributesDescriptor("Braces and Operators//Dot", PyHighlighter.PY_DOT),
+    new AttributesDescriptor(PyBundle.message("python.colors.braces.and.operators.operation.sign"), PyHighlighter.PY_OPERATION_SIGN),
+    new AttributesDescriptor(PyBundle.message("python.colors.braces.and.operators.parentheses"), PyHighlighter.PY_PARENTHS),
+    new AttributesDescriptor(PyBundle.message("python.colors.braces.and.operators.brackets"), PyHighlighter.PY_BRACKETS),
+    new AttributesDescriptor(PyBundle.message("python.colors.braces.and.operators.braces"), PyHighlighter.PY_BRACES),
+    new AttributesDescriptor(PyBundle.message("python.colors.braces.and.operators.comma"), PyHighlighter.PY_COMMA),
+    new AttributesDescriptor(PyBundle.message("python.colors.braces.and.operators.dot"), PyHighlighter.PY_DOT),
     
-    new AttributesDescriptor("Functions//Function definition", PyHighlighter.PY_FUNC_DEFINITION),
-    new AttributesDescriptor("Functions//Function call", PyHighlighter.PY_FUNCTION_CALL),
-    new AttributesDescriptor("Functions//Method call", PyHighlighter.PY_METHOD_CALL),
+    new AttributesDescriptor(PyBundle.message("python.colors.functions.function.definition"), PyHighlighter.PY_FUNC_DEFINITION),
+    new AttributesDescriptor(PyBundle.message("python.colors.functions.function.call"), PyHighlighter.PY_FUNCTION_CALL),
+    new AttributesDescriptor(PyBundle.message("python.colors.functions.method.call"), PyHighlighter.PY_METHOD_CALL),
     
-    new AttributesDescriptor("Parameters//Parameter", PyHighlighter.PY_PARAMETER),
-    new AttributesDescriptor("Parameters//'self' parameter", PyHighlighter.PY_SELF_PARAMETER),
+    new AttributesDescriptor(PyBundle.message("python.colors.parameters.parameter"), PyHighlighter.PY_PARAMETER),
+    new AttributesDescriptor(PyBundle.message("python.colors.parameters.self.parameter"), PyHighlighter.PY_SELF_PARAMETER),
     
-    new AttributesDescriptor("Keyword argument", PyHighlighter.PY_KEYWORD_ARGUMENT),
+    new AttributesDescriptor(PyBundle.message("python.colors.keyword.argument"), PyHighlighter.PY_KEYWORD_ARGUMENT),
 
-    new AttributesDescriptor("Special Names//Definition", PyHighlighter.PY_PREDEFINED_DEFINITION),
-    new AttributesDescriptor("Special Names//Usage", PyHighlighter.PY_PREDEFINED_USAGE),
+    new AttributesDescriptor(PyBundle.message("python.colors.special.names.definition"), PyHighlighter.PY_PREDEFINED_DEFINITION),
+    new AttributesDescriptor(PyBundle.message("python.colors.special.names.usage"), PyHighlighter.PY_PREDEFINED_USAGE),
     
-    new AttributesDescriptor("Built-in name", PyHighlighter.PY_BUILTIN_NAME),
-    new AttributesDescriptor("Decorator", PyHighlighter.PY_DECORATOR),
-    new AttributesDescriptor("Class definition", PyHighlighter.PY_CLASS_DEFINITION),
-    new AttributesDescriptor("Type annotation", PyHighlighter.PY_ANNOTATION),
+    new AttributesDescriptor(PyBundle.message("python.colors.built.in.name"), PyHighlighter.PY_BUILTIN_NAME),
+    new AttributesDescriptor(PyBundle.message("python.colors.decorator"), PyHighlighter.PY_DECORATOR),
+    new AttributesDescriptor(PyBundle.message("python.colors.class.definition"), PyHighlighter.PY_CLASS_DEFINITION),
+    new AttributesDescriptor(PyBundle.message("python.colors.type.annotation"), PyHighlighter.PY_ANNOTATION),
   };
 
   @NonNls private static final Map<String,TextAttributesKey> ourTagToDescriptorMap = ImmutableMap.<String, TextAttributesKey>builder()
@@ -91,7 +93,7 @@ public class PythonColorsPage implements RainbowColorSettingsPage, InspectionCol
   @Override
   @NotNull
   public String getDisplayName() {
-    return "Python";
+    return PyBundle.message("python.colors.python");
   }
 
   @Override
@@ -100,23 +102,23 @@ public class PythonColorsPage implements RainbowColorSettingsPage, InspectionCol
   }
 
   @Override
-  @NotNull
-  public AttributesDescriptor[] getAttributeDescriptors() {
+  public AttributesDescriptor @NotNull [] getAttributeDescriptors() {
     return ATTRS;
   }
 
   @Override
-  @NotNull
-  public ColorDescriptor[] getColorDescriptors() {
+  public ColorDescriptor @NotNull [] getColorDescriptors() {
     return ColorDescriptor.EMPTY_ARRAY;
   }
 
   @Override
   @NotNull
   public SyntaxHighlighter getHighlighter() {
-    final SyntaxHighlighter highlighter = SyntaxHighlighterFactory.getSyntaxHighlighter(PythonFileType.INSTANCE, null, null);
-    assert highlighter != null;
-    return highlighter;
+    final SyntaxHighlighterFactory factory = SyntaxHighlighterFactory.LANGUAGE_FACTORY.forLanguage(PythonLanguage.getInstance());
+    if (factory instanceof PySyntaxHighlighterFactory) {
+      return ((PySyntaxHighlighterFactory)factory).getSyntaxHighlighterForLanguageLevel(LanguageLevel.getLatest());
+    }
+    return factory.getSyntaxHighlighter(null, null);
   }
 
   @Override
@@ -130,13 +132,13 @@ public class PythonColorsPage implements RainbowColorSettingsPage, InspectionCol
       "" +
       RainbowHighlighter.generatePaletteExample("\n        ") + "\n" +
       "    \"\"\"</docComment>\n" +
-      "    <localVar>s</localVar> = (\"Test\", 2+3, {'a': 'b'}, f'{<param>x</param>!s:{\"foo\"}}')   # Comment\n" +
+      "    <localVar>s</localVar> = (\"Test\", 2+3, {'a': 'b'}, f'{<param>x</param>!s:{\"^10\"}}')   # Comment\n" +
       "    <call>f</call>(<localVar>s</localVar>[0].<mcall>lower()</mcall>)\n" +
       "\n" +
       "class <classDef>Foo</classDef>:\n" +
       "    tags: <annotation>List[<builtin>str</builtin>]</annotation>\n" +
       "    def <predefined>__init__</predefined>(<self>self</self>: <annotation>Foo</annotation>):\n" +
-      "        <localVar>byte_string</localVar>: <annotation><builtin>str</builtin></annotation> = 'newline:\\n also newline:\\x0a'\n" +
+      "        <localVar>byte_string</localVar>: <annotation><builtin>bytes</builtin></annotation> = b'newline:\\n also newline:\\x0a'\n" +
       "        <localVar>text_string</localVar> = u\"Cyrillic Я is \\u042f. Oops: \\u042g\"\n" +
       "        <self>self</self>.<mcall>makeSense</mcall>(<kwarg>whatever</kwarg>=1)\n" +
       "    \n" +
@@ -160,7 +162,7 @@ public class PythonColorsPage implements RainbowColorSettingsPage, InspectionCol
 
   @Override
   public boolean isRainbowType(TextAttributesKey type) {
-    return PyRainbowVisitor.getHIGHLIGHTING_KEYS().contains(type);
+    return PyRainbowVisitor.Holder.getHIGHLIGHTING_KEYS().contains(type);
   }
 
   @Nullable

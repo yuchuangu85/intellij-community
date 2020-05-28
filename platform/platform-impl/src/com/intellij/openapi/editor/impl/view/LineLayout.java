@@ -28,6 +28,7 @@ import java.awt.*;
 import java.text.Bidi;
 import java.util.List;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 /**
@@ -134,6 +135,9 @@ abstract class LineLayout {
     if (view.getEditor().myDisableRtl || !Bidi.requiresBidi(text, 0, textLength)) {
       return Collections.singletonList(new BidiRun(textLength));
     }
+
+    view.getEditor().bidiTextFound();
+
     List<BidiRun> runs = new ArrayList<>();
     int flags = view.getBidiFlags();
     if (startOffsetInEditor >= 0) {
@@ -893,12 +897,12 @@ abstract class LineLayout {
     }
 
     void draw(Graphics2D g, float x, float y) {
-      delegate.draw(g, x, y, 0, getLength());
+      delegate.draw(x, y, 0, getLength()).accept(g);
     }
 
     // offsets are visual (relative to fragment's start)
-    void draw(Graphics2D g, float x, float y, int startRelativeOffset, int endRelativeOffset) {
-      delegate.draw(g, x, y, startRelativeOffset, endRelativeOffset);
+    Consumer<Graphics2D> draw(float x, float y, int startRelativeOffset, int endRelativeOffset) {
+      return delegate.draw(x, y, startRelativeOffset, endRelativeOffset);
     }
 
     private int getRelativeOffset(int offset) {

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.intentions.control;
 
 import com.google.common.collect.Lists;
@@ -62,11 +48,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static com.intellij.refactoring.changeSignature.ParameterInfo.NEW_PARAMETER;
+
 /**
  * @author Maxim.Medvedev
  */
 public class CreateParameterForFieldIntention extends Intention {
-  private static final Logger LOG = Logger.getInstance("org.jetbrains.plugins.groovy.intentions.control.CreateParameterForFieldIntention");
+  private static final Logger LOG = Logger.getInstance(CreateParameterForFieldIntention.class);
   private static final Key<CachedValue<List<GrField>>> FIELD_CANDIDATES = Key.create("Fields.candidates");
 
   @Override
@@ -100,7 +88,7 @@ public class CreateParameterForFieldIntention extends Intention {
       setMovable(true).
                     setItemsChosenCallback((values) -> {
         ArrayList<GrMethod> selectedValues = Lists.newArrayList(values);
-        selectedValues.sort((o1, o2) -> ((GrMethod)o2).getParameterList().getParametersCount() - ((GrMethod)o1).getParameterList().getParametersCount());
+        selectedValues.sort((o1, o2) -> o2.getParameterList().getParametersCount() - o1.getParameterList().getParametersCount());
         CommandProcessor.getInstance().executeCommand(project, () -> {
           for (GrMethod selectedValue : selectedValues) {
             LOG.assertTrue(selectedValue.isValid());
@@ -125,14 +113,12 @@ public class CreateParameterForFieldIntention extends Intention {
       .setRenderer(new DefaultPsiElementCellRenderer())
       .setTitle(GroovyIntentionsBundle.message("create.parameter.for.field.intention.name")).
       setMovable(true).
-                    setItemsChosenCallback((selectedValues) -> {
-        CommandProcessor.getInstance().executeCommand(project, () -> {
-          for (GrField selectedValue : selectedValues) {
-            LOG.assertTrue(((GrField)selectedValue).isValid());
-            addParameter(((GrField)selectedValue), constructor, project);
-          }
-        }, GroovyIntentionsBundle.message("create.parameter.for.field.intention.name"), null);
-      }).createPopup().showInBestPositionFor(editor);
+                    setItemsChosenCallback((selectedValues) -> CommandProcessor.getInstance().executeCommand(project, () -> {
+                      for (GrField selectedValue : selectedValues) {
+                        LOG.assertTrue(selectedValue.isValid());
+                        addParameter(selectedValue, constructor, project);
+                      }
+                    }, GroovyIntentionsBundle.message("create.parameter.for.field.intention.name"), null)).createPopup().showInBestPositionFor(editor);
   }
 
   private static void addParameter(final GrField selectedValue, final GrMethod constructor, final Project project) {
@@ -151,7 +137,7 @@ public class CreateParameterForFieldIntention extends Intention {
     if (parameterName == null) {
       parameterName = nameValidator.validateName(suggestedNames[0], true);
     }
-    parameters.add(new GrParameterInfo(parameterName, "null", "", selectedValue.getTypeGroovy(), -1, false));
+    parameters.add(new GrParameterInfo(parameterName, "null", "", selectedValue.getTypeGroovy(), NEW_PARAMETER, false));
 
     PsiClassType[] exceptionTypes = constructor.getThrowsList().getReferencedTypes();
     ThrownExceptionInfo[] thrownExceptionInfos = new ThrownExceptionInfo[exceptionTypes.length];
@@ -164,7 +150,7 @@ public class CreateParameterForFieldIntention extends Intention {
     final String finalParameterName = parameterName;
     final GrChangeSignatureProcessor processor = new GrChangeSignatureProcessor(project, grChangeInfo) {
       @Override
-      protected void performRefactoring(@NotNull UsageInfo[] usages) {
+      protected void performRefactoring(UsageInfo @NotNull [] usages) {
         super.performRefactoring(usages);
 
         final GrOpenBlock block = constructor.getBlock();
@@ -282,10 +268,12 @@ public class CreateParameterForFieldIntention extends Intention {
   private static List<GrMethod> findConstructorCandidates(PsiElement element) {
     final GrField field = PsiTreeUtil.getParentOfType(element, GrField.class);
     if (field == null) return null;
-    return findConstructorCandidates(field, (GrTypeDefinition)field.getContainingClass());
+    PsiClass containingClass = field.getContainingClass();
+    if (!(containingClass instanceof GrTypeDefinition)) return null;
+    return findConstructorCandidates(field, (GrTypeDefinition)containingClass);
   }
 
-  private static List<GrMethod> findConstructorCandidates(final GrField field, GrTypeDefinition psiClass) {
+  private static List<GrMethod> findConstructorCandidates(@NotNull final GrField field, @NotNull GrTypeDefinition psiClass) {
     final List<GrMethod> result = new ArrayList<>();
     final PsiMethod[] constructors = psiClass.getConstructors();
     final PsiManager manager = field.getManager();

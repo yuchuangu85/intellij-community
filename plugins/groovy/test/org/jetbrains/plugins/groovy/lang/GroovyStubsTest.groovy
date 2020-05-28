@@ -13,7 +13,7 @@ import com.intellij.psi.impl.PsiDocumentManagerBase
 import com.intellij.psi.impl.source.PsiFileImpl
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.PsiShortNamesCache
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import com.intellij.util.ThrowableRunnable
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFile
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrEnumDefinitionBody
@@ -21,13 +21,14 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrTypeDefini
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrEnumConstant
 import org.jetbrains.plugins.groovy.lang.psi.api.types.GrCodeReferenceElement
 import org.jetbrains.plugins.groovy.lang.psi.impl.GrClassReferenceType
+import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.GroovyScriptClass
 
 import static org.jetbrains.plugins.groovy.util.TestUtils.disableAstLoading
 
 /**
  * @author peter
  */
-class GroovyStubsTest extends LightCodeInsightFixtureTestCase {
+class GroovyStubsTest extends LightJavaCodeInsightFixtureTestCase {
 
   void testEnumConstant() {
     myFixture.tempDirFixture.createFile('A.groovy', 'enum A { MyEnumConstant }')
@@ -79,5 +80,22 @@ class GroovyStubsTest extends LightCodeInsightFixtureTestCase {
     assert reference instanceof GrCodeReferenceElement
     assert reference.referenceName == 'B'
     assert reference.qualifiedReferenceName == 'foo.B'
+  }
+
+  void 'test unfinished type argument list'() {
+    myFixture.tempDirFixture.createFile('A.groovy', 'def foo(C<T p)')
+    disableAstLoading project, testRootDisposable
+
+    def clazz = (GroovyScriptClass)myFixture.findClass("A")
+    def method = clazz.codeMethods.first()
+    def parameter = method.parameterList.parameters.first()
+
+    def type = parameter.type
+    assert type instanceof GrClassReferenceType
+    assert type.reference.referenceName == 'C'
+
+    def typeArgument = type.parameters.first()
+    assert typeArgument instanceof GrClassReferenceType
+    assert typeArgument.reference.referenceName == 'T'
   }
 }

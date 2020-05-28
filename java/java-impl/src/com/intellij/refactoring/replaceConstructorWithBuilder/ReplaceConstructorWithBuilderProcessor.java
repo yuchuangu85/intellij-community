@@ -57,6 +57,7 @@ public class ReplaceConstructorWithBuilderProcessor extends FixableUsagesRefacto
   public static final String REFACTORING_NAME = "Replace Constructor with Builder";
   private final PsiMethod[] myConstructors;
   private final Map<String, ParameterData> myParametersMap;
+  @NotNull
   private final String myClassName;
   private final String myPackageName;
   private final boolean myCreateNewBuilderClass;
@@ -67,7 +68,7 @@ public class ReplaceConstructorWithBuilderProcessor extends FixableUsagesRefacto
   public ReplaceConstructorWithBuilderProcessor(Project project,
                                                 PsiMethod[] constructors,
                                                 Map<String, ParameterData> parametersMap,
-                                                String className,
+                                                @NotNull String className,
                                                 String packageName,
                                                 MoveDestination moveDestination, boolean createNewBuilderClass) {
     super(project);
@@ -83,7 +84,7 @@ public class ReplaceConstructorWithBuilderProcessor extends FixableUsagesRefacto
 
   @Override
   @NotNull
-  protected UsageViewDescriptor createUsageViewDescriptor(@NotNull final UsageInfo[] usages) {
+  protected UsageViewDescriptor createUsageViewDescriptor(final UsageInfo @NotNull [] usages) {
     return new ReplaceConstructorWithBuilderViewDescriptor();
   }
 
@@ -136,7 +137,7 @@ public class ReplaceConstructorWithBuilderProcessor extends FixableUsagesRefacto
   }
 
   @Override
-  protected void performRefactoring(@NotNull UsageInfo[] usageInfos) {
+  protected void performRefactoring(UsageInfo @NotNull [] usageInfos) {
 
     final JavaPsiFacade psiFacade = JavaPsiFacade.getInstance(myProject);
     final PsiClass builderClass = myCreateNewBuilderClass
@@ -238,15 +239,15 @@ public class ReplaceConstructorWithBuilderProcessor extends FixableUsagesRefacto
       buf.append(myParametersMap.get(pureParamName).getFieldName());
     }
     return myElementFactory.createMethodFromText("public " +
-                                               constructor.getName() +
-                                               " " +
-                                               createMethodName +
-                                               "(){\n return new " +
-                                               constructor.getName() +
-                                               "(" +
-                                               buf.toString() +
-                                               ")" +
-                                               ";\n}", constructor);
+                                                 constructor.getName() +
+                                                 " " +
+                                                 createMethodName +
+                                                 "(){\n return new " +
+                                                 constructor.getName() +
+                                                 "(" +
+                                                 buf +
+                                                 ")" +
+                                                 ";\n}", constructor);
   }
 
   private PsiMethod getWorkingConstructor() {

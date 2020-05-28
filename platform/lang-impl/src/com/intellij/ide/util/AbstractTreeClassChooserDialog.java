@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.util;
 
 import com.intellij.ide.IdeBundle;
@@ -41,18 +27,17 @@ import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.ui.*;
 import com.intellij.ui.treeStructure.Tree;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.Processor;
 import com.intellij.util.Query;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.indexing.FindSymbolParameters;
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import javax.swing.event.TreeSelectionEvent;
-import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
@@ -61,10 +46,8 @@ import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> extends DialogWrapper implements TreeChooser<T> {
   @NotNull private final Project myProject;
@@ -75,21 +58,21 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
   private final boolean myIsShowMembers;
   private final boolean myIsShowLibraryContents;
   private Tree myTree;
-  private T mySelectedClass = null;
+  private T mySelectedClass;
   private BaseProjectTreeBuilder myBuilder;
   private TabbedPaneWrapper myTabbedPane;
   private ChooseByNamePanel myGotoByNamePanel;
   private T myInitialClass;
 
-  public AbstractTreeClassChooserDialog(String title, Project project, final Class<T> elementClass) {
+  public AbstractTreeClassChooserDialog(@NlsContexts.DialogTitle String title, Project project, final Class<T> elementClass) {
     this(title, project, elementClass, null);
   }
 
-  public AbstractTreeClassChooserDialog(String title, Project project, final Class<T> elementClass, @Nullable T initialClass) {
+  public AbstractTreeClassChooserDialog(@NlsContexts.DialogTitle String title, Project project, final Class<T> elementClass, @Nullable T initialClass) {
     this(title, project, GlobalSearchScope.projectScope(project), elementClass, null, initialClass);
   }
 
-  public AbstractTreeClassChooserDialog(String title,
+  public AbstractTreeClassChooserDialog(@NlsContexts.DialogTitle String title,
                                         @NotNull Project project,
                                         GlobalSearchScope scope,
                                         @NotNull Class<T> elementClass,
@@ -98,7 +81,7 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
     this(title, project, scope, elementClass, classFilter, null, initialClass, false, true);
   }
 
-  public AbstractTreeClassChooserDialog(String title,
+  public AbstractTreeClassChooserDialog(@NlsContexts.DialogTitle String title,
                                         @NotNull Project project,
                                         GlobalSearchScope scope,
                                         @NotNull Class<T> elementClass,
@@ -126,12 +109,7 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
   }
 
   private Filter<T> allFilter() {
-    return new Filter<T>() {
-      @Override
-      public boolean isAccepted(T element) {
-        return true;
-      }
-    };
+    return __ -> true;
   }
 
   @Override
@@ -141,11 +119,6 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
 
     ProjectAbstractTreeStructureBase treeStructure = new AbstractProjectTreeStructure(myProject) {
       @Override
-      public boolean isFlattenPackages() {
-        return false;
-      }
-
-      @Override
       public boolean isShowMembers() {
         return myIsShowMembers;
       }
@@ -153,11 +126,6 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
       @Override
       public boolean isHideEmptyMiddlePackages() {
         return true;
-      }
-
-      @Override
-      public boolean isAbbreviatePackageNames() {
-        return false;
       }
 
       @Override
@@ -177,7 +145,6 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
     myTree.expandRow(0);
     myTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
     myTree.setCellRenderer(new NodeRenderer());
-    UIUtil.setLineStyleAngled(myTree);
 
     JScrollPane scrollPane = ScrollPaneFactory.createScrollPane(myTree);
     scrollPane.setPreferredSize(JBUI.size(500, 300));
@@ -194,7 +161,7 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
 
     new DoubleClickListener() {
       @Override
-      protected boolean onDoubleClick(MouseEvent event) {
+      protected boolean onDoubleClick(@NotNull MouseEvent event) {
         TreePath path = myTree.getPathForLocation(event.getX(), event.getY());
         if (path != null && myTree.isPathSelected(path)) {
           doOKAction();
@@ -204,14 +171,7 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
       }
     }.installOn(myTree);
 
-    myTree.addTreeSelectionListener(
-      new TreeSelectionListener() {
-        @Override
-        public void valueChanged(TreeSelectionEvent e) {
-          handleSelectionChanged();
-        }
-      }
-    );
+    myTree.addTreeSelectionListener(__ -> handleSelectionChanged());
 
     new TreeSpeedSearch(myTree);
 
@@ -310,9 +270,6 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
 
   /**
    * Makes sense only in case of not null base class.
-   *
-   * @param baseClass
-   * @return
    */
   @Nullable
   protected BaseClassInheritorsProvider<T> getInheritorsProvider(@NotNull T baseClass) {
@@ -365,10 +322,11 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
     ApplicationManager.getApplication().invokeLater(() -> {
       if (myBuilder == null) return;
       final VirtualFile vFile = PsiUtilCore.getVirtualFile(element);
-      myBuilder.select(element, vFile, false);
+      myBuilder.selectAsync(element, vFile, false);
     }, getModalityState());
   }
 
+  @NotNull
   private ModalityState getModalityState() {
     return ModalityState.stateForComponent(getRootPane());
   }
@@ -462,18 +420,17 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
       return myTreeClassChooserDialog;
     }
 
-    @NotNull
     @Override
-    public Object[] getElementsByName(@NotNull String name, @NotNull FindSymbolParameters parameters, @NotNull ProgressIndicator canceled) {
+    public Object @NotNull [] getElementsByName(@NotNull String name, @NotNull FindSymbolParameters parameters, @NotNull ProgressIndicator canceled) {
       String patternName = parameters.getLocalPatternName();
       List<T> classes = myTreeClassChooserDialog.getClassesByName(
         name, parameters.isSearchInLibraries(), patternName, myTreeClassChooserDialog.getScope()
       );
-      if (classes.size() == 0) return ArrayUtil.EMPTY_OBJECT_ARRAY;
+      if (classes.isEmpty()) return ArrayUtilRt.EMPTY_OBJECT_ARRAY;
       if (classes.size() == 1) {
-        return isAccepted(classes.get(0)) ? ArrayUtil.toObjectArray(classes) : ArrayUtil.EMPTY_OBJECT_ARRAY;
+        return isAccepted(classes.get(0)) ? ArrayUtil.toObjectArray(classes) : ArrayUtilRt.EMPTY_OBJECT_ARRAY;
       }
-      Set<String> qNames = ContainerUtil.newHashSet();
+      Set<String> qNames = new HashSet<>();
       List<T> list = new ArrayList<>(classes.size());
       for (T aClass : classes) {
         if (qNames.add(getFullName(aClass)) && isAccepted(aClass)) {
@@ -518,11 +475,11 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
 
     protected abstract String[] getNames();
 
-    protected Query<T> searchForInheritorsOfBaseClass() {
+    Query<T> searchForInheritorsOfBaseClass() {
       return searchForInheritors(myBaseClass, myScope, true);
     }
 
-    protected boolean isInheritorOfBaseClass(T aClass) {
+    boolean isInheritorOfBaseClass(T aClass) {
       return isInheritor(aClass, myBaseClass, true);
     }
   }
@@ -541,7 +498,7 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
     }
 
     @Override
-    public void processNames(final Processor<? super String> nameProcessor, boolean checkBoxState) {
+    public void processNames(@NotNull Processor<? super String> nameProcessor, @NotNull FindSymbolParameters parameters) {
       if (myFastMode) {
         myFastMode = myInheritorsProvider.searchForInheritorsOfBaseClass().forEach(new Processor<T>() {
           private final long start = System.currentTimeMillis();
@@ -551,7 +508,7 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
             if (System.currentTimeMillis() - start > 500 && !ApplicationManager.getApplication().isUnitTestMode()) {
               return false;
             }
-            if ((getTreeClassChooserDialog().getFilter().isAccepted(aClass)) && aClass.getName() != null) {
+            if (getTreeClassChooserDialog().getFilter().isAccepted(aClass) && aClass.getName() != null) {
               nameProcessor.process(aClass.getName());
             }
             return true;
@@ -570,12 +527,9 @@ public abstract class AbstractTreeClassChooserDialog<T extends PsiNamedElement> 
       if (myFastMode) {
         return getTreeClassChooserDialog().getFilter().isAccepted(aClass);
       }
-      else {
-        return (aClass == getTreeClassChooserDialog().getBaseClass() ||
-                myInheritorsProvider.isInheritorOfBaseClass(aClass)) &&
-               getTreeClassChooserDialog().getFilter().isAccepted(
-                 aClass);
-      }
+      return (aClass == getTreeClassChooserDialog().getBaseClass() ||
+              myInheritorsProvider.isInheritorOfBaseClass(aClass)) &&
+             getTreeClassChooserDialog().getFilter().isAccepted(aClass);
     }
   }
 

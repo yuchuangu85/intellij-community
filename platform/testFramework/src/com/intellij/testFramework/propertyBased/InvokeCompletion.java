@@ -18,12 +18,14 @@ package com.intellij.testFramework.propertyBased;
 import com.intellij.codeInsight.TargetElementUtil;
 import com.intellij.codeInsight.completion.CodeCompletionHandlerBase;
 import com.intellij.codeInsight.completion.CompletionType;
+import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.lookup.*;
 import com.intellij.codeInsight.lookup.impl.LookupImpl;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.actionSystem.EditorActionManager;
+import com.intellij.openapi.editor.actionSystem.TypedAction;
 import com.intellij.openapi.editor.impl.EditorImpl;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
@@ -49,7 +51,7 @@ import java.util.*;
  * @author peter
  */
 public class InvokeCompletion extends ActionOnFile {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.testFramework.propertyBased.InvokeCompletion");
+  private static final Logger LOG = Logger.getInstance(InvokeCompletion.class);
   private final CompletionPolicy myPolicy;
 
   public InvokeCompletion(@NotNull PsiFile file, @NotNull CompletionPolicy policy) {
@@ -110,7 +112,7 @@ public class InvokeCompletion extends ActionOnFile {
 
     String expectedVariant = leaf == null || leaf instanceof PsiPlainText ? null : myPolicy.getExpectedVariant(editor, file, leaf, ref);
     boolean prefixEqualsExpected = isPrefixEqualToExpectedVariant(caretOffset, leaf, ref, expectedVariant);
-    boolean shouldCheckDuplicates = myPolicy.shouldCheckDuplicates(editor, file, leaf);
+    boolean shouldCheckDuplicates = myPolicy.shouldCheckDuplicates(editor, file, file.findElementAt(caretOffset));
     long stampBefore = getDocument().getModificationStamp();
 
     new CodeCompletionHandlerBase(CompletionType.BASIC).invokeCompletion(getProject(), editor);
@@ -125,7 +127,10 @@ public class InvokeCompletion extends ActionOnFile {
         return;
       }
       env.logMessage("No lookup");
-      if (expectedVariant == null || prefixEqualsExpected) return;
+      if (expectedVariant == null || prefixEqualsExpected || !checkAnnotatorErrorsAtCaret(editor, file, env, expectedVariant)) {
+        return;
+      }
+
       TestCase.fail("No lookup, but expected '" + expectedVariant + "' among completion variants" + notFound);
     }
 
@@ -134,6 +139,9 @@ public class InvokeCompletion extends ActionOnFile {
       LookupElement sameItem = ContainerUtil.find(items, e ->
         e.getAllLookupStrings().stream().anyMatch(
           s -> Comparing.equal(s, expectedVariant, e.isCaseSensitive())));
+      if (sameItem == null && !checkAnnotatorErrorsAtCaret(editor, file, env, expectedVariant)) {
+        return;
+      }
       TestCase.assertNotNull("No variant '" + expectedVariant + "' among " + items + notFound, sameItem);
     }
 
@@ -148,8 +156,23 @@ public class InvokeCompletion extends ActionOnFile {
     if (LookupEvent.isSpecialCompletionChar(completionChar)) {
       ((LookupImpl)lookup).finishLookup(completionChar, item);
     } else {
-      EditorActionManager.getInstance().getTypedAction().actionPerformed(editor, completionChar, ((EditorImpl)lookup.getTopLevelEditor()).getDataContext());
+      EditorActionManager.getInstance();
+      TypedAction.getInstance().actionPerformed(editor, completionChar, ((EditorImpl)lookup.getTopLevelEditor()).getDataContext());
     }
+  }
+
+  private boolean checkAnnotatorErrorsAtCaret(@NotNull Editor editor,
+                                              @NotNull PsiFile file,
+                                              Environment env,
+                                              String expectedVariant) {
+    List<HighlightInfo> infos = InvokeIntention.highlightErrors(getProject(), editor);
+    int caretOffset = editor.getCaretModel().getOffset();
+    boolean hasErrors = ContainerUtil.exists(infos, i -> i.getStartOffset() <= caretOffset && caretOffset <= i.getEndOffset());
+    if (hasErrors) {
+      env.logMessage("Found syntax errors at the completion point, skipping expected completion check for '" + expectedVariant + "'");
+      return false;
+    }
+    return true;
   }
 
   private boolean isPrefixEqualToExpectedVariant(int caretOffset, PsiElement leaf, PsiReference ref, String expectedVariant) {

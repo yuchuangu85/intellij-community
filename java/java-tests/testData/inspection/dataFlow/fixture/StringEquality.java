@@ -1,4 +1,8 @@
 class StringEquality {
+  void testNewString(char[] c) {
+    if (new String(c).equals("FOO")) {}
+  }
+
   void ifChain(String s) {
     if (s.equals("foo")) {
 
@@ -17,7 +21,7 @@ class StringEquality {
     switch(s) {
       case "bar":
       case "baz":
-      <warning descr="Switch label 'case \"foo\":' is unreachable">case "foo":</warning>
+      case <warning descr="Switch label '\"foo\"' is unreachable">"foo"</warning>:
     }
   }
 
@@ -95,5 +99,13 @@ class StringEquality {
     Object x = " foo ".trim();
     Object y = " foo ".trim();
     if (x == y) {}
+  }
+  
+  void testIncorrect(String s) {
+    if(<error descr="Operator '==' cannot be applied to 'java.lang.String', 'int'"><warning descr="Condition 's == s.length()' is always 'false'">s == s.length()</warning></error>) {}
+  }
+  
+  void testTrim() {
+    System.out.println(" EQ ".trim() == "EQ");
   }
 }

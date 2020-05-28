@@ -16,17 +16,13 @@
 package com.intellij.testFramework;
 
 import com.intellij.concurrency.JobSchedulerImpl;
-import com.intellij.openapi.util.io.FileUtil;
-
-import java.io.*;
+import org.jetbrains.annotations.Range;
 
 /**
  * @author peter
  */
 @SuppressWarnings("UtilityClassWithoutPrivateConstructor")
 public class Timings {
-  private static final int IO_PROBES = 42;
-
   public static final long CPU_TIMING;
   public static final long IO_TIMING;
 
@@ -38,39 +34,7 @@ public class Timings {
 
   static {
     CPU_TIMING = CpuTimings.calcStableCpuTiming();
-
-    long start = System.currentTimeMillis();
-    for (int i = 0; i < IO_PROBES; i++) {
-      try {
-        final File tempFile = FileUtil.createTempFile("test", "test" + i);
-
-        try (FileWriter writer = new FileWriter(tempFile)) {
-          for (int j = 0; j < 15; j++) {
-            writer.write("test" + j);
-            writer.flush();
-          }
-        }
-
-        try (FileReader reader = new FileReader(tempFile)) {
-          while (reader.read() >= 0) {
-          }
-        }
-
-        if (i == IO_PROBES - 1) {
-          try (FileOutputStream stream = new FileOutputStream(tempFile)) {
-            stream.getFD().sync();
-          }
-        }
-
-        if (!tempFile.delete()) {
-          throw new IOException("Unable to delete: " + tempFile);
-        }
-      }
-      catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    }
-    IO_TIMING = System.currentTimeMillis() - start;
+    IO_TIMING = IoTimings.calcIoTiming();
   }
 
   /**
@@ -78,7 +42,7 @@ public class Timings {
    * @param isParallelizable true if the test load is scalable with the CPU cores
    * @return value calibrated according to this machine speed. For slower machine, lesser value will be returned
    */
-  public static int adjustAccordingToMySpeed(int value, boolean isParallelizable) {
+  public static @Range(from = 1, to = Integer.MAX_VALUE) int adjustAccordingToMySpeed(int value, boolean isParallelizable) {
     return Math.max(1, (int)(1.0 * value * REFERENCE_CPU_TIMING / CPU_TIMING) / 8 * (isParallelizable ? JobSchedulerImpl.getJobPoolParallelism() : 1));
   }
 

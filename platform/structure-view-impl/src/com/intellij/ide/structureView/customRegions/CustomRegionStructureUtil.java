@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.structureView.customRegions;
 
 import com.intellij.ide.structureView.StructureViewTreeElement;
@@ -12,6 +12,7 @@ import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.PsiFileEx;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -29,14 +30,18 @@ public class CustomRegionStructureUtil {
         rootElement instanceof StubBasedPsiElement && ((StubBasedPsiElement)rootElement).getStub() != null) {
       return originalElements;
     }
-    Set<TextRange> childrenRanges = ContainerUtil.map2SetNotNull(originalElements, element -> {
+    List<StructureViewTreeElement> physicalElements = ContainerUtil.filter(originalElements, element -> {
+      Object value = element.getValue();
+      return !(value instanceof StubBasedPsiElement) || ((StubBasedPsiElement)value).getStub() == null;
+    });
+    Set<TextRange> childrenRanges = ContainerUtil.map2SetNotNull(physicalElements, element -> {
       Object value = element.getValue();
       return value instanceof PsiElement ? getTextRange((PsiElement)value) : null;
     });
     Collection<CustomRegionTreeElement> customRegions = collectCustomRegions(rootElement, childrenRanges);
     if (customRegions.size() > 0) {
       List<StructureViewTreeElement> result = new ArrayList<>(customRegions);
-      for (StructureViewTreeElement element : originalElements) {
+      for (StructureViewTreeElement element : physicalElements) {
         ProgressManager.checkCanceled();
         boolean isInCustomRegion = false;
         for (CustomRegionTreeElement customRegion : customRegions) {
@@ -58,7 +63,7 @@ public class CustomRegionStructureUtil {
    */
   private static TextRange getTextRange(@NotNull PsiElement element) {
     PsiElement first = element.getFirstChild();
-    if (first instanceof PsiComment && !first.textContains('\n')) {
+    if (!(element instanceof PsiFile) && first instanceof PsiComment && !first.textContains('\n')) {
       PsiElement next = first.getNextSibling();
       if (next instanceof PsiWhiteSpace) next = next.getNextSibling();
       if (next != null) {
@@ -76,7 +81,7 @@ public class CustomRegionStructureUtil {
                          !isInsideRanges(element, ranges))
       .iterator();
 
-    List<CustomRegionTreeElement> customRegions = ContainerUtil.newSmartList();
+    List<CustomRegionTreeElement> customRegions = new SmartList<>();
     CustomRegionTreeElement currRegionElement = null;
     CustomFoldingProvider provider = null;
     while (iterator.hasNext()) {

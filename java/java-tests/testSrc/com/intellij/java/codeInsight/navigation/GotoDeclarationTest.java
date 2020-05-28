@@ -21,14 +21,14 @@ import com.intellij.codeInsight.TargetElementUtil;
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationAction;
 import com.intellij.openapi.editor.ScrollType;
 import com.intellij.psi.*;
-import com.intellij.testFramework.LightCodeInsightTestCase;
+import com.intellij.testFramework.LightJavaCodeInsightTestCase;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Arrays;
 import java.util.Collection;
 
-public class GotoDeclarationTest extends LightCodeInsightTestCase {
+public class GotoDeclarationTest extends LightJavaCodeInsightTestCase {
   @NotNull
   @Override
   protected String getTestDataPath() {
@@ -42,7 +42,7 @@ public class GotoDeclarationTest extends LightCodeInsightTestCase {
   public void testBreakLabel() {  doTest(); }
   public void testAnonymous() {  doTest(); }
 
-  private static void performAction() {
+  private void performAction() {
     PsiElement element = GotoDeclarationAction.findTargetElement(getProject(), getEditor(), getEditor().getCaretModel().getOffset());
     assertEquals(getFile(), element.getContainingFile());
     getEditor().getCaretModel().moveToOffset(element.getTextOffset());
@@ -64,7 +64,7 @@ public class GotoDeclarationTest extends LightCodeInsightTestCase {
     assertEquals("java.lang", JavaDirectoryService.getInstance().getPackage(element).getQualifiedName());
   }
 
-  public void testMultipleConstructors() {
+  private void doTestMultipleConstructors() {
     String name = getTestName(false);
     configureByFile("/codeInsight/gotoDeclaration/" + name + ".java");
     final int offset = getEditor().getCaretModel().getOffset();
@@ -79,6 +79,14 @@ public class GotoDeclarationTest extends LightCodeInsightTestCase {
     assertEquals(candidates.toString(), 2, candidates.size());
   }
 
+  public void testMultipleConstructors() {
+    doTestMultipleConstructors();
+  }
+
+  public void testMultipleGenericConstructorsOnIncompleteCall() {
+    doTestMultipleConstructors();
+  }
+
   public void testMultipleConstructorsButArrayCreation() {
     String name = getTestName(false);
     configureByFile("/codeInsight/gotoDeclaration/" + name + ".java");
@@ -90,6 +98,21 @@ public class GotoDeclarationTest extends LightCodeInsightTestCase {
     final PsiElement item = ContainerUtil.getFirstItem(candidates);
     assertNotNull(item);
     assertTrue(item instanceof PsiClass && CommonClassNames.JAVA_LANG_STRING.equals(((PsiClass)item).getQualifiedName()));
+  }
+
+  public void testToStringInAnonymous() {
+    configureFromFileText("A.java", "class A {{" +
+                                    "       final Object o = new Object() {\n" +
+                                    "            @Override\n" +
+                                    "            public String toString() {\n" +
+                                    "                return super.toString();\n" +
+                                    "            }\n" +
+                                    "        };\n" +
+                                    "        o.to<caret>String();\n }}");
+    PsiElement element = GotoDeclarationAction.findTargetElement(getProject(), getEditor(), getEditor().getCaretModel().getOffset());
+    assertInstanceOf(element, PsiMethod.class);
+    PsiClass containingClass = ((PsiMethod)element).getContainingClass();
+    assertInstanceOf(containingClass, PsiAnonymousClass.class);
   }
 
   public void testArrayIndexNotCovered() {
@@ -111,12 +134,11 @@ public class GotoDeclarationTest extends LightCodeInsightTestCase {
     assertNotNull("Unexpected null", element);
   }
 
-  public void testNavigateToEnumClass() {
+  public void testGotoDeclarationOnEnumConstantDoesntNavigateToEnumClass() {
     configureFromFileText("A.java", "enum A {<caret>G();}");
     final PsiReference reference = getFile().findReferenceAt(getEditor().getCaretModel().getOffset());
     assertNotNull(reference);
     final Collection<PsiElement> candidates = TargetElementUtil.getInstance().getTargetCandidates(reference);
-    assertEquals(candidates.toString(), 1, candidates.size());
-    assertInstanceOf(ContainerUtil.getFirstItem(candidates), PsiClass.class);
+    assertEmpty(candidates);
   }
 }

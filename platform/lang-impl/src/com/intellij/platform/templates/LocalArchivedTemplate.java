@@ -1,31 +1,17 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.platform.templates;
 
 import com.intellij.facet.ui.ValidationResult;
+import com.intellij.lang.LangBundle;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleType;
 import com.intellij.openapi.module.ModuleTypeManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.IconLoader;
+import com.intellij.openapi.util.JDOMUtil;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.io.StreamUtil;
-import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.JdomKt;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -34,6 +20,7 @@ import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.ZipEntry;
@@ -65,7 +52,7 @@ public class LocalArchivedTemplate extends ArchivedProjectTemplate {
     String s = readEntry(TEMPLATE_DESCRIPTOR);
     if (s != null) {
       try {
-        Element templateElement = JdomKt.loadElement(s);
+        Element templateElement = JDOMUtil.load(s);
         populateFromElement(templateElement);
         String iconPath = templateElement.getChildText("icon-path");
         if (iconPath != null) {
@@ -80,7 +67,7 @@ public class LocalArchivedTemplate extends ArchivedProjectTemplate {
     String meta = readEntry(META_TEMPLATE_DESCRIPTOR_PATH);
     if (meta != null) {
       try {
-        Element templateElement = JdomKt.loadElement(meta);
+        Element templateElement = JDOMUtil.load(meta);
         String unencoded = templateElement.getAttributeValue(UNENCODED_ATTRIBUTE);
         if (unencoded != null) {
           myEscaped = !Boolean.valueOf(unencoded);
@@ -107,12 +94,12 @@ public class LocalArchivedTemplate extends ArchivedProjectTemplate {
           if (rootFile.exists()) {
             String[] list = rootFile.list();
             if (list == null) {
-              return new ValidationResult("<html>File '" + rootFile.getAbsolutePath() + "' already exists," +
-                                          " so project root can't be created</html>");
+              return new ValidationResult(
+                LangBundle.message("dialog.message.already.exists.so.project.root.can.t.be.created.html", rootFile.getAbsolutePath()));
             }
             if (list.length > 0) {
-              return new ValidationResult("<html>Directory '" + rootFile.getAbsolutePath() + "' already exists and is not empty, " +
-                                          "so project root can't be created</html>");
+              return new ValidationResult(
+                LangBundle.message("dialog.message.directory.already.exists.and.is.not.empty", rootFile.getAbsolutePath()));
             }
           }
         }
@@ -152,7 +139,7 @@ public class LocalArchivedTemplate extends ArchivedProjectTemplate {
           ZipEntry entry;
           while ((entry = stream.getNextEntry()) != null) {
             if (entry.getName().endsWith(endsWith)) {
-              return StreamUtil.readText(stream, CharsetToolkit.UTF8_CHARSET);
+              return StreamUtil.readText(stream, StandardCharsets.UTF_8);
             }
           }
           return null;
@@ -169,7 +156,7 @@ public class LocalArchivedTemplate extends ArchivedProjectTemplate {
     String iml = template.readEntry(".iml");
     if (iml == null) return ModuleType.EMPTY;
     try {
-      String type = JdomKt.loadElement(iml).getAttributeValue(Module.ELEMENT_TYPE);
+      String type = JDOMUtil.load(iml).getAttributeValue(Module.ELEMENT_TYPE);
       return ModuleTypeManager.getInstance().findByID(type);
     }
     catch (Exception e) {
@@ -192,7 +179,7 @@ public class LocalArchivedTemplate extends ArchivedProjectTemplate {
   }
 
   @Override
-  public void handleUnzippedDirectories(File dir, List<? super File> filesToRefresh) throws IOException {
+  public void handleUnzippedDirectories(@NotNull File dir, @NotNull List<? super File> filesToRefresh) throws IOException {
     if (myModuleDescriptions == null) {
       filesToRefresh.add(dir);
       return;

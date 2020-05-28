@@ -1,59 +1,43 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.psi.impl.cache.impl.id;
 
 import com.intellij.ide.highlighter.custom.CustomFileTypeLexer;
 import com.intellij.ide.highlighter.custom.SyntaxTable;
 import com.intellij.lang.Language;
-import com.intellij.lang.cacheBuilder.*;
+import com.intellij.lang.cacheBuilder.CacheBuilderRegistry;
+import com.intellij.lang.cacheBuilder.DefaultWordsScanner;
+import com.intellij.lang.cacheBuilder.SimpleWordsScanner;
+import com.intellij.lang.cacheBuilder.WordsScanner;
 import com.intellij.lang.findUsages.LanguageFindUsages;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.InternalFileType;
 import com.intellij.openapi.fileTypes.LanguageFileType;
+import com.intellij.openapi.fileTypes.PlainTextFileType;
 import com.intellij.openapi.fileTypes.impl.CustomSyntaxTableFileType;
 import com.intellij.psi.CustomHighlighterTokenType;
-import com.intellij.psi.search.UsageSearchContext;
 import com.intellij.psi.tree.TokenSet;
-import com.intellij.util.Processor;
-import com.intellij.util.indexing.FileContent;
-import com.intellij.util.indexing.IdDataConsumer;
+import com.intellij.util.indexing.FileBasedIndex;
 import com.intellij.util.text.CharArrayUtil;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.HashMap;
-import java.util.Map;
 
 public class IdTableBuilding {
   private IdTableBuilding() {
   }
 
   public interface ScanWordProcessor {
-    void run(CharSequence chars, @Nullable char[] charsArray, int start, int end);
-  }
-
-  private static final Map<FileType, IdIndexer> ourIdIndexers = new HashMap<>();
-
-  @Deprecated
-  public static void registerIdIndexer(@NotNull FileType fileType, FileTypeIdIndexer indexer) {
-    ourIdIndexers.put(fileType, indexer);
+    void run(CharSequence chars, char @Nullable [] charsArray, int start, int end);
   }
 
   public static boolean isIdIndexerRegistered(@NotNull FileType fileType) {
-    return ourIdIndexers.containsKey(fileType) || IdIndexers.INSTANCE.forFileType(fileType) != null || fileType instanceof InternalFileType;
+    return getIndexer(fileType) != null || fileType instanceof InternalFileType;
   }
-
 
   @Nullable
   public static IdIndexer getFileTypeIndexer(FileType fileType) {
-    final IdIndexer idIndexer = ourIdIndexers.get(fileType);
-
-    if (idIndexer != null) {
-      return idIndexer;
-    }
-
-    final IdIndexer extIndexer = IdIndexers.INSTANCE.forFileType(fileType);
+    final IdIndexer extIndexer = getIndexer(fileType);
     if (extIndexer != null) {
       return extIndexer;
     }
@@ -73,16 +57,31 @@ public class IdTableBuilding {
     }
 
     if (fileType instanceof CustomSyntaxTableFileType) {
-      return createDefaultIndexer(createCustomFileTypeScanner(((CustomSyntaxTableFileType)fileType).getSyntaxTable()));
+      return new ScanningIdIndexer() {
+        @Override
+        protected WordsScanner createScanner() {
+          return createCustomFileTypeScanner(((CustomSyntaxTableFileType)fileType).getSyntaxTable());
+        }
+      };
     }
 
     return null;
   }
 
+  private static IdIndexer getIndexer(@NotNull FileType fileType) {
+    if (fileType == PlainTextFileType.INSTANCE && FileBasedIndex.IGNORE_PLAIN_TEXT_FILES) return null;
+    return IdIndexers.INSTANCE.forFileType(fileType);
+  }
+
   @Contract(value = "_ -> new", pure = true)
   @NotNull
-  public static IdIndexer createDefaultIndexer(@NotNull final WordsScanner customWordsScanner) {
-    return new WordsScannerFileTypeIdIndexerAdapter(customWordsScanner);
+  public static IdIndexer createDefaultIndexer(@NotNull WordsScanner scanner) {
+    return new ScanningIdIndexer() {
+      @Override
+      protected WordsScanner createScanner() {
+        return scanner;
+      }
+    };
   }
 
   @Contract("_ -> new")
@@ -96,58 +95,13 @@ public class IdTableBuilding {
 
   }
 
-  private static class WordsScannerFileTypeIdIndexerAdapter implements IdIndexer {
-    private final WordsScanner myScanner;
-
-    WordsScannerFileTypeIdIndexerAdapter(@NotNull final WordsScanner scanner) {
-      myScanner = scanner;
-    }
-
-    @Override
-    @NotNull
-    public Map<IdIndexEntry, Integer> map(@NotNull final FileContent inputData) {
-      final CharSequence chars = inputData.getContentAsText();
-      final char[] charsArray = CharArrayUtil.fromSequenceWithoutCopying(chars);
-      final IdDataConsumer consumer = new IdDataConsumer();
-      myScanner.processWords(chars, new Processor<WordOccurrence>() {
-        @Override
-        public boolean process(final WordOccurrence t) {
-          if (charsArray != null && t.getBaseText() == chars) {
-            consumer.addOccurrence(charsArray, t.getStart(), t.getEnd(), convertToMask(t.getKind()));
-          }
-          else {
-            consumer.addOccurrence(t.getBaseText(), t.getStart(), t.getEnd(), convertToMask(t.getKind()));
-          }
-          return true;
-        }
-
-        private int convertToMask(final WordOccurrence.Kind kind) {
-          if (kind == null) {
-            return UsageSearchContext.ANY;
-          }
-          if (kind == WordOccurrence.Kind.CODE) return UsageSearchContext.IN_CODE;
-          if (kind == WordOccurrence.Kind.COMMENTS) return UsageSearchContext.IN_COMMENTS;
-          if (kind == WordOccurrence.Kind.LITERALS) return UsageSearchContext.IN_STRINGS;
-          if (kind == WordOccurrence.Kind.FOREIGN_LANGUAGE) return UsageSearchContext.IN_FOREIGN_LANGUAGES;
-          return 0;
-        }
-      });
-      return consumer.getResult();
-    }
-
-    @Override
-    public int getVersion() {
-      return myScanner instanceof VersionedWordsScanner ? ((VersionedWordsScanner)myScanner).getVersion() : -1;
-    }
-  }
-
   public static void scanWords(final ScanWordProcessor processor, final CharSequence chars, final int startOffset, final int endOffset) {
     scanWords(processor, chars, CharArrayUtil.fromSequenceWithoutCopying(chars), startOffset, endOffset, false);
   }
 
   public static void scanWords(final ScanWordProcessor processor,
                                final CharSequence chars,
-                               @Nullable final char[] charArray,
+                               final char @Nullable [] charArray,
                                final int startOffset,
                                final int endOffset,
                                final boolean mayHaveEscapes) {

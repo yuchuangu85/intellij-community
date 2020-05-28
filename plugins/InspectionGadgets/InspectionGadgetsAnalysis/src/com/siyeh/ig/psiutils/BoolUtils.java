@@ -15,7 +15,7 @@
  */
 package com.siyeh.ig.psiutils;
 
-import com.intellij.codeInspection.dataFlow.value.DfaRelationValue;
+import com.intellij.codeInspection.dataFlow.value.RelationType;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
 
+import static com.intellij.codeInspection.util.OptionalUtil.*;
 import static com.intellij.psi.CommonClassNames.JAVA_UTIL_OPTIONAL;
 
 public class BoolUtils {
@@ -68,7 +69,7 @@ public class BoolUtils {
       return null;
     }
     final PsiExpression operand = prefixExpression.getOperand();
-    PsiExpression stripped = ParenthesesUtils.stripParentheses(operand);
+    PsiExpression stripped = PsiUtil.skipParenthesizedExprDown(operand);
     return stripped == null ? operand : stripped;
   }
 
@@ -85,11 +86,6 @@ public class BoolUtils {
   private static final CallMatcher STREAM_ANY_MATCH = CallMatcher.instanceCall(CommonClassNames.JAVA_UTIL_STREAM_STREAM, "anyMatch");
   private static final CallMatcher STREAM_NONE_MATCH = CallMatcher.instanceCall(CommonClassNames.JAVA_UTIL_STREAM_STREAM, "noneMatch");
 
-
-  private static final String OPTIONAL_INT = "java.util.OptionalInt";
-  private static final String OPTIONAL_LONG = "java.util.OptionalLong";
-  private static final String OPTIONAL_DOUBLE = "java.util.OptionalDouble";
-
   private static final CallMatcher OPTIONAL_IS_PRESENT =
     CallMatcher.anyOf(
       CallMatcher.exactInstanceCall(JAVA_UTIL_OPTIONAL, "isPresent").parameterCount(0),
@@ -105,10 +101,6 @@ public class BoolUtils {
       CallMatcher.exactInstanceCall(OPTIONAL_DOUBLE, "isEmpty").parameterCount(0)
     );
 
-  private static Predicate<PsiMethodCallExpression> withMinimalLanguageLevel(CallMatcher matcher, LanguageLevel level) {
-    return matcher.and(expression -> PsiUtil.getLanguageLevel(expression).isAtLeast(level));
-  }
-
   private static class PredicatedReplacement {
     Predicate<PsiMethodCallExpression> predicate;
     String name;
@@ -122,7 +114,7 @@ public class BoolUtils {
   private static final List<PredicatedReplacement> ourReplacements = new ArrayList<>();
   static {
     ourReplacements.add(new PredicatedReplacement(OPTIONAL_IS_EMPTY, "isPresent"));
-    ourReplacements.add(new PredicatedReplacement(withMinimalLanguageLevel(OPTIONAL_IS_PRESENT, LanguageLevel.JDK_11), "isEmpty"));
+    ourReplacements.add(new PredicatedReplacement(OPTIONAL_IS_PRESENT.withLanguageLevelAtLeast(LanguageLevel.JDK_11), "isEmpty"));
     ourReplacements.add(new PredicatedReplacement(STREAM_ANY_MATCH, "noneMatch"));
     ourReplacements.add(new PredicatedReplacement(STREAM_NONE_MATCH, "anyMatch"));
   }
@@ -156,6 +148,21 @@ public class BoolUtils {
       PsiExpression operand = parenthesizedExpression.getExpression();
       if (operand != null) {
         return '(' + getNegatedExpressionText(operand, tracker) + ')';
+      }
+    }
+    if (expression instanceof PsiAssignmentExpression && expression.getParent() instanceof PsiExpressionStatement) {
+      String newOp = null;
+      IElementType tokenType = ((PsiAssignmentExpression)expression).getOperationTokenType();
+      if (tokenType == JavaTokenType.ANDEQ) {
+        newOp = "|=";
+      }
+      else if (tokenType == JavaTokenType.OREQ) {
+        newOp = "&=";
+      }
+      if (newOp != null) {
+        return tracker.text(((PsiAssignmentExpression)expression).getLExpression()) + 
+               newOp +
+               getNegatedExpressionText(((PsiAssignmentExpression)expression).getRExpression());
       }
     }
     if (expression instanceof PsiConditionalExpression) {
@@ -248,8 +255,9 @@ public class BoolUtils {
     return null;
   }
 
+  @Contract("null -> false")
   public static boolean isBooleanLiteral(PsiExpression expression) {
-    expression = ParenthesesUtils.stripParentheses(expression);
+    expression = PsiUtil.skipParenthesizedExprDown(expression);
     if (!(expression instanceof PsiLiteralExpression)) {
       return false;
     }
@@ -260,7 +268,7 @@ public class BoolUtils {
 
   @Contract(value = "null -> false", pure = true)
   public static boolean isTrue(@Nullable PsiExpression expression) {
-    expression = ParenthesesUtils.stripParentheses(expression);
+    expression = PsiUtil.skipParenthesizedExprDown(expression);
     if (expression == null) {
       return false;
     }
@@ -269,7 +277,7 @@ public class BoolUtils {
 
   @Contract(value ="null -> false", pure = true)
   public static boolean isFalse(@Nullable PsiExpression expression) {
-    expression = ParenthesesUtils.stripParentheses(expression);
+    expression = PsiUtil.skipParenthesizedExprDown(expression);
     if (expression == null) {
       return false;
     }
@@ -298,8 +306,8 @@ public class BoolUtils {
     if (expression1 instanceof PsiBinaryExpression && expression2 instanceof PsiBinaryExpression) {
       PsiBinaryExpression binOp1 = (PsiBinaryExpression)expression1;
       PsiBinaryExpression binOp2 = (PsiBinaryExpression)expression2;
-      DfaRelationValue.RelationType rel1 = DfaRelationValue.RelationType.fromElementType(binOp1.getOperationTokenType());
-      DfaRelationValue.RelationType rel2 = DfaRelationValue.RelationType.fromElementType(binOp2.getOperationTokenType());
+      RelationType rel1 = RelationType.fromElementType(binOp1.getOperationTokenType());
+      RelationType rel2 = RelationType.fromElementType(binOp2.getOperationTokenType());
       if (rel1 == null || rel2 == null) return false;
       PsiType type = binOp1.getLOperand().getType();
       // a > b and a <= b are not strictly opposite due to NaN semantics

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.io.fastCgi
 
 import com.intellij.openapi.diagnostic.logger
@@ -13,9 +13,11 @@ import io.netty.channel.Channel
 import io.netty.handler.codec.http.*
 import org.jetbrains.builtInWebServer.SingleConnectionNetService
 import org.jetbrains.concurrency.Promise
-import org.jetbrains.concurrency.doneRun
 import org.jetbrains.concurrency.errorIfNotMessage
-import org.jetbrains.io.*
+import org.jetbrains.io.ChannelExceptionHandler
+import org.jetbrains.io.MessageDecoder
+import org.jetbrains.io.NettyUtil
+import org.jetbrains.io.send
 import java.util.concurrent.atomic.AtomicInteger
 
 internal val LOG = logger<FastCgiService>()
@@ -29,15 +31,18 @@ abstract class FastCgiService(project: Project) : SingleConnectionNetService(pro
     bootstrap.handler {
       it.pipeline().addLast("fastCgiDecoder", FastCgiDecoder(errorOutputConsumer, this@FastCgiService))
       it.pipeline().addLast("exceptionHandler", ChannelExceptionHandler.getInstance())
+    }
+  }
 
-      it.closeFuture().addChannelListener {
-        requestIdCounter.set(0)
-        if (!requests.isEmpty) {
-          val waitingClients = requests.elements().toList()
-          requests.clear()
-          for (client in waitingClients) {
-            sendBadGateway(client.channel, client.extraHeaders)
-          }
+  override fun addCloseListener(it: Channel) {
+    super.addCloseListener(it)
+    it.closeFuture().addChannelListener {
+      requestIdCounter.set(0)
+      if (!requests.isEmpty) {
+        val waitingClients = requests.elements().toList()
+        requests.clear()
+        for (client in waitingClients) {
+          sendBadGateway(client.channel, client.extraHeaders)
         }
       }
     }
@@ -73,7 +78,7 @@ abstract class FastCgiService(project: Project) : SingleConnectionNetService(pro
       }
 
       promise
-        .doneRun { fastCgiRequest.writeToServerChannel(notEmptyContent, processChannel.get()!!) }
+        .onSuccess { fastCgiRequest.writeToServerChannel(notEmptyContent, processChannel.get()!!) }
         .onError {
           LOG.errorIfNotMessage(it)
           handleError(fastCgiRequest, notEmptyContent)
@@ -124,7 +129,6 @@ abstract class FastCgiService(project: Project) : SingleConnectionNetService(pro
     val httpResponse = DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, buffer)
     try {
       parseHeaders(httpResponse, buffer)
-      httpResponse.addServer()
       if (!HttpUtil.isContentLengthSet(httpResponse)) {
         HttpUtil.setContentLength(httpResponse, buffer.readableBytes().toLong())
       }
@@ -189,7 +193,8 @@ private fun parseHeaders(response: HttpResponse, buffer: ByteBuf) {
     }
 
     // skip standard headers
-    if (key.isNullOrEmpty() || key!!.startsWith("http", ignoreCase = true) || key.startsWith("X-Accel-", ignoreCase = true)) {
+    @Suppress("SpellCheckingInspection")
+    if (key.isNullOrEmpty() || key.startsWith("http", ignoreCase = true) || key.startsWith("X-Accel-", ignoreCase = true)) {
       continue
     }
 
@@ -197,7 +202,7 @@ private fun parseHeaders(response: HttpResponse, buffer: ByteBuf) {
     if (key.equals("status", ignoreCase = true)) {
       val index = value.indexOf(' ')
       if (index == -1) {
-        LOG.warn("Cannot parse status: " + value)
+        LOG.warn("Cannot parse status: $value")
         response.status = HttpResponseStatus.OK
       }
       else {

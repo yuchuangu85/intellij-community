@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.template.postfix.settings;
 
+import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInsight.template.impl.TemplateEditorUtil;
 import com.intellij.codeInsight.template.postfix.templates.PostfixTemplate;
 import com.intellij.codeInsight.template.postfix.templates.PostfixTemplateProvider;
@@ -17,25 +18,24 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.EditorFactory;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectManager;
+import com.intellij.openapi.ui.panel.PanelGridBuilder;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.openapi.ui.popup.ListPopup;
 import com.intellij.ui.AnActionButton;
-import com.intellij.ui.ColoredListCellRenderer;
 import com.intellij.ui.ListUtil;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.ToolbarDecorator;
 import com.intellij.ui.components.JBCheckBox;
-import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBList;
-import com.intellij.util.ObjectUtils;
 import com.intellij.util.ui.DialogUtil;
-import com.intellij.util.ui.FormBuilder;
+import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.UI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import java.awt.*;
+import java.util.Objects;
 
 public abstract class PostfixTemplateEditorBase<Condition extends PostfixTemplateExpressionCondition> implements PostfixTemplateEditor {
 
@@ -44,11 +44,8 @@ public abstract class PostfixTemplateEditorBase<Condition extends PostfixTemplat
   @NotNull protected final JBList<Condition> myExpressionTypesList;
   @NotNull protected final DefaultListModel<Condition> myExpressionTypesListModel;
 
-  @NotNull protected final JPanel myTemplateEditorPanel;
-  @NotNull protected final JPanel myExpressionTypesPanel;
   @NotNull protected final JBCheckBox myApplyToTheTopmostJBCheckBox;
   @NotNull protected final JPanel myEditTemplateAndConditionsPanel;
-  @NotNull protected final JBLabel myExpressionVariableHint;
 
   protected class AddConditionAction extends DumbAwareAction {
     @NotNull
@@ -68,7 +65,7 @@ public abstract class PostfixTemplateEditorBase<Condition extends PostfixTemplat
   public PostfixTemplateEditorBase(@NotNull PostfixTemplateProvider provider, boolean showExpressionTypes) {
     this(provider, createSimpleEditor(), showExpressionTypes);
   }
-  
+
 
   public PostfixTemplateEditorBase(@NotNull PostfixTemplateProvider provider,
                                    @NotNull Editor templateEditor,
@@ -76,58 +73,43 @@ public abstract class PostfixTemplateEditorBase<Condition extends PostfixTemplat
     myProvider = provider;
     myTemplateEditor = templateEditor;
 
-    myApplyToTheTopmostJBCheckBox = new JBCheckBox("Apply to the &topmost expression");
+    myApplyToTheTopmostJBCheckBox = new JBCheckBox(CodeInsightBundle.message("checkbox.apply.to.the.&topmost.expression"));
     DialogUtil.registerMnemonic(myApplyToTheTopmostJBCheckBox, '&');
-    myTemplateEditorPanel = new JPanel(new BorderLayout());
-    myTemplateEditorPanel.add(myTemplateEditor.getComponent());
-
-    myExpressionVariableHint = new JBLabel("Use $EXPR$ variable to refer target expression");
-    UIUtil.applyStyle(UIUtil.ComponentStyle.SMALL, myExpressionVariableHint);
-    myExpressionVariableHint.setFontColor(UIUtil.FontColor.BRIGHTER);
+    myApplyToTheTopmostJBCheckBox.setBorder(JBUI.Borders.emptyBottom(UIUtil.DEFAULT_VGAP));
 
     myExpressionTypesListModel = JBList.createDefaultListModel();
     myExpressionTypesList = new JBList<>(myExpressionTypesListModel);
-    myExpressionTypesList.setCellRenderer(new ColoredListCellRenderer<PostfixTemplateExpressionCondition>() {
+    myExpressionTypesList.setCellRenderer(SimpleListCellRenderer.create("", PostfixTemplateExpressionCondition::getPresentableName));
 
-      @Override
-      protected void customizeCellRenderer(@NotNull JList<? extends PostfixTemplateExpressionCondition> list,
-                                           PostfixTemplateExpressionCondition value,
-                                           int index,
-                                           boolean selected,
-                                           boolean hasFocus) {
-        append(value.getPresentableName());
-      }
-    });
-
-    myExpressionTypesPanel = new JPanel(new BorderLayout());
-    FormBuilder builder = FormBuilder.createFormBuilder();
+    PanelGridBuilder grid = UI.PanelFactory.grid().resize();
     if (showExpressionTypes) {
-      myExpressionTypesPanel.add(ToolbarDecorator.createDecorator(myExpressionTypesList)
-                                                 .setAddAction(button -> showAddExpressionTypePopup(button))
-                                                 .setRemoveAction(button -> ListUtil.removeSelectedItems(myExpressionTypesList))
-                                                 .disableUpDownActions()
-                                                 .createPanel());
-      myExpressionTypesPanel.setMinimumSize(new Dimension(-1, 100));
-      builder.addLabeledComponent("Applicable expression types:", myExpressionTypesPanel, true);
+      JPanel expressionTypesPanel = ToolbarDecorator.createDecorator(myExpressionTypesList)
+        .setAddAction(button -> showAddExpressionTypePopup(button))
+        .setRemoveAction(button -> ListUtil.removeSelectedItems(myExpressionTypesList))
+        .disableUpDownActions()
+        .setMinimumSize(JBUI.size(-1, 300))
+        .createPanel();
+      grid.add(UI.PanelFactory.panel(expressionTypesPanel)
+                 .withLabel(CodeInsightBundle.message("label.applicable.expression.types"))
+                 .resizeY(true)
+                 .moveLabelOnTop());
     }
-
-
-    builder.addComponent(myApplyToTheTopmostJBCheckBox);
-    builder.addComponent(myTemplateEditorPanel);
-    builder.addComponent(myExpressionVariableHint);
-
-    myEditTemplateAndConditionsPanel = builder.getPanel();
+    grid.add(UI.PanelFactory.panel(myApplyToTheTopmostJBCheckBox));
+    grid.add(UI.PanelFactory.panel(myTemplateEditor.getComponent())
+               .anchorLabelOn(UI.Anchor.Top)
+               .withComment(CodeInsightBundle.message("comment.use.expr.variable.to.refer.target.expression"))
+               .resizeY(true));
+    myEditTemplateAndConditionsPanel = grid.createPanel();
   }
 
   @NotNull
-  protected static Editor createEditor(@NotNull Project project, @NotNull Document document) {
+  protected static Editor createEditor(@Nullable Project project, @NotNull Document document) {
     return TemplateEditorUtil.createEditor(false, document, project);
   }
 
   @NotNull
   private static Editor createSimpleEditor() {
-    Project defaultProject = ProjectManager.getInstance().getDefaultProject();
-    return createEditor(defaultProject, EditorFactory.getInstance().createDocument(""));
+    return createEditor(null, EditorFactory.getInstance().createDocument(""));
   }
 
   protected final void showAddExpressionTypePopup(@NotNull AnActionButton button) {
@@ -136,7 +118,7 @@ public abstract class PostfixTemplateEditorBase<Condition extends PostfixTemplat
     DataContext context = DataManager.getInstance().getDataContext(button.getContextComponent());
     ListPopup popup = JBPopupFactory.getInstance().createActionGroupPopup(null, group, context,
                                                                           JBPopupFactory.ActionSelectionAid.ALPHA_NUMBERING, true, null);
-    popup.show(ObjectUtils.assertNotNull(button.getPreferredPopupPoint()));
+    popup.show(Objects.requireNonNull(button.getPreferredPopupPoint()));
   }
 
   protected abstract void fillConditions(@NotNull DefaultActionGroup group);

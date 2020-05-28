@@ -4,10 +4,7 @@ package git4idea.commands;
 import com.intellij.execution.ExecutionException;
 import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.execution.impl.ExecutionManagerImpl;
-import com.intellij.execution.process.KillableProcessHandler;
-import com.intellij.execution.process.OSProcessHandler;
-import com.intellij.execution.process.ProcessEvent;
-import com.intellij.execution.process.ProcessListener;
+import com.intellij.execution.process.*;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
@@ -16,6 +13,7 @@ import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.io.BaseOutputReader;
+import git4idea.config.GitExecutable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,8 +33,9 @@ public abstract class GitTextHandler extends GitHandler {
   private final Object myProcessStateLock = new Object();
 
   protected boolean myWithMediator = true;
+  private int myTerminationTimeoutMs = TERMINATION_TIMEOUT_MS;
 
-  protected GitTextHandler(@NotNull Project project, @NotNull File directory, @NotNull GitCommand command) {
+  protected GitTextHandler(@Nullable Project project, @NotNull File directory, @NotNull GitCommand command) {
     super(project, directory, command, Collections.emptyList());
   }
 
@@ -53,14 +52,18 @@ public abstract class GitTextHandler extends GitHandler {
 
   public GitTextHandler(@Nullable Project project,
                         @NotNull File directory,
-                        @NotNull String pathToExecutable,
+                        @NotNull GitExecutable executable,
                         @NotNull GitCommand command,
                         @NotNull List<String> configParameters) {
-    super(project, directory, pathToExecutable, command, configParameters);
+    super(project, directory, executable, command, configParameters);
   }
 
   public void setWithMediator(boolean value) {
     myWithMediator = value;
+  }
+
+  public void setTerminationTimeout(int timeoutMs) {
+    myTerminationTimeoutMs = timeoutMs;
   }
 
   @Nullable
@@ -157,18 +160,18 @@ public abstract class GitTextHandler extends GitHandler {
     myHandler.destroyProcess();
 
     // signal was sent, but we still need to wait for process to finish its dark deeds
-    if (myHandler.waitFor(TERMINATION_TIMEOUT_MS)) {
+    if (myHandler.waitFor(myTerminationTimeoutMs)) {
       return true;
     }
 
     LOG.warn("Soft-kill failed for [" + printableCommandLine() + "].");
 
     ExecutionManagerImpl.stopProcess(myHandler);
-    return myHandler.waitFor(TERMINATION_TIMEOUT_MS);
+    return myHandler.waitFor(myTerminationTimeoutMs);
   }
 
   protected OSProcessHandler createProcess(@NotNull GeneralCommandLine commandLine) throws ExecutionException {
-    return new MyOSProcessHandler(commandLine, myWithMediator && Registry.is("git.execute.with.mediator"));
+    return new MyOSProcessHandler(commandLine, myWithMediator && myExecutable.isLocal() && Registry.is("git.execute.with.mediator"));
   }
 
   protected static class MyOSProcessHandler extends KillableProcessHandler {

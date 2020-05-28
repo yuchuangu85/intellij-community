@@ -1,6 +1,4 @@
-// Copyright 2000-2017 JetBrains s.r.o.
-// Use of this source code is governed by the Apache 2.0 license that can be
-// found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.core;
 
 import com.intellij.lang.jvm.facade.JvmFacade;
@@ -35,17 +33,17 @@ public class JavaCoreProjectEnvironment extends CoreProjectEnvironment {
   private final JavaFileManager myFileManager;
   private final PackageIndex myPackageIndex;
 
-  public JavaCoreProjectEnvironment(Disposable parentDisposable, CoreApplicationEnvironment applicationEnvironment) {
+  public JavaCoreProjectEnvironment(@NotNull Disposable parentDisposable, @NotNull CoreApplicationEnvironment applicationEnvironment) {
     super(parentDisposable, applicationEnvironment);
 
-    myProject.registerService(PsiElementFactory.class, new PsiElementFactoryImpl(myPsiManager));
+    myProject.registerService(PsiElementFactory.class, new PsiElementFactoryImpl(myProject));
     myProject.registerService(JavaPsiImplementationHelper.class, createJavaPsiImplementationHelper());
-    myProject.registerService(PsiResolveHelper.class, new PsiResolveHelperImpl(myPsiManager));
+    myProject.registerService(PsiResolveHelper.class, new PsiResolveHelperImpl(myProject));
     myProject.registerService(LanguageLevelProjectExtension.class, new CoreLanguageLevelProjectExtension());
-    myProject.registerService(JavaResolveCache.class, new JavaResolveCache(myMessageBus));
+    myProject.registerService(JavaResolveCache.class, new JavaResolveCache(myProject));
     myProject.registerService(JavaCodeStyleSettingsFacade.class, new CoreJavaCodeStyleSettingsFacade());
     myProject.registerService(JavaCodeStyleManager.class, new CoreJavaCodeStyleManager());
-    myProject.registerService(ControlFlowFactory.class, new ControlFlowFactory(myPsiManager));
+    myProject.registerService(ControlFlowFactory.class, new ControlFlowFactory(myProject));
 
     myPackageIndex = createCorePackageIndex();
     myProject.registerService(PackageIndex.class, myPackageIndex);
@@ -59,7 +57,7 @@ public class JavaCoreProjectEnvironment extends CoreProjectEnvironment {
   }
 
   protected void registerJavaPsiFacade() {
-    JavaPsiFacadeImpl javaPsiFacade = new JavaPsiFacadeImpl(myProject, myPsiManager, myFileManager, myMessageBus);
+    JavaPsiFacadeImpl javaPsiFacade = new JavaPsiFacadeImpl(myProject);
     myProject.registerService(JavaPsiFacade.class, javaPsiFacade);
   }
 

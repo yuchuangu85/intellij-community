@@ -72,6 +72,11 @@ public class ExternalProjectsViewAdapter implements ExternalProjectsView {
   }
 
   @Override
+  public ExternalProjectsStructure.ErrorLevel getErrorLevelRecursively(@NotNull DataNode node) {
+    return delegate.getErrorLevelRecursively(node);
+  }
+
+  @Override
   public Project getProject() {
     return delegate.getProject();
   }
@@ -84,6 +89,11 @@ public class ExternalProjectsViewAdapter implements ExternalProjectsView {
   @Override
   public boolean getGroupTasks() {
     return delegate.getGroupTasks();
+  }
+
+  @Override
+  public boolean getGroupModules() {
+    return delegate.getGroupModules();
   }
 
   @Override
@@ -109,5 +119,10 @@ public class ExternalProjectsViewAdapter implements ExternalProjectsView {
   @Override
   public boolean getShowIgnored() {
     return delegate.getShowIgnored();
+  }
+
+  @Override
+  public String getDisplayName(DataNode node) {
+    return delegate.getDisplayName(node);
   }
 }

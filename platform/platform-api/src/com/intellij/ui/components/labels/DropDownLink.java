@@ -1,10 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.components.labels;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.ui.popup.IPopupChooserBuilder;
+import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.ui.awt.RelativePoint;
+import com.intellij.ui.popup.util.PopupState;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.Consumer;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
@@ -14,8 +17,10 @@ import javax.swing.*;
 import javax.swing.plaf.metal.MetalLabelUI;
 import java.awt.*;
 import java.util.List;
+import java.util.function.Function;
 
 public class DropDownLink<T> extends LinkLabel<Object> {
+  private final PopupState myPopupState = new PopupState();
   private T chosenItem;
 
   public DropDownLink(@NotNull T value, @NotNull Runnable clickAction) {
@@ -24,32 +29,41 @@ public class DropDownLink<T> extends LinkLabel<Object> {
     init();
   }
 
-  public DropDownLink(@NotNull T initialItem, @NotNull List<T> items, @Nullable Consumer<? super T> itemChosenAction, boolean updateLabel) {
-    super(initialItem.toString(), AllIcons.General.LinkDropTriangle);
-    chosenItem = initialItem;
-    IPopupChooserBuilder<T> popupBuilder = JBPopupFactory.getInstance().createPopupChooserBuilder(items).
-      setRenderer(new LinkCellRenderer<>(this)).
-      setItemChosenCallback(t -> {
-        chosenItem = t;
-        if (updateLabel) {
-          setText(t.toString());
-        }
+  public DropDownLink(@NotNull T value, @NotNull Function<? super DropDownLink, ? extends JBPopup> popupBuilder) {
+    super(value.toString(), AllIcons.General.LinkDropTriangle);
+    chosenItem = value;
 
-        if (itemChosenAction != null) {
-          itemChosenAction.consume(t);
-        }
-      });
-
-    setListener((s, d) -> {
-      Point showPoint = new Point(0, getHeight() + JBUI.scale(4));
-      popupBuilder.createPopup().show(new RelativePoint(this, showPoint));
+    setListener((linkLabel, d) -> {
+      if (myPopupState.isRecentlyHidden()) return; // do not show new popup
+      JBPopup popup = popupBuilder.apply((DropDownLink)linkLabel);
+      Point showPoint = new Point(0, getHeight() + JBUIScale.scale(4));
+      popup.addListener(myPopupState);
+      popup.show(new RelativePoint(this, showPoint));
     }, null);
 
     init();
   }
 
+  public DropDownLink(@NotNull T initialItem, @NotNull List<T> items, @Nullable Consumer<? super T> itemChosenAction, boolean updateLabel) {
+    this(initialItem, linkLabel -> {
+      IPopupChooserBuilder<T> popupBuilder = JBPopupFactory.getInstance().createPopupChooserBuilder(items).
+        setRenderer(new LinkCellRenderer<>(linkLabel)).
+        setItemChosenCallback(t -> {
+          if (updateLabel) {
+            linkLabel.setText(t.toString());
+          }
+
+          if (itemChosenAction != null && !linkLabel.chosenItem.equals(t)) {
+            itemChosenAction.consume(t);
+          }
+          linkLabel.chosenItem = t;
+        });
+      return popupBuilder.createPopup();
+    });
+  }
+
   private void init() {
-    setIconTextGap(JBUI.scale(1));
+    setIconTextGap(JBUIScale.scale(1));
     setHorizontalAlignment(SwingConstants.LEADING);
     setHorizontalTextPosition(SwingConstants.LEADING);
 
@@ -58,7 +72,7 @@ public class DropDownLink<T> extends LinkLabel<Object> {
       protected String layoutCL(JLabel label, FontMetrics fontMetrics, String text, Icon icon,
                                 Rectangle viewR, Rectangle iconR, Rectangle textR) {
         String result = super.layoutCL(label, fontMetrics, text, icon, viewR, iconR, textR);
-        iconR.y += JBUI.scale(1);
+        iconR.y += JBUIScale.scale(1);
         return result;
       }
     });
@@ -87,7 +101,7 @@ public class DropDownLink<T> extends LinkLabel<Object> {
     }
 
     private Dimension recomputeSize(@NotNull Dimension size) {
-      size.height = Math.max(size.height, JBUI.scale(22));
+      size.height = Math.max(size.height, JBUIScale.scale(22));
       size.width = Math.max(size.width, owner.getPreferredSize().width);
       return size;
     }

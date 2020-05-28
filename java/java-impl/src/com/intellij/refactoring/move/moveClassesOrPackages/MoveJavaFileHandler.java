@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.Map;
 
 public class MoveJavaFileHandler extends MoveFileHandler {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.move.moveClassesOrPackages.MoveJavaFileHandler");
+  private static final Logger LOG = Logger.getInstance(MoveJavaFileHandler.class);
 
   @Override
   public boolean canProcessElement(PsiFile element) {
@@ -59,7 +59,8 @@ public class MoveJavaFileHandler extends MoveFileHandler {
     final String qualifiedName = newParentPackage == null ? "" : newParentPackage.getQualifiedName();
     for (PsiClass aClass : ((PsiJavaFile)psiFile).getClasses()) {
       Collections.addAll(result, MoveClassesOrPackagesUtil.findUsages(aClass, searchInComments, searchInNonJavaFiles,
-                                                                      StringUtil.getQualifiedName(qualifiedName, aClass.getName())));
+                                                                      StringUtil.getQualifiedName(qualifiedName,
+                                                                                                  StringUtil.notNullize(aClass.getName()))));
     }
     return result.isEmpty() ? null : result;
   }

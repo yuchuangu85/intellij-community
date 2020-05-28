@@ -1,29 +1,15 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.fetch;
 
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
 import git4idea.repo.GitRemote;
 import git4idea.repo.GitRepository;
+import org.jetbrains.annotations.CalledInAny;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
-import java.util.List;
 
 /**
  * High-level API to execute the {@code git fetch} command.
@@ -35,7 +21,13 @@ public interface GitFetchSupport {
    * The latter is identified by {@link #getDefaultRemoteToFetch}.
    */
   @NotNull
-  GitFetchResult fetch(@NotNull Collection<GitRepository> repositories);
+  GitFetchResult fetchDefaultRemote(@NotNull Collection<GitRepository> repositories);
+
+  /**
+   * For each given repository, fetches all its remotes.
+   */
+  @NotNull
+  GitFetchResult fetchAllRemotes(@NotNull Collection<GitRepository> repositories);
 
   /**
    * Fetches the given remote.
@@ -44,10 +36,10 @@ public interface GitFetchSupport {
   GitFetchResult fetch(@NotNull GitRepository repository, @NotNull GitRemote remote);
 
   /**
-   * Fetches all specified remotes in the repository.
+   * Fetches the given remote using provided refspec.
    */
   @NotNull
-  GitFetchResult fetch(@NotNull GitRepository repository, @NotNull List<GitRemote> remotes);
+  GitFetchResult fetch(@NotNull GitRepository repository, @NotNull GitRemote remote, @NotNull String refspec);
 
   /**
    * Returns the default remote to fetch from, or null if there are no remotes in the repository,
@@ -55,6 +47,12 @@ public interface GitFetchSupport {
    */
   @Nullable
   GitRemote getDefaultRemoteToFetch(@NotNull GitRepository repository);
+
+  /**
+   * @return true if there's an active fetch process, false otherwise
+   */
+  @CalledInAny
+  boolean isFetchRunning();
 
   @NotNull
   static GitFetchSupport fetchSupport(@NotNull Project project) {

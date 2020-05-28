@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.refactoring.convertToJava;
 
 import com.intellij.lang.ASTNode;
@@ -11,6 +11,7 @@ import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -21,10 +22,13 @@ import org.jetbrains.plugins.groovy.lang.lexer.GroovyTokenTypes;
 import org.jetbrains.plugins.groovy.lang.psi.GrControlFlowOwner;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElement;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElementFactory;
+import org.jetbrains.plugins.groovy.lang.psi.api.EmptyGroovyResolveResult;
+import org.jetbrains.plugins.groovy.lang.psi.api.GrRangeExpression;
+import org.jetbrains.plugins.groovy.lang.psi.api.GroovyReference;
 import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.GrListOrMap;
 import org.jetbrains.plugins.groovy.lang.psi.api.formatter.GrControlStatement;
-import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrClosureSignature;
+import org.jetbrains.plugins.groovy.lang.psi.api.signatures.GrSignature;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrField;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariable;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariableDeclaration;
@@ -35,7 +39,6 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.blocks.GrClosableBlo
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.blocks.GrOpenBlock;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.branch.GrReturnStatement;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.*;
-import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.arithmetic.GrRangeExpression;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.literals.GrLiteral;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.literals.GrString;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.path.GrIndexProperty;
@@ -57,10 +60,7 @@ import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.ClosureSyntheticPara
 import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.GrBindingVariable;
 import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.GroovyScriptClass;
 import org.jetbrains.plugins.groovy.lang.psi.typeEnhancers.ClosureParameterEnhancer;
-import org.jetbrains.plugins.groovy.lang.psi.util.GrStringUtil;
-import org.jetbrains.plugins.groovy.lang.psi.util.GroovyCommonClassNames;
-import org.jetbrains.plugins.groovy.lang.psi.util.GroovyPropertyUtils;
-import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
+import org.jetbrains.plugins.groovy.lang.psi.util.*;
 import org.jetbrains.plugins.groovy.lang.resolve.ResolveUtil;
 import org.jetbrains.plugins.groovy.refactoring.convertToJava.invocators.CustomMethodInvocator;
 
@@ -70,7 +70,7 @@ import static org.jetbrains.plugins.groovy.lang.psi.util.GroovyIndexPropertyUtil
  * @author Maxim.Medvedev
  */
 public class ExpressionGenerator extends Generator {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.plugins.groovy.refactoring.convertToJava.ExpressionGenerator");
+  private static final Logger LOG = Logger.getInstance(ExpressionGenerator.class);
 
   private final StringBuilder builder;
   private final GroovyPsiElementFactory factory;
@@ -216,7 +216,7 @@ public class ExpressionGenerator extends Generator {
     final GrArgumentList argList = newExpression.getArgumentList();
     if (argList != null) {
 
-      GrClosureSignature signature = null;
+      GrSignature signature = null;
 
       final GroovyResolveResult resolveResult = newExpression.advancedResolve();
       final PsiElement constructor = resolveResult.getElement();
@@ -288,7 +288,7 @@ public class ExpressionGenerator extends Generator {
     StringBuilder builder = new StringBuilder();
     final PsiMethod setter = GroovyPropertyUtils.findPropertySetter(resolved, fieldName, false, true);
     if (setter != null) {
-      final GrVariableDeclaration var = factory.createVariableDeclaration(ArrayUtil.EMPTY_STRING_ARRAY, "", type, varName);
+      final GrVariableDeclaration var = factory.createVariableDeclaration(ArrayUtilRt.EMPTY_STRING_ARRAY, "", type, varName);
       final GrReferenceExpression caller = factory.createReferenceExpressionFromText(varName, var);
       invokeMethodOn(setter, caller, new GrExpression[]{expression}, GrNamedArgument.EMPTY_ARRAY, GrClosableBlock.EMPTY_ARRAY, substitutor,
                      expression);
@@ -464,7 +464,7 @@ public class ExpressionGenerator extends Generator {
     }
     else {
       //write assignment such as +=, -=, etc
-      final GroovyResolveResult resolveResult = PsiImplUtil.extractUniqueResult(expression.getReference().multiResolve(false));
+      final GroovyResolveResult resolveResult = PsiImplUtil.extractUniqueResult(PsiUtilKt.multiResolve(expression));
       final PsiElement resolved = resolveResult.getElement();
 
       if (resolved instanceof PsiMethod && !shouldNotReplaceOperatorWithMethod(lValue.getType(), rValue, expression.getOperationTokenType())) {
@@ -542,9 +542,9 @@ public class ExpressionGenerator extends Generator {
 
   private void writeAssignmentWithSetter(@Nullable GrExpression qualifier,
                                          @NotNull PsiMethod method,
-                                         @NotNull GrExpression[] exprs,
-                                         @NotNull GrNamedArgument[] namedArgs,
-                                         @NotNull GrClosableBlock[] closures,
+                                         GrExpression @NotNull [] exprs,
+                                         GrNamedArgument @NotNull [] namedArgs,
+                                         GrClosableBlock @NotNull [] closures,
                                          @NotNull PsiSubstitutor substitutor,
                                          @NotNull GrAssignmentExpression assignment) {
     if (PsiUtil.isExpressionUsed(assignment)) {
@@ -636,7 +636,7 @@ public class ExpressionGenerator extends Generator {
       return;
     }
 
-    final GroovyResolveResult resolveResult = PsiImplUtil.extractUniqueResult(expression.getReference().multiResolve(false));
+    final GroovyResolveResult resolveResult = PsiImplUtil.extractUniqueResult(PsiUtilKt.multiResolve(expression));
     final PsiElement resolved = resolveResult.getElement();
     if (resolved instanceof PsiMethod) {
       if (right == null) {
@@ -758,7 +758,9 @@ public class ExpressionGenerator extends Generator {
     if (!(operand instanceof GrReferenceExpression)) return false;
 
     final GrExpression qualifier = ((GrReferenceExpression)operand).getQualifier();
-    final GroovyResolveResult resolveResult = ((GrReferenceExpression)operand).advancedResolve();
+    final GroovyReference rValueReference = ((GrReferenceExpression)operand).getRValueReference();
+    final GroovyResolveResult resolveResult = rValueReference == null ? EmptyGroovyResolveResult.INSTANCE
+                                                                      : rValueReference.advancedResolve();
     final PsiElement resolved = resolveResult.getElement();
     if (resolved instanceof PsiMethod && GroovyPropertyUtils.isSimplePropertyGetter((PsiMethod)resolved)) {
       final PsiMethod getter = (PsiMethod)resolved;
@@ -976,9 +978,8 @@ public class ExpressionGenerator extends Generator {
     }
 
 
-    if (resolveResult.isInvokedOnProperty()) {
+    if (resolveResult.isInvokedOnProperty() && resolved instanceof PsiMethod) {
       //property-style access to accessor (e.g. qual.prop should be translated to qual.getProp())
-      LOG.assertTrue(resolved instanceof PsiMethod);
       LOG.assertTrue(GroovyPropertyUtils.isSimplePropertyGetter((PsiMethod)resolved));
       invokeMethodOn(
         ((PsiMethod)resolved),
@@ -1299,9 +1300,9 @@ public class ExpressionGenerator extends Generator {
 
   public void invokeMethodOn(@NotNull PsiMethod method,
                              @Nullable GrExpression caller,
-                             @NotNull GrExpression[] exprs,
-                             @NotNull GrNamedArgument[] namedArgs,
-                             @NotNull GrClosableBlock[] closures,
+                             GrExpression @NotNull [] exprs,
+                             GrNamedArgument @NotNull [] namedArgs,
+                             GrClosableBlock @NotNull [] closures,
                              @NotNull PsiSubstitutor substitutor,
                              @NotNull GroovyPsiElement context) {
     if (method instanceof GrGdkMethod) {
@@ -1345,7 +1346,7 @@ public class ExpressionGenerator extends Generator {
       }
     }
     builder.append(method.getName());
-    final GrClosureSignature signature = GrClosureSignatureUtil.createSignature(method, substitutor);
+    final GrSignature signature = GrClosureSignatureUtil.createSignature(method, substitutor);
     new ArgumentListGenerator(builder, this.context).generate(signature, exprs, namedArgs, closures, context);
   }
 
@@ -1528,12 +1529,12 @@ public class ExpressionGenerator extends Generator {
       builder.append(resolved.getQualifiedName());
     }
     builder.append('(');
-    final GrExpression left = range.getLeftOperand();
+    final GrExpression left = range.getFrom();
     left.accept(this);
 
     builder.append(", ");
 
-    final GrExpression right = range.getRightOperand();
+    final GrExpression right = range.getTo();
     if (right != null) {
       right.accept(this);
     }

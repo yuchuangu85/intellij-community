@@ -1,14 +1,14 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.actions;
 
 import com.intellij.codeInsight.daemon.impl.analysis.JavaModuleGraphUtil;
 import com.intellij.icons.AllIcons;
-import com.intellij.ide.IdeBundle;
 import com.intellij.ide.IdeView;
 import com.intellij.ide.fileTemplates.FileTemplate;
 import com.intellij.ide.fileTemplates.FileTemplateManager;
 import com.intellij.ide.fileTemplates.actions.AttributesDefaults;
 import com.intellij.ide.fileTemplates.actions.CreateFromTemplateActionBase;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.LangDataKeys;
@@ -34,21 +34,20 @@ import static com.intellij.psi.PsiJavaModule.MODULE_INFO_CLASS;
 
 public class CreateModuleInfoAction extends CreateFromTemplateActionBase {
   public CreateModuleInfoAction() {
-    super(IdeBundle.message("action.create.new.module-info.title"), IdeBundle.message("action.create.new.module-info.description"), AllIcons.FileTypes.Java);
+    super(JavaBundle.messagePointer("action.create.new.module-info.title"), JavaBundle.messagePointer("action.create.new.module-info.description"), AllIcons.FileTypes.Java);
   }
 
   @Override
   public void update(@NotNull AnActionEvent e) {
     DataContext ctx = e.getDataContext();
     IdeView view = LangDataKeys.IDE_VIEW.getData(ctx);
-    if (view == null || e.getProject() == null) {
+    PsiDirectory target = view != null && e.getProject() != null ? getTargetDirectory(ctx, view) : null;
+    if (target == null || !PsiUtil.isLanguageLevel9OrHigher(target)) {
       e.getPresentation().setEnabledAndVisible(false);
     }
     else {
       e.getPresentation().setVisible(true);
-      PsiDirectory target = getTargetDirectory(ctx, view);
-      e.getPresentation().setEnabled(
-        target != null && PsiUtil.isLanguageLevel9OrHigher(target) && JavaModuleGraphUtil.findDescriptorByElement(target) == null);
+      e.getPresentation().setEnabled(JavaModuleGraphUtil.findDescriptorByElement(target) == null);
     }
   }
 

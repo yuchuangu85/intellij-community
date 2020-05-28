@@ -6,6 +6,7 @@ import com.intellij.codeInspection.ex.EntryPointsManager;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
 
@@ -14,12 +15,11 @@ import java.util.Collection;
  * graph.
  *
  * @author anna
- * @since 6.0
  */
 public class RefUtil {
   private RefUtil() {}
 
-  public static boolean isImplicitUsage(PsiElement element) {
+  public static boolean isImplicitUsage(@Nullable PsiElement element) {
     if (element == null) {
       return false;
     }
@@ -29,7 +29,7 @@ public class RefUtil {
     return false;
   }
 
-  public static boolean isImplicitRead(PsiElement element) {
+  public static boolean isImplicitRead(@Nullable PsiElement element) {
     if (element == null) {
       return false;
     }
@@ -48,7 +48,7 @@ public class RefUtil {
     return false;
   }
 
-  public static boolean isImplicitWrite(PsiElement element) {
+  public static boolean isImplicitWrite(@Nullable PsiElement element) {
     if (element == null) {
       return false;
     }

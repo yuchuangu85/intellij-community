@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.popup;
 
 import com.intellij.codeInsight.lookup.LookupEvent;
@@ -21,7 +21,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -48,7 +47,7 @@ public class PopupPositionManager {
   public static void positionPopupInBestPosition(final JBPopup hint,
                                                  @Nullable final Editor editor,
                                                  @Nullable DataContext dataContext,
-                                                 @NotNull Position... relationToExistingPopup) {
+                                                 Position @NotNull ... relationToExistingPopup) {
     final LookupEx lookup = LookupManager.getActiveLookup(editor);
     if (lookup != null && lookup.getCurrentItem() != null && lookup.getComponent().isShowing()) {
       new PositionAdjuster(lookup.getComponent()).adjust(hint, relationToExistingPopup);
@@ -92,7 +91,7 @@ public class PopupPositionManager {
 
     final DataContext dataContext = DataManager.getInstance().getDataContext(focusOwner);
     final JBPopup popup = datakey.getData(dataContext);
-    if (popup != null && popup.isVisible()) {
+    if (popup != null && popup.isVisible() && !popup.isDisposed()) {
       return popup.getContent();
     }
 
@@ -105,7 +104,7 @@ public class PopupPositionManager {
     if (focusOwner == null) return null;
 
     JBPopup popup = PopupUtil.getPopupContainerFor(focusOwner);
-    if (popup != null && popup != hint) {
+    if (popup != null && popup != hint && !popup.isDisposed()) {
       return new PositionAdjuster(popup.getContent());
     }
 
@@ -223,17 +222,17 @@ public class PopupPositionManager {
       }
 
       if (popupRect != null) {
-        if (popup.isVisible()) {
-          popup.setLocation(new Point(r.x, r.y));
-        }
-        else {
+        if (popup.canShow()) {
           final Point p = new Point(r.x - myRelativeOnScreen.x, r.y - myRelativeOnScreen.y);
           popup.show(new RelativePoint(myRelativeTo, p));
+        }
+        else {
+          popup.setLocation(new Point(r.x, r.y));
         }
       }
       else {
         // ok, popup does not fit, will try to resize it
-        Collections.sort(boxes, Comparator.comparingInt((Rectangle o) -> o.width).thenComparingInt(o -> o.height));
+        boxes.sort(Comparator.comparingInt((Rectangle o) -> o.width).thenComparingInt(o -> o.height));
 
         final Rectangle suitableBox = boxes.get(boxes.size() - 1);
         final Rectangle crop = crop(suitableBox,
@@ -244,12 +243,12 @@ public class PopupPositionManager {
                                                   d.width, d.height));
 
         popup.setSize(crop.getSize());
-        if (popup.isVisible()) {
-          popup.setLocation(crop.getLocation());
-        }
-        else {
+        if (popup.canShow()) {
           popup.show(new RelativePoint(myRelativeTo, new Point(crop.getLocation().x - myRelativeOnScreen.x,
                                                                crop.getLocation().y - myRelativeOnScreen.y)));
+        }
+        else {
+          popup.setLocation(crop.getLocation());
         }
       }
     }

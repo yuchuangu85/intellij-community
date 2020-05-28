@@ -53,6 +53,7 @@ public class JavadocHighlightingTest extends LightDaemonAnalyzerTestCase {
   public void testParam2() { doTest(); }
   public void testParam3() { doTest(); }
   public void testParam4() { doTest(); }
+  public void testRecordParamJava14Preview() { doTest(); }
   public void testTypeParam() {
     myInspection.METHOD_OPTIONS.ACCESS_JAVADOC_REQUIRED_FOR = "private"; 
     myInspection.METHOD_OPTIONS.REQUIRED_TAGS = "@param"; 
@@ -66,6 +67,7 @@ public class JavadocHighlightingTest extends LightDaemonAnalyzerTestCase {
   public void testSee5() { doTest(); }
   public void testSee6() { doTest(); }
   public void testLinkToItself() { doTest(); }
+  public void testLinkToMethodNoParams() { doTest(); }
   public void testSeeConstants() { doTest(); }
   public void testSeeNonRefs() { doTest(); }
   public void testReturn0() { doTest(); }
@@ -91,6 +93,7 @@ public class JavadocHighlightingTest extends LightDaemonAnalyzerTestCase {
   public void testPackageInfo4() { doTest("packageInfo/p4/package-info.java"); }
   public void testJava18Tags() { doTest(); }
   public void testJava19Tags() { setLanguageLevel(LanguageLevel.JDK_1_9); doTest(); }
+  public void testJava12Tags() { setLanguageLevel(LanguageLevel.JDK_12); doTest(); }
   public void testModuleInfoTags() { setLanguageLevel(LanguageLevel.JDK_1_9); doTest("moduleInfo/m1/module-info.java"); }
   public void testDeprecatedModule() { setLanguageLevel(LanguageLevel.JDK_1_9); doTest("moduleInfo/m2/module-info.java"); }
   public void testUnknownInlineTag() { doTest(); }
@@ -101,7 +104,9 @@ public class JavadocHighlightingTest extends LightDaemonAnalyzerTestCase {
   public void testBadReference() { doTest(); }
   public void testMissingReturnDescription() { doTest(); }
   public void testDoubleParenthesesInCode() { doTest(); }
-  public void testDuplicateParam() { doTest(); }
+  public void testDuplicateParam0() { doTest(); }
+  public void testDuplicateParam1() { doTest(); }
+  public void testDuplicateParam2() { doTest(); }
   public void testDuplicateReturn() { doTest(); }
   public void testDuplicateDeprecated() { myInspection.IGNORE_DEPRECATED = false; doTest(); }
   public void testDuplicateSerial() { doTest(); }
@@ -115,6 +120,7 @@ public class JavadocHighlightingTest extends LightDaemonAnalyzerTestCase {
   public void testIgnoreDuplicateThrows() { myInspection.setIgnoreDuplicatedThrows(true); doTest(); }
   public void testIgnoreAccessors() { myInspection.setIgnoreSimpleAccessors(true); doTest(); }
   public void testAuthoredMethod() { doTest(); }
+  public void testThrowsInheritDoc() { doTest(); }
 
   public void testIssueLinksInJavaDoc() {
     IssueNavigationConfiguration navigationConfiguration = IssueNavigationConfiguration.getInstance(getProject());
@@ -125,9 +131,9 @@ public class JavadocHighlightingTest extends LightDaemonAnalyzerTestCase {
       configureByFile(getTestName(false) + ".java");
       List<String> expected = ContainerUtil.newArrayList(
         "http://example.com/ABC-1123", "http://example.com/ABC-2", "http://example.com/ABC-22", "http://example.com/ABC-11");
-      List<WebReference> refs = PlatformTestUtil.collectWebReferences(myFile);
+      List<WebReference> refs = PlatformTestUtil.collectWebReferences(getFile());
       assertTrue(refs.stream().allMatch(PsiReferenceBase::isSoft));
-      assertEquals(expected, refs.stream().map(WebReference::getUrl).collect(Collectors.toList()));
+      assertEquals(expected, ContainerUtil.map(refs, WebReference::getUrl));
     }
     finally {
       navigationConfiguration.setLinks(oldLinks);
@@ -141,7 +147,7 @@ public class JavadocHighlightingTest extends LightDaemonAnalyzerTestCase {
       "http://docs.oracle.com/javase/7/docs/tech-notes/guides/lang/cl-mt.html",
       "https://youtrack.jetbrains.com/issue/IDEA-131621",
       "mailto:webmaster@jetbrains.com");
-    List<WebReference> refs = PlatformTestUtil.collectWebReferences(myFile);
+    List<WebReference> refs = PlatformTestUtil.collectWebReferences(getFile());
     assertTrue(refs.stream().allMatch(PsiReferenceBase::isSoft));
     assertEquals(expected, refs.stream().map(PsiReferenceBase::getCanonicalText).collect(Collectors.toSet()));
   }

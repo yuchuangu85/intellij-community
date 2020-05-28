@@ -1,25 +1,16 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.codeStyle;
 
 import com.intellij.application.options.CodeStyle;
 import com.intellij.lang.Language;
-import com.intellij.openapi.components.PersistentStateComponent;
+import com.intellij.openapi.Disposable;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.components.PersistentStateComponentWithModificationTracker;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.extensions.ExtensionPointListener;
+import com.intellij.openapi.extensions.PluginDescriptor;
+import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.DefaultJDOMExternalizer;
 import com.intellij.openapi.util.DifferenceFilter;
@@ -27,18 +18,24 @@ import com.intellij.openapi.util.InvalidDataException;
 import com.intellij.openapi.util.WriteExternalException;
 import com.intellij.psi.PsiFile;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.containers.WeakList;
 import org.jdom.Element;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.TestOnly;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
-public class CodeStyleSettingsManager implements PersistentStateComponent<Element> {
+public class CodeStyleSettingsManager implements PersistentStateComponentWithModificationTracker<Element> {
   private static final Logger LOG = Logger.getInstance(CodeStyleSettingsManager.class);
 
   /**
-   * Use {@link #setMainProjectCodeStyle(CodeStyleSettings)} or {@link #getMainProjectCodeStyle()} instead
+   * @deprecated Use {@link #setMainProjectCodeStyle(CodeStyleSettings)} or {@link #getMainProjectCodeStyle()} instead
    */
   @Deprecated
   @Nullable
@@ -50,23 +47,159 @@ public class CodeStyleSettingsManager implements PersistentStateComponent<Elemen
 
   private final List<CodeStyleSettingsListener> myListeners = ContainerUtil.createLockFreeCopyOnWriteList();
 
+  private final static WeakList<CodeStyleSettings> ourReferencedSettings = new WeakList<>();
+
+  public CodeStyleSettings createSettings() {
+    CodeStyleSettings newSettings = new CodeStyleSettings(true, false);
+    registerSettings(newSettings);
+    return newSettings;
+  }
+
+  static void registerSettings(CodeStyleSettings newSettings) {
+    ourReferencedSettings.add(newSettings);
+  }
+
+  public final CodeStyleSettings createTemporarySettings() {
+    myTemporarySettings = new CodeStyleSettings(true, false);
+    return myTemporarySettings;
+  }
+
+  @SuppressWarnings("MethodMayBeStatic")
+  public final CodeStyleSettings cloneSettings(@NotNull CodeStyleSettings settings) {
+    CodeStyleSettings clonedSettings = new CodeStyleSettings(true, false);
+    clonedSettings.copyFrom(settings);
+    registerSettings(clonedSettings);
+    return clonedSettings;
+  }
+
+  @TestOnly
+  public static CodeStyleSettings createTestSettings(@Nullable CodeStyleSettings baseSettings) {
+    final CodeStyleSettings testSettings = new CodeStyleSettings(true, false);
+    if (baseSettings != null) {
+      testSettings.copyFrom(baseSettings);
+    }
+    return testSettings;
+  }
+
+  private Collection<CodeStyleSettings> getAllSettings() {
+    List<CodeStyleSettings> allSettings = new ArrayList<>(enumSettings());
+    allSettings.addAll(ourReferencedSettings.toStrongList());
+    return allSettings;
+  }
+
+  @Override
+  public long getStateModificationCount() {
+    return enumSettings().stream()
+                         .mapToLong(settings -> settings.getModificationTracker().getModificationCount())
+                         .sum();
+  }
+
   public static CodeStyleSettingsManager getInstance(@Nullable Project project) {
-    if (project == null || project.isDefault()) //noinspection deprecation
+    if (project == null || project.isDefault()) {
       return getInstance();
-    ProjectCodeStyleSettingsManager projectSettingsManager = ServiceManager.getService(project, ProjectCodeStyleSettingsManager.class);
-    projectSettingsManager.initProjectSettings(project);
-    return projectSettingsManager;
+    }
+
+    return project.getService(ProjectCodeStyleSettingsManager.class);
   }
 
-  /**
-   * @deprecated Use {@link CodeStyle#getDefaultSettings()} instead.
-   */
-  @Deprecated
   public static CodeStyleSettingsManager getInstance() {
-    return ServiceManager.getService(AppCodeStyleSettingsManager.class);
+    return ApplicationManager.getApplication().getService(AppCodeStyleSettingsManager.class);
   }
 
-  public CodeStyleSettingsManager() {}
+  protected void registerExtensionPointListeners(@NotNull Disposable disposable) {
+    FileIndentOptionsProvider.EP_NAME.addChangeListener(this::notifyCodeStyleSettingsChanged, disposable);
+    FileTypeIndentOptionsProvider.EP_NAME.addExtensionPointListener(
+      new ExtensionPointListener<FileTypeIndentOptionsProvider>() {
+        @Override
+        public void extensionAdded(@NotNull FileTypeIndentOptionsProvider extension,
+                                   @NotNull PluginDescriptor pluginDescriptor) {
+          registerFileTypeIndentOptions(getAllSettings(), extension.getFileType(), extension.createIndentOptions());
+        }
+
+        @Override
+        public void extensionRemoved(@NotNull FileTypeIndentOptionsProvider extension,
+                                     @NotNull PluginDescriptor pluginDescriptor) {
+          unregisterFileTypeIndentOptions(getAllSettings(), extension.getFileType());
+        }
+      }, disposable);
+    LanguageCodeStyleSettingsProvider.EP_NAME.addExtensionPointListener(
+      new ExtensionPointListener<LanguageCodeStyleSettingsProvider>() {
+        @Override
+        public void extensionAdded(@NotNull LanguageCodeStyleSettingsProvider extension, @NotNull PluginDescriptor pluginDescriptor) {
+          LanguageCodeStyleSettingsProvider.registerSettingsPageProvider(extension);
+          registerLanguageSettings(getAllSettings(), extension);
+          registerCustomSettings(getAllSettings(), extension);
+        }
+
+        @Override
+        public void extensionRemoved(@NotNull LanguageCodeStyleSettingsProvider extension, @NotNull PluginDescriptor pluginDescriptor) {
+          LanguageCodeStyleSettingsProvider.unregisterSettingsPageProvider(extension);
+          unregisterLanguageSettings(getAllSettings(), extension);
+          unregisterCustomSettings(getAllSettings(), extension);
+        }
+      }, disposable
+    );
+    CodeStyleSettingsProvider.EXTENSION_POINT_NAME.addExtensionPointListener(
+      new ExtensionPointListener<CodeStyleSettingsProvider>() {
+        @Override
+        public void extensionAdded(@NotNull CodeStyleSettingsProvider extension,
+                                   @NotNull PluginDescriptor pluginDescriptor) {
+          registerCustomSettings(getAllSettings(), extension);
+        }
+
+        @Override
+        public void extensionRemoved(@NotNull CodeStyleSettingsProvider extension,
+                                     @NotNull PluginDescriptor pluginDescriptor) {
+          unregisterCustomSettings(getAllSettings(), extension);
+        }
+      }, disposable
+    );
+  }
+
+  protected Collection<CodeStyleSettings> enumSettings() { return Collections.emptyList(); }
+
+  @ApiStatus.Internal
+  public final void registerFileTypeIndentOptions(@NotNull Collection<CodeStyleSettings> allSettings,
+                                                  @NotNull FileType fileType,
+                                                  @NotNull CommonCodeStyleSettings.IndentOptions indentOptions) {
+    allSettings.forEach(settings -> settings.registerAdditionalIndentOptions(fileType, indentOptions));
+    notifyCodeStyleSettingsChanged();
+  }
+
+  @ApiStatus.Internal
+  public final void unregisterFileTypeIndentOptions(@NotNull Collection<CodeStyleSettings> allSettings,
+                                                    @NotNull FileType fileType) {
+    allSettings.forEach(settings -> settings.unregisterAdditionalIndentOptions(fileType));
+    notifyCodeStyleSettingsChanged();
+  }
+
+  @ApiStatus.Internal
+  public final void registerLanguageSettings(@NotNull Collection<CodeStyleSettings> allSettings,
+                                             @NotNull LanguageCodeStyleSettingsProvider provider) {
+    allSettings.forEach(settings -> settings.registerSettings(provider));
+    notifyCodeStyleSettingsChanged();
+  }
+
+  @ApiStatus.Internal
+  public final void unregisterLanguageSettings(@NotNull Collection<CodeStyleSettings> allSettings,
+                                               @NotNull LanguageCodeStyleSettingsProvider provider) {
+    allSettings.forEach(settings -> settings.removeSettings(provider));
+    notifyCodeStyleSettingsChanged();
+  }
+
+  @ApiStatus.Internal
+  public final void registerCustomSettings(@NotNull Collection<CodeStyleSettings> allSettings,
+                                           @NotNull CodeStyleSettingsProvider provider) {
+    allSettings.forEach(settings -> settings.registerSettings(provider));
+    notifyCodeStyleSettingsChanged();
+  }
+
+  @ApiStatus.Internal
+  public final void unregisterCustomSettings(@NotNull Collection<CodeStyleSettings> allSettings,
+                                             @NotNull CodeStyleSettingsProvider provider) {
+    allSettings.forEach(settings -> settings.removeSettings(provider));
+    notifyCodeStyleSettingsChanged();
+  }
 
   /**
    * @deprecated Use one of the following methods:
@@ -86,7 +219,7 @@ public class CodeStyleSettingsManager implements PersistentStateComponent<Elemen
   }
 
   /**
-   * @deprecated see comments for {@link #getSettings(Project)}
+   * @deprecated see comments for {@link #getSettings(Project)} or {@link CodeStyle#getDefaultSettings()}
    */
   @Deprecated
   @NotNull
@@ -136,7 +269,6 @@ public class CodeStyleSettingsManager implements PersistentStateComponent<Elemen
    * @param settings The code style settings which can be assigned to project.
    */
   public void setMainProjectCodeStyle(@Nullable CodeStyleSettings settings) {
-    //noinspection deprecation
     PER_PROJECT_SETTINGS = settings;
   }
 
@@ -145,10 +277,12 @@ public class CodeStyleSettingsManager implements PersistentStateComponent<Elemen
    */
   @Nullable
   public CodeStyleSettings getMainProjectCodeStyle() {
-    //noinspection deprecation
     return PER_PROJECT_SETTINGS;
   }
 
+  /**
+   * @deprecated unused
+   */
   @Deprecated
   public boolean isLoaded() {
     return true;
@@ -180,7 +314,6 @@ public class CodeStyleSettingsManager implements PersistentStateComponent<Elemen
 
   public static void removeListener(@Nullable Project project, @NotNull CodeStyleSettingsListener listener) {
     if (project == null || project.isDefault()) {
-      //noinspection deprecation
       getInstance().removeListener(listener);
     }
     else {
@@ -199,4 +332,22 @@ public class CodeStyleSettingsManager implements PersistentStateComponent<Elemen
     }
   }
 
+  /**
+   * Increase current project's code style modification tracker and notify all the listeners on changed code style. The
+   * method must be called if project code style is changed programmatically so that editors and etc. are aware of
+   * code style update and refresh their settings accordingly.
+   *
+   * @see CodeStyleSettingsListener
+   * @see #addListener(CodeStyleSettingsListener)
+   */
+  public final void notifyCodeStyleSettingsChanged() {
+    updateSettingsTracker();
+    fireCodeStyleSettingsChanged(null);
+  }
+
+  @ApiStatus.Internal
+  public void updateSettingsTracker() {
+    CodeStyleSettings settings = getCurrentSettings();
+    settings.getModificationTracker().incModificationCount();
+  }
 }

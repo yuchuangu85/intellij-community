@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 /*
  * Author: max
@@ -42,7 +28,6 @@ import java.util.Set;
 public class InspectionManagerEx extends InspectionManagerBase {
   private final NotNullLazyValue<ContentManager> myContentManager;
   private final Set<GlobalInspectionContextImpl> myRunningContexts = new HashSet<>();
-  private GlobalInspectionContextImpl myGlobalInspectionContext;
 
   public InspectionManagerEx(final Project project) {
     super(project);
@@ -66,8 +51,8 @@ public class InspectionManagerEx extends InspectionManagerBase {
           ToolWindow toolWindow = toolWindowManager.registerToolWindow(ToolWindowId.INSPECTION, true, ToolWindowAnchor.BOTTOM, project);
           ContentManager contentManager = toolWindow.getContentManager();
           toolWindow.setIcon(AllIcons.Toolwindows.ToolWindowInspection);
-          new ContentManagerWatcher(toolWindow, contentManager);
-          contentManager.addContentManagerListener(new ContentManagerAdapter() {
+          ContentManagerWatcher.watchContentManager(toolWindow, contentManager);
+          contentManager.addContentManagerListener(new ContentManagerListener() {
             private static final String PREFIX = "of ";
 
             @Override
@@ -110,31 +95,22 @@ public class InspectionManagerEx extends InspectionManagerBase {
                                                    @NotNull final ProblemHighlightType highlightType,
                                                    @Nullable final HintAction hintAction,
                                                    boolean onTheFly,
-                                                   @Nullable LocalQuickFix... fixes) {
+                                                   LocalQuickFix @Nullable ... fixes) {
     return new ProblemDescriptorImpl(psiElement, psiElement, descriptionTemplate, fixes, highlightType, false, null, hintAction, onTheFly);
   }
 
   @Override
   @NotNull
   public GlobalInspectionContextImpl createNewGlobalContext(boolean reuse) {
-    final GlobalInspectionContextImpl inspectionContext;
-    if (reuse) {
-      if (myGlobalInspectionContext == null) {
-        myGlobalInspectionContext = inspectionContext = new GlobalInspectionContextImpl(getProject(), myContentManager);
-      }
-      else {
-        inspectionContext = myGlobalInspectionContext;
-      }
-    }
-    else {
-      inspectionContext = new GlobalInspectionContextImpl(getProject(), myContentManager);
-    }
-    myRunningContexts.add(inspectionContext);
-    return inspectionContext;
+    return createNewGlobalContext();
   }
 
-  public void setProfile(@NotNull String name) {
-    myCurrentProfileName = name;
+  @NotNull
+  @Override
+  public GlobalInspectionContextImpl createNewGlobalContext() {
+    final GlobalInspectionContextImpl inspectionContext = new GlobalInspectionContextImpl(getProject(), myContentManager);
+    myRunningContexts.add(inspectionContext);
+    return inspectionContext;
   }
 
   void closeRunningContext(@NotNull GlobalInspectionContextImpl globalInspectionContext){

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.highlighting
 
 import com.intellij.testFramework.LightProjectDescriptor
@@ -11,7 +11,7 @@ import org.jetbrains.plugins.groovy.util.TestUtils
 @CompileStatic
 class Groovy30HighlightingTest extends GroovyVersionBasedTest {
 
-  final LightProjectDescriptor projectDescriptor = GroovyProjectDescriptors.GROOVY_3_0
+  final LightProjectDescriptor projectDescriptor = GroovyProjectDescriptors.GROOVY_3_0_REAL_JDK
   final String basePath = TestUtils.testDataPath + 'highlighting/v30/'
 
   void 'test default method in interfaces'() {
@@ -66,7 +66,14 @@ I i = {3}
   }
 
   void 'test constructor reference static access'() {
-    fixture.enableInspections GrUnresolvedAccessInspection
-    highlightingTest()
+    fileHighlightingTest GrUnresolvedAccessInspection
+  }
+
+  void 'test illegal single argument lambda'() {
+    fileHighlightingTest ()
+  }
+
+  void 'test type use in annotation description'() {
+    fileHighlightingTest()
   }
 }

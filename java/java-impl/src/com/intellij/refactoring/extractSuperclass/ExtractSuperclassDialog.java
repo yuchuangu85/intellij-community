@@ -15,6 +15,7 @@
  */
 package com.intellij.refactoring.extractSuperclass;
 
+import com.intellij.java.refactoring.JavaRefactoringBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiMember;
@@ -30,7 +31,7 @@ import com.intellij.refactoring.util.DocCommentPolicy;
 import com.intellij.refactoring.util.classMembers.InterfaceContainmentVerifier;
 import com.intellij.refactoring.util.classMembers.MemberInfo;
 import com.intellij.refactoring.util.classMembers.UsesAndInterfacesDependencyMemberInfoModel;
-import com.intellij.util.ArrayUtil;
+import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
@@ -40,18 +41,18 @@ class ExtractSuperclassDialog extends JavaExtractSuperBaseDialog {
   private final InterfaceContainmentVerifier myContainmentVerifier = new InterfaceContainmentVerifier() {
     @Override
     public boolean checkedInterfacesContain(PsiMethod psiMethod) {
-      return PullUpProcessor.checkedInterfacesContain(myMemberInfos, psiMethod);
+      return PullUpProcessor.checkedInterfacesContain(getMemberInfos(), psiMethod);
     }
   };
 
   public interface Callback {
+
     boolean checkConflicts(ExtractSuperclassDialog dialog);
   }
-
   private final Callback myCallback;
 
   ExtractSuperclassDialog(Project project, PsiClass sourceClass, List<MemberInfo> selectedMembers, Callback callback) {
-    super(project, sourceClass, selectedMembers, ExtractSuperclassHandler.REFACTORING_NAME);
+    super(project, sourceClass, selectedMembers, ExtractSuperclassHandler.getRefactoringName());
     myCallback = callback;
     init();
   }
@@ -60,11 +61,15 @@ class ExtractSuperclassDialog extends JavaExtractSuperBaseDialog {
     return myContainmentVerifier;
   }
 
+  private List<MemberInfo> getMemberInfos() {
+    return myMemberInfos;
+  }
+
   @Override
   protected String getClassNameLabelText() {
     return isExtractSuperclass()
            ? RefactoringBundle.message("superclass.name")
-           : RefactoringBundle.message("extractSuper.rename.original.class.to");
+           : JavaRefactoringBundle.message("extractSuper.rename.original.class.to");
   }
 
   @Override
@@ -74,6 +79,7 @@ class ExtractSuperclassDialog extends JavaExtractSuperBaseDialog {
            : RefactoringBundle.message("package.for.original.class");
   }
 
+  @NotNull
   @Override
   protected String getEntityName() {
     return RefactoringBundle.message("ExtractSuperClass.superclass");
@@ -108,7 +114,7 @@ class ExtractSuperclassDialog extends JavaExtractSuperBaseDialog {
 
   @Override
   protected String getDocCommentPanelName() {
-    return RefactoringBundle.message("javadoc.for.abstracts");
+    return JavaRefactoringBundle.message("javadoc.for.abstracts");
   }
 
   @Override
@@ -135,7 +141,7 @@ class ExtractSuperclassDialog extends JavaExtractSuperBaseDialog {
   @Override
   protected ExtractSuperBaseProcessor createProcessor() {
     return new ExtractSuperClassProcessor(myProject, getTargetDirectory(), getExtractedSuperName(),
-                                          mySourceClass, ArrayUtil.toObjectArray(getSelectedMemberInfos(), MemberInfo.class), false,
+                                          mySourceClass, getSelectedMemberInfos().toArray(new MemberInfo[0]), false,
                                           new DocCommentPolicy(getDocCommentPolicy()));
   }
 

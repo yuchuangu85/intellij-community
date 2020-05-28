@@ -3,11 +3,13 @@ package com.intellij.openapi.projectRoots.ex;
 
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.projectRoots.*;
+import com.intellij.openapi.projectRoots.JavaSdkVersion;
+import com.intellij.openapi.projectRoots.JavaSdkVersionUtil;
+import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.pom.java.LanguageLevel;
-import com.intellij.rt.compiler.JavacRunner;
+import com.intellij.rt.execution.CommandLineWrapper;
 import com.intellij.util.PathUtil;
 import com.intellij.util.PathsList;
 import com.intellij.util.ReflectionUtil;
@@ -21,7 +23,7 @@ import java.util.List;
 public class JavaSdkUtil {
   private static final String IDEA_PREPEND_RT_JAR = "idea.prepend.rtjar";
 
-  public static void addRtJar(PathsList pathsList) {
+  public static void addRtJar(@NotNull PathsList pathsList) {
     String ideaRtJarPath = getIdeaRtJarPath();
     if (Boolean.getBoolean(IDEA_PREPEND_RT_JAR)) {
       pathsList.addFirst(ideaRtJarPath);
@@ -31,16 +33,19 @@ public class JavaSdkUtil {
     }
   }
 
+  @NotNull
   public static String getJunit4JarPath() {
     return PathUtil.getJarPathForClass(ReflectionUtil.forName("org.junit.Test"));
   }
 
+  @NotNull
   public static String getJunit3JarPath() {
     return PathUtil.getJarPathForClass(ReflectionUtil.forName("junit.runner.TestSuiteLoader")); //junit3 specific class
   }
 
+  @NotNull
   public static String getIdeaRtJarPath() {
-    return PathUtil.getJarPathForClass(JavacRunner.class);
+    return PathUtil.getJarPathForClass(CommandLineWrapper.class);
   }
 
   @NotNull

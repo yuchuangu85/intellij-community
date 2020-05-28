@@ -37,6 +37,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.ui.DoubleClickListener;
 import com.intellij.xdebugger.XDebugProcess;
 import com.intellij.xdebugger.XDebugSession;
+import com.intellij.xdebugger.XDebuggerManager;
 import com.intellij.xdebugger.impl.frame.XDebugView;
 import com.intellij.xdebugger.impl.ui.DebuggerUIUtil;
 import com.intellij.xdebugger.impl.ui.tree.XDebuggerTree;
@@ -50,7 +51,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public abstract class DebuggerAction extends AnAction {
-  private static final DebuggerTreeNodeImpl[] EMPTY_TREE_NODE_ARRAY = new DebuggerTreeNodeImpl[0];
+  private static class Holder {
+    private static final DebuggerTreeNodeImpl[] EMPTY_TREE_NODE_ARRAY = new DebuggerTreeNodeImpl[0];
+  }
 
   @Nullable
   public static DebuggerTree getTree(DataContext dataContext){
@@ -81,13 +84,12 @@ public abstract class DebuggerAction extends AnAction {
     return (DebuggerTreeNodeImpl)component;
   }
 
-  @Nullable
-  public static DebuggerTreeNodeImpl[] getSelectedNodes(DataContext dataContext) {
+  public static DebuggerTreeNodeImpl @Nullable [] getSelectedNodes(DataContext dataContext) {
     DebuggerTree tree = getTree(dataContext);
     if(tree == null) return null;
     TreePath[] paths = tree.getSelectionPaths();
     if (paths == null || paths.length == 0) {
-      return EMPTY_TREE_NODE_ARRAY;
+      return Holder.EMPTY_TREE_NODE_ARRAY;
     }
     List<DebuggerTreeNodeImpl> nodes = new ArrayList<>(paths.length);
     for (TreePath path : paths) {
@@ -120,7 +122,7 @@ public abstract class DebuggerAction extends AnAction {
   public static Disposable installEditAction(final JTree tree, String actionName) {
     final DoubleClickListener listener = new DoubleClickListener() {
       @Override
-      protected boolean onDoubleClick(MouseEvent e) {
+      protected boolean onDoubleClick(@NotNull MouseEvent e) {
         if (tree.getPathForLocation(e.getX(), e.getY()) == null) return false;
         DataContext dataContext = DataManager.getInstance().getDataContext(tree);
         GotoFrameSourceAction.doAction(dataContext);
@@ -166,5 +168,22 @@ public abstract class DebuggerAction extends AnAction {
       }
       session.rebuildViews();
     }
+  }
+
+  public static boolean isInJavaSession(AnActionEvent e) {
+    XDebugSession session = getSession(e);
+    return session != null && session.getDebugProcess() instanceof JavaDebugProcess;
+  }
+
+  @Nullable
+  public static XDebugSession getSession(AnActionEvent e) {
+    XDebugSession session = e.getData(XDebugSession.DATA_KEY);
+    if (session == null) {
+      Project project = e.getProject();
+      if (project != null) {
+        session = XDebuggerManager.getInstance(project).getCurrentSession();
+      }
+    }
+    return session;
   }
 }

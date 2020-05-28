@@ -53,8 +53,7 @@ public abstract class JavaDirectoryService {
    *
    * @return the array of classes.
    */
-  @NotNull
-  public abstract PsiClass[] getClasses(@NotNull PsiDirectory dir);
+  public abstract PsiClass @NotNull [] getClasses(@NotNull PsiDirectory dir);
 
   /**
    * Creates a class with the specified name in the directory.
@@ -73,7 +72,6 @@ public abstract class JavaDirectoryService {
    * @param templateName custom file template to create class text based on.
    * @return the created class instance.
    * @throws IncorrectOperationException if the operation failed for some reason.
-   * @since 5.1
    */
   @NotNull
   public abstract PsiClass createClass(@NotNull PsiDirectory dir, @NotNull String name, @NotNull String templateName) throws IncorrectOperationException;
@@ -123,6 +121,16 @@ public abstract class JavaDirectoryService {
    */
   @NotNull
   public abstract PsiClass createEnum(@NotNull PsiDirectory dir, @NotNull String name) throws IncorrectOperationException;
+
+  /**
+   * Creates a record class with the specified name in the directory.
+   *
+   * @param name the name of the record class to create (not including the file extension).
+   * @return the created record instance.
+   * @throws IncorrectOperationException if the operation failed for some reason.
+   */
+  @NotNull
+  public abstract PsiClass createRecord(@NotNull PsiDirectory dir, @NotNull String name) throws IncorrectOperationException;
 
   /**
    * Creates an annotation class with the specified name in the directory.

@@ -953,8 +953,144 @@ public class Py3TypeTest extends PyTestCase {
     );
   }
 
+  // PY-28506
+  public void testDataclassPostInitInheritedParameter() {
+    runWithLanguageLevel(
+      LanguageLevel.PYTHON37,
+      () -> {
+        myFixture.copyDirectoryToProject(TEST_DIRECTORY + "DataclassPostInitParameter", "");
+
+        // both are dataclasses with enabled `init`
+        doTest("int",
+               "from dataclasses import dataclass, InitVar\n" +
+               "\n" +
+               "@dataclass\n" +
+               "class A:\n" +
+               "    a: InitVar[int]\n" +
+               "\n" +
+               "@dataclass\n" +
+               "class B(A):\n" +
+               "    b: InitVar[str]\n" +
+               "\n" +
+               "    def __post_init__(self, a, b):\n" +
+               "        expr = a");
+      }
+    );
+  }
+
+  // PY-28506
+  public void testDataclassPostInitInheritedParameter2() {
+    runWithLanguageLevel(
+      LanguageLevel.PYTHON37,
+      () -> {
+        myFixture.copyDirectoryToProject(TEST_DIRECTORY + "DataclassPostInitParameter", "");
+
+        // both are dataclasses, base with enabled `init`
+        doTest("Any",
+               "from dataclasses import dataclass, InitVar\n" +
+               "\n" +
+               "@dataclass\n" +
+               "class A:\n" +
+               "    a: InitVar[int]\n" +
+               "\n" +
+               "@dataclass(init=False)\n" +
+               "class B(A):\n" +
+               "    b: InitVar[str]\n" +
+               "\n" +
+               "    def __post_init__(self, a, b):\n" +
+               "        expr = a");
+      }
+    );
+  }
+
+  // PY-28506
+  public void testDataclassPostInitInheritedParameter3() {
+    runWithLanguageLevel(
+      LanguageLevel.PYTHON37,
+      () -> {
+        myFixture.copyDirectoryToProject(TEST_DIRECTORY + "DataclassPostInitParameter", "");
+
+        // both are dataclasses, derived with enabled `init`
+        doTest("int",
+               "from dataclasses import dataclass, InitVar\n" +
+               "\n" +
+               "@dataclass(init=False)\n" +
+               "class A:\n" +
+               "    a: InitVar[int]\n" +
+               "\n" +
+               "@dataclass\n" +
+               "class B(A):\n" +
+               "    b: InitVar[str]\n" +
+               "\n" +
+               "    def __post_init__(self, a, b):\n" +
+               "        expr = a");
+      }
+    );
+  }
+
+  // PY-28506
+  public void testDataclassPostInitInheritedParameter4() {
+    runWithLanguageLevel(
+      LanguageLevel.PYTHON37,
+      () -> {
+        myFixture.copyDirectoryToProject(TEST_DIRECTORY + "DataclassPostInitParameter", "");
+
+        // both are dataclasses with disabled `init`
+        doTest("Any",
+               "from dataclasses import dataclass, InitVar\n" +
+               "\n" +
+               "@dataclass(init=False)\n" +
+               "class A:\n" +
+               "    a: InitVar[int]\n" +
+               "\n" +
+               "@dataclass(init=False)\n" +
+               "class B(A):\n" +
+               "    b: InitVar[str]\n" +
+               "\n" +
+               "    def __post_init__(self, a, b):\n" +
+               "        expr = a");
+      }
+    );
+  }
+
+  // PY-28506
+  public void testMixedDataclassPostInitInheritedParameter() {
+    runWithLanguageLevel(
+      LanguageLevel.PYTHON37,
+      () -> {
+        myFixture.copyDirectoryToProject(TEST_DIRECTORY + "DataclassPostInitParameter", "");
+
+        doTest("Any",
+               "from dataclasses import dataclass, InitVar\n" +
+               "\n" +
+               "class A:\n" +
+               "    a: InitVar[int]\n" +
+               "\n" +
+               "@dataclass\n" +
+               "class B(A):\n" +
+               "    b: InitVar[str]\n" +
+               "\n" +
+               "    def __post_init__(self, a, b):\n" +
+               "        expr = a");
+
+        doTest("Any",
+               "from dataclasses import dataclass, InitVar\n" +
+               "\n" +
+               "@dataclass\n" +
+               "class A:\n" +
+               "    a: InitVar[int]\n" +
+               "\n" +
+               "class B(A):\n" +
+               "    b: InitVar[str]\n" +
+               "\n" +
+               "    def __post_init__(self, a, b):\n" +
+               "        expr = a");
+      }
+    );
+  }
+
   // PY-27783
-  public void testApplyingSuperSubstituionToGenericClass() {
+  public void testApplyingSuperSubstitutionToGenericClass() {
     runWithLanguageLevel(
       LanguageLevel.PYTHON36,
       () -> doTest("Dict[T, int]",
@@ -980,7 +1116,7 @@ public class Py3TypeTest extends PyTestCase {
     doTest("Union[float, int]", "expr = round(1, 1)");
 
     doTest("int", "expr = round(1.1)");
-    doTest("Union[float, int]", "expr = round(1.1, 1)");
+    doTest("float", "expr = round(1.1, 1)");
 
     doTest("int", "expr = round(True)");
     doTest("Union[float, int]", "expr = round(True, 1)");
@@ -995,6 +1131,15 @@ public class Py3TypeTest extends PyTestCase {
   public void testFStringLiteralType() {
     doTest("str",
            "expr = f'foo'");
+  }
+
+  // PY-35885
+  public void testFunctionDunderDoc() {
+    doTest("str",
+           "def example():\n" +
+           "    \"\"\"Example Docstring\"\"\"\n" +
+           "    return 0\n" +
+           "expr = example.__doc__");
   }
 
   private void doTest(final String expectedType, final String text) {

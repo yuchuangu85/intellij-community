@@ -28,6 +28,7 @@ import com.intellij.openapi.editor.highlighter.EditorHighlighter;
 import com.intellij.openapi.editor.highlighter.HighlighterIterator;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.util.MathUtil;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
@@ -58,13 +59,9 @@ public class ToggleCaseAction extends TextComponentEditorAction {
         VisualPosition caretPosition = c.getVisualPosition();
         int selectionStartOffset = c.getSelectionStart();
         int selectionEndOffset = c.getSelectionEnd();
-        VisualPosition selectionStartPosition = c.getSelectionStartPosition();
-        VisualPosition selectionEndPosition = c.getSelectionEndPosition();
-        c.removeSelection();
         editor.getDocument().replaceString(selectionStartOffset, selectionEndOffset,
                                            toCase(editor, selectionStartOffset, selectionEndOffset, toLowerCase.get()));
         c.moveToVisualPosition(caretPosition);
-        c.setSelection(selectionStartPosition, selectionStartOffset, selectionEndPosition, selectionEndOffset);
       });
     }
 
@@ -90,8 +87,8 @@ public class ToggleCaseAction extends TextComponentEditorAction {
       HighlighterIterator iterator = highlighter.createIterator(startOffset);
       StringBuilder builder = new StringBuilder(endOffset - startOffset);
       while (!iterator.atEnd()) {
-        int start = trim(iterator.getStart(), startOffset, endOffset);
-        int end = trim(iterator.getEnd(), startOffset, endOffset);
+        int start = MathUtil.clamp(iterator.getStart(), startOffset, endOffset);
+        int end = MathUtil.clamp(iterator.getEnd(), startOffset, endOffset);
         CharSequence fragment = text.subSequence(start, end);
 
         builder.append(iterator.getTokenType() == VALID_STRING_ESCAPE_TOKEN ? fragment :
@@ -102,10 +99,6 @@ public class ToggleCaseAction extends TextComponentEditorAction {
         iterator.advance();
       }
       return builder.toString();
-    }
-
-    private static int trim(int value, int lowerLimit, int upperLimit) {
-      return Math.min(upperLimit, Math.max(lowerLimit, value));
     }
   }
 }

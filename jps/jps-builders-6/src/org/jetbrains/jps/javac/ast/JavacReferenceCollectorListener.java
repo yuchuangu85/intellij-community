@@ -9,27 +9,18 @@ import gnu.trove.TObjectIntHashMap;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.javac.ast.api.*;
 
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.Name;
-import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.*;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
-import javax.tools.*;
+import javax.tools.JavaCompiler;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 final class JavacReferenceCollectorListener implements TaskListener {
-  private final static TObjectIntHashMap<JavacRef> EMPTY_T_OBJ_INT_MAP = new TObjectIntHashMap<JavacRef>(0);
-
-  private final boolean myDivideImportRefs;
   private final Consumer<? super JavacFileData> myDataConsumer;
   private final JavacTask myJavacTask;
   private final JavacTreeRefScanner myAstScanner;
@@ -43,9 +34,7 @@ final class JavacReferenceCollectorListener implements TaskListener {
 
   private final Map<String, ReferenceCollector> myIncompletelyProcessedFiles = new HashMap<String, ReferenceCollector>(10);
 
-  static void installOn(JavaCompiler.CompilationTask task,
-                        boolean divideImportRefs,
-                        Consumer<? super JavacFileData> dataConsumer) {
+  static void installOn(JavaCompiler.CompilationTask task, Consumer<? super JavacFileData> dataConsumer) {
     JavacTask javacTask = (JavacTask)task;
     Method addTaskMethod; // jdk >= 8
     try {
@@ -54,10 +43,9 @@ final class JavacReferenceCollectorListener implements TaskListener {
     catch (NoSuchMethodException e) {
       addTaskMethod = null;
     }
-    final JavacReferenceCollectorListener taskListener = new JavacReferenceCollectorListener(divideImportRefs,
-                                                                                             dataConsumer,
-                                                                                             javacTask,
-                                                                                             addTaskMethod != null);
+    final JavacReferenceCollectorListener taskListener = new JavacReferenceCollectorListener(
+      dataConsumer, javacTask, addTaskMethod != null
+    );
     if (addTaskMethod != null) {
       try {
         addTaskMethod.setAccessible(true);
@@ -75,11 +63,9 @@ final class JavacReferenceCollectorListener implements TaskListener {
     }
   }
 
-  private JavacReferenceCollectorListener(boolean divideImportRefs,
-                                          Consumer<? super JavacFileData> dataConsumer,
+  private JavacReferenceCollectorListener(Consumer<? super JavacFileData> dataConsumer,
                                           JavacTask javacTask,
                                           boolean atLeastJdk8) {
-    myDivideImportRefs = divideImportRefs;
     myDataConsumer = dataConsumer;
     myJavacTask = javacTask;
     myAtLeastJdk8 = atLeastJdk8;
@@ -133,9 +119,6 @@ final class JavacReferenceCollectorListener implements TaskListener {
 
       if (collectImportsData) {
         scanImports(unit, incompletelyProcessedFile.myFileData.getRefs(), incompletelyProcessedFile);
-        if (myDivideImportRefs) {
-          scanImports(unit, incompletelyProcessedFile.myFileData.getImportRefs(), incompletelyProcessedFile);
-        }
       }
       myAstScanner.scan(declarationToProcess, incompletelyProcessedFile);
 
@@ -171,28 +154,29 @@ final class JavacReferenceCollectorListener implements TaskListener {
           final MemberSelectTree classImport = (MemberSelectTree)qExpr;
           final Element ownerElement = incompletelyProcessedFile.getReferencedElement(classImport);
           final Name name = id.getIdentifier();
-          if (!myNameTableCache.isAsterisk(name)) {
+          final JavacRef.ImportProperties importProps = JavacRef.ImportProperties.create(anImport.isStatic(), myNameTableCache.isAsterisk(name));
+          if (!importProps.isOnDemand()) {
             // member import
             for (Element memberElement : myElementUtility.getAllMembers((TypeElement)ownerElement)) {
               if (memberElement.getSimpleName() == name) {
-                incrementOrAdd(elements, JavacRef.JavacElementRefBase.fromElement(memberElement, null, myNameTableCache));
+                incrementOrAdd(elements, JavacRef.JavacElementRefBase.fromElement(null, memberElement, null, myNameTableCache, importProps));
               }
             }
           }
-          collectClassImports(ownerElement, elements);
+          collectClassImports(ownerElement, elements, importProps);
         }
       } else {
         // class import
-        collectClassImports(element, elements);
+        collectClassImports(element, elements, JavacRef.ImportProperties.create(anImport.isStatic(), false));
       }
     }
   }
 
-  private void collectClassImports(Element baseImport, TObjectIntHashMap<JavacRef> collector) {
+  private void collectClassImports(Element baseImport, TObjectIntHashMap<JavacRef> collector, final JavacRef.ImportProperties importProps) {
     for (Element element = baseImport;
          element != null && element.getKind() != ElementKind.PACKAGE;
          element = element.getEnclosingElement()) {
-      incrementOrAdd(collector, JavacRef.JavacElementRefBase.fromElement(element, null, myNameTableCache));
+      incrementOrAdd(collector, JavacRef.JavacElementRefBase.fromElement(null, element, null, myNameTableCache, importProps));
     }
   }
 
@@ -200,18 +184,34 @@ final class JavacReferenceCollectorListener implements TaskListener {
     private final JavacFileData myFileData;
     private final JavacTreeHelper myTreeHelper;
     private int myRemainDeclarations;
-
+    private final JavacRef.JavacClass myPackageInfo;
+    
     private ReferenceCollector(int remainDeclarations,
                                String filePath,
                                CompilationUnitTree unitTree) {
       myRemainDeclarations = remainDeclarations;
-      myFileData = new JavacFileData(filePath,
-                                     createReferenceHolder(),
-                                     myDivideImportRefs ? createReferenceHolder() : EMPTY_T_OBJ_INT_MAP,
-                                     new ArrayList<JavacTypeCast>(),
-                                     createDefinitionHolder(),
-                                     new THashSet<JavacRef>());
+      myFileData = new JavacFileData(
+        filePath, createReferenceHolder(), new ArrayList<JavacTypeCast>(), createDefinitionHolder(), new THashSet<JavacRef>()
+      );
       myTreeHelper = new JavacTreeHelper(unitTree, myTreeUtility);
+
+      if (isPackageInfo(filePath)) {
+        final ExpressionTree packageName = unitTree.getPackageName();
+        final String pack = packageName != null ? packageName.toString() : "";
+        myPackageInfo = new JavacRef.JavacClassImpl(false, Collections.<Modifier>emptySet(), pack.isEmpty()? "package-info" : pack + ".package-info");
+        sinkDeclaration(new JavacDef.JavacClassDef(myPackageInfo, JavacRef.EMPTY_ARRAY));
+      }
+      else {
+        myPackageInfo = null;
+      }
+    }
+
+    private boolean isPackageInfo(String filePath) {
+      if (filePath != null && filePath.endsWith("package-info.java")) {
+        final int idx = filePath.length() - "package-info.java".length() - 1;
+        return idx >= 0 && (filePath.charAt(idx) == '/' || filePath.charAt(idx) == File.separatorChar);
+      }
+      return false;
     }
 
     void sinkReference(@Nullable JavacRef.JavacElementRefBase ref) {
@@ -233,21 +233,25 @@ final class JavacReferenceCollectorListener implements TaskListener {
     }
 
     @Nullable
-    JavacRef.JavacElementRefBase asJavacRef(Element element) {
-      return asJavacRef(element, null);
+    JavacRef.JavacElementRefBase asJavacRef(final Element containingClass, Element element) {
+      return asJavacRef(containingClass, element, null);
     }
 
     @Nullable
-    JavacRef.JavacElementRefBase asJavacRef(Element element, Element qualifier) {
-      return JavacRef.JavacElementRefBase.fromElement(element, qualifier, myNameTableCache);
+    JavacRef.JavacElementRefBase asJavacRef(final Element containingClass, Element element, Element qualifier) {
+      return JavacRef.JavacElementRefBase.fromElement(getContainingClassName(containingClass), element, qualifier, myNameTableCache);
     }
 
     @Nullable
-    JavacRef.JavacElementRefBase asJavacRef(TypeMirror typeMirror) {
+    JavacRef.JavacElementRefBase asJavacRef(final Element containingClass, TypeMirror typeMirror) {
       final Element element = getTypeUtility().asElement(typeMirror);
-      return element == null ? null : JavacRef.JavacElementRefBase.fromElement(element, null, myNameTableCache);
+      return element == null ? null : JavacRef.JavacElementRefBase.fromElement(getContainingClassName(containingClass), element, null, myNameTableCache);
     }
 
+    private String getContainingClassName(Element containingClass) {
+      return containingClass != null? myNameTableCache.parseBinaryName(containingClass) : myPackageInfo != null? myPackageInfo.getName() : null;
+    }
+    
     Element getReferencedElement(Tree tree) {
       return myTreeHelper.getReferencedElement(tree);
     }

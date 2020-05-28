@@ -1,19 +1,17 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.fileEditor.impl;
 
+import com.intellij.diagnostic.PluginException;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.RoamingType;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
-import com.intellij.openapi.extensions.ExtensionPointListener;
-import com.intellij.openapi.extensions.Extensions;
-import com.intellij.openapi.extensions.PluginDescriptor;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileEditor.FileEditorPolicy;
 import com.intellij.openapi.fileEditor.FileEditorProvider;
 import com.intellij.openapi.fileEditor.WeighedFileEditorProvider;
 import com.intellij.openapi.fileEditor.ex.FileEditorProviderManager;
-import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
@@ -37,37 +35,12 @@ import java.util.*;
 public final class FileEditorProviderManagerImpl extends FileEditorProviderManager
   implements PersistentStateComponent<FileEditorProviderManagerImpl> {
 
-  private final List<FileEditorProvider> myProviders = ContainerUtil.createConcurrentList();
-
-  public FileEditorProviderManagerImpl(@NotNull FileEditorProvider[] providers) {
-    Extensions.getRootArea().getExtensionPoint(FileEditorProvider.EP_FILE_EDITOR_PROVIDER).addExtensionPointListener(
-      new ExtensionPointListener<FileEditorProvider>() {
-        @Override
-        public void extensionAdded(@NotNull final FileEditorProvider extension, @Nullable final PluginDescriptor pluginDescriptor) {
-          registerProvider(extension);
-        }
-
-        @Override
-        public void extensionRemoved(@NotNull final FileEditorProvider extension, @Nullable final PluginDescriptor pluginDescriptor) {
-          unregisterProvider(extension);
-        }
-      });
-
-    for (FileEditorProvider provider : providers) {
-      registerProvider(provider);
-    }
-  }
-
-  public FileEditorProviderManagerImpl() {
-  }
-
   @Override
-  @NotNull
-  public FileEditorProvider[] getProviders(@NotNull final Project project, @NotNull final VirtualFile file) {
+  public FileEditorProvider @NotNull [] getProviders(@NotNull final Project project, @NotNull final VirtualFile file) {
     // Collect all possible editors
     List<FileEditorProvider> sharedProviders = new ArrayList<>();
-    boolean doNotShowTextEditor = false;
-    for (final FileEditorProvider provider : myProviders) {
+    boolean hideDefaultEditor = false;
+    for (final FileEditorProvider provider : FileEditorProvider.EP_FILE_EDITOR_PROVIDER.getExtensionList()) {
       if (ReadAction.compute(() -> {
         if (DumbService.isDumb(project) && !DumbService.isDumbAware(provider)) {
           return false;
@@ -75,25 +48,28 @@ public final class FileEditorProviderManagerImpl extends FileEditorProviderManag
         return provider.accept(project, file);
       })) {
         sharedProviders.add(provider);
-        doNotShowTextEditor |= provider.getPolicy() == FileEditorPolicy.HIDE_DEFAULT_EDITOR;
+        hideDefaultEditor |= provider.getPolicy() == FileEditorPolicy.HIDE_DEFAULT_EDITOR;
+        if (provider.getPolicy() == FileEditorPolicy.HIDE_DEFAULT_EDITOR && !DumbService.isDumbAware(provider)) {
+          String message = "HIDE_DEFAULT_EDITOR is supported only for DumbAware providers; " + provider.getClass() + " is not DumbAware.";
+          Logger.getInstance(FileEditorProviderManagerImpl.class).error(PluginException.createByClass(message, null, provider.getClass()));
+        }
       }
     }
 
     // Throw out default editors provider if necessary
-    if (doNotShowTextEditor) {
-      ContainerUtil.retainAll(sharedProviders, provider -> !(provider instanceof TextEditorProvider));
+    if (hideDefaultEditor) {
+      ContainerUtil.retainAll(sharedProviders, provider -> !(provider instanceof DefaultPlatformFileEditorProvider));
     }
 
     // Sort editors according policies
-    Collections.sort(sharedProviders, MyComparator.ourInstance);
-
+    sharedProviders.sort(MyComparator.ourInstance);
     return sharedProviders.toArray(new FileEditorProvider[0]);
   }
 
   @Override
   @Nullable
   public FileEditorProvider getProvider(@NotNull String editorTypeId) {
-    for (FileEditorProvider provider : myProviders) {
+    for (FileEditorProvider provider : FileEditorProvider.EP_FILE_EDITOR_PROVIDER.getExtensionList()) {
       if (provider.getEditorTypeId().equals(editorTypeId)) {
         return provider;
       }
@@ -101,20 +77,7 @@ public final class FileEditorProviderManagerImpl extends FileEditorProviderManag
     return null;
   }
 
-  private void registerProvider(@NotNull FileEditorProvider provider) {
-    String editorTypeId = provider.getEditorTypeId();
-    if (getProvider(editorTypeId) != null) {
-      throw new IllegalArgumentException("attempt to register provider with non unique editorTypeId: " + editorTypeId);
-    }
-    myProviders.add(provider);
-  }
-
-  private void unregisterProvider(@NotNull FileEditorProvider provider) {
-    final boolean b = myProviders.remove(provider);
-    assert b;
-  }
-
-  @Nullable
+  @NotNull
   @Override
   public FileEditorProviderManagerImpl getState() {
     return this;
@@ -128,22 +91,21 @@ public final class FileEditorProviderManagerImpl extends FileEditorProviderManag
 
   private final Map<String, String> mySelectedProviders = new HashMap<>();
 
-  void providerSelected(EditorComposite composite) {
-    if (!(composite instanceof EditorWithProviderComposite)) return;
-    FileEditorProvider[] providers = ((EditorWithProviderComposite)composite).getProviders();
+  void providerSelected(@NotNull EditorComposite composite) {
+    FileEditorProvider[] providers = composite.getProviders();
     if (providers.length < 2) return;
     mySelectedProviders.put(computeKey(providers),
-                            composite.getSelectedEditorWithProvider().getSecond().getEditorTypeId());
+                            composite.getSelectedWithProvider().getProvider().getEditorTypeId());
   }
 
-  private static String computeKey(FileEditorProvider[] providers) {
+  private static @NotNull String computeKey(FileEditorProvider[] providers) {
     return StringUtil.join(ContainerUtil.map(providers, FileEditorProvider::getEditorTypeId), ",");
   }
 
   @Nullable
-  FileEditorProvider getSelectedFileEditorProvider(EditorHistoryManager editorHistoryManager,
-                                                   VirtualFile file,
-                                                   FileEditorProvider[] providers) {
+  FileEditorProvider getSelectedFileEditorProvider(@NotNull EditorHistoryManager editorHistoryManager,
+                                                   @NotNull VirtualFile file,
+                                                   FileEditorProvider @NotNull [] providers) {
     FileEditorProvider provider = editorHistoryManager.getSelectedProvider(file);
     if (provider != null || providers.length < 2) {
       return provider;
@@ -179,9 +141,8 @@ public final class FileEditorProviderManagerImpl extends FileEditorProviderManag
 
     @Override
     public int compare(FileEditorProvider provider1, FileEditorProvider provider2) {
-      final int i1 = provider1.getPolicy().ordinal();
-      final int i2 = provider2.getPolicy().ordinal();
-      if (i1 != i2) return i1 - i2;
+      int c = provider1.getPolicy().compareTo(provider2.getPolicy());
+      if (c != 0) return c;
       final double value = getWeight(provider1) - getWeight(provider2);
       return value > 0 ? 1 : value < 0 ? -1 : 0;
     }

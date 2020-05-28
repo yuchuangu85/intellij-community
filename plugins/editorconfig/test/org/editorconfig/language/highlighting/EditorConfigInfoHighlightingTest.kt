@@ -2,11 +2,11 @@
 package org.editorconfig.language.highlighting
 
 import com.intellij.openapi.application.ex.PathManagerEx
-import com.intellij.testFramework.fixtures.LightPlatformCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
-class EditorConfigInfoHighlightingTest : LightPlatformCodeInsightFixtureTestCase() {
+class EditorConfigInfoHighlightingTest : BasePlatformTestCase() {
   override fun getTestDataPath() =
-    "${PathManagerEx.getCommunityHomePath()}/plugins/editorconfig/testSrc/org/editorconfig/language/highlighting/info/"
+    "${PathManagerEx.getCommunityHomePath()}/plugins/editorconfig/testData/org/editorconfig/language/highlighting/info/"
 
   fun testRootDeclaration() = doTest()
   fun testSimpleHeader() = doTest()

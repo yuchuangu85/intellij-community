@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2016 Bas Leijdekkers
+ * Copyright 2008-2018 Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -322,19 +322,16 @@ public abstract class ResourceInspection extends BaseInspection {
         }
       }
     }
-    PsiElement parent = ParenthesesUtils.getParentSkipParentheses(resourceCreationExpression);
-    if (parent instanceof PsiConditionalExpression) {
-      parent = ParenthesesUtils.getParentSkipParentheses(parent);
-    }
+    final PsiElement parent = ExpressionUtils.getPassThroughParent(resourceCreationExpression);
     if (parent instanceof PsiReturnStatement) {
       return true;
     }
     if (parent instanceof PsiAssignmentExpression) {
       final PsiAssignmentExpression assignmentExpression = (PsiAssignmentExpression)parent;
-      if (ParenthesesUtils.stripParentheses(assignmentExpression.getRExpression()) != resourceCreationExpression) {
+      if (PsiUtil.skipParenthesizedExprDown(assignmentExpression.getRExpression()) != resourceCreationExpression) {
         return true; // non-sensical code
       }
-      final PsiExpression lhs = ParenthesesUtils.stripParentheses(assignmentExpression.getLExpression());
+      final PsiExpression lhs = PsiUtil.skipParenthesizedExprDown(assignmentExpression.getLExpression());
       if (lhs instanceof PsiReferenceExpression) {
         final PsiReferenceExpression referenceExpression = (PsiReferenceExpression)lhs;
         final PsiElement target = referenceExpression.resolve();
@@ -456,7 +453,7 @@ public abstract class ResourceInspection extends BaseInspection {
     public void visitClass(PsiClass aClass) {}
 
     @Override
-    public void visitElement(PsiElement element) {
+    public void visitElement(@NotNull PsiElement element) {
       if (escaped) {
         return;
       }

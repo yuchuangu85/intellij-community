@@ -1,12 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide;
 
+import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.DataContext;
+import com.intellij.openapi.actionSystem.DataKey;
 import com.intellij.openapi.actionSystem.DataProvider;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.util.AsyncResult;
 import com.intellij.openapi.util.Key;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.concurrency.Promise;
@@ -14,15 +15,24 @@ import org.jetbrains.concurrency.Promise;
 import javax.swing.*;
 import java.awt.*;
 
+/**
+ * Provides access to {@link DataContext}.
+ * <p/>
+ * Use {@link AnActionEvent#getData(DataKey)} in {@link com.intellij.openapi.actionSystem.AnAction AnAction}.
+ */
 public abstract class DataManager {
   public static DataManager getInstance() {
-    return ApplicationManager.getApplication().getComponent(DataManager.class);
+    return ApplicationManager.getApplication().getService(DataManager.class);
   }
 
-  @NonNls public static final String CLIENT_PROPERTY_DATA_PROVIDER = "DataProvider";
+  public static DataManager getInstanceIfCreated() {
+    return ApplicationManager.getApplication().getServiceIfCreated(DataManager.class);
+  }
+
+  public static final String CLIENT_PROPERTY_DATA_PROVIDER = "DataProvider";
 
   /**
-   * @return {@link DataContext} constructed by the current focused component
+   * @return {@link DataContext} constructed by the currently focused component
    * @deprecated use either {@link #getDataContext(Component)} or {@link #getDataContextFromFocus()}
    */
   @Deprecated
@@ -43,7 +53,7 @@ public abstract class DataManager {
   }
 
   /**
-   * @return {@link DataContext} constructed by the specified {@code component}
+   * @return {@link DataContext} constructed by the currently focused component.
    */
   @NotNull
   public abstract Promise<DataContext> getDataContextFromFocusAsync();
@@ -58,23 +68,21 @@ public abstract class DataManager {
    * @return {@link DataContext} constructed be the specified {@code component}
    * and the point specified by {@code x} and {@code y} coordinate inside the
    * component.
-   *
-   * @exception IllegalArgumentException if point {@code (x, y)} is not inside
-   * component's bounds
+   * @throws IllegalArgumentException if point {@code (x, y)} is not inside component's bounds
    */
   @NotNull
   public abstract DataContext getDataContext(@NotNull Component component, int x, int y);
 
   /**
    * @param dataContext should be instance of {@link com.intellij.openapi.util.UserDataHolder}
-   * @param dataKey key to store value
-   * @param data value to store
+   * @param dataKey     key to store value
+   * @param data        value to store
    */
   public abstract <T> void saveInDataContext(@Nullable DataContext dataContext, @NotNull Key<T> dataKey, @Nullable T data);
 
   /**
    * @param dataContext find by key if instance of {@link com.intellij.openapi.util.UserDataHolder}
-   * @param dataKey key to find value by
+   * @param dataKey     key to find value by
    * @return value stored by {@link #saveInDataContext(DataContext, Key, Object)}
    */
   @Nullable

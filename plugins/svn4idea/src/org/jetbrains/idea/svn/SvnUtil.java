@@ -1,13 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn;
 
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.progress.util.ProgressIndicatorUtils;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.AtomicNotNullLazyValue;
 import com.intellij.openapi.util.Pair;
@@ -27,7 +27,7 @@ import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.wm.impl.status.StatusBarUtil;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.EnvironmentUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.Convertor;
@@ -64,7 +64,6 @@ import static com.intellij.openapi.vfs.VfsUtilCore.virtualToIoFile;
 import static com.intellij.util.ObjectUtils.notNull;
 import static com.intellij.util.SystemProperties.getUserHome;
 import static com.intellij.util.containers.ContainerUtil.map2Array;
-import static com.intellij.util.containers.ContainerUtil.newHashSet;
 import static java.util.Collections.emptyList;
 
 public class SvnUtil {
@@ -76,14 +75,14 @@ public class SvnUtil {
 
   public static final AtomicNotNullLazyValue<Path> USER_CONFIGURATION_PATH = createValue(
     () -> SystemInfo.isWindows
-          ? Paths.get(notNull(EnvironmentUtil.getValue("APPDATA")), "Subversion")
+          ? Paths.get(Objects.requireNonNull(EnvironmentUtil.getValue("APPDATA")), "Subversion")
           : Paths.get(getUserHome(), ".subversion"));
   public static final AtomicNotNullLazyValue<Path> SYSTEM_CONFIGURATION_PATH = createValue(
     () -> SystemInfo.isWindows
-          ? Paths.get(notNull(EnvironmentUtil.getValue("ALLUSERSPROFILE")), "Application Data", "Subversion")
+          ? Paths.get(Objects.requireNonNull(EnvironmentUtil.getValue("ALLUSERSPROFILE")), "Application Data", "Subversion")
           : Paths.get("/etc/subversion"));
 
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.idea.svn.SvnUtil");
+  private static final Logger LOG = Logger.getInstance(SvnUtil.class);
 
   public static final Pattern ERROR_PATTERN = Pattern.compile("^svn: (E(\\d+)): (.*)$", Pattern.MULTILINE);
   public static final Pattern WARNING_PATTERN = Pattern.compile("^svn: warning: (W(\\d+)): (.*)$", Pattern.MULTILINE);
@@ -138,7 +137,7 @@ public class SvnUtil {
                                                       @NotNull VirtualFile file,
                                                       @NotNull SvnWCRootCrawler callback,
                                                       @Nullable ProgressIndicator progress) {
-    Set<VirtualFile> result = newHashSet();
+    Set<VirtualFile> result = new HashSet<>();
     // TODO: Actually it is not OK to call getParent() if file is invalid.
     VirtualFile parent = !file.isDirectory() || !file.isValid() ? file.getParent() : file;
 
@@ -162,17 +161,14 @@ public class SvnUtil {
   }
 
   private static void checkCanceled(@Nullable ProgressIndicator progress) {
-    if (progress != null && progress.isCanceled()) {
-      throw new ProcessCanceledException();
-    }
+    ProgressIndicatorUtils.checkCancelledEvenWithPCEDisabled(progress);
   }
 
-  @NotNull
-  public static File[] toIoFiles(@NotNull VirtualFile[] files) {
+  public static File @NotNull [] toIoFiles(VirtualFile @NotNull [] files) {
     return map2Array(files, File.class, VfsUtilCore::virtualToIoFile);
   }
 
-  public static void doLockFiles(Project project, final SvnVcs activeVcs, @NotNull final File[] ioFiles) throws VcsException {
+  public static void doLockFiles(Project project, final SvnVcs activeVcs, final File @NotNull [] ioFiles) throws VcsException {
     final String lockMessage;
     final boolean force;
     // TODO[yole]: check for shift pressed
@@ -230,7 +226,7 @@ public class SvnUtil {
 
     ProgressManager.getInstance().runProcessWithProgressSynchronously(command, SvnBundle.message("progress.title.lock.files"), false, project);
     if (!failedLocks.isEmpty()) {
-      String[] failedFiles = ArrayUtil.toStringArray(failedLocks);
+      String[] failedFiles = ArrayUtilRt.toStringArray(failedLocks);
       List<VcsException> exceptions = new ArrayList<>();
       for (String file : failedFiles) {
         exceptions.add(new VcsException(SvnBundle.message("exception.text.locking.file.failed", file)));
@@ -293,7 +289,7 @@ public class SvnUtil {
 
     ProgressManager.getInstance().runProcessWithProgressSynchronously(command, SvnBundle.message("progress.title.unlock.files"), false, project);
     if (!failedUnlocks.isEmpty()) {
-      String[] failedFiles = ArrayUtil.toStringArray(failedUnlocks);
+      String[] failedFiles = ArrayUtilRt.toStringArray(failedUnlocks);
       List<VcsException> exceptions = new ArrayList<>();
 
       for (String file : failedFiles) {
@@ -318,7 +314,7 @@ public class SvnUtil {
                                                                                        @NotNull Collection<? extends T> items,
                                                                                        @NotNull final Convertor<? super T, ? extends FilePath> converter) {
     return ContainerUtil.groupBy(items, item -> {
-      RootUrlInfo path = vcs.getSvnFileUrlMapping().getWcRootForFilePath(converter.convert(item).getIOFile());
+      RootUrlInfo path = vcs.getSvnFileUrlMapping().getWcRootForFilePath(converter.convert(item));
 
       return path == null ? UNKNOWN_REPOSITORY_AND_FORMAT : Pair.create(path.getRepositoryUrl(), path.getFormat());
     });
@@ -369,7 +365,7 @@ public class SvnUtil {
   @Nullable
   public static String getRepositoryUUID(final SvnVcs vcs, final File file) {
     final Info info = vcs.getInfo(file);
-    return info != null ? info.getRepositoryUUID() : null;
+    return info != null ? info.getRepositoryId() : null;
   }
 
   @Nullable
@@ -377,7 +373,7 @@ public class SvnUtil {
     try {
       final Info info = vcs.getInfo(url, Revision.UNDEFINED);
 
-      return (info == null) ? null : info.getRepositoryUUID();
+      return (info == null) ? null : info.getRepositoryId();
     }
     catch (SvnBindException e) {
       return null;
@@ -387,7 +383,7 @@ public class SvnUtil {
   @Nullable
   public static Url getRepositoryRoot(final SvnVcs vcs, final File file) {
     final Info info = vcs.getInfo(file);
-    return info != null ? info.getRepositoryRootURL() : null;
+    return info != null ? info.getRepositoryRootUrl() : null;
   }
 
   @Nullable
@@ -404,7 +400,7 @@ public class SvnUtil {
   public static Url getRepositoryRoot(final SvnVcs vcs, final Url url) throws SvnBindException {
     Info info = vcs.getInfo(url, Revision.HEAD);
 
-    return (info == null) ? null : info.getRepositoryRootURL();
+    return (info == null) ? null : info.getRepositoryRootUrl();
   }
 
   public static boolean isWorkingCopyRoot(@NotNull File file) {
@@ -525,7 +521,7 @@ public class SvnUtil {
     // todo for moved items?
     final Info info = vcs.getInfo(file);
 
-    return info == null ? null : info.getURL();
+    return info == null ? null : info.getUrl();
   }
 
   public static boolean remoteFolderIsEmpty(@NotNull SvnVcs vcs, @NotNull String url) throws VcsException {
@@ -618,7 +614,7 @@ public class SvnUtil {
   }
 
   @NotNull
-  public static String join(@NotNull final String... parts) {
+  public static String join(final String @NotNull ... parts) {
     return StringUtil.join(parts, "/");
   }
 
@@ -635,7 +631,7 @@ public class SvnUtil {
     if (info == null) {
       throw new SvnBindException("Could not get info for " + url);
     }
-    if (info.getRevision() == null) {
+    if (!info.getRevision().isValid()) {
       throw new SvnBindException("Could not get revision for " + url);
     }
 
@@ -692,16 +688,14 @@ public class SvnUtil {
 
   @NotNull
   public static IllegalArgumentException createIllegalArgument(@NotNull Exception e) {
-    IllegalArgumentException runtimeException = new IllegalArgumentException();
-    runtimeException.initCause(e);
-    return runtimeException;
+    return new IllegalArgumentException(e);
   }
 
   @Nullable
   public static String getChangelistName(@NotNull final Status status) {
     // no explicit check on working copy format supports change lists as they are supported from svn 1.5
-    // and anyway status.getChangelistName() should just return null if change lists are not supported.
-    return status.getKind().isFile() ? status.getChangelistName() : null;
+    // and anyway status.getChangeListName() should just return null if change lists are not supported.
+    return status.getNodeKind().isFile() ? status.getChangeListName() : null;
   }
 
   public static boolean isUnversionedOrNotFound(@NotNull SvnBindException e) {

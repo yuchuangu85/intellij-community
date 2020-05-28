@@ -1,21 +1,6 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.tasks.trac;
 
-import com.intellij.openapi.util.Comparing;
 import com.intellij.tasks.Comment;
 import com.intellij.tasks.Task;
 import com.intellij.tasks.TaskRepository;
@@ -25,15 +10,23 @@ import com.intellij.tasks.impl.BaseRepositoryImpl;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xmlb.annotations.Tag;
 import icons.TasksCoreIcons;
-import org.apache.xmlrpc.*;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
-import javax.swing.*;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.Hashtable;
+import java.util.Objects;
+import java.util.Vector;
+import javax.swing.Icon;
+import org.apache.xmlrpc.CommonsXmlRpcTransport;
+import org.apache.xmlrpc.XmlRpc;
+import org.apache.xmlrpc.XmlRpcClient;
+import org.apache.xmlrpc.XmlRpcException;
+import org.apache.xmlrpc.XmlRpcRequest;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * @author Dmitry Avdeev
@@ -96,7 +89,7 @@ public class TracRepository extends BaseRepositoryImpl {
       search = search.replace("{query}", query);
     }
     search = search.replace("{username}", getUsername());
-    XmlRpcRequest request = new XmlRpcRequest("ticket.query", new Vector<Object>(Arrays.asList(search)));
+    XmlRpcRequest request = new XmlRpcRequest("ticket.query", new Vector<Object>(Collections.singletonList(search)));
     return (Vector<Object>)client.execute(request, transport);
   }
 
@@ -120,7 +113,7 @@ public class TracRepository extends BaseRepositoryImpl {
 
   @Nullable
   private Task getTask(int id, XmlRpcClient client, Transport transport) throws IOException, XmlRpcException {
-    XmlRpcRequest request = new XmlRpcRequest("ticket.get", new Vector(Arrays.asList(id)));
+    XmlRpcRequest request = new XmlRpcRequest("ticket.get", new Vector(Collections.singletonList(id)));
     Object response = client.execute(request, transport);
     if (response == null) return null;
     final Vector<Object> vector = (Vector<Object>)response;
@@ -145,9 +138,8 @@ public class TracRepository extends BaseRepositoryImpl {
         return null;
       }
 
-      @NotNull
       @Override
-      public Comment[] getComments() {
+      public Comment @NotNull [] getComments() {
         return Comment.EMPTY_ARRAY;
       }
 
@@ -264,7 +256,7 @@ public class TracRepository extends BaseRepositoryImpl {
 
   @Override
   public boolean equals(Object o) {
-    return super.equals(o) && Comparing.equal(((TracRepository)o).getDefaultSearch(), getDefaultSearch());
+    return super.equals(o) && Objects.equals(((TracRepository)o).getDefaultSearch(), getDefaultSearch());
   }
 
   @Override

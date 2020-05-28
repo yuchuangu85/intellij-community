@@ -1,8 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xdebugger;
 
+import com.intellij.openapi.util.JDOMUtil;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.JdomKt;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.xdebugger.breakpoints.SuspendPolicy;
 import com.intellij.xdebugger.breakpoints.XBreakpoint;
 import com.intellij.xdebugger.breakpoints.XBreakpointListener;
@@ -13,16 +14,16 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * @author nik
- */
 public class XBreakpointManagerTest extends XBreakpointsTestCase {
 
   public void testAddRemove() {
-    XBreakpoint<MyBreakpointProperties> defaultBreakpoint = myBreakpointManager.getDefaultBreakpoint(MY_SIMPLE_BREAKPOINT_TYPE);
+    Set<XBreakpoint<MyBreakpointProperties>> defaultBreakpoints = myBreakpointManager.getDefaultBreakpoints(MY_SIMPLE_BREAKPOINT_TYPE);
+    assertOneElement(defaultBreakpoints);
+    XBreakpoint<MyBreakpointProperties> defaultBreakpoint = ContainerUtil.getOnlyItem(defaultBreakpoints);
     assertSameElements(getAllBreakpoints(), defaultBreakpoint);
 
     XLineBreakpoint<MyBreakpointProperties> lineBreakpoint =
@@ -155,7 +156,7 @@ public class XBreakpointManagerTest extends XBreakpointsTestCase {
     "</breakpoints>" +
     "<option name=\"time\" value=\"1\" />" +
     "</breakpoint-manager>";
-    load(JdomKt.loadElement(oldStyle));
+    load(JDOMUtil.load(oldStyle));
     XLineBreakpoint<MyBreakpointProperties> breakpoint = assertOneElement(myBreakpointManager.getBreakpoints(MY_LINE_BREAKPOINT_TYPE));
     assertEquals(condition, breakpoint.getCondition());
     assertEquals(logExpression, breakpoint.getLogExpression());

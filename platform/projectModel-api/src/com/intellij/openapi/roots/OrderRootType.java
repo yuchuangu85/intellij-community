@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.roots;
 
 import com.intellij.openapi.extensions.ExtensionPointName;
@@ -20,9 +20,9 @@ public class OrderRootType {
 
   public static final ExtensionPointName<OrderRootType> EP_NAME = ExtensionPointName.create("com.intellij.orderRootType");
 
-  protected static PersistentOrderRootType[] ourPersistentOrderRootTypes = new PersistentOrderRootType[0];
+  static PersistentOrderRootType @NotNull [] ourPersistentOrderRootTypes = new PersistentOrderRootType[0];
 
-  protected OrderRootType(String name) {
+  protected OrderRootType(@NotNull String name) {
     myName = name;
   }
 
@@ -65,6 +65,7 @@ public class OrderRootType {
     }
   }
 
+  @NotNull
   public String name() {
     return myName;
   }
@@ -79,11 +80,11 @@ public class OrderRootType {
     return false;
   }
 
-  public static synchronized OrderRootType[] getAllTypes() {
+  public static synchronized OrderRootType @NotNull [] getAllTypes() {
     return getAllPersistentTypes();
   }
 
-  public static PersistentOrderRootType[] getAllPersistentTypes() {
+  public static PersistentOrderRootType @NotNull [] getAllPersistentTypes() {
     if (!ourExtensionsLoaded) {
       ourExtensionsLoaded = true;
       EP_NAME.getExtensionList();
@@ -91,10 +92,11 @@ public class OrderRootType {
     return ourPersistentOrderRootTypes;
   }
 
+  @NotNull
   public static List<PersistentOrderRootType> getSortedRootTypes() {
     List<PersistentOrderRootType> allTypes = new ArrayList<>();
     Collections.addAll(allTypes, getAllPersistentTypes());
-    Collections.sort(allTypes, (o1, o2) -> o1.name().compareToIgnoreCase(o2.name()));
+    allTypes.sort((o1, o2) -> o1.name().compareToIgnoreCase(o2.name()));
     return allTypes;
   }
 
@@ -111,10 +113,12 @@ public class OrderRootType {
     return null;
   }
 
+  @Override
   public final int hashCode() {
     return super.hashCode();
   }
 
+  @Override
   public final boolean equals(Object obj) {
     return super.equals(obj);
   }

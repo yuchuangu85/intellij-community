@@ -1,7 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.settings;
 
-import com.intellij.debugger.DebuggerBundle;
+import com.intellij.debugger.JavaDebuggerBundle;
+import com.intellij.debugger.memory.agent.MemoryAgentUtil;
 import com.intellij.openapi.options.ConfigurableUi;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.registry.Registry;
@@ -22,6 +23,7 @@ class DebuggerLaunchingConfigurable implements ConfigurableUi<DebuggerSettings> 
   private JCheckBox myCbShowAlternativeSource;
   private JCheckBox myCbKillImmediately;
   private JCheckBox myCbAlwaysDebug;
+  private JCheckBox myCbEnableMemoryAgent;
 
   @Override
   public void reset(@NotNull DebuggerSettings settings) {
@@ -30,7 +32,7 @@ class DebuggerLaunchingConfigurable implements ConfigurableUi<DebuggerSettings> 
       myRbShmem.setEnabled(false);
     }
     else {
-      if (settings.DEBUGGER_TRANSPORT == DebuggerSettings.SHMEM_TRANSPORT) {
+      if (settings.getTransport() == DebuggerSettings.SHMEM_TRANSPORT) {
         myRbShmem.setSelected(true);
       }
       else {
@@ -43,6 +45,7 @@ class DebuggerLaunchingConfigurable implements ConfigurableUi<DebuggerSettings> 
     myCbShowAlternativeSource.setSelected(settings.SHOW_ALTERNATIVE_SOURCE);
     myCbKillImmediately.setSelected(settings.KILL_PROCESS_IMMEDIATELY);
     myCbAlwaysDebug.setSelected(settings.ALWAYS_DEBUG);
+    myCbEnableMemoryAgent.setSelected(settings.ENABLE_MEMORY_AGENT);
   }
 
   @Override
@@ -51,17 +54,13 @@ class DebuggerLaunchingConfigurable implements ConfigurableUi<DebuggerSettings> 
   }
 
   private void getSettingsTo(DebuggerSettings settings) {
-    if (myRbShmem.isSelected()) {
-      settings.DEBUGGER_TRANSPORT = DebuggerSettings.SHMEM_TRANSPORT;
-    }
-    else {
-      settings.DEBUGGER_TRANSPORT = DebuggerSettings.SOCKET_TRANSPORT;
-    }
+    settings.setTransport(myRbShmem.isSelected() ? DebuggerSettings.SHMEM_TRANSPORT : DebuggerSettings.SOCKET_TRANSPORT);
     settings.FORCE_CLASSIC_VM = myCbForceClassicVM.isSelectedWhenSelectable();
     settings.DISABLE_JIT = myCbDisableJIT.isSelected();
     settings.SHOW_ALTERNATIVE_SOURCE = myCbShowAlternativeSource.isSelected();
     settings.KILL_PROCESS_IMMEDIATELY = myCbKillImmediately.isSelected();
     settings.ALWAYS_DEBUG = myCbAlwaysDebug.isSelected();
+    settings.ENABLE_MEMORY_AGENT = myCbEnableMemoryAgent.isSelected();
   }
 
   @Override
@@ -74,13 +73,15 @@ class DebuggerLaunchingConfigurable implements ConfigurableUi<DebuggerSettings> 
   @NotNull
   @Override
   public JComponent getComponent() {
-    myCbForceClassicVM = new StateRestoringCheckBox(DebuggerBundle.message("label.debugger.launching.configurable.force.classic.vm"));
-    myCbDisableJIT = new JCheckBox(DebuggerBundle.message("label.debugger.launching.configurable.disable.jit"));
-    myCbShowAlternativeSource = new JCheckBox(DebuggerBundle.message("label.debugger.general.configurable.show.alternative.source"));
-    myRbSocket = new JRadioButton(DebuggerBundle.message("label.debugger.launching.configurable.socket"));
-    myRbShmem = new JRadioButton(DebuggerBundle.message("label.debugger.launching.configurable.shmem"));
-    myCbKillImmediately = new JCheckBox(DebuggerBundle.message("label.debugger.general.configurable.kill.immediately"));
-    myCbAlwaysDebug = new JCheckBox(DebuggerBundle.message("label.debugger.general.configurable.always.debug"));
+    myCbForceClassicVM = new StateRestoringCheckBox(JavaDebuggerBundle.message("label.debugger.launching.configurable.force.classic.vm"));
+    myCbDisableJIT = new JCheckBox(JavaDebuggerBundle.message("label.debugger.launching.configurable.disable.jit"));
+    myCbShowAlternativeSource = new JCheckBox(JavaDebuggerBundle.message("label.debugger.general.configurable.show.alternative.source"));
+    myRbSocket = new JRadioButton(JavaDebuggerBundle.message("label.debugger.launching.configurable.socket"));
+    myRbShmem = new JRadioButton(JavaDebuggerBundle.message("label.debugger.launching.configurable.shmem"));
+    myCbKillImmediately = new JCheckBox(JavaDebuggerBundle.message("label.debugger.general.configurable.kill.immediately"));
+    myCbAlwaysDebug = new JCheckBox(JavaDebuggerBundle.message("label.debugger.general.configurable.always.debug"));
+    myCbEnableMemoryAgent = new JCheckBox(JavaDebuggerBundle.message("label.debugger.general.configurable.enable.memory.agent"));
+    myCbEnableMemoryAgent.setToolTipText(JavaDebuggerBundle.message("label.debugger.general.configurable.enable.memory.agent.tooltip.text"));
 
     final ButtonGroup gr = new ButtonGroup();
     gr.add(myRbSocket);
@@ -91,7 +92,7 @@ class DebuggerLaunchingConfigurable implements ConfigurableUi<DebuggerSettings> 
     box.add(Box.createRigidArea(JBUI.size(UIUtil.DEFAULT_HGAP, 0)));
     box.add(myRbShmem);
     final JPanel transportPanel = new JPanel(new BorderLayout());
-    transportPanel.add(new JLabel(DebuggerBundle.message("label.debugger.launching.configurable.debugger.transport")), BorderLayout.WEST);
+    transportPanel.add(new JLabel(JavaDebuggerBundle.message("label.debugger.launching.configurable.debugger.transport")), BorderLayout.WEST);
     transportPanel.add(box, BorderLayout.CENTER);
 
     VerticalBox panel = new VerticalBox();
@@ -101,6 +102,9 @@ class DebuggerLaunchingConfigurable implements ConfigurableUi<DebuggerSettings> 
     panel.add(myCbDisableJIT);
     panel.add(myCbShowAlternativeSource);
     panel.add(myCbKillImmediately);
+    if (MemoryAgentUtil.isPlatformSupported()) {
+      panel.add(myCbEnableMemoryAgent);
+    }
     if (Registry.is("execution.java.always.debug")) {
       panel.add(myCbAlwaysDebug);
     }

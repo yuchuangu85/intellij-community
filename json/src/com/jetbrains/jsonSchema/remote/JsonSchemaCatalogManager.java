@@ -1,14 +1,14 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.jsonSchema.remote;
 
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.impl.http.FileDownloadingAdapter;
 import com.intellij.openapi.vfs.impl.http.HttpVirtualFile;
 import com.intellij.openapi.vfs.impl.http.RemoteFileInfo;
 import com.intellij.openapi.vfs.impl.http.RemoteFileManager;
 import com.intellij.util.containers.ContainerUtil;
+import com.jetbrains.jsonSchema.JsonSchemaCatalogEntry;
 import com.jetbrains.jsonSchema.JsonSchemaCatalogProjectConfiguration;
 import com.jetbrains.jsonSchema.ide.JsonSchemaService;
 import com.jetbrains.jsonSchema.impl.JsonCachedValues;
@@ -18,15 +18,16 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 public class JsonSchemaCatalogManager {
   static final String DEFAULT_CATALOG = "http://schemastore.org/api/json/catalog.json";
   static final String DEFAULT_CATALOG_HTTPS = "https://schemastore.azurewebsites.net/api/json/catalog.json";
-  @NotNull private final Project myProject;
-  @NotNull private final JsonSchemaRemoteContentProvider myRemoteContentProvider;
-  @Nullable private VirtualFile myCatalog = null;
-  @NotNull private final ConcurrentMap<String, String> myResolvedMappings = ContainerUtil.newConcurrentMap();
+  private final @NotNull Project myProject;
+  private final @NotNull JsonSchemaRemoteContentProvider myRemoteContentProvider;
+  private @Nullable VirtualFile myCatalog = null;
+  private final @NotNull ConcurrentMap<String, String> myResolvedMappings = new ConcurrentHashMap<>();
   private static final String NO_CACHE = "$_$_WS_NO_CACHE_$_$";
   private static final String EMPTY = "$_$_WS_EMPTY_$_$";
 
@@ -50,13 +51,13 @@ public class JsonSchemaCatalogManager {
     myCatalog = !JsonFileResolver.isRemoteEnabled(myProject) ? null : JsonFileResolver.urlToFile(DEFAULT_CATALOG);
   }
 
-  @Nullable
-  public VirtualFile getSchemaFileForFile(@NotNull VirtualFile file) {
-    if (!JsonSchemaCatalogProjectConfiguration.getInstance(myProject).isCatalogEnabled()) return null;
-    for (JsonSchemaCatalogExclusion exclusion : JsonSchemaCatalogExclusion.EP_NAME.getExtensions()) {
-      if (exclusion.isExcluded(file)) {
-        return null;
-      }
+  public @Nullable VirtualFile getSchemaFileForFile(@NotNull VirtualFile file) {
+    if (!JsonSchemaCatalogProjectConfiguration.getInstance(myProject).isCatalogEnabled()) {
+      return null;
+    }
+
+    if (JsonSchemaCatalogExclusion.EP_NAME.findFirstSafe(exclusion -> exclusion.isExcluded(file)) != null) {
+      return null;
     }
 
     String name = file.getName();
@@ -76,17 +77,11 @@ public class JsonSchemaCatalogManager {
     return null;
   }
 
-  public List<String> getAllCatalogSchemas() {
+  public List<JsonSchemaCatalogEntry> getAllCatalogEntries() {
     if (myCatalog != null) {
-      List<Pair<Collection<String>, String>> catalog = JsonCachedValues.getSchemaCatalog(myCatalog, myProject);
-      if (catalog == null) return ContainerUtil.emptyList();
-      List<String> results = ContainerUtil.newArrayListWithCapacity(catalog.size());
-      for (Pair<Collection<String>, String> item: catalog) {
-        results.add(item.second);
-      }
-      return results;
+      final List<JsonSchemaCatalogEntry> catalog = JsonCachedValues.getSchemaCatalog(myCatalog, myProject);
+      return catalog == null ? ContainerUtil.emptyList() : catalog;
     }
-
     return ContainerUtil.emptyList();
   }
 
@@ -122,16 +117,15 @@ public class JsonSchemaCatalogManager {
     JsonFileResolver.startFetchingHttpFileIfNeeded(myCatalog, project);
   }
 
-  @Nullable
-  private static String resolveSchemaFile(@NotNull VirtualFile file, @NotNull VirtualFile catalogFile, @NotNull Project project) {
+  private static @Nullable String resolveSchemaFile(@NotNull VirtualFile file, @NotNull VirtualFile catalogFile, @NotNull Project project) {
     JsonFileResolver.startFetchingHttpFileIfNeeded(catalogFile, project);
 
-    List<Pair<Collection<String>, String>> schemaCatalog = JsonCachedValues.getSchemaCatalog(catalogFile, project);
+    List<JsonSchemaCatalogEntry> schemaCatalog = JsonCachedValues.getSchemaCatalog(catalogFile, project);
     if (schemaCatalog == null) return catalogFile instanceof HttpVirtualFile ? NO_CACHE : null;
     String fileName = file.getName();
-    for (Pair<Collection<String>, String> maskAndPath: schemaCatalog) {
-      if (matches(fileName, maskAndPath.first)) {
-        return maskAndPath.second;
+    for (JsonSchemaCatalogEntry maskAndPath: schemaCatalog) {
+      if (matches(fileName, maskAndPath.getFileMasks())) {
+        return maskAndPath.getUrl();
       }
     }
 

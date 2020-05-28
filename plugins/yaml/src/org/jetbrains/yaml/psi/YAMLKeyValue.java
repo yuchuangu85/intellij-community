@@ -1,18 +1,15 @@
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.yaml.psi;
 
 import com.intellij.pom.PomTarget;
+import com.intellij.psi.ContributedReferenceHost;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiNamedElement;
-import com.intellij.psi.StubBasedPsiElement;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.yaml.psi.stubs.YAMLKeyStub;
 
-/**
- * @author oleg
- */
-public interface YAMLKeyValue extends YAMLPsiElement, PsiNamedElement, PomTarget, StubBasedPsiElement<YAMLKeyStub> {
+public interface YAMLKeyValue extends YAMLPsiElement, ContributedReferenceHost, PsiNamedElement, PomTarget {
   @Contract(pure = true)
   @Nullable
   PsiElement getKey();
@@ -34,19 +31,4 @@ public interface YAMLKeyValue extends YAMLPsiElement, PsiNamedElement, PomTarget
   YAMLMapping getParentMapping();
 
   void setValue(@NotNull YAMLValue value);
-
-  /**
-   * This method return flattened key path (consist of ancestors until document).
-   * </p>
-   * YAML are frequently used in configure files. Access to child keys are preformed by dot separator.
-   * <pre>{@code
-   *  top:
-   *    next:
-   *      list:
-   *        - needKey: value
-   * }</pre>
-   * Flattened {@code needKey} is {@code top.next.list[0].needKey}
-   */
-  @NotNull
-  String getConfigFullPath();
 }

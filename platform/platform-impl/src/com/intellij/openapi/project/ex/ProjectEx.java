@@ -1,34 +1,49 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.project.ex;
 
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.project.Project;
 import com.intellij.util.messages.Topic;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.TestOnly;
 
 public interface ProjectEx extends Project {
+  String NAME_FILE = ".name";
+
+  /**
+   * Consider using only and only if {@link com.intellij.configurationStore.SettingsSavingComponent} is not possible to use.
+   */
   interface ProjectSaved {
-    Topic<ProjectSaved> TOPIC = Topic.create("SaveProjectTopic", ProjectSaved.class, Topic.BroadcastDirection.NONE);
+    Topic<ProjectSaved> TOPIC = Topic.create("SaveProjectTopic", ProjectSaved.class);
 
-    void saved(@NotNull final Project project);
+    /**
+     * Not called in EDT.
+     */
+    default void duringSave(@NotNull Project project) {
+    }
   }
-
-  void init();
 
   void setProjectName(@NotNull String name);
 
-  void save(boolean isForce);
+  @TestOnly
+  default boolean isLight() {
+    return false;
+  }
+
+  /**
+   * {@link Disposable} that will be disposed right after container started to be disposed.
+   * Use it to dispose something that need to be disposed very early, e.g. {@link com.intellij.util.Alarm}.
+   * Or, only and only in unit test mode, if you need to publish something to message bus during dispose.<p/>
+   *
+   * In unit test mode light project is not disposed, but this disposable is disposed for each test.
+   * So, you don't need to have another disposable and can use this one instead.<p/>
+   *
+   * Dependent {@link Disposable#dispose} may be called in any thread.
+   * Implementation of {@link Disposable#dispose} must be self-contained and isolated (getting services is forbidden, publishing to message bus is allowed only in tests).
+   */
+  @NotNull
+  @ApiStatus.Experimental
+  @ApiStatus.Internal
+  Disposable getEarlyDisposable();
 }

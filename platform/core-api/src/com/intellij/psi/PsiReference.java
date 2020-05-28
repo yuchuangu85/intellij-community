@@ -1,30 +1,25 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi;
 
+import com.intellij.model.Symbol;
+import com.intellij.model.SymbolResolveResult;
+import com.intellij.model.psi.PsiSymbolReference;
+import com.intellij.model.psi.PsiSymbolService;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.util.ArrayFactory;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.IncorrectOperationException;
+import org.jetbrains.annotations.ApiStatus.Experimental;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.Collection;
+import java.util.Collections;
 
 /**
  * A reference to a PSI element. For example, the variable name used in an expression.
  * The "Go to Declaration" action can be used to go from a reference to the element it references.
+ * <p>
  * Generally returned from {@link PsiElement#getReferences()} and {@link PsiReferenceService#getReferences},
  * but may be contributed to some elements by third party plugins via {@link PsiReferenceContributor}.
  *
@@ -35,7 +30,8 @@ import org.jetbrains.annotations.Nullable;
  * @see PsiReferenceBase
  * @see PsiReferenceContributor
  */
-public interface PsiReference {
+public interface PsiReference extends PsiSymbolReference {
+
   PsiReference[] EMPTY_ARRAY = new PsiReference[0];
 
   ArrayFactory<PsiReference> ARRAY_FACTORY = count -> count == 0 ? EMPTY_ARRAY : new PsiReference[count];
@@ -45,22 +41,32 @@ public interface PsiReference {
    *
    * @return the underlying element of the reference.
    */
+  @Override
   @NotNull
   PsiElement getElement();
 
   /**
    * Returns the part of the underlying element which serves as a reference, or the complete
    * text range of the element if the entire element is a reference.
+   * <p/>
+   * Sample: PsiElement representing a fully qualified name with multiple dedicated PsiReferences, each bound
+   * to the range it resolves to (skipping the '.' separator).
+   * <pre>
+   * PsiElement text: qualified.LongName
+   * PsiReferences:   [Ref1---]X[Ref2--]
+   * </pre>
+   * where {@code Ref1} would resolve to a "namespace" and {@code Ref2} to an "element".
    *
    * @return Relative range in element
    */
+  @Override
   @NotNull
   TextRange getRangeInElement();
 
   /**
    * Returns the element which is the target of the reference.
    *
-   * @return the target element, or null if it was not possible to resolve the reference to a valid target.
+   * @return the target element, or {@code null} if it was not possible to resolve the reference to a valid target.
    * @see PsiPolyVariantReference#multiResolve(boolean)
    */
   @Nullable
@@ -101,7 +107,7 @@ public interface PsiReference {
    * Checks if the reference targets the specified element.
    *
    * @param element the element to check target for.
-   * @return true if the reference targets that element, false otherwise.
+   * @return {@code true} if the reference targets that element, {@code false} otherwise.
    */
   boolean isReferenceTo(@NotNull PsiElement element);
 
@@ -110,24 +116,44 @@ public interface PsiReference {
    * instances representing all identifiers that are visible at the location of the reference. The contents
    * of the returned array is used to build the lookup list for basic code completion. (The list
    * of visible identifiers may not be filtered by the completion prefix string - the
-   * filtering is performed later by IDEA core.)
+   * filtering is performed later by the IDE.)
    * <p>
    * This method is default since 2018.3.
    *
    * @return the array of available identifiers.
    */
-  @NotNull
-  default Object[] getVariants() {
-    return ArrayUtil.EMPTY_OBJECT_ARRAY;
+  default Object @NotNull [] getVariants() {
+    return ArrayUtilRt.EMPTY_OBJECT_ARRAY;
   }
 
   /**
-   * Returns false if the underlying element is guaranteed to be a reference, or true
+   * Returns {@code false} if the underlying element is guaranteed to be a reference, or {@code true}
    * if the underlying element is a possible reference which should not be reported as
    * an error if it fails to resolve. For example, a text in an XML file which looks
    * like a full-qualified Java class name is a soft reference.
    *
-   * @return true if the reference is soft, false otherwise.
+   * @return {@code true} if the reference is soft, {@code false} otherwise.
    */
   boolean isSoft();
+
+  @Experimental
+  @NotNull
+  @Override
+  default Collection<? extends SymbolResolveResult> resolveReference() {
+    PsiElement resolved = resolve();
+    if (resolved == null) {
+      return Collections.emptyList();
+    }
+    else {
+      Symbol symbol = PsiSymbolService.getInstance().asSymbol(resolved);
+      return Collections.singletonList(SymbolResolveResult.fromSymbol(symbol));
+    }
+  }
+
+  @Experimental
+  @Override
+  default boolean resolvesTo(@NotNull Symbol target) {
+    PsiElement psi = PsiSymbolService.getInstance().extractElementFromSymbol(target);
+    return psi == null ? PsiSymbolReference.super.resolvesTo(target) : isReferenceTo(psi);
+  }
 }

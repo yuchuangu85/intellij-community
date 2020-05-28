@@ -47,9 +47,8 @@ public class CoreFileTypeRegistry extends FileTypeRegistry {
     return false;
   }
 
-  @NotNull
   @Override
-  public FileType[] getRegisteredFileTypes() {
+  public FileType @NotNull [] getRegisteredFileTypes() {
     return myAllFileTypes.toArray(FileType.EMPTY_ARRAY);
   }
 
@@ -62,7 +61,7 @@ public class CoreFileTypeRegistry extends FileTypeRegistry {
         return fileType;
       }
     }
-    return getFileTypeByFileName(file.getName());
+    return getFileTypeByFileName(file.getNameSequence());
   }
 
   @NotNull
@@ -70,11 +69,6 @@ public class CoreFileTypeRegistry extends FileTypeRegistry {
   public FileType getFileTypeByFileName(@NotNull @NonNls String fileName) {
     final String extension = FileUtilRt.getExtension(fileName);
     return getFileTypeByExtension(extension);
-  }
-
-  @Override
-  public boolean isFileOfType(@NotNull VirtualFile file, @NotNull FileType type) {
-    return getFileTypeByFile(file) == type;
   }
 
   @NotNull

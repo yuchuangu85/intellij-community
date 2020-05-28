@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.tree.project;
 
+import com.intellij.ide.scratch.RootType;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ModuleRootEvent;
@@ -10,6 +11,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.newvfs.BulkFileListener;
 import com.intellij.openapi.vfs.newvfs.events.*;
 import com.intellij.psi.*;
+import com.intellij.util.concurrency.EdtExecutorService;
 import com.intellij.util.concurrency.Invoker;
 import com.intellij.util.containers.SmartHashSet;
 import com.intellij.util.messages.MessageBusConnection;
@@ -105,6 +107,7 @@ public abstract class ProjectFileNodeUpdater {
       public void propertyChanged(@NotNull PsiTreeChangeEvent event) {
       }
     }, invoker);
+    RootType.ROOT_EP.addChangeListener(this::updateFromRoot, project);
   }
 
   /**
@@ -147,8 +150,8 @@ public abstract class ProjectFileNodeUpdater {
    * Notifies that all collected files should be reported as soon as possible.
    * Usually, it is needed to find an added file in a tree right after adding.
    */
-  public void updateImmediately() {
-    invoker.runOrInvokeLater(this::onInvokerThread);
+  public void updateImmediately(@NotNull Runnable onDone) {
+    invoker.invoke(() -> onInvokerThread(true)).onProcessed(o -> EdtExecutorService.getInstance().execute(onDone));
   }
 
   /**
@@ -180,11 +183,11 @@ public abstract class ProjectFileNodeUpdater {
     }
     if (start) {
       LOG.debug("start collecting files to update @ ", invoker);
-      invoker.invokeLater(this::onInvokerThread, getUpdatingDelay());
+      invoker.invokeLater(() -> onInvokerThread(false), getUpdatingDelay());
     }
   }
 
-  private void onInvokerThread() {
+  private void onInvokerThread(boolean now) {
     Set<VirtualFile> files;
     long startedAt;
     boolean fromRoot;
@@ -201,7 +204,7 @@ public abstract class ProjectFileNodeUpdater {
         root = false;
         reference.set(null);
       }
-      else if (size == files.size()) {
+      else if (now || size == files.size()) {
         reference.set(null);
       }
       else {
@@ -210,11 +213,11 @@ public abstract class ProjectFileNodeUpdater {
     }
     if (restart) {
       LOG.debug("continue collecting files to update @ ", invoker);
-      invoker.invokeLater(this::onInvokerThread, getUpdatingDelay());
+      invoker.invokeLater(() -> onInvokerThread(false), getUpdatingDelay());
     }
     else {
       LOG.debug("spent ", System.currentTimeMillis() - startedAt, "ms to collect ", size, " files to update @ ", invoker);
-      invoker.runOrInvokeLater(() -> updateStructure(fromRoot, files));
+      invoker.invoke(() -> updateStructure(fromRoot, files));
     }
   }
 

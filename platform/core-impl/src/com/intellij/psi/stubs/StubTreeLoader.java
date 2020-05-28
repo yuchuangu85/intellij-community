@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.stubs;
 
 import com.intellij.lang.Language;
@@ -30,10 +16,10 @@ import com.intellij.psi.impl.DebugUtil;
 import com.intellij.psi.impl.source.PsiFileWithStubSupport;
 import com.intellij.psi.tree.IStubFileElementType;
 import com.intellij.util.Function;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -65,9 +51,9 @@ public abstract class StubTreeLoader {
   }
 
   @NotNull
-  public RuntimeException stubTreeAndIndexDoNotMatch(@NotNull String _message,
-                                                     @Nullable ObjectStubTree stubTree,
-                                                     @NotNull PsiFileWithStubSupport psiFile) {
+  public RuntimeException stubTreeAndIndexDoNotMatch(@Nullable ObjectStubTree stubTree,
+                                                     @NotNull PsiFileWithStubSupport psiFile,
+                                                     @Nullable Throwable cause) {
     VirtualFile file = psiFile.getViewProvider().getVirtualFile();
     StubTree stubTreeFromIndex = (StubTree)readFromVFile(psiFile.getProject(), file);
     boolean compiled = psiFile instanceof PsiCompiledElement;
@@ -77,7 +63,7 @@ public abstract class StubTreeLoader {
 
     boolean canBePrebuilt = isPrebuilt(psiFile.getVirtualFile());
 
-    String msg = _message + "\nPlease report the problem to JetBrains with the files attached\n";
+    String msg = "PSI and index do not match.\nPlease report the problem to JetBrains with the files attached\n";
 
     if (canBePrebuilt) {
       msg += "This stub can have pre-built origin\n";
@@ -94,14 +80,12 @@ public abstract class StubTreeLoader {
 
     if (!compiled) {
       String text = psiFile.getText();
-      PsiFile fromText = PsiFileFactory.getInstance(psiFile.getProject())
-        .createFileFromText(psiFile.getName(), psiFile.getFileType(), text);
+      PsiFile fromText = PsiFileFactory.getInstance(psiFile.getProject()).createFileFromText(psiFile.getName(), psiFile.getFileType(), text);
       if (fromText.getLanguage().equals(psiFile.getLanguage())) {
         boolean consistent = DebugUtil.psiToString(psiFile, true).equals(DebugUtil.psiToString(fromText, true));
         if (consistent) {
           msg += "\n tree consistent";
-        }
-        else {
+        } else {
           msg += "\n AST INCONSISTENT, perhaps after incremental reparse; " + fromText;
         }
       }
@@ -134,27 +118,31 @@ public abstract class StubTreeLoader {
       msg += "; committed: " + PsiDocumentManager.getInstance(psiFile.getProject()).isCommitted(document);
     }
 
-    msg += "\nin many projects: " + hasPsiInManyProjects(file);
     msg += "\nindexing info: " + indexingStampInfo;
 
     Attachment[] attachments = createAttachments(stubTree, psiFile, file, stubTreeFromIndex);
 
     // separate methods and separate exception classes for EA to treat these situations differently
-    return upToDate ? handleUpToDateMismatch(msg, attachments) : new RuntimeExceptionWithAttachments(msg, attachments);
+    return hasPsiInManyProjects(file) ? handleManyProjectsMismatch(msg, attachments, cause) :
+           upToDate ? handleUpToDateMismatch(msg, attachments, cause) :
+           new RuntimeExceptionWithAttachments(msg, cause, attachments);
   }
 
   protected abstract boolean isPrebuilt(@NotNull VirtualFile virtualFile);
 
-  private static UpToDateStubIndexMismatch handleUpToDateMismatch(@NotNull String message, Attachment[] attachments) {
-    return new UpToDateStubIndexMismatch(message, attachments);
+  private static RuntimeExceptionWithAttachments handleUpToDateMismatch(@NotNull String message, Attachment[] attachments, @Nullable Throwable cause) {
+    return new UpToDateStubIndexMismatch(message, cause, attachments);
   }
 
-  @NotNull
-  private static Attachment[] createAttachments(@Nullable ObjectStubTree stubTree,
-                                                @NotNull PsiFileWithStubSupport psiFile,
-                                                VirtualFile file,
-                                                @Nullable StubTree stubTreeFromIndex) {
-    List<Attachment> attachments = ContainerUtil.newArrayList();
+  private static RuntimeExceptionWithAttachments handleManyProjectsMismatch(@NotNull String message, Attachment[] attachments, @Nullable Throwable cause) {
+    return new ManyProjectsStubIndexMismatch(message, cause, attachments);
+  }
+
+  private static Attachment @NotNull [] createAttachments(@Nullable ObjectStubTree stubTree,
+                                                          @NotNull PsiFileWithStubSupport psiFile,
+                                                          VirtualFile file,
+                                                          @Nullable StubTree stubTreeFromIndex) {
+    List<Attachment> attachments = new ArrayList<>();
     attachments.add(new Attachment(file.getPath() + "_file.txt", psiFile instanceof PsiCompiledElement ? "compiled" : psiFile.getText()));
     if (stubTree != null) {
       attachments.add(new Attachment("stubTree.txt", ((PsiFileStubImpl)stubTree.getRoot()).printTree()));
@@ -168,9 +156,8 @@ public abstract class StubTreeLoader {
   public static String getFileViewProviderMismatchDiagnostics(@NotNull FileViewProvider provider) {
     Function<PsiFile, String> fileClassName = file -> file.getClass().getSimpleName();
     Function<Pair<IStubFileElementType, PsiFile>, String> stubRootToString =
-      pair -> "(" + (pair.first == null ? "<unknown type>" : pair.first.toString() + ", " + pair.first.getLanguage()) +
-              " -> " + fileClassName.fun(pair.second) + ")";
-    List<Pair<IStubFileElementType, PsiFile>> roots = StubTreeBuilder.getStubbedRoots(provider, true);
+      pair -> "(" + pair.first.toString() + ", " + pair.first.getLanguage() + " -> " + fileClassName.fun(pair.second) + ")";
+    List<Pair<IStubFileElementType, PsiFile>> roots = StubTreeBuilder.getStubbedRoots(provider);
     return ", stubBindingRoot = " + fileClassName.fun(provider.getStubBindingRoot()) +
            ", languages = [" + StringUtil.join(provider.getLanguages(), Language::getID, ", ") +
            "], fileTypes = [" + StringUtil.join(provider.getAllFiles(), file -> file.getFileType().getName(), ", ") +
@@ -181,7 +168,14 @@ public abstract class StubTreeLoader {
 
 @SuppressWarnings("ExceptionClassNameDoesntEndWithException")
 class UpToDateStubIndexMismatch extends RuntimeExceptionWithAttachments {
-  UpToDateStubIndexMismatch(String message, Attachment... attachments) {
-    super(message, attachments);
+  UpToDateStubIndexMismatch(String message, Throwable cause, Attachment... attachments) {
+    super(message, cause, attachments);
+  }
+}
+
+@SuppressWarnings("ExceptionClassNameDoesntEndWithException")
+class ManyProjectsStubIndexMismatch extends RuntimeExceptionWithAttachments {
+  ManyProjectsStubIndexMismatch(String message, Throwable cause, Attachment... attachments) {
+    super(message, cause, attachments);
   }
 }

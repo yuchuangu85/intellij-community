@@ -39,10 +39,13 @@ public abstract class SliceUsage extends UsageInfo2UsageAdapter {
   public final SliceAnalysisParams params;
 
   public SliceUsage(@NotNull PsiElement element, @NotNull SliceUsage parent) {
+    this(element, parent, parent.params);
+  }
+
+  protected SliceUsage(@NotNull PsiElement element, @NotNull SliceUsage parent, @NotNull SliceAnalysisParams params) {
     super(new UsageInfo(element));
     myParent = parent;
-    params = parent.params;
-    assert params != null;
+    this.params = params;
   }
 
   // root usage
@@ -62,7 +65,7 @@ public abstract class SliceUsage extends UsageInfo2UsageAdapter {
     return transformedUsages != null ? transformedUsages : Collections.singletonList(usage);
   }
 
-  public void processChildren(@NotNull Processor<SliceUsage> processor) {
+  public void processChildren(@NotNull Processor<? super SliceUsage> processor) {
     final PsiElement element = ReadAction.compute(this::getElement);
     ProgressIndicator indicator = ProgressManager.getInstance().getProgressIndicator();
     indicator.checkCanceled();
@@ -81,6 +84,13 @@ public abstract class SliceUsage extends UsageInfo2UsageAdapter {
       }) {
         @Override
         public boolean process(SliceUsage usage) {
+          SliceValueFilter filter = usage.params.valueFilter;
+          if (filter != null) {
+            PsiElement psiElement = usage.getElement();
+            if (psiElement != null && !filter.allowed(psiElement)) {
+              return true;
+            }
+          }
           return transformToLanguageSpecificUsage(usage).stream().allMatch(super::process);
         }
       };
@@ -95,9 +105,9 @@ public abstract class SliceUsage extends UsageInfo2UsageAdapter {
     });
   }
 
-  protected abstract void processUsagesFlownFromThe(PsiElement element, Processor<SliceUsage> uniqueProcessor);
+  protected abstract void processUsagesFlownFromThe(PsiElement element, Processor<? super SliceUsage> uniqueProcessor);
 
-  protected abstract void processUsagesFlownDownTo(PsiElement element, Processor<SliceUsage> uniqueProcessor);
+  protected abstract void processUsagesFlownDownTo(PsiElement element, Processor<? super SliceUsage> uniqueProcessor);
 
   public SliceUsage getParent() {
     return myParent;

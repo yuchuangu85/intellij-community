@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 /*
  * @author max
@@ -21,24 +7,30 @@ package com.intellij.util.io;
 
 import com.intellij.openapi.Forceable;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.vfs.CharsetToolkit;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.EnumSet;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class RandomAccessDataFile implements Forceable, Closeable {
-  protected static final Logger LOG = Logger.getInstance("#com.intellij.util.io.RandomAccessDataFile");
+  protected static final Logger LOG = Logger.getInstance(RandomAccessDataFile.class);
 
-  private static final OpenChannelsCache ourCache = new OpenChannelsCache(150, "rw");
-  private static int ourFilesCount;
+  private static final OpenChannelsCache ourCache = new OpenChannelsCache(150,
+                                                                          EnumSet.of(StandardOpenOption.READ,
+                                                                                     StandardOpenOption.WRITE,
+                                                                                     StandardOpenOption.CREATE));
+  private static final AtomicInteger ourFilesCount = new AtomicInteger();
 
-  private final int myCount = ourFilesCount++;
-  private final File myFile;
+  private final int myCount = ourFilesCount.incrementAndGet();
+  private final Path myFile;
   private final PagePool myPool;
-  private long lastSeek = -1L;
 
-  private final byte[] myTypedIOBuffer = new byte[8];
+  private static final ThreadLocal<byte[]> ourTypedIOBuffer = ThreadLocal.withInitial(() -> new byte[8]);
 
   private final FileWriter log;
 
@@ -48,13 +40,9 @@ public class RandomAccessDataFile implements Forceable, Closeable {
 
   private static final boolean DEBUG = false;
 
-  public RandomAccessDataFile(@NotNull File file) throws IOException {
-    this(file, PagePool.SHARED);
-  }
-
   public RandomAccessDataFile(@NotNull File file, @NotNull PagePool pool) throws IOException {
     myPool = pool;
-    myFile = file;
+    myFile = file.toPath();
     if (!file.exists()) {
       throw new FileNotFoundException(file.getPath() + " does not exist");
     }
@@ -66,11 +54,6 @@ public class RandomAccessDataFile implements Forceable, Closeable {
     else {
       log = null;
     }
-  }
-
-  @NotNull
-  public File getFile() {
-    return myFile;
   }
 
   public void put(long addr, byte[] bytes, int off, int len) {
@@ -104,51 +87,28 @@ public class RandomAccessDataFile implements Forceable, Closeable {
     ourCache.releaseChannel(myFile);
   }
 
-  private RandomAccessFile getRandomAccessFile() throws FileNotFoundException {
+  private FileChannel getFileChannel() throws IOException {
     return ourCache.getChannel(myFile);
   }
 
   public void putInt(long addr, int value) {
-    Bits.putInt(myTypedIOBuffer, 0, value);
-    put(addr, myTypedIOBuffer, 0, 4);
+    Bits.putInt(ourTypedIOBuffer.get(), 0, value);
+    put(addr, ourTypedIOBuffer.get(), 0, 4);
   }
 
   public int getInt(long addr) {
-    get(addr, myTypedIOBuffer, 0, 4);
-    return Bits.getInt(myTypedIOBuffer, 0);
+    get(addr, ourTypedIOBuffer.get(), 0, 4);
+    return Bits.getInt(ourTypedIOBuffer.get(), 0);
   }
 
   public void putLong(long addr, long value) {
-    Bits.putLong(myTypedIOBuffer, 0, value);
-    put(addr, myTypedIOBuffer, 0, 8);
-  }
-
-  public void putByte(final long addr, final byte b) {
-    myTypedIOBuffer[0] = b;
-    put(addr, myTypedIOBuffer, 0, 1);
-  }
-
-  public byte getByte(long addr) {
-    get(addr, myTypedIOBuffer, 0, 1);
-    return myTypedIOBuffer[0];
+    Bits.putLong(ourTypedIOBuffer.get(), 0, value);
+    put(addr, ourTypedIOBuffer.get(), 0, 8);
   }
 
   public long getLong(long addr) {
-    get(addr, myTypedIOBuffer, 0, 8);
-    return Bits.getLong(myTypedIOBuffer, 0);
-  }
-
-  public String getUTF(long addr) {
-    int len = getInt(addr);
-    byte[] bytes = new byte[len];
-    get(addr + 4, bytes, 0, len);
-    return new String(bytes, CharsetToolkit.UTF8_CHARSET);
-  }
-
-  public void putUTF(long addr, String value) {
-    final byte[] bytes = value.getBytes(CharsetToolkit.UTF8_CHARSET);
-    putInt(addr, bytes.length);
-    put(addr + 4, bytes, 0, bytes.length);
+    get(addr, ourTypedIOBuffer.get(), 0, 8);
+    return Bits.getLong(ourTypedIOBuffer.get(), 0);
   }
 
   public long length() {
@@ -162,11 +122,9 @@ public class RandomAccessDataFile implements Forceable, Closeable {
     long res;
 
     try {
-      RandomAccessFile file = getRandomAccessFile();
+      FileChannel file = getFileChannel();
       try {
-        synchronized (file) {
-          res = file.length();
-        }
+        res = file.size();
       }
       finally {
         releaseFile();
@@ -209,8 +167,7 @@ public class RandomAccessDataFile implements Forceable, Closeable {
   public void sync() {
     force();
     try {
-      RandomAccessFile file = getRandomAccessFile();
-      file.getChannel().force(true);
+      getFileChannel().force(true);
     }
     catch (IOException ignored) {
 
@@ -246,28 +203,23 @@ public class RandomAccessDataFile implements Forceable, Closeable {
   public static int totalReads;
   public static long totalReadBytes;
 
-  public static int seekcount;
   public static int totalWrites;
   public static long totalWriteBytes;
 
   void loadPage(final Page page) {
     assertNotDisposed();
     try {
-      final RandomAccessFile file = getRandomAccessFile();
+      final FileChannel file = getFileChannel();
       try {
-        synchronized (file) {
-          seek(file, page.getOffset());
-          final ByteBuffer buf = page.getBuf();
+        final ByteBuffer buf = page.getBuf();
 
-          totalReads++;
-          totalReadBytes += Page.PAGE_SIZE;
+        totalReads++;
+        totalReadBytes += Page.PAGE_SIZE;
 
-          if (DEBUG) {
-            log.write("Read at: \t" + page.getOffset() + "\t len: " + Page.PAGE_SIZE + ", size: " + mySize + "\n");
-          }
-          file.read(buf.array(), 0, Page.PAGE_SIZE);
-          lastSeek += Page.PAGE_SIZE;
+        if (DEBUG) {
+          log.write("Read at: \t" + page.getOffset() + "\t len: " + Page.PAGE_SIZE + ", size: " + mySize + "\n");
         }
+        file.read(ByteBuffer.wrap(buf.array(), 0, Page.PAGE_SIZE), page.getOffset());
       }
       finally {
         releaseFile();
@@ -293,37 +245,19 @@ public class RandomAccessDataFile implements Forceable, Closeable {
       length = (int)(mySize - fileOffset);
     }
 
-    final RandomAccessFile file = getRandomAccessFile();
+    final FileChannel file = getFileChannel();
     try {
-      synchronized (file) {
-        seek(file, fileOffset);
+      totalWrites++;
+      totalWriteBytes += length;
 
-        totalWrites++;
-        totalWriteBytes += length;
-
-        if (DEBUG) {
-          log.write("Write at: \t" + fileOffset + "\t len: " + length + ", size: " + mySize + ", filesize: " + file.length() + "\n");
-        }
-        file.write(buf.array(), bufOffset, length);
-        lastSeek += length;
+      if (DEBUG) {
+        log.write("Write at: \t" + fileOffset + "\t len: " + length + ", size: " + mySize + ", filesize: " + file.size() + "\n");
       }
+      file.write(ByteBuffer.wrap(buf.array(), bufOffset, length), fileOffset);
     }
     finally {
       releaseFile();
     }
-  }
-
-  private void seek(final RandomAccessFile file, final long fileOffset) throws IOException {
-    if (DEBUG) {
-      if (lastSeek != -1L && fileOffset != lastSeek) {
-        long delta = fileOffset - lastSeek;
-        seekcount++;
-        log.write("Seeking: " + delta + "\n");
-      }
-      lastSeek = fileOffset;
-    }
-
-    file.seek(fileOffset);
   }
 
   @Override
@@ -332,7 +266,7 @@ public class RandomAccessDataFile implements Forceable, Closeable {
   }
 
   @Override
-  public synchronized String toString() {
+  public String toString() {
     return "RandomAccessFile[" + myFile + ", dirty=" + myIsDirty + "]";
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.fileEditor.impl.text;
 
 import com.intellij.codeHighlighting.BackgroundEditorHighlighter;
@@ -24,15 +24,10 @@ import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.TestOnly;
 
 import javax.swing.*;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * @author Vladimir Kondratyev
@@ -47,9 +42,8 @@ public class TextEditorImpl extends UserDataHolderBase implements TextEditor {
   @NotNull private final TextEditorComponent myComponent;
   @NotNull protected final VirtualFile myFile;
   private final AsyncEditorLoader myAsyncLoader;
-  private final Future<?> myLoadingFinished;
 
-  TextEditorImpl(@NotNull final Project project, @NotNull final VirtualFile file, final TextEditorProvider provider) {
+  TextEditorImpl(@NotNull Project project, @NotNull VirtualFile file, @NotNull TextEditorProvider provider) {
     myProject = project;
     myFile = file;
     myChangeSupport = new PropertyChangeSupport(this);
@@ -63,7 +57,7 @@ public class TextEditorImpl extends UserDataHolderBase implements TextEditor {
 
     Disposer.register(this, myComponent);
     myAsyncLoader = new AsyncEditorLoader(this, myComponent, provider);
-    myLoadingFinished = myAsyncLoader.start();
+    myAsyncLoader.start();
   }
 
   /**
@@ -75,11 +69,8 @@ public class TextEditorImpl extends UserDataHolderBase implements TextEditor {
     EditorHighlighter highlighter = EditorHighlighterFactory.getInstance().createEditorHighlighter(myFile, scheme, myProject);
     EditorEx editor = (EditorEx)getEditor();
     highlighter.setText(editor.getDocument().getImmutableCharSequence());
-    long stamp = editor.getDocument().getModificationStamp();
-    Language language = getDocumentLanguage(editor);
     return () -> {
-      LOG.assertTrue(stamp == editor.getDocument().getModificationStamp());
-      editor.getSettings().setLanguage(language);
+      editor.getSettings().setLanguageSupplier(() -> getDocumentLanguage(editor));
       editor.setHighlighter(highlighter);
     };
   }
@@ -100,7 +91,7 @@ public class TextEditorImpl extends UserDataHolderBase implements TextEditor {
   }
 
   @NotNull
-  protected TextEditorComponent createEditorComponent(final Project project, final VirtualFile file) {
+  protected TextEditorComponent createEditorComponent(@NotNull Project project, @NotNull VirtualFile file) {
     return new TextEditorComponent(project, file, this);
   }
 
@@ -156,12 +147,12 @@ public class TextEditorImpl extends UserDataHolderBase implements TextEditor {
   }
 
   @Override
-  public void setState(@NotNull final FileEditorState state) {
+  public void setState(@NotNull FileEditorState state) {
     setState(state, false);
   }
 
   @Override
-  public void setState(@NotNull final FileEditorState state, boolean exactState) {
+  public void setState(@NotNull FileEditorState state, boolean exactState) {
     if (state instanceof TextEditorState) {
       myAsyncLoader.setEditorState((TextEditorState)state, exactState);
     }
@@ -179,7 +170,6 @@ public class TextEditorImpl extends UserDataHolderBase implements TextEditor {
 
   @Override
   public void selectNotify() {
-    myComponent.selectNotify();
   }
 
   @Override
@@ -190,17 +180,17 @@ public class TextEditorImpl extends UserDataHolderBase implements TextEditor {
     myComponent.updateModifiedProperty();
   }
 
-  void firePropertyChange(final String propertyName, final Object oldValue, final Object newValue) {
+  void firePropertyChange(@NotNull String propertyName, Object oldValue, Object newValue) {
     myChangeSupport.firePropertyChange(propertyName, oldValue, newValue);
   }
 
   @Override
-  public void addPropertyChangeListener(@NotNull final PropertyChangeListener listener) {
+  public void addPropertyChangeListener(@NotNull PropertyChangeListener listener) {
     myChangeSupport.addPropertyChangeListener(listener);
   }
 
   @Override
-  public void removePropertyChangeListener(@NotNull final PropertyChangeListener listener) {
+  public void removePropertyChangeListener(@NotNull PropertyChangeListener listener) {
     myChangeSupport.removePropertyChangeListener(listener);
   }
 
@@ -229,7 +219,7 @@ public class TextEditorImpl extends UserDataHolderBase implements TextEditor {
   }
 
   @Override
-  public void navigateTo(@NotNull final Navigatable navigatable) {
+  public void navigateTo(@NotNull Navigatable navigatable) {
     ((OpenFileDescriptor)navigatable).navigateIn(getEditor());
   }
 
@@ -238,26 +228,16 @@ public class TextEditorImpl extends UserDataHolderBase implements TextEditor {
     return "Editor: "+myComponent.getFile();
   }
 
-  @TestOnly
-  public void waitForLoaded(long timeout, @NotNull TimeUnit unit) throws TimeoutException {
-    try {
-      myLoadingFinished.get(timeout, unit);
-    }
-    catch (InterruptedException | ExecutionException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
   private static class TransientEditorState {
     private boolean softWrapsEnabled;
 
-    private static TransientEditorState forEditor(Editor editor) {
+    private static @NotNull TransientEditorState forEditor(@NotNull Editor editor) {
       TransientEditorState state = new TransientEditorState();
       state.softWrapsEnabled = editor.getSettings().isUseSoftWraps();
       return state;
     }
 
-    private void applyTo(Editor editor) {
+    private void applyTo(@NotNull Editor editor) {
       editor.getSettings().setUseSoftWraps(softWrapsEnabled);
     }
   }

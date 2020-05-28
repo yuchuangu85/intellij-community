@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.psi;
 
@@ -21,6 +7,7 @@ import com.intellij.injected.editor.VirtualFileWindow;
 import com.intellij.lang.Language;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
+import com.intellij.openapi.application.impl.ApplicationInfoImpl;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
@@ -50,7 +37,7 @@ import java.util.Set;
  * @author db
  */
 public abstract class PsiAnchor {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.psi.PsiAnchor");
+  private static final Logger LOG = Logger.getInstance(PsiAnchor.class);
   @Nullable
   public abstract PsiElement retrieve();
   public abstract PsiFile getFile();
@@ -62,8 +49,11 @@ public abstract class PsiAnchor {
     PsiUtilCore.ensureValid(element);
 
     PsiAnchor anchor = doCreateAnchor(element);
-    if (ApplicationManager.getApplication().isUnitTestMode() && !element.equals(anchor.retrieve())) {
-      LOG.error("Cannot restore element " + element + " of " + element.getClass() + " from anchor " + anchor);
+    if (ApplicationManager.getApplication().isUnitTestMode() && !ApplicationInfoImpl.isInStressTest()) {
+      PsiElement restored = anchor.retrieve();
+      if (!element.equals(restored)) {
+        LOG.error("Cannot restore element " + element + " of " + element.getClass() + " from anchor " + anchor + ", getting " + restored + " instead");
+      }
     }
     return anchor;
   }
@@ -199,7 +189,9 @@ public abstract class PsiAnchor {
     @Override
     @Nullable
     public PsiFile getFile() {
-      return SelfElementInfo.restoreFileFromVirtual(myVirtualFile, myProject, myInfo.getFileLanguage());
+      Language language = myInfo.getFileLanguage();
+      if (language == null) return null;
+      return SelfElementInfo.restoreFileFromVirtual(myVirtualFile, myProject, language);
     }
 
     @Override

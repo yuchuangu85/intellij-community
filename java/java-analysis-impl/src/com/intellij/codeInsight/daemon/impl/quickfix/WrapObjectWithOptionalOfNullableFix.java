@@ -17,13 +17,16 @@ package com.intellij.codeInsight.daemon.impl.quickfix;
 
 import com.intellij.codeInsight.Nullability;
 import com.intellij.codeInsight.daemon.QuickFixBundle;
+import com.intellij.codeInsight.intention.FileModifier;
 import com.intellij.codeInsight.intention.HighPriorityAction;
 import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.codeInsight.intention.impl.BaseIntentionAction;
 import com.intellij.codeInspection.LocalQuickFixAndIntentionActionOnPsiElement;
 import com.intellij.codeInspection.dataFlow.NullabilityUtil;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.util.IncorrectOperationException;
@@ -63,6 +66,12 @@ public class WrapObjectWithOptionalOfNullableFix extends MethodArgumentFix imple
     return PsiUtil.isLanguageLevel8OrHigher(file) && super.isAvailable(project, editor, file);
   }
 
+  @Override
+  public @Nullable FileModifier getFileModifierForPreview(@NotNull PsiFile target) {
+    return new WrapObjectWithOptionalOfNullableFix(PsiTreeUtil.findSameElementInCopy(myArgList, target), myIndex, myToType,
+                                                   myArgumentFixerActionFactory);
+  }
+
   public static IntentionAction createFix(@Nullable PsiType type, @NotNull PsiExpression expression) {
     class MyFix extends LocalQuickFixAndIntentionActionOnPsiElement implements HighPriorityAction {
       protected MyFix(@Nullable PsiElement element) {
@@ -79,7 +88,7 @@ public class WrapObjectWithOptionalOfNullableFix extends MethodArgumentFix imple
       @Override
       public void invoke(@NotNull Project project,
                          @NotNull PsiFile file,
-                         @Nullable("is null when called from inspection") Editor editor,
+                         @Nullable Editor editor,
                          @NotNull PsiElement startElement,
                          @NotNull PsiElement endElement) {
         startElement.replace(getModifiedExpression((PsiExpression)getStartElement()));
@@ -90,7 +99,7 @@ public class WrapObjectWithOptionalOfNullableFix extends MethodArgumentFix imple
                                  @NotNull PsiFile file,
                                  @NotNull PsiElement startElement,
                                  @NotNull PsiElement endElement) {
-        return startElement.getManager().isInProject(startElement) &&
+        return BaseIntentionAction.canModify(startElement) &&
                PsiUtil.isLanguageLevel8OrHigher(startElement) && areConvertible(((PsiExpression) startElement).getType(), type);
       }
 

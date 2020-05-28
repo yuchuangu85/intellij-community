@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.source;
 
 import com.intellij.lang.ASTNode;
@@ -31,11 +17,13 @@ import com.intellij.psi.impl.source.tree.*;
 import com.intellij.psi.javadoc.PsiDocComment;
 import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.psi.search.SearchScope;
+import com.intellij.psi.stub.JavaStubImplUtil;
 import com.intellij.psi.stubs.IStubElementType;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.reference.SoftReference;
 import com.intellij.testFramework.LightVirtualFile;
-import com.intellij.ui.RowIcon;
+import com.intellij.ui.IconManager;
+import com.intellij.ui.icons.RowIcon;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.PlatformIcons;
 import org.jetbrains.annotations.NotNull;
@@ -223,9 +211,17 @@ public class PsiFieldImpl extends JavaStubPsiElement<PsiFieldStub> implements Ps
     return (PsiExpression)getNode().findChildByRoleAsPsiElement(ChildRole.INITIALIZER);
   }
 
-  // avoids stub-to-AST switch if possible,
-  // returns the light generated initializer literal expression if stored in stubs, the regular initializer if wasn't
-  public PsiExpression getDetachedInitializer() {
+  /**
+   * Avoids stub-to-AST switch if possible.
+   * @return Light generated initializer literal expression if it was stored in stubs, the regular initializer otherwise
+   */
+  @Nullable
+  public static PsiExpression getDetachedInitializer(@NotNull PsiVariable variable) {
+    return variable instanceof PsiFieldImpl ? ((PsiFieldImpl)variable).getDetachedInitializer() : variable.getInitializer();
+  }
+
+  @Nullable
+  private PsiExpression getDetachedInitializer() {
     final PsiFieldStub stub = getGreenStub();
     PsiExpression initializer;
     if (stub == null) {
@@ -233,9 +229,11 @@ public class PsiFieldImpl extends JavaStubPsiElement<PsiFieldStub> implements Ps
     }
     else {
       String initializerText = stub.getInitializerText();
+      if (StringUtil.isEmpty(initializerText)) {
+        return null;
+      }
 
-      if (StringUtil.isEmpty(initializerText) ||
-          PsiFieldStub.INITIALIZER_NOT_STORED.equals(initializerText) ||
+      if (PsiFieldStub.INITIALIZER_NOT_STORED.equals(initializerText) ||
           PsiFieldStub.INITIALIZER_TOO_LONG.equals(initializerText)) {
         initializer = getInitializer();
       }
@@ -261,7 +259,8 @@ public class PsiFieldImpl extends JavaStubPsiElement<PsiFieldStub> implements Ps
 
   @Override
   public Icon getElementIcon(final int flags) {
-    final RowIcon baseIcon = ElementPresentationUtil.createLayeredIcon(PlatformIcons.FIELD_ICON, this, false);
+    final RowIcon baseIcon =
+      IconManager.getInstance().createLayeredIcon(this, PlatformIcons.FIELD_ICON, ElementPresentationUtil.getFlags(this, false));
     return ElementPresentationUtil.addVisibilityIcon(this, flags, baseIcon);
   }
 
@@ -299,15 +298,7 @@ public class PsiFieldImpl extends JavaStubPsiElement<PsiFieldStub> implements Ps
 
   @Override
   public boolean isDeprecated() {
-    return isFieldDeprecated(this, getGreenStub());
-  }
-
-  static boolean isFieldDeprecated(@NotNull PsiField field, @Nullable PsiFieldStub stub) {
-    if (stub != null) {
-      return stub.isDeprecated() || stub.hasDeprecatedAnnotation() && PsiImplUtil.isDeprecatedByAnnotation(field);
-    }
-
-    return PsiImplUtil.isDeprecatedByDocTag(field) || PsiImplUtil.isDeprecatedByAnnotation(field);
+    return JavaStubImplUtil.isMemberDeprecated(this, getGreenStub());
   }
 
   @Override

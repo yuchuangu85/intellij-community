@@ -1,26 +1,24 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.io;
 
 import com.intellij.openapi.util.Pair;
+import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.vfs.CharsetToolkit;
-import com.intellij.util.Base64;
 import com.intellij.util.ThreeState;
 import gnu.trove.TIntArrayList;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.*;
-import java.net.MalformedURLException;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.net.URLEncoder;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-public class URLUtil {
+public final class URLUtil {
   public static final String SCHEME_SEPARATOR = "://";
   public static final String FILE_PROTOCOL = "file";
   public static final String HTTP_PROTOCOL = "http";
@@ -30,7 +28,10 @@ public class URLUtil {
 
   public static final Pattern DATA_URI_PATTERN = Pattern.compile("data:([^,;]+/[^,;]+)(;charset(?:=|:)[^,;]+)?(;base64)?,(.+)");
   public static final Pattern URL_PATTERN = Pattern.compile("\\b(mailto:|(news|(ht|f)tp(s?))://|((?<![\\p{L}0-9_.])(www\\.)))[-A-Za-z0-9+$&@#/%?=~_|!:,.;]*[-A-Za-z0-9+$&@#/%=~_|]");
+  public static final Pattern URL_WITH_PARENS_PATTERN = Pattern.compile("\\b(mailto:|(news|(ht|f)tp(s?))://|((?<![\\p{L}0-9_.])(www\\.)))[-A-Za-z0-9+$&@#/%?=~_|!:,.;()]*[-A-Za-z0-9+$&@#/%=~_|()]");
   public static final Pattern FILE_URL_PATTERN = Pattern.compile("\\b(file:///)[-A-Za-z0-9+$&@#/%?=~_|!:,.;]*[-A-Za-z0-9+$&@#/%=~_|]");
+
+  public static final Pattern HREF_PATTERN = Pattern.compile("<a(?:\\s+href\\s*=\\s*[\"']([^\"']*)[\"'])?\\s*>([^<]*)</a>");
 
   private URLUtil() { }
 
@@ -46,14 +47,12 @@ public class URLUtil {
    * separate method is needed, since jar URLs open jars via JarFactory and thus keep them
    * mapped into memory.
    */
-  @NotNull
-  public static InputStream openStream(@NotNull URL url) throws IOException {
+  public static @NotNull InputStream openStream(@NotNull URL url) throws IOException {
     String protocol = url.getProtocol();
     return protocol.equals(JAR_PROTOCOL) ? openJarStream(url) : url.openStream();
   }
 
-  @NotNull
-  public static InputStream openResourceStream(@NotNull URL url) throws IOException {
+  public static @NotNull InputStream openResourceStream(@NotNull URL url) throws IOException {
     try {
       return openStream(url);
     }
@@ -77,8 +76,7 @@ public class URLUtil {
     }
   }
 
-  @NotNull
-  private static InputStream openJarStream(@NotNull URL url) throws IOException {
+  private static @NotNull InputStream openJarStream(@NotNull URL url) throws IOException {
     Pair<String, String> paths = splitJarUrl(url.getFile());
     if (paths == null) {
       throw new MalformedURLException(url.getFile());
@@ -103,8 +101,7 @@ public class URLUtil {
   /**
    * Checks whether local resource specified by {@code url} exists. Returns {@link ThreeState#UNSURE} if {@code url} point to a remote resource.
    */
-  @NotNull
-  public static ThreeState resourceExists(@NotNull URL url) {
+  public static @NotNull ThreeState resourceExists(@NotNull URL url) {
     if (url.getProtocol().equals(FILE_PROTOCOL)) {
       return ThreeState.fromBoolean(urlToFile(url).exists());
     }
@@ -117,12 +114,8 @@ public class URLUtil {
         return ThreeState.NO;
       }
       try {
-        ZipFile file = new ZipFile(paths.first);
-        try {
+        try (ZipFile file = new ZipFile(paths.first)) {
           return ThreeState.fromBoolean(file.getEntry(paths.second) != null);
-        }
-        finally {
-          file.close();
         }
       }
       catch (IOException e) {
@@ -140,8 +133,7 @@ public class URLUtil {
    * <p/>
    * Please note that the first part is platform-dependent - see UrlUtilTest.testJarUrlSplitter() for examples.
    */
-  @Nullable
-  public static Pair<String, String> splitJarUrl(@NotNull String url) {
+  public static @Nullable Pair<String, String> splitJarUrl(@NotNull String url) {
     int pivot = url.indexOf(JAR_SEPARATOR);
     if (pivot < 0) return null;
 
@@ -167,11 +159,10 @@ public class URLUtil {
       }
     }
 
-    return Pair.create(jarPath, resourcePath);
+    return new Pair<>(jarPath, resourcePath);
   }
 
-  @NotNull
-  public static File urlToFile(@NotNull URL url) {
+  public static @NotNull File urlToFile(@NotNull URL url) {
     try {
       return new File(url.toURI().getSchemeSpecificPart());
     }
@@ -180,20 +171,30 @@ public class URLUtil {
     }
   }
 
-  @NotNull
-  public static String unescapePercentSequences(@NotNull String s) {
-    if (s.indexOf('%') == -1) {
-      return s;
+  public static @NotNull String unescapePercentSequences(@NotNull String s) {
+    return unescapePercentSequences(s, 0, s.length()).toString();
+  }
+
+  public static @NotNull CharSequence unescapePercentSequences(@NotNull CharSequence s, int from, int end) {
+    int i = StringUtil.indexOf(s, '%', from, end);
+    if (i == -1) {
+      return s.subSequence(from, end);
     }
 
     StringBuilder decoded = new StringBuilder();
-    final int len = s.length();
-    int i = 0;
-    while (i < len) {
+    decoded.append(s, from, i);
+
+    TIntArrayList bytes = null;
+    while (i < end) {
       char c = s.charAt(i);
       if (c == '%') {
-        TIntArrayList bytes = new TIntArrayList();
-        while (i + 2 < len && s.charAt(i) == '%') {
+        if (bytes == null) {
+          bytes = new TIntArrayList();
+        }
+        else {
+          bytes.clear();
+        }
+        while (i + 2 < end && s.charAt(i) == '%') {
           final int d1 = decode(s.charAt(i + 1));
           final int d2 = decode(s.charAt(i + 2));
           if (d1 != -1 && d2 != -1) {
@@ -209,7 +210,7 @@ public class URLUtil {
           for (int j = 0; j < bytes.size(); j++) {
             bytesArray[j] = (byte)bytes.getQuick(j);
           }
-          decoded.append(new String(bytesArray, CharsetToolkit.UTF8_CHARSET));
+          decoded.append(new String(bytesArray, StandardCharsets.UTF_8));
           continue;
         }
       }
@@ -217,7 +218,7 @@ public class URLUtil {
       decoded.append(c);
       i++;
     }
-    return decoded.toString();
+    return decoded;
   }
 
   private static int decode(char c) {
@@ -242,15 +243,14 @@ public class URLUtil {
    * @param dataUrl data:URL-like string (may be quoted)
    * @return extracted byte array or {@code null} if it cannot be extracted.
    */
-  @Nullable
-  public static byte[] getBytesFromDataUri(@NotNull String dataUrl) {
+  public static byte @Nullable [] getBytesFromDataUri(@NotNull String dataUrl) {
     Matcher matcher = DATA_URI_PATTERN.matcher(StringUtil.unquoteString(dataUrl));
     if (matcher.matches()) {
       try {
         String content = matcher.group(4);
         return ";base64".equalsIgnoreCase(matcher.group(3))
-               ? Base64.decode(content)
-               : content.getBytes(CharsetToolkit.UTF8_CHARSET);
+               ? Base64.getDecoder().decode(content)
+               : decode(content).getBytes(StandardCharsets.UTF_8);
       }
       catch (IllegalArgumentException e) {
         return null;
@@ -259,8 +259,18 @@ public class URLUtil {
     return null;
   }
 
-  @NotNull
-  public static String parseHostFromSshUrl(@NotNull String sshUrl) {
+  public static @NotNull String decode(@NotNull String string) {
+    try {
+      return URLDecoder.decode(string, StandardCharsets.UTF_8.name());
+    }
+    catch (UnsupportedEncodingException ignore) {
+      //noinspection deprecation
+      return URLDecoder.decode(string);
+    }
+  }
+
+
+  public static @NotNull String parseHostFromSshUrl(@NotNull String sshUrl) {
     // [ssh://]git@github.com:user/project.git
     String host = sshUrl;
     int at = host.lastIndexOf('@');
@@ -287,10 +297,18 @@ public class URLUtil {
     return host;
   }
 
-  @NotNull
-  public static URL getJarEntryURL(@NotNull File file, @NotNull String pathInJar) throws MalformedURLException {
-    String fileURL = StringUtil.replace(file.toURI().toASCIIString(), "!", "%21");
+  public static @NotNull URL getJarEntryURL(@NotNull File file, @NotNull String pathInJar) throws MalformedURLException {
+    return getJarEntryURL(file.toURI(), pathInJar);
+  }
+
+  public static @NotNull URL getJarEntryURL(@NotNull URI file, @NotNull String pathInJar) throws MalformedURLException {
+    String fileURL = StringUtil.replace(file.toASCIIString(), "!", "%21");
     return new URL(JAR_PROTOCOL + ':' + fileURL + JAR_SEPARATOR + StringUtil.trimLeading(pathInJar, '/'));
+  }
+
+  public static @NotNull URI getJarEntryUri(@NotNull URI file, @NotNull String pathInJar) throws URISyntaxException {
+    String fileURL = StringUtil.replace(file.toASCIIString(), "!", "%21");
+    return new URI(JAR_PROTOCOL + ':' + fileURL + JAR_SEPARATOR + StringUtil.trimLeading(pathInJar, '/'));
   }
 
   /**
@@ -300,10 +318,9 @@ public class URLUtil {
    * @param s  a component of a URI
    * @return a new string representing the provided string encoded as a URI component
    */
-  @NotNull
-  public static String encodeURIComponent(@NotNull String s) {
+  public static @NotNull String encodeURIComponent(@NotNull String s) {
     try {
-      return URLEncoder.encode(s, CharsetToolkit.UTF8)
+      return URLEncoder.encode(s, StandardCharsets.UTF_8.name())
         .replace("+", "%20")
         .replace("%21", "!")
         .replace("%27", "'")
@@ -314,5 +331,30 @@ public class URLUtil {
     catch (UnsupportedEncodingException e) {
       return s;
     }
+  }
+
+  /**
+   * Finds the first range in text containing URL. This is similar to using {@link #URL_PATTERN} matcher, but also finds URLs containing
+   * matched set of parentheses.
+   */
+  public static @Nullable TextRange findUrl(@NotNull CharSequence text, int startOffset, int endOffset) {
+    Matcher m = URL_WITH_PARENS_PATTERN.matcher(text);
+    m.region(startOffset, endOffset);
+    if (!m.find()) return null;
+    int start = m.start();
+    int end = m.end();
+    int unmatchedPos = 0;
+    int unmatchedCount = 0;
+    for (int i = m.end(1); i < end; i++) {
+      char c = text.charAt(i);
+      if (c == '(') {
+        if (unmatchedCount++ == 0) unmatchedPos = i;
+      }
+      else if (c == ')') {
+        if (unmatchedCount-- == 0) return new TextRange(start, i);
+      }
+    }
+    if (unmatchedCount > 0) return new TextRange(start, unmatchedPos);
+    return new TextRange(start, end);
   }
 }

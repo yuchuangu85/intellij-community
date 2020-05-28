@@ -1,22 +1,7 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.tabs.impl.singleRow;
 
-import com.intellij.icons.AllIcons;
-import com.intellij.ui.tabs.JBTabsPosition;
+import com.intellij.openapi.actionSystem.ActionToolbar;
 import com.intellij.ui.tabs.impl.JBTabsImpl;
 import com.intellij.ui.tabs.impl.ShapeTransform;
 import com.intellij.ui.tabs.impl.TabLabel;
@@ -64,8 +49,6 @@ public abstract class SingleRowLayoutStrategy {
 
   public abstract ShapeTransform createShapeTransform(Rectangle rectangle);
 
-  public abstract boolean canBeStretched();
-
   public abstract void layoutComp(SingleRowPassInfo data);
 
   public boolean isSideComponentOnTabs() {
@@ -100,18 +83,15 @@ public abstract class SingleRowLayoutStrategy {
     }
 
     @Override
-    public boolean canBeStretched() {
-      return true;
-    }
-
-    @Override
     public boolean isDragOut(TabLabel tabLabel, int deltaX, int deltaY) {
+      Rectangle bounds = tabLabel.getBounds();
+      if (bounds.x + bounds.width + deltaX < 0 || bounds.x + bounds.width > tabLabel.getParent().getWidth()) return true;
       return Math.abs(deltaY) > tabLabel.getHeight() * TabLayout.getDragOutMultiplier();
     }
 
     @Override
     public int getMoreRectAxisSize() {
-      return AllIcons.General.MoreTabs.getIconWidth() + 15;
+      return ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE.width + 6;
     }
 
     @Override
@@ -126,7 +106,7 @@ public abstract class SingleRowLayoutStrategy {
 
     @Override
     public int getLengthIncrement(final Dimension labelPrefSize) {
-      return myTabs.isEditorTabs() ? labelPrefSize.width < MIN_TAB_WIDTH ? MIN_TAB_WIDTH : labelPrefSize.width : labelPrefSize.width;
+      return myTabs.isEditorTabs() ? Math.max(labelPrefSize.width, MIN_TAB_WIDTH) : labelPrefSize.width;
     }
 
     @Override
@@ -146,7 +126,7 @@ public abstract class SingleRowLayoutStrategy {
 
     @Override
     public Rectangle getLayoutRec(final int position, final int fixedPos, final int length, final int fixedFitLength) {
-      return new Rectangle(position, fixedPos + (myTabs.getTabsPosition() == JBTabsPosition.bottom ? 1 : 0), length, fixedFitLength);
+      return new Rectangle(position, fixedPos, length, fixedFitLength);
     }
 
     @Override
@@ -156,7 +136,7 @@ public abstract class SingleRowLayoutStrategy {
 
     @Override
     public boolean drawPartialOverflowTabs() {
-      return false;
+      return true;
     }
 
     @Override
@@ -193,10 +173,9 @@ public abstract class SingleRowLayoutStrategy {
         x = data.layoutSize.width - data.moreRectAxisSize - 1;
       }
       else {
-        x = data.position + (data.lastGhostVisible ? data.lastGhost.width : 0);
+        x = data.position;
       }
-      return new Rectangle(x, data.insets.top + JBTabsImpl.getSelectionTabVShift(),
-                                            data.moreRectAxisSize - 1, myTabs.myHeaderFitSize.height - 1);
+      return new Rectangle(x, 1, data.moreRectAxisSize - 1, myTabs.myHeaderFitSize.height);
     }
 
 
@@ -207,12 +186,12 @@ public abstract class SingleRowLayoutStrategy {
       } else {
         JComponent vToolbar = data.vToolbar.get();
         final int vToolbarWidth = vToolbar != null ? vToolbar.getPreferredSize().width : 0;
-        final int vSeparatorWidth = vToolbarWidth > 0 ? 1 : 0;
+        final int vSeparatorWidth = vToolbarWidth > 0 ? myTabs.getSeparatorWidth() : 0;
         final int x = vToolbarWidth > 0 ? vToolbarWidth + vSeparatorWidth : 0;
         JComponent hToolbar = data.hToolbar.get();
         final int hToolbarHeight = !myTabs.isSideComponentOnTabs() && hToolbar != null ? hToolbar.getPreferredSize().height : 0;
-        final int y = myTabs.myHeaderFitSize.height + (myTabs.isEditorTabs() ? 0 : 1) +
-                      (hToolbarHeight > 0 ? hToolbarHeight - 2 : 0);
+        final int y = myTabs.myHeaderFitSize.height +
+                      (Math.max(hToolbarHeight, 0));
 
         JComponent comp = data.comp.get();
         if (hToolbar != null) {
@@ -220,11 +199,11 @@ public abstract class SingleRowLayoutStrategy {
           if (myTabs.isSideComponentOnTabs()) {
             int toolbarX = (data.moreRect != null ? (int)data.moreRect.getMaxX() : data.position) + myTabs.getToolbarInset();
             final Rectangle rec =
-              new Rectangle(toolbarX, data.insets.top + 1, myTabs.getSize().width - data.insets.left - toolbarX, myTabs.myHeaderFitSize.height);
+              new Rectangle(toolbarX, data.insets.top, myTabs.getSize().width - data.insets.left - toolbarX, myTabs.myHeaderFitSize.height);
             myTabs.layout(hToolbar, rec);
           } else {
-            final int toolbarHeight = hToolbar.getPreferredSize().height - 2;
-            myTabs.layout(hToolbar, compBounds.x, compBounds.y - toolbarHeight - 1, compBounds.width, toolbarHeight);
+            final int toolbarHeight = hToolbar.getPreferredSize().height;
+            myTabs.layout(hToolbar, compBounds.x, compBounds.y - toolbarHeight, compBounds.width, toolbarHeight);
           }
         } else if (vToolbar != null) {
           if (myTabs.isSideComponentBefore()) {
@@ -252,19 +231,19 @@ public abstract class SingleRowLayoutStrategy {
       if (myTabs.isHideTabs()) {
         myTabs.layoutComp(data, 0, 0, 0, 0);
       } else {
-        myTabs.layoutComp(data, 0, 0, 0, -(myTabs.myHeaderFitSize.height + 1));
+        myTabs.layoutComp(data, 0, 0, 0, -(myTabs.myHeaderFitSize.height));
       }
     }
 
     @Override
     public int getFixedPosition(final SingleRowPassInfo data) {
-      return myTabs.getSize().height - data.insets.bottom - myTabs.myHeaderFitSize.height - 1;
+      return myTabs.getSize().height - data.insets.bottom - myTabs.myHeaderFitSize.height;
     }
 
     @Override
     public Rectangle getMoreRect(final SingleRowPassInfo data) {
       return new Rectangle(myTabs.getWidth() - data.insets.right - data.moreRectAxisSize + 2, getFixedPosition(data),
-                                            data.moreRectAxisSize - 1, myTabs.myHeaderFitSize.height - 1);
+                           data.moreRectAxisSize - 1, myTabs.myHeaderFitSize.height);
     }
 
     @Override
@@ -280,7 +259,9 @@ public abstract class SingleRowLayoutStrategy {
 
     @Override
     public boolean isDragOut(TabLabel tabLabel, int deltaX, int deltaY) {
-      return Math.abs(deltaX) > tabLabel.getHeight() * TabLayout.getDragOutMultiplier();
+      Rectangle bounds = tabLabel.getBounds();
+      if (bounds.y + bounds.height + deltaX < 0 || bounds.y + bounds.height > tabLabel.getParent().getHeight()) return true;
+      return Math.abs(deltaX) > tabLabel.getWidth() * TabLayout.getDragOutMultiplier();
     }
 
     @Override
@@ -290,12 +271,7 @@ public abstract class SingleRowLayoutStrategy {
 
     @Override
     int getMoreRectAxisSize() {
-      return AllIcons.General.MoreTabs.getIconHeight() + 4;
-    }
-
-    @Override
-    public boolean canBeStretched() {
-      return false;
+      return ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE.width + 2;
     }
 
     @Override
@@ -320,8 +296,7 @@ public abstract class SingleRowLayoutStrategy {
 
     @Override
     public int getMaxPosition(final Rectangle bounds) {
-      int maxY = (int)bounds.getMaxY();
-      return myTabs.isEditorTabs() ? maxY - 1 : maxY;
+      return (int)bounds.getMaxY();
     }
 
     @Override
@@ -351,7 +326,7 @@ public abstract class SingleRowLayoutStrategy {
       if (myTabs.isHideTabs()) {
         myTabs.layoutComp(data, 0, 0, 0, 0);
       } else {
-        myTabs.layoutComp(data, myTabs.myHeaderFitSize.width + 1, 0, 0, 0);
+        myTabs.layoutComp(data, myTabs.myHeaderFitSize.width, 0, 0, 0);
       }
     }
 
@@ -374,7 +349,7 @@ public abstract class SingleRowLayoutStrategy {
     public Rectangle getMoreRect(final SingleRowPassInfo data) {
       return new Rectangle(data.insets.left + JBTabsImpl.getSelectionTabVShift(),
                            myTabs.getHeight() - data.insets.bottom - data.moreRectAxisSize - 1,
-                           myTabs.myHeaderFitSize.width - 1,
+                           myTabs.myHeaderFitSize.width,
                            data.moreRectAxisSize - 1);
     }
 
@@ -412,9 +387,9 @@ public abstract class SingleRowLayoutStrategy {
     @Override
     public Rectangle getMoreRect(SingleRowPassInfo data) {
       return new Rectangle(data.layoutSize.width - myTabs.myHeaderFitSize.width,
-                        myTabs.getHeight() - data.insets.bottom - data.moreRectAxisSize - 1,
-                        myTabs.myHeaderFitSize.width - 1,
-                        data.moreRectAxisSize - 1);
+                           myTabs.getHeight() - data.insets.bottom - data.moreRectAxisSize - 1,
+                           myTabs.myHeaderFitSize.width,
+                           data.moreRectAxisSize - 1);
     }
   }
 

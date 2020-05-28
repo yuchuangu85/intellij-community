@@ -19,7 +19,7 @@ import java.awt.*;
  * @author Vladimir Kondratyev
  */
 final class FormPropertyTableCellRenderer extends ColoredTableCellRenderer{
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.wizard.FormPropertyTableCellRenderer");
+  private static final Logger LOG = Logger.getInstance(FormPropertyTableCellRenderer.class);
 
   private final Palette myPalette;
   private final SimpleTextAttributes myAttrs1;
@@ -59,7 +59,7 @@ final class FormPropertyTableCellRenderer extends ColoredTableCellRenderer{
       icon = item.getSmallIcon();
     }
     else {
-      icon = UIDesignerIcons.Unknown_small;
+      icon = UIDesignerIcons.Unknown;
     }
     setIcon(icon);
 

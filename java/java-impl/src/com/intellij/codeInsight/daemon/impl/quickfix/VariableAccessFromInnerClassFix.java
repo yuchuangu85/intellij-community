@@ -21,6 +21,7 @@ import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightControlFlowUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.JavaGenericsUtil;
 import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.codeInsight.intention.impl.BaseIntentionAction;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
@@ -44,7 +45,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.*;
 
 public class VariableAccessFromInnerClassFix implements IntentionAction {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.daemon.impl.quickfix.VariableAccessFromInnerClassFix");
+  private static final Logger LOG = Logger.getInstance(VariableAccessFromInnerClassFix.class);
   private final PsiVariable myVariable;
   private final PsiElement myContext;
   private final int myFixType;
@@ -92,7 +93,7 @@ public class VariableAccessFromInnerClassFix implements IntentionAction {
   @Override
   public boolean isAvailable(@NotNull Project project, Editor editor, PsiFile file) {
     return myContext.isValid() &&
-           myContext.getManager().isInProject(myContext) &&
+           BaseIntentionAction.canModify(myContext) &&
            myVariable.isValid() &&
            myFixType != -1 &&
            !getVariablesToFix().isEmpty() &&

@@ -34,11 +34,12 @@ public class SpellCheckerSeveritiesProvider extends SeveritiesProvider {
   @Override
   @NotNull
   public List<HighlightInfoType> getSeveritiesHighlightInfoTypes() {
-    class T extends HighlightInfoType.HighlightInfoTypeImpl implements HighlightInfoType.Iconable{
+    class T extends HighlightInfoType.HighlightInfoTypeImpl implements HighlightInfoType.Iconable {
       private T(@NotNull HighlightSeverity severity, @NotNull TextAttributesKey attributesKey) {
         super(severity, attributesKey);
       }
 
+      @NotNull
       @Override
       public Icon getIcon() {
         return AllIcons.General.InspectionsTypos;

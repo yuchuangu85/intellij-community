@@ -15,12 +15,8 @@
  */
 package org.jetbrains.idea.maven.utils;
 
-import com.intellij.ide.DataManager;
 import com.intellij.ide.util.ElementsChooser;
-import com.intellij.openapi.actionSystem.ActionManager;
-import com.intellij.openapi.actionSystem.AnAction;
-import com.intellij.openapi.actionSystem.AnActionEvent;
-import com.intellij.openapi.actionSystem.Presentation;
+import com.intellij.openapi.externalSystem.action.ExternalSystemActionUtil;
 import com.intellij.ui.treeStructure.SimpleTree;
 import com.intellij.util.ui.UIUtil;
 
@@ -37,17 +33,11 @@ import java.util.TreeSet;
 
 public class MavenUIUtil {
   public static void executeAction(final String actionId, final InputEvent e) {
-    final ActionManager actionManager = ActionManager.getInstance();
-    final AnAction action = actionManager.getAction(actionId);
-    if (action != null) {
-      final Presentation presentation = new Presentation();
-      final AnActionEvent event =
-        new AnActionEvent(e, DataManager.getInstance().getDataContext(e.getComponent()), "", presentation, actionManager, 0);
-      action.update(event);
-      if (presentation.isEnabled()) {
-        action.actionPerformed(event);
-      }
-    }
+    executeAction(actionId, "", e);
+  }
+
+  public static void executeAction(final String actionId, final String place, final InputEvent e) {
+    ExternalSystemActionUtil.executeAction(actionId, place, e);
   }
 
   public static <E> void setElements(ElementsChooser<E> chooser, Collection<? extends E> all, Collection<? extends E> selected, Comparator<? super E> comparator) {
@@ -108,13 +98,12 @@ public class MavenUIUtil {
         if (row >= 0) {
           TreePath path = tree.getPathForRow(row);
           if (!isCheckboxEnabledFor(path, handler)) return;
-
           Rectangle checkBounds = checkbox.getBounds();
           checkBounds.setLocation(tree.getRowBounds(row).getLocation());
           if (checkBounds.contains(e.getPoint())) {
+            tree.setSelectionRow(row);
             handler.toggle(path, e);
             e.consume();
-            tree.setSelectionRow(row);
           }
         }
       }

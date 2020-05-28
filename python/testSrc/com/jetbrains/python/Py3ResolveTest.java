@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2017 JetBrains s.r.o.
+ * Copyright 2000-2018 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
  */
 package com.jetbrains.python;
 
-import com.intellij.openapi.vfs.StandardFileSystems;
-import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.testFramework.LightProjectDescriptor;
@@ -53,8 +51,15 @@ public class Py3ResolveTest extends PyResolveTestCase {
 
   @Override
   protected void tearDown() throws Exception {
-    PythonLanguageLevelPusher.setForcedLanguageLevel(myFixture.getProject(), null);
-    super.tearDown();
+    try {
+      PythonLanguageLevelPusher.setForcedLanguageLevel(myFixture.getProject(), null);
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
+    finally {
+      super.tearDown();
+    }
   }
 
   public void testObjectMethods() {  // PY-1494
@@ -68,7 +73,7 @@ public class Py3ResolveTest extends PyResolveTestCase {
 
   // PY-13734
   public void testImplicitDunderClass() {
-    assertResolvesTo(PyClass.class, "A");
+    assertIsBuiltin(assertResolvesTo(PyFunction.class, PyNames.__CLASS__));
   }
 
   public void testImplicitDunderDoc() {
@@ -86,7 +91,7 @@ public class Py3ResolveTest extends PyResolveTestCase {
 
   // PY-13734
   public void testImplicitDunderClassWithClassAttr() {
-    assertResolvesTo(PyClass.class, "A");
+    assertIsBuiltin(assertResolvesTo(PyFunction.class, PyNames.__CLASS__));
   }
 
   public void testImplicitDunderDocWithClassAttr() {
@@ -104,7 +109,7 @@ public class Py3ResolveTest extends PyResolveTestCase {
 
   // PY-13734
   public void testImplicitDunderClassWithInheritedClassAttr() {
-    assertResolvesTo(PyClass.class, "B");
+    assertIsBuiltin(assertResolvesTo(PyFunction.class, PyNames.__CLASS__));
   }
 
   public void testImplicitDunderDocWithInheritedClassAttr() {
@@ -122,7 +127,7 @@ public class Py3ResolveTest extends PyResolveTestCase {
 
   // PY-13734
   public void testInstanceDunderClass() {
-    assertResolvesTo(PyClass.class, "A");
+    assertIsBuiltin(assertResolvesTo(PyFunction.class, PyNames.__CLASS__));
   }
 
   public void testInstanceDunderDoc() {
@@ -213,7 +218,7 @@ public class Py3ResolveTest extends PyResolveTestCase {
 
   // PY-13734
   public void testTypeDunderClass() {
-    assertResolvesTo(PyClass.class, "type");
+    assertIsBuiltin(assertResolvesTo(PyFunction.class, PyNames.__CLASS__));
   }
 
   public void testTypeDunderDoc() {
@@ -232,7 +237,7 @@ public class Py3ResolveTest extends PyResolveTestCase {
 
   // PY-13734
   public void testTypeDunderClassWithClassAttr() {
-    assertResolvesTo(PyClass.class, "type");
+    assertIsBuiltin(assertResolvesTo(PyFunction.class, PyNames.__CLASS__));
   }
 
   public void testTypeDunderDocWithClassAttr() {
@@ -261,7 +266,7 @@ public class Py3ResolveTest extends PyResolveTestCase {
 
   // PY-13734
   public void testTypeDunderClassWithInheritedClassAttr() {
-    assertResolvesTo(PyClass.class, "type");
+    assertIsBuiltin(assertResolvesTo(PyFunction.class, PyNames.__CLASS__));
   }
 
   public void testTypeDunderDocWithInheritedClassAttr() {
@@ -667,16 +672,13 @@ public class Py3ResolveTest extends PyResolveTestCase {
   }
 
   // PY-30942
-  public void testUserPyInsteadStubPackage() {
+  public void testUserPyInsteadProvidedPyi() {
     final String path = "resolve/" + getTestName(false);
     myFixture.copyDirectoryToProject(path + "/pkg", "pkg");
     myFixture.configureByFile(path + "/main.py");
 
-    final VirtualFile libDir = StandardFileSystems.local().findFileByPath(getTestDataPath() + "/" + path + "/lib");
-    assertNotNull(libDir);
-
     runWithAdditionalClassEntryInSdkRoots(
-      libDir,
+      path + "/lib",
       () -> {
         final PsiElement element = PyResolveTestCase.findReferenceByMarker(myFixture.getFile()).resolve();
         assertInstanceOf(element, PyFunction.class);
@@ -688,16 +690,30 @@ public class Py3ResolveTest extends PyResolveTestCase {
     );
   }
 
+  // PY-32963
+  public void testProvidedPyiInsteadStubPackage() {
+    final String path = "resolve/" + getTestName(false);
+    myFixture.configureByFile(path + "/main.py");
+
+    runWithAdditionalClassEntryInSdkRoots(
+      path + "/lib",
+      () -> {
+        final PsiElement element = PyResolveTestCase.findReferenceByMarker(myFixture.getFile()).resolve();
+
+        final PsiFile file = element.getContainingFile();
+        assertEquals("foo.pyi", file.getName());
+        assertEquals("pkg", file.getParent().getName());
+      }
+    );
+  }
+
   // PY-30942
   public void testStubPackageInsteadInlinePackage() {
     final String path = "resolve/" + getTestName(false);
     myFixture.configureByFile(path + "/main.py");
 
-    final VirtualFile libDir = StandardFileSystems.local().findFileByPath(getTestDataPath() + "/" + path + "/lib");
-    assertNotNull(libDir);
-
     runWithAdditionalClassEntryInSdkRoots(
-      libDir,
+      path + "/lib",
       () -> {
         final PsiElement element = PyResolveTestCase.findReferenceByMarker(myFixture.getFile()).resolve();
 
@@ -713,11 +729,8 @@ public class Py3ResolveTest extends PyResolveTestCase {
     final String path = "resolve/" + getTestName(false);
     myFixture.configureByFile(path + "/main.py");
 
-    final VirtualFile libDir = StandardFileSystems.local().findFileByPath(getTestDataPath() + "/" + path + "/lib");
-    assertNotNull(libDir);
-
     runWithAdditionalClassEntryInSdkRoots(
-      libDir,
+      path + "/lib",
       () -> {
         final PsiElement element = PyResolveTestCase.findReferenceByMarker(myFixture.getFile()).resolve();
         assertInstanceOf(element, PyFunction.class);
@@ -734,11 +747,8 @@ public class Py3ResolveTest extends PyResolveTestCase {
     final String path = "resolve/" + getTestName(false);
     myFixture.configureByFile(path + "/main.py");
 
-    final VirtualFile libDir = StandardFileSystems.local().findFileByPath(getTestDataPath() + "/" + path + "/lib");
-    assertNotNull(libDir);
-
     runWithAdditionalClassEntryInSdkRoots(
-      libDir,
+      path + "/lib",
       () -> {
         final PsiElement element = PyResolveTestCase.findReferenceByMarker(myFixture.getFile()).resolve();
         assertInstanceOf(element, PyFunction.class);
@@ -757,11 +767,8 @@ public class Py3ResolveTest extends PyResolveTestCase {
     final String path = "resolve/" + getTestName(false);
     myFixture.configureByFile(path + "/main.py");
 
-    final VirtualFile libDir = StandardFileSystems.local().findFileByPath(getTestDataPath() + "/" + path + "/lib");
-    assertNotNull(libDir);
-
     runWithAdditionalClassEntryInSdkRoots(
-      libDir,
+      path + "/lib",
       () -> {
         final PsiElement element = PyResolveTestCase.findReferenceByMarker(myFixture.getFile()).resolve();
         assertInstanceOf(element, PyFunction.class);
@@ -775,11 +782,8 @@ public class Py3ResolveTest extends PyResolveTestCase {
     final String path = "resolve/" + getTestName(false);
     myFixture.configureByFile(path + "/main.py");
 
-    final VirtualFile libDir = StandardFileSystems.local().findFileByPath(getTestDataPath() + "/" + path + "/lib");
-    assertNotNull(libDir);
-
     runWithAdditionalClassEntryInSdkRoots(
-      libDir,
+      path + "/lib",
       () -> {
         final PsiReference reference = PyResolveTestCase.findReferenceByMarker(myFixture.getFile());
         assertInstanceOf(reference, PsiPolyVariantReference.class);
@@ -794,30 +798,26 @@ public class Py3ResolveTest extends PyResolveTestCase {
     );
   }
 
+  // TODO: this should be fixed after introducing an ability to check visited paths while resolving some qualified name
   // PY-30942
-  public void testNoInlinePackageInsteadStubPackage() {
+  public void _testNoInlinePackageInsteadStubPackage() {
     final String path = "resolve/" + getTestName(false);
     myFixture.configureByFile(path + "/main.py");
 
-    final VirtualFile libDir = StandardFileSystems.local().findFileByPath(getTestDataPath() + "/" + path + "/lib");
-    assertNotNull(libDir);
-
     runWithAdditionalClassEntryInSdkRoots(
-      libDir,
+      path + "/lib",
       () -> assertNull(PyResolveTestCase.findReferenceByMarker(myFixture.getFile()).resolve())
     );
   }
 
+  // TODO: this should be fixed after introducing an ability to check visited paths while resolving some qualified name
   // PY-30942
-  public void testNoInlinePackageInsteadStubPackageAnotherImport() {
+  public void _testNoInlinePackageInsteadStubPackageAnotherImport() {
     final String path = "resolve/" + getTestName(false);
     myFixture.configureByFile(path + "/main.py");
 
-    final VirtualFile libDir = StandardFileSystems.local().findFileByPath(getTestDataPath() + "/" + path + "/lib");
-    assertNotNull(libDir);
-
     runWithAdditionalClassEntryInSdkRoots(
-      libDir,
+      path + "/lib",
       () -> assertNull(PyResolveTestCase.findReferenceByMarker(myFixture.getFile()).resolve())
     );
   }
@@ -827,17 +827,11 @@ public class Py3ResolveTest extends PyResolveTestCase {
     final String path = "resolve/" + getTestName(false);
     myFixture.configureByFile(path + "/main.py");
 
-    final VirtualFile lib1Dir = StandardFileSystems.local().findFileByPath(getTestDataPath() + "/" + path + "/lib1");
-    assertNotNull(lib1Dir);
-
-    final VirtualFile lib2Dir = StandardFileSystems.local().findFileByPath(getTestDataPath() + "/" + path + "/lib2");
-    assertNotNull(lib2Dir);
-
     runWithAdditionalClassEntryInSdkRoots(
-      lib1Dir,
+      path + "/lib1",
       () ->
         runWithAdditionalClassEntryInSdkRoots(
-          lib2Dir,
+          path + "/lib2",
           () -> {
             final PsiElement element = PyResolveTestCase.findReferenceByMarker(myFixture.getFile()).resolve();
             assertInstanceOf(element, PyFunction.class);

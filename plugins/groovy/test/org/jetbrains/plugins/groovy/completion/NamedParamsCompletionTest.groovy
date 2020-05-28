@@ -1,6 +1,5 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.completion
-
 
 import com.intellij.codeInsight.completion.CompletionType
 import com.intellij.testFramework.LightProjectDescriptor
@@ -92,16 +91,52 @@ foo(par<caret>)
   }
 
   void testWithNamedParams() {
+    myFixture.addClass('''\
+package com.foo;
+public class MyCoolClass {}
+''')
     doVariantableTest('''\
 import groovy.transform.NamedParam
 import groovy.transform.NamedVariant
+import com.foo.MyCoolClass
 
 @NamedVariant
-String foo(@NamedParam int param1, @NamedParam String param2) {
+String foo(@NamedParam int param1, @NamedParam MyCoolClass param2) {
     null
 }
 
 foo(par<caret>)
 ''', CompletionType.BASIC, "param1", "param2")
+  }
+
+  void testNamedParamsWithValue() {
+    myFixture.addClass('''\
+package com.foo;
+public class MyCoolClass {}
+''')
+    doCompletionTest'''\
+import groovy.transform.NamedParam
+import groovy.transform.NamedVariant
+import com.foo.MyCoolClass
+
+@NamedVariant
+String foo(@NamedParam("larch1") int param1, @NamedParam("param2") MyCoolClass larch2) {
+    null
+}
+
+foo(lar<caret>)
+''', '''\
+import groovy.transform.NamedParam
+import groovy.transform.NamedVariant
+import com.foo.MyCoolClass
+
+@NamedVariant
+String foo(@NamedParam("larch1") int param1, @NamedParam("param2") MyCoolClass larch2) {
+    null
+}
+
+foo(larch1: <caret>)
+''',
+    CompletionType.BASIC
   }
 }

@@ -172,8 +172,7 @@ public class ChainCompletionContext {
     }
   }
 
-  @NotNull
-  public PsiMethod[] resolve(MethodCall sign) {
+  public PsiMethod @NotNull [] resolve(MethodCall sign) {
     return myResolver.get(sign);
   }
 
@@ -232,7 +231,7 @@ public class ChainCompletionContext {
     }
 
     @Override
-    public boolean shouldProcess(DeclarationKind kind) {
+    public boolean shouldProcess(@NotNull DeclarationKind kind) {
       return kind == DeclarationKind.ENUM_CONST ||
              kind == DeclarationKind.FIELD ||
              kind == DeclarationKind.METHOD ||

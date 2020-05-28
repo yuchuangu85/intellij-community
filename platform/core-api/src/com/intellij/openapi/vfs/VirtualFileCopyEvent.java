@@ -22,13 +22,13 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Provides data for event which is fired when a virtual file is copied.
  *
- * @see com.intellij.openapi.vfs.VirtualFileListener#fileCopied(com.intellij.openapi.vfs.VirtualFileCopyEvent)
+ * @see VirtualFileListener#fileCopied(VirtualFileCopyEvent)
  */
 public class VirtualFileCopyEvent extends VirtualFileEvent {
   private final VirtualFile myOriginalFile;
 
   public VirtualFileCopyEvent(@Nullable Object requestor, @NotNull VirtualFile original, @NotNull VirtualFile created) {
-    super(requestor, created, created.getName(), created.getParent());
+    super(requestor, created, created.getParent(), 0, 0);
     myOriginalFile = original;
   }
 

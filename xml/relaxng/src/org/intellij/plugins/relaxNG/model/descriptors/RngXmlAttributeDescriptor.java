@@ -16,14 +16,13 @@
 
 package org.intellij.plugins.relaxNG.model.descriptors;
 
-import com.intellij.openapi.util.Comparing;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiReference;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.xml.XmlElement;
 import com.intellij.psi.xml.XmlTag;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.xml.impl.BasicXmlAttributeDescriptor;
 import com.intellij.xml.util.XmlEnumeratedValueReference;
@@ -51,7 +50,7 @@ public class RngXmlAttributeDescriptor extends BasicXmlAttributeDescriptor {
     @Override
     public boolean equals(Locator o, Locator o1) {
       if ((o.getLineNumber() == o1.getLineNumber() && o.getColumnNumber() == o1.getColumnNumber())) {
-        if (Comparing.equal(o.getSystemId(), o1.getSystemId())) {
+        if (Objects.equals(o.getSystemId(), o1.getSystemId())) {
           return true;
         }
       }
@@ -106,12 +105,12 @@ public class RngXmlAttributeDescriptor extends BasicXmlAttributeDescriptor {
 
   @Override
   public boolean hasIdType() {
-    return myValues.values().contains("ID");
+    return myValues.containsValue("ID");
   }
 
   @Override
   public boolean hasIdRefType() {
-    return myValues.values().contains("IDREF");
+    return myValues.containsValue("IDREF");
   }
 
   @Override
@@ -135,9 +134,9 @@ public class RngXmlAttributeDescriptor extends BasicXmlAttributeDescriptor {
       } else {
         copy = myValues;
       }
-      return ArrayUtil.toStringArray(copy.keySet());
+      return ArrayUtilRt.toStringArray(copy.keySet());
     } else {
-      return ArrayUtil.EMPTY_STRING_ARRAY;
+      return ArrayUtilRt.EMPTY_STRING_ARRAY;
     }
   }
 
@@ -149,10 +148,12 @@ public class RngXmlAttributeDescriptor extends BasicXmlAttributeDescriptor {
     return myElementDescriptor.getDeclaration(it.next());
   }
 
+  @Override
+  @NotNull
   public Collection<PsiElement> getDeclarations() {
     return ContainerUtil.map2List(myDeclarations, locator -> myElementDescriptor.getDeclaration(locator));
   }
-  
+
   @Override
   public String getName(PsiElement context) {
     final XmlTag tag = PsiTreeUtil.getParentOfType(context, XmlTag.class, false, PsiFile.class);
@@ -187,9 +188,8 @@ public class RngXmlAttributeDescriptor extends BasicXmlAttributeDescriptor {
 
   }
 
-  @NotNull
   @Override
-  public Object[] getDependencies() {
+  public Object @NotNull [] getDependencies() {
     return myElementDescriptor.getDependencies();
   }
 

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.plugins.newui;
 
 import com.intellij.openapi.ui.popup.JBPopup;
@@ -10,8 +10,8 @@ import com.intellij.ui.ColoredListCellRenderer;
 import com.intellij.ui.SearchTextField;
 import com.intellij.ui.components.JBList;
 import com.intellij.ui.components.JBTextField;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.Consumer;
-import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
@@ -20,17 +20,20 @@ import javax.swing.event.CaretEvent;
 import javax.swing.event.CaretListener;
 import javax.swing.text.BadLocationException;
 import java.awt.*;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 
 /**
  * @author Alexander Lobas
  */
-public class SearchPopup implements CaretListener {
+public class SearchPopup extends ComponentAdapter implements CaretListener {
   public final Type type;
 
   private final JBPopupListener myListener;
   private final JBTextField myEditor;
   private JBPopup myPopup;
   private LightweightWindowEvent myEvent;
+  private Component myDialogComponent;
 
   public final CollectionListModel<Object> model;
   public JList<Object> list;
@@ -79,6 +82,11 @@ public class SearchPopup implements CaretListener {
     myPopup.addListener(myListener);
     myEditor.addCaretListener(this);
 
+    myDialogComponent = myEditor.getRootPane().getParent();
+    if (myDialogComponent != null) {
+      myDialogComponent.addComponentListener(this);
+    }
+
     if (async) {
       //noinspection SSBasedInspection
       SwingUtilities.invokeLater(this::show);
@@ -89,7 +97,8 @@ public class SearchPopup implements CaretListener {
   }
 
   private static int getXOffset() {
-    return JBUI.scale(UIUtil.isUnderWin10LookAndFeel() ? 5 : UIUtil.getListCellHPadding());
+    int i = UIUtil.isUnderWin10LookAndFeel() ? 5 : UIUtil.getListCellHPadding();
+    return JBUIScale.scale(i);
   }
 
   @NotNull
@@ -104,7 +113,7 @@ public class SearchPopup implements CaretListener {
     }
 
     SwingUtilities.convertPointToScreen(location, myEditor);
-    location.x -= getXOffset() + JBUI.scale(2);
+    location.x -= getXOffset() + JBUIScale.scale(2);
     location.y += 2;
 
     return location;
@@ -129,6 +138,10 @@ public class SearchPopup implements CaretListener {
 
   public void hide() {
     myEditor.removeCaretListener(this);
+    if (myDialogComponent != null) {
+      myDialogComponent.removeComponentListener(this);
+      myDialogComponent = null;
+    }
     if (myPopup != null) {
       myPopup.cancel();
       myPopup = null;
@@ -144,5 +157,17 @@ public class SearchPopup implements CaretListener {
       hide();
       myListener.onClosed(myEvent);
     }
+  }
+
+  @Override
+  public void componentMoved(ComponentEvent e) {
+    if (myPopup != null && isValid()) {
+      update();
+    }
+  }
+
+  @Override
+  public void componentResized(ComponentEvent e) {
+    componentMoved(e);
   }
 }

@@ -1,28 +1,54 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.extensions;
 
 import com.intellij.openapi.Disposable;
+import com.intellij.openapi.extensions.impl.ExtensionComponentAdapter;
+import com.intellij.util.containers.ContainerUtil;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.TestOnly;
 
 import java.util.List;
+import java.util.function.BiPredicate;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
-public interface ExtensionPoint<T> {
-  @NotNull
-  String getName();
+/**
+ * @see com.intellij.testFramework.PlatformTestUtil#maskExtensions
+ */
+public interface ExtensionPoint<@NotNull T> {
+  /**
+   * @deprecated Use {@link com.intellij.testFramework.PlatformTestUtil#maskExtensions} or {@link #registerExtension(Object, Disposable)}.
+   */
+  @Deprecated
+  default void registerExtension(@NotNull T extension) {
+    registerExtension(extension, LoadingOrder.ANY);
+  }
 
-  AreaInstance getArea();
-
-  void registerExtension(@NotNull T extension);
-
+  /**
+   * @deprecated Use {@link com.intellij.testFramework.PlatformTestUtil#maskExtensions} or {@link #registerExtension(Object, LoadingOrder, Disposable)}.
+   */
+  @Deprecated
   void registerExtension(@NotNull T extension, @NotNull LoadingOrder order);
+
+  @TestOnly
+  void registerExtension(@NotNull T extension, @NotNull Disposable parentDisposable);
+
+  @TestOnly
+  void registerExtension(@NotNull T extension, @NotNull PluginDescriptor pluginDescriptor, @NotNull Disposable parentDisposable);
+
+  /**
+   * Use {@link com.intellij.testFramework.PlatformTestUtil#maskExtensions}
+   * to register extension as first or to completely replace existing extensions in tests.
+   */
+  @TestOnly
+  void registerExtension(@NotNull T extension, @NotNull LoadingOrder order, @NotNull Disposable parentDisposable);
 
   /**
    * Prefer to use {@link #getExtensionList()}.
    */
-  @NotNull
-  T[] getExtensions();
+  T @NotNull [] getExtensions();
 
   @NotNull
   List<T> getExtensionList();
@@ -30,36 +56,87 @@ public interface ExtensionPoint<T> {
   @NotNull
   Stream<T> extensions();
 
-  boolean hasAnyExtensions();
+  int size();
 
-  @Nullable
-  T getExtension();
+  /**
+   * @deprecated Use another solution, because this method instantiates all extensions.
+   */
+  @Deprecated
+  default @Nullable T getExtension() {
+    // method is deprecated and not used, ignore not efficient implementation
+    return ContainerUtil.getFirstItem(getExtensionList());
+  }
 
-  boolean hasExtension(@NotNull T extension);
+  /**
+   * @deprecated Use another solution, because this method instantiates all extensions.
+   */
+  @Deprecated
+  default boolean hasExtension(@NotNull T extension) {
+    // method is deprecated and used only by one external plugin, ignore not efficient implementation
+    return ContainerUtil.containsIdentity(getExtensionList(), extension);
+  }
 
+  /**
+   * @deprecated Use another solution to unregister not applicable extension, because this method instantiates all extensions.
+   */
+  @Deprecated
   void unregisterExtension(@NotNull T extension);
 
   /**
-   * Unregisters an extension of the specified type.
+   * @deprecated Use another solution to unregister not applicable extension, because this method instantiates all extensions.
    */
+  @Deprecated
+  void unregisterExtensions(@NotNull Predicate<? super T> extension);
+
+  /**
+   * Unregisters an extension of the specified type.
+   *
+   * Please note that you can deregister service specifying empty implementation class.
+   *
+   * Consider to use {@link ExtensionNotApplicableException} instead.
+   */
+  @SuppressWarnings("unused")
   void unregisterExtension(@NotNull Class<? extends T> extensionClass);
 
-  void addExtensionPointListener(@NotNull ExtensionPointListener<T> listener, @NotNull Disposable parentDisposable);
+  /**
+   * Unregisters extensions for which the specified predicate returns false.
+   *
+   * Consider to use {@link ExtensionNotApplicableException} instead.
+   */
+  boolean unregisterExtensions(@NotNull BiPredicate<? super String, ? super ExtensionComponentAdapter> extensionClassFilter, boolean stopAfterFirstMatch);
 
+  /**
+   * @deprecated use {@link #addExtensionPointListener(ExtensionPointListener, boolean, Disposable)}
+   */
+  @Deprecated
   void addExtensionPointListener(@NotNull ExtensionPointListener<T> listener);
 
+  void addExtensionPointListener(@NotNull ExtensionPointListener<T> listener, boolean invokeForLoadedExtensions, @Nullable Disposable parentDisposable);
+
+  /**
+   * @deprecated Use {@link ExtensionPointName#addChangeListener(Runnable, Disposable)}
+   */
+  @Deprecated
+  void addExtensionPointListener(@NotNull ExtensionPointChangeListener listener, boolean invokeForLoadedExtensions, @Nullable Disposable parentDisposable);
+
+  /**
+   * Consider using {@link ExtensionPointName#addChangeListener}
+   */
+  void addChangeListener(@NotNull Runnable listener, @Nullable Disposable parentDisposable);
+
+  @ApiStatus.Internal
   void removeExtensionPointListener(@NotNull ExtensionPointListener<T> extensionPointListener);
-
-  void reset();
-
-  @NotNull
-  Class<T> getExtensionClass();
-
-  @NotNull
-  Kind getKind();
 
   @NotNull
   String getClassName();
+
+  /**
+   * @return true if the EP allows adding/removing extensions at runtime
+   */
+  boolean isDynamic();
+
+  @NotNull
+  PluginDescriptor getPluginDescriptor();
 
   enum Kind {INTERFACE, BEAN_CLASS}
 }

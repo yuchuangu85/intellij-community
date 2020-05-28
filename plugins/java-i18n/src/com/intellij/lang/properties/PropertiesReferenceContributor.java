@@ -29,7 +29,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.uast.UElement;
 import org.jetbrains.uast.UExpression;
 import org.jetbrains.uast.UField;
-import org.jetbrains.uast.ULiteralExpression;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -41,31 +40,36 @@ import java.util.List;
 public class PropertiesReferenceContributor extends PsiReferenceContributor{
   private static final Logger LOG = Logger.getInstance(PropertiesReferenceContributor.class);
 
-  private static final JavaClassReferenceProvider CLASS_REFERENCE_PROVIDER = new JavaClassReferenceProvider() {
-    @Override
-    public boolean isSoft() {
-      return true;
-    }
-  };
+  private static class Holder {
+    private static final JavaClassReferenceProvider CLASS_REFERENCE_PROVIDER = new JavaClassReferenceProvider() {
+      @Override
+      public boolean isSoft() {
+        return true;
+      }
+    };
+  }
+
 
   @Override
   public void registerReferenceProviders(@NotNull final PsiReferenceRegistrar registrar) {
-    UastReferenceRegistrar.registerUastReferenceProvider(registrar, UastPatterns.literalExpression(), new UastPropertiesReferenceProvider(true), PsiReferenceRegistrar.DEFAULT_PRIORITY);
+    UastReferenceRegistrar.registerUastReferenceProvider(registrar, UastPatterns.injectionHostUExpression(),
+                                                         new UastPropertiesReferenceProvider(true), PsiReferenceRegistrar.LOWER_PRIORITY);
 
     UastReferenceRegistrar.registerUastReferenceProvider(registrar,
-                                                         UastPatterns.stringLiteralExpression().annotationParam(AnnotationUtil.PROPERTY_KEY,
-                                                                                                                AnnotationUtil.PROPERTY_KEY_RESOURCE_BUNDLE_PARAMETER),
+                                                         UastPatterns.injectionHostUExpression()
+                                                           .annotationParam(AnnotationUtil.PROPERTY_KEY,
+                                                                            AnnotationUtil.PROPERTY_KEY_RESOURCE_BUNDLE_PARAMETER),
                                                          new ResourceBundleReferenceProvider(), PsiReferenceRegistrar.DEFAULT_PRIORITY);
 
-    UastReferenceRegistrar.registerUastReferenceProvider(registrar, UastPatterns.literalExpression(), new UastLiteralReferenceProvider() {
+    UastReferenceRegistrar
+      .registerUastReferenceProvider(registrar, UastPatterns.injectionHostUExpression(), new UastInjectionHostReferenceProvider() {
       private final ResourceBundleReferenceProvider myUnderlying = new ResourceBundleReferenceProvider();
 
-      @NotNull
       @Override
-      public PsiReference[] getReferencesByULiteral(@NotNull ULiteralExpression uLiteral,
-                                                    @NotNull PsiLanguageInjectionHost host,
-                                                    @NotNull ProcessingContext context) {
-        final UElement parent = uLiteral.getUastParent();
+      public PsiReference @NotNull [] getReferencesForInjectionHost(@NotNull UExpression uExpression,
+                                                                    @NotNull PsiLanguageInjectionHost host,
+                                                                    @NotNull ProcessingContext context) {
+        final UElement parent = uExpression.getUastParent();
         if (!(parent instanceof UField)) {
           return PsiReference.EMPTY_ARRAY;
         }
@@ -74,7 +78,7 @@ public class PropertiesReferenceContributor extends PsiReferenceContributor{
         if (initializer == null) return PsiReference.EMPTY_ARRAY;
         PsiElement initializerSource = initializer.getSourcePsi();
         if (initializerSource == null) return PsiReference.EMPTY_ARRAY;
-        PsiElement elementSource = uLiteral.getSourcePsi();
+        PsiElement elementSource = uExpression.getSourcePsi();
         if (initializerSource != elementSource ||
             !field.isFinal() ||
             !field.getType().equalsToText(CommonClassNames.JAVA_LANG_STRING)) {
@@ -95,7 +99,7 @@ public class PropertiesReferenceContributor extends PsiReferenceContributor{
                 if (AnnotationUtil.PROPERTY_KEY_RESOURCE_BUNDLE_PARAMETER.equals(pair.getName())) {
                   final PsiAnnotationMemberValue value = pair.getValue();
                   if (value instanceof PsiReferenceExpression && ((PsiReferenceExpression)value).resolve() == field.getSourcePsi()) {
-                    Collections.addAll(references, myUnderlying.getReferencesByElement(uLiteral, context));
+                    Collections.addAll(references, myUnderlying.getReferencesForInjectionHost(uExpression, host, context));
                     return false;
                   }
                 }
@@ -108,13 +112,12 @@ public class PropertiesReferenceContributor extends PsiReferenceContributor{
     }, PsiReferenceRegistrar.DEFAULT_PRIORITY);
 
     registrar.registerReferenceProvider(PsiJavaPatterns.psiElement(PropertyValueImpl.class), new PsiReferenceProvider() {
-      @NotNull
       @Override
-      public PsiReference[] getReferencesByElement(@NotNull PsiElement element, @NotNull ProcessingContext context) {
+      public PsiReference @NotNull [] getReferencesByElement(@NotNull PsiElement element, @NotNull ProcessingContext context) {
         String text = element.getText();
         String[] words = text.split("\\s");
         if (words.length != 1) return PsiReference.EMPTY_ARRAY;
-        return CLASS_REFERENCE_PROVIDER.getReferencesByString(words[0], element, 0);
+        return Holder.CLASS_REFERENCE_PROVIDER.getReferencesByString(words[0], element, 0);
       }
     });
   }

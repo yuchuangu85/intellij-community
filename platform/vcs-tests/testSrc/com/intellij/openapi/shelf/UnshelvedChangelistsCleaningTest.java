@@ -21,7 +21,7 @@ import com.intellij.openapi.vcs.VcsTestUtil;
 import com.intellij.openapi.vcs.changes.shelf.ShelveChangesManager;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.testFramework.PlatformTestCase;
+import com.intellij.testFramework.HeavyPlatformTestCase;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.util.text.DateFormatUtil;
 import org.jdom.Element;
@@ -32,7 +32,7 @@ import java.util.Date;
 
 import static com.intellij.openapi.vcs.Executor.debug;
 
-public class UnshelvedChangelistsCleaningTest extends PlatformTestCase {
+public class UnshelvedChangelistsCleaningTest extends HeavyPlatformTestCase {
 
   private Calendar myCalendar;
   private int TEST_YEAR;
@@ -86,7 +86,7 @@ public class UnshelvedChangelistsCleaningTest extends PlatformTestCase {
     assert (beforeXmlInfo.exists());
     Element element = JDOMUtil.load(beforeXmlInfo);
     ShelveChangesManager shelveChangesManager = ShelveChangesManager.getInstance(myProject);
-    shelveChangesManager.readExternal(element);
+    shelveChangesManager.loadState(element);
     shelfDir.refresh(false, true);
 
     assertFalse(shelveChangesManager.getRecycledShelvedChangeLists().isEmpty());
@@ -94,12 +94,11 @@ public class UnshelvedChangelistsCleaningTest extends PlatformTestCase {
     String datePresentation = DateFormatUtil.formatDate(calendarTime);
     assertTrue("Calendar date is: " + datePresentation, myCalendar.get(Calendar.YEAR) < TEST_YEAR);
     debug(datePresentation);
-    shelveChangesManager.cleanUnshelved(false, myCalendar.getTimeInMillis());
-    PlatformTestUtil.saveProject(myProject);
-    
-    assertFalse(shelveChangesManager.getRecycledShelvedChangeLists().isEmpty());
+    shelveChangesManager.cleanUnshelved(myCalendar.getTimeInMillis());
+    PlatformTestUtil.saveProject(myProject, true);
     shelfDir.refresh(false, true);
     afterDir.refresh(false, true);
+    assertFalse(shelveChangesManager.getRecycledShelvedChangeLists().isEmpty());
     PlatformTestUtil.assertDirectoriesEqual(afterDir, shelfDir);
   }
 }

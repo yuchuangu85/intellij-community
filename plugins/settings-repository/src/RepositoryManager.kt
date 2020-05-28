@@ -1,13 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.settingsRepository
 
 import com.intellij.openapi.progress.ProgressIndicator
-import gnu.trove.THashSet
+import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet
 import java.io.InputStream
 import java.util.*
 
 interface RepositoryManager {
-  fun createRepositoryIfNeed(): Boolean
+  fun createRepositoryIfNeeded(): Boolean
 
   /**
    * Think twice before use
@@ -43,7 +43,7 @@ interface RepositoryManager {
    *
    * If fixStateIfCannotCommit, repository state will be fixed before commit.
    */
-  fun commit(indicator: ProgressIndicator? = null, syncType: SyncType? = null, fixStateIfCannotCommit: Boolean = true): Boolean
+  suspend fun commit(indicator: ProgressIndicator? = null, syncType: SyncType? = null, fixStateIfCannotCommit: Boolean = true): Boolean
 
   fun getAheadCommitsCount(): Int
 
@@ -51,18 +51,18 @@ interface RepositoryManager {
 
   fun fetch(indicator: ProgressIndicator? = null): Updater
 
-  fun pull(indicator: ProgressIndicator? = null): UpdateResult?
+  suspend fun pull(indicator: ProgressIndicator? = null): UpdateResult?
 
   fun has(path: String): Boolean
 
-  fun resetToTheirs(indicator: ProgressIndicator): UpdateResult?
+  suspend fun resetToTheirs(indicator: ProgressIndicator): UpdateResult?
 
-  fun resetToMy(indicator: ProgressIndicator, localRepositoryInitializer: (() -> Unit)?): UpdateResult?
+  suspend fun resetToMy(indicator: ProgressIndicator, localRepositoryInitializer: (() -> Unit)?): UpdateResult?
 
   fun canCommit(): Boolean
 
   interface Updater {
-    fun merge(): UpdateResult?
+    suspend fun merge(): UpdateResult?
 
     // valid only if merge was called before
     val definitelySkipPush: Boolean
@@ -81,8 +81,8 @@ internal data class ImmutableUpdateResult(override val changed: Collection<Strin
 }
 
 internal class MutableUpdateResult(changed: Collection<String>, deleted: Collection<String>) : UpdateResult {
-  override val changed = THashSet(changed)
-  override val deleted = THashSet(deleted)
+  override val changed = ObjectOpenHashSet(changed)
+  override val deleted = ObjectOpenHashSet(deleted)
 
   fun add(result: UpdateResult?): MutableUpdateResult {
     if (result != null) {

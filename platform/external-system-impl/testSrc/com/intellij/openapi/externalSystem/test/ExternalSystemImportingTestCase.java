@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.externalSystem.test;
 
 import com.intellij.find.FindManager;
@@ -20,7 +6,7 @@ import com.intellij.find.findUsages.FindUsagesHandler;
 import com.intellij.find.findUsages.FindUsagesManager;
 import com.intellij.find.findUsages.FindUsagesOptions;
 import com.intellij.find.impl.FindManagerImpl;
-import com.intellij.openapi.compiler.ex.CompilerPathsEx;
+import com.intellij.openapi.compiler.CompilerPaths;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.externalSystem.importing.ImportSpec;
 import com.intellij.openapi.externalSystem.importing.ImportSpecBuilder;
@@ -48,8 +34,8 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.projectRoots.impl.JavaAwareProjectJdkTableImpl;
 import com.intellij.openapi.roots.*;
-import com.intellij.openapi.roots.impl.libraries.ProjectLibraryTable;
 import com.intellij.openapi.roots.libraries.Library;
+import com.intellij.openapi.roots.libraries.LibraryTablesRegistrar;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.TestDialog;
 import com.intellij.openapi.util.Couple;
@@ -68,7 +54,6 @@ import com.intellij.util.CommonProcessors;
 import com.intellij.util.Function;
 import com.intellij.util.PathUtil;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.ContainerUtilRt;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -80,6 +65,8 @@ import org.jetbrains.jps.model.module.JpsModuleSourceRootType;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiPredicate;
+import java.util.function.Predicate;
 
 import static com.intellij.testFramework.EdtTestUtil.runInEdtAndGet;
 
@@ -87,6 +74,20 @@ import static com.intellij.testFramework.EdtTestUtil.runInEdtAndGet;
  * @author Vladislav.Soroka
  */
 public abstract class ExternalSystemImportingTestCase extends ExternalSystemTestCase {
+  protected void assertModulesContains(@NotNull Project project, String... expectedNames) {
+    Module[] actual = ModuleManager.getInstance(project).getModules();
+    List<String> actualNames = new ArrayList<>();
+
+    for (Module m : actual) {
+      actualNames.add(m.getName());
+    }
+
+    assertContain(actualNames, expectedNames);
+  }
+
+  protected void assertModulesContains(String... expectedNames) {
+    assertModulesContains(myProject, expectedNames);
+  }
 
   protected void assertModules(@NotNull Project project, String... expectedNames) {
     Module[] actual = ModuleManager.getInstance(project).getModules();
@@ -130,13 +131,27 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
 
   private void assertGeneratedSources(String moduleName, JavaSourceRootType type, String... expectedSources) {
     final ContentEntry[] contentRoots = getContentRoots(moduleName);
-    final String rootUrl = contentRoots.length > 1 ? ExternalSystemApiUtil.getExternalProjectPath(getModule(moduleName)) : null;
-    List<SourceFolder> folders = doAssertContentFolders(rootUrl, contentRoots, type, expectedSources);
-    for (SourceFolder folder : folders) {
-      JavaSourceRootProperties properties = folder.getJpsElement().getProperties(type);
-      assertNotNull(properties);
-      assertTrue("Not a generated folder: " + folder, properties.isForGeneratedSources());
+    String rootUrl = contentRoots.length > 1 ? ExternalSystemApiUtil.getExternalProjectPath(getModule(moduleName)) : null;
+    List<String> actual = new ArrayList<>();
+
+    for (ContentEntry contentRoot : contentRoots) {
+      rootUrl = VirtualFileManager.extractPath(rootUrl == null ? contentRoot.getUrl() : rootUrl);
+      for (SourceFolder f : contentRoot.getSourceFolders(type)) {
+        String folderUrl = VirtualFileManager.extractPath(f.getUrl());
+
+        if (folderUrl.startsWith(rootUrl)) {
+          int length = rootUrl.length() + 1;
+          folderUrl = folderUrl.substring(Math.min(length, folderUrl.length()));
+        }
+
+        JavaSourceRootProperties properties = f.getJpsElement().getProperties(type);
+        if (properties != null && properties.isForGeneratedSources()) {
+          actual.add(folderUrl);
+        }
+      }
     }
+
+    assertOrderedElementsAreEqual(actual, Arrays.asList(expectedSources));
   }
 
   protected void assertResources(String moduleName, String... expectedSources) {
@@ -168,9 +183,9 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
   }
 
   protected static List<SourceFolder> doAssertContentFolders(@Nullable String rootUrl,
-                                                           ContentEntry[] contentRoots,
-                                                           @NotNull JpsModuleSourceRootType<?> rootType,
-                                                           String... expected) {
+                                                             ContentEntry[] contentRoots,
+                                                             @NotNull JpsModuleSourceRootType<?> rootType,
+                                                             String... expected) {
     List<SourceFolder> result = new ArrayList<>();
     List<String> actual = new ArrayList<>();
     for (ContentEntry contentRoot : contentRoots) {
@@ -209,7 +224,7 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
   }
 
   protected void assertModuleOutputs(String moduleName, String... outputs) {
-    String[] outputPaths = ContainerUtil.map2Array(CompilerPathsEx.getOutputPaths(new Module[]{getModule(moduleName)}), String.class,
+    String[] outputPaths = ContainerUtil.map2Array(CompilerPaths.getOutputPaths(new Module[]{getModule(moduleName)}), String.class,
                                                    s -> getAbsolutePath(s));
     assertUnorderedElementsAreEqual(outputPaths, outputs);
   }
@@ -227,7 +242,7 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
     assertTrue(e.isCompilerOutputPathInherited());
   }
 
-  private static String getAbsolutePath(String path) {
+  protected static String getAbsolutePath(String path) {
     path = VfsUtilCore.urlToPath(path);
     path = PathUtil.getCanonicalPath(path);
     return FileUtil.toSystemIndependentName(path);
@@ -251,7 +266,9 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
 
   protected void assertModuleLibDep(String moduleName, String depName, String classesPath, String sourcePath, String javadocPath) {
     LibraryOrderEntry lib = ContainerUtil.getFirstItem(getModuleLibDeps(moduleName, depName));
-
+    final String errorMessage = "Failed to find dependency with name [" + depName + "] in module [" + moduleName + "]\n" +
+                                "Available dependencies: " + collectModuleDepsNames(moduleName, LibraryOrderEntry.class);
+    assertNotNull(errorMessage, lib);
     assertModuleLibDepPath(lib, OrderRootType.CLASSES, classesPath == null ? null : Collections.singletonList(classesPath));
     assertModuleLibDepPath(lib, OrderRootType.SOURCES, sourcePath == null ? null : Collections.singletonList(sourcePath));
     assertModuleLibDepPath(lib, JavadocOrderRootType.getInstance(), javadocPath == null ? null : Collections.singletonList(javadocPath));
@@ -292,6 +309,10 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
     assertModuleDeps(moduleName, LibraryOrderEntry.class, expectedDeps);
   }
 
+  protected void assertModuleLibDeps(BiPredicate<String, String> predicate, String moduleName, String... expectedDeps) {
+    assertModuleDeps(predicate, moduleName, LibraryOrderEntry.class, expectedDeps);
+  }
+
   protected void assertExportedDeps(String moduleName, String... expectedDeps) {
     final List<String> actual = new ArrayList<>();
 
@@ -317,7 +338,17 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
   }
 
   private void assertModuleDeps(String moduleName, Class clazz, String... expectedDeps) {
-    assertOrderedElementsAreEqual(collectModuleDepsNames(moduleName, clazz), expectedDeps);
+    assertModuleDeps(equalsPredicate(), moduleName, clazz, expectedDeps);
+  }
+
+  private void assertModuleDeps(BiPredicate<String, String> predicate, String moduleName, Class clazz, String... expectedDeps) {
+    assertOrderedElementsAreEqual(predicate, collectModuleDepsNames(moduleName, clazz), expectedDeps);
+  }
+
+  protected void assertProductionOnTestDependencies(String moduleName, String... expectedDeps) {
+    assertOrderedElementsAreEqual(collectModuleDepsNames(
+      moduleName, entry -> entry instanceof ModuleOrderEntry && ((ModuleOrderEntry)entry).isProductionOnTestDependency()
+    ), expectedDeps);
   }
 
   protected void assertModuleModuleDepScope(String moduleName, String depName, DependencyScope... scopes) {
@@ -330,20 +361,24 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
     return getModuleDep(moduleName, depName, ModuleOrderEntry.class);
   }
 
-  private List<String> collectModuleDepsNames(String moduleName, Class clazz) {
+  private List<String> collectModuleDepsNames(String moduleName, Predicate<OrderEntry> predicate) {
     List<String> actual = new ArrayList<>();
 
     for (OrderEntry e : getRootManager(moduleName).getOrderEntries()) {
-      if (clazz.isInstance(e)) {
+      if (predicate.test(e)) {
         actual.add(e.getPresentableName());
       }
     }
     return actual;
   }
 
+  private List<String> collectModuleDepsNames(String moduleName, Class clazz) {
+    return collectModuleDepsNames(moduleName, entry -> clazz.isInstance(entry));
+  }
+
   @NotNull
   private <T> List<T> getModuleDep(@NotNull String moduleName, @NotNull String depName, @NotNull Class<T> clazz) {
-    List<T> deps = ContainerUtil.newArrayList();
+    List<T> deps = new ArrayList<>();
 
     for (OrderEntry e : getRootManager(moduleName).getOrderEntries()) {
       if (clazz.isInstance(e) && e.getPresentableName().equals(depName)) {
@@ -356,7 +391,7 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
 
   public void assertProjectLibraries(String... expectedNames) {
     List<String> actualNames = new ArrayList<>();
-    for (Library each : ProjectLibraryTable.getInstance(myProject).getLibraries()) {
+    for (Library each : LibraryTablesRegistrar.getInstance().getLibraryTable(myProject).getLibraries()) {
       String name = each.getName();
       actualNames.add(name == null ? "<unnamed>" : name);
     }
@@ -407,7 +442,7 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
     return getRootManager(moduleName).getContentEntries();
   }
 
-  private ModuleRootManager getRootManager(String module) {
+  protected ModuleRootManager getRootManager(String module) {
     return ModuleRootManager.getInstance(getModule(module));
   }
 
@@ -421,7 +456,7 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
 
     final Collection<DataNode<?>> nodes = ExternalSystemApiUtil.findAllRecursively(projectDataNode, booleanFunction);
     for (DataNode<?> node : nodes) {
-      ExternalSystemApiUtil.visit(node, dataNode -> dataNode.setIgnored(ignored));
+      node.visit(dataNode -> dataNode.setIgnored(ignored));
     }
     ServiceManager.getService(ProjectDataManager.class).importData(projectDataNode, myProject, true);
   }
@@ -440,7 +475,7 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
     final ExternalProjectSettings projectSettings = getCurrentExternalProjectSettings();
     projectSettings.setExternalProjectPath(getProjectPath());
     //noinspection unchecked
-    Set<ExternalProjectSettings> projects = ContainerUtilRt.newHashSet(systemSettings.getLinkedProjectsSettings());
+    Set<ExternalProjectSettings> projects = new HashSet<>(systemSettings.getLinkedProjectsSettings());
     projects.remove(projectSettings);
     projects.add(projectSettings);
     //noinspection unchecked
@@ -448,7 +483,8 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
 
     final Ref<Couple<String>> error = Ref.create();
     ImportSpec importSpec = createImportSpec();
-    if (importSpec.getCallback() == null) {
+    ExternalProjectRefreshCallback callback = importSpec.getCallback();
+    if (callback == null || callback instanceof ImportSpecBuilder.DefaultProjectRefreshCallback) {
       importSpec = new ImportSpecBuilder(importSpec).callback(new ExternalProjectRefreshCallback() {
         @Override
         public void onSuccess(@Nullable final DataNode<ProjectData> externalProject) {
@@ -485,12 +521,16 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
     }
 
     if (!error.isNull()) {
-      String failureMsg = "Import failed: " + error.get().first;
-      if (StringUtil.isNotEmpty(error.get().second)) {
-        failureMsg += "\nError details: \n" + error.get().second;
-      }
-      fail(failureMsg);
+      handleImportFailure(error.get().first, error.get().second);
     }
+  }
+
+  protected void handleImportFailure(@NotNull String errorMessage, @Nullable String errorDetails) {
+    String failureMsg = "Import failed: " + errorMessage;
+    if (StringUtil.isNotEmpty(errorDetails)) {
+      failureMsg += "\nError details: \n" + errorDetails;
+    }
+    fail(failureMsg);
   }
 
   protected ImportSpec createImportSpec() {
@@ -525,7 +565,7 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
     final AtomicInteger counter = new AtomicInteger();
     Messages.setTestDialog(new TestDialog() {
       @Override
-      public int show(String message) {
+      public int show(@NotNull String message) {
         counter.set(counter.get() + 1);
         return 0;
       }
@@ -537,7 +577,7 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
     final AtomicInteger counter = new AtomicInteger();
     Messages.setTestDialog(new TestDialog() {
       @Override
-      public int show(String message) {
+      public int show(@NotNull String message) {
         counter.set(counter.get() + 1);
         return 1;
       }
@@ -546,7 +586,7 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
   }
 
   protected static Collection<UsageInfo> findUsages(@NotNull PsiElement element) throws Exception {
-    return ProgressManager.getInstance().run(new Task.WithResult<Collection<UsageInfo>, Exception>(element.getProject(), "", false) {
+    return ProgressManager.getInstance().run(new Task.WithResult<Collection<UsageInfo>, Exception>(null, "", false) {
       @Override
       protected Collection<UsageInfo> compute(@NotNull ProgressIndicator indicator) {
         return runInEdtAndGet(() -> {
@@ -565,6 +605,26 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
         });
       }
     });
+  }
+
+  @Nullable
+  protected SourceFolder findSource(@NotNull String moduleName, @NotNull String sourcePath) {
+    return findSource(getRootManager(moduleName), sourcePath);
+  }
+
+  @Nullable
+  protected SourceFolder findSource(@NotNull ModuleRootModel moduleRootManager, @NotNull String sourcePath) {
+    ContentEntry[] contentRoots = moduleRootManager.getContentEntries();
+    Module module = moduleRootManager.getModule();
+    String rootUrl = getAbsolutePath(ExternalSystemApiUtil.getExternalProjectPath(module));
+    for (ContentEntry contentRoot : contentRoots) {
+      for (SourceFolder f : contentRoot.getSourceFolders()) {
+        String folderPath = getAbsolutePath(f.getUrl());
+        String rootPath = getAbsolutePath(rootUrl + "/" + sourcePath);
+        if (folderPath.equals(rootPath)) return f;
+      }
+    }
+    return null;
   }
 
   //protected void assertProblems(String... expectedProblems) {

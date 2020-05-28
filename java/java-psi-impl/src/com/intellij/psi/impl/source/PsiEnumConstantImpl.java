@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.source;
 
 import com.intellij.lang.ASTNode;
@@ -27,13 +13,14 @@ import com.intellij.psi.impl.PsiImplUtil;
 import com.intellij.psi.impl.java.stubs.JavaStubElementTypes;
 import com.intellij.psi.impl.java.stubs.PsiFieldStub;
 import com.intellij.psi.impl.source.tree.ChildRole;
-import com.intellij.psi.infos.ClassCandidateInfo;
 import com.intellij.psi.javadoc.PsiDocComment;
 import com.intellij.psi.scope.PsiScopeProcessor;
+import com.intellij.psi.stub.JavaStubImplUtil;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
-import com.intellij.ui.RowIcon;
+import com.intellij.ui.IconManager;
+import com.intellij.ui.icons.RowIcon;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.PlatformIcons;
 import org.jetbrains.annotations.NotNull;
@@ -44,7 +31,7 @@ import javax.swing.*;
  * @author dsl
  */
 public class PsiEnumConstantImpl extends JavaStubPsiElement<PsiFieldStub> implements PsiEnumConstant {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.psi.impl.source.PsiEnumConstantImpl");
+  private static final Logger LOG = Logger.getInstance(PsiEnumConstantImpl.class);
   private final MyReference myReference = new MyReference();
 
   public PsiEnumConstantImpl(final PsiFieldStub stub) {
@@ -196,7 +183,7 @@ public class PsiEnumConstantImpl extends JavaStubPsiElement<PsiFieldStub> implem
 
   @Override
   public boolean isDeprecated() {
-    return PsiFieldImpl.isFieldDeprecated(this, getGreenStub());
+    return JavaStubImplUtil.isMemberDeprecated(this, getGreenStub());
   }
 
   @Override
@@ -211,7 +198,8 @@ public class PsiEnumConstantImpl extends JavaStubPsiElement<PsiFieldStub> implem
 
   @Override
   public Icon getElementIcon(final int flags) {
-    final RowIcon baseIcon = ElementPresentationUtil.createLayeredIcon(PlatformIcons.FIELD_ICON, this, false);
+    final RowIcon baseIcon =
+      IconManager.getInstance().createLayeredIcon(this, PlatformIcons.FIELD_ICON, ElementPresentationUtil.getFlags(this, false));
     return ElementPresentationUtil.addVisibilityIcon(this, flags, baseIcon);
   }
 
@@ -255,15 +243,9 @@ public class PsiEnumConstantImpl extends JavaStubPsiElement<PsiFieldStub> implem
     }
 
     @Override
-    @NotNull
-    public JavaResolveResult[] multiResolve(boolean incompleteCode) {
+    public JavaResolveResult @NotNull [] multiResolve(boolean incompleteCode) {
       final JavaPsiFacade facade = JavaPsiFacade.getInstance(getProject());
-      PsiClass containingClass = getContainingClass();
-      if (containingClass.getConstructors().length == 0) {
-        return new JavaResolveResult[] {new ClassCandidateInfo(containingClass, PsiSubstitutor.EMPTY)};
-      }
-      
-      PsiClassType type = facade.getElementFactory().createType(containingClass);
+      PsiClassType type = facade.getElementFactory().createType(getContainingClass());
       return facade.getResolveHelper().multiResolveConstructor(type, getArgumentList(), getElement());
     }
 
@@ -288,9 +270,6 @@ public class PsiEnumConstantImpl extends JavaStubPsiElement<PsiFieldStub> implem
 
     @Override
     public boolean isReferenceTo(@NotNull PsiElement element) {
-      if (element instanceof PsiClass && element == getContainingClass() && ((PsiClass)element).getConstructors().length == 0) {
-        return true;
-      }
       return element instanceof PsiMethod
              && ((PsiMethod)element).isConstructor()
              && ((PsiMethod)element).getContainingClass() == getContainingClass()

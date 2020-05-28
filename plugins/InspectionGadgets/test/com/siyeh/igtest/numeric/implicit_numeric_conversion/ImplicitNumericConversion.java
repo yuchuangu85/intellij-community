@@ -11,9 +11,10 @@ public class ImplicitNumericConversion
         final int i = 0;
         final char ch = (char) 0;
         final long l = 0L;
-        final double d = 0.0;
+        double d = 0.0;
         float f = (float)1.0;
 
+        d += <warning descr="Implicit numeric conversion of 'i' from 'int' to 'double'">i</warning>;
         f = f+<warning descr="Implicit numeric conversion of '1' from 'int' to 'float'">1</warning>;
         f = <warning descr="Implicit numeric conversion of 'i' from 'int' to 'float'">i</warning>;
 
@@ -48,7 +49,7 @@ public class ImplicitNumericConversion
         useLong(3L);
 
         int j = 0;
-        j|=<warning descr="Implicit numeric conversion of 'l' from 'long' to 'int'">l</warning>;
+        <warning descr="Implicit numeric conversion of result value from 'long' to 'int'">j</warning>|=l;
         System.out.println(j);
     }
 
@@ -91,5 +92,15 @@ public class ImplicitNumericConversion
         if (<warning descr="Implicit numeric conversion of 'l' from 'long' to 'float'">l</warning> == f) {}
         if (true == true == (Boolean)new Object()) {}
         if (null == null) {}
+    }
+
+    static final long FOO = <warning descr="Implicit numeric conversion of 'Integer.MAX_VALUE' from 'int' to 'long'">Integer.MAX_VALUE</warning>;
+    void foo(char a) {
+        int y = 1;
+        <warning descr="Implicit numeric conversion of result value from 'long' to 'int'">y</warning> += FOO; // <- should be highlighted by the inspection
+    }
+
+    void error(int i) {
+        i <error descr="Operator '+' cannot be applied to 'int', 'java.lang.Object'">+=</error> new Object();
     }
 }

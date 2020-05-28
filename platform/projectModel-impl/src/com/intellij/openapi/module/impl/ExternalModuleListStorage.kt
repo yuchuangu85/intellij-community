@@ -17,10 +17,7 @@ interface ExternalModuleListStorage {
   fun getExternalModules(): Set<ModulePath>?
 }
 
-/**
- * todo rename component state name to "ExternalProjectModuleManager" for consistency (2018.1 release)
- */
-@State(name = "ExternalModuleListStorage", storages = [(Storage("modules.xml"))], externalStorageOnly = true)
+@State(name = "ExternalProjectModuleManager", storages = [(Storage("modules.xml"))], externalStorageOnly = true)
 internal class ExternalModuleListStorageImpl(private val project: Project)
   : PersistentStateComponent<Element>, ProjectModelElement, ExternalModuleListStorage {
 
@@ -35,8 +32,10 @@ internal class ExternalModuleListStorageImpl(private val project: Project)
       return e
     }
 
-    val moduleManager = ModuleManagerImpl.getInstanceImpl(project)
-    moduleManager.writeExternal(e, getFilteredModuleList(project, moduleManager.modules, true))
+    val moduleManager = ModuleManagerEx.getInstanceEx(project)
+    val filteredModuleList = getFilteredModuleList(project, moduleManager.modules, true)
+    ModuleManagerImpl.writeExternal(e, filteredModuleList, moduleManager)
+
     return e
   }
 

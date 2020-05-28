@@ -1,36 +1,48 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.statistics
 
-import com.intellij.internal.statistic.service.fus.collectors.FUSProjectUsageTrigger
-import com.intellij.internal.statistic.service.fus.collectors.FUSUsageContext
-import com.intellij.internal.statistic.service.fus.collectors.ProjectUsageTriggerCollector
-import com.intellij.internal.statistic.service.fus.collectors.UsageDescriptorKeyValidator
-import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.execution.Executor
+import com.intellij.internal.statistic.eventLog.FeatureUsageData
+import com.intellij.internal.statistic.service.fus.collectors.FUCounterUsageLogger
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.Project
 
-class MavenActionsUsagesCollector : ProjectUsageTriggerCollector() {
-  override fun getGroupId() = "statistics.build.maven.actions"
+private const val GROUP_ID = "build.maven.actions"
+
+class MavenActionsUsagesCollector {
+  enum class ActionID {
+    IntroducePropertyAction,
+    ExtractManagedDependenciesAction,
+    RunBuildAction,
+    ExecuteMavenRunConfigurationAction,
+  }
 
   companion object {
     @JvmStatic
-    fun trigger(project: Project?, action: AnAction, event: AnActionEvent?) {
-      if (project == null) return
+    fun trigger(project: Project?,
+                actionID: ActionID,
+                place: String?,
+                isFromContextMenu: Boolean,
+                executor : Executor? = null) {
+      val data = FeatureUsageData().addProject(project)
 
-      // preserve context data ordering
-      val context = FUSUsageContext.create(
-        "from.${event?.place ?: "undefined.place"}",
-        "fromContextMenu.${event?.isFromContextMenu?.toString() ?: "false"}"
-      )
-      val actionClassName = UsageDescriptorKeyValidator.ensureProperKey(action.javaClass.simpleName)
-      FUSProjectUsageTrigger.getInstance(project).trigger(MavenActionsUsagesCollector::class.java, actionClassName, context)
+      if (place != null) {
+        data.addPlace(place).addData("context_menu", isFromContextMenu)
+      }
+      executor?.let { data.addData("executor", it.id) }
+
+      FUCounterUsageLogger.getInstance().logEvent(GROUP_ID, actionID.name, data)
     }
 
     @JvmStatic
-    fun trigger(project: Project?, feature: String) {
+    fun trigger(project: Project?, actionID: ActionID, event: AnActionEvent?, executor : Executor? = null) {
+      trigger(project, actionID, event?.place, event?.isFromContextMenu ?: false, executor)
+    }
+
+    @JvmStatic
+    fun trigger(project: Project?, feature: ActionID) {
       if (project == null) return
-      val context = FUSUsageContext.create()
-      FUSProjectUsageTrigger.getInstance(project).trigger(MavenActionsUsagesCollector::class.java, feature, context)
+      FUCounterUsageLogger.getInstance().logEvent(project, GROUP_ID, feature.name)
     }
   }
 }

@@ -1,6 +1,7 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection;
 
+import com.intellij.java.analysis.JavaAnalysisBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
@@ -24,14 +25,15 @@ public class ClassGetClassInspection extends AbstractBaseJavaLocalInspectionTool
         if (!OBJECT_GET_CLASS.test(call)) return;
         // Sometimes people use xyz.getClass() for implicit NPE check. While it's a questionable code style
         // do not warn about such case
-        if (call.getParent() instanceof PsiExpressionStatement) return;
+        if (call.getParent() instanceof PsiExpressionStatement && 
+            !(call.getParent().getParent() instanceof PsiSwitchLabeledRuleStatement)) return;
         PsiExpression qualifier = call.getMethodExpression().getQualifierExpression();
         if (qualifier == null) return;
         PsiType type = qualifier.getType();
         if (!(type instanceof PsiClassType)) return;
         if (!((PsiClassType)type).rawType().equalsToText(CommonClassNames.JAVA_LANG_CLASS)) return;
         holder.registerProblem(Objects.requireNonNull(call.getMethodExpression().getReferenceNameElement()),
-                               InspectionsBundle.message("inspection.class.getclass.message"),
+                               JavaAnalysisBundle.message("inspection.class.getclass.message"),
                                new RemoveGetClassCallFix(), new ReplaceWithClassClassFix());
       }
     };
@@ -42,7 +44,7 @@ public class ClassGetClassInspection extends AbstractBaseJavaLocalInspectionTool
     @NotNull
     @Override
     public String getFamilyName() {
-      return InspectionsBundle.message("inspection.class.getclass.fix.remove.name");
+      return JavaAnalysisBundle.message("inspection.class.getclass.fix.remove.name");
     }
 
     @Override
@@ -60,7 +62,7 @@ public class ClassGetClassInspection extends AbstractBaseJavaLocalInspectionTool
     @NotNull
     @Override
     public String getFamilyName() {
-      return InspectionsBundle.message("inspection.class.getclass.fix.replace.name");
+      return JavaAnalysisBundle.message("inspection.class.getclass.fix.replace.name");
     }
 
     @Override

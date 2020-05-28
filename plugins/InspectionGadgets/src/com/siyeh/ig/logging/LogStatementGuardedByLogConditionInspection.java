@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 Bas Leijdekkers
+ * Copyright 2008-2019 Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.InspectionGadgetsFix;
-import com.siyeh.ig.psiutils.ParenthesesUtils;
+import com.siyeh.ig.psiutils.JavaLoggingUtils;
 import com.siyeh.ig.psiutils.TypeUtils;
 import com.siyeh.ig.ui.TextField;
 import com.siyeh.ig.ui.UiUtils;
@@ -50,7 +50,7 @@ public class LogStatementGuardedByLogConditionInspection extends BaseInspection 
   final List<String> logMethodNameList = new ArrayList<>();
   final List<String> logConditionMethodNameList = new ArrayList<>();
   @SuppressWarnings({"PublicField"})
-  public String loggerClassName = "java.util.logging.Logger";
+  public String loggerClassName = JavaLoggingUtils.JAVA_LOGGING;
   @NonNls
   @SuppressWarnings({"PublicField"})
   public String loggerMethodAndconditionMethodNames =
@@ -61,7 +61,7 @@ public class LogStatementGuardedByLogConditionInspection extends BaseInspection 
   public boolean flagAllUnguarded = false;
 
   public LogStatementGuardedByLogConditionInspection() {
-    parseString(this.loggerMethodAndconditionMethodNames, this.logMethodNameList, this.logConditionMethodNameList);
+    parseString(loggerMethodAndconditionMethodNames, logMethodNameList, logConditionMethodNameList);
   }
 
   @Override
@@ -76,12 +76,6 @@ public class LogStatementGuardedByLogConditionInspection extends BaseInspection 
       .addComponent(new CheckBox(InspectionGadgetsBundle.message("log.statement.guarded.by.log.condition.flag.all.unguarded.option"),
                                  this, "flagAllUnguarded"))
       .getPanel();
-  }
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("log.statement.guarded.by.log.condition.display.name");
   }
 
   @Override
@@ -137,12 +131,12 @@ public class LogStatementGuardedByLogConditionInspection extends BaseInspection 
         return;
       }
       PsiStatement previousStatement = PsiTreeUtil.getPrevSiblingOfType(statement, PsiStatement.class);
-      while (previousStatement != null && isSameLogMethodCall(previousStatement, referenceName)) {
+      while (isSameLogMethodCall(previousStatement, referenceName)) {
         logStatements.add(0, previousStatement);
         previousStatement = PsiTreeUtil.getPrevSiblingOfType(previousStatement, PsiStatement.class);
       }
       PsiStatement nextStatement = PsiTreeUtil.getNextSiblingOfType(statement, PsiStatement.class);
-      while (nextStatement != null && isSameLogMethodCall(nextStatement, referenceName)) {
+      while (isSameLogMethodCall(nextStatement, referenceName)) {
         logStatements.add(nextStatement);
         nextStatement = PsiTreeUtil.getNextSiblingOfType(nextStatement, PsiStatement.class);
       }
@@ -199,7 +193,7 @@ public class LogStatementGuardedByLogConditionInspection extends BaseInspection 
         return false;
       }
       final PsiExpression qualifier = methodExpression.getQualifierExpression();
-      return qualifier != null && TypeUtils.expressionHasTypeOrSubtype(qualifier, loggerClassName);
+      return TypeUtils.expressionHasTypeOrSubtype(qualifier, loggerClassName);
     }
   }
 
@@ -228,6 +222,10 @@ public class LogStatementGuardedByLogConditionInspection extends BaseInspection 
       if (!flagAllUnguarded) {
         boolean constant = true;
         for (PsiExpression argument : arguments) {
+          argument = PsiUtil.skipParenthesizedExprDown(argument);
+          if (argument instanceof PsiLambdaExpression || argument instanceof PsiMethodReferenceExpression) {
+            continue;
+          }
           if (!PsiUtil.isConstantExpression(argument)) {
             constant = false;
             break;
@@ -255,7 +253,7 @@ public class LogStatementGuardedByLogConditionInspection extends BaseInspection 
     }
 
     private boolean isLogGuardCheck(@Nullable PsiExpression expression, String logMethodName) {
-      expression = ParenthesesUtils.stripParentheses(expression);
+      expression = PsiUtil.skipParenthesizedExprDown(expression);
       if (expression instanceof PsiMethodCallExpression) {
         final PsiMethodCallExpression methodCallExpression = (PsiMethodCallExpression)expression;
         final PsiReferenceExpression methodExpression = methodCallExpression.getMethodExpression();

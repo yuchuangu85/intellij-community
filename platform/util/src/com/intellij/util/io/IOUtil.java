@@ -1,53 +1,50 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.io;
 
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.ThreadLocalCachedValue;
 import com.intellij.openapi.util.ThrowableComputable;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.util.SystemProperties;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.*;
 import java.lang.reflect.Field;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.IntFunction;
 
 public class IOUtil {
-  public static final boolean ourByteBuffersUseNativeByteOrder = SystemProperties.getBooleanProperty("idea.bytebuffers.use.native.byte.order", true);
+  @SuppressWarnings("SpellCheckingInspection") public static final boolean BYTE_BUFFERS_USE_NATIVE_BYTE_ORDER =
+    SystemProperties.getBooleanProperty("idea.bytebuffers.use.native.byte.order", true);
+
   private static final int STRING_HEADER_SIZE = 1;
   private static final int STRING_LENGTH_THRESHOLD = 255;
-
-  @NonNls private static final String LONGER_THAN_64K_MARKER = "LONGER_THAN_64K";
+  private static final String LONGER_THAN_64K_MARKER = "LONGER_THAN_64K";
 
   private IOUtil() {}
 
   public static String readString(@NotNull DataInput stream) throws IOException {
-    int length = stream.readInt();
-    if (length == -1) return null;
-    if (length == 0) return "";
+    try {
+      int length = stream.readInt();
+      if (length == -1) return null;
+      if (length == 0) return "";
 
-    byte[] bytes = new byte[length*2];
-    stream.readFully(bytes);
-    return new String(bytes, 0, length*2, CharsetToolkit.UTF_16BE_CHARSET);
+      byte[] bytes = new byte[length * 2];
+      stream.readFully(bytes);
+      return new String(bytes, 0, length * 2, CharsetToolkit.UTF_16BE_CHARSET);
+    }
+    catch (IOException e) {
+      throw e;
+    }
+    catch (Throwable e) {
+      throw new IOException(e);
+    }
   }
 
   public static void writeString(@Nullable String s, @NotNull DataOutput stream) throws IOException {
@@ -55,6 +52,7 @@ public class IOUtil {
       stream.writeInt(-1);
       return;
     }
+
     stream.writeInt(s.length());
     if (s.isEmpty()) {
       return;
@@ -84,14 +82,13 @@ public class IOUtil {
   }
 
   private static final ThreadLocalCachedValue<byte[]> ourReadWriteBuffersCache = new ThreadLocalCachedValue<byte[]>() {
-    @NotNull
     @Override
-    protected byte[] create() {
+    protected byte @NotNull [] create() {
       return allocReadWriteUTFBuffer();
     }
   };
 
-  public static void writeUTF(@NotNull DataOutput storage, @NotNull final String value) throws IOException {
+  public static void writeUTF(@NotNull DataOutput storage, @NotNull String value) throws IOException {
     writeUTFFast(ourReadWriteBuffersCache.getValue(), storage, value);
   }
 
@@ -99,12 +96,11 @@ public class IOUtil {
     return readUTFFast(ourReadWriteBuffersCache.getValue(), storage);
   }
 
-  @NotNull
-  public static byte[] allocReadWriteUTFBuffer() {
+  public static byte @NotNull [] allocReadWriteUTFBuffer() {
     return new byte[STRING_LENGTH_THRESHOLD + STRING_HEADER_SIZE];
   }
 
-  public static void writeUTFFast(@NotNull byte[] buffer, @NotNull DataOutput storage, @NotNull final String value) throws IOException {
+  public static void writeUTFFast(byte @NotNull [] buffer, @NotNull DataOutput storage, @NotNull String value) throws IOException {
     int len = value.length();
     if (len < STRING_LENGTH_THRESHOLD) {
       buffer[0] = (byte)len;
@@ -133,16 +129,7 @@ public class IOUtil {
     }
   }
 
-  public static final Charset US_ASCII = Charset.forName("US-ASCII");
-  private static final ThreadLocalCachedValue<char[]> spareBufferLocal = new ThreadLocalCachedValue<char[]>() {
-    @NotNull
-    @Override
-    protected char[] create() {
-      return new char[STRING_LENGTH_THRESHOLD];
-    }
-  };
-
-  public static String readUTFFast(@NotNull byte[] buffer, @NotNull DataInput storage) throws IOException {
+  public static String readUTFFast(byte @NotNull [] buffer, @NotNull DataInput storage) throws IOException {
     int len = 0xFF & (int)storage.readByte();
     if (len == 0xFF) {
       String result = storage.readUTF();
@@ -156,16 +143,15 @@ public class IOUtil {
     if (len == 0) return "";
     storage.readFully(buffer, 0, len);
 
-    char[] chars = spareBufferLocal.getValue();
-    for(int i = 0; i < len; ++i) chars[i] = (char)(buffer[i] &0xFF);
-    return new String(chars, 0, len);
+    return new String(buffer, 0, len, StandardCharsets.ISO_8859_1);
   }
 
   public static boolean isAscii(@NotNull String str) {
     return isAscii((CharSequence)str);
   }
+
   public static boolean isAscii(@NotNull CharSequence str) {
-    for (int i = 0, length = str.length(); i < length; ++ i) {
+    for (int i = 0, length = str.length(); i < length; ++i) {
       if (str.charAt(i) >= 128) return false;
     }
     return true;
@@ -178,12 +164,7 @@ public class IOUtil {
   public static boolean deleteAllFilesStartingWith(@NotNull File file) {
     final String baseName = file.getName();
     File parentFile = file.getParentFile();
-    final File[] files = parentFile != null ? parentFile.listFiles(new FileFilter() {
-      @Override
-      public boolean accept(final File pathname) {
-        return pathname.getName().startsWith(baseName);
-      }
-    }): null;
+    final File[] files = parentFile != null ? parentFile.listFiles(pathname -> pathname.getName().startsWith(baseName)) : null;
 
     boolean ok = true;
     if (files != null) {
@@ -205,7 +186,8 @@ public class IOUtil {
         Object o = outField.get(stream);
         if (o instanceof OutputStream) {
           stream = (OutputStream)o;
-        } else {
+        }
+        else {
           break;
         }
       }
@@ -213,50 +195,74 @@ public class IOUtil {
         ((FileOutputStream)stream).getFD().sync();
       }
     }
-    catch (NoSuchFieldException e) {
-      throw new RuntimeException(e);
-    }
-    catch (IllegalAccessException e) {
+    catch (NoSuchFieldException | IllegalAccessException e) {
       throw new RuntimeException(e);
     }
   }
 
-  public static <T> T openCleanOrResetBroken(@NotNull ThrowableComputable<T, IOException> factoryComputable, @NotNull final File file) throws IOException {
-    return openCleanOrResetBroken(factoryComputable, new Runnable() {
-      @Override
-      public void run() {
-        deleteAllFilesStartingWith(file);
-      }
-    });
+  public static <T> T openCleanOrResetBroken(@NotNull ThrowableComputable<T, ? extends IOException> factoryComputable,
+                                             @NotNull final Path file) throws IOException {
+    return openCleanOrResetBroken(factoryComputable, file.toFile());
   }
 
-  public static <T> T openCleanOrResetBroken(@NotNull ThrowableComputable<T, IOException> factoryComputable, @NotNull Runnable cleanupCallback) throws IOException {
-    for(int i = 0; i < 2; ++i) {
-      try {
-        return factoryComputable.compute();
-      } catch (IOException ex) {
-        if (i == 1) throw ex;
-        cleanupCallback.run();
-      }
+  public static <T> T openCleanOrResetBroken(@NotNull ThrowableComputable<T, ? extends IOException> factoryComputable,
+                                             @NotNull final File file) throws IOException {
+    return openCleanOrResetBroken(factoryComputable, () -> deleteAllFilesStartingWith(file));
+  }
+
+  public static <T> T openCleanOrResetBroken(@NotNull ThrowableComputable<T, ? extends IOException> factoryComputable,
+                                             @NotNull Runnable cleanupCallback) throws IOException {
+    try {
+      return factoryComputable.compute();
+    }
+    catch (IOException ex) {
+      cleanupCallback.run();
     }
 
-    return null;
+    return factoryComputable.compute();
   }
 
+  /**
+   * Consider to use {@link com.intellij.util.io.externalizer.StringCollectionExternalizer}.
+   */
   public static void writeStringList(@NotNull DataOutput out, @NotNull Collection<String> list) throws IOException {
     DataInputOutputUtil.writeINT(out, list.size());
-    for (final String s : list) {
+    for (String s : list) {
       writeUTF(out, s);
     }
   }
 
+  /**
+   * Consider to use {@link com.intellij.util.io.externalizer.StringCollectionExternalizer}.
+   */
   @NotNull
-  public static List<String> readStringList(@NotNull DataInput in) throws IOException {
-    final int size = DataInputOutputUtil.readINT(in);
-    final ArrayList<String> strings = new ArrayList<String>(size);
+  public static <C extends Collection<String>> C readStringCollection(@NotNull DataInput in, @NotNull IntFunction<C> generator) throws IOException {
+    int size = DataInputOutputUtil.readINT(in);
+    C strings = generator.apply(size);
     for (int i = 0; i < size; i++) {
       strings.add(readUTF(in));
     }
     return strings;
+  }
+
+  /**
+   * Consider to use {@link com.intellij.util.io.externalizer.StringCollectionExternalizer}.
+   */
+  @NotNull
+  public static List<String> readStringList(@NotNull DataInput in) throws IOException {
+    return readStringCollection(in, ArrayList::new);
+  }
+
+  public static void closeSafe(@NotNull Logger log, Closeable... closeables) {
+    for (Closeable closeable : closeables) {
+      if (closeable != null) {
+        try {
+          closeable.close();
+        }
+        catch (IOException e) {
+          log.error(e);
+        }
+      }
+    }
   }
 }

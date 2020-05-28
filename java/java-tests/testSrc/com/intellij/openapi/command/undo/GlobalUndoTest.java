@@ -1,10 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.command.undo;
 
 import com.intellij.codeInsight.CodeInsightUtilCore;
 import com.intellij.codeInsight.actions.ReformatCodeProcessor;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInsight.intention.QuickFixFactory;
+import com.intellij.configurationStore.StoreUtil;
 import com.intellij.mock.Mock;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.WriteAction;
@@ -29,14 +30,13 @@ import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.psi.*;
 import com.intellij.refactoring.rename.RenameProcessor;
 import com.intellij.testFramework.PlatformTestUtil;
-import com.intellij.util.IncorrectOperationException;
+import kotlin.text.Charsets;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
-import java.util.concurrent.FutureTask;
 
 public class GlobalUndoTest extends UndoTestCase implements TestDialog {
   private TestDialog myOldTestDialogValue;
@@ -67,13 +67,16 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
       myContainingFile = null;
       myClass = null;
     }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
     finally {
       super.tearDown();
     }
   }
 
   @Override
-  public int show(String message) {
+  public int show(@NotNull String message) {
     myConfirmationWasRequested = true;
     return 0;
   }
@@ -115,9 +118,21 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
 
     globalUndo();
 
-    ApplicationManager.getApplication().saveAll();
+    StoreUtil.saveDocumentsAndProjectsAndApp(false);
 
     checkAllFilesDeleted();
+  }
+
+  public void testUndoFileCopy() throws Exception {
+    VirtualFile file = createFile("a.txt", "").getVirtualFile();
+
+    VirtualFile dir = file.getParent();
+    VirtualFile copy = WriteCommandAction.writeCommandAction(myProject).compute(() -> file.copy(this, dir, "b.txt"));
+
+    globalUndo();
+
+    assertTrue(file.isValid());
+    assertFalse(copy.isValid());
   }
 
   public void testUndoRenameClass() {
@@ -164,23 +179,9 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
     createClass("foo");
     final PsiFile file = myContainingFile;
     final Editor editor = openEditor("foo.java");
-    reformatFile(file);
+    new ReformatCodeProcessor(myProject, file, null, false).run();
     undo(editor);
     assertFileDoesNotExist("foo", myRoot);
-  }
-
-  private void reformatFile(final PsiFile file) throws IncorrectOperationException {
-    final Runnable r = new ReformatCodeProcessor(myProject, file, null, false) {
-      @Override
-      @NotNull
-      public FutureTask<Boolean> preprocessFile(@NotNull final PsiFile file, boolean processChangedTextOnly)
-        throws IncorrectOperationException {
-        return super.preprocessFile(file, false);
-      }
-    }.preprocessFile(file, false);
-
-    CommandProcessor.getInstance().executeCommand(myProject, () -> ApplicationManager.getApplication().runWriteAction(r), "Reformat", null,
-                                                  UndoConfirmationPolicy.REQUEST_CONFIRMATION);
   }
 
   public void testUndoMoveFile() {
@@ -256,6 +257,7 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
     assertEquals("foofoo", getDocumentText(f[0]));
   }
 
+  @NotNull
   protected static VirtualFile createChildData(@NotNull final VirtualFile dir, @NotNull @NonNls final String name) {
     try {
       return WriteAction.computeAndWait(() ->
@@ -330,6 +332,7 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
     checkDirDoesNotExist();
   }
 
+  @NotNull
   protected static VirtualFile createChildDirectory(@NotNull final VirtualFile dir, @NotNull @NonNls final String name) {
     try {
       return WriteAction.computeAndWait(() ->
@@ -478,7 +481,7 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
     FileDocumentManager.getInstance().saveAllDocuments(); // prevent 'file has been changed dialog'
 
     File ioFile = new File(f.getPath());
-    FileUtil.writeToFile(ioFile, "external".getBytes());
+    FileUtil.writeToFile(ioFile, "external".getBytes(Charsets.UTF_8));
     ioFile.setLastModified(f.getTimeStamp() + 2000);
     LocalFileSystem.getInstance().refresh(false);
 
@@ -509,7 +512,7 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
     executeCommand(() -> delete(finalF));
 
     File ioFile = new File(f.getPath());
-    FileUtil.writeToFile(ioFile, "external".getBytes());
+    FileUtil.writeToFile(ioFile, "external".getBytes(Charsets.UTF_8));
     LocalFileSystem.getInstance().refresh(false);
 
     f = myRoot.findChild("f.txt");
@@ -541,7 +544,7 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
     Document d = FileDocumentManager.getInstance().getDocument(f); // make sure the document is cached.
 
     File ioFile = new File(f.getPath());
-    FileUtil.writeToFile(ioFile, "external".getBytes());
+    FileUtil.writeToFile(ioFile, "external".getBytes(Charsets.UTF_8));
     ioFile.setLastModified(f.getTimeStamp() + 2000);
     LocalFileSystem.getInstance().refresh(false);
 
@@ -562,7 +565,7 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
 
       // Rider case, modify externally and refresh some file in a command
       File ioFile = new File(f.getPath());
-      FileUtil.writeToFile(ioFile, "content".getBytes());
+      FileUtil.writeToFile(ioFile, "content".getBytes(Charsets.UTF_8));
       ioFile.setLastModified(f.getTimeStamp() + 2000);
 
       f.putUserData(UndoConstants.FORCE_RECORD_UNDO, true);
@@ -587,7 +590,7 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
     undo(getEditor(f)); // clear undo stack, but preserve the change in redo stack
 
     File ioFile = new File(f.getPath());
-    FileUtil.writeToFile(ioFile, "external".getBytes());
+    FileUtil.writeToFile(ioFile, "external".getBytes(Charsets.UTF_8));
     ioFile.setLastModified(f.getTimeStamp() + 2000);
     LocalFileSystem.getInstance().refresh(false);
 
@@ -1006,13 +1009,13 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
     final String[] path = new String[2];
     executeCommand(() -> {
       VirtualFile f = createChildData(myRoot, "foo1.txt");
-      setBinaryContent(f, "initial1".getBytes());
+      setBinaryContent(f, "initial1".getBytes(Charsets.UTF_8));
       Document doc = FileDocumentManager.getInstance().getDocument(f);
       setDocumentText(doc, "document1");
       path[0] = f.getPath();
 
       f = createChildData(myRoot, "foo2.txt");
-      setBinaryContent(f, "initial2".getBytes());
+      setBinaryContent(f, "initial2".getBytes(Charsets.UTF_8));
       doc = FileDocumentManager.getInstance().getDocument(f);
       setDocumentText(doc, "document2");
       path[1] = f.getPath();
@@ -1039,16 +1042,14 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
   }
 
   public void testUndoRedoFileMoveAndDeleteWithChangedDocument() throws Exception {
-    final String[] path = new String[1];
     final VirtualFile[] dir = new VirtualFile[1];
     final VirtualFile[] f = new VirtualFile[1];
 
     executeCommand(() -> {
       dir[0] = createChildDirectory(myRoot, "dir");
       f[0] = createChildData(myRoot, "foo.txt");
-      setBinaryContent(f[0], "initial".getBytes());
+      setBinaryContent(f[0], "initial".getBytes(Charsets.UTF_8));
       setDocumentText(f[0], "document");
-      path[0] = f[0].getPath();
     });
     executeCommand(() -> {
       move(f[0], dir[0]);
@@ -1237,8 +1238,7 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
     final Document document1 = FileDocumentManager.getInstance().getDocument(file1);
     final Document document2 = FileDocumentManager.getInstance().getDocument(file2);
 
-    Mock.MyFileEditor fileEditor = new Mock.MyFileEditor();
-    fileEditor.DOCUMENTS = new Document[]{document1, document2};
+    Mock.MyFileEditor fileEditor = new Mock.MyFileEditor(document1, document2);
 
     UndoManager undoManager = UndoManager.getInstance(myProject);
 
@@ -1385,8 +1385,7 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
 
     UndoManager undoManager = UndoManager.getInstance(myProject);
 
-    Mock.MyFileEditor fileEditor = new Mock.MyFileEditor();
-    fileEditor.DOCUMENTS = new Document[]{document1, document2};
+    Mock.MyFileEditor fileEditor = new Mock.MyFileEditor(document1, document2);
 
     assertTrue(undoManager.isUndoAvailable(fileEditor));
 
@@ -1426,7 +1425,7 @@ public class GlobalUndoTest extends UndoTestCase implements TestDialog {
   }
 
   private void assertFileExists(VirtualFile dir, String fileName) {
-    ApplicationManager.getApplication().saveAll();
+    StoreUtil.saveDocumentsAndProjectsAndApp(false);
     assertNotNull(findFile(fileName, dir));
   }
 

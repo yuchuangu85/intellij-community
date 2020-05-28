@@ -1,3 +1,4 @@
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.ide
 
 import com.intellij.openapi.application.runWriteAction
@@ -6,6 +7,7 @@ import com.intellij.openapi.roots.ModuleRootModificationUtil
 import com.intellij.openapi.util.io.FileUtilRt
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.ProjectRule
 import com.intellij.testFramework.TemporaryDirectory
 import com.intellij.testFramework.runInEdtAndWait
@@ -15,9 +17,9 @@ import org.junit.rules.TestWatcher
 import org.junit.runner.Description
 import java.io.File
 
-private val EXCLUDED_DIR_NAME = "excludedDir"
+private const val EXCLUDED_DIR_NAME = "excludedDir"
 
-internal class TestManager(val projectRule: ProjectRule, private val tempDirManager: TemporaryDirectory) : TestWatcher() {
+internal class TestManager(private val projectRule: ProjectRule, private val tempDirManager: TemporaryDirectory) : TestWatcher() {
   var annotation: TestDescriptor? = null
 
   var filePath: String? = null
@@ -35,15 +37,8 @@ internal class TestManager(val projectRule: ProjectRule, private val tempDirMana
                                   val status: Int = 200)
 
   override fun starting(description: Description) {
-    annotation = description.getAnnotation(TestDescriptor::class.java)
-    if (annotation == null) {
-      return
-    }
-
-    filePath = StringUtil.nullize(annotation!!.filePath)
-    if (filePath == null) {
-      return
-    }
+    annotation = description.getAnnotation(TestDescriptor::class.java) ?: return
+    filePath = StringUtil.nullize(annotation!!.filePath) ?: return
 
     // trigger project creation
     projectRule.project
@@ -64,7 +59,7 @@ internal class TestManager(val projectRule: ProjectRule, private val tempDirMana
     runInEdtAndWait {
       val normalizedFilePath = FileUtilRt.toSystemIndependentName(filePath!!)
       if (annotation!!.relativeToProject) {
-        val root = projectRule.project.baseDir
+        val root = PlatformTestUtil.getOrCreateProjectTestBaseDir(projectRule.project)
         runWriteAction {
           fileToDelete = root.findOrCreateChildData(this@TestManager, normalizedFilePath)
         }

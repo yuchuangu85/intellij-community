@@ -17,12 +17,11 @@ package com.intellij.execution.testframework.sm.runner.ui;
 
 import com.intellij.execution.executors.DefaultDebugExecutor;
 import com.intellij.execution.testframework.PoolOfTestIcons;
-import com.intellij.execution.testframework.sm.SMTestsRunnerBundle;
+import com.intellij.execution.testframework.sm.SmRunnerBundle;
 import com.intellij.execution.testframework.sm.UITestUtil;
 import com.intellij.execution.testframework.sm.runner.BaseSMTRunnerTestCase;
 import com.intellij.execution.testframework.sm.runner.SMTRunnerConsoleProperties;
 import com.intellij.execution.testframework.sm.runner.SMTestProxy;
-import com.intellij.execution.testframework.ui.TestsProgressAnimator;
 import com.intellij.icons.AllIcons;
 import com.intellij.ui.SimpleTextAttributes;
 import org.jetbrains.annotations.Nls;
@@ -84,7 +83,6 @@ public class TestsPresentationUtilTest extends BaseSMTRunnerTestCase {
 
     final Set<String> category = new LinkedHashSet<>();
 
-    category.clear();
     category.add("Scenarios");
     assertEquals("Running: Scenarios 0 of <...>  ",
                  TestsPresentationUtil.getProgressStatus_Text(0, 0, 0, 0, 0, category, false));
@@ -534,6 +532,23 @@ public class TestsPresentationUtilTest extends BaseSMTRunnerTestCase {
     assertEquals(PoolOfTestIcons.PASSED_ICON, renderer2.getIcon());
   }
 
+  public void testPresentationWithDependentNamesTestProxy() {
+    SMTestProxy suiteProxy = createSuiteProxy("A");
+    SMTestProxy testProxy = createTestProxy("A.b");
+    suiteProxy.addChild(testProxy);
+    TestsPresentationUtil.formatTestProxy(testProxy, myRenderer);
+    assertEquals("b", myFragContainer.getTextAt(0));
+  }
+
+  public void testPresentationWithDependentNamesSuite() {
+    SMTestProxy suiteProxy = createSuiteProxy("A");
+    SMTestProxy suiteProxyChild = createSuiteProxy("AB");
+    suiteProxy.addChild(suiteProxyChild);
+    TestsPresentationUtil.formatTestProxy(suiteProxyChild, myRenderer);
+    assertEquals("AB", myFragContainer.getTextAt(0));
+    myRenderer.clear();
+  }
+
   public void testFormatRootNodeWithoutChildren() {
     TestsPresentationUtil.formatRootNodeWithoutChildren(mySMRootTestProxy, myRenderer);
 
@@ -576,7 +591,7 @@ public class TestsPresentationUtilTest extends BaseSMTRunnerTestCase {
 
     assertEquals(PoolOfTestIcons.NOT_RAN, myRenderer.getIcon());
     assertOneElement(myFragContainer.getFragments());
-    assertEquals(SMTestsRunnerBundle.message("sm.test.runner.ui.tests.tree.presentation.labels.test.reporter.not.attached"), myFragContainer.getTextAt(0));
+    assertEquals(SmRunnerBundle.message("sm.test.runner.ui.tests.tree.presentation.labels.test.reporter.not.attached"), myFragContainer.getTextAt(0));
     assertEquals(SimpleTextAttributes.ERROR_ATTRIBUTES, myFragContainer.getAttribsAt(0));
 
   }
@@ -731,11 +746,7 @@ public class TestsPresentationUtilTest extends BaseSMTRunnerTestCase {
   }
 
   private static void assertIsAnimatorProgressIcon(final Icon icon) {
-    for (Icon frame : TestsProgressAnimator.FRAMES) {
-      if (icon == frame) {
-        return;
-      }
-    }
+    if (icon == SMPoolOfTestIcons.RUNNING_ICON) return;
 
     fail("Icon isn't an Animator progress frame");
   }

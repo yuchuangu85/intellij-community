@@ -24,7 +24,6 @@ import org.jetbrains.annotations.NotNull;
  * Represents the set of changes performed by a "Change Signature" refactoring.
  *
  * @author yole
- * @since 8.1
  */
 public interface ChangeInfo {
   /**
@@ -32,8 +31,7 @@ public interface ChangeInfo {
    *
    * @return parameter list.
    */
-  @NotNull
-  ParameterInfo[] getNewParameters();
+  ParameterInfo @NotNull [] getNewParameters();
 
   boolean isParameterSetOrOrderChanged();
 

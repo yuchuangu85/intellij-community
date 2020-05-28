@@ -75,7 +75,7 @@ public class OptionalInlining {
 
   void testFilter(Optional<String> opt, Optional<Integer> intOpt) {
     opt.filter(<warning descr="Passing 'null' argument to parameter annotated as @NotNull">null</warning>);
-    Integer integer = intOpt.filter(x -> x > 5).filter(x -> <warning descr="Condition 'x == 5' is always 'false'">x == 5</warning>).orElse(0);
+    Integer integer = <warning descr="Result of 'intOpt.filter(x -> x > 5).filter(x -> x == 5).orElse(0)' is always '0'">intOpt.filter(x -> x > 5).filter(x -> <warning descr="Condition 'x == 5' is always 'false'">x == 5</warning>).orElse(0)</warning>;
     String s1 = opt.filter(s -> false).filter(s -> s.equals("barr")).orElse("baz");
     if (<warning descr="Condition 's1.equals(\"xz\")' is always 'false'">s1.equals("xz")</warning>) {
       System.out.println("never");
@@ -134,7 +134,7 @@ public class OptionalInlining {
       System.out.println("impossible");
     }
     if(opt.isPresent()) {
-      if(<warning descr="Condition 'opt.transform(x -> x.isEmpty() ? null : x).toJavaUtil().isPresent()' is always 'true'">opt.transform(x -> <warning descr="Function may return null, but it's not allowed here">x.isEmpty() ? null : x</warning>).toJavaUtil().isPresent()</warning>) {
+      if(<warning descr="Condition 'opt.transform(x -> x.isEmpty() ? null : x).toJavaUtil().isPresent()' is always 'true'">opt.transform(x -> x.isEmpty() ? <warning descr="Function may return null, but it's not allowed here">null</warning> : x).toJavaUtil().isPresent()</warning>) {
         System.out.println("Always");
       }
       if(opt.toJavaUtil().map(x -> x.isEmpty() ? null : x).isPresent()) {
@@ -157,7 +157,7 @@ public class OptionalInlining {
     opt.flatMap(<warning descr="Passing 'null' argument to parameter annotated as @NotNull">null</warning>);
     opt.flatMap(x -> <warning descr="Function may return null, but it's not allowed here">null</warning>);
     opt.flatMap(<warning descr="Function may return null, but it's not allowed here">this::nullableOptionalMethod</warning>);
-    opt.flatMap(x -> <warning descr="Function may return null, but it's not allowed here">x.isEmpty() ? null : Optional.of(x)</warning>);
+    opt.flatMap(x -> x.isEmpty() ? <warning descr="Function may return null, but it's not allowed here">null</warning> : Optional.of(x));
     opt.flatMap(x -> {
       if (x.isEmpty()) {
         return <warning descr="Function may return null, but it's not allowed here">null</warning>;
@@ -170,7 +170,7 @@ public class OptionalInlining {
     if (<warning descr="Condition 's.equals(\"qux\")' is always 'false'">s.equals("qux")</warning>) {
       System.out.println("Never");
     }
-    boolean res = <warning descr="Result of 'opt.filter(x -> x.isEmpty()).flatMap(x -> x.length() <= 2 ? Optional.empty() : Optional.of(\"foo\")) ...' is always 'false'">opt.filter(x -> x.isEmpty()).flatMap(x -> <warning descr="Condition 'x.length() <= 2' is always 'true'">x.length() <= 2</warning> ? Optional.empty() : Optional.of("foo"))
+    boolean res = <warning descr="Result of 'opt.filter(x -> x.isEmpty()).flatMap(x -> x.length() <= 2 ? Optional.empty() : Optional.of(\"foo\")) ...' is always 'false'">opt.filter(x -> x.isEmpty()).flatMap(x -> <warning descr="Condition 'x.length() <= 2' is always 'true'"><warning descr="Result of 'x.length()' is always '0'">x.length()</warning> <= 2</warning> ? Optional.empty() : Optional.of("foo"))
       .isPresent()</warning>;
   }
 
@@ -237,4 +237,12 @@ public class OptionalInlining {
     }
     return result;
   }
+
+  private static void testPrimitive(int x) {
+    final OptionalInt o = getOptionalInt();
+    if(o.isPresent() && x == o.getAsInt()) {}
+    if(<warning descr="Condition 'o.getAsInt() < 5 && o.getAsInt() > 6' is always 'false'">o.getAsInt() < 5 && <warning descr="Condition 'o.getAsInt() > 6' is always 'false' when reached">o.getAsInt() > 6</warning></warning>) {}
+  }
+
+  native static OptionalInt getOptionalInt();
 }

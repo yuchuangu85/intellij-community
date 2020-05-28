@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2017 JetBrains s.r.o.
+ * Copyright 2000-2018 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package com.intellij.java.psi.formatter.java;
 
+import com.intellij.application.options.CodeStyle;
 import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.roots.LanguageLevelProjectExtension;
 import com.intellij.pom.java.LanguageLevel;
@@ -27,13 +28,20 @@ public class AnnotationFormatterTest extends JavaFormatterTestCase {
   protected void setUp() throws Exception {
     super.setUp();
     final CodeStyleSettingsManager codeStyleSettingsManager = CodeStyleSettingsManager.getInstance(getProject());
-    codeStyleSettingsManager.setTemporarySettings(new CodeStyleSettings());
+    codeStyleSettingsManager.setTemporarySettings(CodeStyle.createTestSettings());
   }
 
   @Override
   protected void tearDown() throws Exception {
-    CodeStyleSettingsManager.getInstance(getProject()).dropTemporarySettings();
-    super.tearDown();
+    try {
+      CodeStyleSettingsManager.getInstance(getProject()).dropTemporarySettings();
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
+    finally {
+      super.tearDown();
+    }
   }
 
   @Override
@@ -297,9 +305,9 @@ public class AnnotationFormatterTest extends JavaFormatterTestCase {
 
   public void testEnumFormatting() {
     getSettings(JavaLanguage.INSTANCE).ENUM_CONSTANTS_WRAP = CommonCodeStyleSettings.WRAP_ALWAYS;
-    final LanguageLevel effectiveLanguageLevel = LanguageLevelProjectExtension.getInstance(ourProject).getLanguageLevel();
+    final LanguageLevel effectiveLanguageLevel = LanguageLevelProjectExtension.getInstance(getProject()).getLanguageLevel();
     try {
-      LanguageLevelProjectExtension.getInstance(ourProject).setLanguageLevel(LanguageLevel.JDK_1_5);
+      LanguageLevelProjectExtension.getInstance(getProject()).setLanguageLevel(LanguageLevel.JDK_1_5);
       doTextTest("  enum Breed {\n" +
                  "     Dalmatian (  \"spotted\" ),Labrador ( \"black\" ),Dachshund( \"brown\" );\n" +
                  "\n" +
@@ -332,7 +340,7 @@ public class AnnotationFormatterTest extends JavaFormatterTestCase {
                  "enum Command {\n" + "    USED,\n" + "    UNUSED;\n" + "}");
     }
     finally {
-      LanguageLevelProjectExtension.getInstance(ourProject).setLanguageLevel(effectiveLanguageLevel);
+      LanguageLevelProjectExtension.getInstance(getProject()).setLanguageLevel(effectiveLanguageLevel);
     }
   }
 

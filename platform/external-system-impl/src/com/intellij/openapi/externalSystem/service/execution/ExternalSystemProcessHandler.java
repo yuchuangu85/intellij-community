@@ -26,10 +26,9 @@ import com.intellij.openapi.util.io.StreamUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
+import java.io.*;
+import java.nio.channels.Channels;
+import java.nio.channels.Pipe;
 
 /**
  * @author Vladislav.Soroka
@@ -48,8 +47,9 @@ public class ExternalSystemProcessHandler extends BuildProcessHandler implements
     myExecutionName = executionName;
     if (task instanceof UserDataHolder) {
       try {
-        PipedInputStream inputStream = new PipedInputStream();
-        myProcessInput = new PipedOutputStream(inputStream);
+        Pipe pipe = Pipe.open();
+        InputStream inputStream = new BufferedInputStream(Channels.newInputStream(pipe.source()));
+        myProcessInput = new BufferedOutputStream(Channels.newOutputStream(pipe.sink()));
         ((UserDataHolder)task).putUserData(ExternalSystemRunConfiguration.RUN_INPUT_KEY, inputStream);
       }
       catch (IOException e) {
@@ -61,6 +61,11 @@ public class ExternalSystemProcessHandler extends BuildProcessHandler implements
   @Override
   public String getExecutionName() {
     return myExecutionName;
+  }
+
+  @Nullable
+  public ExternalSystemTask getTask() {
+    return myTask;
   }
 
   @Override
@@ -106,10 +111,6 @@ public class ExternalSystemProcessHandler extends BuildProcessHandler implements
   }
 
   protected void closeInput() {
-    ExternalSystemTask task = myTask;
-    if (task instanceof UserDataHolder) {
-      ((UserDataHolder)task).putUserData(ExternalSystemRunConfiguration.RUN_INPUT_KEY, null);
-    }
     StreamUtil.closeStream(myProcessInput);
     myProcessInput = null;
   }
@@ -117,6 +118,13 @@ public class ExternalSystemProcessHandler extends BuildProcessHandler implements
   @Override
   public void dispose() {
     try {
+      ExternalSystemTask task = myTask;
+      if (task instanceof UserDataHolder) {
+        UserDataHolder taskDataHolder = (UserDataHolder)task;
+        InputStream inputStream = taskDataHolder.getUserData(ExternalSystemRunConfiguration.RUN_INPUT_KEY);
+        StreamUtil.closeStream(inputStream);
+        taskDataHolder.putUserData(ExternalSystemRunConfiguration.RUN_INPUT_KEY, null);
+      }
       detachProcessImpl();
     }
     finally {

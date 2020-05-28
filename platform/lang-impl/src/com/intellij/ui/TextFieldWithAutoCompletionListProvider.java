@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui;
 
 import com.intellij.codeInsight.completion.*;
@@ -105,7 +105,7 @@ public abstract class TextFieldWithAutoCompletionListProvider<T> extends Default
 
   private static <T> void addCompletionElements(final CompletionResultSet result,
                                                 final TextCompletionValueDescriptor<T> descriptor,
-                                                final Collection<T> items,
+                                                final Collection<? extends T> items,
                                                 final int index) {
     final AutoCompletionPolicy completionPolicy = ApplicationManager.getApplication().isUnitTestMode()
                                                   ? AutoCompletionPolicy.ALWAYS_AUTOCOMPLETE
@@ -134,7 +134,7 @@ public abstract class TextFieldWithAutoCompletionListProvider<T> extends Default
 
     final List<T> items = new ArrayList<>(myVariants);
 
-    Collections.sort(items, this);
+    items.sort(this);
     return items;
   }
 

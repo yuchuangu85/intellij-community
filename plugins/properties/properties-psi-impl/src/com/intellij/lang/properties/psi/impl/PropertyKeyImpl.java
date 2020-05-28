@@ -24,7 +24,6 @@ import org.jetbrains.annotations.NotNull;
 
 /**
  * @author cdr
- * @since 14.1
  */
 public class PropertyKeyImpl extends LeafPsiElement {
   public PropertyKeyImpl(@NotNull IElementType type, CharSequence text) {
@@ -32,8 +31,7 @@ public class PropertyKeyImpl extends LeafPsiElement {
   }
 
   @Override
-  @NotNull
-  public PsiReference[] getReferences() {
+  public PsiReference @NotNull [] getReferences() {
     return ReferenceProvidersRegistry.getReferencesFromProviders(this);
   }
 

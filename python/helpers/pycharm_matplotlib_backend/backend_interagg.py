@@ -1,24 +1,28 @@
+import base64
 import matplotlib
 import os
-import socket
-import struct
+import sys
+
 from matplotlib._pylab_helpers import Gcf
 from matplotlib.backend_bases import FigureManagerBase, ShowBase
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
-HOST = 'localhost'
-PORT = os.getenv("PYCHARM_MATPLOTLIB_PORT")
-PORT = int(PORT) if PORT is not None else None
-PORT = PORT if PORT != -1 else None
+from datalore.display import debug, display, SHOW_DEBUG_INFO
+
+PY3 = sys.version_info[0] >= 3
+
 index = int(os.getenv("PYCHARM_MATPLOTLIB_INDEX", 0))
 
 rcParams = matplotlib.rcParams
 
+
 class Show(ShowBase):
     def __call__(self, **kwargs):
+        debug("show() called with args %s" % kwargs)
         managers = Gcf.get_all_fig_managers()
         if not managers:
+            debug("Error: Managers list in `Gcf.get_all_fig_managers()` is empty")
             return
 
         for manager in managers:
@@ -37,6 +41,8 @@ def draw_if_interactive():
         figManager = Gcf.get_active()
         if figManager is not None:
             figManager.canvas.show()
+        else:
+            debug("Error: Figure manager `Gcf.get_active()` is None")
 
 
 # from pyplot API
@@ -61,8 +67,6 @@ class FigureCanvasInterAgg(FigureCanvasAgg):
     def show(self):
         self.figure.tight_layout()
         FigureCanvasAgg.draw(self)
-        if PORT is None:
-            return
 
         if matplotlib.__version__ < '1.2':
             buffer = self.tostring_rgb(0, 0)
@@ -71,27 +75,29 @@ class FigureCanvasInterAgg(FigureCanvasAgg):
 
         if len(set(buffer)) <= 1:
             # do not plot empty
+            debug("Error: Buffer FigureCanvasAgg.tostring_rgb() is empty")
             return
 
         render = self.get_renderer()
         width = int(render.width)
+        debug("Image width: %d" % width)
 
-        plot_index = index if os.getenv("PYCHARM_MATPLOTLIB_INTERACTIVE", False) else -1
-        try:
-            sock = socket.socket()
-            sock.connect((HOST, PORT))
-            sock.send(struct.pack('>i', width))
-            sock.send(struct.pack('>i', plot_index))
-            sock.send(struct.pack('>i', len(buffer)))
-            sock.send(buffer)
-        except OSError as _:
-            # nothing bad. It just means, that our tool window doesn't run yet
-            pass
+        is_interactive = os.getenv("PYCHARM_MATPLOTLIB_INTERACTIVE", False)
+        if is_interactive:
+            debug("Using interactive mode (Run with Python Console)")
+            debug("Plot index = %d" % index)
+        else:
+            debug("Using non-interactive mode (Run without Python Console)")
+        plot_index = index if is_interactive else -1
+        display(DisplayDataObject(plot_index, width, buffer))
 
     def draw(self):
+        FigureCanvasAgg.draw(self)
         is_interactive = os.getenv("PYCHARM_MATPLOTLIB_INTERACTIVE", False)
         if is_interactive and matplotlib.is_interactive():
             self.show()
+        else:
+            debug("Error: calling draw() in non-interactive mode won't show a plot. Try to 'Run with Python Console'")
 
 
 class FigureManagerInterAgg(FigureManagerBase):
@@ -106,3 +112,21 @@ class FigureManagerInterAgg(FigureManagerBase):
     def show(self, **kwargs):
         self.canvas.show()
         Gcf.destroy(self._num)
+
+
+class DisplayDataObject:
+    def __init__(self, plot_index, width, image_bytes):
+        self.plot_index = plot_index
+        self.image_width = width
+        self.image_bytes = image_bytes
+
+    def _repr_display_(self):
+        image_bytes_base64 = base64.b64encode(self.image_bytes)
+        if PY3:
+            image_bytes_base64 = image_bytes_base64.decode()
+        body = {
+            'plot_index': self.plot_index,
+            'image_width': self.image_width,
+            'image_base64': image_bytes_base64
+        }
+        return ('pycharm-plot-image', body)

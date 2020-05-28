@@ -1,6 +1,11 @@
 import java.util.Arrays;
 
 public final class ArrayLength {
+  public static void diff(String[] args, String[] args2) {
+    String[] arr = new String[args2.length - args.length];
+    if (arr.length > 0) {}
+  }
+  
   void testForSimple2(int[] arr, int[][] arr2) {
     boolean b = arr2[0].length == arr.length;
     for(int i=0; i<arr.length; i++) {
@@ -52,8 +57,12 @@ public final class ArrayLength {
   }
 
   public static void testArray(int[] x, int a) {
-    x[<warning descr="Array index is out of bounds">-1</warning>] = -2;
-    x[<warning descr="Array index is out of bounds">x.length</warning>] = -1;
+    if(Math.random() > 0.5) {
+      x[<warning descr="Array index is out of bounds">-1</warning>] = -2;
+    }
+    if(Math.random() > 0.5) {
+      x[<warning descr="Array index is out of bounds">x.length</warning>] = -1;
+    }
     x[a] = 6;
     if(<warning descr="Condition 'a < 0' is always 'false'">a < 0</warning>) {
       System.out.println("never");

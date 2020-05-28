@@ -1,29 +1,14 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.unscramble;
 
+import com.intellij.diagnostic.ThreadDumper;
 import com.intellij.openapi.util.Comparing;
+import com.intellij.openapi.util.text.StringUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 /**
  * @author yole
@@ -42,6 +27,8 @@ public class ThreadState {
 
   @Nullable
   private ThreadOperation myOperation;
+  private boolean myKnownJDKThread;
+  private int myStackDepth;
 
   public ThreadState(final String name, final String state) {
     myName = name;
@@ -60,9 +47,19 @@ public class ThreadState {
     return myStackTrace;
   }
 
-  public void setStackTrace(final String stackTrace, boolean isEmpty) {
+  public void setStackTrace(@NotNull String stackTrace, boolean isEmpty) {
     myStackTrace = stackTrace;
     myEmptyStackTrace = isEmpty;
+    myKnownJDKThread = ThreadDumpParser.isKnownJdkThread(stackTrace);
+    myStackDepth = StringUtil.countNewLines(myStackTrace);
+  }
+
+  int getStackDepth() {
+    return myStackDepth;
+  }
+
+  public boolean isKnownJDKThread() {
+    return myKnownJDKThread;
   }
 
   public Collection<ThreadState> getAwaitingThreads() {
@@ -140,7 +137,7 @@ public class ThreadState {
   }
 
   public boolean isWaiting() {
-    return "on object monitor".equals(myThreadStateDetail) || 
+    return "on object monitor".equals(myThreadStateDetail) ||
            myState.startsWith("waiting") ||
            ("parking".equals(myThreadStateDetail) && !isSleeping());
   }
@@ -151,7 +148,7 @@ public class ThreadState {
   }
 
   public static boolean isEDT(String name) {
-    return name.startsWith("AWT-EventQueue");
+    return ThreadDumper.isEDT(name);
   }
 
   public boolean isDaemon() {
@@ -173,15 +170,15 @@ public class ThreadState {
 
     public boolean add(ThreadState state) {
       if (myOriginalState.isEDT()) return false;
-      if (!Comparing.equal(state.myState, myOriginalState.myState)) return false;
+      if (!Objects.equals(state.myState, myOriginalState.myState)) return false;
       if (state.myEmptyStackTrace != myOriginalState.myEmptyStackTrace) return false;
       if (state.isDaemon != myOriginalState.isDaemon) return false;
-      if (!Comparing.equal(state.myJavaThreadState, myOriginalState.myJavaThreadState)) return false;
-      if (!Comparing.equal(state.myThreadStateDetail, myOriginalState.myThreadStateDetail)) return false;
-      if (!Comparing.equal(state.myExtraState, myOriginalState.myExtraState)) return false;
+      if (!Objects.equals(state.myJavaThreadState, myOriginalState.myJavaThreadState)) return false;
+      if (!Objects.equals(state.myThreadStateDetail, myOriginalState.myThreadStateDetail)) return false;
+      if (!Objects.equals(state.myExtraState, myOriginalState.myExtraState)) return false;
       if (!Comparing.haveEqualElements(state.myThreadsWaitingForMyLock, myOriginalState.myThreadsWaitingForMyLock)) return false;
       if (!Comparing.haveEqualElements(state.myDeadlockedThreads, myOriginalState.myDeadlockedThreads)) return false;
-      if (!Comparing.equal(getMergeableStackTrace(state.myStackTrace, true), getMergeableStackTrace(myOriginalState.myStackTrace, true))) return false;
+      if (!Objects.equals(getMergeableStackTrace(state.myStackTrace, true), getMergeableStackTrace(myOriginalState.myStackTrace, true))) return false;
       myCounter++;
       return true;
     }

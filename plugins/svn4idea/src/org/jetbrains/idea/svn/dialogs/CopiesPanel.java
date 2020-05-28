@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn.dialogs;
 
+import com.intellij.configurationStore.StoreUtil;
 import com.intellij.ide.DataManager;
 import com.intellij.notification.*;
 import com.intellij.openapi.actionSystem.PlatformDataKeys;
@@ -24,10 +25,7 @@ import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.components.labels.LinkLabel;
 import com.intellij.ui.components.labels.LinkListener;
 import com.intellij.util.Consumer;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.hash.EqualityPolicy;
-import com.intellij.util.messages.MessageBusConnection;
-import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.svn.*;
@@ -55,13 +53,14 @@ import java.awt.event.FocusEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.io.File;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 
 import static com.intellij.notification.NotificationDisplayType.STICKY_BALLOON;
 import static com.intellij.openapi.util.text.StringUtil.notNullize;
 import static com.intellij.util.containers.ContainerUtil.map;
 import static java.util.Collections.singletonList;
+import static java.util.Comparator.comparing;
 
 public class CopiesPanel {
 
@@ -70,14 +69,11 @@ public class CopiesPanel {
   private static final NotificationGroup NOTIFICATION_GROUP = new NotificationGroup("Svn Roots Detection Errors", STICKY_BALLOON, true);
 
   private final Project myProject;
-  private final MessageBusConnection myConnection;
-  private final SvnVcs myVcs;
   private final JPanel myPanel;
   private final JComponent myHolder;
   private LinkLabel myRefreshLabel;
   // updated only on AWT
   private List<OverrideEqualsWrapper<WCInfo>> myCurrentInfoList;
-  private final int myTextHeight;
 
   private final static String CHANGE_FORMAT = "CHANGE_FORMAT";
   private final static String CLEANUP = "CLEANUP";
@@ -85,16 +81,14 @@ public class CopiesPanel {
   private final static String CONFIGURE_BRANCHES = "CONFIGURE_BRANCHES";
   private final static String MERGE_FROM = "MERGE_FROM";
 
-  public CopiesPanel(final Project project) {
+  public CopiesPanel(@NotNull Project project) {
     myProject = project;
-    myConnection = myProject.getMessageBus().connect(myProject);
-    myVcs = SvnVcs.getInstance(myProject);
     myCurrentInfoList = null;
 
     final Runnable focus = () -> IdeFocusManager.getInstance(myProject).requestFocus(myRefreshLabel, true);
     final Runnable refreshView = () -> {
-      final List<WCInfo> infoList = myVcs.getWcInfosWithErrors();
-      final boolean hasErrors = !myVcs.getSvnFileUrlMapping().getErrorRoots().isEmpty();
+      final List<WCInfo> infoList = getVcs().getWcInfosWithErrors();
+      final boolean hasErrors = !getVcs().getSvnFileUrlMapping().getErrorRoots().isEmpty();
       final List<WorkingCopyFormat> supportedFormats = getSupportedFormats();
       Runnable runnable = () -> {
         if (myCurrentInfoList != null) {
@@ -107,7 +101,7 @@ public class CopiesPanel {
           }
           myCurrentInfoList = newList;
         }
-        Collections.sort(infoList, WCComparator.getInstance());
+        infoList.sort(comparing(WCInfo::getPath));
         updateList(infoList, supportedFormats);
         myRefreshLabel.setEnabled(true);
         showErrorNotification(hasErrors);
@@ -128,18 +122,17 @@ public class CopiesPanel {
         ApplicationManager.getApplication().invokeLater(() -> myRefreshLabel.setEnabled(true), ModalityState.NON_MODAL);
       }
     };
-    myConnection.subscribe(SvnVcs.ROOTS_RELOADED, refreshOnPooled);
+    myProject.getMessageBus().connect().subscribe(SvnVcs.ROOTS_RELOADED, refreshOnPooled);
 
     final JPanel holderPanel = new JPanel(new BorderLayout());
     FontMetrics fm = holderPanel.getFontMetrics(holderPanel.getFont());
-    myTextHeight = (int)(fm.getHeight() * 1.3);
     myPanel = new JPanel(new GridBagLayout());
     final JPanel panel = new JPanel(new BorderLayout());
     panel.add(myPanel, BorderLayout.NORTH);
     holderPanel.add(panel, BorderLayout.WEST);
-    myRefreshLabel = new MyLinkLabel(myTextHeight, "Refresh", (aSource, aLinkData) -> {
+    myRefreshLabel = new MyLinkLabel((int)(fm.getHeight() * 1.3), "Refresh", (aSource, aLinkData) -> {
       if (myRefreshLabel.isEnabled()) {
-        myVcs.invokeRefreshSvnRoots();
+        getVcs().invokeRefreshSvnRoots();
         myRefreshLabel.setEnabled(false);
       }
     });
@@ -152,8 +145,9 @@ public class CopiesPanel {
     initView();
   }
 
-  public JComponent getPreferredFocusedComponent() {
-    return myRefreshLabel;
+  @NotNull
+  private SvnVcs getVcs() {
+    return SvnVcs.getInstance(myProject);
   }
 
   private void updateList(@NotNull final List<WCInfo> infoList, @NotNull final List<WorkingCopyFormat> supportedFormats) {
@@ -173,12 +167,13 @@ public class CopiesPanel {
       final VirtualFile vf = lfs.refreshAndFindFileByIoFile(new File(wcInfo.getPath()));
       final VirtualFile root = (vf == null) ? wcInfo.getVcsRoot() : vf;
 
-      final JEditorPane editorPane = new JEditorPane(UIUtil.HTML_MIME, "");
-      editorPane.setEditable(false);
-      editorPane.setFocusable(true);
-      editorPane.setBackground(UIUtil.getPanelBackground());
-      editorPane.setOpaque(false);
-      editorPane.addHyperlinkListener(new HyperlinkListener() {
+      WorkingCopyInfoPanel infoPanel = new WorkingCopyInfoPanel();
+      infoPanel.setInfo(wcInfo);
+      infoPanel.setUpgradeFormats(upgradeFormats);
+      infoPanel.setFocusable(true);
+      infoPanel.setBorder(null);
+      infoPanel.update();
+      infoPanel.addHyperlinkListener(new HyperlinkListener() {
         @Override
         public void hyperlinkUpdate(HyperlinkEvent e) {
           if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
@@ -187,23 +182,24 @@ public class CopiesPanel {
               BranchConfigurationDialog.configureBranches(myProject, root);
             } else if (FIX_DEPTH.equals(e.getDescription())) {
               final int result =
-                Messages.showOkCancelDialog(myVcs.getProject(), "You are going to checkout into '" + wcInfo.getPath() + "' with 'infinity' depth.\n" +
-                                                        "This will update your working copy to HEAD revision as well.",
-                                    "Set Working Copy Infinity Depth",
-                                    Messages.getWarningIcon());
+                Messages.showOkCancelDialog(myProject,
+                                            "You are going to checkout into '" + wcInfo.getPath() + "' with 'infinity' depth.\n" +
+                                            "This will update your working copy to HEAD revision as well.",
+                                            "Set Working Copy Infinity Depth",
+                                            Messages.getWarningIcon());
               if (result == Messages.OK) {
                 // update of view will be triggered by roots changed event
-                SvnCheckoutProvider.checkout(myVcs.getProject(), new File(wcInfo.getPath()), wcInfo.getUrl(), Revision.HEAD,
+                SvnCheckoutProvider.checkout(myProject, new File(wcInfo.getPath()), wcInfo.getUrl(), Revision.HEAD,
                                              Depth.INFINITY, false, null, wcInfo.getFormat());
               }
             } else if (CHANGE_FORMAT.equals(e.getDescription())) {
               changeFormat(wcInfo, upgradeFormats);
             } else if (MERGE_FROM.equals(e.getDescription())) {
               if (! checkRoot(root, wcInfo.getPath(), " invoke Merge From")) return;
-              mergeFrom(wcInfo, root, editorPane);
+              mergeFrom(wcInfo, root, infoPanel);
             } else if (CLEANUP.equals(e.getDescription())) {
               if (! checkRoot(root, wcInfo.getPath(), " invoke Cleanup")) return;
-              new CleanupWorker(myVcs, singletonList(root)).execute();
+              new CleanupWorker(getVcs(), singletonList(root)).execute();
             }
           }
         }
@@ -216,8 +212,6 @@ public class CopiesPanel {
           return true;
         }
       });
-      editorPane.setBorder(null);
-      editorPane.setText(formatWc(wcInfo, upgradeFormats));
 
       final JPanel copyPanel = new JPanel(new GridBagLayout());
 
@@ -234,7 +228,7 @@ public class CopiesPanel {
       contForCopy.add(copyPanel, BorderLayout.WEST);
       myPanel.add(contForCopy, gb);
 
-      copyPanel.add(editorPane, gb1);
+      copyPanel.add(infoPanel, gb1);
       gb1.insets = nullIndent;
     }
 
@@ -242,10 +236,8 @@ public class CopiesPanel {
     myPanel.repaint();
   }
 
-  @SuppressWarnings("MethodMayBeStatic")
-  private String formatWc(@NotNull WCInfo info, @NotNull Collection<WorkingCopyFormat> upgradeFormats) {
-    final StringBuilder sb = new StringBuilder().append("<html><head>").append(UIUtil.getCssFontDeclaration(UIUtil.getLabelFont()))
-      .append("</head><body><table bgColor=\"").append(ColorUtil.toHex(UIUtil.getPanelBackground())).append("\">");
+  static String formatWc(@NotNull WCInfo info, @NotNull Collection<WorkingCopyFormat> upgradeFormats) {
+    final StringBuilder sb = new StringBuilder().append("<table>");
 
     sb.append("<tr valign=\"top\"><td colspan=\"3\"><b>").append(info.getPath()).append("</b></td></tr>");
     if (info.hasError()) {
@@ -284,15 +276,15 @@ public class CopiesPanel {
       sb.append("<tr valign=\"top\"><td colspan=\"3\"><a href=\"").append(CONFIGURE_BRANCHES).append("\">Configure Branches</a></td></tr>");
       sb.append("<tr valign=\"top\"><td colspan=\"3\"><a href=\"").append(MERGE_FROM).append("\"><b>Merge From...</b></a></i></td></tr>");
 
-      sb.append("</table></body></html>");
+      sb.append("</table>");
     }
     return sb.toString();
   }
 
   @NotNull
   private List<WorkingCopyFormat> getSupportedFormats() {
-    List<WorkingCopyFormat> result = ContainerUtil.newArrayList();
-    ClientFactory factory = myVcs.getFactory();
+    List<WorkingCopyFormat> result = new ArrayList<>();
+    ClientFactory factory = getVcs().getFactory();
 
     try {
       result.addAll(factory.createUpgradeClient().getSupportedFormats());
@@ -321,7 +313,7 @@ public class CopiesPanel {
     SelectBranchPopup.showForBranchRoot(myProject, root, (project, configuration, branchUrl, revision) -> {
       try {
         Url workingCopyUrlInSelectedBranch = getCorrespondingUrlInOtherBranch(configuration, wcInfo.getUrl(), branchUrl);
-        MergeContext mergeContext = new MergeContext(myVcs, workingCopyUrlInSelectedBranch, wcInfo, branchUrl.getTail(), root);
+        MergeContext mergeContext = new MergeContext(getVcs(), workingCopyUrlInSelectedBranch, wcInfo, branchUrl.getTail(), root);
 
         new QuickMerge(mergeContext, new QuickMergeInteractionImpl(mergeContext)).execute();
       }
@@ -375,7 +367,7 @@ public class CopiesPanel {
     }
     final WorkingCopyFormat newFormat = dialog.getUpgradeMode();
     if (!wcInfo.getFormat().equals(newFormat)) {
-      ApplicationManager.getApplication().saveAll();
+      StoreUtil.saveDocumentsAndProjectSettings(myProject);
       final Task.Backgroundable task = new SvnFormatWorker(myProject, newFormat, wcInfo) {
         @Override
         public void onSuccess() {
@@ -490,25 +482,12 @@ public class CopiesPanel {
       if (val1 == null || val2 == null || val1.getClass() != val2.getClass()) return false;
 
       if (! Comparing.equal(val1.getFormat(), val2.getFormat())) return false;
-      if (! Comparing.equal(val1.getPath(), val2.getPath())) return false;
+      if (!Objects.equals(val1.getPath(), val2.getPath())) return false;
       if (! Comparing.equal(val1.getStickyDepth(), val2.getStickyDepth())) return false;
       if (! Comparing.equal(val1.getType(), val2.getType())) return false;
       if (! Comparing.equal(val1.getUrl(), val2.getUrl())) return false;
 
       return true;
-    }
-  }
-
-  private static class WCComparator implements Comparator<WCInfo> {
-    private final static WCComparator ourComparator = new WCComparator();
-
-    public static WCComparator getInstance() {
-      return ourComparator;
-    }
-
-    @Override
-    public int compare(WCInfo o1, WCInfo o2) {
-      return o1.getPath().compareTo(o2.getPath());
     }
   }
 
@@ -531,10 +510,9 @@ public class CopiesPanel {
 
     private static final String FIX_ACTION = "FIX";
     private static final String TITLE = "";
-    private static final String DESCRIPTION = SvnBundle.message("subversion.roots.detection.errors.found.description");
 
     private ErrorsFoundNotification(@NotNull final Project project) {
-      super(NOTIFICATION_GROUP.getDisplayId(), TITLE, DESCRIPTION, NotificationType.ERROR, createListener(project));
+      super(NOTIFICATION_GROUP.getDisplayId(), TITLE, getDescription(), NotificationType.ERROR, createListener(project));
     }
 
     private static NotificationListener.Adapter createListener(@NotNull final Project project) {
@@ -546,6 +524,10 @@ public class CopiesPanel {
           }
         }
       };
+    }
+
+    private static String getDescription() {
+      return SvnBundle.message("subversion.roots.detection.errors.found.description");
     }
   }
 }

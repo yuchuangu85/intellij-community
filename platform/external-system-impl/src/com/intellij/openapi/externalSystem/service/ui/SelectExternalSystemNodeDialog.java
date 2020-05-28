@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.externalSystem.service.ui;
 
 import com.intellij.openapi.externalSystem.model.DataNode;
@@ -21,18 +7,18 @@ import com.intellij.openapi.externalSystem.model.ProjectSystemId;
 import com.intellij.openapi.externalSystem.model.project.ProjectData;
 import com.intellij.openapi.externalSystem.service.project.ProjectDataManager;
 import com.intellij.openapi.externalSystem.service.project.manage.ExternalProjectsManagerImpl;
-import com.intellij.openapi.externalSystem.view.ExternalProjectsStructure;
-import com.intellij.openapi.externalSystem.view.ExternalProjectsView;
-import com.intellij.openapi.externalSystem.view.ExternalProjectsViewAdapter;
-import com.intellij.openapi.externalSystem.view.ExternalSystemNode;
+import com.intellij.openapi.externalSystem.view.*;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.util.Disposer;
+import com.intellij.openapi.wm.ToolWindow;
+import com.intellij.openapi.wm.ex.ToolWindowEx;
 import com.intellij.ui.ScrollPaneFactory;
+import com.intellij.ui.tree.TreeVisitor;
 import com.intellij.ui.treeStructure.SimpleNode;
-import com.intellij.ui.treeStructure.SimpleNodeVisitor;
 import com.intellij.ui.treeStructure.SimpleTree;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.tree.TreeUtil;
 import org.jetbrains.annotations.NotNull;
@@ -43,6 +29,7 @@ import javax.swing.tree.TreeSelectionModel;
 import java.awt.event.InputEvent;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * @author Vladislav.Soroka
@@ -52,7 +39,7 @@ public class SelectExternalSystemNodeDialog extends DialogWrapper {
   @NotNull
   private final SimpleTree myTree;
   @Nullable
-  private final NodeSelector mySelector;
+  private final Predicate<SimpleNode> mySelector;
   @Nullable
   protected Boolean groupTasks;
   @Nullable
@@ -62,16 +49,16 @@ public class SelectExternalSystemNodeDialog extends DialogWrapper {
                                         @NotNull Project project,
                                         @NotNull String title,
                                         Class<? extends ExternalSystemNode> nodeClass,
-                                        @Nullable NodeSelector selector) {
+                                        @Nullable Predicate<SimpleNode> selector) {
     //noinspection unchecked
     this(systemId, project, title, new Class[]{nodeClass}, selector);
   }
 
   public SelectExternalSystemNodeDialog(@NotNull ProjectSystemId systemId,
                                         @NotNull Project project,
-                                        @NotNull String title,
+                                        @NotNull @NlsContexts.DialogTitle String title,
                                         final Class<? extends ExternalSystemNode>[] nodeClasses,
-                                        @Nullable NodeSelector selector) {
+                                        @Nullable Predicate<SimpleNode> selector) {
     super(project, false);
     mySelector = selector;
     setTitle(title);
@@ -79,7 +66,14 @@ public class SelectExternalSystemNodeDialog extends DialogWrapper {
     myTree = new SimpleTree();
     myTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
-    final ExternalProjectsView projectsView = ExternalProjectsManagerImpl.getInstance(project).getExternalProjectsView(systemId);
+    ExternalProjectsView projectsView = ExternalProjectsManagerImpl.getInstance(project).getExternalProjectsView(systemId);
+    if (projectsView == null) {
+      ToolWindow toolWindow = ExternalToolWindowManager.getToolWindow(project, systemId);
+      if (toolWindow instanceof ToolWindowEx) {
+        projectsView = new ExternalProjectsViewImpl(project, (ToolWindowEx)toolWindow, systemId);
+        Disposer.register(getDisposable(), (ExternalProjectsViewImpl)projectsView);
+      }
+    }
     if(projectsView != null) {
       final ExternalProjectsStructure treeStructure = new ExternalProjectsStructure(project, myTree) {
         @Override
@@ -132,18 +126,10 @@ public class SelectExternalSystemNodeDialog extends DialogWrapper {
       TreeUtil.expandAll(myTree);
 
       if (mySelector != null) {
-        final SimpleNode[] selection = new SimpleNode[]{null};
-        treeStructure.accept(new SimpleNodeVisitor() {
-          @Override
-          public boolean accept(SimpleNode each) {
-            if (!mySelector.shouldSelect(each)) return false;
-            selection[0] = each;
-            return true;
-          }
+        TreeUtil.promiseSelect(myTree, path -> {
+          SimpleNode node = TreeUtil.getLastUserObject(SimpleNode.class, path);
+          return node != null && mySelector.test(node) ? TreeVisitor.Action.INTERRUPT : TreeVisitor.Action.CONTINUE;
         });
-        if (selection[0] != null) {
-          treeStructure.select(selection[0]);
-        }
       }
     }
 
@@ -173,9 +159,5 @@ public class SelectExternalSystemNodeDialog extends DialogWrapper {
     final JScrollPane pane = ScrollPaneFactory.createScrollPane(myTree);
     pane.setPreferredSize(JBUI.size(320, 400));
     return pane;
-  }
-
-  protected interface NodeSelector {
-    boolean shouldSelect(SimpleNode node);
   }
 }

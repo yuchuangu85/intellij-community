@@ -7,7 +7,6 @@ import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.IdeActions;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.ui.treeStructure.Tree;
-import com.intellij.util.ArrayUtil;
 import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
@@ -23,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
 
+import static com.intellij.ui.tree.TreePathUtil.toTreePathArray;
 import static javax.swing.tree.TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION;
 
 public class TreeSpeedSearch extends SpeedSearchBase<JTree> {
@@ -75,9 +75,8 @@ public class TreeSpeedSearch extends SpeedSearchBase<JTree> {
     return selectionRows == null || selectionRows.length == 0 ? -1 : selectionRows[0];
   }
 
-  @NotNull
   @Override
-  protected Object[] getAllElements() {
+  protected Object @NotNull [] getAllElements() {
     JBIterable<TreePath> paths;
     if (myCanExpand) {
       paths = TreeUtil.treePathTraverser(myComponent).traverse();
@@ -89,10 +88,9 @@ public class TreeSpeedSearch extends SpeedSearchBase<JTree> {
       }
       paths = JBIterable.of(arr);
     }
-    List<TreePath> result = paths
+    return paths
       .filter(o -> !(o.getLastPathComponent() instanceof LoadingNode))
-      .toList();
-    return result.toArray(new TreePath[0]);
+      .toArray(TreeUtil.EMPTY_TREE_PATH);
   }
 
   @Override
@@ -158,7 +156,7 @@ public class TreeSpeedSearch extends SpeedSearchBase<JTree> {
         TreePath currentElement = (TreePath)mySearch.findElement(query);
         TreePath anchor = ObjectUtils.chooseNotNull(currentElement, filtered.get(0));
 
-        sm.setSelectionPaths(ArrayUtil.toObjectArray(filtered, TreePath.class));
+        sm.setSelectionPaths(toTreePathArray(filtered));
         myTree.setAnchorSelectionPath(anchor);
       }
     }

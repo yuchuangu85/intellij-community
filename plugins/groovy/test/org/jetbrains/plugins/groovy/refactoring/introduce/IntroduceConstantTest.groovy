@@ -21,9 +21,8 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiType
-import com.intellij.psi.impl.source.PostprocessReformattingAspect
 import com.intellij.testFramework.fixtures.JavaCodeInsightTestFixture
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import com.intellij.util.VisibilityUtil
 import org.jetbrains.annotations.NotNull
 import org.jetbrains.annotations.Nullable
@@ -32,11 +31,10 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrExpres
 import org.jetbrains.plugins.groovy.refactoring.introduce.constant.GrIntroduceConstantHandler
 import org.jetbrains.plugins.groovy.refactoring.introduce.constant.GrIntroduceConstantSettings
 import org.jetbrains.plugins.groovy.util.TestUtils
-
 /**
  * @author Maxim.Medvedev
  */
-class IntroduceConstantTest extends LightCodeInsightFixtureTestCase {
+class IntroduceConstantTest extends LightJavaCodeInsightFixtureTestCase {
   @Override
   protected String getBasePath() {
     TestUtils.testDataPath + "refactoring/introduceConstant/"
@@ -107,9 +105,8 @@ class IntroduceConstantTest extends LightCodeInsightFixtureTestCase {
     def type = getType(useExplicitType, expression, variable, stringPart)
     final GrIntroduceConstantSettings settings = new MockIntroduceConstantSettings(targetClass, replaceAllOccurrences, type, modifier)
 
-    WriteCommandAction.runWriteCommandAction(null) {
+    WriteCommandAction.runWriteCommandAction(project) {
       handler.runRefactoring(context, settings)
-      PostprocessReformattingAspect.getInstance(project).doPostponedFormatting()
     }
     myFixture.checkResultByFile(getTestName(false) + "_after.groovy", true)
   }

@@ -6,9 +6,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-/**
- * @author nik
- */
 public abstract class ProjectStructureElement {
   protected final StructureConfigurableContext myContext;
 
@@ -16,6 +13,7 @@ public abstract class ProjectStructureElement {
     myContext = context;
   }
 
+  @NotNull
   public String getPresentableText() {
     return getTypeName() + " '" + getPresentableName() + "'";
   }

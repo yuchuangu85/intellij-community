@@ -1,6 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.source.resolve;
 
 import com.intellij.openapi.util.Key;
@@ -53,7 +51,7 @@ public class VariableResolverProcessor extends ConflictFilterProcessor implement
   }
 
   @Override
-  protected boolean stopAtFoundResult(JavaResolveResult cachedResult) {
+  protected boolean stopAtFoundResult(@NotNull JavaResolveResult cachedResult) {
     if (super.stopAtFoundResult(cachedResult)) {
       if (myPlaceFile instanceof JavaCodeFragment) {
         JavaCodeFragment.VisibilityChecker visibilityChecker = ((JavaCodeFragment)myPlaceFile).getVisibilityChecker();
@@ -74,7 +72,7 @@ public class VariableResolverProcessor extends ConflictFilterProcessor implement
   @Override
   public final void handleEvent(@NotNull PsiScopeProcessor.Event event, Object associated) {
     super.handleEvent(event, associated);
-    if(event == JavaScopeProcessorEvent.START_STATIC){
+    if (JavaScopeProcessorEvent.isEnteringStaticScope(event, associated)) {
       myStaticScopeFlag = true;
     }
     else if (JavaScopeProcessorEvent.SET_CURRENT_FILE_CONTEXT.equals(event)) {
@@ -92,7 +90,7 @@ public class VariableResolverProcessor extends ConflictFilterProcessor implement
 
 
   @Override
-  public boolean shouldProcess(DeclarationKind kind) {
+  public boolean shouldProcess(@NotNull DeclarationKind kind) {
     return kind == DeclarationKind.VARIABLE || kind == DeclarationKind.FIELD || kind == DeclarationKind.ENUM_CONST;
   }
 

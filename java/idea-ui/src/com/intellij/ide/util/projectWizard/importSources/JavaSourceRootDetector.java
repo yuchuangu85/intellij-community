@@ -26,17 +26,11 @@ import org.jetbrains.annotations.NotNull;
 import java.io.File;
 import java.util.List;
 
-/**
- * @author nik
- */
 public abstract class JavaSourceRootDetector extends ProjectStructureDetector {
   @NotNull
   @Override
-  public DirectoryProcessingResult detectRoots(@NotNull File dir, @NotNull File[] children, @NotNull File base,
+  public DirectoryProcessingResult detectRoots(@NotNull File dir, File @NotNull [] children, @NotNull File base,
                                                @NotNull List<DetectedProjectRoot> result) {
-    if (dir.getName().equals("node_modules")) {
-      return DirectoryProcessingResult.SKIP_CHILDREN;
-    }
     final String fileExtension = getFileExtension();
     if (JavaFileType.DEFAULT_EXTENSION.equals(fileExtension)) {
       for (File child : children) {

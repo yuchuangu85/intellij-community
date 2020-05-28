@@ -90,7 +90,7 @@ public class JavaPreviewHintProvider implements PreviewHintProvider {
                 if (o instanceof Integer) {
                   values[i] = ((Integer)o).intValue();
                   if (expressions.length != 1) {
-                    values[i] = values[i] > 255 ? 255 : values[i] < 0 ? 0 : values[i];
+                    values[i] = values[i] > 255 ? 255 : Math.max(values[i], 0);
                   }
 
                   i++;
@@ -161,7 +161,7 @@ public class JavaPreviewHintProvider implements PreviewHintProvider {
 
         if (psiElement instanceof PsiField) {
           if ("java.awt.Color".equals(((PsiField)psiElement).getContainingClass().getQualifiedName())) {
-            final String colorName = ((PsiField)psiElement).getName().toLowerCase().replace("_", "");
+            final String colorName = StringUtil.toLowerCase(((PsiField)psiElement).getName()).replace("_", "");
             final String hex = ColorMap.getHexCodeForColorName(colorName);
             return new ColorPreviewComponent(Color.decode("0x" + hex.substring(1)));
           }

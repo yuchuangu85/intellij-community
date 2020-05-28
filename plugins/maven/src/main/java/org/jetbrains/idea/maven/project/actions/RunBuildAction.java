@@ -24,7 +24,6 @@ import org.jetbrains.idea.maven.execution.MavenRunnerParameters;
 import org.jetbrains.idea.maven.model.MavenExplicitProfiles;
 import org.jetbrains.idea.maven.project.MavenProject;
 import org.jetbrains.idea.maven.project.MavenProjectsManager;
-import org.jetbrains.idea.maven.statistics.MavenActionsUsagesCollector;
 import org.jetbrains.idea.maven.utils.MavenDataKeys;
 import org.jetbrains.idea.maven.utils.actions.MavenAction;
 import org.jetbrains.idea.maven.utils.actions.MavenActionUtil;
@@ -39,7 +38,6 @@ public class RunBuildAction extends MavenAction {
 
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
-    MavenActionsUsagesCollector.trigger(e.getProject(), this, e);
     checkOrPerform(e.getDataContext(), true);
   }
 
@@ -48,14 +46,14 @@ public class RunBuildAction extends MavenAction {
     if (goals == null || goals.isEmpty()) return false;
 
     final Project project = MavenActionUtil.getProject(context);
-    if(project == null) return false;
+    if (project == null) return false;
     final MavenProject mavenProject = MavenActionUtil.getMavenProject(context);
     if (mavenProject == null) return false;
 
     if (!perform) return true;
 
     final MavenProjectsManager projectsManager = MavenActionUtil.getProjectsManager(context);
-    if(projectsManager == null) return false;
+    if (projectsManager == null) return false;
     MavenExplicitProfiles explicitProfiles = projectsManager.getExplicitProfiles();
     final MavenRunnerParameters params = new MavenRunnerParameters(true,
                                                                    mavenProject.getDirectory(),
@@ -63,7 +61,9 @@ public class RunBuildAction extends MavenAction {
                                                                    goals,
                                                                    explicitProfiles.getEnabledProfiles(),
                                                                    explicitProfiles.getDisabledProfiles());
+
     MavenRunConfigurationType.runConfiguration(project, params, null);
+
 
     return true;
   }

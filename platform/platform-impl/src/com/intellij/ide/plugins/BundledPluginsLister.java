@@ -1,91 +1,92 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.plugins;
 
 import com.google.gson.stream.JsonWriter;
-import com.intellij.openapi.application.ApplicationStarterEx;
-import com.intellij.openapi.vfs.CharsetToolkit;
+import com.intellij.openapi.application.ApplicationStarter;
+import com.intellij.openapi.extensions.PluginId;
+import com.intellij.openapi.fileTypes.FileNameMatcher;
+import com.intellij.openapi.fileTypes.FileType;
+import com.intellij.openapi.fileTypes.FileTypeManager;
+import com.intellij.openapi.fileTypes.PlainTextLikeFileType;
+import org.jetbrains.annotations.NotNull;
 
-import java.io.*;
-import java.util.Arrays;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
-/**
- * @author Ivan Chirkov
- */
-public class BundledPluginsLister extends ApplicationStarterEx {
-  @Override
-  public boolean isHeadless() {
-    return true;
-  }
-
+final class BundledPluginsLister implements ApplicationStarter {
   @Override
   public String getCommandName() {
     return "listBundledPlugins";
   }
 
   @Override
-  public void premain(String[] args) {
+  public int getRequiredModality() {
+    return NOT_IN_EDT;
   }
 
   @Override
-  public void main(String[] args) {
+  public void main(@NotNull List<String> args) {
     try {
-      OutputStream out;
-      if (args.length == 2) {
-        File outFile = new File(args[1]);
-        File parentFile = outFile.getParentFile();
-        if (parentFile != null) parentFile.mkdirs();
-        out = new FileOutputStream(outFile);
+      Writer out;
+      if (args.size() == 2) {
+        Path outFile = Paths.get(args.get(1));
+        Files.createDirectories(outFile.getParent());
+        out = Files.newBufferedWriter(outFile);
       }
       else {
-        out = System.out;
+        // noinspection UseOfSystemOutOrSystemErr,IOResourceOpenedButNotSafelyClosed
+        out = new OutputStreamWriter(System.out, StandardCharsets.UTF_8);
       }
 
-      try (JsonWriter writer = new JsonWriter(new OutputStreamWriter(out, CharsetToolkit.UTF8_CHARSET))) {
-        IdeaPluginDescriptor[] plugins = PluginManagerCore.getPlugins();
+      try (JsonWriter writer = new JsonWriter(out)) {
+        List<? extends IdeaPluginDescriptor> plugins = PluginManagerCore.getLoadedPlugins();
+        List<String> modules = new ArrayList<>();
+        List<String> pluginIds = new ArrayList<>(plugins.size());
+        for (IdeaPluginDescriptor plugin : plugins) {
+          pluginIds.add(plugin.getPluginId().getIdString());
 
-        List<String> modules = Arrays.stream(plugins)
-                                     .filter(IdeaPluginDescriptorImpl.class::isInstance)
-                                     .filter(plugin -> ((IdeaPluginDescriptorImpl)plugin).getModules() != null)
-                                     .flatMap(plugin -> ((IdeaPluginDescriptorImpl)plugin).getModules().stream())
-                                     .sorted()
-                                     .collect(Collectors.toList());
+          for (PluginId pluginId : ((IdeaPluginDescriptorImpl)plugin).getModules()) {
+            modules.add(pluginId.getIdString());
+          }
+        }
 
-        List<String> pluginIds = Arrays.stream(plugins)
-                                       .map(plugin -> plugin.getPluginId().getIdString())
-                                       .sorted()
-                                       .collect(Collectors.toList());
+        pluginIds.sort(null);
+        modules.sort(null);
+
+        FileTypeManager fileTypeManager = FileTypeManager.getInstance();
+        List<String> extensions = new ArrayList<>();
+        for (FileType type : fileTypeManager.getRegisteredFileTypes()) {
+          if (!(type instanceof PlainTextLikeFileType)) {
+            for (FileNameMatcher matcher : fileTypeManager.getAssociations(type)) {
+              extensions.add(matcher.getPresentableString());
+            }
+          }
+        }
 
         writer.beginObject();
         writeList(writer, "modules", modules);
         writeList(writer, "plugins", pluginIds);
+        writeList(writer, "extensions", extensions);
         writer.endObject();
       }
     }
     catch (IOException e) {
-      e.printStackTrace();
+      //noinspection UseOfSystemOutOrSystemErr
+      e.printStackTrace(System.err);
       System.exit(1);
     }
 
     System.exit(0);
   }
 
-  private static void writeList(JsonWriter writer, String name, List<String> elements) throws IOException {
+  private static void writeList(@NotNull JsonWriter writer, String name, @NotNull List<String> elements) throws IOException {
     writer.name(name).beginArray();
     for (String module : elements) {
       writer.value(module);

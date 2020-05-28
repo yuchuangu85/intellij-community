@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes.ui;
 
+import com.intellij.ide.util.treeView.FileNameComparator;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.UserDataHolderBase;
@@ -9,22 +10,23 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.FileStatus;
 import com.intellij.openapi.vcs.VcsBundle;
-import com.intellij.openapi.vcs.changes.Change;
-import com.intellij.openapi.vcs.changes.ChangeListOwner;
-import com.intellij.openapi.vcs.changes.LocallyDeletedChange;
-import com.intellij.openapi.vcs.changes.LogicalLock;
+import com.intellij.openapi.vcs.changes.*;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.newvfs.VfsPresentationUtil;
 import com.intellij.ui.ColoredTreeCellRenderer;
 import com.intellij.ui.SimpleTextAttributes;
+import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.Convertor;
 import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.PropertyKey;
 
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.MutableTreeNode;
 import javax.swing.tree.TreePath;
+import java.awt.*;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -48,9 +50,9 @@ public class ChangesBrowserNode<T> extends DefaultMutableTreeNode implements Use
   protected static final int DEFAULT_CHANGE_LIST_SORT_WEIGHT = 1;
   protected static final int CHANGE_LIST_SORT_WEIGHT = 2;
   protected static final int REPOSITORY_SORT_WEIGHT = 3;
-  protected static final int DIRECTORY_PATH_SORT_WEIGHT = 4;
-  protected static final int FILE_PATH_SORT_WEIGHT = 5;
-  protected static final int GENERIC_FILE_PATH_SORT_WEIGHT = 6;
+  protected static final int MODULE_SORT_WEIGHT = 4;
+  protected static final int DIRECTORY_PATH_SORT_WEIGHT = 5;
+  protected static final int FILE_PATH_SORT_WEIGHT = 6;
   protected static final int CHANGE_SORT_WEIGHT = 7;
   protected static final int VIRTUAL_FILE_SORT_WEIGHT = 8;
   protected static final int UNVERSIONED_SORT_WEIGHT = 9;
@@ -90,8 +92,13 @@ public class ChangesBrowserNode<T> extends DefaultMutableTreeNode implements Use
   }
 
   @NotNull
+  public static ChangesBrowserNode createFilePath(@NotNull FilePath userObject, @Nullable FileStatus status) {
+    return new ChangesBrowserFilePathNode(userObject, status);
+  }
+
+  @NotNull
   public static ChangesBrowserNode createFilePath(@NotNull FilePath userObject) {
-    return new ChangesBrowserFilePathNode(userObject);
+    return createFilePath(userObject, null);
   }
 
   @NotNull
@@ -107,11 +114,6 @@ public class ChangesBrowserNode<T> extends DefaultMutableTreeNode implements Use
   @NotNull
   public static ChangesBrowserNode createLocallyDeleted(@NotNull LocallyDeletedChange change) {
     return new ChangesBrowserLocallyDeletedNode(change);
-  }
-
-  @NotNull
-  public static ChangesBrowserNode createGeneric(@NotNull FilePath filePath, @NotNull FileStatus fileStatus, @NotNull Object userObject) {
-    return new ChangesBrowserGenericNode(filePath, fileStatus, userObject);
   }
 
   @NotNull
@@ -215,7 +217,7 @@ public class ChangesBrowserNode<T> extends DefaultMutableTreeNode implements Use
   }
 
   @NotNull
-  public Stream<ChangesBrowserNode> getNodesUnderStream() {
+  public Stream<ChangesBrowserNode<?>> getNodesUnderStream() {
     return toStream(preorderEnumeration());
   }
 
@@ -263,13 +265,13 @@ public class ChangesBrowserNode<T> extends DefaultMutableTreeNode implements Use
   }
 
   @NotNull
-  private static StreamEx<ChangesBrowserNode> toStream(@NotNull Enumeration enumeration) {
+  private static StreamEx<ChangesBrowserNode<?>> toStream(@NotNull Enumeration enumeration) {
     //noinspection unchecked
     return StreamEx.<ChangesBrowserNode>of(enumeration);
   }
 
   public void render(@NotNull ChangesBrowserNodeRenderer renderer, boolean selected, boolean expanded, boolean hasFocus) {
-    renderer.append(userObject.toString(), myAttributes);
+    renderer.append(getTextPresentation(), myAttributes);
     appendCount(renderer);
   }
 
@@ -327,6 +329,14 @@ public class ChangesBrowserNode<T> extends DefaultMutableTreeNode implements Use
     return 0;
   }
 
+  protected static int compareFileNames(@NotNull String name1, @NotNull String name2) {
+    return FileNameComparator.INSTANCE.compare(name1, name2);
+  }
+
+  public static int compareFilePaths(@NotNull FilePath path1, @NotNull FilePath path2) {
+    return ChangesComparator.getFilePathComparator(true).compare(path1, path2);
+  }
+
   public void setAttributes(@NotNull SimpleTextAttributes attributes) {
     myAttributes = attributes;
   }
@@ -353,15 +363,49 @@ public class ChangesBrowserNode<T> extends DefaultMutableTreeNode implements Use
                     SimpleTextAttributes.GRAYED_ATTRIBUTES);
   }
 
+  @Nullable
+  public Color getBackgroundColor(@NotNull Project project) {
+    return getBackgroundColorFor(project, getUserObject());
+  }
+
+  @Nullable
+  protected static Color getBackgroundColorFor(@NotNull Project project, @Nullable Object object) {
+    VirtualFile file;
+    if (object instanceof FilePath) {
+      file = getScopeVirtualFileFor((FilePath)object);
+    }
+    else if (object instanceof Change) {
+      file = getScopeVirtualFileFor(ChangesUtil.getFilePath((Change)object));
+    }
+    else {
+      file = ObjectUtils.tryCast(object, VirtualFile.class);
+    }
+
+    if (file != null) {
+      return VfsPresentationUtil.getFileBackgroundColor(project, file);
+    }
+    return null;
+  }
+
+  @Nullable
+  private static VirtualFile getScopeVirtualFileFor(@NotNull FilePath filePath) {
+    if (filePath.isNonLocal()) return null;
+    return ChangesUtil.findValidParentAccurately(filePath);
+  }
+
   @Deprecated
   public final int getCount() {
     return getFileCount();
   }
 
-  private static class Tag {
-    @NotNull private final String myKey;
+  public boolean shouldExpandByDefault() {
+    return true;
+  }
 
-    Tag(@NotNull String key) {
+  private static class Tag {
+    @PropertyKey(resourceBundle = VcsBundle.BUNDLE) @NotNull private final String myKey;
+
+    Tag(@PropertyKey(resourceBundle = VcsBundle.BUNDLE) @NotNull String key) {
       myKey = key;
     }
 

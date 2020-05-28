@@ -1,4 +1,4 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.internal.daemon
 
 import com.intellij.openapi.application.PathManager
@@ -22,10 +22,10 @@ import java.lang.reflect.Method
 /**
  * @author Vladislav.Soroka
  */
-@ApiStatus.Experimental
+@ApiStatus.Internal
 @CompileStatic
 class GradleDaemonServices {
-  private static final Logger LOG = Logger.getInstance(GradleDaemonServices.class);
+  private static final Logger LOG = Logger.getInstance(GradleDaemonServices.class)
 
   static void stopDaemons() {
     Map<ClassPath, ConsumerConnection> connections = getConnections()
@@ -154,7 +154,7 @@ class GradleDaemonServices {
   }
 
   @CompileStatic(TypeCheckingMode.SKIP)
-  private static Object runAction(ConsumerConnection connection, actionClass, Object arg) {
+  private static Object runAction(ConsumerConnection connection, Class actionClass, Object arg) {
     try {
       def daemonClientFactory = connection.delegate.delegate.connection.daemonClientFactory
       runAction(daemonClientFactory, connection, actionClass, arg)

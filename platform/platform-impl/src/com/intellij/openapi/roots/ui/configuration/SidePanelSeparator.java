@@ -1,11 +1,10 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.roots.ui.configuration;
 
 import com.intellij.openapi.ui.GraphicsConfig;
 import com.intellij.ui.ColorUtil;
-import com.intellij.ui.Gray;
-import com.intellij.ui.JBColor;
 import com.intellij.ui.SeparatorWithText;
+import com.intellij.ui.paint.LinePainter2D;
 import com.intellij.util.ui.GraphicsUtil;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
@@ -24,12 +23,12 @@ public class SidePanelSeparator extends SeparatorWithText {
     if ("--".equals(getCaption())) {
       final GraphicsConfig config = GraphicsUtil.setupAAPainting(g);
       final int h = getHeight() / 2;
-      UIUtil.drawLine(g, 30, h, getWidth() - 30, h);
+      LinePainter2D.paint((Graphics2D)g, 30, h, getWidth() - 30, h);
       ((Graphics2D)g).setPaint(new GradientPaint(5, h, ColorUtil.toAlpha(separatorColor, 0), 30, h, separatorColor));
-      UIUtil.drawLine(g, 5, h, 30, h);
+      LinePainter2D.paint((Graphics2D)g, 5, h, 30, h);
       ((Graphics2D)g).setPaint(
         new GradientPaint(getWidth() - 5, h, ColorUtil.toAlpha(separatorColor, 0), getWidth() - 30, h, separatorColor));
-      UIUtil.drawLine(g, getWidth() - 5, h, getWidth() - 30, h);
+      LinePainter2D.paint((Graphics2D)g, getWidth() - 5, h, getWidth() - 30, h);
       config.restore();
       return;
     }
@@ -43,9 +42,7 @@ public class SidePanelSeparator extends SeparatorWithText {
                            LEFT,
                            viewR, iconR, textR, 0);
     GraphicsUtil.setupAAPainting(g);
-    g.setColor(new JBColor(Gray._255.withAlpha(80), Gray._0.withAlpha(80)));
-    g.drawString(s, textR.x + 10, textR.y + 1 + g.getFontMetrics().getAscent());
-    g.setColor(new JBColor(new Color(0x5F6D7B), Gray._120));
+    g.setColor(UIUtil.getListForeground());
     g.drawString(s, textR.x + 10, textR.y + g.getFontMetrics().getAscent());
   }
 }

@@ -31,7 +31,6 @@ import org.jetbrains.jps.model.library.sdk.JpsSdkType;
 import org.jetbrains.jps.model.module.*;
 import org.jetbrains.jps.model.serialization.JpsModelSerializerExtension;
 import org.jetbrains.jps.model.serialization.impl.JpsSerializationFormatException;
-import org.jetbrains.jps.model.serialization.java.JpsJavaModelSerializerExtension;
 import org.jetbrains.jps.model.serialization.library.JpsLibraryTableSerializer;
 import org.jetbrains.jps.model.serialization.library.JpsSdkTableSerializer;
 
@@ -41,9 +40,6 @@ import java.util.List;
 
 import static com.intellij.openapi.util.JDOMUtil.getChildren;
 
-/**
- * @author nik
- */
 public class JpsModuleRootModelSerializer {
   private static final Logger LOG = Logger.getInstance(JpsModuleRootModelSerializer.class);
   public static final String URL_ATTRIBUTE = "url";
@@ -68,7 +64,7 @@ public class JpsModuleRootModelSerializer {
   public static final String MODULE_LIBRARY_TYPE = "module-library";
   public static final String MODULE_TYPE = "module";
   public static final String MODULE_NAME_ATTRIBUTE = "module-name";
-  private static final String SOURCE_ROOT_TYPE_ATTRIBUTE = "type";
+  public static final String SOURCE_ROOT_TYPE_ATTRIBUTE = "type";
   public static final String JAVA_SOURCE_ROOT_TYPE_ID = "java-source";
   public static final String JAVA_TEST_ROOT_TYPE_ID = "java-test";
   private static final String GENERATED_LIBRARY_NAME_PREFIX = "#";
@@ -182,7 +178,7 @@ public class JpsModuleRootModelSerializer {
   private static JpsModuleSourceRootPropertiesSerializer<?> getSourceRootPropertiesSerializer(@NotNull Element sourceElement) {
     String typeAttribute = sourceElement.getAttributeValue(SOURCE_ROOT_TYPE_ATTRIBUTE);
     if (typeAttribute == null) {
-      typeAttribute = Boolean.parseBoolean(sourceElement.getAttributeValue(IS_TEST_SOURCE_ATTRIBUTE)) ? JAVA_TEST_ROOT_TYPE_ID : JAVA_SOURCE_ROOT_TYPE_ID;
+      typeAttribute = Boolean.parseBoolean(sourceElement.getAttributeValue(IS_TEST_SOURCE_ATTRIBUTE))? JAVA_TEST_ROOT_TYPE_ID : JAVA_SOURCE_ROOT_TYPE_ID;
     }
     for (JpsModelSerializerExtension extension : JpsModelSerializerExtension.getExtensions()) {
       for (JpsModuleSourceRootPropertiesSerializer<?> serializer : extension.getModuleSourceRootPropertiesSerializers()) {
@@ -192,10 +188,14 @@ public class JpsModuleRootModelSerializer {
       }
     }
     LOG.warn("Unknown module source root type " + typeAttribute);
-    return JpsJavaModelSerializerExtension.JAVA_SOURCE_ROOT_PROPERTIES_SERIALIZER;
+    return UnknownSourceRootPropertiesSerializer.forType(UnknownSourceRootType.getInstance(typeAttribute));
   }
 
   public static void saveRootModel(JpsModule module, Element rootModelElement) {
+    for (JpsModelSerializerExtension extension : JpsModelSerializerExtension.getExtensions()) {
+      extension.saveRootModel(module, rootModelElement);
+    }
+
     List<JpsModuleSourceRoot> sourceRoots = module.getSourceRoots();
     List<String> excludedUrls = getSortedList(module.getExcludeRootsList().getUrls());
     for (String url : getSortedList(module.getContentRootsList().getUrls())) {
@@ -266,10 +266,6 @@ public class JpsModuleRootModelSerializer {
         rootModelElement.addContent(element);
       }
     }
-
-    for (JpsModelSerializerExtension extension : JpsModelSerializerExtension.getExtensions()) {
-      extension.saveRootModel(module, rootModelElement);
-    }
   }
 
   public static <P extends JpsElement> void saveSourceRoot(@NotNull Element contentElement,
@@ -290,6 +286,9 @@ public class JpsModuleRootModelSerializer {
 
   @Nullable
   private static <P extends JpsElement> JpsModuleSourceRootPropertiesSerializer<P> getSerializer(JpsModuleSourceRootType<P> type) {
+    if (type instanceof UnknownSourceRootType) {
+      return (JpsModuleSourceRootPropertiesSerializer<P>)UnknownSourceRootPropertiesSerializer.forType((UnknownSourceRootType)type);
+    }
     for (JpsModelSerializerExtension extension : JpsModelSerializerExtension.getExtensions()) {
       for (JpsModuleSourceRootPropertiesSerializer<?> serializer : extension.getModuleSourceRootPropertiesSerializers()) {
         if (serializer.getType().equals(type)) {

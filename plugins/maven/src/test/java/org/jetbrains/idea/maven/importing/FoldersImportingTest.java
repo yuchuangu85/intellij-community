@@ -15,9 +15,14 @@
  */
 package org.jetbrains.idea.maven.importing;
 
+import com.intellij.execution.CommonProgramRunConfigurationParameters;
+import com.intellij.execution.util.ProgramParametersUtil;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.externalSystem.service.project.IdeModifiableModelsProviderImpl;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.maven.MavenCustomRepositoryHelper;
 import org.jetbrains.idea.maven.MavenImportingTestCase;
 import org.jetbrains.idea.maven.project.MavenImportingSettings;
@@ -28,6 +33,8 @@ import org.jetbrains.jps.model.java.JavaSourceRootType;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class FoldersImportingTest extends MavenImportingTestCase {
 
@@ -98,9 +105,9 @@ public class FoldersImportingTest extends MavenImportingTestCase {
                   "<version>1</version>");
 
     ApplicationManager.getApplication().runWriteAction(() -> {
-      MavenRootModelAdapter adapter = new MavenRootModelAdapter(myProjectsTree.findProject(myProjectPom),
+      MavenRootModelAdapter adapter = new MavenRootModelAdapter(new MavenRootModelAdapterLegacyImpl(myProjectsTree.findProject(myProjectPom),
                                                                 getModule("project"),
-                                                                new IdeModifiableModelsProviderImpl(myProject));
+                                                                new IdeModifiableModelsProviderImpl(myProject)));
       adapter.addSourceFolder(dir1.getPath(), JavaSourceRootType.SOURCE);
       adapter.addExcludedFolder(dir2.getPath());
       adapter.getRootModel().commit();
@@ -511,6 +518,133 @@ public class FoldersImportingTest extends MavenImportingTestCase {
     resolveFoldersAndImport();
     assertSources("m1", "src/foo", "src/main/java");
     assertResources("m1", "src/main/resources");
+  }
+
+  public void testPluginExtraFilesInMultipleExecutions() {
+    createStdProjectFolders();
+    createProjectSubDirs("src1", "src2");
+    createProjectSubDirs("resources1", "resources2");
+    createProjectSubDirs("test1", "test2");
+    createProjectSubDirs("test-resources1", "test-resources2");
+
+    importProject("<groupId>test</groupId>" +
+                  "<artifactId>project</artifactId>" +
+                  "<version>1</version>" +
+
+                  "<build>" +
+                  "  <plugins>" +
+                  "    <plugin>" +
+                  "      <groupId>org.codehaus.mojo</groupId>" +
+                  "      <artifactId>build-helper-maven-plugin</artifactId>" +
+                  "      <version>1.3</version>" +
+                  "      <executions>" +
+                  "        <execution>" +
+                  "          <id>add-src1</id>" +
+                  "          <phase>generate-sources</phase>" +
+                  "          <goals>" +
+                  "            <goal>add-source</goal>" +
+                  "          </goals>" +
+                  "          <configuration>" +
+                  "            <sources>" +
+                  "              <source>${basedir}/src1</source>" +
+                  "            </sources>" +
+                  "          </configuration>" +
+                  "        </execution>" +
+                  "        <execution>" +
+                  "          <id>add-src2</id>" +
+                  "          <phase>generate-sources</phase>" +
+                  "          <goals>" +
+                  "            <goal>add-source</goal>" +
+                  "          </goals>" +
+                  "          <configuration>" +
+                  "            <sources>" +
+                  "              <source>${basedir}/src2</source>" +
+                  "            </sources>" +
+                  "          </configuration>" +
+                  "        </execution>" +
+                  "        <execution>" +
+                  "          <id>add-resources1</id>" +
+                  "          <phase>generate-sources</phase>" +
+                  "          <goals>" +
+                  "            <goal>add-resource</goal>" +
+                  "          </goals>" +
+                  "          <configuration>" +
+                  "            <resources>" +
+                  "              <resource><directory>${basedir}/resources1</directory></resource>" +
+                  "            </resources>" +
+                  "          </configuration>" +
+                  "        </execution>" +
+                  "        <execution>" +
+                  "          <id>add-resources2</id>" +
+                  "          <phase>generate-sources</phase>" +
+                  "          <goals>" +
+                  "            <goal>add-resource</goal>" +
+                  "          </goals>" +
+                  "          <configuration>" +
+                  "            <resources>" +
+                  "              <resource><directory>${basedir}/resources2</directory></resource>" +
+                  "            </resources>" +
+                  "          </configuration>" +
+                  "        </execution>" +
+                  "        <execution>" +
+                  "          <id>add-test1</id>" +
+                  "          <phase>generate-sources</phase>" +
+                  "          <goals>" +
+                  "            <goal>add-test-source</goal>" +
+                  "          </goals>" +
+                  "          <configuration>" +
+                  "            <sources>" +
+                  "              <source>${basedir}/test1</source>" +
+                  "            </sources>" +
+                  "          </configuration>" +
+                  "        </execution>" +
+                  "        <execution>" +
+                  "          <id>add-test2</id>" +
+                  "          <phase>generate-sources</phase>" +
+                  "          <goals>" +
+                  "            <goal>add-test-source</goal>" +
+                  "          </goals>" +
+                  "          <configuration>" +
+                  "            <sources>" +
+                  "              <source>${basedir}/test2</source>" +
+                  "            </sources>" +
+                  "          </configuration>" +
+                  "        </execution>" +
+                  "        <execution>" +
+                  "          <id>add-test-resources1</id>" +
+                  "          <phase>generate-sources</phase>" +
+                  "          <goals>" +
+                  "            <goal>add-test-resource</goal>" +
+                  "          </goals>" +
+                  "          <configuration>" +
+                  "            <resources>" +
+                  "              <resource><directory>${basedir}/test-resources1</directory></resource>" +
+                  "            </resources>" +
+                  "          </configuration>" +
+                  "        </execution>" +
+                  "        <execution>" +
+                  "          <id>add-test-resources2</id>" +
+                  "          <phase>generate-sources</phase>" +
+                  "          <goals>" +
+                  "            <goal>add-test-resource</goal>" +
+                  "          </goals>" +
+                  "          <configuration>" +
+                  "            <resources>" +
+                  "              <resource><directory>${basedir}/test-resources2</directory></resource>" +
+                  "            </resources>" +
+                  "          </configuration>" +
+                  "        </execution>" +
+                  "      </executions>" +
+                  "    </plugin>" +
+                  "  </plugins>" +
+                  "</build>");
+    resolveFoldersAndImport();
+    assertModules("project");
+
+    assertSources("project", "src/main/java", "src1", "src2");
+    assertResources("project", "resources1", "resources2", "src/main/resources");
+    assertTestSources("project", "src/test/java", "test1", "test2");
+    assertTestResources("project", "src/test/resources", "test-resources1", "test-resources2");
   }
 
   public void testDownloadingNecessaryPlugins() throws Exception {
@@ -1203,7 +1337,102 @@ public class FoldersImportingTest extends MavenImportingTestCase {
     assertTestResources("project", "src/test/resources");
   }
 
-  private void createProjectSubDirsWithFile(String ... dirs) throws IOException {
+
+  public void testModuleWorkingDirWithMultiplyContentRoots() {
+    createProjectPom("<groupId>test</groupId>" +
+                     "<artifactId>project</artifactId>" +
+                     "<packaging>pom</packaging>" +
+                     "<version>1</version>" +
+
+                     "<modules>" +
+                     "  <module>AA</module>" +
+                     "  <module>BB</module>" +
+                     "</modules>");
+    createModulePom("AA", "<parent>" +
+                          "        <artifactId>project</artifactId>" +
+                          "        <groupId>test</groupId>" +
+                          "        <version>1</version>" +
+                          "    </parent>" +
+                          "<artifactId>AA</artifactId>");
+
+    VirtualFile pomBB = createModulePom("BB", "<parent>" +
+                                           "        <artifactId>project</artifactId>" +
+                                           "        <groupId>test</groupId>" +
+                                           "        <version>1</version>" +
+                                           "    </parent>" +
+                                           "<artifactId>BB</artifactId>" +
+                                           " <build>" +
+                                           "        <testResources>" +
+                                           "            <testResource>" +
+                                           "                <targetPath>${project.build.testOutputDirectory}</targetPath>" +
+                                           "                <directory>" +
+                                           "                    ${project.basedir}/src/test/resources" +
+                                           "                </directory>" +
+                                           "            </testResource>" +
+                                           "            <testResource>" +
+                                           "                <targetPath>${project.build.testOutputDirectory}</targetPath>" +
+                                           "                <directory>" +
+                                           "                     ${project.basedir}/../AA/src/test/resources" +
+                                           "                </directory>" +
+                                           "            </testResource>" +
+                                           "" +
+                                           "        </testResources>" +
+                                           "    </build>"
+    );
+    createProjectSubDirs("AA/src/test/resources");
+    createProjectSubDirs("BB/src/test/resources");
+    importProject();
+    CommonProgramRunConfigurationParameters parameters = new CommonProgramRunConfigurationParameters() {
+      @Override
+      public Project getProject() {
+        return myProject;
+      }
+
+      @Override
+      public void setProgramParameters(@Nullable String value) {
+
+      }
+
+      @Override
+      public @Nullable String getProgramParameters() {
+        return null;
+      }
+
+      @Override
+      public void setWorkingDirectory(@Nullable String value) {
+      }
+
+      @Override
+      public @Nullable String getWorkingDirectory() {
+        return "$MODULE_WORKING_DIR$";
+      }
+
+      @Override
+      public void setEnvs(@NotNull Map<String, String> envs) {
+
+      }
+
+      @Override
+      public @NotNull Map<String, String> getEnvs() {
+        return new HashMap<>();
+      }
+
+      @Override
+      public void setPassParentEnvs(boolean passParentEnvs) {
+
+      }
+
+      @Override
+      public boolean isPassParentEnvs() {
+        return false;
+      }
+    };
+    assertModules("project", "AA", "BB");
+    String workingDir = ProgramParametersUtil.getWorkingDir(parameters, myProject, getModule("BB"));
+    assertEquals(pomBB.getCanonicalFile().getParent().getPath(), workingDir);
+  }
+
+  private void createProjectSubDirsWithFile(String... dirs) throws IOException {
     for (String dir : dirs) {
       createProjectSubFile(dir + "/a.txt");
     }

@@ -20,9 +20,9 @@ import com.intellij.codeInspection.deadCode.UnusedDeclarationInspection
 import com.intellij.codeInspection.ex.EntryPointsManagerBase
 import com.intellij.codeInspection.ex.InspectionManagerEx
 import com.intellij.codeInspection.reference.RefClass
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 
-class UnusedDeclarationClassPatternsTest : LightCodeInsightFixtureTestCase() {
+class UnusedDeclarationClassPatternsTest : LightJavaCodeInsightFixtureTestCase() {
 
   fun testClassPattern() {
     val unusedDeclarationInspection = UnusedDeclarationInspection(true)
@@ -93,7 +93,7 @@ class UnusedDeclarationClassPatternsTest : LightCodeInsightFixtureTestCase() {
   fun testAddEntryPoint() {
     val aClass = myFixture.addClass("public class Foo {}")
     val entryPointsManager = EntryPointsManagerBase.getInstance(project)
-    val context = (InspectionManager.getInstance(project) as InspectionManagerEx).createNewGlobalContext(false)
+    val context = (InspectionManager.getInstance(project) as InspectionManagerEx).createNewGlobalContext()
     try {
       val refClass = context.refManager.getReference(aClass)
       assertNotNull(refClass)
@@ -122,7 +122,7 @@ class UnusedDeclarationClassPatternsTest : LightCodeInsightFixtureTestCase() {
   fun testAddRemoveMethodEntryPoint() {
     val aClass = myFixture.addClass("public class Foo {void foo(){}}")
     val entryPointsManager = EntryPointsManagerBase.getInstance(project)
-    val context = (InspectionManager.getInstance(project) as InspectionManagerEx).createNewGlobalContext(false)
+    val context = (InspectionManager.getInstance(project) as InspectionManagerEx).createNewGlobalContext()
     try {
       val refMethod = context.refManager.getReference(aClass.methods[0])
       assertNotNull(refMethod)

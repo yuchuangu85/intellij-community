@@ -59,9 +59,9 @@ public interface VcsLog {
    * Details are loaded in background. If a progress indicator is specified it is used during loading process.
    * After all details are loaded they are provided to the consumer in the EDT.
    *
-   * @param consumer  called in EDT after all details are loaded.
+   * @param consumer called in EDT after all details are loaded.
    */
-  void requestSelectedDetails(@NotNull Consumer<List<VcsFullCommitDetails>> consumer);
+  void requestSelectedDetails(@NotNull Consumer<? super List<VcsFullCommitDetails>> consumer);
 
   /**
    * Returns names of branches which contain the given commit, or null if this information is unavailable yet.

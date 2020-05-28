@@ -24,6 +24,7 @@ import com.intellij.testFramework.PlatformTestUtil;
 import com.jetbrains.python.codeInsight.PyCodeInsightSettings;
 import com.jetbrains.python.documentation.docstrings.DocStringFormat;
 import com.jetbrains.python.fixtures.PyTestCase;
+import com.jetbrains.python.formatter.PyCodeStyleSettings;
 import com.jetbrains.python.psi.LanguageLevel;
 import org.jetbrains.annotations.NotNull;
 
@@ -91,12 +92,41 @@ public class PyEditingTest extends PyTestCase {
   }
 
   // PY-18972
-  public void testFStringQuotes() {
+  public void testFStringAutomaticallyInsertedClosingQuotes() {
     assertEquals("f''", doTestTyping("f", 1, '\''));
     assertEquals("rf''", doTestTyping("rf", 2, '\''));
     assertEquals("fr''", doTestTyping("fr", 2, '\''));
-    assertEquals("fr''''''", doTestTyping("fr''", 4, '\''));
+    assertEquals("fr''''''", doTestTyping("fr''", 4, "'"));
     assertEquals("fr''''''", doTestTyping("fr''", 3, "''"));
+  }
+
+  // PY-32872
+  public void testClosingQuotesCompletionForTripleQuotedFString() {
+    assertEquals("f''''''\n", doTestTyping("f''\n", 3, "'"));
+  }
+
+  // PY-33901
+  public void testFStringManuallyInsertedClosingQuotes() {
+    assertEquals("f'foo'", doTestTyping("f'foo", 5, "'"));
+    assertEquals("f'''foo'''", doTestTyping("f'''foo''", 9, "'"));
+  }
+
+  // PY-35434
+  public void testFStringQuoteInTextPartNotDuplicated() {
+    assertEquals("f'\"]'", doTestTyping("f']'", 2, '"'));
+    assertEquals("f'\" '", doTestTyping("f' '", 2, '"'));
+    assertEquals("f'''foo\" '''", doTestTyping("f'''foo '''", 7, '"'));
+    assertEquals("f'''foo\"\n'''", doTestTyping("f'''foo\n'''", 7, '"'));
+  }
+
+  // PY-35461
+  public void testFStringAutomaticClosingQuotesRemoval() {
+    doTestBackspace("f'<caret>'", "f");
+    doTestBackspace("f'''<caret>'''", "f");
+  }
+
+  public void testNoClosingQuotesAfterTripleQuotesInsideTripleQuotedFString() {
+    assertEquals("f'''\"\"\"@'''", doTestTyping("f'''\"\"@'''", 6, "\""));
   }
 
   public void testFStringFragmentBraces() {
@@ -117,7 +147,25 @@ public class PyEditingTest extends PyTestCase {
 
   public void testEnterInFStringTextPart() {
     doTestEnter("f'foo<caret>bar'", "f'foo' \\\n" +
-                                    "    f'bar'");
+                                    "f'bar'");
+  }
+
+  // PY-31984
+  public void testEnterInFStringRightBeforeFragment() {
+    doTestEnter("f'foo<caret>{42}bar'", "f'foo' \\\n" +
+                                        "f'{42}bar'");
+  }
+
+  // PY-32918
+  public void testEnterInFStringRightBeforeClosingQuote() {
+    doTestEnter("(f'foo{42}bar<caret>')", "(f'foo{42}bar'\n" +
+                                          " f'')");
+  }
+
+  // PY-32873
+  public void testEnterInTripleQuotedFStringRightBeforeClosingQuotes() {
+    doTestEnter("f\"\"\"<caret>\"\"\"", "f\"\"\"\n" +
+                                        "<caret>\"\"\"");
   }
 
   public void testOvertypeFromInside() {
@@ -149,6 +197,12 @@ public class PyEditingTest extends PyTestCase {
     myFixture.getEditor().getCaretModel().moveToLogicalPosition(pos);
     pressButton(IdeActions.ACTION_EDITOR_BACKSPACE);
     myFixture.checkResultByFile("/editing/" + fileName + ".after.py", true);
+  }
+
+  private void doTestBackspace(final String before, final String after) {
+    myFixture.configureByText(PythonFileType.INSTANCE, before);
+    pressButton(IdeActions.ACTION_EDITOR_BACKSPACE);
+    myFixture.checkResult(after);
   }
 
   public void testUncommentWithSpace() {   // PY-980
@@ -551,6 +605,12 @@ public class PyEditingTest extends PyTestCase {
     return myFixture.getDocument(file).getText();
   }
 
+  private void doTestTyping(@NotNull String before, @NotNull String typedText, @NotNull String after) {
+    myFixture.configureByText("a.py", before);
+    myFixture.type(typedText);
+    myFixture.checkResult(after);
+  }
+
   private void doTypingTest(final char character) {
     final String testName = "editing/" + getTestName(true);
     myFixture.configureByFile(testName + ".py");
@@ -733,5 +793,53 @@ public class PyEditingTest extends PyTestCase {
     finally {
       CodeInsightSettings.getInstance().TAB_EXITS_BRACKETS_AND_QUOTES = savedValue;
     }
+  }
+
+  // PY-31343
+  public void testInsertingColonRightBeforeParametersClosingParenthesisAtMultipleCarets() {
+    doTestTyping("def alpha(foo<caret>):\n" +
+                 "    pass\n" +
+                 "\n" +
+                 "def bravo(foo<caret>):\n" +
+                 "    pass",
+                 ":",
+                 "def alpha(foo:):\n" +
+                 "    pass\n" +
+                 "\n" +
+                 "def bravo(foo:):\n" +
+                 "    pass");
+  }
+
+  public void testOverTypingColon() {
+    doTestTyping("def func()<caret>: pass",
+                 ":",
+                 "def func():<caret> pass");
+  }
+
+  public void testOverTypingColonInStringLiteral() {
+    doTestTyping("s = 'def func()<caret>: pass'",
+                 ":",
+                 "s = 'def func():<caret>: pass'");
+  }
+
+  public void testOverTypingColonInFStringFragment() {
+    runWithLanguageLevel(LanguageLevel.getLatest(), () -> {
+      doTestTyping("s = f'{(lambda<caret>: 42)}'",
+                   ":",
+                   "s = f'{(lambda:<caret> 42)}'");
+    });
+  }
+
+  public void testOverTypingFormatStartInFStringFragment() {
+    runWithLanguageLevel(LanguageLevel.getLatest(), () -> {
+      doTestTyping("s = f'{42<caret>:3d}'",
+                   ":",
+                   "s = f'{42:<caret>:3d}'");
+    });
+  }
+
+  @NotNull
+  private PyCodeStyleSettings getPythonCodeStyleSettings() {
+    return getCodeStyleSettings().getCustomSettings(PyCodeStyleSettings.class);
   }
 }

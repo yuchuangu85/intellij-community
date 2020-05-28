@@ -35,7 +35,7 @@ import java.util.List;
  * @author Dmitry Avdeev
  */
 public class OpenTaskDialog extends DialogWrapper {
-  private final static Logger LOG = Logger.getInstance("#com.intellij.tasks.actions.SimpleOpenTaskDialog");
+  private final static Logger LOG = Logger.getInstance(OpenTaskDialog.class);
   private static final String UPDATE_STATE_ENABLED = "tasks.open.task.update.state.enabled";
 
   private JPanel myPanel;
@@ -137,13 +137,13 @@ public class OpenTaskDialog extends DialogWrapper {
         }
       }
     }
-    taskManager.activateTask(myTask, isClearContext());
-    if (myTask.getType() == TaskType.EXCEPTION && AnalyzeTaskStacktraceAction.hasTexts(myTask)) {
-      AnalyzeTaskStacktraceAction.analyzeStacktrace(myTask, myProject);
-    }
 
     for (TaskDialogPanel panel : myPanels) {
       panel.commit();
+    }
+    taskManager.activateTask(myTask, isClearContext(), true);
+    if (myTask.getType() == TaskType.EXCEPTION && AnalyzeTaskStacktraceAction.hasTexts(myTask)) {
+      AnalyzeTaskStacktraceAction.analyzeStacktrace(myTask, myProject);
     }
   }
 
@@ -159,14 +159,14 @@ public class OpenTaskDialog extends DialogWrapper {
 
   @Override
   public JComponent getPreferredFocusedComponent() {
+    if (myNameField.getText().trim().isEmpty()) {
+      return myNameField;
+    }
     for (TaskDialogPanel panel : myPanels) {
       final JComponent component = panel.getPreferredFocusedComponent();
       if (component != null) {
         return component;
       }
-    }
-    if (myNameField.getText().trim().isEmpty()) {
-      return myNameField;
     }
     if (myTaskStateCombo.isVisible() && myTaskStateCombo.isEnabled()){
       return myTaskStateCombo.getComboBox();

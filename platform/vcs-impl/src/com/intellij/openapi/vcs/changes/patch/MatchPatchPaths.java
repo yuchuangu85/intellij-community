@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes.patch;
 
 import com.intellij.openapi.application.ReadAction;
@@ -27,7 +13,7 @@ import com.intellij.openapi.vcs.changes.shelf.ShelvedBinaryFilePatch;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
 import org.jetbrains.annotations.NotNull;
@@ -85,7 +71,7 @@ public class MatchPatchPaths {
   }
 
   private void workWithNotExisting(@NotNull PatchBaseDirectoryDetector directoryDetector,
-                                   @NotNull List<FilePatch> newOrWithoutMatches,
+                                   @NotNull List<? extends FilePatch> newOrWithoutMatches,
                                    @NotNull MultiMap<VirtualFile, AbstractFilePatchInProgress> result) {
     for (FilePatch patch : newOrWithoutMatches) {
       String afterName = patch.getAfterName();
@@ -131,7 +117,7 @@ public class MatchPatchPaths {
            match.score == best.score && myBaseDir.equals(match.file);
   }
 
-  private static void selectByContextOrByStrip(@NotNull List<PatchAndVariants> candidates,
+  private static void selectByContextOrByStrip(@NotNull List<? extends PatchAndVariants> candidates,
                                                @NotNull MultiMap<VirtualFile, AbstractFilePatchInProgress> result) {
     for (final PatchAndVariants candidate : candidates) {
       candidate.findAndAddBestVariant(result);
@@ -168,7 +154,7 @@ public class MatchPatchPaths {
 
   private void findCandidates(@NotNull List<? extends FilePatch> list,
                               @NotNull final PatchBaseDirectoryDetector directoryDetector,
-                              @NotNull List<PatchAndVariants> candidates, @NotNull List<FilePatch> newOrWithoutMatches) {
+                              @NotNull List<? super PatchAndVariants> candidates, @NotNull List<? super FilePatch> newOrWithoutMatches) {
     for (final FilePatch patch : list) {
       final String fileName = patch.getBeforeFileName();
       if (patch.isNewFile() || (patch.getBeforeName() == null)) {
@@ -207,7 +193,7 @@ public class MatchPatchPaths {
   }
 
   private static void putSelected(@NotNull MultiMap<VirtualFile, AbstractFilePatchInProgress> result,
-                                  @NotNull final List<AbstractFilePatchInProgress> variants,
+                                  @NotNull final List<? extends AbstractFilePatchInProgress> variants,
                                   @NotNull AbstractFilePatchInProgress patchInProgress) {
     patchInProgress.setAutoBases(mapNotNull(variants, AbstractFilePatchInProgress::getBase));
     result.putValue(patchInProgress.getBase(), patchInProgress);
@@ -363,9 +349,8 @@ public class MatchPatchPaths {
     return compareNamesImpl(parts, file.getParent(), parts.length - 2);
   }
 
-  @NotNull
-  private static String[] getPathParts(@Nullable String relativePath) {
-    if (relativePath == null) return ArrayUtil.EMPTY_STRING_ARRAY;
+  private static String @NotNull [] getPathParts(@Nullable String relativePath) {
+    if (relativePath == null) return ArrayUtilRt.EMPTY_STRING_ARRAY;
     return relativePath.replace('\\', '/').split("/");
   }
 

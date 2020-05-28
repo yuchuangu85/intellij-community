@@ -17,10 +17,12 @@ package com.intellij.java.codeInsight
 
 
 import com.intellij.openapi.actionSystem.IdeActions
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
+import groovy.transform.CompileStatic
 import org.jetbrains.annotations.NonNls
 
-class DuplicateActionTest extends LightCodeInsightFixtureTestCase {
+@CompileStatic
+class DuplicateActionTest extends LightJavaCodeInsightFixtureTestCase {
   void testOneLine() {
     doTest '''xxx<caret>
 ''', "txt", '''xxx

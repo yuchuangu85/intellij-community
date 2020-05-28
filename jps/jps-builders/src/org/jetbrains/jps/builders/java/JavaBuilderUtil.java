@@ -5,6 +5,7 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
@@ -30,9 +31,11 @@ import org.jetbrains.jps.model.java.JpsJavaExtensionService;
 import org.jetbrains.jps.model.java.JpsJavaSdkType;
 import org.jetbrains.jps.model.java.compiler.JpsJavaCompilerConfiguration;
 import org.jetbrains.jps.model.java.compiler.ProcessorConfigProfile;
+import org.jetbrains.jps.model.library.JpsLibrary;
 import org.jetbrains.jps.model.library.JpsTypedLibrary;
 import org.jetbrains.jps.model.library.sdk.JpsSdk;
 import org.jetbrains.jps.model.library.sdk.JpsSdkReference;
+import org.jetbrains.jps.model.library.sdk.JpsSdkType;
 import org.jetbrains.jps.model.module.JpsModule;
 import org.jetbrains.jps.service.JpsServiceManager;
 
@@ -41,13 +44,14 @@ import java.io.FileFilter;
 import java.io.IOException;
 import java.util.*;
 
-/**
- * @author nik
- */
 public class JavaBuilderUtil {
+  /**
+   * @deprecated This functionality is obsolete and is not used by dependency analysis anymore. To be removed in future releases
+   */
+  @Deprecated
   public static final Key<Callbacks.ConstantAffectionResolver> CONSTANT_SEARCH_SERVICE = Key.create("_constant_search_service_");
 
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.jps.incremental.Builder");
+  private static final Logger LOG = Logger.getInstance(Builder.class);
   private static final Key<Set<File>> ALL_AFFECTED_FILES_KEY = Key.create("_all_affected_files_");
   private static final Key<Set<File>> ALL_COMPILED_FILES_KEY = Key.create("_all_compiled_files_");
   private static final Key<Set<File>> FILES_TO_COMPILE_KEY = Key.create("_files_to_compile_");
@@ -139,8 +143,8 @@ public class JavaBuilderUtil {
                                        final Mappings delta,
                                        DirtyFilesHolder<JavaSourceRootDescriptor, ModuleBuildTarget> dirtyFilesHolder,
                                        ModuleChunk chunk,
-                                       Collection<File> filesToCompile,
-                                       Collection<File> successfullyCompiled) throws IOException {
+                                       Collection<? extends File> filesToCompile,
+                                       Collection<? extends File> successfullyCompiled) throws IOException {
     return updateMappings(context, delta, dirtyFilesHolder, chunk, filesToCompile, successfullyCompiled, CompilationRound.NEXT, null);
   }
 
@@ -162,8 +166,8 @@ public class JavaBuilderUtil {
                                         final Mappings delta,
                                         DirtyFilesHolder<JavaSourceRootDescriptor, ModuleBuildTarget> dirtyFilesHolder,
                                         ModuleChunk chunk,
-                                        Collection<File> filesToCompile,
-                                        Collection<File> successfullyCompiled,
+                                        Collection<? extends File> filesToCompile,
+                                        Collection<? extends File> successfullyCompiled,
                                         final CompilationRound markDirtyRound,
                                         @Nullable FileFilter skipMarkingDirtyFilter) throws IOException {
     try {
@@ -196,8 +200,7 @@ public class JavaBuilderUtil {
 
           final ModulesBasedFileFilter moduleBasedFilter = new ModulesBasedFileFilter(context, chunk);
           final boolean incremental = globalMappings.differentiateOnIncrementalMake(
-            delta, removedPaths, filesToCompile, compiledWithErrors, allCompiledFiles, allAffectedFiles, moduleBasedFilter,
-            CONSTANT_SEARCH_SERVICE.get(context)
+            delta, removedPaths, filesToCompile, compiledWithErrors, allCompiledFiles, allAffectedFiles, moduleBasedFilter
           );
 
           if (LOG.isDebugEnabled()) {
@@ -353,7 +356,7 @@ public class JavaBuilderUtil {
     }
   }
 
-  private static boolean containsProcessorGeneratedFiles(ModuleChunk chunk, Collection<File> files) {
+  private static boolean containsProcessorGeneratedFiles(ModuleChunk chunk, Collection<? extends File> files) {
     final JpsModule module = chunk.representativeTarget().getModule();
     final JpsJavaCompilerConfiguration compilerConfig = JpsJavaExtensionService.getInstance().getCompilerConfiguration(module.getProject());
     assert compilerConfig != null;
@@ -383,7 +386,7 @@ public class JavaBuilderUtil {
     return JpsJavaExtensionService.getInstance().getJavaModuleIndex(project);
   }
 
-  private static FileFilter createOrFilter(final List<FileFilter> filters) {
+  private static FileFilter createOrFilter(final List<? extends FileFilter> filters) {
     if (filters == null || filters.isEmpty()) return null;
     return pathname -> {
       for (FileFilter filter : filters) {
@@ -395,9 +398,9 @@ public class JavaBuilderUtil {
     };
   }
 
-  private static void removeFilesAcceptedByFilter(@NotNull Set<File> files, @Nullable FileFilter filter) {
+  private static void removeFilesAcceptedByFilter(@NotNull Set<? extends File> files, @Nullable FileFilter filter) {
     if (filter != null) {
-      for (final Iterator<File> it = files.iterator(); it.hasNext();) {
+      for (final Iterator<? extends File> it = files.iterator(); it.hasNext();) {
         if (filter.accept(it.next())) {
           it.remove();
         }
@@ -416,7 +419,7 @@ public class JavaBuilderUtil {
     return scope.isBuildIncrementally(JavaModuleBuildTargetType.PRODUCTION) || scope.isBuildIncrementally(JavaModuleBuildTargetType.TEST);
   }
 
-  private static List<Pair<File, JpsModule>> checkAffectedFilesInCorrectModules(CompileContext context, Collection<File> affected, ModulesBasedFileFilter moduleBasedFilter) {
+  private static List<Pair<File, JpsModule>> checkAffectedFilesInCorrectModules(CompileContext context, Collection<? extends File> affected, ModulesBasedFileFilter moduleBasedFilter) {
     if (affected.isEmpty()) {
       return Collections.emptyList();
     }
@@ -479,8 +482,16 @@ public class JavaBuilderUtil {
 
     JpsTypedLibrary<JpsSdk<JpsDummyElement>> sdkLibrary = reference.resolve();
     if (sdkLibrary == null) {
-      context.processMessage(new CompilerMessage(compilerName, BuildMessage.Kind.ERROR,
-                                                 "Cannot find JDK '" + reference.getSdkName() + "' for module '" + module.getName() + "'"));
+      JpsLibrary library = context.getProjectDescriptor().getModel().getGlobal().getLibraryCollection().findLibrary(reference.getSdkName());
+      JpsSdkType sdkType = library != null ? ObjectUtils.tryCast(library.getType(), JpsSdkType.class) : null;
+      String errorMessage;
+      if (sdkType == null) {
+        errorMessage = "Cannot find JDK '" + reference.getSdkName() + "' for module '" + module.getName() + "'";
+      }
+      else {
+        errorMessage = "Cannot find JDK for module '" + module.getName() + "': '" + reference.getSdkName() + "' points to " + sdkType.getPresentableName();
+      }
+      context.processMessage(new CompilerMessage(compilerName, BuildMessage.Kind.ERROR, errorMessage));
       throw new StopBuildException();
     }
     return sdkLibrary.getProperties();
@@ -534,7 +545,7 @@ public class JavaBuilderUtil {
       return rd != null && myChunkTargets.contains(rd.target);
     }
 
-    public boolean containsFilesFromCurrentTargetChunk(Collection<File> files) {
+    public boolean containsFilesFromCurrentTargetChunk(Collection<? extends File> files) {
       for (File file : files) {
         if (belongsToCurrentTargetChunk(file)) {
           return true;

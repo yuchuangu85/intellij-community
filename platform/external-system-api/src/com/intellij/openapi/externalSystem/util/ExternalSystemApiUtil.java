@@ -1,7 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.externalSystem.util;
 
 import com.intellij.execution.rmi.RemoteUtil;
+import com.intellij.ide.highlighter.ArchiveFileType;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.*;
 import com.intellij.openapi.externalSystem.ExternalSystemAutoImportAware;
 import com.intellij.openapi.externalSystem.ExternalSystemManager;
@@ -17,9 +19,8 @@ import com.intellij.openapi.externalSystem.settings.AbstractExternalSystemLocalS
 import com.intellij.openapi.externalSystem.settings.AbstractExternalSystemSettings;
 import com.intellij.openapi.externalSystem.settings.ExternalProjectSettings;
 import com.intellij.openapi.externalSystem.settings.ExternalSystemSettingsListener;
-import com.intellij.openapi.fileTypes.FileTypes;
+import com.intellij.openapi.fileTypes.FileTypeRegistry;
 import com.intellij.openapi.module.Module;
-import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ExternalProjectSystemRegistry;
 import com.intellij.openapi.roots.OrderRootType;
@@ -36,9 +37,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.*;
 import com.intellij.util.concurrency.EdtExecutorService;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.ContainerUtilRt;
 import com.intellij.util.containers.MultiMap;
-import com.intellij.util.containers.Stack;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Contract;
@@ -49,8 +48,7 @@ import java.io.File;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.*;
-
-import static com.intellij.util.PlatformUtils.*;
+import java.util.function.Consumer;
 
 /**
  * @author Denis Zhdanov
@@ -146,7 +144,7 @@ public class ExternalSystemApiUtil {
   }
 
   public static void orderAwareSort(@NotNull List<?> data) {
-    Collections.sort(data, ORDER_AWARE_COMPARATOR);
+    data.sort(ORDER_AWARE_COMPARATOR);
   }
 
   /**
@@ -162,7 +160,7 @@ public class ExternalSystemApiUtil {
 
   @NotNull
   public static String getLocalFileSystemPath(@NotNull VirtualFile file) {
-    if (file.getFileType() == FileTypes.ARCHIVE) {
+    if (FileTypeRegistry.getInstance().isFileOfType(file, ArchiveFileType.INSTANCE)) {
       final VirtualFile jar = JarFileSystem.getInstance().getVirtualFileForJar(file);
       if (jar != null) {
         return jar.getPath();
@@ -173,12 +171,7 @@ public class ExternalSystemApiUtil {
 
   @Nullable
   public static ExternalSystemManager<?, ?, ?, ?, ?> getManager(@NotNull ProjectSystemId externalSystemId) {
-    for (ExternalSystemManager manager : ExternalSystemManager.EP_NAME.getExtensions()) {
-      if (externalSystemId.equals(manager.getSystemId())) {
-        return manager;
-      }
-    }
-    return null;
+    return ExternalSystemManager.EP_NAME.findFirstSafe(manager -> externalSystemId.equals(manager.getSystemId()));
   }
 
   @NotNull
@@ -188,7 +181,7 @@ public class ExternalSystemApiUtil {
 
   public static MultiMap<Key<?>, DataNode<?>> recursiveGroup(@NotNull Collection<DataNode<?>> nodes) {
     MultiMap<Key<?>, DataNode<?>> result = new ContainerUtil.KeyOrderedMultiMap<>();
-    Queue<Collection<DataNode<?>>> queue = ContainerUtil.newLinkedList();
+    Queue<Collection<DataNode<?>>> queue = new LinkedList<>();
     queue.add(nodes);
     while (!queue.isEmpty()) {
       Collection<DataNode<?>> _nodes = queue.remove();
@@ -224,7 +217,7 @@ public class ExternalSystemApiUtil {
         continue;
       }
       if (result == null) {
-        result = ContainerUtilRt.newArrayList();
+        result = new ArrayList<>();
       }
       result.add((DataNode<T>)child);
     }
@@ -275,16 +268,9 @@ public class ExternalSystemApiUtil {
     return getChildren(parent, key);
   }
 
-  public static void visit(@Nullable DataNode node, @NotNull Consumer<? super DataNode<?>> consumer) {
-    if (node == null) return;
-
-    Stack<DataNode> toProcess = ContainerUtil.newStack(node);
-    while (!toProcess.isEmpty()) {
-      DataNode<?> node0 = toProcess.pop();
-      consumer.consume(node0);
-      for (DataNode<?> child : node0.getChildren()) {
-        toProcess.push(child);
-      }
+  public static void visit(@Nullable DataNode<?> originalNode, @NotNull Consumer<? super DataNode<?>> consumer) {
+    if (originalNode != null) {
+      originalNode.visit(consumer);
     }
   }
 
@@ -357,7 +343,9 @@ public class ExternalSystemApiUtil {
   }
 
   public static void executeProjectChangeAction(boolean synchronous, @NotNull final DisposeAwareProjectChange task) {
-    TransactionGuard.getInstance().assertWriteSafeContext(ModalityState.defaultModalityState());
+    if (!ApplicationManager.getApplication().isDispatchThread()) {
+      TransactionGuard.getInstance().assertWriteSafeContext(ModalityState.defaultModalityState());
+    }
     executeOnEdt(synchronous, () -> ApplicationManager.getApplication().runWriteAction(task));
   }
 
@@ -446,12 +434,13 @@ public class ExternalSystemApiUtil {
    *
    * @param ideProject  target ide project
    * @param projectData target external project
+   * @param modules     the list of modules to check (during import this contains uncommitted modules from the modifiable model)
    * @return {@code true} if given ide project has 1-1 mapping to the given external project;
    * {@code false} otherwise
    */
-  public static boolean isOneToOneMapping(@NotNull Project ideProject, @NotNull ProjectData projectData) {
+  public static boolean isOneToOneMapping(@NotNull Project ideProject, @NotNull ProjectData projectData, Module[] modules) {
     String linkedExternalProjectPath = null;
-    for (ExternalSystemManager<?, ?, ?, ?, ?> manager : getAllManagers()) {
+    for (ExternalSystemManager<?, ?, ?, ?, ?> manager : ExternalSystemManager.EP_NAME.getIterable()) {
       ProjectSystemId externalSystemId = manager.getSystemId();
       AbstractExternalSystemSettings systemSettings = getSettings(ideProject, externalSystemId);
       Collection projectsSettings = systemSettings.getLinkedProjectsSettings();
@@ -476,7 +465,7 @@ public class ExternalSystemApiUtil {
       return false;
     }
 
-    for (Module module : ModuleManager.getInstance(ideProject).getModules()) {
+    for (Module module : modules) {
       if (!isExternalSystemAwareModule(projectData.getOwner(), module)) {
         return false;
       }
@@ -542,13 +531,9 @@ public class ExternalSystemApiUtil {
    * @param e exception to process
    * @return error message for the given exception
    */
-  @SuppressWarnings({"IOResourceOpenedButNotSafelyClosed"})
   @NotNull
   public static String buildErrorMessage(@NotNull Throwable e) {
     Throwable unwrapped = RemoteUtil.unwrap(e);
-    if (ApplicationManager.getApplication().isUnitTestMode()) {
-      return stacktraceAsString(unwrapped);
-    }
     String reason = unwrapped.getLocalizedMessage();
     if (!StringUtil.isEmpty(reason)) {
       return reason;
@@ -561,7 +546,9 @@ public class ExternalSystemApiUtil {
     }
   }
 
-  private static String stacktraceAsString(Throwable unwrapped) {
+  @NotNull
+  public static String stacktraceAsString(@NotNull Throwable throwable) {
+    Throwable unwrapped = RemoteUtil.unwrap(throwable);
     StringWriter writer = new StringWriter();
     unwrapped.printStackTrace(new PrintWriter(writer));
     return writer.toString();
@@ -686,13 +673,21 @@ public class ExternalSystemApiUtil {
                                @NotNull ProjectSystemId systemId,
                                @NotNull ExternalSystemSettingsListener listener) {
     //noinspection unchecked
-    getSettings(project, systemId).subscribe(listener);
+    getSettings(project, systemId).subscribe(listener, project);
+  }
+
+  public static void subscribe(@NotNull Project project,
+                               @NotNull ProjectSystemId systemId,
+                               @NotNull ExternalSystemSettingsListener listener,
+                               @NotNull Disposable parentDisposable) {
+    //noinspection unchecked
+    getSettings(project, systemId).subscribe(listener, parentDisposable);
   }
 
   @NotNull
-  public Collection<TaskData> findProjectTasks(@NotNull Project project,
-                                               @NotNull ProjectSystemId systemId,
-                                               @NotNull String projectPath) {
+  public static Collection<TaskData> findProjectTasks(@NotNull Project project,
+                                                      @NotNull ProjectSystemId systemId,
+                                                      @NotNull String projectPath) {
     AbstractExternalSystemSettings settings = getSettings(project, systemId);
     ExternalProjectSettings linkedProjectSettings = settings.getLinkedProjectSettings(projectPath);
     if (linkedProjectSettings == null) return Collections.emptyList();
@@ -705,7 +700,7 @@ public class ExternalSystemApiUtil {
     DataNode<ProjectData> projectStructure = projectInfo.getExternalProjectStructure();
     if (projectStructure == null) return Collections.emptyList();
 
-    List<TaskData> tasks = ContainerUtil.newSmartList();
+    List<TaskData> tasks = new SmartList<>();
 
     DataNode<ModuleData> moduleDataNode = findAll(projectStructure, ProjectKeys.MODULE).stream()
       .filter(moduleNode -> FileUtil.pathsEqual(projectPath, moduleNode.getData().getLinkedExternalProjectPath()))
@@ -716,15 +711,25 @@ public class ExternalSystemApiUtil {
     return tasks;
   }
 
-  /**
-   * DO NOT USE THIS METHOD.
-   * The method should be removed when the 'java' subsystem features will be extracted from External System API [IDEA-187832]
-   *
-   * @return check if the current IDE is compatible with the 'java' IntelliJ subsystem
-   */
   @ApiStatus.Experimental
-  @Deprecated
-  public static boolean isJavaCompatibleIde() {
-    return isIdeaUltimate() || isIdeaCommunity() || "AndroidStudio".equals(getPlatformPrefix());
+  @Nullable
+  public static DataNode<ProjectData> findProjectData(@NotNull Project project,
+                                                      @NotNull ProjectSystemId systemId,
+                                                      @NotNull String projectPath) {
+    ExternalProjectInfo projectInfo = findProjectInfo(project, systemId, projectPath);
+    if (projectInfo == null) return null;
+    return projectInfo.getExternalProjectStructure();
+  }
+
+  @ApiStatus.Experimental
+  @Nullable
+  public static ExternalProjectInfo findProjectInfo(@NotNull Project project,
+                                                    @NotNull ProjectSystemId systemId,
+                                                    @NotNull String projectPath) {
+    AbstractExternalSystemSettings settings = getSettings(project, systemId);
+    ExternalProjectSettings linkedProjectSettings = settings.getLinkedProjectSettings(projectPath);
+    if (linkedProjectSettings == null) return null;
+    String rootProjectPath = linkedProjectSettings.getExternalProjectPath();
+    return ProjectDataManager.getInstance().getExternalProjectData(project, systemId, rootProjectPath);
   }
 }

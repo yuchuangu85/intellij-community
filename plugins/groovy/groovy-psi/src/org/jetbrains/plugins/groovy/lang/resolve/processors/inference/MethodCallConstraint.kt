@@ -1,32 +1,35 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.resolve.processors.inference
 
-import com.intellij.psi.PsiSubstitutor
-import com.intellij.psi.impl.source.resolve.graphInference.InferenceSession
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiType
 import com.intellij.psi.impl.source.resolve.graphInference.constraints.ConstraintFormula
-import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrReferenceExpression
+import org.jetbrains.plugins.groovy.lang.psi.api.GroovyMethodResult
+import org.jetbrains.plugins.groovy.lang.psi.api.SpreadState
+import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil
 
-class MethodCallConstraint(private val callRef: GrReferenceExpression, private val candidate: MethodCandidate) : ConstraintFormula {
+class MethodCallConstraint(
+  private val expectedType: ExpectedType?,
+  private val result: GroovyMethodResult,
+  private val context: PsiElement
+) : GrConstraintFormula() {
 
-  override fun reduce(session: InferenceSession, constraints: MutableList<ConstraintFormula>): Boolean {
-    processArguments(constraints)
-    return true
-  }
+  override fun reduce(session: GroovyInferenceSession, constraints: MutableList<in ConstraintFormula>): Boolean {
+    val candidate = result.candidate ?: return true
+    val method = candidate.method
+    val contextSubstitutor = result.contextSubstitutor
+    session.startNestedSession(method.typeParameters, contextSubstitutor, context, result) { nested ->
+      nested.initArgumentConstraints(candidate.argumentMapping)
+      nested.repeatInferencePhases()
 
-  private fun processArguments(constraints: MutableList<ConstraintFormula>) {
-    val argInfos = candidate.argumentMapping
-
-    argInfos.forEach { argument, pair ->
-      val leftType = pair.second ?: return@forEach
-      if (argument.type != null) {
-        constraints.add(TypeConstraint(leftType, argument.type, callRef))
-      }
-
-      if (argument.expression != null) {
-        constraints.add(ExpressionConstraint(argument.expression, leftType))
+      if (expectedType != null) {
+        val rt = SpreadState.apply(PsiUtil.getSmartReturnType(method), result.spreadState, context.project)
+        if (rt != null && rt != PsiType.VOID) {
+          nested.registerReturnTypeConstraints(expectedType, rt, context)
+          nested.repeatInferencePhases()
+        }
       }
     }
+    return true
   }
-
-  override fun apply(substitutor: PsiSubstitutor, cache: Boolean) {}
 }

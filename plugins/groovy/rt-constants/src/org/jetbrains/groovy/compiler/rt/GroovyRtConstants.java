@@ -15,9 +15,6 @@
  */
 package org.jetbrains.groovy.compiler.rt;
 
-/**
- * @author nik
- */
 public class GroovyRtConstants {
   public static final String PATCHERS = "patchers";
   public static final String ENCODING = "encoding";
@@ -37,7 +34,6 @@ public class GroovyRtConstants {
   public static final String OPTIMIZE = "optimize";
   public static final String GROOVYC_STUB_GENERATION_FAILED = "Groovyc stub generation failed";
 
-  public static final String STUBS_GENERATED = "Stubs generated";
   public static final String JAVAC_COMPLETED = "Javac completed";
   public static final String BUILD_ABORTED = "Build aborted";
 

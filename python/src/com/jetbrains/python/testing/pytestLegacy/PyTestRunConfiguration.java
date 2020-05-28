@@ -19,7 +19,7 @@ import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.PyNames;
-import com.jetbrains.python.sdk.PythonSdkType;
+import com.jetbrains.python.sdk.PythonSdkUtil;
 import com.jetbrains.python.testing.AbstractPythonLegacyTestRunConfiguration;
 import com.jetbrains.python.testing.VFSTestFrameworkListener;
 import org.jdom.Element;
@@ -158,7 +158,7 @@ public class PyTestRunConfiguration extends AbstractPythonLegacyTestRunConfigura
     if (StringUtil.isEmptyOrSpaces(myTestToRun)) {
       throw new RuntimeConfigurationError("Please specify target folder or script");
     }
-    Sdk sdk = PythonSdkType.findSdkByPath(getInterpreterPath());
+    Sdk sdk = PythonSdkUtil.findSdkByPath(getInterpreterPath());
     if (sdk != null && !VFSTestFrameworkListener.getInstance().isTestFrameworkInstalled(sdk, PyNames.PY_TEST)) {
       throw new RuntimeConfigurationWarning(PyBundle.message("runcfg.testing.no.test.framework", "pytest"));
     }
@@ -182,7 +182,7 @@ public class PyTestRunConfiguration extends AbstractPythonLegacyTestRunConfigura
   @Nullable
   @Override
   public final String getTestSpec(@NotNull final Location location, @NotNull final AbstractTestProxy failedTest) {
-    /**
+    /*
      *  PyTest supports subtests (with yielding). Such tests are reported as _test_name[index] and location does not point to actual test.
      *  We need to get rid of braces and calculate name manually, since location is incorrect.
      *  Test path starts from file.

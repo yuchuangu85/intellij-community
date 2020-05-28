@@ -21,6 +21,7 @@ package com.intellij.openapi.wm.impl.welcomeScreen;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.DataManager;
+import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.actionSystem.impl.ActionButtonWithText;
 import com.intellij.openapi.actionSystem.impl.PresentationFactory;
@@ -40,7 +41,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CardActionsPanel extends JPanel {
-  private final boolean USE_ICONS = true;
+  private static final boolean USE_ICONS = true;
   private final JBCardLayout myLayout = new JBCardLayout();
   private final JPanel myContent = new JPanel(myLayout);
   private int nCards = 0;
@@ -126,7 +127,7 @@ public class CardActionsPanel extends JPanel {
       setBackground(WelcomeScreenColors.CAPTION_BACKGROUND);
 
       if (parentId != null) {
-        AnAction back = new AnAction("Back", null, AllIcons.Actions.Back) {
+        AnAction back = new AnAction(IdeBundle.messagePointer("action.Anonymous.text.back"), AllIcons.Actions.Back) {
           @Override
           public void actionPerformed(@NotNull AnActionEvent e) {
             myLayout.swipe(myContent, parentId, JBCardLayout.SwipeDirection.BACKWARD);

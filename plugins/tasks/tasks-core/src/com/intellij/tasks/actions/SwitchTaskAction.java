@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.tasks.actions;
 
@@ -45,7 +45,7 @@ import java.util.List;
 public class SwitchTaskAction extends ComboBoxAction implements DumbAware {
   @NotNull
   @Override
-  public JComponent createCustomComponent(@NotNull final Presentation presentation) {
+  public JComponent createCustomComponent(@NotNull final Presentation presentation, @NotNull String place) {
     return new ComboBoxButton(presentation) {
       @Override
       protected JBPopup createPopup(Runnable onDispose) {
@@ -65,7 +65,7 @@ public class SwitchTaskAction extends ComboBoxAction implements DumbAware {
     Presentation presentation = e.getPresentation();
     Project project = e.getData(CommonDataKeys.PROJECT);
     if (project == null || project.isDefault() || project.isDisposed()) {
-      presentation.setEnabled(false);
+      presentation.setEnabledAndVisible(false);
       presentation.setText("");
       presentation.setIcon(null);
     }
@@ -81,7 +81,7 @@ public class SwitchTaskAction extends ComboBoxAction implements DumbAware {
       else {
         String s = getText(activeTask);
         presentation.setEnabledAndVisible(true);
-        presentation.setText(s);
+        presentation.setText(s, false);
         presentation.setIcon(activeTask.getIcon());
         presentation.setDescription(activeTask.getSummary());
       }
@@ -150,7 +150,7 @@ public class SwitchTaskAction extends ComboBoxAction implements DumbAware {
       }
 
       @Override
-      public boolean hasSubstep(List<TaskListItem> selectedValues) {
+      public boolean hasSubstep(List<? extends TaskListItem> selectedValues) {
         return selectedValues.size() > 1 || selectedValues.get(0).getTask() != null;
       }
 
@@ -255,7 +255,7 @@ public class SwitchTaskAction extends ComboBoxAction implements DumbAware {
     final TaskManager manager = TaskManager.getManager(project);
     LocalTask activeTask = manager.getActiveTask();
     List<LocalTask> localTasks = manager.getLocalTasks();
-    Collections.sort(localTasks, TaskManagerImpl.TASK_UPDATE_COMPARATOR);
+    localTasks.sort(TaskManagerImpl.TASK_UPDATE_COMPARATOR);
     ArrayList<LocalTask> temp = new ArrayList<>();
     for (final LocalTask task : localTasks) {
       if (task == activeTask) {
@@ -288,7 +288,7 @@ public class SwitchTaskAction extends ComboBoxAction implements DumbAware {
     return group;
   }
 
-  public static void removeTask(final @NotNull Project project, LocalTask task, TaskManager manager) {
+  public static void removeTask(final @NotNull Project project, @NotNull LocalTask task, @NotNull TaskManager manager) {
     if (task.isDefault()) {
       Messages.showInfoMessage(project, "Default task cannot be removed", "Cannot Remove");
     }

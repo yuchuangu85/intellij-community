@@ -1,9 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.util;
 
 import com.intellij.CommonBundle;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.IdeBundle;
+import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.CommandProcessor;
@@ -12,7 +13,6 @@ import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.fileChooser.ex.FileChooserDialogImpl;
 import com.intellij.openapi.fileChooser.ex.TextFieldAction;
-import com.intellij.openapi.fileTypes.StdFileTypes;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.FileIndex;
@@ -34,7 +34,6 @@ import com.intellij.util.Alarm;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.PlatformIcons;
 import com.intellij.util.ui.JBUI;
-import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.tree.TreeUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -43,16 +42,14 @@ import org.jetbrains.jps.model.java.JavaModuleSourceRootTypes;
 import javax.swing.*;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
-import javax.swing.tree.DefaultMutableTreeNode;
-import javax.swing.tree.DefaultTreeCellRenderer;
-import javax.swing.tree.DefaultTreeModel;
-import javax.swing.tree.TreePath;
+import javax.swing.tree.*;
 import java.awt.*;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Objects;
 
 public class PackageChooserDialog extends PackageChooser {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.ide.util.PackageChooserDialog");
+  private static final Logger LOG = Logger.getInstance(PackageChooserDialog.class);
 
   private Tree myTree;
   private DefaultTreeModel myModel;
@@ -89,8 +86,6 @@ public class PackageChooserDialog extends PackageChooser {
     myModel = new DefaultTreeModel(new DefaultMutableTreeNode());
     createTreeModel();
     myTree = new Tree(myModel);
-
-    UIUtil.setLineStyleAngled(myTree);
     myTree.setCellRenderer(
       new DefaultTreeCellRenderer() {
         @Override
@@ -166,7 +161,7 @@ public class PackageChooserDialog extends PackageChooser {
         toggleShowPathComponent(northPanel, this);
       }
     }, BorderLayout.EAST);
-    myPathEditor = new EditorTextField(JavaReferenceEditorUtil.createDocument("", myProject, false), myProject, StdFileTypes.JAVA);
+    myPathEditor = new EditorTextField(JavaReferenceEditorUtil.createDocument("", myProject, false), myProject, JavaFileType.INSTANCE);
     myPathEditor.addDocumentListener(new DocumentListener() {
       @Override
       public void documentChanged(@NotNull DocumentEvent e) {
@@ -225,6 +220,7 @@ public class PackageChooserDialog extends PackageChooser {
 
   @Override
   public PsiPackage getSelectedPackage(){
+    if (getExitCode() == CANCEL_EXIT_CODE) return null;
     return getTreeSelection();
   }
 
@@ -317,7 +313,7 @@ public class PackageChooserDialog extends PackageChooser {
       final DefaultMutableTreeNode child = (DefaultMutableTreeNode)rootNode.getChildAt(i);
       final PsiPackage nodePackage = (PsiPackage)child.getUserObject();
       if (nodePackage != null) {
-        if (Comparing.equal(nodePackage.getQualifiedName(), qualifiedName)) return child;
+        if (Objects.equals(nodePackage.getQualifiedName(), qualifiedName)) return child;
       }
     }
     return null;
@@ -332,7 +328,7 @@ public class PackageChooserDialog extends PackageChooser {
         DefaultMutableTreeNode node = (DefaultMutableTreeNode)o;
         PsiPackage nodePackage = (PsiPackage)node.getUserObject();
         if (nodePackage != null) {
-          if (Comparing.equal(nodePackage.getQualifiedName(), qualifiedPackageName)) return node;
+          if (Objects.equals(nodePackage.getQualifiedName(), qualifiedPackageName)) return node;
         }
       }
     }
@@ -368,25 +364,17 @@ public class PackageChooserDialog extends PackageChooser {
           if (dir == null) return;
           final PsiPackage newPackage = JavaDirectoryService.getInstance().getPackage(dir);
 
-          DefaultMutableTreeNode node = (DefaultMutableTreeNode)myTree.getSelectionPath().getLastPathComponent();
-          final DefaultMutableTreeNode newChild = new DefaultMutableTreeNode();
-          newChild.setUserObject(newPackage);
-          node.add(newChild);
+          if (newPackage != null) {
+            DefaultMutableTreeNode newChild = addPackage(newPackage);
 
-          final DefaultTreeModel model = (DefaultTreeModel)myTree.getModel();
-          model.nodeStructureChanged(node);
+            DefaultTreeModel model = (DefaultTreeModel)myTree.getModel();
+            model.nodeStructureChanged((TreeNode)model.getRoot());
 
-          final TreePath selectionPath = myTree.getSelectionPath();
-          TreePath path;
-          if (selectionPath == null) {
-            path = new TreePath(newChild.getPath());
-          } else {
-            path = selectionPath.pathByAddingChild(newChild);
-          }
+            TreePath path = new TreePath(newChild.getPath());
             myTree.setSelectionPath(path);
             myTree.scrollPathToVisible(path);
             myTree.expandPath(path);
-
+          }
         }
         catch (IncorrectOperationException e) {
           Messages.showMessageDialog(
@@ -395,9 +383,7 @@ public class PackageChooserDialog extends PackageChooser {
             CommonBundle.getErrorTitle(),
             Messages.getErrorIcon()
           );
-          if (LOG.isDebugEnabled()) {
-            LOG.debug(e);
-          }
+          LOG.debug(e);
         }
       };
       ApplicationManager.getApplication().runReadAction(action);
@@ -408,8 +394,8 @@ public class PackageChooserDialog extends PackageChooser {
 
   private class NewPackageAction extends AnAction {
     NewPackageAction() {
-      super(IdeBundle.message("action.new.package"),
-            IdeBundle.message("action.description.create.new.package"), AllIcons.Actions.NewFolder);
+      super(IdeBundle.messagePointer("action.new.package"), IdeBundle.messagePointer("action.description.create.new.package"),
+            AllIcons.Actions.NewFolder);
     }
 
     @Override

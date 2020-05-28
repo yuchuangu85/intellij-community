@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.debugger
 
 import com.intellij.icons.AllIcons
@@ -62,17 +62,20 @@ class VariableView(override val variableName: String, private val variable: Vari
 
     if (variable !is ObjectProperty || variable.getter == null) {
       // it is "used" expression (WEB-6779 Debugger/Variables: Automatically show used variables)
-      evaluateContext.evaluate(variable.name)
-        .onSuccess(node) {
-          if (it.wasThrown) {
-            setEvaluatedValue(viewSupport.transformErrorOnGetUsedReferenceValue(it.value, null), null, node)
-          }
-          else {
-            value = it.value
-            computePresentation(it.value, node)
-          }
+        context.memberFilter.then {
+          evaluateContext.evaluate(it.sourceNameToRaw(variable.name) ?: variable.name)
+            .onSuccess(node) {
+              if (it.wasThrown) {
+                setEvaluatedValue(viewSupport.transformErrorOnGetUsedReferenceValue(it.value, null), null, node)
+              }
+              else {
+                value = it.value
+                computePresentation(it.value, node)
+              }
+            }
+            .onError(node) { setEvaluatedValue(viewSupport.transformErrorOnGetUsedReferenceValue(null, it.message), it.message, node) }
+
         }
-        .onError(node) { setEvaluatedValue(viewSupport.transformErrorOnGetUsedReferenceValue(null, it.message), it.message, node) }
       return
     }
 
@@ -302,7 +305,7 @@ class VariableView(override val variableName: String, private val variable: Vari
 
       override fun setValue(expression: XExpression, callback: XValueModifier.XModificationCallback) {
         variable.valueModifier!!.setValue(variable, expression.expression, evaluateContext)
-          .doneRun {
+          .onSuccess {
             value = null
             callback.valueModified()
           }
@@ -437,7 +440,7 @@ class VariableView(override val variableName: String, private val variable: Vari
     fun getIcon(value: Value): Icon {
       val type = value.type
       return when (type) {
-        ValueType.FUNCTION -> AllIcons.Nodes.Function
+        ValueType.FUNCTION -> AllIcons.Nodes.Lambda
         ValueType.ARRAY -> AllIcons.Debugger.Db_array
         else -> if (type.isObjectType) AllIcons.Debugger.Value else AllIcons.Debugger.Db_primitive
       }
@@ -447,12 +450,16 @@ class VariableView(override val variableName: String, private val variable: Vari
 
 fun getClassName(value: ObjectValue): String {
   val className = value.className
-  return if (className.isNullOrEmpty()) "Object" else className!!
+  return when {
+    className.isNullOrEmpty() -> "Object"
+    className == "console" -> "Console"
+    else -> className
+  }
 }
 
 fun getObjectValueDescription(value: ObjectValue): String {
   val description = value.valueString
-  return if (description.isNullOrEmpty()) getClassName(value) else description!!
+  return if (description.isNullOrEmpty()) getClassName(value) else description
 }
 
 internal fun trimFunctionDescription(value: Value): String {
@@ -478,7 +485,7 @@ private val ARRAY_DESCRIPTION_PATTERN = Pattern.compile("^[a-zA-Z\\d]+[\\[(]\\d+
 
 private class ArrayPresentation(length: Int, className: String?) : XValuePresentation() {
   private val length = Integer.toString(length)
-  private val className = if (className.isNullOrEmpty()) "Array" else className!!
+  private val className = if (className.isNullOrEmpty()) "Array" else className
 
   override fun renderValue(renderer: XValuePresentation.XValueTextRenderer) {
     renderer.renderSpecialSymbol(className)

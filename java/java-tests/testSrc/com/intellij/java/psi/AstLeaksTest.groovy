@@ -26,12 +26,15 @@ import com.intellij.psi.impl.source.PsiClassReferenceType
 import com.intellij.psi.impl.source.PsiFileImpl
 import com.intellij.psi.impl.source.tree.java.JavaFileElement
 import com.intellij.psi.impl.source.tree.java.MethodElement
+import com.intellij.psi.impl.source.tree.java.ParameterElement
 import com.intellij.testFramework.LeakHunter
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
+import com.intellij.util.ref.GCWatcher
+
 /**
  * @author peter
  */
-class AstLeaksTest extends LightCodeInsightFixtureTestCase {
+class AstLeaksTest extends LightJavaCodeInsightFixtureTestCase {
 
   void "test AST should be on a soft reference, for changed files as well"() {
     def file = myFixture.addClass('class Foo {}').containingFile
@@ -93,6 +96,7 @@ class AstLeaksTest extends LightCodeInsightFixtureTestCase {
 
   void "test no hard refs to AST via class reference type"() {
     def cls = myFixture.addClass("class Foo { Object bar() {} }")
+    def file = cls.containingFile as PsiFileImpl
     cls.node
     def type = cls.methods[0].returnType
     assert type instanceof PsiClassReferenceType
@@ -100,6 +104,31 @@ class AstLeaksTest extends LightCodeInsightFixtureTestCase {
     LeakHunter.checkLeak(type, MethodElement, { MethodElement node ->
       node.psi == cls.methods[0]
     } as Condition<MethodElement>)
+
+    GCWatcher.tracking(cls.node).ensureCollected()
+    assert !file.contentsLoaded
+
+    assert type.equalsToText(Object.name)
+    assert !file.contentsLoaded
+  }
+
+  @SuppressWarnings('CStyleArrayDeclaration')
+  void "test no hard refs to AST via class reference type of c-style array"() {
+    def cls = myFixture.addClass("class Foo { static void main(String args[]) {} }")
+    def file = cls.containingFile as PsiFileImpl
+    cls.node
+    def type = cls.methods[0].parameterList.parameters[0].typeElement.type
+    assert type instanceof PsiClassReferenceType
+
+    LeakHunter.checkLeak(type, ParameterElement, { ParameterElement node ->
+      node.psi == cls.methods[0].parameterList.parameters[0]
+    } as Condition<ParameterElement>)
+
+    GCWatcher.tracking(cls.node).ensureCollected()
+    assert !file.contentsLoaded
+
+    assert type.equalsToText(String.name)
+    assert !file.contentsLoaded
   }
 
 }

@@ -15,6 +15,7 @@
  */
 package com.intellij.spellchecker.inspections;
 
+import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.spellchecker.util.Strings;
 import com.intellij.util.Consumer;
@@ -27,12 +28,9 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static com.intellij.openapi.util.text.StringUtil.newBombedCharSequence;
-
-
 public class IdentifierSplitter extends BaseSplitter {
   private static final IdentifierSplitter INSTANCE = new IdentifierSplitter();
-  
+
   public static IdentifierSplitter getInstance() {
     return INSTANCE;
   }
@@ -76,10 +74,15 @@ public class IdentifierSplitter extends BaseSplitter {
       for (TextRange word : words) {
         boolean uc = Strings.isUpperCased(text, word);
         boolean flag = (uc && !isAllWordsAreUpperCased);
-        Matcher matcher = WORD.matcher(newBombedCharSequence(text.substring(word.getStartOffset(), word.getEndOffset()), 500));
-        if (matcher.find()) {
-          TextRange found = matcherRange(word, matcher);
-          addWord(consumer, flag, found);
+        try {
+          Matcher matcher = WORD.matcher(newBombedCharSequence(word.substring(text)));
+          if (matcher.find()) {
+            TextRange found = matcherRange(word, matcher);
+            addWord(consumer, flag, found);
+          }
+        }
+        catch (ProcessCanceledException e) {
+          return;
         }
       }
     }
@@ -99,7 +102,7 @@ public class IdentifierSplitter extends BaseSplitter {
           ch >= '\u4E00' && ch <= '\u9FFF' || // CJK Unified ideographs
           ch >= '\uF900' && ch <= '\uFAFF' || // CJK Compatibility Ideographs
           ch >= '\uFF00' && ch <= '\uFFEF' //Halfwidth and Fullwidth Forms of Katakana & Fullwidth ASCII variants
-         ) {
+      ) {
         if (s >= 0) {
           add(text, result, i, s);
           s = -1;
@@ -116,13 +119,13 @@ public class IdentifierSplitter extends BaseSplitter {
           type == Character.OTHER_LETTER ||
           type == Character.MODIFIER_LETTER ||
           type == Character.OTHER_PUNCTUATION
-        ) {
+      ) {
         //letter
         if (s < 0) {
           //start
           s = i;
         }
-        else if (s >= 0 && type == Character.UPPERCASE_LETTER && prevType == Character.LOWERCASE_LETTER) {
+        else if (type == Character.UPPERCASE_LETTER && prevType == Character.LOWERCASE_LETTER) {
           //a|Camel
           add(text, result, i, s);
           s = i;

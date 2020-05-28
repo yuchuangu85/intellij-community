@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.source.tree;
 
 import com.intellij.lang.*;
@@ -82,7 +68,7 @@ public interface JavaElementType {
   IElementType EXTENDS_BOUND_LIST = JavaStubElementTypes.EXTENDS_BOUND_LIST;
   IElementType THROWS_LIST = JavaStubElementTypes.THROWS_LIST;
   IElementType LAMBDA_EXPRESSION = JavaStubElementTypes.LAMBDA_EXPRESSION;
-  IElementType METHOD_REF_EXPRESSION = JavaStubElementTypes.METHOD_REFERENCE;
+  IElementType METHOD_REF_EXPRESSION = JavaStubElementTypes.METHOD_REF_EXPRESSION;
   IElementType MODULE = JavaStubElementTypes.MODULE;
   IElementType REQUIRES_STATEMENT = JavaStubElementTypes.REQUIRES_STATEMENT;
   IElementType EXPORTS_STATEMENT = JavaStubElementTypes.EXPORTS_STATEMENT;
@@ -90,6 +76,8 @@ public interface JavaElementType {
   IElementType USES_STATEMENT = JavaStubElementTypes.USES_STATEMENT;
   IElementType PROVIDES_STATEMENT = JavaStubElementTypes.PROVIDES_STATEMENT;
   IElementType PROVIDES_WITH_LIST = JavaStubElementTypes.PROVIDES_WITH_LIST;
+  IElementType RECORD_COMPONENT = JavaStubElementTypes.RECORD_COMPONENT;
+  IElementType RECORD_HEADER = JavaStubElementTypes.RECORD_HEADER;
 
   IElementType IMPORT_STATIC_REFERENCE = new JavaCompositeElementType("IMPORT_STATIC_REFERENCE", PsiImportStaticReferenceElementImpl::new);
   IElementType TYPE = new JavaCompositeElementType("TYPE", PsiTypeElementImpl::new);
@@ -128,8 +116,11 @@ public interface JavaElementType {
   IElementType FOREACH_STATEMENT = new JavaCompositeElementType("FOREACH_STATEMENT", PsiForeachStatementImpl::new);
   IElementType DO_WHILE_STATEMENT = new JavaCompositeElementType("DO_WHILE_STATEMENT", PsiDoWhileStatementImpl::new);
   IElementType SWITCH_STATEMENT = new JavaCompositeElementType("SWITCH_STATEMENT", PsiSwitchStatementImpl::new);
+  IElementType SWITCH_EXPRESSION = new JavaCompositeElementType("SWITCH_EXPRESSION", PsiSwitchExpressionImpl::new);
   IElementType SWITCH_LABEL_STATEMENT = new JavaCompositeElementType("SWITCH_LABEL_STATEMENT", PsiSwitchLabelStatementImpl::new);
+  IElementType SWITCH_LABELED_RULE = new JavaCompositeElementType("SWITCH_LABELED_RULE", PsiSwitchLabeledRuleStatementImpl::new);
   IElementType BREAK_STATEMENT = new JavaCompositeElementType("BREAK_STATEMENT", PsiBreakStatementImpl::new);
+  IElementType YIELD_STATEMENT = new JavaCompositeElementType("YIELD_STATEMENT", PsiYieldStatementImpl::new);
   IElementType CONTINUE_STATEMENT = new JavaCompositeElementType("CONTINUE_STATEMENT", PsiContinueStatementImpl::new);
   IElementType RETURN_STATEMENT = new JavaCompositeElementType("RETURN_STATEMENT", PsiReturnStatementImpl::new);
   IElementType THROW_STATEMENT = new JavaCompositeElementType("THROW_STATEMENT", PsiThrowStatementImpl::new);
@@ -144,6 +135,8 @@ public interface JavaElementType {
   IElementType ANNOTATION_ARRAY_INITIALIZER = new JavaCompositeElementType("ANNOTATION_ARRAY_INITIALIZER", PsiArrayInitializerMemberValueImpl::new);
   IElementType RECEIVER_PARAMETER = new JavaCompositeElementType("RECEIVER", PsiReceiverParameterImpl::new);
   IElementType MODULE_REFERENCE = new JavaCompositeElementType("MODULE_REFERENCE", PsiJavaModuleReferenceElementImpl::new);
+  IElementType TYPE_TEST_PATTERN = new JavaCompositeElementType("TYPE_TEST_PATTERN", PsiTypeTestPatternImpl::new);
+  IElementType PATTERN_VARIABLE = new JavaCompositeElementType("PATTERN_VARIABLE", PsiPatternVariableImpl::new);
 
   class ICodeBlockElementType extends IErrorCounterReparseableElementType implements ICompositeElementType, ILightLazyParseableElementType {
     private ICodeBlockElementType() {
@@ -182,6 +175,17 @@ public interface JavaElementType {
     }
   }
   ILazyParseableElementType CODE_BLOCK = new ICodeBlockElementType();
+
+  IElementType MEMBERS = new ICodeFragmentElementType("MEMBERS", JavaLanguage.INSTANCE) {
+    private final JavaParserUtil.ParserWrapper myParser =
+      builder -> JavaParser.INSTANCE.getDeclarationParser().parseClassBodyDeclarations(builder, false);
+
+    @Nullable
+    @Override
+    public ASTNode parseContents(@NotNull ASTNode chameleon) {
+      return JavaParserUtil.parseFragment(chameleon, myParser);
+    }
+  };
 
   IElementType STATEMENTS = new ICodeFragmentElementType("STATEMENTS", JavaLanguage.INSTANCE) {
     private final JavaParserUtil.ParserWrapper myParser = builder -> JavaParser.INSTANCE.getStatementParser().parseStatements(builder);

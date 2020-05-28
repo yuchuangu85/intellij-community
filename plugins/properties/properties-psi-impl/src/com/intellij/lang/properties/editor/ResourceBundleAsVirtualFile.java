@@ -97,7 +97,7 @@ public class ResourceBundleAsVirtualFile extends VirtualFile implements VirtualF
 
   @Override
   public VirtualFile getParent() {
-    return myResourceBundle.getBaseDirectory();
+    return myResourceBundle.isValid() ? myResourceBundle.getBaseDirectory() : null;
   }
 
   @Override
@@ -139,8 +139,7 @@ public class ResourceBundleAsVirtualFile extends VirtualFile implements VirtualF
   }
 
   @Override
-  @NotNull
-  public byte[] contentsToByteArray() {
+  public byte @NotNull [] contentsToByteArray() {
     //TODO compare files action uses this method
     return new byte[0];
   }

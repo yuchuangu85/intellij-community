@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.highlighting
 
 import com.siyeh.ig.junit.AbstractTestClassNamingConvention
@@ -6,6 +6,7 @@ import com.siyeh.ig.junit.TestClassNamingConvention
 import org.jetbrains.plugins.groovy.codeInspection.assignment.GroovyAssignabilityCheckInspection
 import org.jetbrains.plugins.groovy.codeInspection.naming.NewGroovyClassNamingConventionInspection
 import org.jetbrains.plugins.groovy.codeInspection.untypedUnresolvedAccess.GrUnresolvedAccessInspection
+import org.jetbrains.plugins.groovy.transformations.TransformationUtilKt
 
 /**
  * @author peter
@@ -21,6 +22,7 @@ class GroovyHighlightingTest extends GrHighlightingTestBase {
   }
 
   void testCircularInheritance() {
+    TransformationUtilKt.disableAssertOnRecursion(testRootDisposable)
     doTest()
   }
 
@@ -133,7 +135,7 @@ class A {
     myFixture.testHighlighting(true, false, false, getTestName(false) + ".java")
   }
 
-  void testSuperConstructorInvocation() { doTest() }
+  void testSuperConstructorInvocation() { doTest(new GroovyAssignabilityCheckInspection()) }
 
   void testDuplicateMapKeys() { doTest() }
 
@@ -151,15 +153,14 @@ class A {
 
   void testMethodDuplicates() { doTest() }
 
-  void testAmbiguousCodeBlock() { doTest() }
-
-  void testAmbiguousCodeBlockInMethodCall() { doTest() }
-
   void testNotAmbiguousClosableBlock() { doTest() }
 
   void testDuplicateParameterInClosableBlock() { doTest() }
 
-  void testCyclicInheritance() { doTest() }
+  void testCyclicInheritance() {
+    TransformationUtilKt.disableAssertOnRecursion(testRootDisposable)
+    doTest()
+  }
 
   void testNoDefaultConstructor() { doTest() }
 
@@ -189,6 +190,7 @@ class A {
   }
 
   void testSOFInDelegate() {
+    TransformationUtilKt.disableAssertOnRecursion(testRootDisposable)
     doTest()
   }
 
@@ -577,6 +579,11 @@ print <warning descr="Cannot resolve symbol 'abc'">abc</warning>
 @CompileStatic
 def bar() {
 print <error descr="Cannot resolve symbol 'abc'">abc</error>
+  new Object() {
+    def baz() {
+      print(<error descr="Cannot resolve symbol 'unknown'">unknown</error>)
+    }
+  }
 }
 }
 ''', true, false, false, GrUnresolvedAccessInspection)
@@ -670,82 +677,6 @@ int method(x, y, z) {
     }
 }
 ''')
-  }
-
-  void testReassignedVarInClosure1() {
-    addCompileStatic()
-    testHighlighting("""
-$IMPORT_COMPILE_STATIC
-
-@CompileStatic
-def test() {
-    def var = "abc"
-    def cl = {
-        var = new Date()
-    }
-    cl()
-    var.<error descr="Cannot resolve symbol 'toUpperCase'">toUpperCase</error>()
-}
-""", GrUnresolvedAccessInspection)
-  }
-
-  void testReassignedVarInClosure2() {
-    addCompileStatic()
-    testHighlighting("""
-$IMPORT_COMPILE_STATIC
-
-@CompileStatic
-def test() {
-    def cl = {
-        def var
-        var = new Date()
-    }
-    def var = "abc"
-
-    cl()
-    var.toUpperCase()  //no errors
-}
-""", GrUnresolvedAccessInspection)
-  }
-
-  void testReassignedVarInClosure3() {
-    addCompileStatic()
-    testHighlighting("""
-$IMPORT_COMPILE_STATIC
-
-@CompileStatic
-def test() {
-    def var = "abc"
-    def cl = new Closure(this, this){
-      def call() {
-        var = new Date()
-      }
-    }
-    cl()
-    var.toUpperCase() //no errors
-}
-""", GrUnresolvedAccessInspection)
-  }
-
-  void testReassignedVarInClosure4() {
-    addCompileStatic()
-    testHighlighting("""
-$IMPORT_COMPILE_STATIC
-
-class X {
-  def var
-}
-
-@CompileStatic
-def test() {
-    def var = "abc"
-    new X().with {
-        var = new Date()
-    }
-
-    var.<error descr="Cannot resolve symbol 'toUpperCase'">toUpperCase</error>()
-}
-""", GrUnresolvedAccessInspection)
   }
 
   void testOverrideForVars() {
@@ -855,6 +786,15 @@ new Base() {
   String value3()
 }
 ''')
+  }
+
+  void testAnnotationMethodThrowsList() {
+    testHighlighting '''\
+@interface A {
+  int aaa() <error descr="'throws' clause is not allowed in @interface members">throws IOException</error>;
+  int aab() throws<error descr="<type> expected, got ';'"> </error>;
+}
+'''
   }
 
   void testAnnotationAttributeTypes() {
@@ -1175,12 +1115,6 @@ def mm2() {
     })
 }
 
-def mm3() {
-    return new Foo()
-    <error descr="Ambiguous code block">{
-    }</error>
-}
-
 def mm4() {
     return (new Foo()
     {
@@ -1234,11 +1168,6 @@ foo(new Foo()
 {
 
 }.identity { it })
-
-foo new Foo()
-<error descr="Ambiguous code block">{
-
-}</error>
 
 foo 1 + (new Foo()
 {
@@ -1387,7 +1316,6 @@ assert book.toString() == 'Other Title by Other Name'
   }
 
   void testArrayAccessForMapProperty() {
-
     testHighlighting('''\
 def bar() {
     return [list:[1, 2, 3]]
@@ -1395,20 +1323,34 @@ def bar() {
 
 def testConfig = bar()
 print testConfig.list[0]
-print testConfig.<warning descr="Cannot resolve symbol 'foo'">foo</warning>()
-''', true, false, false, GrUnresolvedAccessInspection)
+print <weak_warning descr="Cannot infer argument types">testConfig.foo<warning descr="'foo' cannot be applied to '()'">()</warning></weak_warning>
+''', true, false, true, GrUnresolvedAccessInspection, GroovyAssignabilityCheckInspection)
   }
 
   void testGStringInjectionLFs() {
     testHighlighting('''\
-print "<error descr="GString injection must not contain line feeds">${
-}</error>"
+print "${<error descr="GString injection must not contain line feeds">
+</error>}"
 
 print """${
 }"""
 
-print "<error descr="GString injection must not contain line feeds">${ """
-"""}</error>"
+print "${ """
+""" }"
+
+print "${"\\
+hi"}"
+
+print "${<error descr="GString injection must not contain line feeds">
+  </error>1 + 2
+}"
+
+print "${1 + <error descr="GString injection must not contain line feeds">
+  </error>2
+}"
+
+print "${1 + 2<error descr="GString injection must not contain line feeds">
+</error>}"
 ''')
   }
 
@@ -1713,6 +1655,7 @@ A.foo = 3 //no error
   }
 
   void testSOEIfExtendsItself() {
+    TransformationUtilKt.disableAssertOnRecursion(testRootDisposable)
     testHighlighting('''\
 <error descr="Cyclic inheritance involving 'A'">class A extends A</error> {
   def foo
@@ -1839,7 +1782,9 @@ class A {
   }
 
   void testUnresolvedPropertyWhenGetPropertyDeclared() {
-    myFixture.enableInspections(GrUnresolvedAccessInspection)
+    def inspection = new GrUnresolvedAccessInspection()
+    inspection.myHighlightIfGroovyObjectOverridden = false
+    myFixture.enableInspections(inspection)
     myFixture.configureByText('_.groovy', '''\
 class DelegatesToTest {
     void ideSupport() {
@@ -1867,8 +1812,6 @@ class DslDelegate {
 print new DslDelegate().foo   //resolved
 print new DslDelegate().<warning descr="Cannot resolve symbol 'foo'">foo</warning>() //unresolved
 ''')
-
-    GrUnresolvedAccessInspection.getInstance(myFixture.file, myFixture.project).myHighlightIfGroovyObjectOverridden = false
     myFixture.testHighlighting(true, false, true)
   }
 
@@ -2039,24 +1982,6 @@ foo(<caret>)
     myFixture.getAvailableIntention("Static import method 'A.foo'")
   }
 
-  void testInaccessibleWithCompileStatic() {
-    addCompileStatic()
-    testHighlighting('''
-import groovy.transform.CompileStatic
-
-@CompileStatic
-class PrivateTest {
-    void doTest() {
-        Target.<error descr="Access to 'callMe' exceeds its access rights">callMe</error>()
-    }
-}
-
-class Target {
-    private static void callMe() {}
-}
-''')
-  }
-
   void 'test no SOE in index property assignment with generic function'() {
     testHighlighting '''
 class Main {
@@ -2135,5 +2060,34 @@ w.width.compareTo(2f)
 
   void "test no warning on extension method with spread operator"() {
     testHighlighting '[1, 2, 3]*.multiply(4)', GrUnresolvedAccessInspection, GroovyAssignabilityCheckInspection
+  }
+
+  void 'test type arguments in import references'() {
+    testHighlighting '''\
+import java.util.List<error descr="Type argument list is not allowed here"><String></error>
+import java.util.Map<error descr="Type argument list is not allowed here"><Integer, String></error>.Entry
+import static java.util.Map<error descr="Type argument list is not allowed here"><Integer, String></error>.*
+import java.util.List<error descr="Type argument list is not allowed here"><String></error> as Foo
+''', false
+  }
+
+  void 'test assign collection to an array in @CS'() {
+    testHighlighting '''\
+Collection<? extends Runnable> foo() {}
+
+@groovy.transform.CompileStatic
+def usage() {
+  Runnable[] ar = foo()
+}
+
+@groovy.transform.CompileStatic
+def usage(Collection<? extends Runnable> cr) {
+  Runnable[] ar = cr //https://issues.apache.org/jira/browse/GROOVY-8983
+}
+'''
+  }
+
+  void testIllegalMethodName() {
+    doTest()
   }
 }

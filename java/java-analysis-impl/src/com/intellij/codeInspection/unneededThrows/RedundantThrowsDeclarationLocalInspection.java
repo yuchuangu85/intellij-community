@@ -1,14 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.unneededThrows;
 
 import com.intellij.codeInsight.ExceptionUtil;
-import com.intellij.codeInsight.daemon.JavaErrorMessages;
+import com.intellij.codeInsight.daemon.JavaErrorBundle;
 import com.intellij.codeInsight.daemon.impl.analysis.JavaHighlightUtil;
 import com.intellij.codeInsight.daemon.impl.quickfix.MethodThrowsFix;
 import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.deadCode.UnusedDeclarationInspectionBase;
 import com.intellij.psi.*;
-import com.intellij.util.ArrayUtil;
 import com.siyeh.ig.JavaOverridingMethodUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -19,6 +18,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+@SuppressWarnings("InspectionDescriptionNotFoundInspection") // delegates
 public class RedundantThrowsDeclarationLocalInspection extends AbstractBaseJavaLocalInspectionTool {
   private final RedundantThrowsDeclarationInspection myGlobalTool;
 
@@ -35,25 +35,17 @@ public class RedundantThrowsDeclarationLocalInspection extends AbstractBaseJavaL
 
   @Override
   @NotNull
-  public String getDisplayName() {
-    return myGlobalTool.getDisplayName();
-  }
-
-  @Override
-  @NotNull
   public String getShortName() {
     return myGlobalTool.getShortName();
   }
 
-  @Nullable
   @Override
-  public ProblemDescriptor[] checkMethod(@NotNull PsiMethod method, @NotNull InspectionManager manager, boolean isOnTheFly) {
+  public ProblemDescriptor @Nullable [] checkMethod(@NotNull PsiMethod method, @NotNull InspectionManager manager, boolean isOnTheFly) {
     return checkExceptionsNeverThrown(method, manager);
   }
 
-  @Nullable
-  private ProblemDescriptor[] checkExceptionsNeverThrown(PsiMethod method,
-                                                         InspectionManager inspectionManager) {
+  private ProblemDescriptor @Nullable [] checkExceptionsNeverThrown(PsiMethod method,
+                                                                    InspectionManager inspectionManager) {
     if (method instanceof SyntheticElement) return null;
     PsiClass containingClass = method.getContainingClass();
     if (containingClass == null || JavaHighlightUtil.isSerializationRelatedMethod(method, containingClass)) return null;
@@ -102,7 +94,7 @@ public class RedundantThrowsDeclarationLocalInspection extends AbstractBaseJavaL
 
     return candidates.stream().map(exceptionType -> {
       PsiJavaCodeReferenceElement reference = exceptionType.ref;
-      String description = JavaErrorMessages.message("exception.is.never.thrown", JavaHighlightUtil.formatType(exceptionType.type));
+      String description = JavaErrorBundle.message("exception.is.never.thrown", JavaHighlightUtil.formatType(exceptionType.type));
       LocalQuickFix quickFix = new MethodThrowsFix.Remove(method, exceptionType.type, false);
       return inspectionManager.createProblemDescriptor(reference, description, quickFix, ProblemHighlightType.LIKE_UNUSED_SYMBOL, true);
     }).toArray(ProblemDescriptor[]::new);

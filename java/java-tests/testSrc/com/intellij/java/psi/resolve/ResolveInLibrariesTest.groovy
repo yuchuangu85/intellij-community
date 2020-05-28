@@ -1,39 +1,29 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.psi.resolve
 
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.application.ex.PathManagerEx
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.roots.ModuleRootModificationUtil
+import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.JarFileSystem
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.project.IntelliJProjectConfiguration
-import com.intellij.psi.JavaPsiFacade
-import com.intellij.psi.PsiClass
-import com.intellij.psi.PsiClassType
-import com.intellij.psi.PsiMethod
+import com.intellij.psi.*
 import com.intellij.psi.impl.JavaPsiFacadeEx
 import com.intellij.psi.impl.source.PsiFileImpl
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ClassInheritorsSearch
 import com.intellij.psi.search.searches.OverridingMethodsSearch
 import com.intellij.psi.stubs.StubTreeLoader
+import com.intellij.testFramework.IdeaTestUtil
 import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.JavaCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.MavenDependencyUtil
+import groovy.transform.CompileStatic
+
 /**
  * @author peter
  */
@@ -44,8 +34,8 @@ class ResolveInLibrariesTest extends JavaCodeInsightFixtureTestCase {
       JarFileSystem.instance.getLocalVirtualFileFor(protobufJar).copy(this, myFixture.getTempDirFixture().findOrCreateDir("lib"), "protoJar.jar")
     }
 
-    PsiTestUtil.addProjectLibrary(myModule, 'proto1', [protobufJar], [])
-    PsiTestUtil.addProjectLibrary(myModule, 'proto2', [JarFileSystem.instance.getJarRootForLocalFile(jarCopy)], [])
+    PsiTestUtil.addProjectLibrary(module, 'proto1', [protobufJar], [])
+    PsiTestUtil.addProjectLibrary(module, 'proto2', [JarFileSystem.instance.getJarRootForLocalFile(jarCopy)], [])
 
     def scope = GlobalSearchScope.allScope(project)
 
@@ -70,14 +60,42 @@ class ResolveInLibrariesTest extends JavaCodeInsightFixtureTestCase {
     }
   }
 
+  @CompileStatic
+  void "test missed library dependency"() {
+    def projectRootManager = ProjectRootManager.getInstance(myFixture.project)
+    def oldSdk = projectRootManager.projectSdk
+    try {
+      WriteAction.run { projectRootManager.projectSdk = IdeaTestUtil.getMockJdk17() }
+
+      // add jar with org.codehaus.groovy.ant.Groovydoc
+      ModuleRootModificationUtil.updateModel(module) { model ->
+        MavenDependencyUtil.addFromMaven(model, "org.codehaus.groovy:groovy-ant:2.4.17", false)
+      }
+
+      // add jar with org.apache.tools.ant.Task which is the superclass of org.codehaus.groovy.ant.Groovydoc
+      def ant = IntelliJProjectConfiguration.getProjectLibraryClassesRootPaths("Ant")
+      PsiTestUtil.addProjectLibrary(module, 'ant', ant)
+
+      myFixture.configureByText("Foo.java", """
+  class Foo { 
+    {new org.codehaus.groovy.ant.Groovydoc().set<caret>Project(new org.apache.tools.ant.Project());}
+  }""")
+
+      assertNotNull(myFixture.getElementAtCaret())
+    }
+    finally {
+      WriteAction.run { projectRootManager.projectSdk = oldSdk }
+    }
+  }
+
   void "test accept that with different library versions inheritance relation may be intransitive"() {
     def lib = LocalFileSystem.getInstance().refreshAndFindFileByPath(PathManagerEx.getTestDataPath() + "/libResolve/inheritance")
 
     //Foo, Middle implements Foo, Other extends Middle
-    PsiTestUtil.addLibrary(myModule, 'full', lib.path, ["/fullLibrary.jar!/"] as String[], [] as String[])
+    PsiTestUtil.addLibrary(module, 'full', lib.path, ["/fullLibrary.jar!/"] as String[], [] as String[])
 
     //Middle, Bottom extends Middle
-    PsiTestUtil.addLibrary(myModule, 'partial', lib.path, ["/middleBottom.jar!/"] as String[], [] as String[])
+    PsiTestUtil.addLibrary(module, 'partial', lib.path, ["/middleBottom.jar!/"] as String[], [] as String[])
 
     def scope = GlobalSearchScope.allScope(project)
 
@@ -119,7 +137,7 @@ class ResolveInLibrariesTest extends JavaCodeInsightFixtureTestCase {
 
   void "test do not parse not stubbed sources in class jars"() {
     def lib = LocalFileSystem.getInstance().refreshAndFindFileByPath(PathManagerEx.getTestDataPath() + "/libResolve/classesAndSources")
-    PsiTestUtil.addLibrary(myModule, 'cas', lib.path, ["/classesAndSources.jar!/"] as String[], ["/classesAndSources.jar!/"] as String[])
+    PsiTestUtil.addLibrary(module, 'cas', lib.path, ["/classesAndSources.jar!/"] as String[], ["/classesAndSources.jar!/"] as String[])
 
     def facade = JavaPsiFacade.getInstance(project)
     def scope = GlobalSearchScope.allScope(project)
@@ -155,7 +173,7 @@ class ResolveInLibrariesTest extends JavaCodeInsightFixtureTestCase {
 
     checkFileIsNotLoadedAndHasNoIndexedStub(localFile)
     assert facade.findClasses('Foo', scope).size() == 0
-    PsiTestUtil.addLibrary(myModule, 'cas', lib.path, [] as String[], ["/classesAndSources.jar!/"] as String[])
+    PsiTestUtil.addLibrary(module, 'cas', lib.path, [] as String[], ["/classesAndSources.jar!/"] as String[])
 
     def vfile = lib.findChild("classesAndSources.jar")
     assert vfile != null
@@ -181,15 +199,15 @@ class ResolveInLibrariesTest extends JavaCodeInsightFixtureTestCase {
   void "test directory with class files inside project content"() {
     def testData = PathManagerEx.getTestDataPath() + "/codeInsight/interJarDependencies"
     myFixture.setTestDataPath(testData)
-    PsiTestUtil.addLibrary(myModule, "lib2", testData, "lib2.jar")
+    PsiTestUtil.addLibrary(module, "lib2", testData, "lib2.jar")
 
     myFixture.copyDirectoryToProject("lib1", "lib1")
-    PsiTestUtil.addLibrary(myModule, "lib1", myFixture.tempDirFixture.getFile("").path, "lib1")
+    PsiTestUtil.addLibrary(module, "lib1", myFixture.tempDirFixture.getFile("").path, "lib1")
 
     myFixture.configureFromExistingVirtualFile(myFixture.addFileToProject("TestCase.java", """
 class TestCase {
     public static void main( String[] args ) {
-        new B().<error descr="Cannot resolve method 'a()'">a</error>(); // should not work, because the A in lib1 has no method a
+        new B().<error descr="Cannot resolve method 'a' in 'B'">a</error>(); // should not work, because the A in lib1 has no method a
         new B().a2(); // should work, because the A with this method is in lib1
     }
 }
@@ -200,7 +218,7 @@ class TestCase {
   void "test update method hierarchy on class file change"() {
     myFixture.testDataPath = PathManagerEx.getTestDataPath() + "/libResolve/methodHierarchy"
     myFixture.copyDirectoryToProject("", "lib")
-    PsiTestUtil.addLibrary(myModule, "lib", myFixture.tempDirFixture.getFile("").path, "lib")
+    PsiTestUtil.addLibrary(module, "lib", myFixture.tempDirFixture.getFile("").path, "lib")
 
     def message = JavaPsiFacade.getInstance(project).findClass('com.google.protobuf.AbstractMessageLite', GlobalSearchScope.allScope(project))
     assert message
@@ -218,7 +236,7 @@ class TestCase {
   void "test nested generic signature from binary"() {
     myFixture.testDataPath = PathManagerEx.getTestDataPath() + "/libResolve/genericSignature"
     myFixture.copyDirectoryToProject("", "lib")
-    PsiTestUtil.addLibrary(myModule, "lib", myFixture.tempDirFixture.getFile("").path, "lib")
+    PsiTestUtil.addLibrary(module, "lib", myFixture.tempDirFixture.getFile("").path, "lib")
 
     def javaPsiFacade = JavaPsiFacadeEx.getInstanceEx(project)
     def factory = javaPsiFacade.elementFactory
@@ -262,4 +280,50 @@ class TestCase {
     assert specificOuter.canonicalText == 'pkg.ParameterizedTypes<java.lang.Number>'
   }
 
+  void "test extending inner types of parameterised classes in external jars"() {
+    def classesDir = myFixture.tempDirFixture.findOrCreateDir("classes")
+    PsiTestUtil.addLibrary(module, classesDir.path)
+    def libSrc = myFixture.addFileToProject("Child.java", """package p;
+class Parent<T> {
+
+    protected class InnerBase {
+        public final T t;
+
+        public InnerBase(T t) {
+            this.t = t;
+        }
+    }
+}
+
+public abstract class Child<T> extends Parent<T> {
+    public abstract void evaluate(InnerImpl market);
+
+    public final class InnerImpl extends InnerBase {
+        public InnerImpl(T t) {
+            super(t);
+        }
+    }
+}
+""").virtualFile
+    IdeaTestUtil.compileFile(VfsUtil.virtualToIoFile(libSrc), VfsUtil.virtualToIoFile(classesDir))
+    VfsUtil.markDirtyAndRefresh(false, true, true, classesDir)
+
+    WriteAction.run { libSrc.delete() }
+
+    assert myFixture.findClass("p.Parent")
+    assert myFixture.findClass("p.Child")
+
+    myFixture.configureByText "p/a.java", """
+package p;
+
+class MyChild extends Child<String> {
+    @Override
+    public void evaluate(InnerImpl impl) {
+        String s = impl.<caret>t;
+    }
+}
+"""
+    myFixture.checkHighlighting()
+    assert (myFixture.getReferenceAtCaretPosition() as PsiReferenceExpression).type.equalsToText(String.name)
+  }
 }

@@ -1,4 +1,4 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection;
 
 import com.intellij.lang.annotation.ProblemGroup;
@@ -36,7 +36,6 @@ public interface ProblemDescriptor extends CommonProblemDescriptor {
    * Sets custom attributes for highlighting the inspection result. Can be used only when the severity of the problem is INFORMATION.
    *
    * @param key the text attributes key for highlighting the result.
-   * @since 9.0
    */
   void setTextAttributes(TextAttributesKey key);
 

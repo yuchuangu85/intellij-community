@@ -1,20 +1,23 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.platform.templates;
 
 import com.intellij.application.options.CodeStyle;
 import com.intellij.execution.RunManager;
+import com.intellij.execution.RunnerAndConfigurationSettings;
 import com.intellij.execution.configurations.ModuleBasedConfiguration;
 import com.intellij.execution.configurations.RunConfiguration;
+import com.intellij.execution.impl.RunManagerImpl;
 import com.intellij.ide.fileTemplates.FileTemplate;
 import com.intellij.ide.fileTemplates.FileTemplateManager;
 import com.intellij.ide.fileTemplates.FileTemplateUtil;
 import com.intellij.ide.util.projectWizard.*;
+import com.intellij.lang.LangBundle;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.diagnostic.Attachment;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.FileTypeManager;
+import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.*;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.progress.ProgressIndicator;
@@ -23,6 +26,7 @@ import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.project.ex.ProjectManagerEx;
+import com.intellij.openapi.projectRoots.SdkTypeId;
 import com.intellij.openapi.roots.ModifiableRootModel;
 import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.roots.ui.configuration.ModulesProvider;
@@ -31,17 +35,13 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.InvalidDataException;
 import com.intellij.openapi.util.Trinity;
 import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtilRt;
-import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.encoding.EncodingProjectManager;
 import com.intellij.openapi.vfs.newvfs.RefreshQueue;
 import com.intellij.platform.templates.github.ZipUtil;
-import com.intellij.util.Consumer;
-import com.intellij.util.ExceptionUtil;
-import com.intellij.util.SmartList;
+import com.intellij.util.*;
 import com.intellij.util.containers.ContainerUtil;
 import org.apache.velocity.exception.VelocityException;
 import org.jdom.JDOMException;
@@ -52,8 +52,14 @@ import org.jetbrains.jps.model.serialization.PathMacroUtil;
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.zip.ZipInputStream;
 
@@ -61,21 +67,17 @@ import java.util.zip.ZipInputStream;
 * @author Dmitry Avdeev
 */
 public class TemplateModuleBuilder extends ModuleBuilder {
+  private final static Logger LOG = Logger.getInstance(TemplateModuleBuilder.class);
 
-  private final ModuleType myType;
-  private final List<WizardInputField> myAdditionalFields;
+  private final ModuleType<?> myType;
+  private final List<WizardInputField<?>> myAdditionalFields;
   private final ArchivedProjectTemplate myTemplate;
   private boolean myProjectMode;
 
-  public TemplateModuleBuilder(ArchivedProjectTemplate template, ModuleType moduleType, List<WizardInputField> additionalFields) {
+  public TemplateModuleBuilder(ArchivedProjectTemplate template, ModuleType<?> moduleType, @NotNull List<WizardInputField<?>> additionalFields) {
     myTemplate = template;
     myType = moduleType;
     myAdditionalFields = additionalFields;
-  }
-
-  @Override
-  public void setupRootModel(ModifiableRootModel modifiableRootModel) throws ConfigurationException {
-
   }
 
   @Override
@@ -90,8 +92,9 @@ public class TemplateModuleBuilder extends ModuleBuilder {
     return builder.createFinishingSteps(wizardContext, modulesProvider);
   }
 
+  @NotNull
   @Override
-  protected List<WizardInputField> getAdditionalFields() {
+  protected List<WizardInputField<?>> getAdditionalFields() {
     return myAdditionalFields;
   }
 
@@ -110,17 +113,19 @@ public class TemplateModuleBuilder extends ModuleBuilder {
           }
         });
 
-        StartupManager.getInstance(project).registerPostStartupActivity(() -> ApplicationManager.getApplication().runWriteAction(() -> {
-          try {
-            ModifiableModuleModel modifiableModuleModel = ModuleManager.getInstance(project).getModifiableModel();
-            modifiableModuleModel.renameModule(module, module.getProject().getName());
-            modifiableModuleModel.commit();
-            fixModuleName(module);
-          }
-          catch (ModuleWithNameAlreadyExists exists) {
-            // do nothing
-          }
-        }));
+        StartupManager.getInstance(project).registerPostStartupActivity(() -> {
+          ApplicationManager.getApplication().runWriteAction(() -> {
+            try {
+              ModifiableModuleModel modifiableModuleModel = ModuleManager.getInstance(project).getModifiableModel();
+              modifiableModuleModel.renameModule(module, module.getProject().getName());
+              modifiableModuleModel.commit();
+              fixModuleName(module);
+            }
+            catch (ModuleWithNameAlreadyExists exists) {
+              // do nothing
+            }
+          });
+        });
         return module;
       }
       return null;
@@ -130,14 +135,14 @@ public class TemplateModuleBuilder extends ModuleBuilder {
     }
   }
 
-  @Nullable
+  @NotNull
   @Override
   public String getBuilderId() {
     return myTemplate.getName();
   }
 
   @Override
-  public ModuleType getModuleType() {
+  public ModuleType<?> getModuleType() {
     return myType;
   }
 
@@ -166,34 +171,47 @@ public class TemplateModuleBuilder extends ModuleBuilder {
     return module;
   }
 
-  private void fixModuleName(Module module) {
-    for (RunConfiguration configuration : RunManager.getInstance(module.getProject()).getAllConfigurationsList()) {
-      if (configuration instanceof ModuleBasedConfiguration) {
-        ((ModuleBasedConfiguration)configuration).getConfigurationModule().setModule(module);
+  private void fixModuleName(@NotNull Module module) {
+    ModifiableRootModel model = ModuleRootManager.getInstance(module).getModifiableModel();
+    for (WizardInputField<?> field : myAdditionalFields) {
+      ProjectTemplateParameterFactory factory = WizardInputField.getFactoryById(field.getId());
+      if (factory != null) {
+        factory.applyResult(field.getValue(), model);
       }
     }
-    ModifiableRootModel model = ModuleRootManager.getInstance(module).getModifiableModel();
-    for (WizardInputField field : myAdditionalFields) {
-      ProjectTemplateParameterFactory factory = WizardInputField.getFactoryById(field.getId());
-      factory.applyResult(field.getValue(), model);
-    }
+
     applyProjectDefaults(module.getProject());
-    for (ProjectTemplateParameterFactory factory : ProjectTemplateParameterFactory.EP_NAME.getExtensions()) {
+
+    for (ProjectTemplateParameterFactory factory : ProjectTemplateParameterFactory.EP_NAME.getExtensionList()) {
       String value = factory.getImmediateValue();
-      if (value != null)
+      if (value != null) {
         factory.applyResult(value, model);
+      }
     }
+
     model.commit();
+
+    RunManager runManager = RunManager.getInstance(module.getProject());
+    for (RunConfiguration configuration : runManager.getAllConfigurationsList()) {
+      if (configuration instanceof ModuleBasedConfiguration) {
+        ((ModuleBasedConfiguration<?, ?>)configuration).getConfigurationModule().setModule(module);
+      }
+    }
   }
 
-  private static void applyProjectDefaults(Project project) {
+  private static void applyProjectDefaults(@NotNull Project project) {
     Project defaultProject = ProjectManager.getInstance().getDefaultProject();
     String charset = EncodingProjectManager.getInstance(defaultProject).getDefaultCharsetName();
     EncodingProjectManager.getInstance(project).setDefaultCharsetName(charset);
+
+    RunnerAndConfigurationSettings selectedConfiguration = RunManager.getInstance(project).getSelectedConfiguration();
+    RunManagerImpl.getInstanceImpl(defaultProject).copyTemplatesToProjectFromTemplate(project);
+    RunManager.getInstance(project).setSelectedConfiguration(selectedConfiguration);
   }
 
-  private WizardInputField getBasePackageField() {
-    for (WizardInputField field : getAdditionalFields()) {
+  @Nullable
+  private WizardInputField<?> getBasePackageField() {
+    for (WizardInputField<?> field : getAdditionalFields()) {
       if (ProjectTemplateParameterFactory.IJ_BASE_PACKAGE.equals(field.getId())) {
         return field;
       }
@@ -203,10 +221,10 @@ public class TemplateModuleBuilder extends ModuleBuilder {
 
   private void unzip(final @Nullable String projectName,
                      String path,
-                     final boolean moduleMode,
+                     final boolean isModuleMode,
                      @Nullable ProgressIndicator pI,
                      boolean reportFailuresWithDialog) {
-    final WizardInputField basePackage = getBasePackageField();
+    final WizardInputField<?> basePackage = getBasePackageField();
     try {
       final File dir = new File(path);
       class ExceptionConsumer implements Consumer<VelocityException> {
@@ -232,7 +250,7 @@ public class TemplateModuleBuilder extends ModuleBuilder {
           if(reportFailuresWithDialog) {
             String dialogMessage;
             if (myFailures.size() == 1) {
-              dialogMessage = "Failed to decode file \'" + myFailures.get(0).getFirst() + "\'";
+              dialogMessage = LangBundle.message("dialog.message.failed.to.decode.file", myFailures.get(0).getFirst());
             }
             else {
               StringBuilder dialogMessageBuilder = new StringBuilder();
@@ -242,14 +260,14 @@ public class TemplateModuleBuilder extends ModuleBuilder {
               }
               dialogMessage = dialogMessageBuilder.toString();
             }
-            Messages.showErrorDialog(dialogMessage, "Decoding Template");
+            Messages.showErrorDialog(dialogMessage, LangBundle.message("dialog.title.decoding.template"));
           }
 
           StringBuilder reportBuilder = new StringBuilder();
           for (Trinity<String, String, VelocityException> failure : myFailures) {
             reportBuilder.append("File: ").append(failure.getFirst()).append("\n");
             reportBuilder.append("Exception:\n").append(ExceptionUtil.getThrowableText(failure.getThird())).append("\n");
-            reportBuilder.append("File content:\n\'").append(failure.getSecond()).append("\'\n");
+            reportBuilder.append("File content:\n'").append(failure.getSecond()).append("'\n");
             reportBuilder.append("\n===========================================\n");
           }
 
@@ -263,7 +281,7 @@ public class TemplateModuleBuilder extends ModuleBuilder {
         @Override
         public Void consume(@NotNull ZipInputStream stream) throws IOException {
           ZipUtil.unzip(ProgressManager.getInstance().getProgressIndicator(), dir, stream, path1 -> {
-            if (moduleMode && path1.contains(Project.DIRECTORY_STORE_FOLDER)) {
+            if (isModuleMode && path1.contains(Project.DIRECTORY_STORE_FOLDER)) {
               return null;
             }
             if (basePackage != null) {
@@ -276,26 +294,25 @@ public class TemplateModuleBuilder extends ModuleBuilder {
               if(pI != null){
                 pI.checkCanceled();
               }
-              FileType fileType = FileTypeManager.getInstance().getFileTypeByExtension(FileUtilRt.getExtension(file.getName()));
-              String text = new String(content, CharsetToolkit.UTF8_CHARSET);
+              FileType fileType = FileTypeManager.getInstance().getFileTypeByFileName(file.getName());
+              String text = new String(content, StandardCharsets.UTF_8);
               consumer.setCurrentFile(file.getName(), text);
               return fileType.isBinary() ? content : processTemplates(projectName, text, file, consumer);
             }
           }, true);
 
           myTemplate.handleUnzippedDirectories(dir, filesToRefresh);
-
           return null;
         }
       });
 
-      if(pI != null) {
-        pI.setText("Refreshing...");
+      if (pI != null) {
+        pI.setText(LangBundle.message("progress.title.refreshing"));
       }
 
-      String iml = ContainerUtil.find(dir.list(), s -> s.endsWith(".iml"));
-      if (moduleMode) {
-        File from = new File(path, iml);
+      String iml = ContainerUtil.find(ObjectUtils.chooseNotNull(dir.list(), ArrayUtilRt.EMPTY_STRING_ARRAY), s -> s.endsWith(".iml"));
+      if (isModuleMode) {
+        File from = new File(path, Objects.requireNonNull(iml));
         File to = new File(getModuleFilePath());
         if (!from.renameTo(to)) {
           throw new IOException("Can't rename " + from + " to " + to);
@@ -319,23 +336,23 @@ public class TemplateModuleBuilder extends ModuleBuilder {
     }
   }
 
-  private static String getPathFragment(String value) {
+  @NotNull
+  private static String getPathFragment(@NotNull String value) {
     return "/" + value.replace('.', '/') + "/";
   }
 
   @SuppressWarnings("UseOfPropertiesAsHashtable")
-  @Nullable
-  private byte[] processTemplates(@Nullable String projectName, String content, File file, Consumer<? super VelocityException> exceptionConsumer)
+  private byte @Nullable [] processTemplates(@Nullable String projectName, String content, File file, Consumer<? super VelocityException> exceptionConsumer)
     throws IOException {
     String patchedContent = content;
     if (!(myTemplate instanceof LocalArchivedTemplate) || ((LocalArchivedTemplate)myTemplate).isEscaped()) {
-      for (WizardInputField field : myAdditionalFields) {
+      for (WizardInputField<?> field : myAdditionalFields) {
         if (!field.acceptFile(file)) {
           return null;
         }
       }
       Properties properties = FileTemplateManager.getDefaultInstance().getDefaultProperties();
-      for (WizardInputField field : myAdditionalFields) {
+      for (WizardInputField<?> field : myAdditionalFields) {
         properties.putAll(field.getValues());
       }
       if (projectName != null) {
@@ -357,56 +374,51 @@ public class TemplateModuleBuilder extends ModuleBuilder {
       }
     }
     return StringUtilRt.convertLineSeparators(patchedContent, CodeStyle.getDefaultSettings().getLineSeparator()).
-      getBytes(CharsetToolkit.UTF8_CHARSET);
+      getBytes(StandardCharsets.UTF_8);
+  }
+
+  @Override
+  public boolean isSuitableSdkType(SdkTypeId sdkType) {
+    return myType.createModuleBuilder().isSuitableSdkType(sdkType);
   }
 
   @Nullable
   @Override
-  public Project createProject(String name, final String path) {
-    final File location = new File(FileUtil.toSystemDependentName(path));
-    LOG.assertTrue(location.exists());
+  public Project createProject(String name, @NotNull String path) {
+    Path baseDir = Paths.get(path);
+    LOG.assertTrue(Files.isDirectory(baseDir));
 
-    final VirtualFile baseDir = WriteAction.compute(() -> LocalFileSystem.getInstance().refreshAndFindFileByIoFile(location));
-    if (baseDir == null) {
-      LOG.error("Couldn't find path '" + path + "' in VFS");
-      return null;
+    List<Path> children;
+    try (DirectoryStream<Path> childrenIterator = Files.newDirectoryStream(baseDir)) {
+      children = ContainerUtil.collect(childrenIterator.iterator());
     }
+    catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+    boolean isSomehowOverwriting = children.size() > 1 ||
+                                   (children.size() == 1 && !PathMacroUtil.DIRECTORY_STORE_NAME.equals(children.get(0).getFileName().toString()));
 
-    VirtualFile[] children = baseDir.getChildren();
-    boolean isSomehowOverwriting = children.length > 1 ||
-                                   (children.length == 1 && !PathMacroUtil.DIRECTORY_STORE_NAME.equals(children[0].getName()));
-
-    Task.WithResult<Project, RuntimeException> task = new Task.WithResult<Project, RuntimeException>(null, "Applying Template", true) {
+    return ProgressManager.getInstance().run(new Task.WithResult<Project, RuntimeException>(null, LangBundle
+      .message("progress.title.applying.template"), true) {
       @Override
       public Project compute(@NotNull ProgressIndicator indicator) {
         try {
           myProjectMode = true;
           unzip(name, path, false, indicator, false);
-          return ProjectManagerEx.getInstanceEx().convertAndLoadProject(path);
-        }
-        catch (IOException e) {
-          LOG.error(e);
-          return null;
+          return ProjectManagerEx.getInstanceEx().loadProject(baseDir);
         }
         finally {
           cleanup();
-          if(indicator.isCanceled()){
-            if (!isSomehowOverwriting) {
-              ApplicationManager.getApplication().invokeLater(() -> {
-                try {
-                  WriteAction.run(() -> baseDir.delete(TemplateProjectDirectoryGenerator.class));
-                }
-                catch (IOException e) {
-                  LOG.error(e);
-                }
-              });
+          if (indicator.isCanceled() && !isSomehowOverwriting) {
+            try {
+              FileUtil.delete(baseDir);
+            }
+            catch (IOException e) {
+              LOG.error(e);
             }
           }
         }
       }
-    };
-    return ProgressManager.getInstance().run(task);
+    });
   }
-
-  private final static Logger LOG = Logger.getInstance(TemplateModuleBuilder.class);
 }

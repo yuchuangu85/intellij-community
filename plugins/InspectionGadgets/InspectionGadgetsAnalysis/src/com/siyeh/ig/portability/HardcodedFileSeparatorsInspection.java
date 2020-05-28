@@ -39,6 +39,7 @@ public class HardcodedFileSeparatorsInspection extends BaseInspection {
 
   private static final char BACKSLASH = '\\';
   private static final char SLASH = '/';
+  private static class Holder {
   /**
    * The regular expression pattern that matches strings which are likely to
    * be date formats. <code>Pattern</font></b> instances are immutable, so
@@ -62,7 +63,7 @@ public class HardcodedFileSeparatorsInspection extends BaseInspection {
   /**
    * All mimetypes, see http://www.iana.org/assignments/media-types/
    */
-  private static final Set<String> mimeTypes = new HashSet();
+  private static final Set<String> mimeTypes = new HashSet<>();
 
   static {
     for (ImageMediaType imageMediaType : ImageMediaType.values()) {
@@ -97,12 +98,12 @@ public class HardcodedFileSeparatorsInspection extends BaseInspection {
   /**
    * All {@link TimeZone} IDs.
    */
-  private static final Set<String> timeZoneIds = new HashSet();
+  private static final Set<String> timeZoneIds = new HashSet<>();
 
   static {
     ContainerUtil.addAll(timeZoneIds, TimeZone.getAvailableIDs());
   }
-
+  }
   /**
    * @noinspection PublicField
    */
@@ -112,13 +113,6 @@ public class HardcodedFileSeparatorsInspection extends BaseInspection {
   @NotNull
   public String getID() {
     return "HardcodedFileSeparator";
-  }
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message(
-      "hardcoded.file.separator.display.name");
   }
 
   @Override
@@ -171,7 +165,7 @@ public class HardcodedFileSeparatorsInspection extends BaseInspection {
             }
           }
         }
-        registerErrorAtOffset(expression, 1, expression.getTextLength() - 2);
+        registerErrorInString(expression);
       }
       else if (type != null && type.equals(PsiType.CHAR)) {
         final Character value = (Character)expression.getValue();
@@ -201,8 +195,8 @@ public class HardcodedFileSeparatorsInspection extends BaseInspection {
       if (string == null) {
         return false;
       }
-      if (string.indexOf((int)'/') == -1 &&
-          string.indexOf((int)'\\') == -1) {
+      if (string.indexOf(SLASH) == -1 &&
+          string.indexOf(BACKSLASH) == -1) {
         return false;
       }
       final char startChar = string.charAt(0);
@@ -222,6 +216,37 @@ public class HardcodedFileSeparatorsInspection extends BaseInspection {
         return false;
       }
       return !isTimeZoneIdString(string);
+    }
+
+    private void registerErrorInString(@NotNull PsiLiteralExpression expression) {
+      String text = expression.getText();
+      int length = 0;
+      int slashInd = 0;
+      int prevSlashInd;
+      while (slashInd != -1) {
+        prevSlashInd = slashInd;
+        int nextSlashInd;
+        for (nextSlashInd = slashInd; nextSlashInd < text.length(); nextSlashInd++) {
+          char symbol = text.charAt(nextSlashInd);
+          if (SLASH == symbol || BACKSLASH == symbol) {
+            slashInd = nextSlashInd;
+            break;
+          }
+        }
+        if (nextSlashInd == text.length()) {
+          slashInd = -1;
+        }
+        else {
+          slashInd++;
+        }
+        if (prevSlashInd == 0 || slashInd - prevSlashInd == 1) {
+          length++;
+        }
+        else {
+          registerErrorAtOffset(expression, prevSlashInd - length, length);
+          length = 1;
+        }
+      }
     }
 
     /**
@@ -252,7 +277,7 @@ public class HardcodedFileSeparatorsInspection extends BaseInspection {
       final int strLength = string.length();
       final char startChar = string.charAt(0);
       final char endChar = string.charAt(strLength - 1);
-      if (startChar == '/' || endChar == '/') {
+      if (startChar == SLASH || endChar == SLASH) {
         // Most likely it's a filename if the string starts or ends
         // with a slash.
         return false;
@@ -261,7 +286,7 @@ public class HardcodedFileSeparatorsInspection extends BaseInspection {
         // Most likely this is a Windows-style full file name.
         return false;
       }
-      final Matcher dateFormatMatcher = DATE_FORMAT_PATTERN.matcher(string);
+      final Matcher dateFormatMatcher = Holder.DATE_FORMAT_PATTERN.matcher(string);
       return dateFormatMatcher.find();
     }
 
@@ -274,7 +299,7 @@ public class HardcodedFileSeparatorsInspection extends BaseInspection {
      *         {@code false} if not.
      */
     private boolean isURLString(String string) {
-      final Matcher urlMatcher = URL_PATTERN.matcher(string);
+      final Matcher urlMatcher = Holder.URL_PATTERN.matcher(string);
       return urlMatcher.find();
     }
 
@@ -307,10 +332,10 @@ public class HardcodedFileSeparatorsInspection extends BaseInspection {
       // "example/foo."                 (can't end with a separator)
       //
       if (m_recognizeExampleMediaType &&
-          string.matches(EXAMPLE_MIME_MEDIA_TYPE_PATTERN)) {
+          string.matches(Holder.EXAMPLE_MIME_MEDIA_TYPE_PATTERN)) {
         return true;
       }
-      return mimeTypes.contains(string);
+      return Holder.mimeTypes.contains(string);
     }
 
     /**
@@ -322,7 +347,7 @@ public class HardcodedFileSeparatorsInspection extends BaseInspection {
      *         TimeZone ID, {@code false} if not.
      */
     private boolean isTimeZoneIdString(String string) {
-      return timeZoneIds.contains(string);
+      return Holder.timeZoneIds.contains(string);
     }
   }
 }

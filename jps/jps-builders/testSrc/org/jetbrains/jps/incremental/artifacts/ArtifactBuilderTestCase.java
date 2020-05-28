@@ -1,33 +1,21 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.jps.incremental.artifacts;
 
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.project.IntelliJProjectConfiguration;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.io.DirectoryContentSpec;
 import com.intellij.util.io.TestFileSystemBuilder;
 import com.intellij.util.text.UniqueNameGenerator;
 import org.jetbrains.jps.builders.BuildResult;
 import org.jetbrains.jps.builders.CompileScopeTestBuilder;
 import org.jetbrains.jps.builders.JpsBuildTestCase;
+import org.jetbrains.jps.model.JpsDummyElement;
 import org.jetbrains.jps.model.JpsElementFactory;
 import org.jetbrains.jps.model.artifact.DirectoryArtifactType;
 import org.jetbrains.jps.model.artifact.JpsArtifact;
 import org.jetbrains.jps.model.artifact.JpsArtifactService;
+import org.jetbrains.jps.model.artifact.JpsArtifactType;
 import org.jetbrains.jps.model.java.JpsJavaExtensionService;
 import org.jetbrains.jps.model.java.JpsJavaLibraryType;
 import org.jetbrains.jps.model.library.JpsLibrary;
@@ -44,9 +32,6 @@ import java.util.Set;
 import static com.intellij.util.io.TestFileSystemItem.fs;
 import static org.jetbrains.jps.builders.CompileScopeTestBuilder.make;
 
-/**
- * @author nik
- */
 public abstract class ArtifactBuilderTestCase extends JpsBuildTestCase {
   protected static void createFileInArtifactOutput(JpsArtifact a, final String relativePath) {
     createFileInOutputDir(a.getOutputPath(), relativePath);
@@ -94,8 +79,14 @@ public abstract class ArtifactBuilderTestCase extends JpsBuildTestCase {
   }
 
   protected JpsArtifact addArtifact(String name, LayoutElementTestUtil.LayoutElementCreator root) {
+    return addArtifact(name, root, DirectoryArtifactType.INSTANCE);
+  }
+
+  protected JpsArtifact addArtifact(String name, LayoutElementTestUtil.LayoutElementCreator root,
+                                    JpsArtifactType<JpsDummyElement> artifactType) {
     assertFalse("JpsArtifact " + name + " already exists", getArtifactNames().contains(name));
-    JpsArtifact artifact = JpsArtifactService.getInstance().addArtifact(myProject, name, root.buildElement(), DirectoryArtifactType.INSTANCE,
+    JpsArtifact artifact = JpsArtifactService.getInstance().addArtifact(myProject, name, root.buildElement(),
+                                                                        artifactType,
                                                                         JpsElementFactory.getInstance().createDummyElement());
     artifact.setOutputPath(getAbsolutePath("out/artifacts/" + name));
     return artifact;
@@ -139,7 +130,7 @@ public abstract class ArtifactBuilderTestCase extends JpsBuildTestCase {
   }
 
   protected void assertCopied(String... filePaths) {
-    assertDeletedAndCopied(ArrayUtil.EMPTY_STRING_ARRAY, filePaths);
+    assertDeletedAndCopied(ArrayUtilRt.EMPTY_STRING_ARRAY, filePaths);
   }
 
   protected void assertDeletedAndCopied(String deletedPath, String... copiedPaths) {
@@ -170,7 +161,7 @@ public abstract class ArtifactBuilderTestCase extends JpsBuildTestCase {
   }
 
   protected void assertUpToDate() {
-    assertDeletedAndCopied(ArrayUtil.EMPTY_STRING_ARRAY);
+    assertDeletedAndCopied(ArrayUtilRt.EMPTY_STRING_ARRAY);
   }
 
 }

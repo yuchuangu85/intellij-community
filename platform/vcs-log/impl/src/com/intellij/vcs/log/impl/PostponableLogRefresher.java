@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.vcs.log.impl;
 
 import com.intellij.ide.PowerSaveMode;
@@ -32,11 +18,11 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-public class PostponableLogRefresher implements VcsLogRefresher {
+public final class PostponableLogRefresher implements VcsLogRefresher {
   private static final Logger LOG = Logger.getInstance(PostponableLogRefresher.class);
-  @NotNull protected final VcsLogData myLogData;
-  @NotNull private final Set<VirtualFile> myRootsToRefresh = ContainerUtil.newHashSet();
-  @NotNull private final Set<VcsLogWindow> myLogWindows = ContainerUtil.newHashSet();
+  private final @NotNull VcsLogData myLogData;
+  private final @NotNull Set<VirtualFile> myRootsToRefresh = new HashSet<>();
+  private final @NotNull Set<VcsLogWindow> myLogWindows = new HashSet<>();
 
   public PostponableLogRefresher(@NotNull VcsLogData logData) {
     myLogData = logData;
@@ -48,8 +34,10 @@ public class PostponableLogRefresher implements VcsLogRefresher {
     });
   }
 
-  @NotNull
-  public Disposable addLogWindow(@NotNull VcsLogWindow window) {
+  public @NotNull Disposable addLogWindow(@NotNull VcsLogWindow window) {
+    LOG.assertTrue(!ContainerUtil.exists(myLogWindows, w -> w.getId().equals(window.getId())),
+                   "Log window with id '" + window.getId() + "' was already added.");
+
     myLogWindows.add(window);
     refresherActivated(window.getRefresher(), true);
     return () -> {
@@ -58,16 +46,11 @@ public class PostponableLogRefresher implements VcsLogRefresher {
     };
   }
 
-  @NotNull
-  public Disposable addLogWindow(@NotNull VisiblePackRefresher refresher) {
-    return addLogWindow(new VcsLogWindow(refresher));
-  }
-
   public static boolean keepUpToDate() {
     return Registry.is("vcs.log.keep.up.to.date") && !PowerSaveMode.isEnabled();
   }
 
-  protected boolean canRefreshNow() {
+  private boolean canRefreshNow() {
     if (keepUpToDate()) return true;
     return isLogVisible();
   }
@@ -91,16 +74,11 @@ public class PostponableLogRefresher implements VcsLogRefresher {
   }
 
   private static void dataPackArrived(@NotNull VisiblePackRefresher refresher, boolean visible) {
-    if (!visible) {
-      refresher.setValid(false, true);
-    }
-    else {
-      refresher.onRefresh();
-    }
+    refresher.setValid(visible, true);
   }
 
   @Override
-  public void refresh(@NotNull final VirtualFile root) {
+  public void refresh(final @NotNull VirtualFile root) {
     ApplicationManager.getApplication().invokeLater(() -> {
       if (canRefreshNow()) {
         myLogData.refresh(Collections.singleton(root));
@@ -112,26 +90,26 @@ public class PostponableLogRefresher implements VcsLogRefresher {
     }, ModalityState.any());
   }
 
-  protected void refreshPostponedRoots() {
+  private void refreshPostponedRoots() {
     Set<VirtualFile> toRefresh = new HashSet<>(myRootsToRefresh);
     myRootsToRefresh.removeAll(toRefresh); // clear the set, but keep roots which could possibly arrive after collecting them in the var.
     myLogData.refresh(toRefresh);
   }
 
-  @NotNull
-  public Set<VcsLogWindow> getLogWindows() {
+  public @NotNull Set<VcsLogWindow> getLogWindows() {
     return myLogWindows;
   }
 
   public static class VcsLogWindow {
-    @NotNull private final VisiblePackRefresher myRefresher;
+    private final @NotNull String myId;
+    private final @NotNull VisiblePackRefresher myRefresher;
 
-    public VcsLogWindow(@NotNull VisiblePackRefresher refresher) {
+    public VcsLogWindow(@NotNull String id, @NotNull VisiblePackRefresher refresher) {
+      myId = id;
       myRefresher = refresher;
     }
 
-    @NotNull
-    public VisiblePackRefresher getRefresher() {
+    public @NotNull VisiblePackRefresher getRefresher() {
       return myRefresher;
     }
 
@@ -139,9 +117,13 @@ public class PostponableLogRefresher implements VcsLogRefresher {
       return true;
     }
 
+    public @NotNull String getId() {
+      return myId;
+    }
+
     @Override
     public String toString() {
-      return "VcsLogWindow \'" + myRefresher + "\'";
+      return "VcsLogWindow '" + myId + "'"; // NON-NLS
     }
   }
 }

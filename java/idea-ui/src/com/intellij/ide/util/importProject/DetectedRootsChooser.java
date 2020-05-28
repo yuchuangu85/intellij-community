@@ -1,12 +1,12 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.util.importProject;
 
 import com.intellij.ide.util.projectWizard.importSources.DetectedProjectRoot;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.ComboBoxTableRenderer;
 import com.intellij.ui.CollectionComboBoxModel;
-import com.intellij.ui.ListCellRendererWrapper;
 import com.intellij.ui.ScrollPaneFactory;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.table.TableView;
 import com.intellij.util.EventDispatcher;
 import com.intellij.util.ui.ColumnInfo;
@@ -25,9 +25,6 @@ import java.awt.event.KeyEvent;
 import java.util.List;
 import java.util.*;
 
-/**
- * @author nik
- */
 public class DetectedRootsChooser {
   private static final int CHECKBOX_COLUMN_WIDTH = new JCheckBox().getPreferredSize().width + 4;
   private final ColumnInfo<DetectedRootData,Boolean> myIncludedColumn = new ColumnInfo<DetectedRootData, Boolean>("") {
@@ -101,13 +98,8 @@ public class DetectedRootsChooser {
 
     @Override
     public TableCellEditor getEditor(DetectedRootData o) {
-      final ComboBox comboBox = new ComboBox(new CollectionComboBoxModel(Arrays.asList(o.getAllRoots()), o.getSelectedRoot()));
-      comboBox.setRenderer(new ListCellRendererWrapper<DetectedProjectRoot>() {
-        @Override
-        public void customize(JList list, DetectedProjectRoot value, int index, boolean selected, boolean hasFocus) {
-          setText(value.getRootTypeName());
-        }
-      });
+      ComboBox<DetectedProjectRoot> comboBox = new ComboBox<>(new CollectionComboBoxModel(Arrays.asList(o.getAllRoots()), o.getSelectedRoot()));
+      comboBox.setRenderer(SimpleListCellRenderer.create("", DetectedProjectRoot::getRootTypeName));
       return new DefaultCellEditor(comboBox);
     }
 
@@ -207,7 +199,7 @@ public class DetectedRootsChooser {
     column.setMaxWidth(width);
     myTable.updateColumnSizes();
     List<DetectedRootData> sortedRoots = new ArrayList<>(roots);
-    Collections.sort(sortedRoots, Comparator.comparing(DetectedRootData::getDirectory));
+    sortedRoots.sort(Comparator.comparing(DetectedRootData::getDirectory));
     myModel.setItems(sortedRoots);
   }
 

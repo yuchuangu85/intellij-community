@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.impl.statements;
 
 import com.intellij.lang.ASTNode;
@@ -10,8 +10,8 @@ import com.intellij.psi.impl.ResolveScopeManager;
 import com.intellij.psi.presentation.java.JavaPresentationUtil;
 import com.intellij.psi.search.SearchScope;
 import com.intellij.psi.stubs.IStubElementType;
+import com.intellij.ui.IconManager;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.containers.ContainerUtil;
 import icons.JetgroovyIcons;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -19,7 +19,7 @@ import org.jetbrains.plugins.groovy.extensions.NamedArgumentDescriptor;
 import org.jetbrains.plugins.groovy.lang.groovydoc.psi.api.GrDocComment;
 import org.jetbrains.plugins.groovy.lang.groovydoc.psi.impl.GrDocCommentUtil;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyTokenTypes;
-import org.jetbrains.plugins.groovy.lang.parser.GroovyElementTypes;
+import org.jetbrains.plugins.groovy.lang.parser.GroovyStubElementTypes;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyElementVisitor;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFileBase;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElementFactory;
@@ -29,6 +29,7 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrExpres
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrTypeDefinitionBody;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrAccessorMethod;
 import org.jetbrains.plugins.groovy.lang.psi.dataFlow.types.TypeInferenceHelper;
+import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyPsiManager;
 import org.jetbrains.plugins.groovy.lang.psi.stubs.GrFieldStub;
 import org.jetbrains.plugins.groovy.lang.psi.typeEnhancers.GrVariableEnhancer;
 import org.jetbrains.plugins.groovy.lang.psi.util.GrClassImplUtil;
@@ -36,6 +37,7 @@ import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 
 import javax.swing.*;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 public class GrFieldImpl extends GrVariableBaseImpl<GrFieldStub> implements GrField, StubBasedPsiElement<GrFieldStub> {
@@ -45,7 +47,7 @@ public class GrFieldImpl extends GrVariableBaseImpl<GrFieldStub> implements GrFi
   }
 
   public GrFieldImpl(GrFieldStub stub) {
-    this(stub, GroovyElementTypes.FIELD);
+    this(stub, GroovyStubElementTypes.FIELD);
   }
 
   public GrFieldImpl(GrFieldStub stub, IStubElementType nodeType) {
@@ -104,7 +106,7 @@ public class GrFieldImpl extends GrVariableBaseImpl<GrFieldStub> implements GrFi
 
   @Override
   public PsiType getTypeGroovy() {
-    PsiType type = TypeInferenceHelper.getCurrentContext().getExpressionType(this, field -> {
+    PsiType type = TypeInferenceHelper.inTopContext(() -> GroovyPsiManager.getInstance(getProject()).getType(this, field -> {
       if (getDeclaredType() == null && getInitializerGroovy() == null) {
         final PsiType type1 = GrVariableEnhancer.getEnhancedType(field);
         if (type1 != null) {
@@ -112,13 +114,13 @@ public class GrFieldImpl extends GrVariableBaseImpl<GrFieldStub> implements GrFi
         }
       }
       return null;
-    });
+    }));
 
     if (type != null) {
       return type;
     }
 
-    return super.getTypeGroovy();
+    return TypeInferenceHelper.inTopContext(() -> super.getTypeGroovy());
   }
 
   @Override
@@ -155,8 +157,7 @@ public class GrFieldImpl extends GrVariableBaseImpl<GrFieldStub> implements GrFi
   }
 
   @Override
-  @NotNull
-  public GrAccessorMethod[] getGetters() {
+  public GrAccessorMethod @NotNull [] getGetters() {
     return GrClassImplUtil.findGetters(this);
   }
 
@@ -190,7 +191,7 @@ public class GrFieldImpl extends GrVariableBaseImpl<GrFieldStub> implements GrFi
     Icon fieldIcon = isProperty()
                      ? isAbstract ? JetgroovyIcons.Groovy.AbstractProperty : JetgroovyIcons.Groovy.Property
                      : isAbstract ? JetgroovyIcons.Groovy.AbstractField : JetgroovyIcons.Groovy.Field;
-    return ElementPresentationUtil.createLayeredIcon(fieldIcon, this, false);
+    return IconManager.getInstance().createLayeredIcon(this, fieldIcon, ElementPresentationUtil.getFlags(this, false));
   }
 
   @Override
@@ -201,7 +202,7 @@ public class GrFieldImpl extends GrVariableBaseImpl<GrFieldStub> implements GrFi
       String[] namedParameters = stub.getNamedParameters();
       if (namedParameters.length == 0) return Collections.emptyMap();
 
-      Map<String, NamedArgumentDescriptor> result = ContainerUtil.newHashMap();
+      Map<String, NamedArgumentDescriptor> result = new HashMap<>();
       for (String parameter : namedParameters) {
         result.put(parameter, GrNamedArgumentSearchVisitor.CODE_NAMED_ARGUMENTS_DESCR);
       }

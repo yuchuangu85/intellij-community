@@ -1,35 +1,34 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.application;
 
+import com.intellij.ide.CliResult;
+import com.intellij.util.ArrayUtilRt;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * Implementers of the interface declared via {@link com.intellij.ExtensionPoints#APPLICATION_STARTER}
- * may be capable of processing an external command line within a running IntelliJ Platform instance.
- *
- * @author yole
- */
-public abstract class ApplicationStarterEx implements ApplicationStarter {
-  public abstract boolean isHeadless();
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 
-  public boolean canProcessExternalCommandLine() {
-    return false;
+/** @deprecated override {@link ApplicationStarter} instead */
+@Deprecated
+@ApiStatus.ScheduledForRemoval(inVersion = "2021.2")
+public abstract class ApplicationStarterEx implements ApplicationStarter {
+  @NotNull
+  @Override
+  public final Future<CliResult> processExternalCommandLineAsync(@NotNull List<String> args, @Nullable String currentDirectory) {
+    processExternalCommandLine(ArrayUtilRt.toStringArray(args), currentDirectory);
+    return CompletableFuture.completedFuture(CliResult.OK);
   }
 
-  public void processExternalCommandLine(@NotNull String[] args, @Nullable String currentDirectory) { }
+  /**
+   * @deprecated use async version {@link #processExternalCommandLineAsync}
+   */
+  @SuppressWarnings("unused")
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.2")
+  @Deprecated
+  public void processExternalCommandLine(String @NotNull [] args, @Nullable String currentDirectory) {
+    throw new UnsupportedOperationException("Class " + getClass().getName() + " must implement `processExternalCommandLine()`");
+  }
 }

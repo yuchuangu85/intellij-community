@@ -36,7 +36,7 @@ public class SvnContentRevision extends SvnBaseContentRevision implements ByteBa
 
   @NotNull
   public static SvnContentRevision createBaseRevision(@NotNull SvnVcs vcs, @NotNull FilePath file, @NotNull Status status) {
-    Revision revision = status.getRevision().isValid() ? status.getRevision() : status.getCommittedRevision();
+    Revision revision = status.getRevision().isValid() ? status.getRevision() : status.getCommitInfo().getRevision();
     return createBaseRevision(vcs, file, revision);
   }
 
@@ -62,9 +62,8 @@ public class SvnContentRevision extends SvnBaseContentRevision implements ByteBa
     return ContentRevisionCache.getAsString(getContentAsBytes(), myFile, null);
   }
 
-  @Nullable
   @Override
-  public byte[] getContentAsBytes() throws VcsException {
+  public byte @Nullable [] getContentAsBytes() throws VcsException {
     try {
       if (myUseBaseRevision) {
         return ContentRevisionCache.getOrLoadCurrentAsBytes(myVcs.getProject(), myFile, myVcs.getKeyInstanceMethod(),

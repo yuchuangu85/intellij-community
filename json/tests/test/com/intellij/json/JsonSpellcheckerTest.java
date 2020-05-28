@@ -1,14 +1,14 @@
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.json;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.IdeActions;
-import com.intellij.openapi.extensions.AreaPicoContainer;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.fileTypes.LanguageFileType;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import com.intellij.spellchecker.inspections.SpellCheckingInspection;
+import com.intellij.testFramework.ServiceContainerUtil;
 import com.intellij.util.containers.Predicate;
 import com.jetbrains.jsonSchema.JsonSchemaTestProvider;
 import com.jetbrains.jsonSchema.JsonSchemaTestServiceImpl;
@@ -40,12 +40,8 @@ public class JsonSpellcheckerTest extends JsonTestCase {
 
   public void testWithSchema() {
     PsiFile[] files = myFixture.configureByFiles(getTestName(false) + ".json", "Schema.json");
-    JsonSchemaTestServiceImpl.setProvider(new JsonSchemaTestProvider(files[1].getVirtualFile(),
-                                                                     getAvailabilityPredicate()));
-    AreaPicoContainer container = Extensions.getArea(getProject()).getPicoContainer();
-    String key = JsonSchemaService.class.getName();
-    container.unregisterComponent(key);
-    container.registerComponentImplementation(key, JsonSchemaTestServiceImpl.class);
+    JsonSchemaTestServiceImpl.setProvider(new JsonSchemaTestProvider(files[1].getVirtualFile(), getAvailabilityPredicate()));
+    ServiceContainerUtil.replaceService(getProject(), JsonSchemaService.class, new JsonSchemaTestServiceImpl(getProject()), getTestRootDisposable());
     Disposer.register(getTestRootDisposable(), new Disposable() {
       @Override
       public void dispose() {

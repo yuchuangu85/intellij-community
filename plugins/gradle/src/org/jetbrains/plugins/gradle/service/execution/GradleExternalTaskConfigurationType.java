@@ -6,10 +6,10 @@ import com.intellij.openapi.externalSystem.model.ProjectSystemId;
 import com.intellij.openapi.externalSystem.service.execution.AbstractExternalSystemTaskConfigurationType;
 import com.intellij.openapi.externalSystem.service.execution.ExternalSystemRunConfiguration;
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil;
-import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.SettingsEditor;
 import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.plugins.gradle.util.GradleBundle;
 import org.jetbrains.plugins.gradle.util.GradleConstants;
 
 import javax.swing.*;
@@ -29,6 +29,11 @@ public final class GradleExternalTaskConfigurationType extends AbstractExternalS
     return (GradleExternalTaskConfigurationType)ExternalSystemUtil.findConfigurationType(GradleConstants.SYSTEM_ID);
   }
 
+  @Override
+  protected @NotNull String getConfigurationFactoryId() {
+    return "Gradle";
+  }
+
   @NotNull
   @Override
   protected ExternalSystemRunConfiguration doCreateConfiguration(@NotNull ProjectSystemId externalSystemId,
@@ -36,6 +41,11 @@ public final class GradleExternalTaskConfigurationType extends AbstractExternalS
                                                                  @NotNull ConfigurationFactory factory,
                                                                  @NotNull String name) {
     return new GradleRunConfiguration(project, factory, name);
+  }
+
+  @Override
+  public boolean isDumbAware() {
+    return true;
   }
 }
 
@@ -49,7 +59,7 @@ class GradleDebugSettingsEditor extends SettingsEditor<GradleRunConfiguration> {
   }
 
   @Override
-  protected void applyEditorTo(@NotNull GradleRunConfiguration s) throws ConfigurationException {
+  protected void applyEditorTo(@NotNull GradleRunConfiguration s) {
     s.setScriptDebugEnabled(myCheckBox.isSelected());
   }
 
@@ -57,7 +67,7 @@ class GradleDebugSettingsEditor extends SettingsEditor<GradleRunConfiguration> {
   @Override
   protected JComponent createEditor() {
     JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    myCheckBox = new JCheckBox("Enable Gradle script debugging");
+    myCheckBox = new JCheckBox(GradleBundle.message("gradle.tasks.script.debugging"));
     panel.add(myCheckBox);
     return panel;
   }

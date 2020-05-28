@@ -15,14 +15,14 @@
  */
 package com.intellij.refactoring.util.occurrences;
 
-import com.intellij.psi.PsiClass;
-import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiExpression;
+import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.refactoring.introduceField.ElementToWorkOn;
 import com.intellij.refactoring.util.RefactoringUtil;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * @author dsl
@@ -42,7 +42,7 @@ public abstract class BaseOccurrenceManager implements OccurrenceManager {
       myOccurrences = findOccurrences();
 
       if(myFilter != null) {
-        ArrayList<PsiExpression> result = new ArrayList<>();
+        List<PsiExpression> result = new ArrayList<>();
         for (PsiExpression occurrence : myOccurrences) {
           if (myFilter.isOK(occurrence)) result.add(occurrence);
         }
@@ -61,9 +61,9 @@ public abstract class BaseOccurrenceManager implements OccurrenceManager {
     return myOccurrences;
   }
 
-  protected abstract PsiExpression[] defaultOccurrences();
+  protected abstract PsiExpression @NotNull [] defaultOccurrences();
 
-  protected abstract PsiExpression[] findOccurrences();
+  protected abstract PsiExpression @NotNull [] findOccurrences();
 
   @Override
   public boolean isInFinalContext() {
@@ -80,18 +80,23 @@ public abstract class BaseOccurrenceManager implements OccurrenceManager {
   }
   @Override
   public PsiElement getAnchorStatementForAllInScope(PsiElement scope) {
-    return RefactoringUtil.getAnchorElementForMultipleExpressions(myOccurrences, scope);
+    PsiElement anchor = RefactoringUtil.getAnchorElementForMultipleExpressions(myOccurrences, scope);
+    return anchor instanceof PsiField && !(anchor instanceof PsiEnumConstant) ? ((PsiField)anchor).getInitializer() : anchor;
   }
 
   private static boolean needToDeclareFinal(PsiExpression[] occurrences) {
     PsiElement scopeToDeclare = null;
     for (PsiExpression occurrence : occurrences) {
       final PsiElement data = occurrence.getUserData(ElementToWorkOn.PARENT);
+      PsiElement element = data != null ? data : occurrence;
       if (scopeToDeclare == null) {
-        scopeToDeclare = data != null ? data : occurrence;
+        scopeToDeclare = element;
       }
       else {
-        scopeToDeclare = PsiTreeUtil.findCommonParent(scopeToDeclare, data != null ? data : occurrence);
+        scopeToDeclare = PsiTreeUtil.findCommonParent(scopeToDeclare, element);
+      }
+      if (PsiTreeUtil.getParentOfType(element, PsiSwitchLabelStatement.class, true, PsiStatement.class) != null) {
+        return true;
       }
     }
     if(scopeToDeclare == null) {

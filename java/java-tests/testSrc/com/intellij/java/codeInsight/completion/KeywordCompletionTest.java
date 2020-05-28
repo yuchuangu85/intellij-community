@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.codeInsight.completion;
 
 import com.intellij.JavaTestUtil;
@@ -23,14 +9,9 @@ import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
 import org.jetbrains.annotations.NotNull;
 
-/**
- * @author ik
- */
 public class KeywordCompletionTest extends LightCompletionTestCase {
   private static final String BASE_PATH = "/codeInsight/completion/keywords/";
 
-  private static final String[] FILE_SCOPE_KEYWORDS = {
-    "package", "public", "private", "import", "final", "class", "interface", "abstract", "enum", "default", null};
   private static final String[] CLASS_SCOPE_KEYWORDS = {
     "public", "private", "protected", "import", "final", "class", "interface", "abstract", "enum", "default", null};
   private static final String[] CLASS_SCOPE_KEYWORDS_2 = {
@@ -44,7 +25,7 @@ public class KeywordCompletionTest extends LightCompletionTestCase {
     return JavaTestUtil.getJavaTestDataPath();
   }
 
-  public void testFileScope1() { 
+  public void testFileScope1() {
     doTest(8, "package", "public", "import", "final", "class", "interface", "abstract", "enum");
     assertNotContainItems("private", "default");
   }
@@ -114,10 +95,13 @@ public class KeywordCompletionTest extends LightCompletionTestCase {
   public void testNullInMethodCall2() { doTest(); }
   public void testNewInMethodRefs() { doTest(1, "new", "null", "true", "false"); }
   public void testNewInCast() { doTest(2, "new", "null", "true", "false"); }
+  public void testNewInNegation() { doTest(1, "new", "null", "true", "false"); }
   public void testSpaceAfterInstanceof() { doTest(); }
   public void testInstanceofAfterUnresolved() { doTest(1, "instanceof"); }
   public void testInstanceofAfterStatementStart() { doTest(1, "instanceof"); }
+  public void testNoInstanceofInAnnotation() { doTest(0, "instanceof"); }
 
+  public void testInstanceofNegated() { doTest(); }
   public void testInstanceofNegation() {
     configureByTestName();
     selectItem(myItems[0], '!');
@@ -131,6 +115,7 @@ public class KeywordCompletionTest extends LightCompletionTestCase {
   public void testPrimitivesInClassAnnotationAttribute() { doTest(3, "true", "int", "boolean"); }
   public void testPrimitivesInMethodReturningArray() { doTest(2, "true", "byte", "boolean"); }
   public void testPrimitivesInMethodReturningClass() { doTest(3, "byte", "boolean", "void"); }
+  public void testPrimitivesInRecordHeader() {setLanguageLevel(LanguageLevel.JDK_14_PREVIEW); doTest(2, "byte", "boolean"); }
 
   public void testNoClassKeywordsInLocalArrayInitializer() { doTest(0, "class", "interface", "enum"); }
   public void testNoClassKeywordsInFieldArrayInitializer() { doTest(0, "class", "interface", "enum"); }
@@ -140,10 +125,12 @@ public class KeywordCompletionTest extends LightCompletionTestCase {
   public void testCharInAnnotatedParameter() { doTest(1, "char"); }
   public void testReturnInTernary() { doTest(1, "return"); }
   public void testReturnInRussian() { doTest(1, "return"); }
+  public void testReturnWithTypo() { doTest(1, "return"); }
   public void testFinalAfterParameterAnno() { doTest(2, "final", "float", "class"); }
   public void testFinalAfterParameterAnno2() { doTest(2, "final", "float", "class"); }
   public void testFinalAfterCase() { doTest(3, "final", "float", "class"); }
   public void testNoCaseInsideWhileInSwitch() { doTest(0, "case", "default"); }
+  public void testIndentDefaultInSwitch() { doTest(); }
   public void testFinalInCatch() { doTest(1, "final"); }
   public void testFinalInIncompleteCatch() { doTest(1, "final"); }
   public void testFinalInCompleteCatch() { doTest(1, "final"); }
@@ -161,10 +148,14 @@ public class KeywordCompletionTest extends LightCompletionTestCase {
   public void testIntInGenerics2() { doTest(2, "int", "char", "final"); }
   public void testBreakInLabeledBlock() { doTest(1, "break label", "continue"); }
   public void testPrimitiveInForLoop() { doTest(1, "int"); }
+  public void testPrimitiveInEnumConstructorCast() { doTest(1, "int"); }
   public void testNoStatementInForLoopCondition() { doTest(0, "synchronized", "if"); }
   public void testNoStatementInForLoopUpdate() { doTest(0, "synchronized", "if"); }
+  public void testSuggestModifiersAfterUnfinishedMethod() { doTest(1, "public"); }
   public void testPrivateInJava9Interface() { setLanguageLevel(LanguageLevel.JDK_1_9); doTest(); }
   public void testQualifiedNew() { doTest(1, "new"); }
+  public void testRecord() {setLanguageLevel(LanguageLevel.JDK_14_PREVIEW);  doTest(); }
+  public void testRecordInFileScope() {setLanguageLevel(LanguageLevel.JDK_14_PREVIEW);  doTest(1, "record"); }
 
   public void testOverwriteCatch() {
     configureByTestName();
@@ -184,6 +175,11 @@ public class KeywordCompletionTest extends LightCompletionTestCase {
     configureFromFileText("package-info.java", "@Anno <caret>");
     complete();
     testByCount(1, "package");
+  }
+
+  public void testAfterWildcard() {
+    configureByTestName();
+    assertStringItems("extends", "super");
   }
 
   private void doTest() {

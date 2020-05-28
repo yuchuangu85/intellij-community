@@ -1,28 +1,15 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.util;
 
-import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.IntObjectMap;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -30,19 +17,22 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @author max
  * @author Konstantin Bulenkov
+ * @see KeyWithDefaultValue
  */
+@NonNls
 public class Key<T> {
   private static final AtomicInteger ourKeysCounter = new AtomicInteger();
-  private final int myIndex = ourKeysCounter.getAndIncrement();
-  private final String myName; // for debug purposes only
   private static final IntObjectMap<Key<?>> allKeys = ContainerUtil.createConcurrentIntObjectWeakValueMap();
 
-  public Key(@NotNull @NonNls String name) {
+  private final int myIndex = ourKeysCounter.getAndIncrement();
+  private final String myName; // for debug purposes only
+
+  public Key(@NonNls @NotNull String name) {
     myName = name;
     allKeys.put(myIndex, this);
   }
 
-  // made final because many classes depend on one-to-one key index <-> key instance relationship. See e.g. UserDataHolderBase
+  // Final because some clients depend on one-to-one key index/key instance relationship (e.g. UserDataHolderBase).
   @Override
   public final int hashCode() {
     return myIndex;
@@ -59,36 +49,34 @@ public class Key<T> {
   }
 
   @NotNull
-  public static <T> Key<T> create(@NotNull @NonNls String name) {
-    return new Key<T>(name);
+  public static <T> Key<T> create(@NonNls @NotNull String name) {
+    return new Key<>(name);
   }
 
+  @Contract("null -> null")
   public T get(@Nullable UserDataHolder holder) {
     return holder == null ? null : holder.getUserData(this);
   }
 
+  @Contract("null -> null")
   public T get(@Nullable Map<Key, ?> holder) {
     //noinspection unchecked
     return holder == null ? null : (T)holder.get(this);
   }
 
+  @Contract("_, !null -> !null")
   public T get(@Nullable UserDataHolder holder, T defaultValue) {
-    final T t = get(holder);
+    T t = get(holder);
     return t == null ? defaultValue : t;
   }
 
   @NotNull
   public T getRequired(@NotNull UserDataHolder holder) {
-    return ObjectUtils.notNull(holder.getUserData(this));
+    return Objects.requireNonNull(holder.getUserData(this));
   }
 
   /**
-   * Returns {@code true} if and only if the {@code holder} has
-   * not null value by the key.
-   *
-   * @param holder user data holder object
-   * @return {@code true} if holder.getUserData(this) != null
-   * {@code false} otherwise.
+   * Returns {@code true} if and only if the {@code holder} has not null value for the key.
    */
   public boolean isIn(@Nullable UserDataHolder holder) {
     return get(holder) != null;
@@ -113,7 +101,7 @@ public class Key<T> {
   }
 
   /**
-   * @deprecated access to Key via its name is a kind of hack, use Key instance directly instead
+   * @deprecated access to a key via its name is a dirty hack; use Key instance directly instead
    */
   @Deprecated
   @Nullable

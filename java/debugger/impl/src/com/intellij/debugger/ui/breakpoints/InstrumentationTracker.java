@@ -1,14 +1,16 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.ui.breakpoints;
 
 import com.intellij.debugger.engine.DebugProcessImpl;
 import com.intellij.debugger.engine.events.SuspendContextCommandImpl;
 import com.intellij.debugger.engine.requests.RequestManagerImpl;
+import com.intellij.debugger.impl.DebuggerUtilsEx;
 import com.intellij.debugger.requests.Requestor;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.util.ReflectionUtil;
 import com.intellij.util.containers.ContainerUtil;
+import com.jetbrains.jdi.ReferenceTypeImpl;
 import com.sun.jdi.*;
 import com.sun.jdi.event.LocatableEvent;
 import one.util.streamex.StreamEx;
@@ -17,9 +19,6 @@ import org.jetbrains.annotations.NotNull;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 
-/**
- * @author egor
- */
 public class InstrumentationTracker {
   private static final Logger LOG = Logger.getInstance(InstrumentationTracker.class);
 
@@ -50,9 +49,9 @@ public class InstrumentationTracker {
     myRedefineBreakpoint =
       new InstrumentationMethodBreakpoint(debugProcess.getProject(), "sun.instrument.InstrumentationImpl", "redefineClasses") {
         @Override
-        public boolean processLocatableEvent(SuspendContextCommandImpl action, LocatableEvent event) {
+        public boolean processLocatableEvent(@NotNull SuspendContextCommandImpl action, LocatableEvent event) {
           try {
-            Value value = event.thread().frame(0).getArgumentValues().get(0);
+            Value value = ContainerUtil.getFirstItem(DebuggerUtilsEx.getArgumentValues(event.thread().frame(0)));
             if (value instanceof ArrayReference) {
               ((ArrayReference)value).getValues().forEach(v -> {
                 Value aClass = ((ObjectReference)v).getValue(((ReferenceType)v.type()).fieldByName("mClass"));
@@ -69,9 +68,9 @@ public class InstrumentationTracker {
     myRetransformBreakpoint =
       new InstrumentationMethodBreakpoint(debugProcess.getProject(), "sun.instrument.InstrumentationImpl", "retransformClasses") {
         @Override
-        public boolean processLocatableEvent(SuspendContextCommandImpl action, LocatableEvent event) {
+        public boolean processLocatableEvent(@NotNull SuspendContextCommandImpl action, LocatableEvent event) {
           try {
-            Value value = event.thread().frame(0).getArgumentValues().get(0);
+            Value value = ContainerUtil.getFirstItem(DebuggerUtilsEx.getArgumentValues(event.thread().frame(0)));
             if (value instanceof ArrayReference) {
               ((ArrayReference)value).getValues().forEach(v -> noticeRedefineClass(((ClassObjectReference)v).reflectedType()));
             }
@@ -89,7 +88,7 @@ public class InstrumentationTracker {
   }
 
   private void noticeRedefineClass(ReferenceType type) {
-    if (!ourNoticeRedefineClassMethod.getDeclaringClass().isAssignableFrom(type.getClass())) {
+    if (!(type instanceof ReferenceTypeImpl) && !ourNoticeRedefineClassMethod.getDeclaringClass().isAssignableFrom(type.getClass())) {
       return;
     }
     List<Requestor> requestors = StreamEx.of(type.virtualMachine().eventRequestManager().breakpointRequests())
@@ -98,11 +97,16 @@ public class InstrumentationTracker {
       .toList();
     requestors.forEach(myDebugProcess.getRequestsManager()::deleteRequest);
 
-    try {
-      ourNoticeRedefineClassMethod.invoke(type);
+    if (type instanceof ReferenceTypeImpl) {
+      ((ReferenceTypeImpl)type).noticeRedefineClass();
     }
-    catch (IllegalAccessException | InvocationTargetException e) {
-      LOG.error(e);
+    else {
+      try {
+        ourNoticeRedefineClassMethod.invoke(type);
+      }
+      catch (IllegalAccessException | InvocationTargetException e) {
+        LOG.error(e);
+      }
     }
 
     StreamEx.of(requestors).select(Breakpoint.class).forEach(b -> b.createRequest(myDebugProcess));
@@ -125,7 +129,7 @@ public class InstrumentationTracker {
 
     @Override
     protected void createRequestForPreparedClass(DebugProcessImpl debugProcess, ReferenceType classType) {
-      for (Method method : classType.methodsByName(myMethodName)) {
+      for (Method method : DebuggerUtilsEx.declaredMethodsByName(classType, myMethodName)) {
         createRequestInMethod(debugProcess, method);
       }
     }

@@ -27,16 +27,16 @@ import com.intellij.psi.*;
 import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.SearchScope;
+import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.List;
 
-public abstract class PsiElementBase extends ElementBase implements NavigatablePsiElement {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.psi.impl.PsiElementBase");
+public abstract class PsiElementBase extends ElementBase implements NavigatablePsiElement, Cloneable {
+  private static final Logger LOG = Logger.getInstance(PsiElementBase.class);
 
   @Override
   public PsiElement getFirstChild() {
@@ -77,8 +77,7 @@ public abstract class PsiElementBase extends ElementBase implements NavigatableP
   }
 
   @Override
-  @NotNull
-  public PsiReference[] getReferences() {
+  public PsiReference @NotNull [] getReferences() {
     return SharedPsiElementImplUtil.getReferences(this);
   }
 
@@ -287,13 +286,12 @@ public abstract class PsiElementBase extends ElementBase implements NavigatableP
     return child;
   }
 
-  @NotNull
-  protected <T> T[] findChildrenByClass(Class<T> aClass) {
+  protected <T> T @NotNull [] findChildrenByClass(Class<T> aClass) {
     List<T> result = new ArrayList<>();
     for (PsiElement cur = getFirstChild(); cur != null; cur = cur.getNextSibling()) {
       if (aClass.isInstance(cur)) result.add((T)cur);
     }
-    return result.toArray((T[]) Array.newInstance(aClass, result.size()));
+    return result.toArray(ArrayUtil.newArray(aClass, result.size()));
   }
 
   @Nullable

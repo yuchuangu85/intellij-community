@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2011 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.update;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -26,7 +12,6 @@ import com.intellij.openapi.vcs.changes.ChangeListManager;
 import com.intellij.openapi.vcs.impl.LocalChangesUnderRoots;
 import com.intellij.openapi.vcs.update.UpdatedFiles;
 import com.intellij.util.containers.ContainerUtil;
-import git4idea.GitBranch;
 import git4idea.GitUtil;
 import git4idea.branch.GitBranchPair;
 import git4idea.commands.Git;
@@ -67,7 +52,14 @@ public class GitRebaseUpdater extends GitUpdater {
   public boolean isSaveNeeded() {
     Collection<Change> localChanges = new LocalChangesUnderRoots(myChangeListManager, myVcsManager)
       .getChangesUnderRoots(singletonList(myRoot)).get(myRoot);
-    return !ContainerUtil.isEmpty(localChanges);
+    try {
+      return !ContainerUtil.isEmpty(localChanges) ||
+             GitUtil.hasLocalChanges(true, myProject, myRoot);
+    }
+    catch (VcsException e) {
+      LOG.info("isSaveNeeded failed to check local changes", e);
+      return true;
+    }
   }
 
   @NotNull
@@ -81,10 +73,7 @@ public class GitRebaseUpdater extends GitUpdater {
 
   @NotNull
   private String getRemoteBranchToMerge() {
-    GitBranch dest = myBranchPair.getDest();
-    LOG.assertTrue(dest != null, String.format("Destination branch is null for source branch %s in %s",
-                                               myBranchPair.getBranch().getName(), myRoot));
-    return dest.getName();
+    return myBranchPair.getTarget().getName();
   }
 
   public void cancel() {
@@ -115,26 +104,26 @@ public class GitRebaseUpdater extends GitUpdater {
       return false;
     }
     try {
-      markStart(myRoot);
+      markStart(repository);
     }
     catch (VcsException e) {
-      LOG.info("Couldn't mark start for repository " + myRoot, e);
+      LOG.info("Couldn't mark start for repository " + repository, e);
       return false;
     }
 
     GitCommandResult result = myGit.merge(repository, getRemoteBranchToMerge(), singletonList("--ff-only"));
 
     try {
-      markEnd(myRoot);
+      markEnd(repository);
     }
     catch (VcsException e) {
       // this is not critical, and update has already happened,
       // so we just notify the user about problems with collecting the updated changes.
-      LOG.info("Couldn't mark end for repository " + myRoot, e);
+      LOG.info("Couldn't mark end for repository " + repository, e);
       VcsNotifier.getInstance(myProject).
         notifyMinorWarning("Couldn't collect the updated files info",
                            String.format("Update of %s was successful, but we couldn't collect the updated changes because of an error",
-                                         myRoot));
+                                         repository));
     }
     return result.success();
   }

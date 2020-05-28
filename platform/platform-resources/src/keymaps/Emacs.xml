@@ -172,7 +172,7 @@
   <action id="CodeCompletion">
     <keyboard-shortcut first-keystroke="alt SLASH"/>
   </action>
-  <action id="ReloadFromDisk">
+  <action id="SynchronizeCurrentFile">
     <keyboard-shortcut first-keystroke="alt U"/>
     <keyboard-shortcut first-keystroke="ESCAPE" second-keystroke="U"/>
   </action>
@@ -278,6 +278,12 @@
   <action id="EditorBackwardParagraph">
     <keyboard-shortcut first-keystroke="control UP"/>
   </action>
+  <action id="EditorForwardParagraphWithSelection">
+    <keyboard-shortcut first-keystroke="control shift DOWN"/>
+  </action>
+  <action id="EditorBackwardParagraphWithSelection">
+    <keyboard-shortcut first-keystroke="control shift UP"/>
+  </action>
   <action id="EditorScrollToCenter">
     <keyboard-shortcut first-keystroke="control L"/>
   </action>
@@ -288,6 +294,9 @@
   <action id="EditorChooseLookupItem">
     <keyboard-shortcut first-keystroke="ENTER"/>
     <keyboard-shortcut first-keystroke="control M"/>
+  </action>
+  <action id="SelectVirtualTemplateElement">
+    <keyboard-shortcut first-keystroke="TAB"/>
   </action>
   <action id="NextTemplateVariable">
     <keyboard-shortcut first-keystroke="TAB"/>
@@ -311,13 +320,19 @@
   <action id="SafeDelete"/>
   <action id="IntroduceField"/>
   <action id="RecentFiles"/>
+  <action id="SwitcherRecentEditedChangedToggleCheckBox"/>
+  <action id="SwitcherIterateItems"/>
   <action id="EditorTab"/>
   <action id="EditorDeleteLine"/>
   <action id="PreviousProjectWindow"/>
+  <action id="Vcs.ToggleAmendCommitMode"/>
   <action id="Vcs.ShowMessageHistory"/>
   <action id="GotoImplementation"/>
   <action id="EditorScrollUp"/>
   <action id="EditorScrollDown"/>
   <action id="Vcs.MoveChangedLinesToChangelist"/>
   <action id="ChangesView.Move"/>
+  <action id="MoveStatementUp"/>
+  <action id="MoveStatementDown"/>
+  <action id="ToggleRenderedDocPresentation"/>
 </keymap>

@@ -1,10 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui;
 
 import com.intellij.ide.ui.UISettings;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.components.JBScrollPane;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.SystemProperties;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.tree.WideSelectionTreeUI;
@@ -16,14 +16,17 @@ import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 import javax.swing.*;
 import javax.swing.plaf.TreeUI;
+import javax.swing.plaf.basic.BasicTreeUI;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreeCellRenderer;
 import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.font.TextAttribute;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
+import java.util.Collections;
 
 public abstract class MultilineTreeCellRenderer extends JComponent implements Accessible, TreeCellRenderer {
 
@@ -42,7 +45,7 @@ public abstract class MultilineTreeCellRenderer extends JComponent implements Ac
   private boolean myHasFocus;
 
   private Icon myIcon;
-  private String[] myLines = ArrayUtil.EMPTY_STRING_ARRAY;
+  private String[] myLines = ArrayUtilRt.EMPTY_STRING_ARRAY;
   private String myPrefix;
   private int myTextLength;
   private int myPrefixWidth;
@@ -100,7 +103,11 @@ public abstract class MultilineTreeCellRenderer extends JComponent implements Ac
   }
 
   private FontMetrics getCurrFontMetrics() {
-    return getFontMetrics(getFont());
+    // Disable kerning for font because of huge performance penalty
+    // String width will increase a bit but it's OK here
+    Font font = getFont().deriveFont(
+      Collections.singletonMap(TextAttribute.KERNING, Integer.valueOf(0)));
+    return getFontMetrics(font);
   }
 
   @Override
@@ -317,8 +324,8 @@ public abstract class MultilineTreeCellRenderer extends JComponent implements Ac
 
   private int getChildIndent(JTree tree) {
     TreeUI newUI = tree.getUI();
-    if (newUI instanceof javax.swing.plaf.basic.BasicTreeUI) {
-      javax.swing.plaf.basic.BasicTreeUI btreeui = (javax.swing.plaf.basic.BasicTreeUI)newUI;
+    if (newUI instanceof BasicTreeUI) {
+      BasicTreeUI btreeui = (BasicTreeUI)newUI;
       return btreeui.getLeftChildIndent() + btreeui.getRightChildIndent();
     }
     else {

@@ -40,6 +40,12 @@ public interface FoldRegion extends RangeMarker {
   @Nullable
   FoldingGroup getGroup();
 
+  /**
+   * If {@code true}, this region is always in a collapsed state, {@link #setExpanded(boolean)} does nothing for it. No marker is displayed
+   * in gutter for such a region.
+   *
+   * @see com.intellij.openapi.editor.ex.FoldingModelEx#createFoldRegion(int, int, String, FoldingGroup, boolean)
+   */
   boolean shouldNeverExpand();
 
   /**
@@ -54,4 +60,24 @@ public interface FoldRegion extends RangeMarker {
    * @see #setInnerHighlightersMuted(boolean)
    */
   default boolean areInnerHighlightersMuted() { return false; }
+
+  /**
+   * By default, gutter mark (for collapsing/expanding the region using mouse) is not shown for a folding region, if it's contained within
+   * a single document line. This method allows to change this behaviour for given fold region.
+   *
+   * @see #isGutterMarkEnabledForSingleLine()
+   * @see EditorSettings#setAllowSingleLogicalLineFolding(boolean)
+   */
+  default void setGutterMarkEnabledForSingleLine(boolean value) {}
+
+  /**
+   * @see #setGutterMarkEnabledForSingleLine(boolean)
+   */
+  default boolean isGutterMarkEnabledForSingleLine() { return false; }
+
+  /**
+   * Updates region's placeholder text. Should be called inside {@link FoldingModel#runBatchFoldingOperation(Runnable)}, like any other
+   * operations with fold regions.
+   */
+  default void setPlaceholderText(@NotNull String text) {}
 }

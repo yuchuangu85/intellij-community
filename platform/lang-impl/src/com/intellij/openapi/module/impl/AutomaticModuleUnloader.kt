@@ -17,8 +17,6 @@ import com.intellij.xml.util.XmlStringUtil
 /**
  * If some modules were unloaded and new modules appears after loading project configuration, automatically unloads those which
  * aren't required for loaded modules.
- *
- * @author nik
  */
 @State(name = "AutomaticModuleUnloader", storages = [(Storage(StoragePathMacros.WORKSPACE_FILE))])
 class AutomaticModuleUnloader(private val project: Project) : PersistentStateComponent<LoadedModulesListStorage> {
@@ -42,7 +40,7 @@ class AutomaticModuleUnloader(private val project: Project) : PersistentStateCom
 
     val newLoadedNames = oldLoadedWithDependencies.mapTo(LinkedHashSet()) { it.name }
     val toLoad = modulesToLoad.filter { it.moduleName in newLoadedNames && it.moduleName !in oldLoaded}
-    val toUnload = modulesToLoad.filter { it.moduleName !in newLoadedNames }
+    val toUnload = modulesToLoad.filter { it.moduleName !in newLoadedNames && it.moduleName in moduleDescriptions}
     loadedModulesListStorage.modules.clear()
     modulesToLoad.filter { it.moduleName in newLoadedNames }.mapTo(loadedModulesListStorage.modules) { it.moduleName }
     val change = UnloadedModulesListChange(toLoad, toUnload, toUnload.map { moduleDescriptions[it.moduleName]!! })

@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.move.moveClassesOrPackages;
 
+import com.intellij.java.refactoring.JavaRefactoringBundle;
 import com.intellij.lang.Language;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
@@ -34,28 +35,27 @@ import com.intellij.refactoring.util.CommonRefactoringUtil;
 import com.intellij.ui.*;
 import com.intellij.usageView.UsageViewUtil;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.containers.hash.HashSet;
 import com.intellij.util.ui.UIUtil;
-import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 public class MoveClassesOrPackagesDialog extends MoveDialogBase {
   private static final String RECENTS_KEY = "MoveClassesOrPackagesDialog.RECENTS_KEY";
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.move.moveClassesOrPackages.MoveClassesOrPackagesDialog");
+  private static final Logger LOG = Logger.getInstance(MoveClassesOrPackagesDialog.class);
 
   private final PsiElement[] myElementsToMove;
   private final MoveCallback myMoveCallback;
   private final PsiManager myManager;
   private final boolean mySearchTextOccurrencesEnabled;
-  private boolean myTargetDirectoryFixed;
-  private boolean mySuggestToMoveToAnotherRoot;
-  private String myHelpID;
+  private final boolean myTargetDirectoryFixed;
+  private final boolean mySuggestToMoveToAnotherRoot;
+  private final String myHelpID;
 
   private JLabel myNameLabel;
   private ReferenceEditorComboWithBrowseButton myWithBrowseButtonReference;
@@ -72,38 +72,23 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
   private ComboboxWithBrowseButton myDestinationFolderCB;
   private JPanel myTargetPanel;
   private JLabel myTargetDestinationLabel;
-  private JPanel myOpenInEditorPanel;
   private boolean myHavePackages;
 
-  @SuppressWarnings("deprecation")
-  public MoveClassesOrPackagesDialog(Project project,
+  public MoveClassesOrPackagesDialog(@NotNull Project project,
                                      boolean searchTextOccurrences,
-                                     PsiElement[] elementsToMove,
+                                     PsiElement @NotNull [] elementsToMove,
                                      PsiElement initialTargetElement,
                                      MoveCallback moveCallback,
-                                     String targetPackageName,
+                                     @NotNull String targetPackageName,
                                      PsiDirectory initialTargetDirectory,
                                      boolean searchInComments,
                                      boolean searchForTextOccurrences) {
-    this(project, searchTextOccurrences, elementsToMove, initialTargetElement, moveCallback);
-    setData(elementsToMove, targetPackageName, initialTargetDirectory, initialTargetDirectory == null, initialTargetElement == null,
-            searchInComments, searchForTextOccurrences, HelpID.getMoveHelpID(elementsToMove[0]));
-  }
+    super(project, true, canBeOpenedInEditor(elementsToMove));
 
-  /** @deprecated use {@link #MoveClassesOrPackagesDialog(Project, boolean, PsiElement[], PsiElement, MoveCallback, String, PsiDirectory, boolean, boolean)} */
-  @Deprecated
-  @ApiStatus.ScheduledForRemoval(inVersion = "2019.1")
-  @SuppressWarnings("DeprecatedIsStillUsed")
-  public MoveClassesOrPackagesDialog(Project project,
-                                     boolean searchTextOccurrences,
-                                     PsiElement[] elementsToMove,
-                                     PsiElement initialTargetElement,
-                                     MoveCallback moveCallback) {
-    super(project, true);
     myElementsToMove = elementsToMove;
     myMoveCallback = moveCallback;
     myManager = PsiManager.getInstance(myProject);
-    setTitle(MoveHandler.REFACTORING_NAME);
+    setTitle(MoveHandler.getRefactoringName());
     mySearchTextOccurrencesEnabled = searchTextOccurrences;
 
     selectInitialCard();
@@ -113,11 +98,14 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
     if (initialTargetElement instanceof PsiClass) {
       myMakeInnerClassOfRadioButton.setSelected(true);
 
-      myInnerClassChooser.setText(((PsiClass)initialTargetElement).getQualifiedName());
+      String qualifiedName = ((PsiClass)initialTargetElement).getQualifiedName();
+      assert qualifiedName != null : initialTargetElement;
+      myInnerClassChooser.setText(qualifiedName);
 
-      ApplicationManager.getApplication().invokeLater(() -> IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-        IdeFocusManager.getGlobalInstance().requestFocus(myInnerClassChooser, true);
-      }), ModalityState.stateForComponent(myMainPanel));
+      ApplicationManager.getApplication().invokeLater(
+        () -> IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(
+          () -> IdeFocusManager.getGlobalInstance().requestFocus(myInnerClassChooser, true)),
+        ModalityState.stateForComponent(myMainPanel));
     }
     else if (initialTargetElement instanceof PsiPackage) {
       myClassPackageChooser.setText(((PsiPackage)initialTargetElement).getQualifiedName());
@@ -126,38 +114,15 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
     updateControlsEnabled();
     myToPackageRadioButton.addActionListener(e -> {
       updateControlsEnabled();
-      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-        IdeFocusManager.getGlobalInstance().requestFocus(myClassPackageChooser, true);
-      });
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(myClassPackageChooser, true));
     });
     myMakeInnerClassOfRadioButton.addActionListener(e -> {
       updateControlsEnabled();
-      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> {
-        IdeFocusManager.getGlobalInstance().requestFocus(myInnerClassChooser, true);
-      });
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(() -> IdeFocusManager.getGlobalInstance().requestFocus(myInnerClassChooser, true));
     });
 
-    for (PsiElement element : elementsToMove) {
-      if (element.getContainingFile() != null) {
-        myOpenInEditorPanel.add(initOpenInEditorCb(), BorderLayout.EAST);
-        break;
-      }
-    }
-  }
-
-  /** @deprecated use {@link #MoveClassesOrPackagesDialog(Project, boolean, PsiElement[], PsiElement, MoveCallback, String, PsiDirectory, boolean, boolean)} */
-  @Deprecated
-  @ApiStatus.ScheduledForRemoval(inVersion = "2019.1")
-  public void setData(PsiElement[] elementsToMove,
-                      String targetPackageName,
-                      PsiDirectory initialTargetDirectory,
-                      boolean isTargetDirectoryFixed,
-                      boolean suggestToMoveToAnotherRoot,
-                      boolean searchInComments,
-                      boolean searchForTextOccurrences,
-                      String helpID) {
-    myTargetDirectoryFixed = isTargetDirectoryFixed;
-    mySuggestToMoveToAnotherRoot = suggestToMoveToAnotherRoot;
+    myTargetDirectoryFixed = initialTargetDirectory == null;
+    mySuggestToMoveToAnotherRoot = initialTargetElement == null;
     if (targetPackageName.length() != 0) {
       myWithBrowseButtonReference.prependItem(targetPackageName);
       myClassPackageChooser.prependItem(targetPackageName);
@@ -178,10 +143,10 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
         PsiElement parent = firstElement.getParent();
         LOG.assertTrue(parent != null);
       }
-      myNameLabel.setText(RefactoringBundle.message("move.single.class.or.package.name.label", UsageViewUtil.getType(firstElement), UsageViewUtil.getLongName(firstElement)));
+      myNameLabel.setText(JavaRefactoringBundle.message("move.single.class.or.package.name.label", UsageViewUtil.getType(firstElement), UsageViewUtil.getLongName(firstElement)));
     }
     else if (elementsToMove.length > 1) {
-      myNameLabel.setText(RefactoringBundle.message(elementsToMove[0] instanceof PsiClass ? "move.specified.classes" : "move.specified.packages"));
+      myNameLabel.setText(JavaRefactoringBundle.message(elementsToMove[0] instanceof PsiClass ? "move.specified.classes" : "move.specified.packages"));
     }
     selectInitialCard();
 
@@ -208,7 +173,16 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
     UIUtil.setEnabled(myTargetPanel, !getSourceRoots().isEmpty() && isMoveToPackage() && !myTargetDirectoryFixed, true);
     validateButtons();
 
-    myHelpID = helpID;
+    myHelpID = HelpID.getMoveHelpID(elementsToMove[0]);
+  }
+
+  static boolean canBeOpenedInEditor(PsiElement @NotNull [] elementsToMove) {
+    for (PsiElement element : elementsToMove) {
+      if (element.getContainingFile() != null) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private void updateControlsEnabled() {
@@ -244,8 +218,6 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
   }
 
   private void createUIComponents() {
-    myMainPanel = new JPanel();
-
     myWithBrowseButtonReference = createPackageChooser();
     myClassPackageChooser = createPackageChooser();
 
@@ -316,7 +288,7 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
            : "#com.intellij.refactoring.move.moveClassesOrPackages.MoveClassesOrPackagesDialog.classes";
   }
 
-  private static void collectSourceRoots(PsiElement[] psiElements, ProjectFileIndex fileIndex, Set<VirtualFile> initialRoots) {
+  private static void collectSourceRoots(PsiElement[] psiElements, ProjectFileIndex fileIndex, Set<? super VirtualFile> initialRoots) {
     for (PsiElement element : psiElements) {
       final VirtualFile file = PsiUtilCore.getVirtualFile(element);
       if (file != null) {
@@ -339,7 +311,7 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
     if (isMoveToPackage()) {
       String name = getTargetPackage().trim();
       if (name.length() != 0 && !PsiNameHelper.getInstance(myManager.getProject()).isQualifiedName(name)) {
-        throw new ConfigurationException("\'" + name + "\' is invalid destination package name");
+        throw new ConfigurationException("'" + name + "' is invalid destination package name");
       }
     }
     else {
@@ -364,7 +336,7 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
   }
 
   @Nullable
-  private static String verifyDestinationForElement(final PsiElement element, final MoveDestination moveDestination) {
+  private static String verifyDestinationForElement(@NotNull PsiElement element, @NotNull MoveDestination moveDestination) {
     final String message;
     if (element instanceof PsiDirectory) {
       message = moveDestination.verify((PsiDirectory)element);
@@ -380,7 +352,6 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
 
   @Override
   protected void doAction() {
-    saveOpenInEditorOption();
     if (isMoveToPackage()) {
       invokeMoveToPackage();
     }
@@ -407,14 +378,6 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
         if (element instanceof PsiClass) {
           final PsiClass aClass = (PsiClass)element;
           LOG.assertTrue(aClass.isPhysical(), aClass);
-          /*PsiElement toAdd;
-          if (aClass.getContainingFile() instanceof PsiJavaFile && ((PsiJavaFile)aClass.getContainingFile()).getClasses().length > 1) {
-            toAdd = aClass;
-          }
-          else {
-            toAdd = aClass.getContainingFile();
-          }*/
-
           final PsiDirectory targetDirectory = destination.getTargetIfExists(element.getContainingFile());
           if (targetDirectory != null) {
             MoveFilesOrDirectoriesUtil.checkMove(aClass, targetDirectory);
@@ -435,18 +398,16 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
   }
 
   //for scala plugin
-  protected MoveClassesOrPackagesProcessor createMoveToPackageProcessor(MoveDestination destination, final PsiElement[] elementsToMove,
-                                                                        final MoveCallback callback) {
+  protected MoveClassesOrPackagesProcessor createMoveToPackageProcessor(@NotNull MoveDestination destination,
+                                                                        PsiElement @NotNull [] elementsToMove,
+                                                                        MoveCallback callback) {
     return new MoveClassesOrPackagesProcessor(getProject(), elementsToMove, destination, isSearchInComments(), isSearchInNonJavaFiles(), callback);
   }
 
   private void saveRefactoringSettings() {
-    final JavaRefactoringSettings refactoringSettings = JavaRefactoringSettings.getInstance();
-    final boolean searchInComments = isSearchInComments();
-    final boolean searchForTextOccurences = isSearchInNonJavaFiles();
-    refactoringSettings.MOVE_SEARCH_IN_COMMENTS = searchInComments;
-    refactoringSettings.MOVE_SEARCH_FOR_TEXT = searchForTextOccurences;
-    refactoringSettings.MOVE_PREVIEW_USAGES = isPreviewUsages();
+    JavaRefactoringSettings refactoringSettings = JavaRefactoringSettings.getInstance();
+    refactoringSettings.MOVE_SEARCH_IN_COMMENTS = isSearchInComments();
+    refactoringSettings.MOVE_SEARCH_FOR_TEXT = isSearchInNonJavaFiles();
   }
 
   @Nullable
@@ -456,7 +417,7 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
 
     for (PsiElement element : myElementsToMove) {
       if (PsiTreeUtil.isAncestor(element, targetClass, false)) {
-        return RefactoringBundle.message("move.class.to.inner.move.to.self.error");
+        return JavaRefactoringBundle.message("move.class.to.inner.move.to.self.error");
       }
       final Language targetClassLanguage = targetClass.getLanguage();
       if (!element.getLanguage().equals(targetClassLanguage)) {
@@ -467,7 +428,7 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
 
     while (targetClass != null) {
       if (targetClass.getContainingClass() != null && !targetClass.hasModifierProperty(PsiModifier.STATIC)) {
-        return RefactoringBundle.message("move.class.to.inner.nonstatic.error");
+        return JavaRefactoringBundle.message("move.class.to.inner.nonstatic.error");
       }
       targetClass = targetClass.getContainingClass();
     }
@@ -489,7 +450,9 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
   }
 
   //for scala plugin
-  protected MoveClassToInnerProcessor createMoveToInnerProcessor(@NotNull PsiClass destination, @NotNull PsiClass[] classesToMove, @Nullable final MoveCallback callback) {
+  protected MoveClassToInnerProcessor createMoveToInnerProcessor(@NotNull PsiClass destination,
+                                                                 PsiClass @NotNull [] classesToMove,
+                                                                 @Nullable MoveCallback callback) {
     return new MoveClassToInnerProcessor(getProject(), classesToMove, destination, isSearchInComments(), isSearchInNonJavaFiles(), callback);
   }
 
@@ -501,14 +464,14 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
   private MoveDestination selectDestination() {
     final String packageName = getTargetPackage().trim();
     if (packageName.length() > 0 && !PsiNameHelper.getInstance(myManager.getProject()).isQualifiedName(packageName)) {
-      Messages.showErrorDialog(myProject, RefactoringBundle.message("please.enter.a.valid.target.package.name"),
+      Messages.showErrorDialog(myProject, JavaRefactoringBundle.message("please.enter.a.valid.target.package.name"),
                                RefactoringBundle.message("move.title"));
       return null;
     }
     RecentsManager.getInstance(myProject).registerRecentEntry(RECENTS_KEY, packageName);
     PackageWrapper targetPackage = new PackageWrapper(myManager, packageName);
     if (!targetPackage.exists()) {
-      final int ret = Messages.showYesNoDialog(myProject, RefactoringBundle.message("package.does.not.exist", packageName),
+      final int ret = Messages.showYesNoDialog(myProject, JavaRefactoringBundle.message("package.does.not.exist", packageName),
                                                RefactoringBundle.message("move.title"), Messages.getQuestionIcon());
       if (ret != Messages.YES) return null;
     }
@@ -521,17 +484,7 @@ public class MoveClassesOrPackagesDialog extends MoveDialogBase {
   }
 
   @Override
-  protected String getMovePropertySuffix() {
-    return "Class";
-  }
-
-  @Override
-  protected String getCbTitle() {
-    return "Open moved in editor";
-  }
-
-  @Override
-  protected boolean isEnabledByDefault() {
-    return false;
+  protected @NotNull String getRefactoringId() {
+    return "MoveClass";
   }
 }

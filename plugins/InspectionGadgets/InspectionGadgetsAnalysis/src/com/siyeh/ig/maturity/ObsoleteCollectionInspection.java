@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2017 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2020 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,13 +43,6 @@ public class ObsoleteCollectionInspection extends BaseInspection {
   @NotNull
   public String getID() {
     return "UseOfObsoleteCollectionType";
-  }
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message(
-      "use.obsolete.collection.type.display.name");
   }
 
   @Override
@@ -136,7 +129,9 @@ public class ObsoleteCollectionInspection extends BaseInspection {
       }
       final PsiType deepComponentType = type.getDeepComponentType();
       final String className = TypeUtils.resolvedClassName(deepComponentType);
-      return "java.util.Vector".equals(className) || "java.util.Hashtable".equals(className);
+      return "java.util.Vector".equals(className) ||
+             "java.util.Hashtable".equals(className) ||
+             "java.util.Stack".equals(className);
     }
 
     private boolean checkReferences(PsiNamedElement namedElement) {
@@ -228,15 +223,19 @@ public class ObsoleteCollectionInspection extends BaseInspection {
   }
 
   private static boolean isCheapToSearchInFile(@NotNull PsiNamedElement element) {
-    String name = element.getName();
-    if (name == null) return false;
+    if (element.getName() == null) return false;
     return CachedValuesManager.getCachedValue(element, () -> {
       PsiFile file = element.getContainingFile();
-      StringSearcher searcher = new StringSearcher(name, true, true);
-      CharSequence contents = file.getViewProvider().getContents();
-      int[] count = new int[1];
-      boolean cheapEnough = searcher.processOccurrences(contents, __->++count[0] <= MAX_OCCURRENCES);
-      return CachedValueProvider.Result.create(cheapEnough, file);
+      return CachedValueProvider.Result.create(calcCheapEnoughToSearchInFile(element, file), file);
     });
+  }
+
+  private static boolean calcCheapEnoughToSearchInFile(@NotNull PsiNamedElement element, PsiFile file) {
+    String name = element.getName();
+    if (name == null) return false;
+    StringSearcher searcher = new StringSearcher(name, true, true);
+    CharSequence contents = file.getViewProvider().getContents();
+    int[] count = new int[1];
+    return searcher.processOccurrences(contents, __->++count[0] <= MAX_OCCURRENCES);
   }
 }

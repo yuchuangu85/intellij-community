@@ -1,15 +1,18 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.application.options.codeStyle;
 
 import com.intellij.application.options.CodeStyleAbstractPanel;
+import com.intellij.application.options.OptionsContainingConfigurable;
 import com.intellij.application.options.TabbedLanguageCodeStylePanel;
+import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.ide.DataManager;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.lang.Language;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.application.ApplicationBundle;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.ex.Settings;
 import com.intellij.psi.codeStyle.CodeStyleScheme;
@@ -17,6 +20,7 @@ import com.intellij.psi.codeStyle.CodeStyleSchemes;
 import com.intellij.psi.codeStyle.CodeStyleSettings;
 import com.intellij.ui.components.labels.SwingActionLink;
 import com.intellij.util.concurrency.EdtExecutorService;
+import com.intellij.util.ui.JBDimension;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -28,7 +32,6 @@ import java.awt.event.ActionEvent;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -43,8 +46,8 @@ public class CodeStyleMainPanel extends JPanel implements TabbedLanguageCodeStyl
   private final CodeStyleSchemesModel myModel;
   private final CodeStyleSettingsPanelFactory myFactory;
   private final CodeStyleSchemesPanel mySchemesPanel;
-  private boolean myIsDisposed = false;
-  private final Action mySetFromAction = new AbstractAction("Set from...") {
+  private boolean myIsDisposed;
+  private final Action mySetFromAction = new AbstractAction(CodeInsightBundle.message("settings.code.style.set.from")) {
     @Override
     public void actionPerformed(ActionEvent event) {
       CodeStyleAbstractPanel selectedPanel = ensureCurrentPanel().getSelectedPanel();
@@ -59,13 +62,18 @@ public class CodeStyleMainPanel extends JPanel implements TabbedLanguageCodeStyl
 
   private final PropertiesComponent myProperties;
 
-  private final static String SELECTED_TAB = "settings.code.style.selected.tab";
+  private static final String SELECTED_TAB = "settings.code.style.selected.tab";
 
   public CodeStyleMainPanel(CodeStyleSchemesModel model, CodeStyleSettingsPanelFactory factory, boolean schemesPanelEnabled) {
     super(new BorderLayout());
     myModel = model;
     myFactory = factory;
-    mySchemesPanel = new CodeStyleSchemesPanel(model, createLinkComponent());
+    mySchemesPanel = new CodeStyleSchemesPanel(model) {
+      @Override
+      protected JComponent createTopComponent() {
+        return createLinkComponent();
+      }
+    };
     myProperties = PropertiesComponent.getInstance();
 
     model.addListener(new CodeStyleSchemesModelListener(){
@@ -108,6 +116,11 @@ public class CodeStyleMainPanel extends JPanel implements TabbedLanguageCodeStyl
       public void settingsChanged(@NotNull CodeStyleSettings settings) {
         ensureCurrentPanel().reset(settings);
       }
+
+      @Override
+      public void overridingStatusChanged() {
+        ApplicationManager.getApplication().invokeLater(() -> mySchemesPanel.updateOverridingMessage(), ModalityState.any());
+      }
     });
 
     addWaitCard();
@@ -126,18 +139,22 @@ public class CodeStyleMainPanel extends JPanel implements TabbedLanguageCodeStyl
     mySchemesPanel.resetSchemesCombo();
     mySchemesPanel.onSelectedSchemeChanged();
     onCurrentSchemeChanged();
-
   }
 
   @NotNull
   private JComponent createLinkComponent() {
-    JPanel linkPanel = new JPanel();
     JLabel link = new SwingActionLink(mySetFromAction);
     link.setVerticalAlignment(SwingConstants.BOTTOM);
-    linkPanel.setLayout(new BoxLayout(linkPanel, BoxLayout.Y_AXIS));
-    linkPanel.add(Box.createVerticalGlue());
-    linkPanel.add(link);
-    return linkPanel;
+
+    Box linkBox = new Box(BoxLayout.Y_AXIS);
+    linkBox.add(Box.createVerticalGlue());
+    linkBox.add(link);
+
+    Box row = new Box(BoxLayout.X_AXIS);
+    row.add(Box.createRigidArea(new JBDimension(0, 12)));
+    row.add(Box.createHorizontalGlue());
+    row.add(linkBox);
+    return row;
   }
 
   private void addWaitCard() {
@@ -150,7 +167,7 @@ public class CodeStyleMainPanel extends JPanel implements TabbedLanguageCodeStyl
     mySettingsPanel.add(WAIT_CARD, waitPanel);
   }
 
-  public void onCurrentSchemeChanged() {
+  private void onCurrentSchemeChanged() {
     myLayout.show(mySettingsPanel, WAIT_CARD);
     final Runnable replaceLayout = () -> {
       if (!myIsDisposed) {
@@ -178,10 +195,6 @@ public class CodeStyleMainPanel extends JPanel implements TabbedLanguageCodeStyl
   }
 
   public boolean isModified() {
-    if (myModel.isSchemeListModified()) {
-      return true;
-    }
-
     final NewCodeStyleSettingsPanel[] panels = getPanels();
     for (NewCodeStyleSettingsPanel panel : panels) {
       //if (!panel.isMultiLanguage()) mySchemesPanel.setPredefinedEnabled(false);
@@ -244,6 +257,7 @@ public class CodeStyleMainPanel extends JPanel implements TabbedLanguageCodeStyl
         if (currentTab != null) {
           tabbedPanel.changeTab(currentTab);
         }
+        mySchemesPanel.setSeparatorVisible(false);
       }
       mySettingsPanels.put(name, panel);
       mySettingsPanel.add(scheme.getName(), panel);
@@ -270,10 +284,11 @@ public class CodeStyleMainPanel extends JPanel implements TabbedLanguageCodeStyl
     return mySettingsPanels.get(scheme.getName()).isModified();
   }
 
-  public Set<String> processListOptions() {
+  @NotNull
+  public OptionsContainingConfigurable getOptionIndexer() {
     final CodeStyleScheme defaultScheme = CodeStyleSchemes.getInstance().getDefaultScheme();
     final NewCodeStyleSettingsPanel panel = ensurePanel(defaultScheme);
-    return panel.processListOptions();
+    return panel.getOptionIndexer();
   }
 
   @Override
@@ -288,5 +303,9 @@ public class CodeStyleMainPanel extends JPanel implements TabbedLanguageCodeStyl
   private static String getSelectedTabPropertyName(@NotNull TabbedLanguageCodeStylePanel panel) {
     Language language = panel.getDefaultLanguage();
     return language != null ? SELECTED_TAB + "." + language.getID() : SELECTED_TAB;
+  }
+
+  public void highlightOptions(@NotNull String searchString) {
+    ensureCurrentPanel().highlightOptions(searchString);
   }
 }

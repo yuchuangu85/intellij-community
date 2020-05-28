@@ -1,6 +1,4 @@
-/*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.folding.impl;
 
@@ -11,41 +9,40 @@ import com.intellij.lang.Language;
 import com.intellij.lang.folding.FoldingBuilder;
 import com.intellij.lang.folding.FoldingDescriptor;
 import com.intellij.lang.folding.LanguageFolding;
-import com.intellij.lang.folding.NamedFoldingDescriptor;
 import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Attachment;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.editor.Document;
-import com.intellij.openapi.editor.Editor;
-import com.intellij.openapi.editor.FoldingModel;
+import com.intellij.openapi.editor.*;
+import com.intellij.openapi.editor.ex.DocumentEx;
+import com.intellij.openapi.editor.impl.DocumentImpl;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.Getter;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.DebugUtil;
+import com.intellij.psi.impl.source.tree.injected.FoldingRegionWindow;
 import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
+import com.intellij.psi.util.CachedValue;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
-import com.intellij.psi.util.ParameterizedCachedValue;
+import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class FoldingUpdate {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.folding.impl.FoldingUpdate");
+  private static final Logger LOG = Logger.getInstance(FoldingUpdate.class);
 
-  static final Key<ParameterizedCachedValue<Runnable, Boolean>> CODE_FOLDING_KEY = Key.create("code folding");
-  private static final Key<String> CODE_FOLDING_FILE_EXTENSION_KEY = Key.create("code folding file extension");
+  private static final Key<CachedValue<Runnable>> CODE_FOLDING_KEY = Key.create("code folding");
 
   private FoldingUpdate() {
   }
@@ -58,67 +55,66 @@ public class FoldingUpdate {
     final Document document = editor.getDocument();
     LOG.assertTrue(!PsiDocumentManager.getInstance(project).isUncommited(document));
     
-    String currentFileExtension = null;
-    final VirtualFile virtualFile = file.getVirtualFile();
-    if (virtualFile != null) {
-      currentFileExtension = virtualFile.getExtension();
-    }
+    CachedValue<Runnable> value = editor.getUserData(CODE_FOLDING_KEY);
 
-    ParameterizedCachedValue<Runnable, Boolean> value = editor.getUserData(CODE_FOLDING_KEY);
-    if (value != null) {
-      // There was a problem that old fold regions have been cached on file extension change (e.g. *.java -> *.groovy).
-      // We want to drop them in such circumstances.
-      final String oldExtension = editor.getUserData(CODE_FOLDING_FILE_EXTENSION_KEY);
-      if (oldExtension == null ? currentFileExtension != null : !oldExtension.equals(currentFileExtension)) {
-        value = null;
-        editor.putUserData(CODE_FOLDING_KEY, null);
+    if (value != null && !applyDefaultState) {
+      Getter<Runnable> cached = value.getUpToDateOrNull();
+      if (cached != null) {
+        return cached.get();
       }
     }
-    editor.putUserData(CODE_FOLDING_FILE_EXTENSION_KEY, currentFileExtension);
+    if (quick || applyDefaultState) return getUpdateResult(file, document, quick, project, editor, applyDefaultState).getValue();
     
-    if (value != null && value.hasUpToDateValue() && !applyDefaultState) return value.getValue(null); // param shouldn't matter, as the value is up-to-date
-    if (quick) return getUpdateResult(file, document, true, project, editor, applyDefaultState).getValue();
-    
-    return CachedValuesManager.getManager(project).getParameterizedCachedValue(
-      editor, CODE_FOLDING_KEY, param -> {
-        Document document1 = editor.getDocument();
-        PsiFile file1 = PsiDocumentManager.getInstance(project).getPsiFile(document1);
-        return getUpdateResult(file1, document1, false, project, editor, param);
-      }, false, applyDefaultState);
+    return CachedValuesManager.getManager(project).getCachedValue(
+      editor, CODE_FOLDING_KEY, () -> {
+        PsiFile file1 = PsiDocumentManager.getInstance(project).getPsiFile(document);
+        return getUpdateResult(file1, document, false, project, editor, false);
+      }, false);
   }
 
-  private static CachedValueProvider.Result<Runnable> getUpdateResult(PsiFile file,
+  private static CachedValueProvider.Result<Runnable> getUpdateResult(@NotNull PsiFile file,
                                                                       @NotNull Document document,
                                                                       boolean quick,
                                                                       final Project project,
                                                                       final Editor editor,
                                                                       final boolean applyDefaultState) {
-
-    final List<RegionInfo> elementsToFold = getFoldingsFor(file, document, quick);
+    PsiUtilCore.ensureValid(file);
+    final List<RegionInfo> elementsToFold = getFoldingsFor(file, quick);
     final UpdateFoldRegionsOperation operation = new UpdateFoldRegionsOperation(project, editor, file, elementsToFold,
                                                                                 applyDefaultStateMode(applyDefaultState),
                                                                                 !applyDefaultState, false);
-    long documentTimestamp = document.getModificationStamp();
     int documentLength = document.getTextLength();
     AtomicBoolean alreadyExecuted = new AtomicBoolean();
     Runnable runnable = () -> {
       if (alreadyExecuted.compareAndSet(false, true)) {
-        if (documentTimestamp != editor.getDocument().getModificationStamp()) {
-          LOG.error("Document has changed since fold regions were calculated");
-        }
-        else if (documentLength != editor.getDocument().getTextLength()) {
-          LOG.error("Document length has changed since fold regions were calculated");
+        if (documentLength != document.getTextLength() || !PsiDocumentManager.getInstance(project).isCommitted(document)) {
+          reportUnexpectedDocumentChange(file, document, documentLength);
         }
         editor.getFoldingModel().runBatchFoldingOperationDoNotCollapseCaret(operation);
       }
     };
     Set<Object> dependencies = new HashSet<>();
-    dependencies.add(document);
+    dependencies.add(file);
     dependencies.add(editor.getFoldingModel());
     for (RegionInfo info : elementsToFold) {
       dependencies.addAll(info.descriptor.getDependencies());
     }
     return CachedValueProvider.Result.create(runnable, ArrayUtil.toObjectArray(dependencies));
+  }
+
+  private static void reportUnexpectedDocumentChange(@NotNull PsiFile file, @NotNull Document document, int prevLength) {
+    Document fileDoc = file.getViewProvider().getDocument();
+    VirtualFile vFile = file.getViewProvider().getVirtualFile();
+    PsiDocumentManager pdm = PsiDocumentManager.getInstance(file.getProject());
+    PsiFile docFile = pdm.getCachedPsiFile(document);
+    LOG.error("Document has changed since fold regions were calculated:\n" +
+              "  lengths: " + prevLength + " vs " + document.getTextLength() + "\n" +
+              "  document=" + document + "\n" +
+              "  file.document=" + (fileDoc == document ? "same" : fileDoc) + "\n" +
+              "  document.file=" + (docFile == file ? "same" : docFile) + "\n" +
+              "  committed=" + pdm.isCommitted(document) + "\n" +
+              "  psiFile=" + file + "\n" +
+              "  vFile.length=" + (vFile.isValid() ? vFile.getLength() : -1));
   }
 
   @NotNull
@@ -159,7 +155,7 @@ public class FoldingUpdate {
         injectedFiles.add(injectedFile);
         final List<RegionInfo> map = new ArrayList<>();
         lists.add(map);
-        getFoldingsFor(injectedFile, injectedEditor.getDocument(), map, false);
+        getFoldingsFor(injectedFile, map, false);
       });
     }
 
@@ -178,6 +174,13 @@ public class FoldingUpdate {
           operation.run();
         }
       });
+      EditorFoldingInfo info = EditorFoldingInfo.get(editor);
+      for (FoldRegion region : editor.getFoldingModel().getAllFoldRegions()) {
+        FoldingRegionWindow injectedRegion = FoldingRegionWindow.getInjectedRegion(region);
+        if (injectedRegion != null && !injectedRegion.isValid()) {
+          info.removeRegion(region);
+        }
+      }
 
       editor.putUserData(LAST_UPDATE_INJECTED_STAMP_KEY, timeStamp);
     };
@@ -217,40 +220,84 @@ public class FoldingUpdate {
     return true;
   }
 
-  static List<RegionInfo> getFoldingsFor(@NotNull PsiFile file, @NotNull Document document, boolean quick) {
+  static List<RegionInfo> getFoldingsFor(@NotNull PsiFile file, boolean quick) {
     if (file instanceof PsiCompiledFile) {
       file = ((PsiCompiledFile)file).getDecompiledPsiFile();
     }
     List<RegionInfo> foldingMap = new ArrayList<>();
-    getFoldingsFor(file, document, foldingMap, quick);
+    getFoldingsFor(file, foldingMap, quick);
     return foldingMap;
   }
 
   private static void getFoldingsFor(@NotNull PsiFile file,
-                                     @NotNull Document document,
                                      @NotNull List<? super RegionInfo> elementsToFold,
                                      boolean quick) {
     final FileViewProvider viewProvider = file.getViewProvider();
-    TextRange docRange = TextRange.from(0, document.getTextLength());
-    for (final Language language : viewProvider.getLanguages()) {
+    Document document = viewProvider.getDocument();
+    if (document == null) {
+      LOG.error("No document for " + viewProvider);
+      return;
+    }
+
+    LOG.assertTrue(PsiDocumentManager.getInstance(file.getProject()).isCommitted(document));
+
+    int textLength = document.getTextLength();
+    TextRange docRange = TextRange.from(0, textLength);
+    Comparator<Language> preferBaseLanguage = Comparator.comparing((Language l) -> l != viewProvider.getBaseLanguage());
+    List<Language> languages = ContainerUtil.sorted(viewProvider.getLanguages(), preferBaseLanguage.thenComparing(Language::getID));
+
+    DocumentEx copyDoc = languages.size() > 1 ? new DocumentImpl(document.getImmutableCharSequence()) : null;
+    List<RangeMarker> hardRefToRangeMarkers = new ArrayList<>();
+
+    for (Language language : languages) {
       final PsiFile psi = viewProvider.getPsi(language);
       final FoldingBuilder foldingBuilder = LanguageFolding.INSTANCE.forLanguage(language);
       if (psi != null && foldingBuilder != null) {
+        if (psi.getTextLength() != textLength) {
+          LOG.error(DebugUtil.diagnosePsiDocumentInconsistency(psi, document));
+          return;
+        }
+
         for (FoldingDescriptor descriptor : LanguageFolding.buildFoldingDescriptors(foldingBuilder, psi, document, quick)) {
           PsiElement psiElement = descriptor.getElement().getPsi();
           if (psiElement == null) {
             LOG.error("No PSI for folding descriptor " + descriptor);
             continue;
           }
-          if (!docRange.contains(descriptor.getRange())) {
+          TextRange range = descriptor.getRange();
+          if (!docRange.contains(range)) {
             diagnoseIncorrectRange(psi, document, language, foldingBuilder, descriptor, psiElement);
             continue;
           }
+
+          if (copyDoc != null && !addNonConflictingRegion(copyDoc, range, hardRefToRangeMarkers)) {
+            continue;
+          }
+
           RegionInfo regionInfo = new RegionInfo(descriptor, psiElement, foldingBuilder);
           elementsToFold.add(regionInfo);
         }
       }
     }
+  }
+
+  private static boolean addNonConflictingRegion(DocumentEx document, TextRange range, List<? super RangeMarker> hardRefToRangeMarkers) {
+    int start = range.getStartOffset();
+    int end = range.getEndOffset();
+    if (!document.processRangeMarkersOverlappingWith(start, end, rm -> !areConflicting(range, TextRange.create(rm)))) {
+      return false;
+    }
+    RangeMarker marker = document.createRangeMarker(start, end);
+    hardRefToRangeMarkers.add(marker); //prevent immediate GC
+    return true;
+  }
+
+  private static boolean areConflicting(TextRange range1, TextRange range2) {
+    if (range1.equals(range2)) return true;
+    if (range1.contains(range2) || range2.contains(range1)) return false;
+
+    TextRange intersection = range1.intersection(range2);
+    return intersection != null && !intersection.isEmpty();
   }
 
   private static void diagnoseIncorrectRange(@NotNull PsiFile file,
@@ -268,6 +315,11 @@ public class FoldingUpdate {
                                : Attachment.EMPTY_ARRAY);
   }
 
+  static void clearFoldingCache(@NotNull Editor editor) {
+    editor.putUserData(CODE_FOLDING_KEY, null);
+    editor.putUserData(LAST_UPDATE_INJECTED_STAMP_KEY, null);
+  }
+
   static class RegionInfo {
     @NotNull
     final FoldingDescriptor descriptor;
@@ -280,8 +332,8 @@ public class FoldingUpdate {
                        @NotNull FoldingBuilder foldingBuilder) {
       this.descriptor = descriptor;
       element = psiElement;
-      Boolean hardCoded = descriptor instanceof NamedFoldingDescriptor ? ((NamedFoldingDescriptor)descriptor).isCollapsedByDefault() : null;
-      collapsedByDefault = hardCoded == null ? FoldingPolicy.isCollapsedByDefault(psiElement, foldingBuilder) : hardCoded;
+      Boolean hardCoded = descriptor.isCollapsedByDefault();
+      collapsedByDefault = hardCoded == null ? FoldingPolicy.isCollapsedByDefault(descriptor, foldingBuilder) : hardCoded;
       signature = createSignature(psiElement);
     }
 

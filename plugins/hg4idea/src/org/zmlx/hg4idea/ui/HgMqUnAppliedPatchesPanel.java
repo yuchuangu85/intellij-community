@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.zmlx.hg4idea.ui;
 
 import com.google.common.primitives.Ints;
@@ -18,9 +18,11 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.PopupHandler;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.TableSpeedSearch;
+import com.intellij.ui.UIBundle;
 import com.intellij.ui.table.JBTable;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.*;
+import org.zmlx.hg4idea.HgBundle;
 import org.zmlx.hg4idea.HgUpdater;
 import org.zmlx.hg4idea.HgVcs;
 import org.zmlx.hg4idea.command.mq.HgQDeleteCommand;
@@ -39,6 +41,8 @@ import java.awt.event.FocusEvent;
 import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -74,7 +78,7 @@ public class HgMqUnAppliedPatchesPanel extends JPanel implements DataProvider, H
     });
     myPatchTable.setShowColumns(true);
     myPatchTable.setFillsViewportHeight(true);
-    myPatchTable.getEmptyText().setText("Nothing to show");
+    myPatchTable.getEmptyText().setText(UIBundle.message("message.nothingToShow"));
     myPatchTable.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0), START_EDITING);
     myPatchTable.setDragEnabled(true);
     new TableSpeedSearch(myPatchTable);
@@ -113,7 +117,7 @@ public class HgMqUnAppliedPatchesPanel extends JPanel implements DataProvider, H
   public void updatePatchSeriesInBackground(@Nullable final Runnable runAfterUpdate) {
     final String newContent = myNeedToUpdateFileContent ? getContentFromModel() : null;
     myNeedToUpdateFileContent = false;
-    new Task.Backgroundable(myProject, "Updating patch series for " + myRepository.getPresentableUrl()) {
+    new Task.Backgroundable(myProject, HgBundle.message("action.hg4idea.mq.updating", myRepository.getPresentableUrl())) {
       @Override
       public void run(@NotNull ProgressIndicator indicator) {
         if (newContent != null) {
@@ -217,7 +221,7 @@ public class HgMqUnAppliedPatchesPanel extends JPanel implements DataProvider, H
   @Override
   public void update(final Project project, @Nullable VirtualFile root) {
     ApplicationManager.getApplication().invokeLater(() -> {
-      if (project != null && !project.isDisposed()) {
+      if (!myProject.isDisposed()) {
         refreshAll();
       }
     });
@@ -229,12 +233,11 @@ public class HgMqUnAppliedPatchesPanel extends JPanel implements DataProvider, H
       final List<String> names = getSelectedPatchNames();
       if (names.isEmpty()) return;
 
-      if (Messages.showOkCancelDialog(myRepository.getProject(), String
-                                        .format("You are going to delete selected %s. Would you like to continue?",
-                                                StringUtil.pluralize("patch", names.size())),
-                                      "Delete Confirmation", Messages.getWarningIcon()) == Messages.OK) {
+      if (Messages.showOkCancelDialog(myRepository.getProject(),
+                                      HgBundle.message("action.hg4idea.mq.delete.confirmation", names.size()),
+                                      HgBundle.message("delete.confirmation.title"), Messages.getWarningIcon()) == Messages.OK) {
         Runnable deleteTask = () -> {
-          ProgressManager.getInstance().getProgressIndicator().setText("Deleting patches...");
+          ProgressManager.getInstance().getProgressIndicator().setText(HgBundle.message("action.hg4idea.mq.delete.progress"));
           new HgQDeleteCommand(myRepository).executeInCurrentThread(names);
         };
         updatePatchSeriesInBackground(deleteTask);
@@ -265,12 +268,12 @@ public class HgMqUnAppliedPatchesPanel extends JPanel implements DataProvider, H
 
   private class MyPatchModel extends AbstractTableModel implements MultiReorderedModel {
 
-    @NotNull private final MqPatchDetails.MqPatchEnum[] myColumnNames = MqPatchDetails.MqPatchEnum.values();
-    @NotNull private final Map<String, MqPatchDetails> myPatchesWithDetails = ContainerUtil.newHashMap();
+    private final MqPatchDetails.MqPatchEnum @NotNull [] myColumnNames = MqPatchDetails.MqPatchEnum.values();
+    @NotNull private final Map<String, MqPatchDetails> myPatchesWithDetails = new HashMap<>();
     @NotNull private final List<String> myPatches;
 
     MyPatchModel(@NotNull List<String> names) {
-      myPatches = ContainerUtil.newArrayList(names);
+      myPatches = new ArrayList<>(names);
       readMqPatchesDetails();
     }
 

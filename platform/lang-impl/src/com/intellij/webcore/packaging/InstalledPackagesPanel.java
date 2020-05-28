@@ -1,7 +1,9 @@
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.webcore.packaging;
 
-import com.google.common.collect.Lists;
+import com.intellij.CommonBundle;
 import com.intellij.ide.ActivityTracker;
+import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonShortcuts;
 import com.intellij.openapi.application.Application;
@@ -20,7 +22,6 @@ import com.intellij.ui.table.JBTable;
 import com.intellij.util.CatchingConsumer;
 import com.intellij.util.IconUtil;
 import com.intellij.util.ObjectUtils;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.StatusText;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
@@ -35,15 +36,13 @@ import javax.swing.table.TableCellRenderer;
 import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class InstalledPackagesPanel extends JPanel {
   private static final Logger LOG = Logger.getInstance(InstalledPackagesPanel.class);
-
-  private static final String LOADING_PACKAGES_LIST_TITLE = "Loading Packages List";
 
   private final AnActionButton myUpgradeButton;
   protected final AnActionButton myInstallButton;
@@ -55,15 +54,20 @@ public class InstalledPackagesPanel extends JPanel {
   protected volatile PackageManagementService myPackageManagementService;
   protected final Project myProject;
   protected final PackagesNotificationPanel myNotificationArea;
-  private final Set<String> myCurrentlyInstalling = ContainerUtil.newHashSet();
-  private final Map<InstalledPackage, String> myWaitingToUpgrade = ContainerUtil.newHashMap();
+  private final Set<String> myCurrentlyInstalling = new HashSet<>();
+  private final Map<InstalledPackage, String> myWaitingToUpgrade = new HashMap<>();
 
   public InstalledPackagesPanel(@NotNull Project project, @NotNull PackagesNotificationPanel area) {
     super(new BorderLayout());
     myProject = project;
     myNotificationArea = area;
 
-    myPackagesTableModel = new DefaultTableModel(new String[]{"Package", "Version", "Latest version"}, 0) {
+    String[] names = {
+      IdeBundle.message("packages.settings.package"),
+      IdeBundle.message("packages.settings.version"),
+      IdeBundle.message("packages.settings.latest.version")
+    };
+    myPackagesTableModel = new DefaultTableModel(names, 0) {
       @Override
       public boolean isCellEditable(int i, int i1) {
         return false;
@@ -76,22 +80,21 @@ public class InstalledPackagesPanel extends JPanel {
         return tableCellRenderer;
       }
     };
-    // Defence from javax.swing.JTable.initializeLocalVars:
-    //     setPreferredScrollableViewportSize(new Dimension(450, 400));
-    myPackagesTable.setPreferredScrollableViewportSize(null);
     myPackagesTable.setStriped(true);
     myPackagesTable.getTableHeader().setReorderingAllowed(false);
     new TableSpeedSearch(myPackagesTable);
 
-    myUpgradeButton = new AnActionButton("Upgrade", IconUtil.getMoveUpIcon()) {
+    myUpgradeButton = new DumbAwareActionButton(IdeBundle.messagePointer("action.AnActionButton.text.upgrade"), IconUtil.getMoveUpIcon()) {
       @Override
       public void actionPerformed(@NotNull AnActionEvent e) {
+        PackageManagementUsageCollector.triggerUpgradePerformed(myProject, myPackageManagementService);
         upgradeAction();
       }
     };
-    myInstallButton = new DumbAwareActionButton("Install", IconUtil.getAddIcon()) {
+    myInstallButton = new DumbAwareActionButton(IdeBundle.messagePointer("action.AnActionButton.text.install"), IconUtil.getAddIcon()) {
       @Override
       public void actionPerformed(@NotNull AnActionEvent e) {
+        PackageManagementUsageCollector.triggerBrowseAvailablePackagesPerformed(myProject, myPackageManagementService);
         if (myPackageManagementService != null) {
           ManagePackagesDialog dialog = createManagePackagesDialog();
           dialog.show();
@@ -99,9 +102,10 @@ public class InstalledPackagesPanel extends JPanel {
       }
     };
     myInstallButton.setShortcut(CommonShortcuts.getNew());
-    myUninstallButton = new AnActionButton("Uninstall", IconUtil.getRemoveIcon()) {
+    myUninstallButton = new DumbAwareActionButton(IdeBundle.messagePointer("action.AnActionButton.text.uninstall"), IconUtil.getRemoveIcon()) {
       @Override
       public void actionPerformed(@NotNull AnActionEvent e) {
+        PackageManagementUsageCollector.triggerUninstallPerformed(myProject, myPackageManagementService);
         uninstallAction();
       }
     };
@@ -127,7 +131,7 @@ public class InstalledPackagesPanel extends JPanel {
 
     new DoubleClickListener() {
       @Override
-      protected boolean onDoubleClick(MouseEvent e) {
+      protected boolean onDoubleClick(@NotNull MouseEvent e) {
         if (myPackageManagementService != null && myInstallButton.isEnabled()) {
           ManagePackagesDialog dialog = createManagePackagesDialog();
           Point p = e.getPoint();
@@ -238,13 +242,15 @@ public class InstalledPackagesPanel extends JPanel {
               ApplicationManager.getApplication().invokeLater(() -> {
                 myPackagesTable.clearSelection();
                 updatePackages(selPackageManagementService);
-                myPackagesTable.setPaintBusy(false);
                 myCurrentlyInstalling.remove(packageName);
+                myPackagesTable.setPaintBusy(!myCurrentlyInstalling.isEmpty());
                 if (errorDescription == null) {
-                  myNotificationArea.showSuccess("Package " + packageName + " successfully upgraded");
+                  myNotificationArea.showSuccess(IdeBundle.message("package.successfully.upgraded", packageName));
                 }
                 else {
-                  myNotificationArea.showError("Upgrade packages failed. <a href=\"xxx\">Details...</a>", "Upgrade Packages Failed",
+                  myNotificationArea.showError(IdeBundle.message("upgrade.packages.failed") +
+                                               " <a href=\"xxx\">" + IdeBundle.message("upgrade.packages.failure.details") + "</a>",
+                                               IdeBundle.message("upgrade.packages.failed.dialog.title"),
                                                errorDescription);
                 }
 
@@ -267,8 +273,10 @@ public class InstalledPackagesPanel extends JPanel {
 
       @Override
       public void consume(Exception e) {
-        ApplicationManager.getApplication().invokeLater(() -> Messages.showErrorDialog("Error occurred. Please, check your internet connection.",
-                                                                                     "Upgrade Package Failed."), ModalityState.any());
+        ApplicationManager.getApplication().invokeLater(() -> Messages.showErrorDialog(
+          IdeBundle.message("error.occurred.please.check.your.internet.connection"),
+          IdeBundle.message("upgrade.package.failed.title")
+        ), ModalityState.any());
       }
     });
   }
@@ -278,7 +286,7 @@ public class InstalledPackagesPanel extends JPanel {
     return ObjectUtils.tryCast(myPackageManagementService, PackageManagementServiceEx.class);
   }
 
-  private void updateUninstallUpgrade() {
+  protected void updateUninstallUpgrade() {
     final int[] selected = myPackagesTable.getSelectedRows();
     boolean upgradeAvailable = false;
     boolean canUninstall = selected.length != 0;
@@ -349,17 +357,19 @@ public class InstalledPackagesPanel extends JPanel {
           ApplicationManager.getApplication().invokeLater(() -> {
             myPackagesTable.clearSelection();
             updatePackages(selPackageManagementService);
-            myPackagesTable.setPaintBusy(false);
+            myPackagesTable.setPaintBusy(!myCurrentlyInstalling.isEmpty());
             if (errorDescription == null) {
               if (packageName != null) {
-                myNotificationArea.showSuccess("Package '" + packageName + "' successfully uninstalled");
+                myNotificationArea.showSuccess(IdeBundle.message("package.successfully.uninstalled", packageName));
               }
               else {
-                myNotificationArea.showSuccess("Packages successfully uninstalled");
+                myNotificationArea.showSuccess(IdeBundle.message("packages.successfully.uninstalled"));
               }
             }
             else {
-              myNotificationArea.showError("Uninstall packages failed. <a href=\"xxx\">Details...</a>", "Uninstall Packages Failed",
+              myNotificationArea.showError(IdeBundle.message("uninstall.packages.failed") +
+                                           " <a href=\"xxx\">" + IdeBundle.message("uninstall.packages.failure.details") + "</a>",
+                                           IdeBundle.message("uninstall.packages.failed.dialog.title"),
                                            errorDescription);
             }
           }, modalityState);
@@ -394,12 +404,12 @@ public class InstalledPackagesPanel extends JPanel {
 
   private void onUpdateStarted() {
     myPackagesTable.setPaintBusy(true);
-    myPackagesTable.getEmptyText().setText("Loading...");
+    myPackagesTable.getEmptyText().setText(CommonBundle.getLoadingTreeNodeText());
   }
 
   private void onUpdateFinished() {
-    myPackagesTable.setPaintBusy(false);
-    myPackagesTable.getEmptyText().setText(StatusText.DEFAULT_EMPTY_TEXT);
+    myPackagesTable.setPaintBusy(!myCurrentlyInstalling.isEmpty());
+    myPackagesTable.getEmptyText().setText(StatusText.getDefaultEmptyText());
     updateUninstallUpgrade();
     // Action button presentations won't be updated if no events occur (e.g. mouse isn't moving, keys aren't being pressed).
     // In that case emulating activity will help:
@@ -409,10 +419,10 @@ public class InstalledPackagesPanel extends JPanel {
   public void doUpdatePackages(@NotNull final PackageManagementService packageManagementService) {
     onUpdateStarted();
     ProgressManager progressManager = ProgressManager.getInstance();
-    progressManager.run(new Task.Backgroundable(myProject, LOADING_PACKAGES_LIST_TITLE, true, PerformInBackgroundOption.ALWAYS_BACKGROUND) {
+    progressManager.run(new Task.Backgroundable(myProject, IdeBundle.message("packages.settings.loading"), true, PerformInBackgroundOption.ALWAYS_BACKGROUND) {
       @Override
       public void run(@NotNull ProgressIndicator indicator) {
-        Collection<InstalledPackage> packages = Lists.newArrayList();
+        Collection<InstalledPackage> packages = new ArrayList<>();
         try {
           packages = packageManagementService.getInstalledPackages();
         }
@@ -533,7 +543,7 @@ public class InstalledPackagesPanel extends JPanel {
               final RepoPackage repoPackage = packageMap.get(pyPackage.getName());
               myPackagesTableModel.setValueAt(repoPackage == null ? null : repoPackage.getLatestVersion(), i, 2);
             }
-            myPackagesTable.setPaintBusy(false);
+            myPackagesTable.setPaintBusy(!myCurrentlyInstalling.isEmpty());
           }, ModalityState.stateForComponent(myPackagesTable));
         }
         catch (IOException ignored) {
@@ -544,7 +554,7 @@ public class InstalledPackagesPanel extends JPanel {
     });
   }
 
-  private Map<String, RepoPackage> buildNameToPackageMap(List<RepoPackage> packages) {
+  private Map<String, RepoPackage> buildNameToPackageMap(List<? extends RepoPackage> packages) {
     try {
       return doBuildNameToPackageMap(packages);
     }
@@ -556,7 +566,7 @@ public class InstalledPackagesPanel extends JPanel {
     }
   }
 
-  private static Map<String, RepoPackage> doBuildNameToPackageMap(List<RepoPackage> packages) {
+  private static Map<String, RepoPackage> doBuildNameToPackageMap(List<? extends RepoPackage> packages) {
     final Map<String, RepoPackage> packageMap = new HashMap<>();
     for (RepoPackage aPackage : packages) {
       packageMap.put(aPackage.getName(), aPackage);

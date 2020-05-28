@@ -1,21 +1,8 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.jarRepository.settings;
 
 import com.google.common.base.Strings;
+import com.intellij.CommonBundle;
 import com.intellij.jarRepository.JarRepositoryManager;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
@@ -24,9 +11,11 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.ui.CollectionComboBoxModel;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.labels.SwingActionLink;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.ThreeStateCheckBox;
 import com.intellij.util.ui.UI;
 import com.intellij.util.ui.UIUtil;
@@ -48,7 +37,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class RepositoryLibraryPropertiesEditor {
   private static final Logger LOG = Logger.getInstance(RepositoryLibraryPropertiesEditor.class);
@@ -101,7 +89,7 @@ public class RepositoryLibraryPropertiesEditor {
     myIncludeTransitiveDepsCheckBox = new ThreeStateCheckBox(UIUtil.replaceMnemonicAmpersand("Include &transitive dependencies"));
     myIncludeTransitiveDepsCheckBox.setThirdStateEnabled(false);
     myTransitiveDependenciesPanel.add(myIncludeTransitiveDepsCheckBox);
-    myManageDependenciesLink = new SwingActionLink(new AbstractAction("Configure...") {
+    myManageDependenciesLink = new SwingActionLink(new AbstractAction(CommonBundle.message("action.text.configure.ellipsis")) {
       @Override
       public void actionPerformed(ActionEvent e) {
         configureTransitiveDependencies();
@@ -123,7 +111,7 @@ public class RepositoryLibraryPropertiesEditor {
         mavenCoordinates.setText(repositoryLibraryDescription.getMavenCoordinates(model.getVersion()));
       }
     };
-    versionSelector.setRenderer(new VersionSelectorCellRenderer());
+    versionSelector.setRenderer(SimpleListCellRenderer.create("", VersionItem::getDisplayName));
     updateManageDependenciesLink();
     reloadVersionsAsync();
   }
@@ -166,14 +154,15 @@ public class RepositoryLibraryPropertiesEditor {
 
   private void reloadVersionsAsync() {
     setState(State.Loading);
-    JarRepositoryManager.getAvailableVersions(project, repositoryLibraryDescription).onSuccess(result -> versionsLoaded(new ArrayList<>(result)));
+    JarRepositoryManager.getAvailableVersions(project, repositoryLibraryDescription)
+      .onSuccess(result -> versionsLoaded(new ArrayList<>(result)));
   }
 
   private void initVersionsPanel() {
     CollectionComboBoxModel<VersionItem> versionSelectorModel = new CollectionComboBoxModel<>();
     versionSelectorModel.add(VersionItem.LatestRelease.INSTANCE);
     versionSelectorModel.add(VersionItem.LatestVersion.INSTANCE);
-    versionSelectorModel.add(versions.stream().map(VersionItem.ExactVersion::new).collect(Collectors.toList()));
+    versionSelectorModel.add(ContainerUtil.map(versions, VersionItem.ExactVersion::new));
     versionSelector.setModel(versionSelectorModel);
     versionSelector.setSelectedItem(toVersionItem(model.getVersion()));
     setState(State.Loaded);
@@ -236,9 +225,9 @@ public class RepositoryLibraryPropertiesEditor {
     myManageDependenciesLink.setEnabled(enable);
   }
 
-  private void versionsLoaded(final @Nullable List<String> versions) {
+  private void versionsLoaded(@NotNull List<String> versions) {
     this.versions = versions;
-    if (versions == null || versions.isEmpty()) {
+    if (versions.isEmpty()) {
       versionsFailedToLoad();
       return;
     }

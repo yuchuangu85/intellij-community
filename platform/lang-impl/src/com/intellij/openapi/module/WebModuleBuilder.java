@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.module;
 
 import com.intellij.icons.AllIcons;
@@ -23,7 +23,7 @@ import javax.swing.*;
 * @author Dmitry Avdeev
 */
 public class WebModuleBuilder<T> extends ModuleBuilder {
-  public static final String GROUP_NAME = "Static Web";
+  public static final String GROUP_NAME = "JavaScript";
   public static final Icon ICON = AllIcons.Nodes.PpWeb;
 
   private final WebProjectTemplate<T> myTemplate;
@@ -40,13 +40,13 @@ public class WebModuleBuilder<T> extends ModuleBuilder {
   }
 
   @Override
-  public void setupRootModel(ModifiableRootModel modifiableRootModel) throws ConfigurationException {
+  public void setupRootModel(@NotNull ModifiableRootModel modifiableRootModel) throws ConfigurationException {
     doAddContentEntry(modifiableRootModel);
   }
 
   @Override
   public ModuleType getModuleType() {
-    return WebModuleType.getInstance();
+    return WebModuleTypeBase.getInstance();
   }
 
   @Override

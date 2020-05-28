@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.stubs;
 
 import com.intellij.psi.impl.PsiImplUtil;
@@ -35,10 +21,8 @@ import org.jetbrains.plugins.groovy.lang.psi.api.types.GrCodeReferenceElement;
 public class GrTypeDefinitionStub extends StubBase<GrTypeDefinition> implements NamedStub<GrTypeDefinition> {
   private static final int ANONYMOUS = 0x01;
   private static final int INTERFACE = 0x02;
-  private static final int ENUM = 0x04;
   private static final int ANNOTATION = 0x08;
   private static final int DEPRECATED_BY_DOC = 0x20;
-  private static final int TRAIT = 0x40;
 
   private final StringRef myName;
   private final @Nullable String myBaseClassName;
@@ -75,7 +59,7 @@ public class GrTypeDefinitionStub extends StubBase<GrTypeDefinition> implements 
 
     GrCodeReferenceElement reference = SoftReference.dereference(myStubBaseReference);
     if (reference == null) {
-      reference = GroovyPsiElementFactory.getInstance(getProject()).createReferenceElementFromText(baseClassName, getPsi());
+      reference = GroovyPsiElementFactory.getInstance(getProject()).createCodeReference(baseClassName, getPsi());
       myStubBaseReference = new SoftReference<>(reference);
     }
     return reference;
@@ -106,14 +90,6 @@ public class GrTypeDefinitionStub extends StubBase<GrTypeDefinition> implements 
     return (myFlags & INTERFACE) != 0;
   }
 
-  public boolean isEnum() {
-    return (myFlags & ENUM) != 0;
-  }
-
-  public boolean isTrait() {
-    return (myFlags & TRAIT) != 0;
-  }
-
   public byte getFlags() {
     return myFlags;
   }
@@ -130,10 +106,7 @@ public class GrTypeDefinitionStub extends StubBase<GrTypeDefinition> implements 
     }
     if (typeDefinition.isAnnotationType()) flags |= ANNOTATION;
     if (typeDefinition.isInterface()) flags |= INTERFACE;
-    if (typeDefinition.isEnum()) flags |= ENUM;
-    if (typeDefinition.isTrait()) flags |= TRAIT;
     if (PsiImplUtil.isDeprecatedByDocTag(typeDefinition)) flags |= DEPRECATED_BY_DOC;
     return flags;
   }
-
 }

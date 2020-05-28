@@ -1,25 +1,13 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.fileChooser;
 
+import com.intellij.ide.highlighter.ArchiveFileType;
 import com.intellij.openapi.actionSystem.DataKey;
 import com.intellij.openapi.fileTypes.FileTypeManager;
-import com.intellij.openapi.fileTypes.FileTypes;
+import com.intellij.openapi.fileTypes.FileTypeRegistry;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Iconable;
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.VFileProperty;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -28,7 +16,6 @@ import com.intellij.ui.UIBundle;
 import com.intellij.util.IconUtil;
 import com.intellij.util.PlatformIcons;
 import gnu.trove.THashMap;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -36,7 +23,9 @@ import javax.swing.*;
 import java.util.*;
 
 /**
- * @see FileChooserDescriptorFactory
+ * Allows customizing {@link FileChooser} dialog options.
+ * <p>
+ * Please consider using common variants provided by {@link FileChooserDescriptorFactory}.
  */
 public class FileChooserDescriptor implements Cloneable {
   private final boolean myChooseFiles;
@@ -54,20 +43,20 @@ public class FileChooserDescriptor implements Cloneable {
   private boolean myShowFileSystemRoots = true;
   private boolean myTreeRootVisible = false;
   private boolean myShowHiddenFiles = false;
-  private Condition<VirtualFile> myFileFilter = null;
+  private Condition<? super VirtualFile> myFileFilter = null;
   private boolean myForcedToUseIdeaFileChooser = false;
 
   private final Map<String, Object> myUserData = new THashMap<>();
 
   /**
-   * Creates new instance. Use methods from {@link FileChooserDescriptorFactory} for most used descriptors.
+   * Use {@link FileChooserDescriptorFactory} for most used descriptors.
    *
    * @param chooseFiles       controls whether files can be chosen
    * @param chooseFolders     controls whether folders can be chosen
    * @param chooseJars        controls whether .jar files can be chosen
    * @param chooseJarsAsFiles controls whether .jar files will be returned as files or as folders
    * @param chooseJarContents controls whether .jar file contents can be chosen
-   * @param chooseMultiple    controls how many files can be chosen
+   * @param chooseMultiple    controls whether multiple files can be chosen
    */
   public FileChooserDescriptor(boolean chooseFiles,
                                boolean chooseFolders,
@@ -122,11 +111,11 @@ public class FileChooserDescriptor implements Cloneable {
     return myTitle;
   }
 
-  public void setTitle(@Nls(capitalization = Nls.Capitalization.Title) String title) {
+  public void setTitle(@NlsContexts.DialogTitle String title) {
     withTitle(title);
   }
 
-  public FileChooserDescriptor withTitle(@Nls(capitalization = Nls.Capitalization.Title) String title) {
+  public FileChooserDescriptor withTitle(@NlsContexts.DialogTitle String title) {
     myTitle = title;
     return this;
   }
@@ -135,11 +124,11 @@ public class FileChooserDescriptor implements Cloneable {
     return myDescription;
   }
 
-  public void setDescription(@Nls(capitalization = Nls.Capitalization.Sentence) String description) {
+  public void setDescription(@NlsContexts.Label String description) {
     withDescription(description);
   }
 
-  public FileChooserDescriptor withDescription(@Nls(capitalization = Nls.Capitalization.Sentence) String description) {
+  public FileChooserDescriptor withDescription(@NlsContexts.Label String description) {
     myDescription = description;
     return this;
   }
@@ -161,11 +150,11 @@ public class FileChooserDescriptor implements Cloneable {
     return Collections.unmodifiableList(myRoots);
   }
 
-  public void setRoots(@NotNull VirtualFile... roots) {
+  public void setRoots(VirtualFile @NotNull ... roots) {
     withRoots(roots);
   }
 
-  public void setRoots(@NotNull List<VirtualFile> roots) {
+  public void setRoots(@NotNull List<? extends VirtualFile> roots) {
     withRoots(roots);
   }
 
@@ -214,7 +203,7 @@ public class FileChooserDescriptor implements Cloneable {
   /**
    * Sets simple boolean condition for use in {@link #isFileVisible(VirtualFile, boolean)} and {@link #isFileSelectable(VirtualFile)}.
    */
-  public FileChooserDescriptor withFileFilter(@Nullable Condition<VirtualFile> filter) {
+  public FileChooserDescriptor withFileFilter(@Nullable Condition<? super VirtualFile> filter) {
     myFileFilter = filter;
     return this;
   }
@@ -290,12 +279,13 @@ public class FileChooserDescriptor implements Cloneable {
   }
 
   /**
-   * the method is called upon pressing Ok in the FileChooserDialog
-   * Override the method in order to customize validation of user input
-   * @param files - selected files to be checked
-   * @throws Exception if the the files cannot be accepted
+   * Called upon <em>OK</em> action before closing dialog.
+   * Override to customize validation of user input.
+   *
+   * @param files selected files to be checked
+   * @throws Exception if selected files cannot be accepted, exception message will be shown in UI.
    */
-  public void validateSelectedFiles(VirtualFile[] files) throws Exception {
+  public void validateSelectedFiles(VirtualFile @NotNull [] files) throws Exception {
   }
 
   public boolean isForcedToUseIdeaFileChooser() {
@@ -320,7 +310,7 @@ public class FileChooserDescriptor implements Cloneable {
     if (file.isDirectory() && (myChooseFolders || isFileSelectable(file))) {
       return file;
     }
-    boolean isJar = file.getFileType() == FileTypes.ARCHIVE;
+    boolean isJar = FileTypeRegistry.getInstance().isFileOfType(file, ArchiveFileType.INSTANCE);
     if (!isJar) {
       return acceptAsGeneralFile(file) ? file : null;
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2017 JetBrains s.r.o.
+ * Copyright 2000-2018 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,9 +28,8 @@ import org.jetbrains.annotations.NotNull;
 //todo test3 should be checked if it compiles - as now javac infers Object instead of String?!
 public class Simplify2DiamondInspectionsTest extends LightQuickFixParameterizedTestCase {
 
-  @NotNull
   @Override
-  protected LocalInspectionTool[] configureLocalInspectionTools() {
+  protected LocalInspectionTool @NotNull [] configureLocalInspectionTools() {
     return new LocalInspectionTool[]{
       new ExplicitTypeCanBeDiamondInspection(),
     };
@@ -48,8 +47,15 @@ public class Simplify2DiamondInspectionsTest extends LightQuickFixParameterizedT
 
   @Override
   protected void tearDown() throws Exception {
-    getSettings().ALIGN_MULTILINE_PARAMETERS_IN_CALLS = myAlignment;
-    super.tearDown();
+    try {
+      getSettings().ALIGN_MULTILINE_PARAMETERS_IN_CALLS = myAlignment;
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
+    finally {
+      super.tearDown();
+    }
   }
 
   private CommonCodeStyleSettings getSettings() {

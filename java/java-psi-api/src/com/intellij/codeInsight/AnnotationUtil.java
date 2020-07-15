@@ -588,6 +588,13 @@ public class AnnotationUtil {
     return t;
   }
 
+  /**
+   * Get an attribute as an instance of {@link PsiNameValuePair} by its name from the annotation
+   * @param annotation annotation to look for the attribute
+   * @param attributeName attribute name
+   * @return an attribute as an instance of {@link PsiNameValuePair} or null
+   */
+  @Contract(pure = true)
   @Nullable
   public static PsiNameValuePair findDeclaredAttribute(@NotNull PsiAnnotation annotation, @Nullable("null means 'value'") String attributeName) {
     if (PsiAnnotation.DEFAULT_REFERENCED_METHOD_NAME.equals(attributeName)) attributeName = null;

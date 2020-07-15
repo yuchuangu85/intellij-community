@@ -9,9 +9,11 @@ import com.intellij.debugger.engine.evaluation.EvaluateException;
 import com.intellij.debugger.engine.evaluation.EvaluationContext;
 import com.intellij.debugger.engine.evaluation.EvaluationContextImpl;
 import com.intellij.debugger.jdi.VirtualMachineProxyImpl;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.io.StreamUtil;
 import com.jetbrains.jdi.MethodImpl;
 import com.sun.jdi.*;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
@@ -21,7 +23,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-public class ClassLoadingUtils {
+public final class ClassLoadingUtils {
+  private static final Logger LOG = Logger.getInstance(ClassLoadingUtils.class);
   private static final int BATCH_SIZE = 4096;
   private ClassLoadingUtils() {}
 
@@ -102,17 +105,34 @@ public class ClassLoadingUtils {
     throws EvaluateException, InvalidTypeException, ClassNotLoadedException {
     ArrayType arrayClass = (ArrayType)process.findClass(context, "byte[]", context.getClassLoader());
     ArrayReference reference = DebuggerUtilsEx.mirrorOfArray(arrayClass, bytes.length, context);
+    VirtualMachine virtualMachine = reference.virtualMachine();
     List<Value> mirrors = new ArrayList<>(bytes.length);
     for (byte b : bytes) {
-      mirrors.add(((VirtualMachineProxyImpl)process.getVirtualMachineProxy()).mirrorOf(b));
+      mirrors.add(virtualMachine.mirrorOf(b));
     }
 
-    if (DebuggerUtils.isAndroidVM(arrayClass.virtualMachine())) {
+    if (DebuggerUtils.isAndroidVM(virtualMachine)) {
       // Android VM has a limited buffer size to receive JDWP data (see https://issuetracker.google.com/issues/73584940)
       setChuckByChunk(reference, mirrors);
     }
     else {
-      DebuggerUtilsEx.setValuesNoCheck(reference, mirrors);
+      try {
+        DebuggerUtilsEx.setValuesNoCheck(reference, mirrors);
+      }
+      catch (VMMismatchException e) {
+        LOG.error("Class vm: " + arrayClass.virtualMachine() +
+                  " loaded by " + arrayClass.virtualMachine().getClass().getClassLoader() +
+                  "\nReference vm: " + reference.virtualMachine() +
+                  " loaded by " + reference.virtualMachine().getClass().getClassLoader() +
+                  "\nMirrors vms: " + StreamEx.of(mirrors).map(Mirror::virtualMachine).distinct()
+                    .map(m -> {
+                      return m +
+                             " loaded by " + arrayClass.virtualMachine().getClass().getClassLoader() +
+                             " same as ref vm = " + (m.virtualMachine() == reference.virtualMachine());
+                    })
+                    .joining(", ")
+          , e);
+      }
     }
 
     return reference;

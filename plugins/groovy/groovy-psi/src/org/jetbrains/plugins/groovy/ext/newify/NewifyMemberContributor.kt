@@ -5,15 +5,18 @@ import com.intellij.psi.*
 import com.intellij.psi.impl.light.LightMethodBuilder
 import com.intellij.psi.scope.PsiScopeProcessor
 import com.intellij.psi.util.parentsWithSelf
-import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult
+import org.jetbrains.plugins.groovy.lang.psi.GroovyFile
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrReferenceExpression
+import org.jetbrains.plugins.groovy.lang.psi.api.toplevel.imports.GrImportStatement
 import org.jetbrains.plugins.groovy.lang.psi.impl.GrAnnotationUtil
 import org.jetbrains.plugins.groovy.lang.psi.impl.GrAnnotationUtil.getClassArrayValue
+import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyImportHelper
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil
 import org.jetbrains.plugins.groovy.lang.psi.util.GrStaticChecker
 import org.jetbrains.plugins.groovy.lang.resolve.NonCodeMembersContributor
 import org.jetbrains.plugins.groovy.lang.resolve.ResolveUtil
 import org.jetbrains.plugins.groovy.lang.resolve.processUnqualified
+import org.jetbrains.plugins.groovy.lang.resolve.processors.ClassHint.RESOLVE_CONTEXT
 import org.jetbrains.plugins.groovy.lang.resolve.processors.ClassProcessor
 import org.jetbrains.plugins.groovy.lang.resolve.shouldProcessMethods
 import java.util.regex.PatternSyntaxException
@@ -30,7 +33,7 @@ class NewifyMemberContributor : NonCodeMembersContributor() {
     if (!processor.shouldProcessMethods()) return
     if (place !is GrReferenceExpression) return
     val referenceName = place.referenceName ?: return
-    val newifyAnnotations = place.listNewifyAnnotations()
+    val newifyAnnotations = getNewifyAnnotations(place)
     if (newifyAnnotations.isEmpty()) return
 
     val qualifier = place.qualifierExpression
@@ -39,14 +42,14 @@ class NewifyMemberContributor : NonCodeMembersContributor() {
     for (annotation in newifyAnnotations) {
 
       if (qualifier == null) {
-        val patternClasses: List<PsiClass> = getClassesForPatternAttribute(annotation, referenceName, place)
+        processClassesWithPatternAttribute(annotation, referenceName, place, processor, state)
+
         val newifiedClasses = getClassArrayValue(annotation, "value", true)
-        (patternClasses + newifiedClasses)
+        newifiedClasses
           .filter { psiClass -> GrStaticChecker.isStaticsOK(psiClass, place, psiClass, false) }
           .flatMap { buildConstructors(it, it.name) }
           .forEach { ResolveUtil.processElement(processor, it, state) }
       }
-
       val createNewMethods = GrAnnotationUtil.inferBooleanAttributeNotNull(annotation, "auto")
       if (type != null && createNewMethods) {
           buildConstructors(type, "new").forEach {
@@ -56,29 +59,53 @@ class NewifyMemberContributor : NonCodeMembersContributor() {
     }
   }
 
-  private fun getClassesForPatternAttribute(annotation: PsiAnnotation, referenceName: String, place: PsiElement): List<PsiClass> {
-    val regex = try {
-      val pattern = GrAnnotationUtil.inferStringAttribute(annotation, "pattern") ?: return emptyList()
-      Regex(pattern)
-    }
-    catch (e: PatternSyntaxException) {
-      return emptyList()
-    }
-    return if (regex matches referenceName) {
+  private fun processClassesWithPatternAttribute(annotation: PsiAnnotation,
+                                                 referenceName: String,
+                                                 place: PsiElement,
+                                                 processor: PsiScopeProcessor,
+                                                 state: ResolveState) {
+    if (matchesPattern(referenceName, annotation)) {
       val classProcessor = ClassProcessor(referenceName, place)
       place.processUnqualified(classProcessor, ResolveState.initial())
-      classProcessor.results.mapNotNull(GroovyResolveResult::getElement).filterIsInstance<PsiClass>()
-    }
-    else {
-      emptyList()
+
+      classProcessor.results
+        .map { result ->
+          val clazz = (result.element as? PsiClass)?.takeIf { GrStaticChecker.isStaticsOK(it, place, it, false) }
+          val import = (result.currentFileResolveContext as? GrImportStatement)?.takeIf {
+            val containingFile = place.containingFile as? GroovyFile ?: return@takeIf false
+            !GroovyImportHelper.isImplicitlyImported(result.element, referenceName, containingFile)
+          }
+          clazz to import
+        }
+        .filterIsInstance<Pair<PsiClass, GrImportStatement?>>()
+        .flatMap { (clazz, import) -> buildConstructors(clazz, clazz.name).map { it to import } }
+        .forEach { (clazz, import) ->
+          val newState = if (import == null) state else state.put(RESOLVE_CONTEXT, import)
+          ResolveUtil.processElement(processor, clazz, newState)
+        }
     }
   }
 
-  private fun PsiElement.listNewifyAnnotations() = parentsWithSelf.flatMap {
-    val owner = it as? PsiModifierListOwner
-    val seq = owner?.modifierList?.annotations?.asSequence()?.filter { it.qualifiedName == newifyAnnotationFqn }
-    return@flatMap seq ?: emptySequence()
-  }.toList()
+  companion object {
+    @JvmStatic
+    fun getNewifyAnnotations(element: PsiElement): List<PsiAnnotation> = element.parentsWithSelf.flatMap {
+      val owner = it as? PsiModifierListOwner
+      val seq = owner?.modifierList?.annotations?.asSequence()?.filter { it.qualifiedName == newifyAnnotationFqn }
+      return@flatMap seq ?: emptySequence()
+    }.toList()
+
+    @JvmStatic
+    fun matchesPattern(name: String, annotation: PsiAnnotation): Boolean {
+      val regex = try {
+        val pattern = GrAnnotationUtil.inferStringAttribute(annotation, "pattern") ?: return false
+        Regex(pattern)
+      }
+      catch (e: PatternSyntaxException) {
+        return false
+      }
+      return regex matches name
+    }
+  }
 
   private fun buildConstructors(clazz: PsiClass, newName: String?): List<NewifiedConstructor> {
     newName ?: return emptyList()

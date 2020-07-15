@@ -403,6 +403,9 @@ public class DataFlowRunner {
         }
       }
     }
+    if (e instanceof RuntimeExceptionWithAttachments) {
+      attachments = ArrayUtil.mergeArrays(attachments, ((RuntimeExceptionWithAttachments)e).getAttachments());
+    }
     LOG.error(new RuntimeExceptionWithAttachments(e, attachments));
   }
 
@@ -626,7 +629,7 @@ public class DataFlowRunner {
     private long myMergeStart, myFlowTime, myLVATime, myMergeTime, myProcessTime;
 
     TimeStats() {
-      this(ApplicationManager.getApplication().isInternal() || ApplicationManager.getApplication().isEAP());
+      this(ApplicationManager.getApplication().isInternal());
     }
 
     public TimeStats(boolean record) {

@@ -14,8 +14,12 @@ import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.codeInspection.ProblemHighlightType;
 import com.intellij.codeInspection.QuickFix;
 import com.intellij.codeInspection.deadCode.UnusedDeclarationInspectionBase;
+import com.intellij.diagnostic.PluginException;
 import com.intellij.ide.highlighter.JavaFileType;
-import com.intellij.lang.annotation.*;
+import com.intellij.lang.annotation.AnnotationBuilder;
+import com.intellij.lang.annotation.AnnotationHolder;
+import com.intellij.lang.annotation.HighlightSeverity;
+import com.intellij.lang.annotation.ProblemGroup;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.colors.CodeInsightColors;
 import com.intellij.openapi.editor.colors.TextAttributesKey;
@@ -109,8 +113,7 @@ public class LightAnnotatorHighlightingTest extends LightDaemonAnalyzerTestCase 
     @Override
     public void annotate(@NotNull PsiElement psiElement, @NotNull AnnotationHolder holder) {
       if (psiElement instanceof PsiFile && !psiElement.getText().contains("xxx")) {
-        Annotation annotation = holder.createWarningAnnotation(psiElement, "top level");
-        annotation.setFileLevelAnnotation(true);
+        holder.newAnnotation(HighlightSeverity.WARNING, "top level").fileLevel().create();
         iDidIt();
       }
     }
@@ -146,7 +149,7 @@ public class LightAnnotatorHighlightingTest extends LightDaemonAnalyzerTestCase 
             .create();
           fail("Must have rejected crazy annotation range");
         }
-        catch (IllegalArgumentException ignored) {
+        catch (PluginException ignored) {
         }
       }
     }

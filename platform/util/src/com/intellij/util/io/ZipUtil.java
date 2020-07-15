@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.io;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -17,7 +17,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
-public class ZipUtil {
+public final class ZipUtil {
   private static final Logger LOG = Logger.getInstance(ZipUtil.class);
 
   private ZipUtil() { }
@@ -130,7 +130,7 @@ public class ZipUtil {
     new Decompressor.Zip(file).filter(FileFilterAdapter.wrap(outputDir, filter)).overwrite(overwrite).extract(outputDir);
   }
 
-  private static class FileFilterAdapter implements Condition<String> {
+  private static final class FileFilterAdapter implements Condition<String> {
     private static FileFilterAdapter wrap(File outputDir, @Nullable FilenameFilter filter) {
       return filter == null ? null : new FileFilterAdapter(outputDir, filter);
     }

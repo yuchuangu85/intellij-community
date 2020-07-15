@@ -19,6 +19,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -43,6 +44,13 @@ public class DebuggerUtilsAsync {
     return completedFuture(type.allFields());
   }
 
+  public static CompletableFuture<List<Field>> fields(ReferenceType type) {
+    if (type instanceof ReferenceTypeImpl && Registry.is("debugger.async.jdi")) {
+      return reschedule(((ReferenceTypeImpl)type).fieldsAsync());
+    }
+    return completedFuture(type.fields());
+  }
+
   public static CompletableFuture<? extends Type> type(@Nullable Value value) {
     if (value == null) {
       return completedFuture(null);
@@ -53,8 +61,8 @@ public class DebuggerUtilsAsync {
     return completedFuture(value.type());
   }
 
-  public static CompletableFuture<Value> getValue(ObjectReference ref, Field field, boolean now) {
-    if (!now && ref instanceof ObjectReferenceImpl && Registry.is("debugger.async.jdi")) {
+  public static CompletableFuture<Value> getValue(ObjectReference ref, Field field) {
+    if (ref instanceof ObjectReferenceImpl && Registry.is("debugger.async.jdi")) {
       return reschedule(((ObjectReferenceImpl)ref).getValueAsync(field));
     }
     return completedFuture(ref.getValue(field));
@@ -258,7 +266,7 @@ public class DebuggerUtilsAsync {
     DebuggerManagerThreadImpl.assertIsManagerThread();
     DebuggerManagerThreadImpl thread = (DebuggerManagerThreadImpl)InvokeThread.currentThread();
     LOG.assertTrue(thread != null);
-    DebuggerCommandImpl event = thread.myEvents.getCurrentEvent();
+    DebuggerCommandImpl event = DebuggerManagerThreadImpl.getCurrentCommand();
     LOG.assertTrue(event != null);
     PrioritizedTask.Priority priority = event.getPriority();
     SuspendContextImpl suspendContext =
@@ -280,13 +288,32 @@ public class DebuggerUtilsAsync {
           public void contextAction(@NotNull SuspendContextImpl suspendContext) {
             completeFuture(r, ex, res);
           }
+
+          @Override
+          protected void commandCancelled() {
+            res.cancel(false);
+          }
         });
       }
       else {
-        thread.schedule(priority, () -> completeFuture(r, ex, res));
+        thread.schedule(new DebuggerCommandImpl(priority) {
+          @Override
+          protected void action() {
+            completeFuture(r, ex, res);
+          }
+
+          @Override
+          protected void commandCancelled() {
+            res.cancel(false);
+          }
+        });
       }
     });
     return res;
+  }
+
+  public static Throwable unwrap(Throwable throwable) {
+    return throwable instanceof CompletionException ? throwable.getCause() : throwable;
   }
 
   private static <T> void completeFuture(T res, Throwable ex, CompletableFuture<T> future) {

@@ -242,11 +242,6 @@ public abstract class CodeBlockSurrounder {
       return null;
     }
     if (parent instanceof PsiField) {
-      PsiElement prev = PsiTreeUtil.skipWhitespacesAndCommentsBackward(parent);
-      PsiElement next = PsiTreeUtil.skipWhitespacesAndCommentsForward(parent);
-      boolean multipleFieldsDeclaration = prev instanceof PsiJavaToken && ((PsiJavaToken)prev).getTokenType() == JavaTokenType.COMMA ||
-                                          next instanceof PsiJavaToken && ((PsiJavaToken)next).getTokenType() == JavaTokenType.COMMA;
-      if (multipleFieldsDeclaration) return null;
       return new ExtractFieldInitializerSurrounder(expression, (PsiField)parent);
     }
 
@@ -375,7 +370,7 @@ public abstract class CodeBlockSurrounder {
   private static class ExtractFieldInitializerSurrounder extends CodeBlockSurrounder {
     private final PsiField myField;
 
-    public ExtractFieldInitializerSurrounder(@NotNull PsiExpression expression, @NotNull PsiField field) {
+    ExtractFieldInitializerSurrounder(@NotNull PsiExpression expression, @NotNull PsiField field) {
       super(expression);
       myField = field;
     }
@@ -387,6 +382,7 @@ public abstract class CodeBlockSurrounder {
 
     @Override
     @NotNull PsiStatement replace(@NotNull Project project, @NotNull PsiElementFactory factory) {
+      myField.normalizeDeclaration();
       PsiClassInitializer initializer =
         ObjectUtils.tryCast(PsiTreeUtil.skipWhitespacesAndCommentsForward(myField), PsiClassInitializer.class);
       boolean isStatic = myField.hasModifierProperty(PsiModifier.STATIC);
@@ -462,7 +458,7 @@ public abstract class CodeBlockSurrounder {
         }
         copyFinally.delete();
       }
-      PsiElement codeBlock = tryBlock.replace(JavaPsiFacade.getElementFactory(myStatement.getProject()).createCodeBlock());
+      PsiElement codeBlock = tryBlock.replace(factory.createCodeBlock());
       return (PsiStatement)codeBlock.add(copy);
     }
   }
@@ -530,7 +526,7 @@ public abstract class CodeBlockSurrounder {
     private final PsiConditionalExpression myConditional;
     private final CodeBlockSurrounder myUpstream;
 
-    public TernaryToIfSurrounder(@NotNull PsiExpression expression,
+    TernaryToIfSurrounder(@NotNull PsiExpression expression,
                                  @NotNull PsiConditionalExpression conditional,
                                  @NotNull CodeBlockSurrounder upstream) {
       super(expression);

@@ -62,7 +62,9 @@ import com.intellij.pom.Navigatable;
 import com.intellij.ui.components.breadcrumbs.Crumb;
 import com.intellij.util.concurrency.NonUrgentExecutor;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.update.Activatable;
 import com.intellij.util.ui.update.MergingUpdateQueue;
+import com.intellij.util.ui.update.UiNotifyConnector;
 import com.intellij.util.ui.update.Update;
 import com.intellij.xml.breadcrumbs.NavigatableCrumb;
 import gnu.trove.TIntFunction;
@@ -150,6 +152,13 @@ public class UnifiedDiffViewer extends ListenerDiffViewerBase {
     installTypingSupport();
     myPanel.setLoadingContent(); // We need loading panel only for initial rediff()
     myPanel.setPersistentNotifications(DiffUtil.getCustomNotifications(myContext, myRequest));
+
+    new UiNotifyConnector(getComponent(), new Activatable() {
+      @Override
+      public void showNotify() {
+        myMarkupUpdater.scheduleUpdate();
+      }
+    });
   }
 
   @Override
@@ -845,7 +854,7 @@ public class UnifiedDiffViewer extends ListenerDiffViewerBase {
   @NotNull
   protected List<? extends DocumentContent> getContents() {
     //noinspection unchecked
-    return (List<? extends DocumentContent>)(List)myRequest.getContents();
+    return (List)myRequest.getContents();
   }
 
   @NotNull
@@ -1023,7 +1032,7 @@ public class UnifiedDiffViewer extends ListenerDiffViewerBase {
   // Scroll from annotate
   //
 
-  private class ChangedLinesIterator extends BufferedLineIterator {
+  private final class ChangedLinesIterator extends BufferedLineIterator {
     @NotNull private final List<? extends UnifiedDiffChange> myChanges;
 
     private int myIndex = 0;
@@ -1238,7 +1247,7 @@ public class UnifiedDiffViewer extends ListenerDiffViewerBase {
       myLineNumberConvertor.dispose();
     }
 
-    private static class MyFoldingBuilder extends FoldingBuilderBase {
+    private static final class MyFoldingBuilder extends FoldingBuilderBase {
       @NotNull private final Document myDocument;
       @NotNull private final DisposableLineNumberConvertor myLineConvertor;
 
@@ -1260,7 +1269,7 @@ public class UnifiedDiffViewer extends ListenerDiffViewerBase {
       }
     }
 
-    private static class DisposableLineNumberConvertor {
+    private static final class DisposableLineNumberConvertor {
       @Nullable private volatile LineNumberConvertor myConvertor;
 
       private DisposableLineNumberConvertor(@Nullable LineNumberConvertor convertor) {
@@ -1285,7 +1294,7 @@ public class UnifiedDiffViewer extends ListenerDiffViewerBase {
     }
   }
 
-  private class MarkupUpdater implements Disposable {
+  private final class MarkupUpdater implements Disposable {
     @NotNull private final MergingUpdateQueue myUpdateQueue =
       new MergingUpdateQueue("UnifiedDiffViewer.MarkupUpdater", 300, true, myPanel, this);
 
@@ -1325,6 +1334,7 @@ public class UnifiedDiffViewer extends ListenerDiffViewerBase {
     public void scheduleUpdate() {
       if (myProject == null) return;
       if (mySuspended) return;
+      if (!getComponent().isShowing()) return;
       myUpdateIndicator.cancel();
 
       myUpdateQueue.queue(new Update("update") {
@@ -1392,12 +1402,9 @@ public class UnifiedDiffViewer extends ListenerDiffViewerBase {
     }
   }
 
-  private class UnifiedBreadcrumbsPanel extends DiffBreadcrumbsPanel {
+  private final class UnifiedBreadcrumbsPanel extends DiffBreadcrumbsPanel {
     private final VirtualFile myFile1;
     private final VirtualFile myFile2;
-
-    private volatile FileBreadcrumbsCollector myBreadcrumbsCollector1;
-    private volatile FileBreadcrumbsCollector myBreadcrumbsCollector2;
 
     private UnifiedBreadcrumbsPanel() {
       super(getEditor(), UnifiedDiffViewer.this);
@@ -1408,9 +1415,7 @@ public class UnifiedDiffViewer extends ListenerDiffViewerBase {
 
     @Override
     protected boolean updateCollectors(boolean enabled) {
-      myBreadcrumbsCollector1 = enabled ? findCollector(myFile1) : null;
-      myBreadcrumbsCollector2 = enabled ? findCollector(myFile2) : null;
-      return myBreadcrumbsCollector1 != null || myBreadcrumbsCollector2 != null;
+      return enabled && (findCollector(myFile1) != null || findCollector(myFile2) != null);
     }
 
     @Nullable
@@ -1423,7 +1428,7 @@ public class UnifiedDiffViewer extends ListenerDiffViewerBase {
       int twosideOffset = pair.first;
 
       VirtualFile file = side.select(myFile1, myFile2);
-      FileBreadcrumbsCollector collector = side.select(myBreadcrumbsCollector1, myBreadcrumbsCollector2);
+      FileBreadcrumbsCollector collector = side.select(findCollector(myFile1), findCollector(myFile2));
       if (file == null || collector == null) return null;
 
       Iterable<? extends Crumb> crumbs = collector.computeCrumbs(file, getDocument(side), twosideOffset, null);
@@ -1462,7 +1467,7 @@ public class UnifiedDiffViewer extends ListenerDiffViewerBase {
     }
 
 
-    private class UnifiedNavigatableCrumb implements NavigatableCrumb {
+    private final class UnifiedNavigatableCrumb implements NavigatableCrumb {
       @NotNull private final NavigatableCrumb myDelegate;
       @NotNull private final Side mySide;
 

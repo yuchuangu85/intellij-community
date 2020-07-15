@@ -142,6 +142,10 @@ public final class StructureViewWrapperImpl implements StructureViewWrapper, Dis
         }
       }
     });
+    if (component.isShowing()) {
+      loggedRun("initial structure rebuild", this::checkUpdate);
+      scheduleRebuild();
+    }
     myToolWindow.getContentManager().addContentManagerListener(new ContentManagerListener() {
       @Override
       public void selectionChanged(@NotNull ContentManagerEvent event) {
@@ -169,7 +173,7 @@ public final class StructureViewWrapperImpl implements StructureViewWrapper, Dis
     if (myStructureView != null) {
       myStructureView.disableStoreState();
     }
-    scheduleRebuild();
+    rebuild();
   }
 
   private void checkUpdate() {

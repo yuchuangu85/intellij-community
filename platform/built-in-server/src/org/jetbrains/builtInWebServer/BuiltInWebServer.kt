@@ -23,6 +23,7 @@ import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.io.*
+import com.intellij.util.io.DigestUtil.randomToken
 import com.intellij.util.net.NetUtils
 import io.netty.channel.Channel
 import io.netty.channel.ChannelHandlerContext
@@ -33,11 +34,10 @@ import io.netty.handler.codec.http.cookie.ServerCookieEncoder
 import org.jetbrains.ide.BuiltInServerBundle
 import org.jetbrains.ide.BuiltInServerManagerImpl
 import org.jetbrains.ide.HttpRequestHandler
-import org.jetbrains.io.orInSafeMode
+import org.jetbrains.ide.orInSafeMode
 import org.jetbrains.io.send
 import java.awt.datatransfer.StringSelection
 import java.io.IOException
-import java.math.BigInteger
 import java.net.InetAddress
 import java.nio.file.Files
 import java.nio.file.Path
@@ -66,7 +66,7 @@ class BuiltInWebServer : HttpRequestHandler() {
   override fun isSupported(request: FullHttpRequest): Boolean = super.isSupported(request) || request.method() == HttpMethod.POST
 
   override fun process(urlDecoder: QueryStringDecoder, request: FullHttpRequest, context: ChannelHandlerContext): Boolean {
-    var hostName = request.hostName ?: return false
+    var hostName = getHostName(request) ?: return false
     val projectName: String?
     val isIpv6 = hostName[0] == '[' && hostName.length > 2 && hostName[hostName.length - 1] == ']'
     if (isIpv6) {
@@ -136,11 +136,6 @@ fun acquireToken(): String {
     tokens.put(token, java.lang.Boolean.TRUE)
   }
   return token
-}
-
-// http://stackoverflow.com/a/41156 - shorter than UUID, but secure
-private fun randomToken(): String {
-  return BigInteger(130, DigestUtil.random).toString(32)
 }
 
 private fun doProcess(urlDecoder: QueryStringDecoder, request: FullHttpRequest, context: ChannelHandlerContext, projectNameAsHost: String?): Boolean {

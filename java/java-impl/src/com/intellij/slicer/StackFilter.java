@@ -9,47 +9,45 @@ import com.intellij.psi.*;
 import com.intellij.psi.search.DelegatingGlobalSearchScope;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.SearchScope;
+import com.intellij.psi.util.ClassUtil;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.util.TypeConversionUtil;
+import com.intellij.util.containers.ContainerUtil;
 import com.siyeh.ig.psiutils.ClassUtils;
 import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Allows to narrow dataflow-to-here results based on known stacktrace.
- * TODO: support bridge methods
  */
-class StackFilter {
+final class StackFilter {
   final int myExtraFrames;
   final @NotNull String myClassName;
   final @NotNull String myMethodName;
+  final @Nullable String myFileName;
   final @Nullable StackFilter myNext;
 
   private StackFilter(int frames,
                       @NotNull String className,
                       @NotNull String methodName,
-                      @Nullable StackFilter next) {
+                      @Nullable String fileName, @Nullable StackFilter next) {
     myExtraFrames = frames;
     myClassName = className;
     myMethodName = methodName;
+    myFileName = fileName;
     myNext = next;
   }
-  
-  SearchScope correctScope(Project project, SearchScope base) {
-    if (base instanceof GlobalSearchScope && myExtraFrames == 0) {
-      PsiManager instance = PsiManager.getInstance(project);
-      String packageName = StringUtil.getPackageName(myClassName);
-      return new DelegatingGlobalSearchScope((GlobalSearchScope)base) {
 
+  SearchScope correctScope(SearchScope base) {
+    if (base instanceof GlobalSearchScope && myExtraFrames == 0 && myFileName != null) {
+      return new DelegatingGlobalSearchScope((GlobalSearchScope)base) {
         @Override
         public boolean contains(@NotNull VirtualFile file) {
-          if (!super.contains(file)) return false;
-          PsiFile psiFile = instance.findFile(file);
-          if (!(psiFile instanceof PsiClassOwner)) return false;
-          // Do not filter by exact class for now
-          return ((PsiClassOwner)psiFile).getPackageName().equals(packageName);
+          return file.getName().equals(myFileName) && super.contains(file);
         }
       };
     }
@@ -119,17 +117,51 @@ class StackFilter {
   }
 
   @NotNull StackFilter pushFrame() {
-    return new StackFilter(myExtraFrames + 1, myClassName, myMethodName, myNext);
+    return new StackFilter(myExtraFrames + 1, myClassName, myMethodName, myFileName, myNext);
   }
-  
-  @Nullable StackFilter popFrame() {
-    return myExtraFrames == 0 ? myNext :
-           new StackFilter(myExtraFrames - 1, myClassName, myMethodName, myNext);
+
+  @Nullable StackFilter popFrame(Project project) {
+    if (myExtraFrames == 0) {
+      if (myNext != null && myClassName.equals(myNext.myClassName) &&
+          myMethodName.equals(myNext.myMethodName) && Objects.equals(myFileName, myNext.myFileName)) {
+        PsiClass psiClass = ClassUtil.findPsiClass(PsiManager.getInstance(project), myClassName, null, true);
+        if (psiClass != null) {
+          PsiMethod[] methods = psiClass.findMethodsByName(myMethodName, false);
+          for (PsiMethod method : methods) {
+            if (isBridge(method)) return myNext.myNext;
+          }
+        }
+      }
+      return myNext;
+    }
+    return new StackFilter(myExtraFrames - 1, myClassName, myMethodName, myFileName, myNext);
+  }
+
+  private static boolean isBridge(PsiMethod method) {
+    PsiMethod[] superMethods = method.findSuperMethods();
+    if (superMethods.length == 0) return false;
+    PsiType returnType = TypeConversionUtil.erasure(method.getReturnType());
+    List<PsiType> parameterTypes = ContainerUtil.map(method.getParameterList().getParameters(),
+                                                     p -> TypeConversionUtil.erasure(p.getType()));
+    for (PsiMethod superMethod : superMethods) {
+      if (!Objects.equals(returnType, TypeConversionUtil.erasure(superMethod.getReturnType()))) {
+        return true;
+      }
+      PsiParameter[] parameters = superMethod.getParameterList().getParameters();
+      if (parameters.length == parameterTypes.size()) {
+        for (int i = 0; i < parameters.length; i++) {
+          if (!Objects.equals(TypeConversionUtil.erasure(parameters[i].getType()), parameterTypes.get(i))) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
   static @Nullable StackFilter from(List<ExceptionAnalysisProvider.StackLine> list) {
-    return StreamEx.of(list).foldRight(null, (line, prev) -> 
-      new StackFilter(0, line.getClassName(), line.getMethodName(), prev));
+    return StreamEx.of(list).foldRight(null, (line, prev) ->
+      new StackFilter(0, line.getClassName(), line.getMethodName(), line.getFileName(), prev));
   }
 
   @Override

@@ -16,6 +16,7 @@ import com.intellij.openapi.application.impl.ApplicationImpl;
 import com.intellij.openapi.diagnostic.Attachment;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.diagnostic.RuntimeExceptionWithAttachments;
+import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
@@ -24,7 +25,7 @@ import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.progress.impl.ProgressManagerImpl;
 import com.intellij.openapi.progress.impl.ProgressSuspender;
 import com.intellij.openapi.progress.util.AbstractProgressIndicatorExBase;
-import com.intellij.openapi.progress.util.ProgressIndicatorBase;
+import com.intellij.openapi.progress.util.RelayUiToDelegateIndicator;
 import com.intellij.openapi.startup.StartupActivity;
 import com.intellij.openapi.startup.StartupManager;
 import com.intellij.openapi.ui.MessageType;
@@ -55,6 +56,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 
 public class DumbServiceImpl extends DumbService implements Disposable, ModificationTracker, DumbServiceBalloon.Service {
+  private static final ExtensionPointName<StartupActivity.RequiredForSmartMode> REQUIRED_FOR_SMART_MODE_STARTUP_ACTIVITY
+    = new ExtensionPointName<>("com.intellij.requiredForSmartModeStartupActivity");
+
   private static final Logger LOG = Logger.getInstance(DumbServiceImpl.class);
   private static final FrequentErrorLogger ourErrorLogger = FrequentErrorLogger.newInstance(LOG);
   private final AtomicReference<State> myState;
@@ -98,13 +102,11 @@ public class DumbServiceImpl extends DumbService implements Disposable, Modifica
                                          State.RUNNING_PROJECT_SMART_MODE_STARTUP_TASKS),
                    "actual state: " + myState.get() + ", project " + getProject());
 
-    List<StartupActivity.RequiredForSmartMode> activities = StartupActivity
-      .REQUIRED_FOR_SMART_MODE_STARTUP_ACTIVITY
-      .getExtensionList();
-
+    List<StartupActivity.RequiredForSmartMode> activities = REQUIRED_FOR_SMART_MODE_STARTUP_ACTIVITY.getExtensionList();
     if (activities.isEmpty()) {
       myState.set(State.SMART);
-    } else {
+    }
+    else {
       for (StartupActivity.RequiredForSmartMode activity : activities) {
         activity.runActivity(getProject());
       }
@@ -130,7 +132,6 @@ public class DumbServiceImpl extends DumbService implements Disposable, Modifica
   public void dispose() {
     ApplicationManager.getApplication().assertIsWriteThread();
     myBalloon.dispose();
-    myTaskQueue.clearTasksQueue();
 
     synchronized (myRunWhenSmartQueue) {
       myRunWhenSmartQueue.clear();
@@ -216,7 +217,13 @@ public class DumbServiceImpl extends DumbService implements Disposable, Modifica
       }
     }
 
-    runnable.run();
+    Application app = ApplicationManager.getApplication();
+    if (app.isDispatchThread()) {
+      runnable.run();
+    }
+    else {
+      app.invokeLater(() -> unsafeRunWhenSmart(runnable), ModalityState.NON_MODAL, myProject.getDisposed());
+    }
   }
 
   @Override
@@ -372,7 +379,9 @@ public class DumbServiceImpl extends DumbService implements Disposable, Modifica
       throw new AssertionError("Must be called on write thread without write action");
     }
 
-    while (myState.get() != State.SMART && !myProject.isDisposed()) {
+    while (!(myState.get() == State.SMART ||
+             myState.get() == State.WAITING_PROJECT_SMART_MODE_STARTUP_TASKS)
+           && !myProject.isDisposed()) {
       LockSupport.parkNanos(50_000_000);
       // polls next dumb mode task
       myTrackedEdtActivityService.executeAllQueuedActivities();
@@ -536,17 +545,16 @@ public class DumbServiceImpl extends DumbService implements Disposable, Modifica
         shutdownTracker.registerStopperThread(self);
 
         DumbServiceAppIconProgress.registerForProgress(myProject, (ProgressIndicatorEx)visibleIndicator);
+        ProgressIndicatorEx relayToVisibleIndicator = new RelayUiToDelegateIndicator(visibleIndicator);
 
-        myGuiDumbTaskRunner.processTasksWithProgress(taskIndicator -> {
+        myGuiDumbTaskRunner.processTasksWithProgress(activity, taskIndicator -> {
           suspender.attachToProgress(taskIndicator);
-          taskIndicator.addStateDelegate(new AbstractProgressIndicatorExBase() {
-            @Override
-            protected void delegateProgressChange(@NotNull IndicatorAction action) {
-              super.delegateProgressChange(action);
-              action.execute((ProgressIndicatorEx)visibleIndicator);
-            }
-          });
-        }, activity);
+          taskIndicator.addStateDelegate(relayToVisibleIndicator);
+        },
+        taskIndicator -> {
+          ((AbstractProgressIndicatorExBase)taskIndicator).removeStateDelegate(relayToVisibleIndicator);
+        }
+        );
       }
       catch (Throwable unexpected) {
         LOG.error(unexpected);

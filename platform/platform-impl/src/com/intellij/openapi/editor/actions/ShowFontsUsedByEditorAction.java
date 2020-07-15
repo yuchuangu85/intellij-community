@@ -130,7 +130,7 @@ public class ShowFontsUsedByEditorAction extends EditorAction {
       }
     }
 
-    private static class MyDialog extends DialogWrapper {
+    private static final class MyDialog extends DialogWrapper {
       private final JBTextArea myTextArea;
 
       private MyDialog(String text) {
@@ -154,7 +154,7 @@ public class ShowFontsUsedByEditorAction extends EditorAction {
   }
 }
 
-class AccessingInternalJdkFontApi {
+final class AccessingInternalJdkFontApi {
   private static final Method GET_FONT_2D_METHOD = ReflectionUtil.getDeclaredMethod(Font.class, "getFont2D");
   private static final FontRenderContext DUMMY_CONTEXT = new FontRenderContext(null, false, false);
 

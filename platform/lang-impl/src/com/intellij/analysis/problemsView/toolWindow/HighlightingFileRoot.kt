@@ -1,57 +1,30 @@
 // Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.analysis.problemsView.toolWindow
 
-import com.intellij.codeInsight.daemon.impl.HighlightInfo
-import com.intellij.lang.annotation.HighlightSeverity.INFORMATION
-import com.intellij.openapi.util.Disposer
+import com.intellij.lang.annotation.HighlightSeverity
+import com.intellij.openapi.editor.ex.RangeHighlighterEx
 import com.intellij.openapi.vfs.VirtualFile
 
-internal class HighlightingFileRoot(panel: ProblemsViewPanel, val file: VirtualFile) : Root(panel) {
+internal class HighlightingFileRoot(panel: ProblemsViewPanel, val file: VirtualFile)
+  : Root(panel, ProblemFilter(panel.state)) {
 
-  private val problems = FileProblems(file)
-  private val watcher = HighlightingWatcher(this, file, INFORMATION.myVal + 1)
+  private val watcher = HighlightingWatcher(this, file, HighlightSeverity.INFORMATION.myVal + 1)
 
-  init {
-    Disposer.register(this, watcher)
+  fun findProblemNode(highlighter: RangeHighlighterEx): ProblemNode? {
+    val problem = watcher.findProblem(highlighter) ?: return null
+    return super.findProblemNode(file, problem)
   }
 
-  override fun getChildren(): Collection<Node> {
-    return synchronized(problems) { listOf(problems.getFileNode(this)) }
-  }
-
-  override fun getChildren(file: VirtualFile): Collection<Node> {
-    return synchronized(problems) { problems.getProblemNodes() }
-  }
-
-  fun findProblemNode(info: HighlightInfo?): ProblemNode? {
-    val problem = watcher.getProblem(info) ?: return null
-    return synchronized(problems) { problems.findProblemNode(problem) }
-  }
-
-  override fun getProblemsCount() = synchronized(problems) { problems.count() }
-
-  override fun getProblemsCount(file: VirtualFile) = synchronized(problems) { problems.count() }
-
-  override fun addProblem(file: VirtualFile, problem: Problem) {
-    synchronized(problems) { problems.add(problem) }
-    structureChanged()
-  }
-
-  override fun removeProblem(file: VirtualFile, problem: Problem) {
-    synchronized(problems) { problems.remove(problem) }
-    structureChanged()
-  }
-
-  override fun updateProblems(file: VirtualFile, collection: Collection<Problem>) {
-    synchronized(problems) { problems.update(collection) }
-    structureChanged()
-  }
-
-  private fun structureChanged() {
-    val model = panel.treeModel
-    if (model.isRoot(this)) {
-      model.structureChanged()
-      panel.updateToolWindowContent()
+  override fun addProblems(file: VirtualFile, vararg problems: Problem) {
+    super.addProblems(file, *problems)
+    if (problems.any { it.severity >= HighlightSeverity.ERROR.myVal }) {
+      getProjectErrors()?.problemsAppeared(file)
     }
   }
+
+  private fun getProjectErrors() = ProblemsView.getToolWindow(project)
+    ?.contentManagerIfCreated
+    ?.contents
+    ?.mapNotNull { it.component as? ProjectErrorsPanel }
+    ?.firstOrNull()
 }

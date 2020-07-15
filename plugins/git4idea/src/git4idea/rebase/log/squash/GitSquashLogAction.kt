@@ -6,9 +6,7 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.vcs.log.VcsCommitMetadata
 import git4idea.i18n.GitBundle
-import git4idea.rebase.log.GitMultipleCommitEditingAction
-import git4idea.rebase.log.GitNewCommitMessageActionDialog
-import git4idea.rebase.log.getOrLoadDetails
+import git4idea.rebase.log.*
 
 internal class GitSquashLogAction : GitMultipleCommitEditingAction() {
   override fun update(e: AnActionEvent, commitEditingData: MultipleCommitEditingData) {
@@ -21,9 +19,9 @@ internal class GitSquashLogAction : GitMultipleCommitEditingAction() {
     val selectedCommitDetails = getOrLoadDetails(commitEditingData.project, commitEditingData.logData, commitEditingData.selectedCommitList)
     val dialog = GitNewCommitMessageActionDialog(
       commitEditingData,
-      selectedCommitDetails.joinToString("\n".repeat(3)) { it.fullMessage },
-      GitBundle.getString("rebase.log.squash.new.message.dialog.title"),
-      GitBundle.getString("rebase.log.squash.new.message.dialog.label")
+      originMessage = selectedCommitDetails.joinToString("\n".repeat(3)) { it.fullMessage },
+      title = GitBundle.getString("rebase.log.squash.new.message.dialog.title"),
+      dialogLabel = GitBundle.getString("rebase.log.squash.new.message.dialog.label")
     )
     dialog.show { newMessage ->
       squashInBackground(commitEditingData, selectedCommitDetails, newMessage)
@@ -37,7 +35,15 @@ internal class GitSquashLogAction : GitMultipleCommitEditingAction() {
   ) {
     object : Task.Backgroundable(commitEditingData.project, GitBundle.getString("rebase.log.squash.progress.indicator.title")) {
       override fun run(indicator: ProgressIndicator) {
-        GitSquashOperation(commitEditingData.repository).execute(selectedCommitsDetails, newMessage)
+        val operationResult = GitSquashOperation(commitEditingData.repository).execute(selectedCommitsDetails, newMessage)
+        if (operationResult is GitCommitEditingOperationResult.Complete) {
+          operationResult.notifySuccess(
+            GitBundle.getString("rebase.log.squash.success.notification.title"),
+            GitBundle.getString("rebase.log.squash.undo.progress.title"),
+            GitBundle.getString("rebase.log.squash.undo.impossible.title"),
+            GitBundle.getString("rebase.log.squash.undo.failed.title")
+          )
+        }
       }
     }.queue()
   }

@@ -253,7 +253,7 @@ public final class BalloonImpl implements Balloon, IdeTooltip.Ui, ScreenAreaCons
   private final int myPositionChangeYShift;
   private boolean myDialogMode;
   private IdeFocusManager myFocusManager;
-  private final String myTitle;
+  private String myTitle;
   private JLabel myTitleLabel;
 
   private boolean myAnimationEnabled = true;
@@ -1683,7 +1683,7 @@ public final class BalloonImpl implements Balloon, IdeTooltip.Ui, ScreenAreaCons
     }
   }
 
-  private class CloseButton extends ActionButton {
+  private final class CloseButton extends ActionButton {
     private CloseButton(@NotNull Consumer<? super MouseEvent> listener) {
       super(getCloseButton(), null, null, listener);
       setVisible(myEnableButtons);
@@ -1698,7 +1698,7 @@ public final class BalloonImpl implements Balloon, IdeTooltip.Ui, ScreenAreaCons
     }
   }
 
-  private class MyComponent extends HwFacadeJPanel implements ComponentWithMnemonics {
+  private final class MyComponent extends HwFacadeJPanel implements ComponentWithMnemonics {
 
     private BufferedImage myImage;
     private float myAlpha;
@@ -2110,8 +2110,13 @@ public final class BalloonImpl implements Balloon, IdeTooltip.Ui, ScreenAreaCons
     return myDisposed;
   }
 
+  public String getTitle() {
+    return myTitle;
+  }
+
   @Override
   public void setTitle(String title) {
+    myTitle = title;
     myTitleLabel.setText(title);
   }
 

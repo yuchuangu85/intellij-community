@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testFramework;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -15,12 +15,12 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.newvfs.BulkFileListener;
 import com.intellij.openapi.vfs.newvfs.events.*;
-import com.intellij.util.ArrayUtil;
 import com.intellij.util.ExceptionUtil;
 import com.intellij.util.PathUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.messages.MessageBusConnection;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.junit.Assert;
 
 import java.io.File;
@@ -29,38 +29,33 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class VfsTestUtil {
+public final class VfsTestUtil {
   public static final Key<String> TEST_DATA_FILE_PATH = Key.create("TEST_DATA_FILE_PATH");
 
   private VfsTestUtil() { }
 
-  @NotNull
-  public static VirtualFile createFile(@NotNull VirtualFile root, @NotNull String relativePath) {
-    return createFile(root, relativePath, "");
+  public static @NotNull VirtualFile createFile(@NotNull VirtualFile root, @NotNull String relativePath) {
+    return createFile(root, relativePath, (byte[])null);
   }
 
-  @NotNull
-  public static VirtualFile createFile(@NotNull VirtualFile root, @NotNull String relativePath, @NotNull String text) {
+  public static @NotNull VirtualFile createFile(@NotNull VirtualFile root, @NotNull String relativePath, @Nullable String text) {
     try {
-      return createFileOrDir(root, relativePath, VfsUtil.toByteArray(root, text), false);
+      return createFileOrDir(root, relativePath, text == null ? null : VfsUtil.toByteArray(root, text), false);
     }
     catch (IOException e) {
       throw new RuntimeException(e);
     }
   }
 
-  @NotNull
-  public static VirtualFile createFile(@NotNull VirtualFile root, @NotNull String relativePath, byte @NotNull [] data) {
+  public static @NotNull VirtualFile createFile(@NotNull VirtualFile root, @NotNull String relativePath, byte @Nullable [] data) {
     return createFileOrDir(root, relativePath, data, false);
   }
 
-  @NotNull
-  public static VirtualFile createDir(@NotNull VirtualFile root, @NotNull String relativePath) {
-    return createFileOrDir(root, relativePath, ArrayUtil.EMPTY_BYTE_ARRAY, true);
+  public static @NotNull VirtualFile createDir(@NotNull VirtualFile root, @NotNull String relativePath) {
+    return createFileOrDir(root, relativePath, null, true);
   }
 
-  @NotNull
-  private static VirtualFile createFileOrDir(VirtualFile root, String relativePath, byte @NotNull [] data, boolean dir) {
+  private static @NotNull VirtualFile createFileOrDir(VirtualFile root, String relativePath, byte @Nullable [] data, boolean dir) {
     try {
       return WriteAction.computeAndWait(() -> {
         VirtualFile parent = root;
@@ -89,7 +84,9 @@ public class VfsTestUtil {
             Document document = manager.getCachedDocument(file);
             if (document != null) manager.saveDocument(document);  // save changes to prevent possible conflicts
           }
-          file.setBinaryContent(data);
+          if (data != null) {
+            file.setBinaryContent(data);
+          }
           manager.reloadFiles(file);  // update the document now, otherwise MemoryDiskConflictResolver will do it later at unexpected moment of time
         }
         return file;
@@ -132,7 +129,7 @@ public class VfsTestUtil {
   @NotNull
   public static VirtualFile findFileByCaseSensitivePath(@NotNull String absolutePath) {
     String vfsPath = FileUtil.toSystemIndependentName(absolutePath);
-    VirtualFile vFile = LocalFileSystem.getInstance().findFileByPath(vfsPath);
+    VirtualFile vFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(vfsPath);
     Assert.assertNotNull("file " + absolutePath + " not found", vFile);
     String realVfsPath = vFile.getPath();
     if (!SystemInfo.isFileSystemCaseSensitive && !vfsPath.equals(realVfsPath) &&

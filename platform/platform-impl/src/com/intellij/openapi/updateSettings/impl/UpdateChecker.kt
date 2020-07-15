@@ -5,6 +5,7 @@ import com.google.common.annotations.VisibleForTesting
 import com.intellij.ide.IdeBundle
 import com.intellij.ide.externalComponents.ExternalComponentManager
 import com.intellij.ide.plugins.*
+import com.intellij.ide.plugins.marketplace.BrokenPluginsService
 import com.intellij.ide.plugins.marketplace.MarketplaceRequests
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.notification.*
@@ -40,7 +41,6 @@ import com.intellij.util.text.VersionComparatorUtil
 import com.intellij.util.text.nullize
 import com.intellij.util.ui.UIUtil
 import com.intellij.xml.util.XmlStringUtil
-import gnu.trove.THashMap
 import org.jdom.JDOMException
 import org.jetbrains.annotations.ApiStatus
 import java.io.File
@@ -77,7 +77,7 @@ object UpdateChecker {
   fun getNotificationGroup() = notificationGroupRef
 
   private var ourDisabledToUpdatePlugins: MutableSet<PluginId>? = null
-  private val ourAdditionalRequestOptions = THashMap<String, String>()
+  private val ourAdditionalRequestOptions = hashMapOf<String, String>()
   private val ourUpdatedPlugins = hashMapOf<PluginId, PluginDownloader>()
   private val ourShownNotifications = MultiMap<NotificationUniqueType, Notification>()
 
@@ -236,6 +236,7 @@ object UpdateChecker {
     indicator: ProgressIndicator?,
     newBuildNumber: BuildNumber? = null
   ): CheckPluginsUpdateResult {
+    BrokenPluginsService.setupUpdateBrokenPlugins()
     val updateable = collectUpdateablePlugins()
     if (updateable.isEmpty()) return EMPTY_CHECK_UPDATE_RESULT
 
@@ -444,7 +445,7 @@ object UpdateChecker {
     for (customPlugin in customPlugins) {
       val pluginId = customPlugin.pluginId
       val plugin = compatiblePluginMap[pluginId]
-      if (plugin == null || PluginDownloader.compareVersionsSkipBrokenAndIncompatible(plugin, customPlugin.version) > 0) {
+      if (plugin == null || PluginDownloader.compareVersionsSkipBrokenAndIncompatible(customPlugin.version, plugin) > 0) {
         compatiblePluginMap[pluginId] = customPlugin
       }
     }
@@ -466,8 +467,7 @@ object UpdateChecker {
 
     val pluginVersion = downloader.pluginVersion
     val installedPlugin = PluginManagerCore.getPlugin(pluginId)
-    if (installedPlugin == null || pluginVersion == null || PluginDownloader.compareVersionsSkipBrokenAndIncompatible(installedPlugin,
-                                                                                                                      pluginVersion) > 0) {
+    if (installedPlugin == null || pluginVersion == null || PluginDownloader.compareVersionsSkipBrokenAndIncompatible(pluginVersion, installedPlugin) > 0) {
       var descriptor: IdeaPluginDescriptor?
 
       val oldDownloader = ourUpdatedPlugins[pluginId]
@@ -529,7 +529,7 @@ object UpdateChecker {
         showNotification(project, title, "", {
           IdeUpdateUsageTriggerCollector.trigger("notification.clicked")
           runnable()
-        }, null, NotificationUniqueType.PLATFORM)
+        }, null, NotificationUniqueType.PLATFORM, "ide.update.available")
       }
       return
     }
@@ -552,10 +552,12 @@ object UpdateChecker {
           ideFrame.showPluginUpdates(runnable)
         }
         else {
-          val title = IdeBundle.message("updates.plugins.ready.short.title.available")
-          val message = updatedPlugins.joinToString { downloader -> downloader.pluginName }
+          val names = updatedPlugins.joinToString { downloader -> StringUtil.wrapWithDoubleQuote(downloader.pluginName) }
+          val title = if (updatedPlugins.size == 1) IdeBundle.message("updates.plugin.ready.short.title.available", names)
+          else IdeBundle.message("updates.plugins.ready.short.title.available")
+          val message = if (updatedPlugins.size == 1) "" else names
           showNotification(project, title, message, runnable, { notification ->
-            notification.actions[0].templatePresentation.text = IdeBundle.message("plugin.settings.title")
+            notification.actions[0].templatePresentation.text = IdeBundle.message("plugin.settings.link.title")
             notification.actions.add(0, object : NotificationAction(
               IdeBundle.message(if (updatedPlugins.size == 1) "plugins.configurable.update.button" else "plugin.manager.update.all")) {
               override fun actionPerformed(e: AnActionEvent, notification: Notification) {
@@ -564,13 +566,13 @@ object UpdateChecker {
               }
             })
             notification.addAction(object : NotificationAction(
-              IdeBundle.message(if (updatedPlugins.size == 1) "updates.ignore.update.button" else "updates.ignore.updates.button")) {
+              IdeBundle.message(if (updatedPlugins.size == 1) "updates.ignore.update.link" else "updates.ignore.updates.link")) {
               override fun actionPerformed(e: AnActionEvent, notification: Notification) {
                 notification.expire()
                 PluginUpdateDialog.ignorePlugins(updatedPlugins.map { downloader -> downloader.descriptor })
               }
             })
-          }, NotificationUniqueType.PLUGINS)
+          }, NotificationUniqueType.PLUGINS, "plugins.update.available")
         }
       }
     }
@@ -590,7 +592,7 @@ object UpdateChecker {
           val title = IdeBundle.message("updates.plugins.ready.title.available", ApplicationNamesInfo.getInstance().fullProductName)
           val updates = update.components.joinToString(", ")
           val message = IdeBundle.message("updates.external.ready.message", update.components.size, updates)
-          showNotification(project, title, message, runnable, null, NotificationUniqueType.EXTERNAL)
+          showNotification(project, title, message, runnable, null, NotificationUniqueType.EXTERNAL, "external.components.available")
         }
       }
     }
@@ -603,7 +605,7 @@ object UpdateChecker {
         ourShownNotifications.remove(NotificationUniqueType.PLUGINS)?.forEach { it.expire() }
 
         val title = IdeBundle.message("updates.no.updates.notification")
-        showNotification(project, title, "", {}, { notification -> notification.actions.clear() }, NotificationUniqueType.PLUGINS)
+        showNotification(project, title, "", {}, { notification -> notification.actions.clear() }, NotificationUniqueType.PLUGINS, "no.updates.available")
       }
     }
   }
@@ -621,9 +623,10 @@ object UpdateChecker {
                                message: String,
                                action: () -> Unit,
                                extraBuilder: ((Notification) -> Unit)?,
-                               notificationType: NotificationUniqueType) {
-    val notification = getNotificationGroup().createNotification(title, XmlStringUtil.wrapInHtml(message), NotificationType.INFORMATION,
-                                                                 null)
+                               notificationType: NotificationUniqueType,
+                               notificationDisplayId: String) {
+    val notification = getNotificationGroup().createNotification(title, if (message.isEmpty()) "" else XmlStringUtil.wrapInHtml(message),
+                                                                 NotificationType.INFORMATION, null, notificationDisplayId)
     notification.collapseActionsDirection = Notification.CollapseActionsDirection.KEEP_LEFTMOST
     notification.addAction(object : NotificationAction(IdeBundle.message("updates.notification.update.action")) {
       override fun actionPerformed(e: AnActionEvent, notification: Notification) {

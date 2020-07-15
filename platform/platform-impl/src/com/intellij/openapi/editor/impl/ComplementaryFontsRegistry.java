@@ -18,7 +18,7 @@ import java.awt.font.FontRenderContext;
 import java.util.List;
 import java.util.*;
 
-public class ComplementaryFontsRegistry {
+public final class ComplementaryFontsRegistry {
   private static final Logger LOG = Logger.getInstance(ComplementaryFontsRegistry.class);
   private static final String DEFAULT_FALLBACK_FONT = Font.MONOSPACED;
   private static final Object lock = new Object();
@@ -344,7 +344,7 @@ public class ComplementaryFontsRegistry {
     }
   }
 
-  private static class FontKey implements Cloneable {
+  private static final class FontKey implements Cloneable {
     private int mySize;
     private boolean myUseLigatures;
     private FontRenderContext myContext;
@@ -388,7 +388,7 @@ public class ComplementaryFontsRegistry {
     }
   }
 
-  private static class FallBackInfo {
+  private static final class FallBackInfo {
     private final Font myBaseFont;
     private final int myOriginalStyle;
     private final Map<FontKey, FontInfo> myFontInfoMap = new HashMap<>();

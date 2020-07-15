@@ -104,15 +104,22 @@ public class UsageViewManagerImpl extends UsageViewManager {
   }
 
   void showUsageView(@NotNull UsageViewEx usageView, @NotNull UsageViewPresentation presentation) {
+    boolean wasPinned = false;
+    Content selectedContent = UsageViewContentManager.getInstance(myProject).getSelectedContent();
+    if (selectedContent != null && System.identityHashCode(selectedContent) == presentation.getRerunHash()) {
+      wasPinned = selectedContent.isPinned();
+      selectedContent.setPinned(false);//Unpin explicitly to make old content removed as we rerun search
+    }
     Content content = UsageViewContentManager.getInstance(myProject).addContent(
       presentation.getTabText(),
       presentation.getTabName(),
       presentation.getToolwindowTitle(),
       true,
       usageView.getComponent(),
-      presentation.isOpenInNewTab(),
+      presentation.isOpenInNewTab() && presentation.getRerunHash() == 0,
       true
     );
+    content.setPinned(wasPinned);
     ((UsageViewImpl)usageView).setContent(content);
     content.putUserData(USAGE_VIEW_KEY, usageView);
   }
@@ -217,14 +224,11 @@ public class UsageViewManagerImpl extends UsageViewManager {
   public static void showTooManyUsagesWarningLater(@NotNull final Project project,
                                                    @NotNull final TooManyUsagesStatus tooManyUsagesStatus,
                                                    @NotNull final ProgressIndicator indicator,
-                                                   @NotNull final UsageViewPresentation presentation,
-                                                   final int usageCount,
                                                    @Nullable final UsageViewEx usageView) {
     UIUtil.invokeLaterIfNeeded(() -> {
       if (usageView != null && usageView.searchHasBeenCancelled() || indicator.isCanceled()) return;
-      int shownUsageCount = usageView instanceof  UsageViewImpl ? ((UsageViewImpl)usageView).getRoot().getRecursiveUsageCount() : usageCount;
-      String message = UsageViewBundle.message("find.excessive.usage.count.prompt", shownUsageCount, StringUtil.pluralize(presentation.getUsagesWord()));
-      UsageLimitUtil.Result ret = UsageLimitUtil.showTooManyUsagesWarning(project, message, presentation);
+      String message = UsageViewBundle.message("find.excessive.usage.count.prompt");
+      UsageLimitUtil.Result ret = UsageLimitUtil.showTooManyUsagesWarning(project, message);
       if (ret == UsageLimitUtil.Result.ABORT) {
         if (usageView != null) {
           usageView.cancelCurrentSearch();

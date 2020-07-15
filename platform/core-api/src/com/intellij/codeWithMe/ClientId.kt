@@ -1,6 +1,8 @@
 // Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeWithMe
 
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.util.Processor
 import java.util.concurrent.Callable
 import java.util.function.BiConsumer
@@ -26,7 +28,12 @@ data class ClientId(val value: String) {
     }
 
     companion object {
-        private val defaultLocalId = ClientId("Host")
+
+        val logger = Logger.getInstance(ClientId::class.java)
+        /**
+         * Default client id for local application
+         */
+        val defaultLocalId = ClientId("Host")
 
         /**
          * Specifies behavior for ClientId.current
@@ -113,10 +120,21 @@ data class ClientId(val value: String) {
         @JvmStatic
         inline fun <T> withClientId(clientId: ClientId?, action: () -> T): T {
             val clientIdStore = ClientIdValueStoreService.tryGetInstance() ?: return action()
+
+            val foreignMainThreadActivity = ApplicationManager.getApplication().isDispatchThread && !clientId.isLocal
             val old = clientIdStore.value
             try {
                 clientIdStore.value = clientId?.value
-                return action()
+                if (foreignMainThreadActivity) {
+                    val beforeActionTime = System.currentTimeMillis()
+                    val result = action()
+                    val delta = System.currentTimeMillis() - beforeActionTime
+                    if (delta > 300) {
+                        logger.warn("LONG MAIN THREAD ACTIVITY by ${clientId?.value}. Stack trace:\n${getStackTrace()}")
+                    }
+                    return result
+                } else
+                    return action()
             } finally {
                 clientIdStore.value = old
             }
@@ -157,4 +175,18 @@ data class ClientId(val value: String) {
             return Processor { withClientId(currentId) { processor.process(it) } }
         }
     }
+}
+
+fun isForeignClientOnServer(): Boolean {
+    return !ClientId.isCurrentlyUnderLocalId && ClientId.localId == ClientId.defaultLocalId
+}
+
+fun getStackTrace(): String {
+    val builder = StringBuilder()
+    val trace = Thread.currentThread().stackTrace
+    for (element in trace) {
+        with(builder) { append("\tat $element\n") }
+    }
+
+    return builder.toString()
 }

@@ -61,7 +61,7 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
-public class FindInProjectUtil {
+public final class FindInProjectUtil {
   private static final int USAGES_PER_READ_ACTION = 100;
 
   private FindInProjectUtil() {}
@@ -165,7 +165,7 @@ public class FindInProjectUtil {
   /* filter can have form "*.js, !*_min.js", latter means except matched by *_min.js */
   @NotNull
   public static Condition<CharSequence> createFileMaskCondition(@Nullable String filter) throws PatternSyntaxException {
-    if (filter == null) {
+    if (StringUtil.isEmpty(filter)) {
       return Conditions.alwaysTrue();
     }
 
@@ -347,6 +347,7 @@ public class FindInProjectUtil {
   public static void setupViewPresentation(UsageViewPresentation presentation, boolean toOpenInNewTab, @NotNull FindModel findModel) {
     String scope = getTitleForScope(findModel);
     final String stringToFind = findModel.getStringToFind();
+    final String stringToReplace = findModel.getStringToReplace();
     presentation.setScopeText(scope);
     if (stringToFind.isEmpty()) {
       if (!scope.isEmpty()) {
@@ -362,8 +363,13 @@ public class FindInProjectUtil {
       if (searchContext != FindModel.SearchContext.ANY) {
         contextText = FindBundle.message("find.context.presentation.scope.label", FindInProjectUtil.getPresentableName(searchContext));
       }
-      presentation.setTabText(FindBundle.message("find.usage.view.tab.text", stringToFind, contextText));
-      presentation.setToolwindowTitle(FindBundle.message("find.usage.view.toolwindow.title", stringToFind, scope, contextText));
+      if (!findModel.isReplaceState()) {
+        presentation.setTabText(FindBundle.message("find.usage.view.tab.text", stringToFind, contextText));
+        presentation.setToolwindowTitle(FindBundle.message("find.usage.view.toolwindow.title", stringToFind, scope, contextText));
+      } else {
+        presentation.setTabText(FindBundle.message("replace.usage.view.tab.text", stringToFind, stringToReplace, contextText));
+        presentation.setToolwindowTitle(FindBundle.message("replace.usage.view.toolwindow.title", stringToFind, stringToReplace, scope, contextText));
+      }
       presentation.setSearchString(FindBundle.message("find.occurrences.search.string", stringToFind, searchContext.ordinal()));
       presentation.setUsagesWord(FindBundle.message("occurrence"));
       presentation.setCodeUsagesString(FindBundle.message("found.occurrences"));
@@ -640,21 +646,29 @@ public class FindInProjectUtil {
     );
   }
 
+  @NotNull
   public static String getPresentableName(@NotNull FindModel.SearchContext searchContext) {
     @PropertyKey(resourceBundle = "messages.FindBundle") String messageKey = null;
-    if (searchContext == FindModel.SearchContext.ANY) {
-      messageKey = "find.context.anywhere.scope.label";
-    } else if (searchContext == FindModel.SearchContext.EXCEPT_COMMENTS) {
-      messageKey = "find.context.except.comments.scope.label";
-    } else if (searchContext == FindModel.SearchContext.EXCEPT_STRING_LITERALS) {
-      messageKey = "find.context.except.literals.scope.label";
-    } else if (searchContext == FindModel.SearchContext.EXCEPT_COMMENTS_AND_STRING_LITERALS) {
-      messageKey = "find.context.except.comments.and.literals.scope.label";
-    } else if (searchContext == FindModel.SearchContext.IN_COMMENTS) {
-      messageKey = "find.context.in.comments.scope.label";
-    } else if (searchContext == FindModel.SearchContext.IN_STRING_LITERALS) {
-      messageKey = "find.context.in.literals.scope.label";
+    switch (searchContext) {
+      case ANY:
+        messageKey = "find.context.anywhere.scope.label";
+        break;
+      case EXCEPT_COMMENTS:
+        messageKey = "find.context.except.comments.scope.label";
+        break;
+      case EXCEPT_STRING_LITERALS:
+        messageKey = "find.context.except.literals.scope.label";
+        break;
+      case EXCEPT_COMMENTS_AND_STRING_LITERALS:
+        messageKey = "find.context.except.comments.and.literals.scope.label";
+        break;
+      case IN_COMMENTS:
+        messageKey = "find.context.in.comments.scope.label";
+        break;
+      case IN_STRING_LITERALS:
+        messageKey = "find.context.in.literals.scope.label";
+        break;
     }
-    return messageKey != null ? FindBundle.message(messageKey) : searchContext.toString();
+    return FindBundle.message(messageKey);
   }
 }

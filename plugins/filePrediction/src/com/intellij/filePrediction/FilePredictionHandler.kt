@@ -4,37 +4,48 @@ package com.intellij.filePrediction
 import com.intellij.filePrediction.features.history.FilePredictionHistory
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.ServiceManager
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.util.BackgroundTaskUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.impl.ProjectManagerImpl
+import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.util.concurrency.NonUrgentExecutor
+import com.intellij.util.concurrency.SequentialTaskExecutor
 
-class FilePredictionHandler : Disposable {
+class FilePredictionHandler(private val project: Project) : Disposable {
   companion object {
-    private const val CALCULATE_CANDIDATE_PROBABILITY: Double = 0.1
+    private val LOG: Logger = Logger.getInstance(FilePredictionHandler::class.java)
 
-    fun getInstance(): FilePredictionHandler? = ServiceManager.getService(FilePredictionHandler::class.java)
+    fun getInstance(project: Project): FilePredictionHandler? = ServiceManager.getService(project, FilePredictionHandler::class.java)
   }
 
-  private var manager: FilePredictionSessionManager
-    = FilePredictionSessionManager(50, 5, 10, CALCULATE_CANDIDATE_PROBABILITY)
+  private val executor = SequentialTaskExecutor.createSequentialApplicationPoolExecutor("NextFilePrediction")
+  private val manager: FilePredictionSessionManager
 
-  fun onFileSelected(project: Project, newFile: VirtualFile) {
+  init {
+    val percent = Registry.get("filePrediction.calculate.candidates.percent").asDouble()
+    manager = FilePredictionSessionManager(50, 3, 5, percent)
+  }
+
+  fun onFileSelected(newFile: VirtualFile) {
     if (ProjectManagerImpl.isLight(project)) {
       return
     }
 
-    NonUrgentExecutor.getInstance().execute {
+    executor.submit {
       BackgroundTaskUtil.runUnderDisposeAwareIndicator(this, Runnable {
-        manager.finishSession(project, newFile)
-
+        val start = System.currentTimeMillis()
         FilePredictionHistory.getInstance(project).onFileSelected(newFile.url)
-        manager.startSession(project, newFile)
+
+        manager.onSessionStarted(project, newFile)
+        if (LOG.isTraceEnabled) {
+          LOG.trace("Candidates calculation took ${System.currentTimeMillis() - start}ms")
+        }
       })
     }
   }
 
   override fun dispose() {
+    executor.shutdown()
   }
 }

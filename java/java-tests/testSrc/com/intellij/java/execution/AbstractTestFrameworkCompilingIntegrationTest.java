@@ -1,22 +1,28 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.execution;
 
 import com.intellij.application.options.PathMacrosImpl;
 import com.intellij.openapi.application.PathMacros;
-import com.intellij.openapi.compiler.CompilerMessage;
 import com.intellij.openapi.compiler.CompilerMessageCategory;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.roots.ModuleRootModificationUtil;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.testFramework.CompilerTester;
 import com.intellij.testFramework.IdeaTestUtil;
+import com.intellij.testFramework.OpenProjectTaskBuilder;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.File;
-import java.util.List;
+import java.nio.file.Paths;
 import java.util.stream.Collectors;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 public abstract class AbstractTestFrameworkCompilingIntegrationTest extends AbstractTestFrameworkIntegrationTest {
+  @Override
+  protected @NotNull OpenProjectTaskBuilder getOpenProjectOptions() {
+    return super.getOpenProjectOptions().componentStoreLoadingEnabled(false);
+  }
+
   private CompilerTester myCompilerTester;
 
   protected abstract String getTestContentRoot();
@@ -31,10 +37,9 @@ public abstract class AbstractTestFrameworkCompilingIntegrationTest extends Abst
     pathMacros.setMacro(PathMacrosImpl.MAVEN_REPOSITORY, getDefaultMavenRepositoryPath());
     try {
       myCompilerTester = new CompilerTester(myModule);
-      List<CompilerMessage> compilerMessages = myCompilerTester.rebuild();
-      assertEmpty(compilerMessages.stream()
-                    .filter(message -> message.getCategory() == CompilerMessageCategory.ERROR)
-                    .collect(Collectors.toSet()));
+      assertThat(myCompilerTester.rebuild().stream()
+                   .filter(message -> message.getCategory() == CompilerMessageCategory.ERROR)
+                   .collect(Collectors.toSet())).isEmpty();
     }
     finally {
       pathMacros.setMacro(PathMacrosImpl.MAVEN_REPOSITORY, oldMacroValue);
@@ -53,15 +58,14 @@ public abstract class AbstractTestFrameworkCompilingIntegrationTest extends Abst
   }
 
   protected String getDefaultMavenRepositoryPath() {
-    final String root = System.getProperty("user.home", null);
-    return (root != null ? new File(root, ".m2/repository") : new File(".m2/repository")).getAbsolutePath();
+    String root = System.getProperty("user.home", null);
+    return (root == null ? Paths.get(".m2") : Paths.get(root, ".m2")).resolve("repository").toAbsolutePath().toString();
   }
 
   protected void setupModule() throws Exception {
-    ModuleRootModificationUtil.updateModel(myModule,
-                                           model -> model.addContentEntry(getTestContentRoot())
-                                             .addSourceFolder(getTestContentRoot() + "/test", true));
-
+    ModuleRootModificationUtil.updateModel(myModule, model -> {
+      model.addContentEntry(getTestContentRoot()).addSourceFolder(getTestContentRoot() + "/test", true);
+    });
   }
 
   @Override

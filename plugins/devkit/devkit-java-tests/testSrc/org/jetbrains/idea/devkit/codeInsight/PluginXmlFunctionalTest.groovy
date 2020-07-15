@@ -101,34 +101,14 @@ class PluginXmlFunctionalTest extends JavaCodeInsightFixtureTestCase {
     moduleBuilder.addLibrary("coreImpl", coreImpl)
   }
 
-  void testListeners() {
-    myFixture.addClass("public class MyCollectionWithoutDefaultCTOR implements java.util.Collection {" +
-                       " public MyCollectionWithoutDefaultCTOR(String something) {}" +
-                       "}")
-    doHighlightingTest("Listeners.xml")
-  }
-
-  // absence of since-build only in DevKit setup: PluginXmlPluginModuleTest.testListenersNoSinceBuild
-  void testListenersPre193() {
-    doHighlightingTest("ListenersPre193.xml")
-  }
-
-  void testListenersOsAttributePre201() {
-    doHighlightingTest("ListenersOsAttributePre201.xml")
-  }
-
-  void testListenersDepends() {
-    myFixture.copyFileToProject(getTestName(false) + ".xml", "META-INF/plugin.xml")
-    doHighlightingTest("ListenersDepends-dependency.xml")
-  }
-
-  void testListenersNoPluginIdStandalone() {
-    doHighlightingTest("ListenersNoPluginIdStandalone.xml")
+  // Gradle-like setup, but JBList not in Library
+  void testListenerUnresolvedTargetPlatform() {
+    doHighlightingTest("ListenersUnresolvedTargetPlatform.xml")
   }
 
   void testExtensionI18n() {
     doHighlightingTest("extensionI18n.xml",
-                       "extensionI18nBundle.properties")
+                       "extensionI18nBundle.properties", "extensionI18nAnotherBundle.properties")
   }
 
   void testExtensionsHighlighting() {
@@ -167,7 +147,8 @@ class PluginXmlFunctionalTest extends JavaCodeInsightFixtureTestCase {
                        "  @Attribute public String serviceImplementation; " +
                        "  @Attribute public java.util.concurrent.TimeUnit timeUnit; " +
                        "  @Attribute public java.lang.Integer integerNullable; " +
-                       "  @Attribute public int intProperty; " +
+                       "  @Attribute public int intPropertyForClass; " +
+                       "  @Attribute public boolean forClass; " +
                        "}")
 
     configureByFile()

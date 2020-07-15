@@ -5,9 +5,7 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
-import com.intellij.openapi.progress.util.ProgressIndicatorUtils;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
@@ -20,18 +18,19 @@ import com.intellij.util.PathUtil;
 import com.intellij.util.indexing.FileBasedIndexImpl;
 import com.intellij.util.indexing.diagnostic.FileIndexingStatistics;
 import com.intellij.util.indexing.diagnostic.IndexingJobStatistics;
+import com.intellij.util.indexing.diagnostic.TooLargeForIndexingFile;
 import com.intellij.util.progress.SubTaskProgressIndicator;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.FileNotFoundException;
-import java.util.ArrayList;
+import java.nio.file.NoSuchFileException;
 import java.util.Collection;
-import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -40,8 +39,6 @@ import java.util.concurrent.locks.ReentrantLock;
 public final class IndexUpdateRunner {
 
   private static final long SOFT_MAX_TOTAL_BYTES_LOADED_INTO_MEMORY = 20 * FileUtilRt.MEGABYTE;
-
-  private static final Key<Boolean> FAILED_TO_INDEX = Key.create("FAILED_TO_INDEX");
 
   private static final CopyOnWriteArrayList<IndexingJob> ourIndexingJobs = new CopyOnWriteArrayList<>();
 
@@ -53,14 +50,14 @@ public final class IndexUpdateRunner {
 
   /**
    * Memory optimization to prevent OutOfMemory on loading file contents.
-   *
+   * <p>
    * "Soft" total limit of bytes loaded into memory in the whole application is {@link #SOFT_MAX_TOTAL_BYTES_LOADED_INTO_MEMORY}.
    * It is "soft" because one (and only one) "indexable" file can exceed this limit.
-   *
+   * <p>
    * "Indexable" file is any file for which {@link FileBasedIndexImpl#isTooLarge(VirtualFile)} returns {@code false}.
    * Note that this method may return {@code false} even for relatively big files with size greater than {@link #SOFT_MAX_TOTAL_BYTES_LOADED_INTO_MEMORY}.
    * This is because for some files (or file types) the size limit is ignored.
-   *
+   * <p>
    * So in its maximum we will load {@code SOFT_MAX_TOTAL_BYTES_LOADED_INTO_MEMORY + <size of not "too large" file>}, which seems acceptable,
    * because we have to index this "not too large" file anyway (even if its size is 4 Gb), and {@code SOFT_MAX_TOTAL_BYTES_LOADED_INTO_MEMORY}
    * additional bytes are insignificant.
@@ -86,55 +83,93 @@ public final class IndexUpdateRunner {
 
     CachedFileContentLoader contentLoader = new CurrentProjectHintedCachedFileContentLoader(project);
     IndexingJob indexingJob = new IndexingJob(project, indicator, contentLoader, files);
-    ourIndexingJobs.add(indexingJob);
-
-    try {
-      Runnable indexingWorker = () -> {
-        while (!indexingJob.isOutdated()) {
-          // Fair alternating indexing of different projects.
-          for (IndexingJob job : ourIndexingJobs) {
-            if (job.isOutdated()) {
-              ourIndexingJobs.remove(job);
-              break;
-            }
-            try {
-              indexOneFileOfJob(job);
-            }
-            catch (ProcessCanceledException ignored) {
+    if (ApplicationManager.getApplication().isWriteAccessAllowed()) {
+      // If the current thread has acquired the write lock, we can't grant it to worker threads, so we must do the work in the current thread.
+      while (!indexingJob.areAllFilesProcessed()) {
+        indexOneFileOfJob(indexingJob);
+      }
+    }
+    else {
+      ourIndexingJobs.add(indexingJob);
+      try {
+        AtomicInteger numberOfRunningWorkers = new AtomicInteger();
+        Runnable worker = () -> {
+          try {
+            indexJobsFairly();
+          }
+          finally {
+            numberOfRunningWorkers.decrementAndGet();
+          }
+        };
+        for (int i = 0; i < myNumberOfIndexingThreads; i++) {
+          myIndexingExecutor.execute(worker);
+          numberOfRunningWorkers.incrementAndGet();
+        }
+        while (!project.isDisposed() && !indexingJob.areAllFilesProcessed() && indexingJob.myError.get() == null) {
+          // Add a worker if the previous died for whatever reason, to avoid waiting for nothing.
+          if (numberOfRunningWorkers.get() < myNumberOfIndexingThreads) {
+            myIndexingExecutor.execute(worker);
+            numberOfRunningWorkers.incrementAndGet();
+          }
+          indicator.checkCanceled();
+          try {
+            if (indexingJob.myAllFilesAreProcessedLatch.await(100, TimeUnit.MILLISECONDS)) {
               break;
             }
           }
+          catch (InterruptedException e) {
+            throw new ProcessCanceledException(e);
+          }
         }
-      };
-
-      if (ApplicationManager.getApplication().isWriteAccessAllowed()) {
-        // If the current thread has acquired the write lock, we can't grant it to worker threads, so we must do the work in the current thread.
-        indexingWorker.run();
-      }
-      else {
-        List<Future<?>> futures = new ArrayList<>(myNumberOfIndexingThreads);
-        for (int i = 0; i < myNumberOfIndexingThreads; i++) {
-          futures.add(myIndexingExecutor.submit(indexingWorker));
+        Throwable error = indexingJob.myError.get();
+        if (error instanceof ProcessCanceledException) {
+          throw (ProcessCanceledException) error;
         }
-        for (Future<?> future : futures) {
-          ProgressIndicatorUtils.awaitWithCheckCanceled(future, indicator);
+        if (error != null) {
+          throw new RuntimeException("Indexing of " + project.getName() + " has failed", error);
         }
       }
-    }
-    finally {
-      ourIndexingJobs.remove(indexingJob);
+      finally {
+        ourIndexingJobs.remove(indexingJob);
+      }
     }
     return indexingJob.myStatistics;
+  }
+
+  // Index jobs one by one while there are some. Jobs may belong to different projects, and we index them fairly.
+  // Drops finished, cancelled and failed jobs from {@code ourIndexingJobs}. Does not throw exceptions.
+  private void indexJobsFairly() {
+    while (!ourIndexingJobs.isEmpty()) {
+      for (IndexingJob job : ourIndexingJobs) {
+        if (job.myProject.isDisposed()
+            || job.myNoMoreFilesInQueue.get()
+            || job.myIndicator.isCanceled()
+            || job.myError.get() != null) {
+          ourIndexingJobs.remove(job);
+          continue;
+        }
+        try {
+          indexOneFileOfJob(job);
+        }
+        catch (Throwable e) {
+          job.myError.compareAndSet(null, e);
+          ourIndexingJobs.remove(job);
+        }
+      }
+    }
   }
 
   private void indexOneFileOfJob(@NotNull IndexingJob indexingJob) throws ProcessCanceledException {
     long contentLoadingTime = System.nanoTime();
     ContentLoadingResult loadingResult;
     try {
+      // Propagate ProcessCanceledException and unchecked exceptions. The latter fail the whole indexing (see IndexingJob.myError).
       loadingResult = loadNextContent(indexingJob, indexingJob.myIndicator);
     }
     catch (TooLargeContentException e) {
       indexingJob.oneMoreFileProcessed();
+      indexingJob.myStatistics.getNumberOfTooLargeForIndexingFiles().incrementAndGet();
+      indexingJob.myStatistics.getTooLargeForIndexingFiles().addElement(new TooLargeForIndexingFile(e.getFile().getName(), e.getFile().getLength()));
       FileBasedIndexImpl.LOG.info("File: " + e.getFile().getUrl() + " is too large for indexing");
       return;
     }
@@ -148,36 +183,36 @@ public final class IndexUpdateRunner {
     }
 
     if (loadingResult == null) {
-      indexingJob.myIsFinished.set(true);
       return;
     }
 
     CachedFileContent fileContent = loadingResult.cachedFileContent;
+    VirtualFile file = fileContent.getVirtualFile();
     try {
-      FileIndexingStatistics fileIndexingStatistics = indexOneFileOfJob(indexingJob, fileContent);
-      if (fileIndexingStatistics != null) {
-        indexingJob.myStatistics.addFileStatistics(fileIndexingStatistics,
-                                                   contentLoadingTime,
-                                                   loadingResult.fileLength,
-                                                   loadingResult.cachedFileContent.getVirtualFile().getName());
+      indexingJob.setLocationBeingIndexed(file);
+      if (!file.isDirectory()) {
+        FileIndexingStatistics fileIndexingStatistics = ReadAction
+          .nonBlocking(() -> myFileBasedIndex.indexFileContent(indexingJob.myProject, fileContent))
+          .expireWith(indexingJob.myProject)
+          .wrapProgress(indexingJob.myIndicator)
+          .executeSynchronously();
+        indexingJob.myStatistics.addFileStatistics(fileIndexingStatistics, contentLoadingTime, loadingResult.fileLength);
       }
       indexingJob.oneMoreFileProcessed();
     }
     catch (ProcessCanceledException e) {
-      pushBackFile(indexingJob, fileContent.getVirtualFile());
+      // Push back the file.
+      indexingJob.myQueueOfFiles.add(file);
       throw e;
     }
     catch (Throwable e) {
       indexingJob.oneMoreFileProcessed();
-      ExceptionUtil.rethrow(e);
+      FileBasedIndexImpl.LOG.error("Error while indexing " + file.getPresentableUrl() + "\n" +
+                                   "To reindex this file IDEA has to be restarted", e);
     }
     finally {
       signalThatFileIsUnloaded(loadingResult.fileLength);
     }
-  }
-
-  private static void pushBackFile(@NotNull IndexingJob indexingJob, @NotNull VirtualFile file) {
-    indexingJob.myQueueOfFiles.add(file);
   }
 
   @Nullable
@@ -187,18 +222,55 @@ public final class IndexUpdateRunner {
                                                                                                               ProcessCanceledException {
     VirtualFile file = indexingJob.myQueueOfFiles.poll();
     if (file == null) {
+      indexingJob.myNoMoreFilesInQueue.set(true);
       return null;
     }
     if (myFileBasedIndex.isTooLarge(file)) {
       throw new TooLargeContentException(file);
     }
-    long fileLength = file.getLength();
-    waitForFreeMemoryToLoadFileContent(indicator, fileLength);
-    CachedFileContent fileContent = indexingJob.myContentLoader.loadContent(file);
-    return new ContentLoadingResult(fileContent, fileLength);
+
+    long fileLength;
+    try {
+      fileLength = file.getLength();
+    }
+    catch (ProcessCanceledException e) {
+      indexingJob.myQueueOfFiles.add(file);
+      throw e;
+    }
+    catch (Throwable e) {
+      throw new FailedToLoadContentException(file, e);
+    }
+
+    // Reserve bytes for the file.
+    try {
+      waitForFreeMemoryToLoadFileContent(indicator, fileLength);
+    }
+    catch (ProcessCanceledException e) {
+      indexingJob.myQueueOfFiles.add(file);
+      throw e;
+    } // Propagate other exceptions (if any) and fail the whole indexing (see IndexingJob.myError).
+
+    try {
+      CachedFileContent fileContent = indexingJob.myContentLoader.loadContent(file);
+      return new ContentLoadingResult(fileContent, fileLength);
+    }
+    catch (ProcessCanceledException e) {
+      signalThatFileIsUnloaded(fileLength);
+      indexingJob.myQueueOfFiles.add(file);
+      throw e;
+    }
+    catch (FailedToLoadContentException | TooLargeContentException e) {
+      signalThatFileIsUnloaded(fileLength);
+      throw e;
+    }
+    catch (Throwable e) {
+      signalThatFileIsUnloaded(fileLength);
+      ExceptionUtil.rethrow(e);
+      return null;
+    }
   }
 
-  private static class ContentLoadingResult {
+  private static final class ContentLoadingResult {
     final @NotNull CachedFileContent cachedFileContent;
     final long fileLength;
 
@@ -208,7 +280,8 @@ public final class IndexUpdateRunner {
     }
   }
 
-  private static void waitForFreeMemoryToLoadFileContent(@NotNull ProgressIndicator indicator, long fileLength) {
+  private static void waitForFreeMemoryToLoadFileContent(@NotNull ProgressIndicator indicator,
+                                                         long fileLength) throws ProcessCanceledException {
     ourLoadedBytesLimitLock.lock();
     try {
       while (ourTotalBytesLoadedIntoMemory >= SOFT_MAX_TOTAL_BYTES_LOADED_INTO_MEMORY) {
@@ -245,7 +318,7 @@ public final class IndexUpdateRunner {
     Throwable cause = e.getCause();
     VirtualFile file = e.getFile();
     String fileUrl = "File: " + file.getUrl();
-    if (cause instanceof FileNotFoundException) {
+    if (cause instanceof FileNotFoundException || cause instanceof NoSuchFileException) {
       // It is possible to not observe file system change until refresh finish, we handle missed file properly anyway.
       FileBasedIndexImpl.LOG.debug(fileUrl, e);
     }
@@ -255,35 +328,6 @@ public final class IndexUpdateRunner {
     else {
       FileBasedIndexImpl.LOG.error(fileUrl, e);
     }
-  }
-
-  @Nullable
-  private FileIndexingStatistics indexOneFileOfJob(@NotNull IndexingJob indexingJob,
-                                                   @NotNull CachedFileContent fileContent) throws ProcessCanceledException {
-    Project project = indexingJob.myProject;
-    if (project.isDisposed() || indexingJob.myIndicator.isCanceled()) {
-      throw new ProcessCanceledException();
-    }
-
-    indexingJob.setLocationBeingIndexed(fileContent.getVirtualFile());
-    if (!fileContent.isDirectory() && !Boolean.TRUE.equals(fileContent.getUserData(FAILED_TO_INDEX))) {
-      try {
-        return ReadAction
-          .nonBlocking(() -> myFileBasedIndex.indexFileContent(project, fileContent))
-          .expireWith(project)
-          .wrapProgress(indexingJob.myIndicator)
-          .executeSynchronously();
-      }
-      catch (ProcessCanceledException e) {
-        throw e;
-      }
-      catch (Throwable e) {
-        fileContent.putUserData(FAILED_TO_INDEX, Boolean.TRUE);
-        FileBasedIndexImpl.LOG.error("Error while indexing " + fileContent.getVirtualFile().getPresentableUrl() + "\n" +
-                                     "To reindex this file IDEA has to be restarted", e);
-      }
-    }
-    return null;
   }
 
   @NotNull
@@ -316,10 +360,11 @@ public final class IndexUpdateRunner {
     final CachedFileContentLoader myContentLoader;
     final BlockingQueue<VirtualFile> myQueueOfFiles;
     final ProgressIndicator myIndicator;
-    final AtomicInteger myNumberOfFilesProcessed = new AtomicInteger();
     final int myTotalFiles;
-    final AtomicBoolean myIsFinished = new AtomicBoolean();
+    final AtomicBoolean myNoMoreFilesInQueue = new AtomicBoolean();
+    final CountDownLatch myAllFilesAreProcessedLatch;
     final IndexingJobStatistics myStatistics = new IndexingJobStatistics();
+    final AtomicReference<Throwable> myError = new AtomicReference<>();
 
     IndexingJob(@NotNull Project project,
                 @NotNull ProgressIndicator indicator,
@@ -330,16 +375,22 @@ public final class IndexUpdateRunner {
       myTotalFiles = files.size();
       myContentLoader = contentLoader;
       myQueueOfFiles = new ArrayBlockingQueue<>(files.size(), false, files);
+      myAllFilesAreProcessedLatch = new CountDownLatch(files.size());
     }
 
     public void oneMoreFileProcessed() {
-      double newFraction = myNumberOfFilesProcessed.incrementAndGet() / (double)myTotalFiles;
+      myAllFilesAreProcessedLatch.countDown();
+      double newFraction = 1.0 - myAllFilesAreProcessedLatch.getCount() / (double) myTotalFiles;
       try {
         myIndicator.setFraction(newFraction);
       }
       catch (Exception ignored) {
         //Unexpected here. A misbehaved progress indicator must not break our code flow.
       }
+    }
+
+    boolean areAllFilesProcessed() {
+      return myAllFilesAreProcessedLatch.getCount() == 0;
     }
 
     public void setLocationBeingIndexed(@NotNull VirtualFile virtualFile) {
@@ -350,10 +401,6 @@ public final class IndexUpdateRunner {
       else {
         myIndicator.setText2(presentableLocation);
       }
-    }
-
-    private boolean isOutdated() {
-      return myProject.isDisposed() || myIsFinished.get() || myIndicator.isCanceled();
     }
   }
 }

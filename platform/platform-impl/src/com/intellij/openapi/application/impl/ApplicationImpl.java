@@ -55,6 +55,7 @@ import sun.awt.AWTAutoShutdown;
 
 import javax.swing.*;
 import java.awt.*;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -323,7 +324,7 @@ public class ApplicationImpl extends ComponentManagerImpl implements Application
   }
 
   @Override
-  public final void load(@Nullable String configPath) {
+  public final void load(@Nullable Path configPath) {
     @SuppressWarnings("unchecked")
     List<IdeaPluginDescriptorImpl> plugins = (List<IdeaPluginDescriptorImpl>)PluginManagerCore.getLoadedPlugins();
     registerComponents(plugins);
@@ -1268,7 +1269,7 @@ public class ApplicationImpl extends ComponentManagerImpl implements Application
     }
   }
 
-  private class ReadAccessToken extends AccessToken {
+  private final class ReadAccessToken extends AccessToken {
     private ReadAccessToken() {
       acquireReadLock(Runnable.class);
     }
@@ -1424,5 +1425,10 @@ public class ApplicationImpl extends ComponentManagerImpl implements Application
   @TestOnly
   void disableEventsUntil(@NotNull Disposable disposable) {
     myDispatcher.neuterMultiCasterWhilePerformanceTestIsRunningUntil(disposable);
+  }
+
+  @ApiStatus.Internal
+  public boolean getComponentCreated() {
+    return getContainerState().get().compareTo(ContainerState.COMPONENT_CREATED) >= 0;
   }
 }

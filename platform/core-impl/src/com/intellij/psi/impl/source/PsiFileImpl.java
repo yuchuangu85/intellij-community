@@ -624,7 +624,6 @@ public abstract class PsiFileImpl extends ElementBase implements PsiFileEx, PsiF
     }
 
     final VirtualFile vFile = getVirtualFile();
-    if (!(vFile instanceof VirtualFileWithId) || !vFile.isValid()) return null;
 
     ObjectStubTree tree = StubTreeLoader.getInstance().readOrBuild(getProject(), vFile, this);
     if (!(tree instanceof StubTree)) return null;
@@ -965,7 +964,8 @@ public abstract class PsiFileImpl extends ElementBase implements PsiFileEx, PsiF
         IStubFileElementType contentElementType = getElementTypeForStubBuilder();
         if (contentElementType == null) {
           VirtualFile vFile = getVirtualFile();
-          String message = "ContentElementType: " + getContentElementType() + "; file: " + this +
+          String message = "ContentElementType: " + getContentElementType() +
+                           "; file: " + this + (vFile.isValid() ? "" : " ("+vFile+" invalid)") +
                            "\n\t" + "Boolean.TRUE.equals(getUserData(BUILDING_STUB)) = " + Boolean.TRUE.equals(getUserData(BUILDING_STUB)) +
                            "\n\t" + "getTreeElement() = " + getTreeElement() +
                            "\n\t" + "vFile instanceof VirtualFileWithId = " + (vFile instanceof VirtualFileWithId) +

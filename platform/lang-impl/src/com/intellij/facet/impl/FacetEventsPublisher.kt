@@ -26,8 +26,12 @@ class FacetEventsPublisher(private val project: Project) {
       }
 
       override fun beforeModuleRemoved(project: Project, module: Module) {
-        for (facet in FacetManager.getInstance(module).allFacets) {
-          onFacetRemoved(facet, true)
+        val facetManager = FacetManager.getInstance(module)
+        //in workspace model removal of a module causes cascade removal of facet entities and beforeFacetRemoved events are sent from FacetEntityChangeListener
+        if (facetManager is FacetManagerImpl) {
+          for (facet in facetManager.allFacets) {
+            onFacetRemoved(facet, true)
+          }
         }
       }
 
@@ -175,7 +179,7 @@ class FacetEventsPublisher(private val project: Project) {
 
   @Suppress("UNCHECKED_CAST")
   private inline fun <F : Facet<*>> processListeners(facetType: FacetType<F, *>, action: (ProjectFacetListener<F>) -> Unit) {
-    for (listenerEP in LISTENER_EP.getByGroupingKey<String>(facetType.stringId, LISTENER_EP_CACHE_KEY)) {
+    for (listenerEP in LISTENER_EP.getByGroupingKey<String>(facetType.stringId, LISTENER_EP_CACHE_KEY::class.java, LISTENER_EP_CACHE_KEY)) {
       action(listenerEP.listenerInstance as ProjectFacetListener<F>)
     }
     manuallyRegisteredListeners.filter { it.first == facetType.id }.forEach {
@@ -185,7 +189,7 @@ class FacetEventsPublisher(private val project: Project) {
 
   @Suppress("UNCHECKED_CAST")
   private inline fun processListeners(action: (ProjectFacetListener<Facet<*>>) -> Unit) {
-    for (listenerEP in LISTENER_EP.getByGroupingKey<String>(ANY_TYPE, LISTENER_EP_CACHE_KEY)) {
+    for (listenerEP in LISTENER_EP.getByGroupingKey<String>(ANY_TYPE, LISTENER_EP_CACHE_KEY::class.java, LISTENER_EP_CACHE_KEY)) {
       action(listenerEP.listenerInstance as ProjectFacetListener<Facet<*>>)
     }
     manuallyRegisteredListeners.filter { it.first == null }.forEach {

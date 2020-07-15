@@ -4,6 +4,7 @@ package com.intellij.openapi.vfs.impl.local;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.JarFileSystem;
@@ -11,12 +12,10 @@ import com.intellij.openapi.vfs.LocalFileSystem.WatchRequest;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.newvfs.BulkFileListener;
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
-import com.intellij.util.Function;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.JBIterable;
-import com.intellij.util.containers.MultiMap;
-import gnu.trove.TIntObjectHashMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.SystemDependent;
@@ -40,8 +39,8 @@ final class WatchRootsManager {
   private final NavigableMap<String, List<WatchRequest>> myFlatWatchRoots = WatchRootsUtil.createFileNavigableMap();
   private final NavigableSet<String> myOptimizedRecursiveWatchRoots = WatchRootsUtil.createFileNavigableSet();
   private final NavigableMap<String, SymlinkData> mySymlinksByPath = WatchRootsUtil.createFileNavigableMap();
-  private final TIntObjectHashMap<SymlinkData> mySymlinksById = new TIntObjectHashMap<>();
-  private final MultiMap<String, String> myPathMappings = MultiMap.createConcurrentSet();
+  private final Int2ObjectMap<SymlinkData> mySymlinksById = new Int2ObjectOpenHashMap<>();
+  private final NavigableSet<Pair<String, String>> myPathMappings = WatchRootsUtil.createMappingsNavigableSet();
 
   @SuppressWarnings("FieldAccessedSynchronizedAndUnsynchronized") private boolean myWatcherRequiresUpdate;  // synchronized on `myLock`
   private final Object myLock = new Object();
@@ -85,7 +84,7 @@ final class WatchRootsManager {
       myOptimizedRecursiveWatchRoots.clear();
       myFlatWatchRoots.clear();
       myPathMappings.clear();
-      mySymlinksById.forEachValue(data -> { data.clear(); return true; });
+      mySymlinksById.values().forEach(SymlinkData::clear);
     }
   }
 
@@ -130,26 +129,40 @@ final class WatchRootsManager {
   }
 
   private void updateFileWatcher() {
-    Iterable<@SystemDependent String> flatWatchRootsIterable;
-    NavigableSet<@SystemDependent String> recursiveWatchRoots = WatchRootsUtil.createFileNavigableSet();
-    MultiMap<@SystemDependent String, @SystemDependent String> initialMappings = MultiMap.create();
+    myFileWatcher.setWatchRoots(() -> {
+      synchronized (myLock) {
+        if (!myWatcherRequiresUpdate) return null;
+        myWatcherRequiresUpdate = false;
+        return createCanonicalPathMap(myFlatWatchRoots.navigableKeySet(), myOptimizedRecursiveWatchRoots,
+                                      myPathMappings, File.separatorChar == '\\');
+      }
+    });
+  }
+
+  static CanonicalPathMap createCanonicalPathMap(NavigableSet<String> flatWatchRoots,
+                                                 NavigableSet<String> optimizedRecursiveWatchRoots,
+                                                 Collection<Pair<String, String>> pathMappings,
+                                                 boolean convertToForwardSlashes) {
+    NavigableSet<@SystemDependent String> optimizedRecursiveWatchRootsCopy = WatchRootsUtil.createFileNavigableSet();
+    List<Pair<@SystemDependent String, @SystemDependent String>> initialMappings = new ArrayList<>(pathMappings.size());
 
     // Ensure paths are system dependent
-    if (File.separatorChar == '/') {
-      flatWatchRootsIterable = myFlatWatchRoots.navigableKeySet();
-      recursiveWatchRoots.addAll(myOptimizedRecursiveWatchRoots);
-      initialMappings.putAllValues(myPathMappings);
-    } else {
-      Function<String, String> pathMapper = path -> path.replace('/', File.separatorChar);
-      flatWatchRootsIterable = JBIterable.from(myFlatWatchRoots.navigableKeySet()).map(pathMapper);
-      JBIterable.from(myOptimizedRecursiveWatchRoots).map(pathMapper).addAllTo(recursiveWatchRoots);
-      for (Map.Entry<String, Collection<String>> entry: myPathMappings.entrySet()) {
-        initialMappings.putValues(pathMapper.fun(entry.getKey()), ContainerUtil.map(entry.getValue(), pathMapper));
+    if (!convertToForwardSlashes) {
+      optimizedRecursiveWatchRootsCopy.addAll(optimizedRecursiveWatchRoots);
+      initialMappings.addAll(pathMappings);
+    }
+    else {
+      for (String recursiveWatchRoot: optimizedRecursiveWatchRoots) {
+        optimizedRecursiveWatchRootsCopy.add(recursiveWatchRoot.replace('/', '\\'));
+      }
+      for (Pair<String, String> mapping: pathMappings) {
+        initialMappings.add(new Pair<>(mapping.first.replace('/', '\\'),
+                                       mapping.second.replace('/', '\\')));
       }
     }
-    NavigableSet<@SystemDependent String> flatWatchRoots = WatchRootsUtil.optimizeFlatRoots(flatWatchRootsIterable, recursiveWatchRoots);
-    myFileWatcher.setWatchRoots(new CanonicalPathMap(recursiveWatchRoots, flatWatchRoots, initialMappings));
-    myWatcherRequiresUpdate = false;
+    NavigableSet<@SystemDependent String> optimizedFlatWatchRoots =
+      WatchRootsUtil.optimizeFlatRoots(flatWatchRoots, optimizedRecursiveWatchRootsCopy, convertToForwardSlashes);
+    return new CanonicalPathMap(optimizedRecursiveWatchRootsCopy, optimizedFlatWatchRoots, initialMappings);
   }
 
   private void updateWatchRoots(Collection<String> rootsToAdd,
@@ -257,7 +270,7 @@ final class WatchRootsManager {
     }
     if (request.setRegistered(true)) {
       myWatcherRequiresUpdate = true;
-      myPathMappings.putValue(watchRoot, request.getOriginalPath());
+      myPathMappings.add(new Pair<>(watchRoot, request.getOriginalPath()));
     }
   }
 
@@ -284,7 +297,7 @@ final class WatchRootsManager {
     }
     removeWatchRequest(request);
     if (request.setRegistered(false)) {
-      myPathMappings.remove(request.getRootPath(), request.getOriginalPath());
+      myPathMappings.remove(new Pair<>(request.getRootPath(), request.getOriginalPath()));
       myWatcherRequiresUpdate = true;
     }
   }

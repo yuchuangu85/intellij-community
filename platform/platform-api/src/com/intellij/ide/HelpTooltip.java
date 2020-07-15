@@ -125,6 +125,7 @@ public class HelpTooltip {
   private boolean isMultiline;
   private int myDismissDelay;
   private String myToolTipText;
+  private boolean initialShowScheduled;
 
   protected MouseAdapter myMouseListener;
 
@@ -273,6 +274,7 @@ public class HelpTooltip {
         if (myPopup != null && !myPopup.isDisposed()){
           myPopup.cancel();
         }
+        initialShowScheduled = true;
         scheduleShow(e, Registry.intValue("ide.tooltip.initialReshowDelay"));
       }
 
@@ -281,7 +283,9 @@ public class HelpTooltip {
       }
 
       @Override public void mouseMoved(MouseEvent e) {
-        scheduleShow(e, Registry.intValue("ide.tooltip.reshowDelay"));
+        if (!initialShowScheduled) {
+          scheduleShow(e, Registry.intValue("ide.tooltip.reshowDelay"));
+        }
       }
     };
   }
@@ -301,6 +305,7 @@ public class HelpTooltip {
     instance.initPopupBuilder();
     myPopupSize = instance.myPopupSize;
     myPopupBuilder = instance.myPopupBuilder;
+    initialShowScheduled = false;
   }
 
   @NotNull
@@ -442,6 +447,7 @@ public class HelpTooltip {
   private void scheduleShow(MouseEvent e, int delay) {
     popupAlarm.cancelAllRequests();
     popupAlarm.addRequest(() -> {
+      initialShowScheduled = false;
       if (masterPopupOpenCondition == null || masterPopupOpenCondition.getAsBoolean()) {
         Component owner = e.getComponent();
         String text = owner instanceof JComponent ? ((JComponent)owner).getToolTipText(e) : null;
@@ -531,7 +537,7 @@ public class HelpTooltip {
     }
   }
 
-  private class Header extends BoundWidthLabel {
+  private final class Header extends BoundWidthLabel {
     private Header(boolean obeyWidth) {
       setFont(deriveHeaderFont(getFont()));
       setForeground(UIUtil.getToolTipForeground());
@@ -558,7 +564,7 @@ public class HelpTooltip {
     }
   }
 
-  private class Paragraph extends BoundWidthLabel {
+  private final class Paragraph extends BoundWidthLabel {
     private Paragraph(String text, boolean hasTitle) {
       setForeground(hasTitle ? INFO_COLOR : UIUtil.getToolTipForeground());
       setFont(deriveDescriptionFont(getFont(), hasTitle));

@@ -14,7 +14,7 @@ import java.util.Locale;
 import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 
-public class FeatureStatisticsBundle {
+public final class FeatureStatisticsBundle {
 
   public static String message(@NotNull @PropertyKey(resourceBundle = BUNDLE) String key, Object @NotNull ... params) {
     return AbstractBundle.message(getBundle(key), key, params);
@@ -48,7 +48,8 @@ public class FeatureStatisticsBundle {
     private ProvidersBundles() {
       for (FeatureStatisticsBundleEP bundleEP : FeatureStatisticsBundleEP.EP_NAME.getExtensionList()) {
         try {
-          ResourceBundle bundle = ResourceBundle.getBundle(bundleEP.qualifiedName, Locale.getDefault(), bundleEP.getLoaderForClass());
+          ClassLoader pluginClassLoader = bundleEP.getPluginDescriptor().getPluginClassLoader();
+          ResourceBundle bundle = ResourceBundle.getBundle(bundleEP.qualifiedName, Locale.getDefault(), pluginClassLoader);
           for (String key : bundle.keySet()) {
             put(key, bundle);
           }

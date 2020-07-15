@@ -141,6 +141,11 @@ public class JUnitUtil {
     if (checkClass && checkRunWith) {
       PsiAnnotation annotation = getRunWithAnnotation(aClass);
       if (annotation != null) {
+        PsiClass containingClass = psiMethod.getContainingClass();
+        if (containingClass == null || 
+            CommonClassNames.JAVA_LANG_OBJECT.equals(containingClass.getQualifiedName())) {
+          return false;
+        }
         return !isOneOf(annotation, RUNNERS_REQUIRE_ANNOTATION_ON_TEST_METHOD);
       }
     }
@@ -204,7 +209,7 @@ public class JUnitUtil {
     if (checkForTestCaseInheritance && isTestCaseInheritor(psiClass)) return true;
 
     return CachedValuesManager.getCachedValue(psiClass, () ->
-      CachedValueProvider.Result.create(hasTestOrSuiteMethods(psiClass), PsiModificationTracker.JAVA_STRUCTURE_MODIFICATION_COUNT));
+      CachedValueProvider.Result.create(hasTestOrSuiteMethods(psiClass), PsiModificationTracker.MODIFICATION_COUNT));
   }
 
   private static boolean hasTestOrSuiteMethods(@NotNull PsiClass psiClass) {
@@ -289,17 +294,15 @@ public class JUnitUtil {
 
     if (psiClass.isAnnotationType()) return false;
 
-    if (JavaPsiFacade.getInstance(psiClass.getProject())
-          .findClass(CUSTOM_TESTABLE_ANNOTATION, psiClass.getResolveScope()) == null
-    && !MetaAnnotationUtil.hasMetaAnnotatedMethods(psiClass,Collections.singleton(CUSTOM_TESTABLE_ANNOTATION))) {
-      return false;
-    }
-
     if (psiClass.getContainingClass() != null && MetaAnnotationUtil.isMetaAnnotated(psiClass, Collections.singleton(JUNIT5_NESTED))) {
       return true;
     }
 
     if (MetaAnnotationUtil.isMetaAnnotatedInHierarchy(psiClass, Collections.singleton(CUSTOM_TESTABLE_ANNOTATION))) {
+      return true;
+    }
+
+    if (MetaAnnotationUtil.isMetaAnnotated(psiClass, TEST5_ANNOTATIONS)) {
       return true;
     }
 
@@ -323,7 +326,7 @@ public class JUnitUtil {
           }
         }
       }
-      return CachedValueProvider.Result.create(hasAnnotation, PsiModificationTracker.JAVA_STRUCTURE_MODIFICATION_COUNT);
+      return CachedValueProvider.Result.create(hasAnnotation, PsiModificationTracker.MODIFICATION_COUNT);
     });
   }
 

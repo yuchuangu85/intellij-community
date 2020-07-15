@@ -5,17 +5,17 @@ import com.intellij.internal.statistic.envTest.ApacheContainer
 import com.intellij.openapi.util.io.FileUtil
 import java.nio.file.Paths
 
-internal const val SETTINGS_FILE = "settings.xml"
-
 class EventLogConfigBuilder(private val container: ApacheContainer, private val tmpLocalRoot: String) {
   private val TEST_SERVER_ROOT = "upload"
 
+  private var productVersion: String = PRODUCT_VERSION
   private var customSendHost: String? = null
-  private var sendPath: String = "dump-request.php"
-  private var whitelistPath: String = ""
-  private var permitted: Int = 100
+  private var sendPath: String? = "dump-request.php"
+  private var metadataPath: String = ""
+  private var fromBucket: Int = 0
+  private var toBucket: Int = 256
 
-  fun withSendUrlPath(path: String): EventLogConfigBuilder {
+  fun withSendUrlPath(path: String?): EventLogConfigBuilder {
     sendPath = path
     return this
   }
@@ -25,23 +25,56 @@ class EventLogConfigBuilder(private val container: ApacheContainer, private val 
     return this
   }
 
-  fun withWhitelistUrlPath(path: String): EventLogConfigBuilder {
-    whitelistPath = path
+  fun withMetadataUrlPath(path: String): EventLogConfigBuilder {
+    metadataPath = path
     return this
   }
 
-  fun withPermittedTraffic(percent: Int): EventLogConfigBuilder {
-    permitted = percent
+  fun withToBucket(to: Int): EventLogConfigBuilder {
+    toBucket = to
+    return this
+  }
+
+  fun withProductVersion(version: String): EventLogConfigBuilder {
+    productVersion = version
     return this
   }
 
   fun create() {
-    val sendUrl = customSendHost?.let { "$customSendHost/$TEST_SERVER_ROOT/$sendPath" }
-                  ?: container.getBaseUrl("$TEST_SERVER_ROOT/$sendPath").toString()
+    val sendUrl = sendPath?.let { """"send": "${getSendUrl()}",""" } ?: ""
+    val metadataUrl = container.getBaseUrl("$TEST_SERVER_ROOT/$metadataPath").toString()
+    val config = """
+{
+  "productCode": "${PRODUCT_CODE}",
+  "versions": [
+    {
+      "majorBuildVersionBorders": {
+        "from": "${productVersion}"
+      },
+      "releaseFilters": [
+        {
+          "releaseType": "ALL",
+          "from": $fromBucket,
+          "to": $toBucket
+        }
+      ],
+      "endpoints": {
+        $sendUrl
+        "metadata": "$metadataUrl"
+      }
+    }
+  ]
+}
+    """.trimIndent()
+    val path = String.format(SETTINGS_ROOT, RECORDER_ID, PRODUCT_CODE)
+    val file = Paths.get(tmpLocalRoot).resolve(path).toFile()
+    FileUtil.writeToFile(file, config)
+  }
 
-    val whitelistUrl = container.getBaseUrl("$TEST_SERVER_ROOT/$whitelistPath").toString()
-    val settings = """<service url="$sendUrl" percent-traffic="$permitted" white-list-service="$whitelistUrl"/>"""
-    val file = Paths.get(tmpLocalRoot).resolve(SETTINGS_FILE).toFile()
-    FileUtil.writeToFile(file, settings)
+  private fun getSendUrl(): String {
+    if (customSendHost != null) {
+      return "$customSendHost/$TEST_SERVER_ROOT/$sendPath"
+    }
+    return container.getBaseUrl("$TEST_SERVER_ROOT/$sendPath").toString()
   }
 }

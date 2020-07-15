@@ -28,6 +28,8 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.nio.file.FileSystems;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -196,8 +198,8 @@ public class VirtualFileManagerImpl extends VirtualFileManagerEx implements Disp
   }
 
   @ApiStatus.Internal
-  public List<AsyncFileListener> getAsyncFileListeners() {
-    return Collections.unmodifiableList(myAsyncFileListeners);
+  public void addAsyncFileListenersTo(@NotNull List<? super AsyncFileListener> listeners) {
+    listeners.addAll(myAsyncFileListeners);
   }
 
   @Override
@@ -340,5 +342,21 @@ public class VirtualFileManagerImpl extends VirtualFileManagerEx implements Disp
     if (fileSystem == null) return null;
     String path = url.substring(protocolSepIndex + URLUtil.SCHEME_SEPARATOR.length());
     return fileSystem.refreshAndFindFileByPath(path);
+  }
+
+  @Override
+  public @Nullable VirtualFile findFileByNioPath(@NotNull Path path) {
+    if (!FileSystems.getDefault().equals(path.getFileSystem())) return null;
+    VirtualFileSystem fileSystem = getFileSystem(StandardFileSystems.FILE_PROTOCOL);
+    if (fileSystem == null) return null;
+    return fileSystem.findFileByPath(path.toString());
+  }
+
+  @Override
+  public @Nullable VirtualFile refreshAndFindFileByNioPath(@NotNull Path path) {
+    if (!FileSystems.getDefault().equals(path.getFileSystem())) return null;
+    VirtualFileSystem fileSystem = getFileSystem(StandardFileSystems.FILE_PROTOCOL);
+    if (fileSystem == null) return null;
+    return fileSystem.refreshAndFindFileByPath(path.toString());
   }
 }

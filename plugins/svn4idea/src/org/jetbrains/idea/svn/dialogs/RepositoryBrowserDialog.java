@@ -1,10 +1,10 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn.dialogs;
 
 import com.intellij.CommonBundle;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.CommonActionsManager;
-import com.intellij.ide.TreeExpander;
+import com.intellij.ide.DefaultTreeExpander;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.diagnostic.Logger;
@@ -150,27 +150,8 @@ public class RepositoryBrowserDialog extends DialogWrapper {
     mkDirAction.registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_INSERT,
                                                               InputEvent.ALT_MASK | InputEvent.ALT_DOWN_MASK)), browser);
 
-    AnAction action = CommonActionsManager.getInstance().createCollapseAllAction(new TreeExpander() {
-      @Override
-      public boolean canExpand() {
-        return false;
-      }
-
-      @Override
-      public void collapseAll() {
-        JTree tree = browser.getRepositoryTree();
-        int row = tree.getRowCount() - 1;
-        while (row >= 0) {
-          tree.collapseRow(row);
-          row--;
-        }
-      }
-
-      @Override
-      public boolean canCollapse() {
-        return true;
-      }
-    }, browser);
+    AnAction action = CommonActionsManager.getInstance().createCollapseAllAction(
+      new DefaultTreeExpander(browser::getRepositoryTree), browser);
     group.add(action);
 
     if (!isEmpty(additionalActions)) {
@@ -678,7 +659,7 @@ public class RepositoryBrowserDialog extends DialogWrapper {
     }
   }
 
-  private static class TargetReloader implements CopyMoveReloadHelper {
+  private static final class TargetReloader implements CopyMoveReloadHelper {
     private final RepositoryTreeNode myDialogParent;
     private final Url myDst;
     private final RepositoryTreeNode mySourceNode;
@@ -716,7 +697,7 @@ public class RepositoryBrowserDialog extends DialogWrapper {
     }
   }
 
-  private static class MoveSourceReloader implements CopyMoveReloadHelper {
+  private static final class MoveSourceReloader implements CopyMoveReloadHelper {
     private final RepositoryTreeNode mySource;
     private final RepositoryTreeNode myParent;
 
@@ -839,7 +820,7 @@ public class RepositoryBrowserDialog extends DialogWrapper {
     }
   }
 
-  private static class AfterDeletionSelectionInstaller implements Expander {
+  private static final class AfterDeletionSelectionInstaller implements Expander {
     private final RepositoryTreeNode myParentNode;
     private final String myDeletedNodeName;
     private final boolean myIsFolder;

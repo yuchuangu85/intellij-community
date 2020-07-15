@@ -23,7 +23,6 @@ import com.intellij.openapi.application.ex.ApplicationInfoEx;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.ExtensionNotApplicableException;
 import com.intellij.openapi.extensions.PluginId;
-import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.impl.HTMLEditorProvider;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.startup.StartupActivity;
@@ -33,7 +32,6 @@ import com.intellij.openapi.util.BuildNumber;
 import com.intellij.openapi.util.NotNullLazyValue;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.testFramework.LightVirtualFile;
 import com.intellij.util.LineSeparator;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.text.DateFormatUtil;
@@ -124,13 +122,12 @@ final class UpdateCheckerComponent {
     }
 
     String title = IdeBundle.message("update.whats.new.notification.title", ApplicationNamesInfo.getInstance().getFullProductName());
-    UpdateChecker.getNotificationGroup().createNotification(title, null, null, NotificationType.INFORMATION)
+    UpdateChecker.getNotificationGroup().createNotification(title, null, NotificationType.INFORMATION, null, "ide.update.installed")
       .addAction(new NotificationAction(IdeBundle.message("update.whats.new.notification.action")) {
         @Override
         public void actionPerformed(@NotNull AnActionEvent e, @NotNull Notification notification) {
-          LightVirtualFile file = new LightVirtualFile(IdeBundle.message("update.whats.new.file.name", ApplicationInfo.getInstance().getFullVersion()), updateHtmlMessage);
-          file.putUserData(HTMLEditorProvider.Companion.getHTML_CONTENT_TYPE(), true);
-          FileEditorManager.getInstance(project).openFile(file, true);
+          String title = IdeBundle.message("update.whats.new.file.name", ApplicationInfo.getInstance().getFullVersion());
+          HTMLEditorProvider.Companion.openEditor(project, title, null, updateHtmlMessage, updateHtmlMessage);
           IdeUpdateUsageTriggerCollector.trigger("update.whats.new");
           notification.expire();
         }
@@ -161,7 +158,7 @@ final class UpdateCheckerComponent {
       if (!ConfigImportHelper.isFirstSession()) {
         String title = IdeBundle.message("update.notifications.title");
         String message = IdeBundle.message("update.channel.enforced", ChannelStatus.EAP);
-        UpdateChecker.getNotificationGroup().createNotification(title, message, NotificationType.INFORMATION, null).notify(null);
+        UpdateChecker.getNotificationGroup().createNotification(title, message, NotificationType.INFORMATION, null, "ide.update.channel.switched").notify(null);
       }
     }
 
@@ -240,7 +237,7 @@ final class UpdateCheckerComponent {
     String message = blogPost == null ? IdeBundle.message("update.snap.message")
                                       : IdeBundle.message("update.snap.message.with.blog.post", StringUtil.escapeXmlEntities(blogPost));
     UpdateChecker.getNotificationGroup().createNotification(
-      title, message, NotificationType.INFORMATION, NotificationListener.URL_OPENING_LISTENER).notify(null);
+      title, message, NotificationType.INFORMATION, NotificationListener.URL_OPENING_LISTENER, "ide.updated.by.snap").notify(null);
 
     UpdateSettings.getInstance().saveLastCheckedInfo();
   }
@@ -317,7 +314,7 @@ final class UpdateCheckerComponent {
       DataProvider provider = component == null ? null : DataManager.getDataProvider((JComponent)component);
 
       PluginManagerConfigurable.showPluginConfigurable(provider == null ? null : CommonDataKeys.PROJECT.getData(provider), descriptor);
-    }).notify(project);
+    }, "plugins.updated.after.restart").notify(project);
   }
 
   @NotNull

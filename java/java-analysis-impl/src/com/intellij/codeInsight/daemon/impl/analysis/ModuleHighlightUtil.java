@@ -16,6 +16,7 @@ import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.Trinity;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
 import com.intellij.psi.PsiPackageAccessibilityStatement.Role;
 import com.intellij.psi.search.FilenameIndex;
@@ -28,6 +29,7 @@ import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.JBIterable;
 import gnu.trove.THashSet;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.PropertyKey;
@@ -422,5 +424,41 @@ class ModuleHighlightUtil {
     HighlightInfo info = HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(refElement).descriptionAndTooltip(message).create();
     QuickFixAction.registerQuickFixAction(info, factory().createDeleteFix(refElement, QuickFixBundle.message("delete.reference.fix.text")));
     return info;
+  }
+
+  @Nullable
+  public static HighlightInfo checkModulePreviewFeatureAnnotation(@Nullable final PsiStatement statement,
+                                                                  @NotNull final LanguageLevel level) {
+    if (statement instanceof PsiRequiresStatement) {
+      final PsiRequiresStatement requiresStatement = (PsiRequiresStatement)statement;
+      final PsiJavaModule module = requiresStatement.resolve();
+
+      return HighlightUtil.checkPreviewFeatureElement(statement, module, level);
+    }
+    else if (statement instanceof PsiPackageAccessibilityStatement) {
+      final PsiPackageAccessibilityStatement accessibilityStatement = (PsiPackageAccessibilityStatement)statement;
+      final PsiJavaCodeReferenceElement reference = accessibilityStatement.getPackageReference();
+      if (reference == null) return null;
+
+      final PsiElement resolve = reference.resolve();
+      if (!(resolve instanceof PsiPackage)) return null;
+
+      final PsiPackage psiPackage = (PsiPackage)resolve;
+      return HighlightUtil.checkPreviewFeatureElement(statement, psiPackage, level);
+    }
+    else if (statement instanceof PsiProvidesStatement) {
+      final PsiProvidesStatement providesStatement = (PsiProvidesStatement)statement;
+      final PsiReferenceList list = providesStatement.getImplementationList();
+      if (list == null) return null;
+
+      return StreamEx.of(list.getReferenceElements())
+        .map(PsiReference::resolve)
+        .select(PsiClass.class)
+        .map(clazz -> HighlightUtil.checkPreviewFeatureElement(statement, clazz, level))
+        .nonNull()
+        .findAny()
+        .orElse(null);
+    }
+    return null;
   }
 }

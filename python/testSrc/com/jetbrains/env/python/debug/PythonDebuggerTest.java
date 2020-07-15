@@ -20,7 +20,6 @@ import com.jetbrains.python.debugger.PyDebugValue;
 import com.jetbrains.python.debugger.PyExceptionBreakpointProperties;
 import com.jetbrains.python.debugger.PyExceptionBreakpointType;
 import com.jetbrains.python.debugger.settings.PyDebuggerSettings;
-import com.jetbrains.python.debugger.settings.PySteppingFilter;
 import com.jetbrains.python.sdk.flavors.PythonSdkFlavor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -28,7 +27,6 @@ import org.junit.Assume;
 import org.junit.Test;
 
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -1317,7 +1315,7 @@ public class PythonDebuggerTest extends PyEnvTestCase {
 
     Assume.assumeFalse("Don't run under Windows", UsefulTestCase.IS_UNDER_TEAMCITY && SystemInfo.isWindows);
 
-    class ExecAndSpawnWithBytesArgsTask extends PyDebuggerTaskTagAware {
+    final class ExecAndSpawnWithBytesArgsTask extends PyDebuggerTaskTagAware {
 
       private final static String BYTES_ARGS_WARNING = "pydev debugger: bytes arguments were passed to a new process creation function. " +
                                                        "Breakpoints may not work correctly.\n";

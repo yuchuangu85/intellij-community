@@ -11,7 +11,6 @@
                     dynamic="true"/>
     <extensionPoint name="vcsIgnoreChecker"
                     interface="com.intellij.openapi.vcs.VcsIgnoreChecker"
-                    area="IDEA_PROJECT"
                     dynamic="true"/>
     <extensionPoint name="checkoutListener"
                     interface="com.intellij.openapi.vcs.checkout.CheckoutListener"
@@ -176,6 +175,10 @@
 
     <extensionPoint name="vcsBulkMovesOnlyChangesFilter"
                     interface="com.intellij.openapi.vcs.changes.ui.browser.BulkMovesOnlyChangesFilter"
+                    dynamic="true"/>
+
+    <extensionPoint name="vcs.consoleFolding"
+                    interface="com.intellij.vcs.console.VcsConsoleFolding"
                     dynamic="true"/>
   </extensionPoints>
 </idea-plugin>

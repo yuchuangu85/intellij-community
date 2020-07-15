@@ -1,26 +1,48 @@
 // Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.index.ui
 
+import com.intellij.ide.DataManager
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.*
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.util.ProgressWindow
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.vcs.AbstractVcsHelper
+import com.intellij.openapi.vcs.VcsException
+import com.intellij.openapi.vcs.VcsNotifier
 import com.intellij.openapi.vcs.VcsRoot
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
 import com.intellij.openapi.vcs.changes.ui.TreeActionsToolbarPanel
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.IdeFocusManager
 import com.intellij.ui.OnePixelSplitter
 import com.intellij.ui.PopupHandler
 import com.intellij.ui.ScrollPaneFactory
 import com.intellij.ui.SideBorder
+import com.intellij.util.EditSourceOnDoubleClickHandler
+import com.intellij.util.OpenSourceUtil
+import com.intellij.util.Processor
+import com.intellij.util.ui.UIUtil
+import com.intellij.vcs.commit.getDefaultCommitShortcut
 import com.intellij.vcs.commit.showEmptyCommitMessageConfirmation
+import com.intellij.vcs.log.runInEdt
 import com.intellij.vcs.log.runInEdtAsync
 import com.intellij.vcs.log.ui.frame.ProgressStripe
+import com.intellij.vcsUtil.VcsImplUtil
+import com.intellij.xml.util.XmlStringUtil
 import git4idea.GitVcs
 import git4idea.i18n.GitBundle
+import git4idea.index.CommitListener
 import git4idea.index.GitStageTracker
 import git4idea.index.GitStageTrackerListener
+import git4idea.index.actions.GitAddOperation
+import git4idea.index.actions.GitResetOperation
+import git4idea.index.actions.StagingAreaOperation
+import git4idea.index.actions.performStageOperation
+import git4idea.repo.GitRepository
+import git4idea.status.GitChangeProvider
+import org.jetbrains.annotations.CalledInAwt
 import java.awt.BorderLayout
 import javax.swing.JPanel
 
@@ -37,9 +59,14 @@ internal class GitStagePanel(private val tracker: GitStageTracker, disposablePar
   private val state: GitStageTracker.State
     get() = tracker.state
 
+  private var isCommitInProgress = false
+  private var hasPendingUpdates = false
+
   init {
     tree = MyChangesTree(project)
+
     commitPanel = MyGitCommitPanel()
+    commitPanel.createCommitAction().registerCustomShortcutSet(getDefaultCommitShortcut(), this)
 
     val toolbarGroup = DefaultActionGroup()
     toolbarGroup.add(ActionManager.getInstance().getAction("Git.Stage.Toolbar"))
@@ -72,7 +99,8 @@ internal class GitStagePanel(private val tracker: GitStageTracker, disposablePar
     add(commitDiffSplitter, BorderLayout.CENTER)
 
     tracker.addListener(MyGitStageTrackerListener(), this)
-    if (tracker.isRefreshInProgress) {
+    project.messageBus.connect(this).subscribe(GitChangeProvider.TOPIC, MyGitChangeProviderListener())
+    if (GitVcs.getInstance(project).changeProvider?.isRefreshInProgress == true) {
       tree.setEmptyText(GitBundle.message("stage.loading.status"))
       progressStripe.startLoadingImmediately()
     }
@@ -86,12 +114,38 @@ internal class GitStagePanel(private val tracker: GitStageTracker, disposablePar
     val rootsToCommit = state.stagedRoots
     if (rootsToCommit.isEmpty()) return
 
-    if (commitPanel.commitMessage.text.isBlank() && !showEmptyCommitMessageConfirmation()) return
+    val commitMessage = commitPanel.commitMessage.text
+    if (commitMessage.isBlank() && !showEmptyCommitMessageConfirmation()) return
 
-    git4idea.index.performCommit(project, rootsToCommit, commitPanel.commitMessage.text, amend)
+    commitStarted()
+
+    FileDocumentManager.getInstance().saveAllDocuments()
+    git4idea.index.performCommit(project, rootsToCommit, commitMessage, amend, MyCommitListener(commitMessage))
   }
 
+  @CalledInAwt
+  private fun commitStarted() {
+    isCommitInProgress = true
+    commitPanel.commitButton.isEnabled = false
+  }
+
+  @CalledInAwt
+  private fun commitFinished(success: Boolean) {
+    isCommitInProgress = false
+    // commit button is going to be enabled after state update
+    if (success) commitPanel.isAmend = false
+    if (hasPendingUpdates) {
+      hasPendingUpdates = false
+      update()
+    }
+  }
+
+  @CalledInAwt
   fun update() {
+    if (isCommitInProgress) {
+      hasPendingUpdates = true
+      return
+    }
     tree.update()
     commitPanel.commitButton.isEnabled = state.hasStagedRoots()
   }
@@ -104,12 +158,38 @@ internal class GitStagePanel(private val tracker: GitStageTracker, disposablePar
   override fun dispose() {
   }
 
-  inner class MyChangesTree(project: Project) : GitStageTree(project) {
+  private inner class MyChangesTree(project: Project) : GitStageTree(project, this) {
     override val state
       get() = this@GitStagePanel.state
+    override val operations: List<StagingAreaOperation> = listOf(GitAddOperation, GitResetOperation)
+
+    init {
+      doubleClickHandler = Processor { e ->
+        if (EditSourceOnDoubleClickHandler.isToggleEvent(this, e)) return@Processor false
+
+        OpenSourceUtil.openSourcesFrom(DataManager.getInstance().getDataContext(this), true)
+        true
+      }
+    }
+
+    override fun performStageOperation(nodes: List<GitFileStatusNode>, operation: StagingAreaOperation) {
+      performStageOperation(project, nodes, operation)
+    }
+
+    override fun getDndOperation(targetKind: NodeKind): StagingAreaOperation? {
+      return when (targetKind) {
+        NodeKind.STAGED -> GitAddOperation
+        NodeKind.UNSTAGED -> GitResetOperation
+        else -> null
+      }
+    }
+
+    override fun showMergeDialog(conflictedFiles: List<VirtualFile>) {
+      AbstractVcsHelper.getInstance(project).showMergeDialog(conflictedFiles)
+    }
   }
 
-  inner class MyGitCommitPanel : GitCommitPanel(project, this) {
+  private inner class MyGitCommitPanel : GitCommitPanel(project, this) {
     override fun isFocused(): Boolean {
       return IdeFocusManager.getInstance(project).getFocusedDescendantFor(this@GitStagePanel) != null
     }
@@ -121,19 +201,46 @@ internal class GitStagePanel(private val tracker: GitStageTracker, disposablePar
     override fun rootsToCommit() = state.stagedRoots.map { VcsRoot(GitVcs.getInstance(project), it) }
   }
 
-  inner class MyGitStageTrackerListener : GitStageTrackerListener {
+  private inner class MyGitStageTrackerListener : GitStageTrackerListener {
     override fun update() {
       this@GitStagePanel.update()
     }
+  }
 
+  private inner class MyGitChangeProviderListener : GitChangeProvider.ChangeProviderListener {
     override fun progressStarted() {
-      tree.setEmptyText(GitBundle.message("stage.loading.status"))
-      progressStripe.startLoading()
+      runInEdt(this@GitStagePanel) {
+        tree.setEmptyText(GitBundle.message("stage.loading.status"))
+        progressStripe.startLoading()
+      }
     }
 
     override fun progressStopped() {
-      progressStripe.stopLoading()
-      tree.setEmptyText("")
+      runInEdt(this@GitStagePanel) {
+        progressStripe.stopLoading()
+        tree.setEmptyText("")
+      }
+    }
+
+    override fun repositoryUpdated(repository: GitRepository) = Unit
+  }
+
+  private inner class MyCommitListener(private val commitMessage: String) : CommitListener {
+    private val notifier = VcsNotifier.getInstance(project)
+
+    override fun commitProcessFinished(successfulRoots: Collection<VirtualFile>, failedRoots: Map<VirtualFile, VcsException>) {
+      commitFinished(successfulRoots.isNotEmpty() && failedRoots.isEmpty())
+
+      if (successfulRoots.isNotEmpty()) {
+        notifier.notifySuccess(GitBundle.message("stage.commit.successful", successfulRoots.joinToString {
+          "'${VcsImplUtil.getShortVcsRootName(project, it)}'"
+        }, XmlStringUtil.escapeString(commitMessage)))
+      }
+      if (failedRoots.isNotEmpty()) {
+        notifier.notifyError(GitBundle.message("stage.commit.failed", failedRoots.keys.joinToString {
+          "'${VcsImplUtil.getShortVcsRootName(project, it)}'"
+        }), failedRoots.values.joinToString(UIUtil.BR) { it.localizedMessage })
+      }
     }
   }
 }

@@ -23,6 +23,7 @@ import com.intellij.vcs.log.VcsCommitMetadata
 import com.intellij.vcs.log.impl.HashImpl
 import com.intellij.vcs.log.impl.VcsCommitMetadataImpl
 import com.intellij.vcs.log.ui.details.MultipleCommitInfoDialog
+import com.intellij.vcs.log.util.VcsLogUtil
 import com.intellij.xml.util.XmlStringUtil.*
 import git4idea.GitBranch
 import git4idea.GitRevisionNumber
@@ -48,7 +49,7 @@ internal open class GitDefaultMergeDialogCustomizer(
 ) : MergeDialogCustomizer() {
   override fun getMultipleFileMergeDescription(files: MutableCollection<VirtualFile>): String {
     val repos = getRepositoriesForFiles(project, files)
-      .ifEmpty { getRepositories(project).filter { it.conflictsHolder.conflicts.isNotEmpty() } }
+      .ifEmpty { getRepositories(project).filter { it.stagingAreaHolder.allConflicts.isNotEmpty() } }
 
     val mergeBranches = repos.mapNotNull { resolveMergeBranch(it)?.presentable }.toSet()
     if (mergeBranches.isNotEmpty()) {
@@ -283,7 +284,7 @@ private fun getMergeBranchNameSet(roots: Collection<GitRepository>): Set<String>
 internal fun getSingleCurrentBranchName(roots: Collection<GitRepository>): String? = getCurrentBranchNameSet(roots).singleOrNull()
 
 private fun getCurrentBranchNameSet(roots: Collection<GitRepository>): Set<String> = roots.asSequence().mapNotNull { repo ->
-  repo.currentBranchName
+  repo.currentBranchName ?: repo.currentRevision?.let { VcsLogUtil.getShortHash(it) }
 }.toSet()
 
 internal fun getTitleWithCommitDetailsCustomizer(

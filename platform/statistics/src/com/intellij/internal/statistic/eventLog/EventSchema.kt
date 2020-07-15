@@ -2,6 +2,7 @@
 package com.intellij.internal.statistic.eventLog
 
 import com.intellij.internal.statistic.beans.MetricEvent
+import com.intellij.internal.statistic.eventLog.EventLogSystemEvents.SYSTEM_EVENTS
 import com.intellij.internal.statistic.eventLog.fus.FeatureUsageLogger
 import com.intellij.internal.statistic.service.fus.collectors.FeatureUsageCollectorExtension
 import com.intellij.internal.statistic.utils.PluginInfo
@@ -27,7 +28,9 @@ abstract class EventField<T> {
   infix fun with(data: T): EventPair<T> = EventPair(this, data)
 }
 
-data class EventPair<T>(val field: EventField<T>, val data: T)
+data class EventPair<T>(val field: EventField<T>, val data: T) {
+  fun addData(featureUsageData: FeatureUsageData) = field.addData(featureUsageData, data)
+}
 
 data class StringEventField(override val name: String): EventField<String?>() {
   var customRuleId: String? = null
@@ -94,6 +97,15 @@ data class StringListEventField(override val name: String): EventField<List<Stri
   }
 }
 
+data class ClassEventField(override val name: String): EventField<Class<*>?>() {
+  override fun addData(fuData: FeatureUsageData, value: Class<*>?) {
+    if (value != null) {
+      val pluginInfo = getPluginInfo(value)
+      fuData.addData(name, if (pluginInfo.isSafeToReport()) value.name else "third.party")
+    }
+  }
+}
+
 class ObjectEventField(override val name: String, vararg val fields: EventField<*>) : EventField<ObjectEventData>() {
   constructor(name: String, description: ObjectDescription) : this(name, *description.getFields())
 
@@ -147,20 +159,14 @@ abstract class ObjectDescription {
 }
 
 class ObjectEventData(private vararg val values: EventPair<*>) {
-  fun buildObjectData(allowedFields: Array<out EventField<*>>): HashMap<String, Any> {
-    val map = hashMapOf<String, Any>()
+  fun buildObjectData(allowedFields: Array<out EventField<*>>): Map<String, Any> {
+    val data = FeatureUsageData()
     for (eventPair in values) {
       val eventField = eventPair.field
       if (eventField !in allowedFields) throw IllegalArgumentException("Field ${eventField.name} is not in allowed object fields")
-      var data = eventPair.data
-      if (data is ObjectEventData && eventField is ObjectEventField) {
-        data = data.buildObjectData(eventField.fields)
-      }
-      if (data != null) {
-        map[eventField.name] = data
-      }
+      eventPair.addData(data)
     }
-    return map
+    return data.build()
   }
 }
 
@@ -204,6 +210,9 @@ object EventFields {
 
   @JvmStatic
   fun Boolean(name: String): BooleanEventField = BooleanEventField(name)
+
+  @JvmStatic
+  fun Class(name: String): ClassEventField = ClassEventField(name)
 
   @JvmStatic
   @JvmOverloads
@@ -255,6 +264,14 @@ object EventFields {
     override val name = "file_path"
     override fun addData(fuData: FeatureUsageData, value: String?) {
       fuData.addAnonymizedPath(value)
+    }
+  }
+
+  @JvmField
+  val Language = object : EventField<Language?>() {
+    override val name = "lang"
+    override fun addData(fuData: FeatureUsageData, value: Language?) {
+      fuData.addLanguage(value)
     }
   }
 
@@ -328,9 +345,14 @@ class EventLogGroup(val id: String, val version: Int) {
   }
 
   internal fun validateEventId(eventId: String) {
-    if (registeredEventIds.isNotEmpty() && eventId !in registeredEventIds) {
+    if (!isEventIdValid(eventId)) {
       throw IllegalArgumentException("Trying to report unregistered event ID $eventId to group $id")
     }
+  }
+
+  private fun isEventIdValid(eventId: String): Boolean {
+    if (SYSTEM_EVENTS.contains(eventId)) return true
+    return registeredEventIds.isEmpty() || eventId in registeredEventIds
   }
 }
 

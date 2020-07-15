@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.roots.ui.configuration.classpath;
 
 import com.intellij.ide.JavaUiBundle;
@@ -671,7 +671,7 @@ public class ClasspathPanelImpl extends JPanel implements ClasspathPanel {
     }
 
     @Override
-    protected void customizeCellRenderer(JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
+    protected void customizeCellRenderer(@NotNull JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
       setPaintFocusBorder(false);
       setFocusBorderAroundIcon(true);
       setBorder(NO_FOCUS_BORDER);
@@ -702,7 +702,7 @@ public class ClasspathPanelImpl extends JPanel implements ClasspathPanel {
     }
   }
 
-  private class MyFindUsagesAction extends FindUsagesInProjectStructureActionBase {
+  private final class MyFindUsagesAction extends FindUsagesInProjectStructureActionBase {
     private MyFindUsagesAction() {
       super(myEntryTable, myState.getProject());
     }

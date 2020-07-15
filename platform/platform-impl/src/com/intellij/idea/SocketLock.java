@@ -12,16 +12,12 @@ import com.intellij.openapi.application.JetBrainsProtocolHandler;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.ExceptionUtil;
+import com.intellij.util.ExceptionUtilRt;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.containers.ContainerUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufOutputStream;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
-import it.unimi.dsi.fastutil.ints.Int2ObjectMaps;
-import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -29,10 +25,7 @@ import org.jetbrains.io.BuiltInServer;
 import org.jetbrains.io.MessageDecoder;
 
 import java.awt.*;
-import java.io.BufferedReader;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.lang.management.ManagementFactory;
 import java.net.ConnectException;
 import java.net.InetAddress;
@@ -46,11 +39,11 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.util.List;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 public final class SocketLock {
@@ -152,13 +145,13 @@ public final class SocketLock {
 
     lockPortFiles();
 
-    Int2ObjectOpenHashMap<List<String>> portToPath = new Int2ObjectOpenHashMap<>(2);
+    Map<Integer, List<String>> portToPath = new HashMap<>();
     readPort(myConfigPath, portToPath);
     readPort(mySystemPath, portToPath);
     if (!portToPath.isEmpty()) {
       args = JetBrainsProtocolHandler.checkForJetBrainsProtocolCommand(args);
-      for (Int2ObjectMap.Entry<List<String>> entry : Int2ObjectMaps.fastIterable(portToPath)) {
-        Map.Entry<ActivationStatus, CliResult> status = tryActivate(entry.getIntKey(), entry.getValue(), args);
+      for (Map.Entry<Integer, List<String>> entry : portToPath.entrySet()) {
+        Map.Entry<ActivationStatus, CliResult> status = tryActivate(entry.getKey(), entry.getValue(), args);
         if (status.getKey() != ActivationStatus.NO_INSTANCE) {
           log("exit: lock(): " + status.getValue());
           unlockPortFiles();
@@ -177,8 +170,7 @@ public final class SocketLock {
 
       String token = UUID.randomUUID().toString();
       Path[] lockedPaths = {myConfigPath, mySystemPath};
-      Supplier<ChannelHandler> handlerSupplier = () -> new MyChannelInboundHandler(lockedPaths, myCommandProcessorRef, token);
-      BuiltInServer server = BuiltInServer.startNioOrOio(BuiltInServer.getRecommendedWorkerCount(), 6942, 50, false, handlerSupplier);
+      BuiltInServer server = BuiltInServer.start(6942, 50, () -> new MyChannelInboundHandler(lockedPaths, myCommandProcessorRef, token));
       try {
         byte[] portBytes = Integer.toString(server.getPort()).getBytes(StandardCharsets.UTF_8);
         Files.write(myConfigPath.resolve(PORT_FILE), portBytes);
@@ -199,7 +191,8 @@ public final class SocketLock {
         unlockPortFiles();
       }
       catch (Exception e) {
-        ExceptionUtil.rethrow(e);
+        ExceptionUtilRt.rethrowUnchecked(e);
+        throw new CompletionException(e);
       }
 
       activity.end();
@@ -251,15 +244,9 @@ public final class SocketLock {
     }
   }
 
-  private static void readPort(@NotNull Path dir, @NotNull Int2ObjectOpenHashMap<List<String>> portToPath) {
+  private static void readPort(@NotNull Path dir, @NotNull Map<Integer, List<String>> portToPath) {
     try {
-      int port = Integer.parseInt(readOneLine(dir.resolve(PORT_FILE)));
-      List<String> list = portToPath.get(port);
-      if (list == null) {
-        list = new ArrayList<>();
-        portToPath.put(port, list);
-      }
-      list.add(dir.toString());
+      portToPath.computeIfAbsent(Integer.parseInt(readOneLine(dir.resolve(PORT_FILE))), it -> new ArrayList<>()).add(dir.toString());
     }
     catch (NoSuchFileException ignore) {
     }
@@ -275,7 +262,7 @@ public final class SocketLock {
     try (Socket socket = new Socket(InetAddress.getLoopbackAddress(), portNumber)) {
       socket.setSoTimeout(5000);
 
-      DataInputStream in = new DataInputStream(socket.getInputStream());
+      DataInput in = new DataInputStream(socket.getInputStream());
       List<String> stringList = readStringSequence(in);
       // backward compatibility: requires at least one path to match
       boolean result = ContainerUtil.intersects(paths, stringList);
@@ -453,7 +440,7 @@ public final class SocketLock {
     context.writeAndFlush(buffer);
   }
 
-  private static @NotNull List<String> readStringSequence(@NotNull DataInputStream in) {
+  private static @NotNull List<String> readStringSequence(@NotNull DataInput in) {
     List<String> result = new ArrayList<>();
     while (true) {
       try {

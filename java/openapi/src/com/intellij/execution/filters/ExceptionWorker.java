@@ -1,21 +1,8 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.filters;
 
 import com.intellij.execution.filters.ExceptionAnalysisProvider.StackLine;
+import com.intellij.ide.actions.ActionsCollector;
 import com.intellij.openapi.actionSystem.ActionPlaces;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -248,7 +235,7 @@ public class ExceptionWorker {
         if (methodName != null) {
           return ParsedLine.createFromFileAndLine(new TextRange(0, methodName.getStartOffset() - 1),
                                                   methodName,
-                                                  spaceIndex + 1, lineEnd + 1, 
+                                                  spaceIndex + 1, lineEnd + 1,
                                                   line);
         }
       }
@@ -264,7 +251,7 @@ public class ExceptionWorker {
     String linePrefix = "line=";
     int lineNumberStart = line.indexOf(linePrefix);
     if (lineNumberStart < 0) return null;
-    
+
     int lineNumberEnd = line.indexOf(' ', lineNumberStart);
     if (lineNumberEnd < 0) return null;
 
@@ -274,18 +261,18 @@ public class ExceptionWorker {
     int lineNumber = getLineNumber(line.substring(lineNumberStart + linePrefix.length(), lineNumberEnd));
     if (lineNumber < 0) return null;
 
-    return new ParsedLine(trimRange(line, TextRange.create(line.indexOf(dash) + dash.length(), methodName.getStartOffset() - 1)), 
-                          methodName, 
+    return new ParsedLine(trimRange(line, TextRange.create(line.indexOf(dash) + dash.length(), methodName.getStartOffset() - 1)),
+                          methodName,
                           TextRange.create(lineNumberStart, lineNumberEnd), null, lineNumber);
   }
-  
+
   private static TextRange findMethodNameCandidateBefore(@NotNull String line, int start, int end) {
     int lParenIdx = line.lastIndexOf('(', end);
     if (lParenIdx < 0) return null;
 
     int dotIdx = line.lastIndexOf('.', lParenIdx);
     if (dotIdx < 0 || dotIdx < start) return null;
-    
+
     return TextRange.create(dotIdx + 1, lParenIdx);
   }
 
@@ -330,10 +317,10 @@ public class ExceptionWorker {
       if (lineNumber < 0) return null;
 
       return new ParsedLine(classFqnRange, methodNameRange, fileLineRange, fileAndLine.substring(0, colonIndex).trim(), lineNumber);
-    } 
+    }
   }
-  
-  private static class StackFrameMatcher implements ExceptionLineRefiner {
+
+  private static final class StackFrameMatcher implements ExceptionLineRefiner {
     private final String myMethodName;
     private final String myClassName;
     private final boolean myHasDollarInName;
@@ -393,10 +380,11 @@ public class ExceptionWorker {
     }
   }
 
-  private static class ExceptionColumnFinder implements HyperlinkInfoFactory.HyperlinkHandler {
+  private static final class ExceptionColumnFinder implements HyperlinkInfoFactory.HyperlinkHandler {
     private final ExceptionLineRefiner myElementMatcher;
     private final int myLineNumber;
     private final int myTextEndOffset;
+    private boolean myAnalysisWasActivated;
 
     private ExceptionColumnFinder(@NotNull ExceptionLineRefiner elementMatcher, int lineNumber, int textEndOffset) {
       myElementMatcher = elementMatcher;
@@ -434,6 +422,10 @@ public class ExceptionWorker {
                                        @NotNull PsiElement element,
                                        @NotNull Editor editor,
                                        @Nullable Editor originalEditor) {
+      if (myAnalysisWasActivated) {
+        // Do not show the balloon if analysis was already activated once on this link
+        return;
+      }
       Supplier<List<StackLine>> supplier;
       if (originalEditor != null) {
         Document origDocument = originalEditor.getDocument();
@@ -448,7 +440,7 @@ public class ExceptionWorker {
             if (line == null) break;
             String methodName = line.methodNameRange.substring(traceLine);
             if (methodName.startsWith("access$")) continue;
-            StackLine stackLine = new StackLine(line.classFqnRange.substring(traceLine), methodName);
+            StackLine stackLine = new StackLine(line.classFqnRange.substring(traceLine), methodName, line.fileName);
             nextLines.add(stackLine);
           }
           return nextLines;
@@ -477,6 +469,8 @@ public class ExceptionWorker {
                 if (b != null) {
                   Disposer.dispose(b);
                 }
+                myAnalysisWasActivated = true;
+                ActionsCollector.getInstance().record(project, action, null, element.getLanguage());
                 action.actionPerformed(AnActionEvent.createFromAnAction(action, null, ActionPlaces.UNKNOWN, DataContext.EMPTY_CONTEXT));
               }
             }

@@ -1,6 +1,8 @@
 // Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.documentation.render;
 
+import com.intellij.codeInsight.folding.CodeFoldingManager;
+import com.intellij.codeInsight.folding.CodeFoldingSettings;
 import com.intellij.openapi.actionSystem.IdeActions;
 import com.intellij.openapi.application.impl.NonBlockingReadActionImpl;
 import com.intellij.openapi.editor.ex.EditorSettingsExternalizable;
@@ -118,6 +120,44 @@ public class JavaDocRenderTest extends AbstractEditorTest {
                           "module some {}");
     updateRenderedItems(true);
     verifyItem(0, 19, "whatever");
+  }
+
+  public void testToggleNestedMember() {
+    configure("/**\n" +
+              " * class\n" +
+              " */\n" +
+              "class C {\n" +
+              "  /**\n" +
+              "   * method\n" +
+              "   */\n" +
+              "  void m() {\n" +
+              "    <caret>\n" +
+              "  }\n" +
+              "}", false);
+    verifyFoldingState("[]");
+    toggleItem();
+    verifyFoldingState("[FoldRegion +(27:51), placeholder='']");
+  }
+
+  public void testExpandAll() {
+    boolean savedValue = CodeFoldingSettings.getInstance().COLLAPSE_METHODS;
+    try {
+      CodeFoldingSettings.getInstance().COLLAPSE_METHODS = true;
+      configure("/** class */\n" +
+              "class C {\n" +
+              "  void m() {\n" +
+              "  }\n" +
+              "}", true);
+      int methodBodyPos = getEditor().getDocument().getText().indexOf("{\n  }");
+      CodeFoldingManager.getInstance(getProject()).buildInitialFoldings(getEditor());
+      executeAction(IdeActions.ACTION_COLLAPSE_ALL_REGIONS);
+      assertNotNull(getEditor().getFoldingModel().getCollapsedRegionAtOffset(methodBodyPos));
+      executeAction(IdeActions.ACTION_EXPAND_ALL_REGIONS);
+      assertNull(getEditor().getFoldingModel().getCollapsedRegionAtOffset(methodBodyPos));
+    }
+    finally {
+      CodeFoldingSettings.getInstance().COLLAPSE_METHODS = savedValue;
+    }
   }
 
   private void configure(@NotNull String text, boolean enableRendering) {

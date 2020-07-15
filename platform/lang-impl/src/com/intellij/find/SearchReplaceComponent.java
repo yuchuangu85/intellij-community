@@ -1,6 +1,7 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.find;
 
+import com.intellij.execution.runners.ExecutionUtil;
 import com.intellij.find.editorHeaderActions.*;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.DataManager;
@@ -46,7 +47,7 @@ import java.util.List;
 import static java.awt.event.InputEvent.CTRL_DOWN_MASK;
 import static java.awt.event.InputEvent.META_DOWN_MASK;
 
-public class SearchReplaceComponent extends EditorHeaderComponent implements DataProvider {
+public final class SearchReplaceComponent extends EditorHeaderComponent implements DataProvider {
   private final EventDispatcher<Listener> myEventDispatcher = EventDispatcher.create(Listener.class);
 
   private final MyTextComponentWrapper mySearchFieldWrapper;
@@ -62,8 +63,7 @@ public class SearchReplaceComponent extends EditorHeaderComponent implements Dat
   private final ActionToolbarImpl mySearchActionsToolbar;
   private final List<AnAction> myEmbeddedSearchActions = new ArrayList<>();
   private final List<Component> myExtraSearchButtons = new ArrayList<>();
-  @NotNull
-  private final ActionToolbarImpl.PopupStateModifier mySearchToolbar1PopupStateModifier;
+  private final BooleanGetter mySearchToolbarModifiedFlagGetter;
 
   private final DefaultActionGroup myReplaceFieldActions;
   private final ActionToolbarImpl myReplaceActionsToolbar;
@@ -104,6 +104,7 @@ public class SearchReplaceComponent extends EditorHeaderComponent implements Dat
                                  @Nullable DataProvider dataProvider) {
     myProject = project;
     myTargetComponent = targetComponent;
+    mySearchToolbarModifiedFlagGetter = searchToolbar1ModifiedFlagGetter;
     mySearchFieldActions = searchFieldActions;
     myReplaceFieldActions = replaceFieldActions;
     myReplaceAction = replaceAction;
@@ -129,19 +130,6 @@ public class SearchReplaceComponent extends EditorHeaderComponent implements Dat
     for (AnAction action : myEmbeddedReplaceActions) {
       replaceToolbar2Actions.remove(action);
     }
-
-
-    mySearchToolbar1PopupStateModifier = new ActionToolbarImpl.PopupStateModifier() {
-      @Override
-      public int getModifiedPopupState() {
-        return ActionButtonComponent.PUSHED;
-      }
-
-      @Override
-      public boolean willModify() {
-        return searchToolbar1ModifiedFlagGetter.get();
-      }
-    };
 
     mySearchFieldWrapper = new MyTextComponentWrapper() {
       @Override
@@ -208,6 +196,8 @@ public class SearchReplaceComponent extends EditorHeaderComponent implements Dat
     splitter.setSecondComponent(myRightPanel);
     splitter.setHonorComponentsMinimumSize(true);
     splitter.setLackOfSpaceStrategy(Splitter.LackOfSpaceStrategy.HONOR_THE_SECOND_MIN_SIZE);
+    splitter.setHonorComponentsPreferredSize(true);
+    splitter.setDividerPositionStrategy(Splitter.DividerPositionStrategy.KEEP_FIRST_SIZE);
     splitter.setAndLoadSplitterProportionKey("FindSplitterProportion");
     splitter.setOpaque(false);
     splitter.getDivider().setOpaque(false);
@@ -562,10 +552,18 @@ public class SearchReplaceComponent extends EditorHeaderComponent implements Dat
   @NotNull
   private ActionToolbarImpl createSearchToolbar1(@NotNull DefaultActionGroup group) {
     ActionToolbarImpl toolbar = createToolbar(group);
-    toolbar.setSecondaryButtonPopupStateModifier(mySearchToolbar1PopupStateModifier);
     toolbar.setSecondaryActionsTooltip(FindBundle.message("find.popup.show.filter.popup"));
-    toolbar.setSecondaryActionsIcon(AllIcons.General.Filter);
+    toolbar.setSecondaryActionsIcon(AllIcons.General.Filter, true);
     toolbar.setNoGapMode();
+    toolbar.setSecondaryButtonPopupStateModifier(new ActionToolbarImpl.SecondaryGroupUpdater() {
+      @Override
+      public void update(@NotNull AnActionEvent e) {
+        Icon icon = e.getPresentation().getIcon();
+        if (icon != null && mySearchToolbarModifiedFlagGetter.get()) {
+          e.getPresentation().setIcon(ExecutionUtil.getLiveIndicator(icon));
+        }
+      }
+    });
 
     KeyboardShortcut keyboardShortcut = ActionManager.getInstance().getKeyboardShortcut("ShowFilterPopup");
     if (keyboardShortcut != null) {
@@ -603,7 +601,7 @@ public class SearchReplaceComponent extends EditorHeaderComponent implements Dat
   }
 
   @SuppressWarnings("HardCodedStringLiteral")
-  public static class Builder {
+  public static final class Builder {
     private final Project myProject;
     private final JComponent myTargetComponent;
 

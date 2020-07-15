@@ -56,7 +56,7 @@ import java.util.function.Supplier;
 /**
  * @author Maxim.Mossienko
  */
-public class UIUtil {
+public final class UIUtil {
   @NonNls private static final String SS_GROUP = "structuralsearchgroup";
 
   public static final NotificationGroup SSR_NOTIFICATION_GROUP =
@@ -233,7 +233,18 @@ public class UIUtil {
 
   @NotNull
   public static EditorTextField createEditorComponent(String text, String fileName, Project project) {
-    return new EditorTextField(text, project, getFileType(fileName));
+    final FileType fileType = getFileType(fileName);
+    final Document document = createDocument(fileType, text, project);
+    return new EditorTextField(document, project, fileType);
+  }
+
+  @NotNull
+  public static Document createDocument(FileType fileType, String text, Project project) {
+    final PsiFile file =
+      PsiFileFactory.getInstance(project).createFileFromText("Dummy." + fileType.getDefaultExtension(), fileType, text, -1, true);
+    final Document document = PsiDocumentManager.getInstance(project).getDocument(file);
+    assert document != null;
+    return document;
   }
 
   private static FileType getFileType(final String fileName) {

@@ -9,7 +9,6 @@ import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.progress.util.ProgressWindow;
 import com.intellij.openapi.ui.Splitter;
 import com.intellij.openapi.util.Disposer;
-import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.vcs.VcsDataKeys;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -113,7 +112,12 @@ public class MainFrame extends JPanel implements DataProvider, Disposable {
     }, this);
     myChangesBrowser.getDiffAction().registerCustomShortcutSet(myChangesBrowser.getDiffAction().getShortcutSet(), getGraphTable());
     JBLoadingPanel changesLoadingPane = new JBLoadingPanel(new BorderLayout(), this,
-                                                           ProgressWindow.DEFAULT_PROGRESS_DIALOG_POSTPONE_TIME_MILLIS);
+                                                           ProgressWindow.DEFAULT_PROGRESS_DIALOG_POSTPONE_TIME_MILLIS) {
+      @Override
+      public Dimension getMinimumSize() {
+        return VcsLogUiUtil.expandToFitToolbar(super.getMinimumSize(), myChangesBrowser.getToolbar().getComponent());
+      }
+    };
     changesLoadingPane.add(myChangesBrowser);
 
     myToolbar = createActionsToolbar();
@@ -151,7 +155,8 @@ public class MainFrame extends JPanel implements DataProvider, Disposable {
     if (withDiffPreview) {
       myDiffPreview = new FrameDiffPreview<VcsLogChangeProcessor>(createDiffPreview(false, myChangesBrowser),
                                                                   myUiProperties, myChangesBrowserSplitter, DIFF_SPLITTER_PROPORTION,
-                                                                  Registry.is("vcs.log.diff.preview.vertical"), 0.7f) {
+                                                                  myUiProperties.get(MainVcsLogUiProperties.DIFF_PREVIEW_VERTICAL_SPLIT),
+                                                                  0.7f) {
         @Override
         public void updatePreview(boolean state) {
           getPreviewDiff().updatePreview(state);
@@ -228,37 +233,26 @@ public class MainFrame extends JPanel implements DataProvider, Disposable {
     mainGroup.add(myFilterUi.createActionGroup());
     mainGroup.addSeparator();
     mainGroup.add(toolbarGroup);
-    ActionToolbar toolbar = createActionsToolbar(mainGroup);
+    ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar(VcsLogActionPlaces.VCS_LOG_TOOLBAR_PLACE, mainGroup, true);
+    toolbar.setTargetComponent(this);
 
     Wrapper textFilter = new Wrapper(myFilterUi.getTextFilterComponent());
     textFilter.setVerticalSizeReferent(toolbar.getComponent());
 
     DefaultActionGroup rightCornerGroup =
       new DefaultActionGroup(ActionManager.getInstance().getAction(VcsLogActionPlaces.TOOLBAR_RIGHT_CORNER_ACTION_GROUP));
-    ActionToolbar rightCornerToolbar = createActionsToolbar(rightCornerGroup);
+    ActionToolbar rightCornerToolbar = ActionManager.getInstance().createActionToolbar(VcsLogActionPlaces.VCS_LOG_TOOLBAR_PLACE,
+                                                                                       rightCornerGroup, true);
+    rightCornerToolbar.setTargetComponent(this);
     rightCornerToolbar.setReservePlaceAutoPopupIcon(false);
     rightCornerToolbar.setLayoutPolicy(ActionToolbar.NOWRAP_LAYOUT_POLICY);
 
-    DefaultActionGroup leftCornerGroup =
-      new DefaultActionGroup(ActionManager.getInstance().getAction(VcsLogActionPlaces.TOOLBAR_LEFT_CORNER_ACTION_GROUP));
-    ActionToolbar leftCornerToolbar = createActionsToolbar(leftCornerGroup);
-    leftCornerToolbar.setReservePlaceAutoPopupIcon(false);
-    leftCornerToolbar.setLayoutPolicy(ActionToolbar.NOWRAP_LAYOUT_POLICY);
-
-    JPanel panel = new JPanel(new MigLayout("ins 0, fill", "[]0[left]0[left, fill]push[right]", "center"));
+    JPanel panel = new JPanel(new MigLayout("ins 0, fill", "[left]0[left, fill]push[pref:pref, right]", "center"));
     GuiUtils.installVisibilityReferent(panel, toolbar.getComponent());
-    panel.add(leftCornerToolbar.getComponent());
     panel.add(textFilter);
     panel.add(toolbar.getComponent());
     panel.add(rightCornerToolbar.getComponent());
     return panel;
-  }
-
-  @NotNull
-  private ActionToolbar createActionsToolbar(@NotNull DefaultActionGroup mainGroup) {
-    ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar(VcsLogActionPlaces.VCS_LOG_TOOLBAR_PLACE, mainGroup, true);
-    toolbar.setTargetComponent(this);
-    return toolbar;
   }
 
   @Nullable
@@ -414,9 +408,9 @@ public class MainFrame extends JPanel implements DataProvider, Disposable {
         if (visiblePack.getFilters().isEmpty()) {
           statusText.setText(VcsLogBundle.message("vcs.log.no.commits.status")).
             appendSecondaryText(VcsLogBundle.message("vcs.log.commit.status.action"), VcsLogUiUtil.getLinkAttributes(),
-                                ActionUtil.createActionListener(VcsLogActionPlaces.CHECKIN_PROJECT_ACTION, this,
+                                ActionUtil.createActionListener(IdeActions.ACTION_CHECKIN_PROJECT, this,
                                                                 ActionPlaces.UNKNOWN));
-          String shortcutText = KeymapUtil.getFirstKeyboardShortcutText(VcsLogActionPlaces.CHECKIN_PROJECT_ACTION);
+          String shortcutText = KeymapUtil.getFirstKeyboardShortcutText(IdeActions.ACTION_CHECKIN_PROJECT);
           if (!shortcutText.isEmpty()) {
             statusText.appendSecondaryText(" (" + shortcutText + ")", StatusText.DEFAULT_ATTRIBUTES, null);
           }

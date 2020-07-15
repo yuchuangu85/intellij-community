@@ -12,13 +12,18 @@ import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.application.runInEdt
 import com.intellij.openapi.components.*
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.util.text.StringUtil
+import com.intellij.psi.codeStyle.FixingLayoutMatcher
+import com.intellij.psi.codeStyle.MinusculeMatcher
+import com.intellij.psi.codeStyle.NameUtil
 import com.intellij.ui.*
 import com.intellij.ui.speedSearch.SpeedSearch
+import com.intellij.ui.speedSearch.SpeedSearchSupply
 import com.intellij.util.EditSourceOnDoubleClickHandler.isToggleEvent
 import com.intellij.util.PlatformIcons
 import com.intellij.util.ThreeState
 import com.intellij.util.containers.SmartHashSet
-import com.intellij.util.ui.EmptyIcon
 import com.intellij.util.ui.UIUtil
 import com.intellij.util.ui.tree.TreeUtil
 import git4idea.config.GitVcsSettings
@@ -31,7 +36,6 @@ import java.awt.event.MouseEvent
 import javax.swing.JComponent
 import javax.swing.JTree
 import javax.swing.TransferHandler
-import javax.swing.border.Border
 import javax.swing.event.TreeExpansionEvent
 import javax.swing.event.TreeExpansionListener
 import javax.swing.tree.TreePath
@@ -79,7 +83,7 @@ internal class BranchesTreeComponent(project: Project) : DnDAwareTree() {
           AllIcons.Nodes.Favorite
         }
         isBranchNode -> {
-          EmptyIcon.ICON_16
+          AllIcons.Vcs.BranchNode
         }
         isGroupNode -> {
           PlatformIcons.FOLDER_ICON
@@ -163,8 +167,45 @@ internal class FilteringBranchesTree(project: Project,
     }
   }
 
-  override fun installSearchField(textFieldBorder: Border?): SearchTextField {
-    val searchField = super.installSearchField(textFieldBorder)
+  override fun createSpeedSearch(searchTextField: SearchTextField): SpeedSearchSupply =
+    object : FilteringSpeedSearch(searchTextField) {
+
+      private val customWordMatchers = hashSetOf<MinusculeMatcher>()
+
+      override fun matchingFragments(text: String): Iterable<TextRange?>? {
+        val allTextRanges = super.matchingFragments(text)
+        if (customWordMatchers.isEmpty()) return allTextRanges
+        val wordRanges = arrayListOf<TextRange>()
+        for (wordMatcher in customWordMatchers) {
+          wordMatcher.matchingFragments(text)?.let(wordRanges::addAll)
+        }
+        return when {
+          allTextRanges != null -> allTextRanges + wordRanges
+          wordRanges.isNotEmpty() -> wordRanges
+          else -> null
+        }
+      }
+
+      override fun onUpdatePattern(text: String?) {
+        customWordMatchers.clear()
+        customWordMatchers.addAll(buildCustomWordMatchers(text))
+      }
+
+      private fun buildCustomWordMatchers(text: String?): Set<MinusculeMatcher> {
+        if (text == null) return emptySet()
+
+        val wordMatchers = hashSetOf<MinusculeMatcher>()
+        for (word in StringUtil.split(text, " ")) {
+          wordMatchers.add(
+            FixingLayoutMatcher("*$word", NameUtil.MatchingCaseSensitivity.NONE, ""))
+        }
+
+        return wordMatchers
+      }
+    }
+
+  override fun installSearchField(): SearchTextField {
+    val searchField = super.installSearchField()
     component.searchField = searchField
     return searchField
   }
@@ -189,13 +230,18 @@ internal class FilteringBranchesTree(project: Project,
     TreeUtil.restoreExpandedPaths(component, expandedPaths.toList())
   }
 
-  override fun onSpeedSearchUpdateComplete() {
+  override fun expandTreeOnSearchUpdateComplete(pattern: String?) {
     restorePreviouslyExpandedPaths()
+  }
+
+  override fun onSpeedSearchUpdateComplete(pattern: String?) {
     updateSpeedSearchBackground()
   }
 
+  override fun useIdentityHashing(): Boolean = false
+
   private fun updateSpeedSearchBackground() {
-    val speedSearch = searchModel.speedSearchSupply as? SpeedSearch ?: return
+    val speedSearch = searchModel.speedSearch as? SpeedSearch ?: return
     val textEditor = component.searchField?.textEditor ?: return
     if (isEmptyModel()) {
       textEditor.isOpaque = true
@@ -229,7 +275,14 @@ internal class FilteringBranchesTree(project: Project,
 
   private fun BranchNodeDescriptor.getDirectChildren() = nodeDescriptorsModel.getChildrenForParent(this)
 
-  override fun rebuildTree(initial: Boolean): Boolean {
+  fun update(initial: Boolean) {
+    if (rebuildTree(initial)) {
+      tree.revalidate()
+      tree.repaint()
+    }
+  }
+
+  fun rebuildTree(initial: Boolean): Boolean {
     val rebuilded = buildTreeNodesIfNeeded()
     val treeState = project.service<BranchesTreeStateHolder>()
     if (!initial) {
@@ -301,7 +354,7 @@ private val BRANCH_TREE_TRANSFER_HANDLER = object : TransferHandler() {
   override fun getSourceActions(c: JComponent) = COPY_OR_MOVE
 }
 
-@State(name = "BranchesTreeState", storages = [Storage(StoragePathMacros.WORKSPACE_FILE)])
+@State(name = "BranchesTreeState", storages = [Storage(StoragePathMacros.PRODUCT_WORKSPACE_FILE)], reportStatistic = false)
 internal class BranchesTreeStateHolder : PersistentStateComponent<TreeState> {
   private lateinit var branchesTree: FilteringBranchesTree
   private lateinit var treeState: TreeState

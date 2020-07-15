@@ -13,9 +13,7 @@ import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.IndexNotReadyException;
 import com.intellij.openapi.ui.Queryable;
-import com.intellij.openapi.util.Condition;
-import com.intellij.openapi.util.Conditions;
-import com.intellij.openapi.util.Pair;
+import com.intellij.openapi.util.*;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.JavaPsiFacadeImpl;
@@ -168,8 +166,9 @@ public class PsiPackageImpl extends PsiPackageBase implements PsiPackage, Querya
   }
 
   private PsiClass @NotNull [] getCachedClassesByName(@NotNull String name, GlobalSearchScope scope) {
-    if (DumbService.getInstance(getProject()).isDumb()) {
-      return getCachedClassInDumbMode(name, scope);
+    DumbService dumbService = DumbService.getInstance(getProject());
+    if (dumbService.isDumb() && dumbService.isAlternativeResolveEnabled()) {
+      return getCachedClassesInDumbMode(name, scope);
     }
 
     if (ModelBranchImpl.hasBranchedFilesInScope(scope)) {
@@ -185,7 +184,11 @@ public class PsiPackageImpl extends PsiPackageBase implements PsiPackage, Querya
       return classes;
     }
 
-    map.put(name, classes = findAllClasses(name, new EverythingGlobalScope(getProject())));
+    RecursionGuard.StackStamp stamp = RecursionManager.markStack();
+    classes = findAllClasses(name, new EverythingGlobalScope(getProject()));
+    if (stamp.mayCacheNow()) {
+      map.put(name, classes);
+    }
     return classes;
   }
 
@@ -195,7 +198,7 @@ public class PsiPackageImpl extends PsiPackageBase implements PsiPackage, Querya
     return getFacade().findClasses(classQName, scope);
   }
 
-  private PsiClass @NotNull [] getCachedClassInDumbMode(final String name, GlobalSearchScope scope) {
+  private PsiClass[] getCachedClassesInDumbMode(String name, GlobalSearchScope scope) {
     Map<GlobalSearchScope, Map<String, PsiClass[]>> scopeMap = SoftReference.dereference(myDumbModeFullCache);
     if (scopeMap == null) {
       myDumbModeFullCache = new SoftReference<>(scopeMap = new ConcurrentHashMap<>());
@@ -206,6 +209,7 @@ public class PsiPackageImpl extends PsiPackageBase implements PsiPackage, Querya
       PsiClass[] array = findClassesHeuristically(name, scope);
       if (array != null) return array;
 
+      RecursionGuard.StackStamp stamp = RecursionManager.markStack();
       map = new HashMap<>();
       for (PsiClass psiClass : getClasses(scope)) {
         String psiClassName = psiClass.getName();
@@ -214,7 +218,9 @@ public class PsiPackageImpl extends PsiPackageBase implements PsiPackage, Querya
           map.put(psiClassName, existing == null ? new PsiClass[]{psiClass} : ArrayUtil.append(existing, psiClass));
         }
       }
-      scopeMap.put(scope, map);
+      if (stamp.mayCacheNow()) {
+        scopeMap.put(scope, map);
+      }
     }
     PsiClass[] classes = map.get(name);
     return classes == null ? PsiClass.EMPTY_ARRAY : classes;
@@ -231,6 +237,7 @@ public class PsiPackageImpl extends PsiPackageBase implements PsiPackage, Querya
     }
     PsiClass[] result = partial.get(Pair.create(scope, name));
     if (result == null) {
+      RecursionGuard.StackStamp stamp = RecursionManager.markStack();
       List<PsiClass> fastClasses = new ArrayList<>();
       for (PsiDirectory directory : getDirectories(scope)) {
         List<PsiFile> sameNamed = ContainerUtil.filter(directory.getFiles(), file -> file.getName().contains(name));
@@ -241,7 +248,7 @@ public class PsiPackageImpl extends PsiPackageBase implements PsiPackage, Querya
           }
         }
       }
-      if (!fastClasses.isEmpty()) {
+      if (!fastClasses.isEmpty() && stamp.mayCacheNow()) {
         partial.put(Pair.create(scope, name), result = fastClasses.toArray(PsiClass.EMPTY_ARRAY));
       }
     }
@@ -395,7 +402,7 @@ public class PsiPackageImpl extends PsiPackageBase implements PsiPackage, Querya
       }
 
       PsiCompositeModifierList result = modifiers.isEmpty() ? null : new PsiCompositeModifierList(getManager(), modifiers);
-      return new Result<>(result, PsiModificationTracker.OUT_OF_CODE_BLOCK_MODIFICATION_COUNT);
+      return new Result<>(result, PsiModificationTracker.MODIFICATION_COUNT);
     }
   }
 

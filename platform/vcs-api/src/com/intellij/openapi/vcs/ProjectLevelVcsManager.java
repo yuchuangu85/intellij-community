@@ -86,9 +86,9 @@ public abstract class ProjectLevelVcsManager {
    *
    * @return the root, or {@code null} if the specified file is not in a VCS-managed directory.
    */
-  public abstract @Nullable VirtualFile getVcsRootFor(FilePath file);
+  public abstract @Nullable VirtualFile getVcsRootFor(@Nullable FilePath file);
 
-  public abstract @Nullable VcsRoot getVcsRootObjectFor(final VirtualFile file);
+  public abstract @Nullable VcsRoot getVcsRootObjectFor(@Nullable VirtualFile file);
 
   public abstract @Nullable VcsRoot getVcsRootObjectFor(FilePath file);
 
@@ -106,6 +106,11 @@ public abstract class ProjectLevelVcsManager {
    * Returns the list of VCSes used by at least one module in the project.
    */
   public abstract AbstractVcs @NotNull [] getAllActiveVcss();
+
+  /**
+   * @return VCS configured for the project, if there's only a single one. Return 'null' otherwise.
+   */
+  public abstract @Nullable AbstractVcs getSingleVCS();
 
   public abstract boolean hasActiveVcss();
 
@@ -177,6 +182,8 @@ public abstract class ProjectLevelVcsManager {
 
   public abstract VcsRoot @NotNull [] getAllVcsRoots();
 
+  public abstract String getConsolidatedVcsName();
+
   /**
    * @deprecated Use just {@link #setDirectoryMappings(List)}.
    */
@@ -241,4 +248,9 @@ public abstract class ProjectLevelVcsManager {
    * Executes task on pooled thread, delayed until core vcs services are initialized.
    */
   public abstract void runAfterInitialization(@NotNull Runnable runnable);
+
+  /**
+   * Checks whether VCS console is enabled and VCS tool window exists.
+   */
+  public abstract boolean isConsoleVisible();
 }

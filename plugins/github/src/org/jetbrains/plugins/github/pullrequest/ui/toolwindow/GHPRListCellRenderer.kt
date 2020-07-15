@@ -7,12 +7,10 @@ import com.intellij.util.ui.JBDimension
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.ListUiUtil
 import com.intellij.util.ui.UIUtil
-import icons.GithubIcons
 import net.miginfocom.layout.CC
 import net.miginfocom.layout.LC
 import net.miginfocom.swing.MigLayout
 import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestShort
-import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestState
 import org.jetbrains.plugins.github.i18n.GithubBundle
 import org.jetbrains.plugins.github.pullrequest.avatars.CachingGithubAvatarIconsProvider
 import org.jetbrains.plugins.github.ui.InlineIconButton
@@ -78,9 +76,9 @@ class GHPRListCellRenderer(private val avatarIconsProvider: CachingGithubAvatarI
                          .insets("0", "0", "0", "0")
                          .fillX())
 
-    add(infoPanel, CC())
-    add(assignees, CC().gapBefore("push"))
-    add(openButtonPanel, CC().growY())
+    add(infoPanel, CC().minWidth("0"))
+    add(assignees, CC().minWidth("0").gapBefore("push"))
+    add(openButtonPanel, CC().minWidth("pref").growY())
   }
 
   override fun getListCellRendererComponent(list: JList<out GHPullRequestShort>,
@@ -93,12 +91,8 @@ class GHPRListCellRenderer(private val avatarIconsProvider: CachingGithubAvatarI
     val secondaryTextColor = ListUiUtil.WithTallRow.secondaryForeground(list, isSelected)
 
     stateIcon.apply {
-      icon = when (value.state) {
-        GHPullRequestState.CLOSED -> GithubIcons.PullRequestClosed
-        GHPullRequestState.MERGED -> GithubIcons.PullRequestMerged
-        GHPullRequestState.OPEN -> GithubIcons.PullRequestOpen
-      }
-      toolTipText = value.state.toString().toLowerCase().capitalize()
+      icon = GithubUIUtil.getPullRequestStateIcon(value.state, value.isDraft)
+      toolTipText = GithubUIUtil.getPullRequestStateText(value.state, value.isDraft)
     }
     title.apply {
       text = value.title

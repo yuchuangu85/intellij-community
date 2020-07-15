@@ -62,6 +62,7 @@ public interface IdeActions {
   @NonNls String ACTION_EDITOR_CREATE_RECTANGULAR_SELECTION_ON_MOUSE_DRAG = "EditorCreateRectangularSelectionOnMouseDrag";
   @NonNls String ACTION_EDITOR_CLONE_CARET_BELOW= "EditorCloneCaretBelow";
   @NonNls String ACTION_EDITOR_CLONE_CARET_ABOVE= "EditorCloneCaretAbove";
+  @NonNls String ACTION_EDITOR_ADD_CARET_PER_SELECTED_LINE = "EditorAddCaretPerSelectedLine";
   @NonNls String ACTION_EDITOR_TOGGLE_STICKY_SELECTION= "EditorToggleStickySelection";
   @NonNls String ACTION_EDITOR_TOGGLE_OVERWRITE_MODE= "EditorToggleInsertState";
   @NonNls String ACTION_EDITOR_TOGGLE_CASE= "EditorToggleCase";
@@ -111,6 +112,7 @@ public interface IdeActions {
   @NonNls String GROUP_CONSOLE_EDITOR_POPUP = "ConsoleEditorPopupMenu";
   @NonNls String GROUP_CUT_COPY_PASTE = "CutCopyPasteGroup";
   @NonNls String GROUP_EDITOR_TAB_POPUP = "EditorTabPopupMenu";
+  @NonNls String GROUP_HELP_MENU = "HelpMenu";
 
   @NonNls String ACTION_CVS_ADD = "Cvs.Add";
   @NonNls String ACTION_CVS_COMMIT = "Cvs.Commit";
@@ -257,6 +259,7 @@ public interface IdeActions {
   @NonNls String ACTION_CHECKIN_PROJECT = "CheckinProject";
   @NonNls String ACTION_FILE_STRUCTURE_POPUP = "FileStructurePopup";
   @NonNls String ACTION_TOGGLE_RENDERED_DOC = "ToggleRenderedDocPresentation";
+  @NonNls String ACTION_TOGGLE_RENDERED_DOC_FOR_ALL = "ToggleRenderedDocPresentationForAll";
 
   @NonNls String GROUP_DOC_COMMENT_GUTTER_ICON_CONTEXT_MENU = "DocCommentGutterIconContextMenu";
 

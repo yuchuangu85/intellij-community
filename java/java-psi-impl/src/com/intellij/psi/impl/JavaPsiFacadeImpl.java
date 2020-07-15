@@ -8,10 +8,7 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProgressIndicatorProvider;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.AtomicNotNullLazyValue;
-import com.intellij.openapi.util.Comparing;
-import com.intellij.openapi.util.Condition;
-import com.intellij.openapi.util.Conditions;
+import com.intellij.openapi.util.*;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.file.impl.JavaFileManager;
@@ -50,21 +47,10 @@ public class JavaPsiFacadeImpl extends JavaPsiFacadeEx {
     myJvmFacade = AtomicNotNullLazyValue.createValue(() -> (JvmFacadeImpl)JvmFacade.getInstance(project));
     myConversionHelper = JvmPsiConversionHelper.getInstance(myProject);
 
-    final PsiModificationTracker modificationTracker = PsiManager.getInstance(project).getModificationTracker();
-
-    project.getMessageBus().connect().subscribe(PsiModificationTracker.TOPIC, new PsiModificationTracker.Listener() {
-      private long lastTimeSeen = -1L;
-
-      @Override
-      public void modificationCountChanged() {
-        myClassCache.clear();
-        final long now = modificationTracker.getJavaStructureModificationCount();
-        if (lastTimeSeen != now) {
-          lastTimeSeen = now;
-          myPackageCache.clear();
-          myModuleCache.clear();
-        }
-      }
+    project.getMessageBus().connect().subscribe(PsiModificationTracker.TOPIC, () -> {
+      myClassCache.clear();
+      myPackageCache.clear();
+      myModuleCache.clear();
     });
 
     DummyHolderFactory.setFactory(new JavaDummyHolderFactory());
@@ -81,8 +67,9 @@ public class JavaPsiFacadeImpl extends JavaPsiFacadeEx {
     }
     PsiClass result = map.get(qualifiedName);
     if (result == null) {
+      RecursionGuard.StackStamp stamp = RecursionManager.markStack();
       result = doFindClass(qualifiedName, scope);
-      if (result != null) {
+      if (result != null && stamp.mayCacheNow()) {
         map.put(qualifiedName, result);
       }
     }
@@ -100,7 +87,7 @@ public class JavaPsiFacadeImpl extends JavaPsiFacadeEx {
       return null;
     }
 
-    List<PsiElementFinder> finders = finders();
+    List<PsiElementFinder> finders = filteredFinders();
     Condition<PsiClass> classesFilter = getFilterFromFinders(scope, finders);
 
     for (PsiElementFinder finder : finders) {
@@ -167,7 +154,7 @@ public class JavaPsiFacadeImpl extends JavaPsiFacadeEx {
     if (shouldUseSlowResolve()) {
       return Arrays.asList(findClassesInDumbMode(qualifiedName, scope));
     }
-    List<PsiElementFinder> finders = finders();
+    List<PsiElementFinder> finders = filteredFinders();
     Condition<PsiClass> classesFilter = getFilterFromFinders(scope, finders);
 
     List<PsiClass> result = null;
@@ -196,11 +183,6 @@ public class JavaPsiFacadeImpl extends JavaPsiFacadeEx {
   private boolean shouldUseSlowResolve() {
     DumbService dumbService = DumbService.getInstance(getProject());
     return dumbService.isDumb() && dumbService.isAlternativeResolveEnabled();
-  }
-
-  @NotNull
-  private List<PsiElementFinder> finders() {
-    return PsiElementFinder.EP.getPoint(myProject).getExtensionList();
   }
 
   @Override
@@ -242,7 +224,7 @@ public class JavaPsiFacadeImpl extends JavaPsiFacadeEx {
 
   @NotNull
   private List<PsiElementFinder> filteredFinders() {
-    return DumbService.getInstance(getProject()).filterByDumbAwareness(finders());
+    return DumbService.getInstance(getProject()).filterByDumbAwareness(PsiElementFinder.EP.getPoint(myProject).getExtensionList());
   }
 
   @Override

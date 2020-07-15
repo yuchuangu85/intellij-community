@@ -56,7 +56,7 @@ public class PyFileImpl extends PsiFileBase implements PyFile, PyExpression {
   @NotNull private volatile SoftReference<ExportedNameCache> myExportedNameCache = new SoftReference<>(null);
   @NotNull private final PsiModificationTracker myModificationTracker;
 
-  private class ExportedNameCache {
+  private final class ExportedNameCache {
     private final List<String> myNameDefinerNegativeCache = new ArrayList<>();
     private long myNameDefinerOOCBModCount = -1;
     private final long myModificationStamp;
@@ -117,7 +117,7 @@ public class PyFileImpl extends PsiFileBase implements PyFile, PyExpression {
     @NotNull
     private List<RatedResolveResult> multiResolve(@NotNull String name) {
       synchronized (myNameDefinerNegativeCache) {
-        final long modCount = myModificationTracker.getOutOfCodeBlockModificationCount();
+        final long modCount = myModificationTracker.getModificationCount();
         if (modCount != myNameDefinerOOCBModCount) {
           myNameDefinerNegativeCache.clear();
           myNameDefinerOOCBModCount = modCount;

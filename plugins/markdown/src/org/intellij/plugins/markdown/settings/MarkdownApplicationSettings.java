@@ -8,7 +8,6 @@ import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
 import com.intellij.util.messages.Topic;
-import com.intellij.util.ui.StartupUiUtil;
 import com.intellij.util.xmlb.annotations.Attribute;
 import com.intellij.util.xmlb.annotations.Property;
 import org.jetbrains.annotations.NotNull;
@@ -28,7 +27,9 @@ public final class MarkdownApplicationSettings implements PersistentStateCompone
     MarkdownLAFListener lafListener = new MarkdownLAFListener();
     ApplicationManager.getApplication().getMessageBus().connect().subscribe(LafManagerListener.TOPIC, lafListener);
     // Let's init proper CSS scheme
-    ApplicationManager.getApplication().invokeLater(() -> lafListener.updateCssSettingsForced(StartupUiUtil.isUnderDarcula()));
+    ApplicationManager.getApplication().invokeLater(() -> {
+      MarkdownLAFListener.reinit();
+    });
   }
 
   @NotNull
@@ -56,8 +57,7 @@ public final class MarkdownApplicationSettings implements PersistentStateCompone
   @NotNull
   @Override
   public MarkdownCssSettings getMarkdownCssSettings() {
-    if (MarkdownCssSettings.DARCULA.getStylesheetUri().equals(myState.myCssSettings.getStylesheetUri())
-        || MarkdownCssSettings.DEFAULT.getStylesheetUri().equals(myState.myCssSettings.getStylesheetUri())) {
+    if (MarkdownCssSettings.DEFAULT.getStylesheetUri().equals(myState.myCssSettings.getStylesheetUri())) {
       return new MarkdownCssSettings(false,
                                      "",
                                      myState.myCssSettings.isTextEnabled(),

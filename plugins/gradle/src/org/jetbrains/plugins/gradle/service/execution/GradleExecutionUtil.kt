@@ -1,6 +1,5 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 @file:JvmName("GradleExecutionUtil")
-
 package org.jetbrains.plugins.gradle.service.execution
 
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId
@@ -14,6 +13,7 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
+import com.intellij.util.io.systemIndependentPath
 import org.gradle.tooling.GradleConnector
 import org.gradle.util.GradleVersion
 import org.jetbrains.plugins.gradle.service.GradleInstallationManager
@@ -23,9 +23,9 @@ import org.jetbrains.plugins.gradle.settings.GradleSettings
 import org.jetbrains.plugins.gradle.util.GradleBundle
 import org.jetbrains.plugins.gradle.util.GradleConstants.SYSTEM_ID
 import org.jetbrains.plugins.gradle.util.GradleUtil
+import java.nio.file.Path
 
-
-fun ensureInstalledWrapper(project: Project, externalProjectPath: String, gradleVersion: GradleVersion, callback: Runnable) {
+fun ensureInstalledWrapper(project: Project, externalProjectPath: Path, gradleVersion: GradleVersion, callback: Runnable) {
   val ensureInstalledWrapperTask = EnsureInstalledWrapperExecutionTask(project, externalProjectPath, gradleVersion)
   val title = GradleBundle.message("gradle.project.generation.wrapper.progress.title")
   val task = object : Task.Backgroundable(project, title, true) {
@@ -41,10 +41,9 @@ fun ensureInstalledWrapper(project: Project, externalProjectPath: String, gradle
 
 private class EnsureInstalledWrapperExecutionTask(
   project: Project,
-  externalProjectPath: String,
+  externalProjectPath: Path,
   private val gradleVersion: GradleVersion
-) : AbstractExternalSystemTask(SYSTEM_ID, EXECUTE_TASK, project, externalProjectPath) {
-
+) : AbstractExternalSystemTask(SYSTEM_ID, EXECUTE_TASK, project, externalProjectPath.systemIndependentPath) {
   private val progressNotificationManager = ExternalSystemProgressNotificationManagerImpl.getInstanceImpl()
   private val newCancellationTokenSource = GradleConnector.newCancellationTokenSource()
 

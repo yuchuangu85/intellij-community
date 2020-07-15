@@ -34,7 +34,7 @@ import java.util.List;
 
 import static com.intellij.execution.services.ServiceViewDnDDescriptor.Position.*;
 
-class ServiceViewDragHelper {
+final class ServiceViewDragHelper {
   static DnDSource createSource(@NotNull ServiceView serviceView) {
     return new ServiceViewDnDSource(serviceView);
   }
@@ -309,7 +309,7 @@ class ServiceViewDragHelper {
       return new EventContext(point, cellBounds, (ServiceViewDnDDescriptor)viewDescriptor);
     }
 
-    private static class EventContext {
+    private static final class EventContext {
       final Point point;
       final Rectangle cellBounds;
       final ServiceViewDnDDescriptor descriptor;

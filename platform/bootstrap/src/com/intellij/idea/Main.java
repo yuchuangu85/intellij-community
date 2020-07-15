@@ -8,6 +8,7 @@ import com.intellij.openapi.application.JetBrainsProtocolHandler;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.util.ArrayUtilRt;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.TestOnly;
 
 import javax.swing.*;
 import java.awt.*;
@@ -17,6 +18,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -61,6 +63,7 @@ public final class Main {
   public static void main(String[] args) {
     LinkedHashMap<String, Long> startupTimings = new LinkedHashMap<>();
     startupTimings.put("startup begin", System.nanoTime());
+
     if (args.length == 1 && "%f".equals(args[0])) {
       args = NO_ARGS;
     }
@@ -144,14 +147,32 @@ public final class Main {
       System.setProperty(AWT_HEADLESS, Boolean.TRUE.toString());
     }
 
-    boolean isFirstArgRegularFile;
-    try {
-      isFirstArgRegularFile = args.length > 0 && Files.isRegularFile(Paths.get(args[0]));
-    } catch (Throwable t) {
-      isFirstArgRegularFile = false;
-    }
+    isLightEdit = "LightEdit".equals(System.getProperty(PLATFORM_PREFIX_PROPERTY)) || !isCommandLine && isFileAfterOptions(args);
+  }
 
-    isLightEdit = "LightEdit".equals(System.getProperty(PLATFORM_PREFIX_PROPERTY)) || isFirstArgRegularFile;
+  private static boolean isFileAfterOptions(String @NotNull [] args) {
+    for (String arg : args) {
+      if (!arg.startsWith("-")) { // If not an option
+        try {
+          Path path = Paths.get(arg);
+          return Files.isRegularFile(path) || !Files.exists(path);
+        }
+        catch (Throwable t) {
+          return false;
+        }
+      }
+      else if (arg.equals("-l") || arg.equals("--line") || arg.equals("-c") || arg.equals("--column")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @TestOnly
+  public static void setHeadlessInTestMode(boolean isHeadless) {
+    Main.isHeadless = isHeadless;
+    isCommandLine = true;
+    isLightEdit = false;
   }
 
   public static boolean isHeadless(String @NotNull [] args) {

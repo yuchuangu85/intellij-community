@@ -31,8 +31,9 @@ final class DumbServiceGuiTaskQueue {
     myTaskQueue = queue;
   }
 
-  void processTasksWithProgress(@NotNull Consumer<ProgressIndicatorEx> bindProgress,
-                                @NotNull IdeActivity activity) {
+  void processTasksWithProgress(@NotNull IdeActivity activity,
+                                @NotNull Consumer<? super ProgressIndicatorEx> bindProgress,
+                                @NotNull Consumer<? super ProgressIndicatorEx> unbindProgress) {
     while (true) {
       //we do jump in EDT to
       if (myProject.isDisposed()) break;
@@ -46,12 +47,15 @@ final class DumbServiceGuiTaskQueue {
         try (AccessToken ignored = HeavyProcessLatch.INSTANCE.processStarted("Performing indexing tasks", HeavyProcessLatch.Type.Indexing)) {
           runSingleTask(pair);
         }
+        finally {
+          unbindProgress.accept(pair.getIndicator());
+        }
       }
     }
   }
 
   private static void runSingleTask(@NotNull final QueuedDumbModeTask task) {
-    if (ApplicationManager.getApplication().isInternal()) LOG.info("Running dumb mode task: " + task);
+    if (ApplicationManager.getApplication().isInternal()) LOG.info("Running dumb mode task: " + task.getInfoString());
 
     // nested runProcess is needed for taskIndicator to be honored in ProgressManager.checkCanceled calls deep inside tasks
     ProgressManager.getInstance().runProcess(() -> {

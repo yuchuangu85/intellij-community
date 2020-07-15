@@ -12,7 +12,7 @@ import org.apache.tools.ant.types.FileSet
 import org.apache.tools.ant.types.resources.FileProvider
 import org.jetbrains.annotations.Nullable
 import org.jetbrains.intellij.build.*
-import org.jetbrains.intellij.build.fus.StatisticsRecorderBundledWhiteListProvider
+import org.jetbrains.intellij.build.fus.StatisticsRecorderBundledMetadataProvider
 import org.jetbrains.intellij.build.impl.projectStructureMapping.ProjectStructureMapping
 import org.jetbrains.jps.model.java.JpsJavaClasspathKind
 import org.jetbrains.jps.model.java.JpsJavaExtensionService
@@ -151,6 +151,7 @@ class DistributionJARsBuilder {
       addModule("intellij.platform.util.text.matching", "util.jar")
       addModule("intellij.platform.util.collections", "util.jar")
       addModule("intellij.platform.util.strings", "util.jar")
+      addModule("intellij.platform.util.diagnostic", "util.jar")
       addModule("intellij.platform.util.ui")
       addModule("intellij.platform.util.ex")
       addModule("intellij.platform.rd.community")
@@ -167,6 +168,7 @@ class DistributionJARsBuilder {
       addModule("intellij.spellchecker")
       addModule("intellij.platform.statistics")
       addModule("intellij.platform.statistics.uploader")
+      addModule("intellij.platform.statistics.config")
       addModule("intellij.platform.statistics.devkit")
 
       addModule("intellij.relaxng", "intellij-xml.jar")
@@ -617,8 +619,14 @@ class DistributionJARsBuilder {
       layoutBuilder.patchModuleOutput("intellij.platform.resources", FileUtil.toSystemIndependentName(patchedKeyMapDir.absolutePath))
     }
     if (buildContext.proprietaryBuildTools.featureUsageStatisticsProperties != null) {
-      def whiteList = StatisticsRecorderBundledWhiteListProvider.downloadWhiteList(buildContext)
-      layoutBuilder.patchModuleOutput('intellij.platform.ide.impl', whiteList.absolutePath)
+      try {
+        def metadata = StatisticsRecorderBundledMetadataProvider.downloadMetadata(buildContext)
+        layoutBuilder.patchModuleOutput('intellij.platform.ide.impl', metadata.absolutePath)
+      }
+      catch (Exception e) {
+        buildContext.messages.warning('Failed to bundle default version of feature usage statistics metadata')
+        e.printStackTrace()
+      }
     }
 
     def libDirectoryMapping = new ProjectStructureMapping()
@@ -830,7 +838,7 @@ class DistributionJARsBuilder {
     }
 
     def patchedPluginXmlDir = "$buildContext.paths.temp/patched-plugin-xml/$plugin.mainModule"
-    def patchedPluginXmlPath = "$patchedPluginXmlDir/META-INF/plugin.xml"
+    def patchedPluginXmlFile = new File("$patchedPluginXmlDir/META-INF/plugin.xml")
 
     buildContext.ant.copy(file: pluginXmlPath, todir: "$patchedPluginXmlDir/META-INF")
 
@@ -844,11 +852,13 @@ class DistributionJARsBuilder {
                     buildContext.applicationInfo.isEAP ? CompatibleBuildRange.RESTRICTED_TO_SAME_RELEASE
                             : CompatibleBuildRange.NEWER_WITH_SAME_BASELINE
 
-    def pluginVersion = buildContext.buildNumber.endsWith(".SNAPSHOT")
+    def defaultPluginVersion = buildContext.buildNumber.endsWith(".SNAPSHOT")
       ? buildContext.buildNumber + ".${new SimpleDateFormat('yyyyMMdd').format(new Date())}"
       : buildContext.buildNumber
 
-    setPluginVersionAndSince(patchedPluginXmlPath, pluginVersion, compatibleBuildRange, pluginsToPublish.contains(plugin))
+    def pluginVersion = plugin.versionEvaluator.apply(patchedPluginXmlFile, defaultPluginVersion)
+
+    setPluginVersionAndSince(patchedPluginXmlFile, pluginVersion, compatibleBuildRange, pluginsToPublish.contains(plugin))
     layoutBuilder.patchModuleOutput(plugin.mainModule, patchedPluginXmlDir)
   }
 
@@ -1115,18 +1125,17 @@ class DistributionJARsBuilder {
     new LayoutBuilder(buildContext, COMPRESS_JARS)
   }
 
-  private void setPluginVersionAndSince(String pluginXmlPath, String pluginVersion, CompatibleBuildRange compatibleBuildRange, boolean toPublish) {
+  private void setPluginVersionAndSince(File pluginXmlFile, String pluginVersion, CompatibleBuildRange compatibleBuildRange, boolean toPublish) {
     Pair<String, String> sinceUntil = getCompatiblePlatformVersionRange(compatibleBuildRange, buildContext.buildNumber)
-    def file = new File(pluginXmlPath)
-    def text = file.text
+    def text = pluginXmlFile.text
             .replaceFirst(
                     "<version>[\\d.]*</version>",
                     "<version>${pluginVersion}</version>")
             .replaceFirst(
-                    "<idea-version\\s+since-build=\"\\d+\\.\\d+\"\\s+until-build=\"\\d+\\.\\d+\"",
+                    "<idea-version\\s+since-build=\"(\\d+\\.)+\\d+\"\\s+until-build=\"(\\d+\\.)+\\d+\"",
                     "<idea-version since-build=\"${sinceUntil.first}\" until-build=\"${sinceUntil.second}\"")
             .replaceFirst(
-                    "<idea-version\\s+since-build=\"\\d+\\.\\d+\"",
+                    "<idea-version\\s+since-build=\"(\\d+\\.)+\\d+\"",
                     "<idea-version since-build=\"${sinceUntil.first}\"")
             .replaceFirst(
                     "<change-notes>\\s+<\\!\\[CDATA\\[\\s*Plugin version: \\\$\\{version\\}",
@@ -1140,7 +1149,7 @@ class DistributionJARsBuilder {
               "<product-descriptor code=\"([\\w]*)\"\\s+release-date=\"[^\"]*\"\\s+release-version=\"[^\"]*\"/>",
               !toPublish ? "" :
               "<product-descriptor code=\"\$1\" release-date=\"$releaseDate\" release-version=\"$releaseVersion\"/>")
-      buildContext.messages.info("        ${toPublish ? "Patching" : "Skipping"} ${file.parentFile.parentFile.name} <product-descriptor/>")
+      buildContext.messages.info("        ${toPublish ? "Patching" : "Skipping"} ${pluginXmlFile.parentFile.parentFile.name} <product-descriptor/>")
     }
 
     def anchor = text.contains("</id>") ? "</id>" : "</name>"
@@ -1150,7 +1159,7 @@ class DistributionJARsBuilder {
     if (!text.contains("<idea-version since-build")) {
       text = text.replace(anchor, "${anchor}\n  <idea-version since-build=\"${sinceUntil.first}\" until-build=\"${sinceUntil.second}\"/>")
     }
-    file.text = text
+    pluginXmlFile.text = text
   }
 
   static Pair<String, String> getCompatiblePlatformVersionRange(CompatibleBuildRange compatibleBuildRange, String buildNumber) {

@@ -18,7 +18,6 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.refactoring.listeners.RefactoringElementAdapter;
 import com.intellij.refactoring.listeners.RefactoringElementListener;
-import com.intellij.sh.ShSupport;
 import com.intellij.sh.psi.ShFile;
 import com.intellij.util.EnvironmentUtil;
 import com.intellij.util.containers.ContainerUtil;
@@ -31,6 +30,7 @@ import java.io.File;
 
 import static com.intellij.openapi.util.io.FileUtil.toSystemDependentName;
 import static com.intellij.openapi.util.text.StringUtilRt.notNullize;
+import static com.intellij.sh.ShBundle.message;
 
 public class ShRunConfiguration extends LocatableConfigurationBase implements RefactoringListenerProvider {
   @NonNls private static final String TAG_PREFIX = "INDEPENDENT_";
@@ -59,23 +59,27 @@ public class ShRunConfiguration extends LocatableConfigurationBase implements Re
   @Override
   public void checkConfiguration() throws RuntimeConfigurationException {
     if (!FileUtil.exists(myScriptPath)) {
-      throw new RuntimeConfigurationError("Shell script not found");
+      throw new RuntimeConfigurationError(message("sh.run.script.not.found"));
     }
     if (!FileUtil.exists(myScriptWorkingDirectory)) {
-      throw new RuntimeConfigurationError("Working directory not found");
+      throw new RuntimeConfigurationError(message("sh.run.working.dir.not.found"));
     }
     if (StringUtil.isNotEmpty(myInterpreterPath) || !new File(myScriptPath).canExecute()) {
       // WSL can be used as an interpreter
       if (myInterpreterPath.endsWith("sh") && getWSLDistributionIfNeeded() != null) return;
-      if (!FileUtil.exists(myInterpreterPath)) throw new RuntimeConfigurationError("Interpreter not found");
-      if (!new File(myInterpreterPath).canExecute()) throw new RuntimeConfigurationError("Interpreter should be executable file");
+      if (!FileUtil.exists(myInterpreterPath)) {
+        throw new RuntimeConfigurationError(message("sh.run.interpreter.not.found"));
+      }
+      if (!new File(myInterpreterPath).canExecute()) {
+        throw new RuntimeConfigurationError(message("sh.run.interpreter.should.be.executable"));
+      }
     }
   }
 
   @Nullable
   @Override
   public RunProfileState getState(@NotNull Executor executor, @NotNull ExecutionEnvironment environment) {
-    return ShSupport.getInstance().createRunProfileState(executor, environment, this);
+    return new ShRunConfigurationProfileState(environment.getProject(), this);
   }
 
   @Override

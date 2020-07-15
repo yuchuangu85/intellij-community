@@ -27,13 +27,11 @@ import git4idea.branch.GitBranchPair;
 import git4idea.branch.GitBranchUtil;
 import git4idea.commands.Git;
 import git4idea.config.GitVcsSettings;
-import git4idea.config.GitVersionSpecialty;
 import git4idea.config.UpdateMethod;
 import git4idea.i18n.GitBundle;
 import git4idea.merge.GitConflictResolver;
 import git4idea.merge.GitMergeCommittingConflictResolver;
 import git4idea.merge.GitMerger;
-import git4idea.pull.GitPullDialog;
 import git4idea.rebase.GitRebaser;
 import git4idea.repo.GitBranchTrackInfo;
 import git4idea.repo.GitRepository;
@@ -56,7 +54,7 @@ import static git4idea.util.GitUIUtil.*;
  *
  * The class is not thread-safe and is stateful. It is intended to be used only once.
  */
-public class GitUpdateProcess {
+public final class GitUpdateProcess {
   private static final Logger LOG = Logger.getInstance(GitUpdateProcess.class);
 
   @NotNull private final Project myProject;
@@ -281,8 +279,7 @@ public class GitUpdateProcess {
   @NotNull
   private Map<GitRepository, GitUpdater> tryFastForwardMergeForRebaseUpdaters(@NotNull Map<GitRepository, GitUpdater> updaters) {
     Map<GitRepository, GitUpdater> modifiedUpdaters = new LinkedHashMap<>();
-    Map<VirtualFile, Collection<Change>> changesUnderRoots =
-      new LocalChangesUnderRoots(myChangeListManager, myVcsManager).getChangesUnderRoots(getRootsFromRepositories(updaters.keySet()));
+    Map<VirtualFile, Collection<Change>> changesUnderRoots = LocalChangesUnderRoots.getChangesUnderRoots(getRootsFromRepositories(updaters.keySet()), myProject);
     for (GitRepository repository : updaters.keySet()) {
       GitUpdater updater = updaters.get(repository);
       Collection<Change> changes = changesUnderRoots.get(repository.getRoot());
@@ -427,13 +424,14 @@ public class GitUpdateProcess {
   }
 
   private void showUpdateDialog(@NotNull GitRepository repository) {
-    GitPullDialog updateDialog = new GitPullDialog(repository.getProject());
+    FixTrackedBranchDialog updateDialog = new FixTrackedBranchDialog(repository.getProject());
+
     if (updateDialog.showAndGet()) {
       new GitUpdateExecutionProcess(repository.getProject(),
                                     myRepositories,
                                     updateDialog.getUpdateConfig(),
                                     updateDialog.getUpdateMethod(),
-                                    updateDialog.shouldSetAsUpstream())
+                                    updateDialog.shouldSetAsTrackedBranch())
         .execute();
     }
   }

@@ -129,7 +129,7 @@ public final class DefUseUtil {
 
     ControlFlow flow;
     try {
-      flow = ControlFlowFactory.getInstance(body.getProject()).getControlFlow(body, ourPolicy, false);
+      flow = ControlFlowFactory.getControlFlow(body, ourPolicy, new ControlFlowOptions(true, false, false));
     }
     catch (AnalysisCanceledException e) {
       return null;
@@ -378,7 +378,7 @@ public final class DefUseUtil {
 
     RefsDefs(@NotNull PsiCodeBlock body) throws AnalysisCanceledException {
       this.body = body;
-      flow = ControlFlowFactory.getInstance(body.getProject()).getControlFlow(body, ourPolicy, false, false);
+      flow = ControlFlowFactory.getControlFlow(body, ourPolicy, ControlFlowOptions.NO_CONST_EVALUATE);
       instructions = flow.getInstructions();
     }
 

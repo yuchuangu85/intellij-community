@@ -41,7 +41,7 @@ import static com.intellij.util.ObjectUtils.notNull;
  *
  * @author tav
  */
-class AccessibleGutterLine extends JPanel {
+final class AccessibleGutterLine extends JPanel {
   private final EditorGutterComponentImpl myGutter;
   private AccessibleGutterElement mySelectedElement;
   // [tav] todo: soft-wrap doesn't work correctly
@@ -50,7 +50,7 @@ class AccessibleGutterLine extends JPanel {
 
   private static boolean actionHandlerInstalled;
 
-  private static class MyShortcuts {
+  private static final class MyShortcuts {
     static final CustomShortcutSet MOVE_RIGHT = new CustomShortcutSet(
       new KeyboardShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), null),
       new KeyboardShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0), null));
@@ -409,7 +409,7 @@ class AccessibleGutterLine extends JPanel {
   /**
    * This delegate implements wrapping over SimpleAccessible for active gutter rendorer
    */
-  private static class MySimpleAccessibleDelegat implements MySimpleAccessible {
+  private static final class MySimpleAccessibleDelegat implements MySimpleAccessible {
     @NotNull private final SimpleAccessible simpleAccessible;
 
     private MySimpleAccessibleDelegat(@NotNull SimpleAccessible accessible) {

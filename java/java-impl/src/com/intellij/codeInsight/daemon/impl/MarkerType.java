@@ -362,21 +362,18 @@ public class MarkerType {
       super(project, title, createComparatorWrapper((Comparator)renderer.getComparator()));
     }
 
-    protected void collectFunctionalInheritors(@NotNull ProgressIndicator indicator, PsiClass psiClass) {
-      FunctionalExpressionSearch.search(psiClass).forEach(new CommonProcessors.CollectProcessor<PsiFunctionalExpression>() {
-        @Override
-        public boolean process(final PsiFunctionalExpression expr) {
-          if (!updateComponent(expr)) {
-            indicator.cancel();
-          }
-          ProgressManager.checkCanceled();
-          return super.process(expr);
+    void collectFunctionalInheritors(@NotNull ProgressIndicator indicator, PsiClass psiClass) {
+      FunctionalExpressionSearch.search(psiClass).forEach(expr -> {
+        if (!updateComponent(expr)) {
+          indicator.cancel();
         }
+        ProgressManager.checkCanceled();
+        return true;
       });
     }
   }
 
-  private static class SubclassUpdater extends OverridingMembersUpdater {
+  private static final class SubclassUpdater extends OverridingMembersUpdater {
     private final PsiClass myClass;
 
     private SubclassUpdater(@NotNull PsiClass aClass, @NotNull PsiElementListCellRenderer<NavigatablePsiElement> renderer) {
@@ -420,7 +417,7 @@ public class MarkerType {
     }
   }
 
-  private static class OverridingMethodsUpdater extends OverridingMembersUpdater {
+  private static final class OverridingMethodsUpdater extends OverridingMembersUpdater {
     private final PsiMethod myMethod;
 
     private OverridingMethodsUpdater(@NotNull PsiMethod method, @NotNull PsiElementListCellRenderer<NavigatablePsiElement> renderer) {

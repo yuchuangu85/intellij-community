@@ -14,11 +14,11 @@ import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.ui.TabbedPaneWrapper;
 import com.intellij.util.CollectConsumer;
 import com.intellij.util.ReflectionUtil;
+import com.intellij.util.containers.CollectionFactory;
 import com.intellij.util.containers.ContainerUtil;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMaps;
 import it.unimi.dsi.fastutil.ints.Int2ObjectRBTreeMap;
-import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -468,11 +468,13 @@ public final class SearchUtil {
       return;
     }
     if (filter == null || filter.length() == 0) {
+      textRenderer.setDynamicSearchMatchHighlighting(false);
       textRenderer.append(text, new SimpleTextAttributes(background, foreground, JBColor.RED, style));
     }
     else {
+      textRenderer.setDynamicSearchMatchHighlighting(true);
       //markup
-      ObjectOpenHashSet<String> quoted = new ObjectOpenHashSet<>();
+      Set<String> quoted = CollectionFactory.createSmallMemoryFootprintSet();
       filter = processFilter(quoteStrictOccurrences(text, filter), quoted);
       final Int2ObjectRBTreeMap<String> indexToString = new Int2ObjectRBTreeMap<>();
       for (String stripped : quoted) {

@@ -6,7 +6,6 @@ import com.intellij.openapi.components.Service;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.updateSettings.impl.PluginDownloader;
-import com.intellij.util.containers.SmartHashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -31,7 +30,7 @@ public final class InstalledPluginsState {
   private final Set<PluginId> myInstalledWithoutRestartPlugins = new HashSet<>();
   private final Set<PluginId> myUpdatedPlugins = new HashSet<>();
   private final Set<PluginId> myUninstalledWithoutRestartPlugins = new HashSet<>();
-  private final Set<String> myOutdatedPlugins = new SmartHashSet<>();
+  private final Set<String> myOutdatedPlugins = new HashSet<>();
   private boolean myInstallationInProgress = false;
   private boolean myRestartRequired = false;
 
@@ -113,7 +112,7 @@ public final class InstalledPluginsState {
     }
 
     boolean supersedes = PluginManagerCore.isCompatible(descriptor) &&
-                         PluginDownloader.compareVersionsSkipBrokenAndIncompatible(existing, descriptor.getVersion()) > 0;
+                         PluginDownloader.compareVersionsSkipBrokenAndIncompatible(descriptor.getVersion(), existing) > 0;
 
     String idString = id.getIdString();
 

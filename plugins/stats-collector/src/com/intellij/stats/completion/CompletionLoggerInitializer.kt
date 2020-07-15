@@ -2,17 +2,17 @@
 package com.intellij.stats.completion
 
 import com.intellij.codeInsight.lookup.impl.LookupImpl
-import com.intellij.completion.settings.CompletionMLRankingSettings
 import com.intellij.internal.statistic.utils.StatisticsUploadAssistant
 import com.intellij.internal.statistic.utils.getPluginInfo
 import com.intellij.lang.Language
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.stats.CompletionStatsPolicy
 import com.intellij.stats.experiment.WebServiceStatus
+import com.intellij.stats.sender.isCompletionLogsSendAllowed
 import com.intellij.stats.storage.factors.MutableLookupStorage
 import kotlin.random.Random
 
-class CompletionLoggerInitializer(private val actionListener: LookupActionsListener) : LookupTracker() {
+internal class CompletionLoggerInitializer(private val actionListener: LookupActionsListener) : LookupTracker() {
   companion object {
     fun shouldInitialize(): Boolean =
       (ApplicationManager.getApplication().isEAP && StatisticsUploadAssistant.isSendAllowed()) || ApplicationManager.getApplication().isUnitTestMode
@@ -26,7 +26,8 @@ class CompletionLoggerInitializer(private val actionListener: LookupActionsListe
       "ecmascript 6" to 0.2,
       "typescript" to 0.5,
       "c/c++" to 0.5,
-      "c#" to 0.1
+      "c#" to 0.1,
+      "go" to 0.4
     )
   }
 
@@ -64,11 +65,11 @@ class CompletionLoggerInitializer(private val actionListener: LookupActionsListe
     val application = ApplicationManager.getApplication()
     if (application.isUnitTestMode || experimentHelper.isExperimentOnCurrentIDE()) return true
 
-    if (!CompletionMLRankingSettings.getInstance().isCompletionLogsSendAllowed)
+    if (!isCompletionLogsSendAllowed()) {
       return false
+    }
 
     val logSessionChance = LOGGED_SESSIONS_RATIO.getOrDefault(language.displayName.toLowerCase(), 1.0)
-
     return Random.nextDouble() < logSessionChance
   }
 }

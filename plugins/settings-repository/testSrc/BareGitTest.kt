@@ -4,8 +4,7 @@ package org.jetbrains.settingsRepository.test
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.testFramework.TemporaryDirectory
 import com.intellij.util.SmartList
-import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
-import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet
+import com.intellij.util.containers.CollectionFactory
 import org.assertj.core.api.Assertions.assertThat
 import org.jetbrains.settingsRepository.git.cloneBare
 import org.jetbrains.settingsRepository.git.commit
@@ -50,7 +49,7 @@ internal class BareGitTest {
 
     val repository = cloneBare(remoteRepository.workTree.absolutePath, tempDirManager.newPath())
 
-    val data = Object2ObjectOpenHashMap<String, String>()
+    val data = HashMap<String, String>()
     repository.processChildren("keymaps") {name, input ->
       data.put(name, FileUtil.loadTextAndClose(input))
       true
@@ -66,7 +65,7 @@ internal class BareGitTest {
     val repository = cloneBare("https://github.com/pronskiy/PhpStorm-Live-Templates-Craft-CMS.git", clonePath)
 
     val filePath = "templates"
-    val data = ObjectOpenHashSet<String>()
+    val data = CollectionFactory.createSmallMemoryFootprintSet<String>()
     repository.processChildren(filePath) { name, _ ->
       data.add(name)
       true

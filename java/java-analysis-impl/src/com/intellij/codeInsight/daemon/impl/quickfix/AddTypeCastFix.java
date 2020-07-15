@@ -15,10 +15,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import com.intellij.psi.infos.MethodCandidateInfo;
-import com.intellij.psi.util.PsiTreeUtil;
-import com.intellij.psi.util.PsiTypesUtil;
-import com.intellij.psi.util.PsiUtil;
-import com.intellij.psi.util.TypeConversionUtil;
+import com.intellij.psi.util.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.PropertyKey;
@@ -85,9 +82,15 @@ public class AddTypeCastFix extends LocalQuickFixAndIntentionActionOnPsiElement 
     if (expression == null) return null;
 
     if (type.equals(PsiType.NULL)) return null;
+    PsiElementFactory factory = JavaPsiFacade.getElementFactory(original.getProject());
+    if (expression instanceof PsiLiteralExpression) {
+      String newLiteral = PsiLiteralUtil.tryConvertNumericLiteral((PsiLiteralExpression)expression, type);
+      if (newLiteral != null) {
+        return factory.createExpressionFromText(newLiteral, null);
+      }
+    }
     if (type instanceof PsiEllipsisType) type = ((PsiEllipsisType)type).toArrayType();
     String text = "(" + type.getCanonicalText(false) + ")value";
-    PsiElementFactory factory = JavaPsiFacade.getElementFactory(original.getProject());
     PsiTypeCastExpression typeCast = (PsiTypeCastExpression)factory.createExpressionFromText(text, original);
     typeCast = (PsiTypeCastExpression)JavaCodeStyleManager.getInstance(project).shortenClassReferences(typeCast);
     typeCast = (PsiTypeCastExpression)CodeStyleManager.getInstance(project).reformat(typeCast);

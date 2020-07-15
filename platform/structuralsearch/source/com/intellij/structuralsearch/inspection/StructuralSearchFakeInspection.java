@@ -156,7 +156,7 @@ public class StructuralSearchFakeInspection extends LocalInspectionTool {
     }
     final SSBasedInspection inspection = InspectionProfileUtil.getStructuralSearchInspection(profile);
     final StructuralSearchProfileActionProvider.InspectionDataDialog dialog =
-      new StructuralSearchProfileActionProvider.InspectionDataDialog(project, inspection, myMainConfiguration);
+      new StructuralSearchProfileActionProvider.InspectionDataDialog(project, inspection, myMainConfiguration, false);
     if (!dialog.showAndGet()) {
       return;
     }
@@ -184,6 +184,7 @@ public class StructuralSearchFakeInspection extends LocalInspectionTool {
     }
     myMainConfiguration = moveMetaData(myMainConfiguration, myConfigurations.get(0));
     list.setSelectedIndices(indices);
+    list.scrollRectToVisible(list.getCellBounds(indices[0], indices[indices.length - 1]));
     model.fireContentsChanged(list);
 
     final InspectionProfileModifiableModel profile = InspectionProfileUtil.getInspectionProfile(list);
@@ -229,10 +230,17 @@ public class StructuralSearchFakeInspection extends LocalInspectionTool {
     for (int i = 0; i < size; i++){
       myConfigurations.get(i).setOrder(i);
     }
+    final int maxIndex = list.getMaxSelectionIndex();
+    if (maxIndex != list.getMinSelectionIndex()) {
+      list.setSelectedIndex(maxIndex);
+    }
     ((MyListModel)list.getModel()).fireContentsChanged(list);
     if (list.getSelectedIndex() >= size) {
       list.setSelectedIndex(size - 1);
     }
+    final int index = list.getSelectedIndex();
+    list.scrollRectToVisible(list.getCellBounds(index, index));
+
 
     final InspectionProfileModifiableModel profile = InspectionProfileUtil.getInspectionProfile(list);
     if (profile == null) return;
@@ -269,7 +277,7 @@ public class StructuralSearchFakeInspection extends LocalInspectionTool {
     profile.setModified(true);
   }
 
-  private class AddTemplateAction extends DumbAwareAction {
+  private final class AddTemplateAction extends DumbAwareAction {
 
     private final JList<Configuration> myList;
     private final boolean myReplace;
@@ -292,6 +300,9 @@ public class StructuralSearchFakeInspection extends LocalInspectionTool {
       final Configuration configuration = dialog.getConfiguration();
       configuration.setUuid(myMainConfiguration.getUuid());
       configuration.setName(myMainConfiguration.getName());
+      configuration.setDescription(null);
+      configuration.setSuppressId(null);
+      configuration.setProblemDescriptor(null);
       final MyListModel model = (MyListModel)myList.getModel();
       final int size = model.getSize();
       configuration.setOrder(size);
@@ -302,6 +313,7 @@ public class StructuralSearchFakeInspection extends LocalInspectionTool {
         myConfigurations.add(configuration);
         model.fireContentsChanged(myList);
         myList.setSelectedIndex(size);
+        myList.scrollRectToVisible(myList.getCellBounds(size, size));
         profile.setModified(true);
       }
       else {

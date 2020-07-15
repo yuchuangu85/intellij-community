@@ -9,15 +9,15 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.ThrowableComputable;
-import com.intellij.openapi.util.io.BufferExposingByteArrayOutputStream;
-import com.intellij.openapi.util.io.ByteArraySequence;
-import com.intellij.openapi.util.io.FileAttributes;
-import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.io.*;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.impl.ZipHandlerBase;
+import com.intellij.openapi.vfs.impl.local.LocalFileSystemImpl;
 import com.intellij.openapi.vfs.newvfs.ChildInfoImpl;
 import com.intellij.openapi.vfs.newvfs.FileAttribute;
 import com.intellij.openapi.vfs.newvfs.events.ChildInfo;
-import com.intellij.openapi.vfs.newvfs.impl.CachedFileType;
 import com.intellij.openapi.vfs.newvfs.impl.FileNameCache;
 import com.intellij.openapi.vfs.newvfs.impl.VirtualDirectoryImpl;
 import com.intellij.openapi.vfs.newvfs.impl.VirtualFileSystemEntry;
@@ -33,16 +33,16 @@ import com.intellij.util.io.storage.*;
 import gnu.trove.TIntArrayList;
 import gnu.trove.TObjectHashingStrategy;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
+import it.unimi.dsi.fastutil.ints.IntList;
 import org.jetbrains.annotations.*;
 
 import javax.swing.*;
 import java.awt.*;
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -73,7 +73,9 @@ public final class FSRecords {
                                      (ourStoreRootsSeparately ? 0x63 : 0) +
                                      (useCompressionUtil ? 0x7f : 0) +
                                      (useSmallAttrTable ? 0x31 : 0) +
-                                     (PersistentHashMapValueStorage.COMPRESSION_ENABLED ? 0x15 : 0);
+                                     (PersistentHashMapValueStorage.COMPRESSION_ENABLED ? 0x15 : 0) +
+                                     (FileSystemUtil.DO_NOT_RESOLVE_SYMLINKS ? 0x3b : 0) +
+                                     (ZipHandlerBase.USE_CRC_INSTEAD_OF_TIMESTAMP ? 0x4f : 0);
 
   private static final int PARENT_OFFSET = 0;
   private static final int PARENT_SIZE = 4;
@@ -181,7 +183,7 @@ public final class FSRecords {
     private static ContentHashEnumerator myContentHashesEnumerator;
     private static File myRootsFile;
     private static final VfsDependentEnum<String> myAttributesList = new VfsDependentEnum<>("attrib", EnumeratorStringDescriptor.INSTANCE, 1);
-    private static final TIntArrayList myFreeRecords = new TIntArrayList();
+    private static final IntList myFreeRecords = new IntArrayList();
 
     private static volatile boolean myDirty;
     /** accessed under {@link #r}/{@link #w} */
@@ -214,7 +216,7 @@ public final class FSRecords {
     }
 
     static int getFreeRecord() {
-      return myFreeRecords.isEmpty() ? 0 : myFreeRecords.remove(myFreeRecords.size() - 1);
+      return myFreeRecords.isEmpty() ? 0 : myFreeRecords.removeInt(myFreeRecords.size() - 1);
     }
 
     private static void createBrokenMarkerFile(@Nullable Throwable reason) {
@@ -1007,13 +1009,14 @@ public final class FSRecords {
       ListResult toSave;
       // optimization: if the children were never changed after list(), do not check for duplicates again
       if (result.childrenWereChangedSinceLastList()) {
-        ListResult reloadedChildren = doLoadChildren(parentId);
-        toSave = childrenConvertor.apply(reloadedChildren);
+        children = doLoadChildren(parentId);
+        toSave = childrenConvertor.apply(children);
       }
       else {
         toSave = result;
       }
 
+      updateSymlinksForNewChildren(parentId, children, toSave);
       doSaveChildren(parentId, toSave);
       return toSave;
     }
@@ -1031,6 +1034,33 @@ public final class FSRecords {
     }
   }
 
+  private static void updateSymlinksForNewChildren(int parentId, @NotNull ListResult oldChildren, @NotNull ListResult newChildren) {
+    // find children which are added to the list and call updateSymlinkInfoForNewChild() on them (once)
+    ContainerUtil.processSortedListsInOrder(oldChildren.children, newChildren.children, Comparator.comparingInt(ChildInfo::getId), true,
+                                            (childInfo, isOldInfo) -> {
+                                              if (!isOldInfo) {
+                                                updateSymlinkInfoForNewChild(parentId, childInfo);
+                                              }
+                                            });
+  }
+
+  private static void updateSymlinkInfoForNewChild(int parentId, @NotNull ChildInfo info) {
+    FileAttributes attributes = info.getFileAttributes();
+    if (attributes != null && attributes.isSymLink()) {
+      int id = info.getId();
+      String symlinkTarget = info.getSymlinkTarget();
+      storeSymlinkTarget(id, symlinkTarget);
+      CharSequence name = info.getName();
+      LocalFileSystem fs = LocalFileSystem.getInstance();
+      if (fs instanceof LocalFileSystemImpl) {
+        VirtualFile parent = PersistentFS.getInstance().findFileById(parentId);
+        assert parent != null : parentId + '/' + id + ": " + name + " -> " + symlinkTarget;
+        String linkPath = parent.getPath() + '/' + name;
+        ((LocalFileSystemImpl)fs).symlinkUpdated(id, parent, linkPath, symlinkTarget);
+      }
+    }
+  }
+
   private static void doSaveChildren(int parentId, @NotNull ListResult toSave) throws IOException {
     DbConnection.markDirty();
     try (DataOutputStream record = writeAttribute(parentId, ourChildrenAttr)) {
@@ -1039,13 +1069,17 @@ public final class FSRecords {
       int prevId = parentId;
       for (ChildInfo childInfo : toSave.children) {
         int childId = childInfo.getId();
-        if (childId <= 0) throw new IllegalArgumentException("ids must be >0 but got: "+childId+"; list: "+toSave);
+        if (childId <= 0) {
+          throw new IllegalArgumentException("ids must be >0 but got: "+childId+"; childInfo: "+childInfo+"; list: "+toSave);
+        }
         if (childId == parentId) {
           LOG.error("Cyclic parent-child relations. parentId="+parentId+"; list: "+toSave);
         }
         else {
           int delta = childId - prevId;
-          if (prevId != parentId && delta <= 0) throw new IllegalArgumentException("The list must be sorted by (unique) id but got: " + toSave + "; delta=" + delta);
+          if (prevId != parentId && delta <= 0) {
+            throw new IllegalArgumentException("The list must be sorted by (unique) id but got parentId: " + parentId  + "; delta: " + delta+"; childInfo: "+childInfo+"; prevId: "+prevId+"; toSave: "+toSave);
+          }
           DataInputOutputUtil.writeINT(record, delta);
           prevId = childId;
         }
@@ -1058,7 +1092,7 @@ public final class FSRecords {
   @NotNull
   static ListResult mergeByName(@NotNull ListResult existingList,
                                 @NotNull ListResult newList,
-                                @NotNull TObjectHashingStrategy<CharSequence> hashingStrategy) {
+                                @NotNull TObjectHashingStrategy<? super CharSequence> hashingStrategy) {
     List<? extends ChildInfo> newChildren = newList.children;
     List<? extends ChildInfo> oldChildren = existingList.children;
     if (oldChildren.isEmpty()) return newList;
@@ -1096,7 +1130,7 @@ public final class FSRecords {
           int nameId = newChild.getNameId();
           assert nameId > 0 : newList;
           ChildInfoImpl replaced = new ChildInfoImpl(oldDup.getId(), nameId, oldDup.getFileAttributes(), oldDup.getChildren(),
-                                                 oldDup.getSymLinkTarget());
+                                                 oldDup.getSymlinkTarget());
           result.set(dupI, replaced);
         }
         i++;
@@ -1116,7 +1150,7 @@ public final class FSRecords {
           int nameId = dup.getNameId();
           assert nameId > 0 : existingList;
           ChildInfoImpl replaced = new ChildInfoImpl(oldChild.getId(), nameId, dup.getFileAttributes(), dup.getChildren(),
-                                                     dup.getSymLinkTarget());
+                                                 dup.getSymlinkTarget());
           result.set(dupI, replaced);
         }
         j++;
@@ -1149,7 +1183,6 @@ public final class FSRecords {
 
   private static void incModCount(int id) {
     incLocalModCount();
-    CachedFileType.clearCache();
 
     final int count = doGetModCount() + 1;
     getRecords().putInt(HEADER_GLOBAL_MOD_COUNT_OFFSET, count);
@@ -1718,14 +1751,26 @@ public final class FSRecords {
   private static int contents;
   private static int reuses;
 
-  // TODO replace with sha-256
-  public static final MessageDigest CONTENT_HASH_DIGEST = DigestUtil.sha1();
+  @NotNull
+  public static MessageDigest getContentHashDigest() {
+    // TODO replace with sha-256
+    return DigestUtil.sha1();
+  }
+
+  private static byte @NotNull[] calculateHash(byte[] bytes, int offset, int length) {
+    // Probably we don't need to hash the length and "\0000".
+    MessageDigest digest = getContentHashDigest();
+    digest.update(String.valueOf(length).getBytes(StandardCharsets.UTF_8));
+    digest.update("\u0000".getBytes(StandardCharsets.UTF_8));
+    digest.update(bytes, offset, length);
+    return digest.digest();
+  }
 
   private static int findOrCreateContentRecord(byte[] bytes, int offset, int length) throws IOException {
     assert WE_HAVE_CONTENT_HASHES;
 
     long started = DUMP_STATISTICS ? System.nanoTime():0;
-    byte[] contentHash = DigestUtil.calculateContentHash(CONTENT_HASH_DIGEST, bytes, offset, length);
+    byte[] contentHash = calculateHash(bytes, offset, length);
     long done = DUMP_STATISTICS ? System.nanoTime() - started : 0;
     time += done;
 

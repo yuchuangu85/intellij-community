@@ -191,10 +191,14 @@ object ExecUtil {
       }
     }
 
+    val parentEnvType = if (SystemInfo.isWinVistaOrNewer)
+      GeneralCommandLine.ParentEnvironmentType.NONE
+    else
+      commandLine.parentEnvironmentType
     return sudoCommandLine
       .withWorkDirectory(commandLine.workDirectory)
       .withEnvironment(commandLine.environment)
-      .withParentEnvironmentType(commandLine.parentEnvironmentType)
+      .withParentEnvironmentType(parentEnvType)
       .withRedirectErrorStream(commandLine.isRedirectErrorStream)
   }
 

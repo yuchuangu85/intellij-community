@@ -1,7 +1,12 @@
 // Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.merge
 
-import com.intellij.ide.ui.laf.darcula.DarculaUIUtil
+import com.intellij.ide.ui.laf.darcula.DarculaUIUtil.BW
+import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
@@ -9,32 +14,46 @@ import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.CollectionComboBoxModel
+import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.MutableCollectionComboBoxModel
 import com.intellij.ui.ScrollPaneFactory.createScrollPane
+import com.intellij.ui.components.DropDownLink
 import com.intellij.ui.components.JBTextArea
-import com.intellij.ui.components.labels.DropDownLink
+import com.intellij.ui.components.JBTextField
 import com.intellij.ui.popup.list.ListPopupImpl
 import com.intellij.util.ui.JBDimension
 import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.UIUtil.invokeLaterIfNeeded
 import git4idea.GitUtil
+import git4idea.commands.Git
+import git4idea.commands.GitCommand
+import git4idea.commands.GitLineHandler
+import git4idea.config.GitExecutableManager
+import git4idea.config.GitMergeSettings
+import git4idea.config.GitVersionSpecialty.NO_VERIFY_SUPPORTED
 import git4idea.i18n.GitBundle
 import git4idea.merge.dialog.*
-import git4idea.merge.dialog.FlatComboBoxUI
-import git4idea.merge.dialog.OptionButton
 import git4idea.repo.GitRepository
+import git4idea.util.GitUIUtil
 import net.miginfocom.layout.AC
 import net.miginfocom.layout.CC
 import net.miginfocom.layout.LC
 import net.miginfocom.swing.MigLayout
+import org.jetbrains.annotations.CalledInBackground
 import java.awt.BorderLayout
 import java.awt.Insets
 import java.awt.event.ItemEvent
-import java.util.function.Function
+import java.awt.event.KeyEvent
+import java.util.Collections.synchronizedMap
+import java.util.regex.Pattern
 import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED
 import javax.swing.ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
+import javax.swing.event.DocumentEvent
+import javax.swing.plaf.basic.BasicComboBoxEditor
+import kotlin.collections.HashMap
 
 class GitMergeDialog(private val project: Project,
                      private val defaultRoot: VirtualFile,
@@ -42,8 +61,13 @@ class GitMergeDialog(private val project: Project,
 
   val selectedOptions = mutableSetOf<MergeOption>()
 
+  private val repositoryManager = GitUtil.getRepositoryManager(project)
+
   private val rootsByNames = roots.associateBy { it.name }
-  private val repositoryBranches = mutableMapOf<GitRepository, List<String>?>()
+
+  private val allBranches = collectAllBranches()
+
+  private val unmergedBranches = synchronizedMap(HashMap<GitRepository, List<String>?>())
 
   private val optionInfos = mutableMapOf<MergeOption, OptionInfo<MergeOption>>()
 
@@ -58,12 +82,17 @@ class GitMergeDialog(private val project: Project,
 
   private val panel = createPanel()
 
-  private val repositoryManager = GitUtil.getRepositoryManager(project)
+  private val mergeSettings = project.service<GitMergeSettings>()
+
+  private val isNoVerifySupported = NO_VERIFY_SUPPORTED.existsIn(GitExecutableManager.getInstance().getVersion(project))
 
   init {
-    title = GitBundle.message("merge.branch.title")
+    loadUnmergedBranchesInBackground()
+    updateTitle()
     setOKButtonText(GitBundle.message("merge.action.name"))
-    updateBranches()
+    updateBranchesField()
+    loadSettings()
+    updateUi()
     init()
   }
 
@@ -84,8 +113,22 @@ class GitMergeDialog(private val project: Project,
 
   override fun createSouthPanel(): JComponent {
     val southPanel = super.createSouthPanel()
-    southPanel.add(createOptionsDropDown(), BorderLayout.WEST)
+    (southPanel.components[0] as JPanel).apply {
+      (layout as BorderLayout).hgap = JBUI.scale(5)
+      add(createOptionsDropDown(), BorderLayout.EAST)
+    }
     return southPanel
+  }
+
+  override fun getHelpId() = "reference.VersionControl.Git.MergeBranches"
+
+  override fun doOKAction() {
+    try {
+      saveSettings()
+    }
+    finally {
+      super.doOKAction()
+    }
   }
 
   fun getCommitMessage(): String = commitMsgField.text
@@ -96,58 +139,128 @@ class GitMergeDialog(private val project: Project,
 
   fun shouldCommitAfterMerge() = MergeOption.NO_COMMIT !in selectedOptions
 
+  private fun saveSettings() {
+    mergeSettings.options = selectedOptions
+  }
+
+  private fun loadSettings() = mergeSettings.options
+    .filter { option -> option != MergeOption.NO_VERIFY || isNoVerifySupported }
+    .forEach { option -> selectedOptions += option }
+
+  private fun collectAllBranches(): Map<GitRepository, List<String>?> {
+    val branches = mutableMapOf<GitRepository, List<String>?>()
+
+    for (root in roots) {
+      val repository = repositoryManager.getRepositoryForFileQuick(root)
+      if (repository == null) {
+        LOG.error("Unable to find repository with root: ${root}")
+        continue
+      }
+
+      branches[repository] = repository.branches
+        .let { it.localBranches.sorted() + it.remoteBranches.sorted() }
+        .map { it.name }
+    }
+
+    return branches.toMap()
+  }
+
+  private fun loadUnmergedBranchesInBackground() {
+    ProgressManager.getInstance().run(
+      object : Task.Backgroundable(project, GitBundle.message("merge.branch.loading.branches.progress"), true) {
+        override fun run(indicator: ProgressIndicator) {
+          val sortedRoots = LinkedHashSet<VirtualFile>(roots.size).apply {
+            add(defaultRoot)
+            addAll(roots)
+          }
+
+          sortedRoots.forEach { root ->
+            loadUnmergedBranches(root)?.let { branches ->
+              unmergedBranches[getRepository(root)] = branches
+
+              invokeLaterIfNeeded {
+                if (getSelectedRoot() == root) {
+                  updateBranchesField()
+                }
+              }
+            }
+          }
+        }
+      })
+  }
+
+  @CalledInBackground
+  private fun loadUnmergedBranches(root: VirtualFile): List<String>? {
+    var result: List<String>? = null
+
+    val handler = GitLineHandler(project, root, GitCommand.BRANCH).apply {
+      addParameters("--no-color", "-a", "--no-merged")
+    }
+    try {
+      result = Git.getInstance().runCommand(handler).getOutputOrThrow()
+        .lines()
+        .filter { branch -> !LINK_REF_REGEX.matcher(branch).matches() }
+        .map { it.trim() }
+    }
+    catch (e: Exception) {
+      LOG.warn("Failed to load unmerged branches for root: ${root}", e)
+    }
+
+    return result
+  }
+
   private fun validateBranchField(): ValidationInfo? {
-    if (branchField.item == null) {
+    val item = branchField.item ?: ""
+    val text = GitUIUtil.getTextField(branchField).text
+    val value = if (item == text) item else text
+
+    if (value.isNullOrEmpty()) {
       return ValidationInfo(GitBundle.message("merge.no.branch.selected.error"), branchField)
     }
+
     val items = (branchField.model as CollectionComboBoxModel).items
-    if (branchField.item !in items) {
+    if (value !in items) {
       return ValidationInfo(GitBundle.message("merge.no.matching.branch.error"), branchField)
     }
+
     return null
   }
 
-  private fun updateBranchesField(branches: List<String>) {
+  private fun updateBranchesField() {
+    val branches = getBranches()
+
     val model = branchField.model as MutableCollectionComboBoxModel
-
     model.update(branches)
-    model.selectedItem = if (branches.isNotEmpty()) branches[0] else ""
-  }
 
-  private fun updateBranches() {
-    val repository = getRepository(getSelectedRoot())
-    val branches = getRepositoryBranches(repository)
+    val repository = getSelectedRepository()
+    val currentRemoteBranch = repository.currentBranch?.findTrackedBranch(repository)?.nameForRemoteOperations
 
-    updateBranchesField(branches)
-  }
+    val matchingBranch = branches.find { branch -> branch == currentRemoteBranch } ?: branches.getOrElse(0) { "" }
 
-  private fun getRepository(root: VirtualFile): GitRepository {
-    var repository = repositoryBranches.keys.find { it.root == root }
-    if (repository != null) {
-      return repository
+    if (matchingBranch.isEmpty()) {
+      startTrackingValidation()
     }
 
-    repository = repositoryManager.getRepositoryForFileQuick(root)
-    checkNotNull(repository) { "Unable to find repository with root: ${root}" }
-
-    repositoryBranches[repository] = null
-
-    return repository
+    model.selectedItem = matchingBranch
   }
 
-  private fun getRepositoryBranches(repository: GitRepository): List<String> {
-    var branches = repositoryBranches[repository]
-    if (branches != null) {
-      return branches
+  private fun getBranches(): List<String> {
+    val repository = getSelectedRepository()
+    return unmergedBranches[repository] ?: allBranches[repository] ?: emptyList()
+  }
+
+  private fun getRepository(root: VirtualFile) = allBranches.keys.find { repo -> repo.root == root }!!
+
+  private fun getSelectedRepository() = getRepository(getSelectedRoot())
+
+  private fun updateTitle() {
+    val currentBranchName = getSelectedRepository().currentBranchName
+    title = if (currentBranchName.isNullOrEmpty()) {
+      GitBundle.message("merge.branch.title")
     }
-
-    branches = repository.branches
-      .let { it.localBranches + it.remoteBranches }
-      .map { it.name }
-
-    repositoryBranches[repository] = branches
-
-    return branches
+    else {
+      GitBundle.message("merge.branch.into.current.title", currentBranchName)
+    }
   }
 
   private fun createPanel() = JPanel().apply {
@@ -200,14 +313,13 @@ class GitMergeDialog(private val project: Project,
     return ComboBox(model).apply {
       item = defaultRoot.name
       isSwingPopup = false
-
-      val bw = DarculaUIUtil.BW.get()
-      ui = FlatComboBoxUI(outerInsets = Insets(bw, bw, bw, 0))
+      ui = FlatComboBoxUI(outerInsets = Insets(BW.get(), BW.get(), BW.get(), 0))
 
       addItemListener { e ->
         if (e.stateChange == ItemEvent.SELECTED
             && e.item != null) {
-          updateBranches()
+          updateTitle()
+          updateBranchesField()
         }
       }
     }
@@ -222,11 +334,20 @@ class GitMergeDialog(private val project: Project,
     return ComboBox(model).apply<ComboBox<String>> {
       isSwingPopup = false
       isEditable = true
+      editor = object : BasicComboBoxEditor() {
+        override fun createEditorComponent() = JBTextField().apply {
+          emptyText.text = GitBundle.message("merge.branch.field.placeholder")
 
-      val bw = DarculaUIUtil.BW.get()
+          document.addDocumentListener(object : DocumentAdapter() {
+            override fun textChanged(e: DocumentEvent) {
+              startTrackingValidation()
+            }
+          })
+        }
+      }
 
       ui = FlatComboBoxUI(
-        outerInsets = Insets(bw, 0, bw, bw),
+        outerInsets = Insets(BW.get(), 0, BW.get(), BW.get()),
         popupEmptyText = GitBundle.message("merge.branch.popup.empty.text"))
     }
   }
@@ -249,8 +370,9 @@ class GitMergeDialog(private val project: Project,
           .minHeight("${JBUI.scale(75)}px"))
   }
 
-  private fun createOptionsDropDown() = DropDownLink(GitBundle.message("merge.options.modify"),
-                                                     Function<DropDownLink<*>?, ListPopupImpl> { createOptionsPopup() })
+  private fun createOptionsDropDown() = DropDownLink(GitBundle.message("merge.options.modify")) { createOptionsPopup() }.apply {
+    mnemonic = KeyEvent.VK_M
+  }
 
   private fun createOptionsPopup() = object : ListPopupImpl(project, createOptionPopupStep()) {
     override fun getListElementRenderer() = OptionListCellRenderer(
@@ -263,11 +385,18 @@ class GitMergeDialog(private val project: Project,
     OptionInfo(option, option.option, GitBundle.message(option.descriptionKey))
   }
 
-  private fun createOptionPopupStep() = object : BaseListPopupStep<MergeOption>(GitBundle.message("merge.options.modify"),
-                                                                                mutableListOf(*MergeOption.values())) {
+  private fun createOptionPopupStep() = object : BaseListPopupStep<MergeOption>(GitBundle.message("merge.options.modify.popup.title"),
+                                                                                getOptions()) {
+
     override fun isSelectable(value: MergeOption?) = isOptionEnabled(value!!)
 
     override fun onChosen(selectedValue: MergeOption?, finalChoice: Boolean) = doFinalStep(Runnable { optionChosen(selectedValue) })
+  }
+
+  private fun getOptions() = MergeOption.values().toMutableList().apply {
+    if (!isNoVerifySupported) {
+      remove(MergeOption.NO_VERIFY)
+    }
   }
 
   private fun isOptionEnabled(option: MergeOption) = selectedOptions.all { it.isOptionSuitable(option) }
@@ -328,9 +457,17 @@ class GitMergeDialog(private val project: Project,
   }
 
   private fun updateCommitMessagePanel() {
-    commitMsgPanel.isVisible = MergeOption.COMMIT_MESSAGE in selectedOptions
-    commitMsgField.text = ""
+    val useCommitMsg = MergeOption.COMMIT_MESSAGE in selectedOptions
+    commitMsgPanel.isVisible = useCommitMsg
+    if (!useCommitMsg) {
+      commitMsgField.text = ""
+    }
   }
 
   private fun createOptionButton(option: MergeOption) = OptionButton(option, option.option) { optionChosen(option) }
+
+  companion object {
+    private val LOG = logger<GitMergeDialog>()
+    private val LINK_REF_REGEX = Pattern.compile(".+\\s->\\s.+")
+  }
 }

@@ -38,7 +38,6 @@
     <resolveScopeProvider implementation="com.intellij.psi.impl.file.impl.JavaOutOfSourcesResolveScopeProvider"/>
     <highlightingPassFactory implementation="com.intellij.codeInsight.daemon.impl.JavaSoftKeywordHighlightingPassFactory"/>
     <highlightingPassFactory implementation="com.intellij.codeInsight.daemon.impl.JavaTextBlockIndentPassFactory"/>
-    <highlightingPassFactory implementation="com.intellij.codeInsight.daemon.problems.pass.ProjectProblemPassFactory"/>
     <deadCode implementation="com.intellij.codeInspection.java19modules.Java9ModuleEntryPoint"/>
     <metaLanguage implementation="com.intellij.uast.UastMetaLanguage"/>
     <lang.inspectionSuppressor language="JAVA" implementationClass="com.intellij.codeInspection.SuppressManagerImpl"/>
@@ -256,6 +255,7 @@
     <lang.foldingBuilder language="JAVA" implementationClass="com.intellij.codeInsight.daemon.impl.actions.SuppressWarningsFoldingBuilder" />
     <highlightVisitor implementation="com.intellij.codeInsight.daemon.impl.analysis.HighlightVisitorImpl"/>
     <lang.inferredAnnotationProvider implementation="com.intellij.codeInsight.DefaultInferredAnnotationProvider"/>
+    <lang.inferredAnnotationProvider implementation="com.intellij.codeInsight.ProtobufInferredAnnotationProvider"/>
     <projectService serviceInterface="com.intellij.codeInsight.guess.GuessManager"
                     serviceImplementation="com.intellij.codeInsight.guess.impl.GuessManagerImpl"/>
     <projectService serviceInterface="com.intellij.codeInsight.InferredAnnotationsManager"

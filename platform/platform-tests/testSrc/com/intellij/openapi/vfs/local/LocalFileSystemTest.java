@@ -88,7 +88,7 @@ public class LocalFileSystemTest extends BareTestFixtureTestCase {
 
   @Test
   public void testBasics() throws IOException {
-    VirtualFile dir = PlatformTestUtil.notNull(myFS.refreshAndFindFileByIoFile(tempDir.newDirectory("xxx")));
+    VirtualFile dir = Objects.requireNonNull(myFS.refreshAndFindFileByIoFile(tempDir.newDirectory("xxx")));
     assertTrue(dir.isValid());
     assertEquals(0, dir.getChildren().length);
 
@@ -211,7 +211,7 @@ public class LocalFileSystemTest extends BareTestFixtureTestCase {
   }
 
   @Test
-  public void testCopyFile() {
+  public void testCopyFile() throws IOException {
     runInEdtAndWait(() -> {
       File fromDir = tempDir.newDirectory("from");
       File toDir = tempDir.newDirectory("to");
@@ -231,7 +231,7 @@ public class LocalFileSystemTest extends BareTestFixtureTestCase {
   }
 
   @Test
-  public void testCopyDir() {
+  public void testCopyDir() throws IOException {
     runInEdtAndWait(() -> {
       File fromDir = tempDir.newDirectory("from");
       File toDir = tempDir.newDirectory("to");
@@ -539,7 +539,7 @@ public class LocalFileSystemTest extends BareTestFixtureTestCase {
   @Test
   public void testCaseInsensitiveRename() throws IOException {
     File file = tempDir.newFile("file.txt");
-    File home = PlatformTestUtil.notNull(file.getParentFile());
+    File home = Objects.requireNonNull(file.getParentFile());
     assertThat(home.list()).containsExactly("file.txt");
 
     VirtualFile vFile = myFS.refreshAndFindFileByIoFile(file);
@@ -737,7 +737,7 @@ public class LocalFileSystemTest extends BareTestFixtureTestCase {
   }
 
   @Test
-  public void testDuplicateViaRename() {
+  public void testDuplicateViaRename() throws IOException {
     runInEdtAndWait(() -> {
       VirtualFile dir = myFS.refreshAndFindFileByIoFile(tempDir.getRoot());
       assertNotNull(dir);
@@ -757,7 +757,7 @@ public class LocalFileSystemTest extends BareTestFixtureTestCase {
   }
 
   @Test
-  public void testBrokenSymlinkMove() {
+  public void testBrokenSymlinkMove() throws IOException {
     assumeSymLinkCreationIsSupported();
 
     runInEdtAndWait(() -> {
@@ -812,7 +812,7 @@ public class LocalFileSystemTest extends BareTestFixtureTestCase {
   }
 
   @Test
-  public void testReadOnly() {
+  public void testReadOnly() throws IOException {
     runInEdtAndWait(() -> {
       File file = tempDir.newFile("file.txt");
       VirtualFile vFile = myFS.refreshAndFindFileByIoFile(file);
@@ -870,5 +870,32 @@ public class LocalFileSystemTest extends BareTestFixtureTestCase {
         assertNull(virtualFileManager.findFileByUrl("temp://"));
       }
     }).assertTiming();
+  }
+
+  @Test
+  public void testFindFileByNioPath() {
+    File file = tempDir.newFile("some-new-file");
+
+    VirtualFile nioFile = VirtualFileManager.getInstance().refreshAndFindFileByNioPath(file.toPath());
+    VirtualFile nioFile2 = VirtualFileManager.getInstance().findFileByNioPath(file.toPath());
+
+    assertNotNull(nioFile);
+    assertNotNull(nioFile2);
+    assertEquals(nioFile, nioFile2);
+  }
+
+  @Test
+  public void testFindNioPathConsistency() {
+    File file = tempDir.newFile("some-new-file");
+
+    VirtualFile ioFile = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file);
+    VirtualFile nioFile = VirtualFileManager.getInstance().refreshAndFindFileByNioPath(file.toPath());
+
+    assertNotNull(ioFile);
+    assertNotNull(nioFile);
+    assertEquals(nioFile, ioFile);
+
+    assertEquals(file.toPath(), nioFile.toNioPath());
+    assertEquals(file.toPath(), ioFile.toNioPath());
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.externalSystem.service.project.wizard
 
 import com.intellij.ide.IdeBundle
@@ -21,6 +21,7 @@ import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.SortedComboBoxModel
 import com.intellij.ui.layout.*
 import java.io.File
+import java.nio.file.Paths
 import java.util.Comparator.comparing
 import java.util.function.Function
 import javax.swing.JList
@@ -28,7 +29,6 @@ import javax.swing.JTextField
 import javax.swing.ListCellRenderer
 
 abstract class MavenizedStructureWizardStep<Data : Any>(val context: WizardContext) : ModuleWizardStep() {
-
   abstract fun createView(data: Data): DataView<Data>
 
   abstract fun findAllParents(): List<Data>
@@ -241,14 +241,15 @@ abstract class MavenizedStructureWizardStep<Data : Any>(val context: WizardConte
       return error(message)
     }
 
+    val locationPath = Paths.get(location)
     for (project in ProjectManager.getInstance().openProjects) {
-      if (ProjectUtil.isSameProject(location, project)) {
+      if (ProjectUtil.isSameProject(locationPath, project)) {
         val message = ExternalSystemBundle.message("external.system.mavenized.structure.wizard.directory.already.taken.error", project.name)
         return error(message)
       }
     }
 
-    val file = File(location)
+    val file = locationPath.toFile()
     if (file.exists()) {
       if (!file.canWrite()) {
         val message = ExternalSystemBundle.message("external.system.mavenized.structure.wizard.directory.not.writable.error")
@@ -272,7 +273,7 @@ abstract class MavenizedStructureWizardStep<Data : Any>(val context: WizardConte
   override fun updateDataModel() {
     val location = location
     context.projectName = entityName
-    context.projectFileDirectory = location
+    context.setProjectFileDirectory(location)
     createDirectory(File(location))
     updateProjectData()
   }

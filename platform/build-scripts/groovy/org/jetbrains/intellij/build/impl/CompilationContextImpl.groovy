@@ -9,7 +9,6 @@ import groovy.transform.CompileDynamic
 import groovy.transform.CompileStatic
 import org.jetbrains.intellij.build.*
 import org.jetbrains.intellij.build.impl.compilation.CompilationPartsUtil
-import org.jetbrains.intellij.build.impl.compilation.PortableCompilationCache
 import org.jetbrains.intellij.build.impl.logging.BuildMessagesImpl
 import org.jetbrains.jps.model.JpsElementFactory
 import org.jetbrains.jps.model.JpsGlobal
@@ -80,8 +79,6 @@ class CompilationContextImpl implements CompilationContext {
                                              buildOutputRootEvaluator, options)
     context.prepareForBuild()
     messages.debugLogPath = "$context.paths.buildOutputRoot/log/debug.log"
-    def jpsCache = new PortableCompilationCache(context)
-    if (jpsCache.canBeUsed) jpsCache.warmUp()
     return context
   }
 
@@ -183,6 +180,7 @@ class CompilationContextImpl implements CompilationContext {
 
     def model = JpsElementFactory.instance.createModel()
     def pathVariablesConfiguration = JpsModelSerializationDataService.getOrCreatePathVariablesConfiguration(model.global)
+    pathVariablesConfiguration.addPathVariable("KOTLIN_BUNDLED", "$kotlinHome/kotlinc")
     pathVariablesConfiguration.addPathVariable("MAVEN_REPOSITORY", FileUtil.toSystemIndependentName(new File(SystemProperties.getUserHome(), ".m2/repository").absolutePath))
 
     def pathVariables = JpsModelSerializationDataService.computeAllPathVariables(model.global)

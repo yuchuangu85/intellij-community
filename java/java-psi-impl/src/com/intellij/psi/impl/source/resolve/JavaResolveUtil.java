@@ -204,7 +204,7 @@ public class JavaResolveUtil {
            !PsiImplUtil.isInServerPage(placeFile);
   }
 
-  public static boolean isInJavaDoc(final PsiElement place) {
+  public static boolean isInJavaDoc(@NotNull PsiElement place) {
     PsiElement scope = place;
     while(scope != null){
       if (scope instanceof PsiDocComment) return true;
@@ -299,5 +299,16 @@ public class JavaResolveUtil {
 
     return PsiResolveHelper.SERVICE.getInstance(project)
       .resolveConstructor(PsiTypesUtil.getClassType(superClassWhichTheSuperCallMustResolveTo), expressionList, place).getElement();
+  }
+
+  @Nullable
+  public static PsiPackage getContainingPackage(@NotNull final PsiElement element) {
+    final PsiFile file = element.getContainingFile();
+    if (file == null) return null;
+
+    final PsiDirectory directory = file.getContainingDirectory();
+    if (directory == null) return null;
+
+    return JavaDirectoryService.getInstance().getPackage(directory);
   }
 }

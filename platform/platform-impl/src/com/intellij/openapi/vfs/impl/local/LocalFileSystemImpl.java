@@ -19,15 +19,9 @@ import com.intellij.openapi.vfs.newvfs.persistent.PersistentFS;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.containers.ContainerUtil;
-import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.*;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public final class LocalFileSystemImpl extends LocalFileSystemBase implements Disposable, VirtualFilePointerCapableFileSystem {
@@ -40,12 +34,11 @@ public final class LocalFileSystemImpl extends LocalFileSystemBase implements Di
 
   public LocalFileSystemImpl() {
     myManagingFS = ManagingFS.getInstance();
-    myWatcher = new FileWatcher(myManagingFS);
-    if (myWatcher.isOperational()) {
+    myWatcher = new FileWatcher(myManagingFS, () -> {
       AppExecutorUtil.getAppScheduledExecutorService().scheduleWithFixedDelay(
         () -> { if (!ApplicationManager.getApplication().isDisposed()) storeRefreshStatusToFiles(); },
         STATUS_UPDATE_PERIOD, STATUS_UPDATE_PERIOD, TimeUnit.MILLISECONDS);
-    }
+    });
     myWatchRootsManager = new WatchRootsManager(myWatcher, this);
     Disposer.register(ApplicationManager.getApplication(), this);
     new SymbolicLinkRefresher(this);
@@ -125,6 +118,22 @@ public final class LocalFileSystemImpl extends LocalFileSystemBase implements Di
         }
       }
     }
+  }
+
+  @Override
+  public @NotNull Iterable<@NotNull VirtualFile> findCachedFilesForPath(@NotNull String path) {
+    return ContainerUtil.mapNotNull(getAliasedPaths(path), this::findFileByPathIfCached);
+  }
+
+  // Finds paths that denote the same physical file (canonical path + symlinks)
+  // Returns [canonical_path + symlinks], if path is canonical
+  //         [path], otherwise
+  private @NotNull List<@NotNull @SystemDependent String> getAliasedPaths(@NotNull String path) {
+    path = FileUtil.toSystemDependentName(path);
+    List<@NotNull String> aliases = new ArrayList<>(getFileWatcher().mapToAllSymlinks(path));
+    assert !aliases.contains(path);
+    aliases.add(0, path);
+    return aliases;
   }
 
   @NotNull

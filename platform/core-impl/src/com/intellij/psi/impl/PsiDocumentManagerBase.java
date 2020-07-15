@@ -49,7 +49,8 @@ import java.util.concurrent.ConcurrentMap;
 public abstract class PsiDocumentManagerBase extends PsiDocumentManager implements DocumentListener, Disposable {
   static final Logger LOG = Logger.getInstance(PsiDocumentManagerBase.class);
   private static final Key<Document> HARD_REF_TO_DOCUMENT = Key.create("HARD_REFERENCE_TO_DOCUMENT");
-  private static final Key<List<Runnable>> ACTION_AFTER_COMMIT = Key.create("ACTION_AFTER_COMMIT");
+
+  private final Map<Document, List<Runnable>> myActionsAfterCommit = ContainerUtil.createConcurrentWeakMap();
 
   protected final Project myProject;
   private final PsiManager myPsiManager;
@@ -73,7 +74,6 @@ public abstract class PsiDocumentManagerBase extends PsiDocumentManager implemen
     myPsiManager = PsiManager.getInstance(project);
     myDocumentCommitProcessor = ApplicationManager.getApplication().getService(DocumentCommitProcessor.class);
     mySynchronizer = new PsiToDocumentSynchronizer(this, project.getMessageBus());
-    myPsiManager.addPsiTreeChangeListener(mySynchronizer, this);
   }
 
   @Override
@@ -115,10 +115,9 @@ public abstract class PsiDocumentManagerBase extends PsiDocumentManager implemen
   }
 
   @Override
-  public PsiFile getCachedPsiFile(@NotNull Document document) {
-    final VirtualFile virtualFile = FileDocumentManager.getInstance().getFile(document);
-    if (virtualFile == null || !virtualFile.isValid()) return null;
-    return getCachedPsiFile(virtualFile);
+  public final PsiFile getCachedPsiFile(@NotNull Document document) {
+    VirtualFile virtualFile = FileDocumentManager.getInstance().getFile(document);
+    return virtualFile == null || !virtualFile.isValid() ? null : getCachedPsiFile(virtualFile);
   }
 
   @Nullable
@@ -302,26 +301,14 @@ public abstract class PsiDocumentManagerBase extends PsiDocumentManager implemen
     return false;
   }
 
-  public static void addRunOnCommit(@NotNull Document document, @NotNull Runnable action) {
-    synchronized (ACTION_AFTER_COMMIT) {
-      List<Runnable> list = document.getUserData(ACTION_AFTER_COMMIT);
-      if (list == null) {
-        document.putUserData(ACTION_AFTER_COMMIT, list = new SmartList<>());
-      }
-      list.add(action);
-    }
+  @ApiStatus.Internal
+  public void addRunOnCommit(@NotNull Document document, @NotNull Runnable action) {
+    myActionsAfterCommit.computeIfAbsent(document, __ -> new SmartList<>()).add(action);
   }
 
-  private static List<Runnable> getAndClearActionsAfterCommit(@NotNull Document document) {
-    List<Runnable> list;
-    synchronized (ACTION_AFTER_COMMIT) {
-      list = document.getUserData(ACTION_AFTER_COMMIT);
-      if (list != null) {
-        list = new ArrayList<>(list);
-        document.putUserData(ACTION_AFTER_COMMIT, null);
-      }
-    }
-    return list;
+  private List<Runnable> getAndClearActionsAfterCommit(@NotNull Document document) {
+    List<Runnable> list = myActionsAfterCommit.remove(document);
+    return list != null ? new ArrayList<>(list) : null;
   }
 
   @Override
@@ -706,7 +693,7 @@ public abstract class PsiDocumentManagerBase extends PsiDocumentManager implemen
            !hasEventSystemEnabledUncommittedDocuments();
   }
 
-  @ApiStatus.Internal
+  @Override
   public boolean hasEventSystemEnabledUncommittedDocuments() {
     return ContainerUtil.exists(myUncommittedDocuments, this::isEventSystemEnabled);
   }
@@ -1128,7 +1115,7 @@ public abstract class PsiDocumentManagerBase extends PsiDocumentManager implemen
     }
   }
 
-  private static class UncommittedInfo {
+  private static final class UncommittedInfo {
     private final FrozenDocument myFrozen;
     private final ArrayList<DocumentEvent> myEvents = new ArrayList<>();
     private final ConcurrentMap<DocumentWindow, DocumentWindow> myFrozenWindows = new ConcurrentHashMap<>();

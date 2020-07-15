@@ -458,7 +458,7 @@ public class InspectionProfileImpl extends NewInspectionProfile {
     }
 
     if (myBaseProfile != null) {
-      myBaseProfile.initInspectionTools(project);
+      myBaseProfile.initInspectionTools(myBaseProfile.getProfileManager() instanceof ProjectInspectionProfileManager ? project : null);
     }
 
     List<InspectionToolWrapper<?, ?>> tools;
@@ -903,7 +903,7 @@ public class InspectionProfileImpl extends NewInspectionProfile {
     }
   }
 
-  private static class MyInspectionElementsMerger extends InspectionElementsMergerBase {
+  private static final class MyInspectionElementsMerger extends InspectionElementsMergerBase {
 
     private final String myShortName;
     private final LocalInspectionToolWrapper myWrapper;

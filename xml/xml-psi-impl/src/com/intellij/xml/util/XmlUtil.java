@@ -58,7 +58,7 @@ import java.io.File;
 import java.net.URL;
 import java.util.*;
 
-public class XmlUtil {
+public final class XmlUtil {
   @NonNls public static final String XML_SCHEMA_URI = "http://www.w3.org/2001/XMLSchema";
   @NonNls public static final String XML_SCHEMA_URI2 = "http://www.w3.org/1999/XMLSchema";
   @NonNls public static final String XML_SCHEMA_URI3 = "http://www.w3.org/2000/10/XMLSchema";
@@ -256,16 +256,16 @@ public class XmlUtil {
     return null;
   }
 
-  public static boolean processXmlElements(XmlElement element, PsiElementProcessor processor, boolean deepFlag) {
+  public static boolean processXmlElements(XmlElement element, PsiElementProcessor<? super PsiElement> processor, boolean deepFlag) {
     return XmlPsiUtil.processXmlElements(element, processor, deepFlag);
   }
 
-  public static boolean processXmlElements(XmlElement element, PsiElementProcessor processor, boolean deepFlag, boolean wideFlag) {
+  public static boolean processXmlElements(XmlElement element, PsiElementProcessor<? super PsiElement> processor, boolean deepFlag, boolean wideFlag) {
     return XmlPsiUtil.processXmlElements(element, processor, deepFlag, wideFlag);
   }
 
   public static boolean processXmlElements(final XmlElement element,
-                                           final PsiElementProcessor processor,
+                                           final PsiElementProcessor<? super PsiElement> processor,
                                            final boolean deepFlag,
                                            final boolean wideFlag,
                                            final PsiFile baseFile) {
@@ -273,7 +273,7 @@ public class XmlUtil {
   }
 
   public static boolean processXmlElements(final XmlElement element,
-                                           final PsiElementProcessor processor,
+                                           final PsiElementProcessor<? super PsiElement> processor,
                                            final boolean deepFlag,
                                            final boolean wideFlag,
                                            final PsiFile baseFile,
@@ -281,7 +281,7 @@ public class XmlUtil {
     return XmlPsiUtil.processXmlElements(element, processor, deepFlag, wideFlag, baseFile, processIncludes);
   }
 
-  public static boolean processXmlElementChildren(final XmlElement element, final PsiElementProcessor processor, final boolean deepFlag) {
+  public static boolean processXmlElementChildren(final XmlElement element, final PsiElementProcessor<? super PsiElement> processor, final boolean deepFlag) {
     return XmlPsiUtil.processXmlElementChildren(element, processor, deepFlag);
   }
 

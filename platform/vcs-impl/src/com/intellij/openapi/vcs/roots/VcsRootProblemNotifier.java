@@ -37,7 +37,7 @@ import static com.intellij.util.containers.ContainerUtil.*;
 /**
  * Searches for Vcs roots problems via {@link VcsRootErrorsFinder} and notifies about them.
  */
-public class VcsRootProblemNotifier {
+public final class VcsRootProblemNotifier {
   private static final Logger LOG = Logger.getInstance(VcsRootProblemNotifier.class);
 
   @NotNull private final Project myProject;
@@ -303,6 +303,6 @@ public class VcsRootProblemNotifier {
     if (presentablePath == null) {
       presentablePath = FileUtil.getLocationRelativeToUserHome(toSystemDependentName(mapping));
     }
-    return StringUtil.shortenPathWithEllipsis(escapeXmlEntities(presentablePath), 30, true);
+    return escapeXmlEntities(presentablePath);
   }
 }

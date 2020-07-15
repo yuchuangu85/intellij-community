@@ -24,6 +24,7 @@ import com.intellij.psi.PsiClass;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.roots.ModuleRootManagerTestCase;
 import com.intellij.testFramework.PsiTestUtil;
+import com.intellij.testFramework.rules.ProjectModelRule;
 import com.intellij.util.ui.UIUtil;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
@@ -80,15 +81,13 @@ public class LibraryTest extends ModuleRootManagerTestCase {
     commit(libraryModel);
 
     assertNull(table.getLibraryByName("a"));
-    assertNull(model.getLibraryByName("a"));
     assertSame(a, table.getLibraryByName("b"));
-    assertSame(a, model.getLibraryByName("b"));
     commit(model);
     assertSame(a, table.getLibraryByName("b"));
   }
 
   public void testModificationCount() {
-    ignoreTestUnderWorkspaceModel();
+    ProjectModelRule.ignoreTestUnderWorkspaceModel();
 
     final long moduleModificationCount = ModuleRootManagerEx.getInstanceEx(myModule).getModificationCountForTests();
 
@@ -125,7 +124,7 @@ public class LibraryTest extends ModuleRootManagerTestCase {
   }
 
   public void testReloadLibraryTable() {
-    ignoreTestUnderWorkspaceModel();
+    ProjectModelRule.ignoreTestUnderWorkspaceModel();
 
     ((LibraryTableBase)getProjectLibraryTable()).loadState(new Element("component"));
     createLibrary("a", null, null);
@@ -134,7 +133,7 @@ public class LibraryTest extends ModuleRootManagerTestCase {
   }
 
   public void testReloadLibraryTableWithoutChanges() {
-    ignoreTestUnderWorkspaceModel();
+    ProjectModelRule.ignoreTestUnderWorkspaceModel();
 
     ((LibraryTableBase)getProjectLibraryTable()).loadState(new Element("component"));
     createLibrary("a", null, null);

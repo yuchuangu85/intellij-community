@@ -128,9 +128,13 @@ public class CompilerConfigurationImpl extends CompilerConfiguration implements 
 
     if (!project.isDefault()) {
       // initial state
-      StartupManager.getInstance(project).runAfterOpened(() -> {myRegisteredCompilers = collectCompilers();});
+      StartupManager.getInstance(project).runAfterOpened(() -> {
+        myRegisteredCompilers = collectCompilers();
+      });
     }
-    BackendCompiler.EP_NAME.getPoint(project).addChangeListener(() -> {myRegisteredCompilers = collectCompilers();}, project);
+    BackendCompiler.EP_NAME.getPoint(project).addChangeListener(() -> {
+      myRegisteredCompilers = collectCompilers();
+    }, project);
   }
 
   // Overridden in Upsource
@@ -723,6 +727,11 @@ public class CompilerConfigurationImpl extends CompilerConfiguration implements 
   }
 
   @Override
+  public void noStateLoaded() {
+    loadStateFromExternalStorage();
+  }
+
+  @Override
   public void loadState(@NotNull Element parentNode) {
     myState = XmlSerializer.deserialize(parentNode, State.class);
     if (!myProject.isDefault()) {
@@ -812,7 +821,12 @@ public class CompilerConfigurationImpl extends CompilerConfiguration implements 
       readByteTargetLevel(parentNode, myModuleBytecodeTarget);
     }
 
-    Map<String, String> externalState = ExternalCompilerConfigurationStorage.getInstance(myProject).getLoadedState();
+    loadStateFromExternalStorage();
+  }
+
+  private void loadStateFromExternalStorage() {
+    ExternalCompilerConfigurationStorage externalStorage = ExternalCompilerConfigurationStorage.getInstance(myProject);
+    Map<String, String> externalState = externalStorage.getLoadedState();
     if (externalState != null) {
       myModuleBytecodeTarget.putAll(externalState);
     }
@@ -1040,7 +1054,7 @@ public class CompilerConfigurationImpl extends CompilerConfiguration implements 
     return artifacts.isEmpty();
   }
 
-  private static class CompiledPattern {
+  private static final class CompiledPattern {
     @NotNull final Pattern fileName;
     @Nullable final Pattern dir;
     @Nullable final Pattern srcRoot;

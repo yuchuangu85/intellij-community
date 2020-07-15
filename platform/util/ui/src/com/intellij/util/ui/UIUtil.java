@@ -232,6 +232,11 @@ public final class UIUtil {
     }
   }
 
+  public static void setMonospaced(@NotNull Component component) {
+    Font font = component.getFont();
+    component.setFont(new FontUIResource(Font.MONOSPACED, font.getStyle(), font.getSize()));
+  }
+
   public static @NotNull Cursor getTextCursor(@NotNull Color backgroundColor) {
     return SystemInfo.isMac && ColorUtil.isDark(backgroundColor) ?
            MacUIUtil.getInvertedTextCursor() : Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR);
@@ -685,7 +690,7 @@ public final class UIUtil {
 
   public static void setEnabled(@NotNull Component component, boolean enabled, boolean recursively, final boolean visibleOnly) {
     JBIterable<Component> all = recursively ? uiTraverser(component).expandAndFilter(
-      visibleOnly ? (Condition<Component>)Component::isVisible : Conditions.alwaysTrue()).traverse() : JBIterable.of(component);
+      visibleOnly ? Component::isVisible : Conditions.alwaysTrue()).traverse() : JBIterable.of(component);
     Color fg = enabled ? getLabelForeground() : getLabelDisabledForeground();
     for (Component c : all) {
       c.setEnabled(enabled);
@@ -1718,6 +1723,8 @@ public final class UIUtil {
     g.setComposite(X_RENDER_ACTIVE.getValue() ? AlphaComposite.SrcOver : AlphaComposite.Src);
   }
 
+  private static final Method dispatchEventMethod =
+    Objects.requireNonNull(ReflectionUtil.getDeclaredMethod(EventQueue.class, "dispatchEvent", AWTEvent.class));
   /**
    * Dispatch all pending invocation events (if any) in the {@link com.intellij.ide.IdeEventQueue}, ignores and removes all other events from the queue.
    * In tests, consider using {@link com.intellij.testFramework.PlatformTestUtil#dispatchAllInvocationEventsInIdeEventQueue()}
@@ -1727,8 +1734,6 @@ public final class UIUtil {
   public static void dispatchAllInvocationEvents() {
     assert EdtInvocationManager.getInstance().isEventDispatchThread() : Thread.currentThread() + "; EDT: "+getEventQueueThread();
     EventQueue eventQueue = Toolkit.getDefaultToolkit().getSystemEventQueue();
-    Method dispatchEventMethod =
-      Objects.requireNonNull(ReflectionUtil.getDeclaredMethod(eventQueue.getClass(), "dispatchEvent", AWTEvent.class));
     for (int i = 1; ; i++) {
       AWTEvent event = eventQueue.peekEvent();
       if (event == null) break;
@@ -1919,7 +1924,7 @@ public final class UIUtil {
     }
     if (component != null && component.getParent() instanceof JLayeredPane) { // Handle LoadingDecorator
       Component[] components = ((JLayeredPane)component.getParent()).getComponentsInLayer(JLayeredPane.DEFAULT_LAYER);
-      if (components.length == 1 && ArrayUtil.indexOf(components, component) == -1) {
+      if (components.length == 1 && ArrayUtilRt.indexOf(components, component, 0, components.length) == -1) {
         component = getDeepestComponentAtForComponent(parent, x, y, components[0]);
       }
     }
@@ -2134,6 +2139,15 @@ public final class UIUtil {
     @Override
     public ViewFactory getViewFactory() {
       return myFactory;
+    }
+  }
+
+  public static @NotNull Font getFontWithFallbackIfNeeded(@NotNull Font font, @NotNull String text) {
+    if (font.canDisplayUpTo(text) != -1) {
+      return getFontWithFallback(font);
+    }
+    else {
+      return font;
     }
   }
 
@@ -2706,18 +2720,26 @@ public final class UIUtil {
   }
 
   public static void setNotOpaqueRecursively(@NotNull Component component) {
+    setOpaqueRecursively(component, false);
+  }
+
+  public static void setOpaqueRecursively(@NotNull Component component, boolean opaque) {
     if (!(component instanceof JComponent)) {
       return;
     }
     forEachComponentInHierarchy(component, c -> {
       if (c instanceof JComponent) {
-        ((JComponent)c).setOpaque(false);
+        ((JComponent)c).setOpaque(opaque);
       }
     });
   }
 
   public static void setBackgroundRecursively(@NotNull Component component, @NotNull Color bg) {
     forEachComponentInHierarchy(component, c -> c.setBackground(bg));
+  }
+
+  public static void setForegroundRecursively(@NotNull Component component, @NotNull Color bg) {
+    forEachComponentInHierarchy(component, c -> c.setForeground(bg));
   }
 
   private static void forEachComponentInHierarchy(@NotNull Component component, @NotNull Consumer<? super Component> action) {

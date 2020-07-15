@@ -16,7 +16,7 @@ import kotlin.math.roundToInt
  */
 enum class InspectionsLevel(@PropertyKey(resourceBundle = EditorBundle.BUNDLE) private val bundleKey: String) {
   NONE("iw.level.none"),
-  ERRORS("iw.level.errors"),
+  SYNTAX("iw.level.syntax"),
   ALL("iw.level.all");
 
   override fun toString(): String = EditorBundle.message(bundleKey)
@@ -41,7 +41,8 @@ data class PassWrapper(val presentableName: String, val progress: Double, val fi
  * Type of the analyzing status that's taking place.
  */
 enum class AnalyzingType {
-  COMPLETE, // Analyzing complete
+  COMPLETE, // Analyzing complete, final results are available or none if OFF or in PowerSave mode
+  SUSPENDED, // Analyzing suspended for long process like indexing
   PARTIAL,  // Analyzing has partial results available for displaying
   EMPTY     // Analyzing in progress but no information is available
 }
@@ -103,7 +104,7 @@ interface UIController {
    */
   fun onClosePopup()
 
-  fun openProblemsView()
+  fun toggleProblemsView()
 }
 
 /**
@@ -187,7 +188,7 @@ class AnalyzerStatus(val icon: Icon, val title: String, val details: String, con
           override fun fillHectorPanels(container: Container, gc: GridBag) {}
           override fun canClosePopup(): Boolean = true
           override fun onClosePopup() {}
-          override fun openProblemsView() {}
+          override fun toggleProblemsView() {}
         }
       }
     }

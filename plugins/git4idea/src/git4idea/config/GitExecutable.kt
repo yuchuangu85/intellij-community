@@ -1,11 +1,16 @@
 // Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.config
 
+import com.intellij.execution.ExecutionException
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.util.ExecUtil
 import com.intellij.execution.wsl.WSLDistribution
 import com.intellij.openapi.util.SystemInfo
+import com.intellij.openapi.util.io.FileUtil
+import com.intellij.openapi.util.registry.Registry
+import com.intellij.openapi.util.text.StringUtil
 import git4idea.commands.GitHandler
+import git4idea.i18n.GitBundle
 import org.jetbrains.annotations.NonNls
 import java.io.File
 
@@ -28,6 +33,8 @@ sealed class GitExecutable {
    * Convert file path, returned by git, to be used by IDE.
    */
   abstract fun convertFilePathBack(path: String, workingDir: File): File
+
+  @Throws(ExecutionException::class)
   abstract fun patchCommandLine(handler: GitHandler, commandLine: GeneralCommandLine, withLowPriority: Boolean, withNoTty: Boolean)
 
   data class Local(override val exePath: String)
@@ -62,12 +69,27 @@ sealed class GitExecutable {
 
     override fun convertFilePath(file: File): String {
       val path = file.absolutePath
-      return distribution.getWslPath(path) ?: path
+
+      // 'C:\Users\file.txt' -> '/mnt/c/Users/file.txt'
+      val wslPath = distribution.getWslPath(path)
+      if (wslPath != null) return wslPath
+
+      // '\\wsl$\Ubuntu\home\user\file.txt' -> '/home/user/file.txt'
+      val uncRoot = distribution.uncRoot
+      if (FileUtil.isAncestor(uncRoot, file, false)) {
+        return StringUtil.trimStart(FileUtil.toSystemIndependentName(path),
+                                    FileUtil.toSystemIndependentName(uncRoot.path))
+      }
+
+      return path
     }
 
     override fun convertFilePathBack(path: String, workingDir: File): File {
+      // '/mnt/c/Users/file.txt' -> 'C:\Users\file.txt'
       val localPath = distribution.getWindowsPath(path)
       if (localPath != null) return File(localPath)
+
+      // '/home/user/file.txt' -> '\\wsl$\Ubuntu\home\user\file.txt'
       return File(distribution.uncRoot, path)
     }
 
@@ -75,7 +97,12 @@ sealed class GitExecutable {
       if (withNoTty) {
         val executablePath = commandLine.exePath
         commandLine.exePath = "setsid"
-        commandLine.parametersList.prependAll(executablePath)
+        if (Registry.`is`("git.use.setsid.wait.for.wsl.ssh")) {
+          commandLine.parametersList.prependAll("-w", executablePath)
+        }
+        else {
+          commandLine.parametersList.prependAll(executablePath)
+        }
       }
 
       // TODO: check that executable exists
@@ -87,6 +114,21 @@ sealed class GitExecutable {
       //commandLine.exePath = executable
 
       distribution.patchCommandLine(commandLine, handler.project(), null, false)
+    }
+  }
+
+  data class Unknown(override val id: String,
+                     override val exePath: String,
+                     val errorMessage: String)
+    : GitExecutable() {
+    override val isLocal: Boolean = false
+    override fun toString(): String = "$id: $exePath"
+
+    override fun convertFilePath(file: File): String = file.absolutePath
+    override fun convertFilePathBack(path: String, workingDir: File): File = File(path)
+
+    override fun patchCommandLine(handler: GitHandler, commandLine: GeneralCommandLine, withLowPriority: Boolean, withNoTty: Boolean) {
+      throw ExecutionException(errorMessage)
     }
   }
 }

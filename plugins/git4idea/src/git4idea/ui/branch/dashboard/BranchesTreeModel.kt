@@ -13,9 +13,9 @@ internal val GIT_BRANCHES = DataKey.create<Set<BranchInfo>>("GitBranchKey")
 internal data class BranchInfo(val branchName: String,
                                val isLocal: Boolean,
                                val isCurrent: Boolean,
+                               val isFavorite: Boolean,
                                val repositories: List<GitRepository>) {
   var isMy: ThreeState = ThreeState.UNSURE
-  var isFavorite = false
   override fun toString() = branchName
 }
 
@@ -79,7 +79,7 @@ internal class NodeDescriptorsModel(private val localRootNodeDescriptor: BranchN
     var curParent: BranchNodeDescriptor = if (branch.isLocal) localRootNodeDescriptor else remoteRootNodeDescriptor
 
     if (!useGrouping) {
-      addChild(curParent, BranchNodeDescriptor(NodeType.BRANCH, branch))
+      addChild(curParent, BranchNodeDescriptor(NodeType.BRANCH, branch, parent = curParent))
       return
     }
 

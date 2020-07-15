@@ -4,17 +4,24 @@ package com.intellij.util.indexing;
 import com.intellij.ide.lightEdit.LightEdit;
 import com.intellij.model.ModelBranch;
 import com.intellij.model.ModelBranchImpl;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.roots.*;
 import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.util.Condition;
+import com.intellij.openapi.util.RecursionGuard;
+import com.intellij.openapi.util.RecursionManager;
+import com.intellij.openapi.util.ThrowableComputable;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileFilter;
 import com.intellij.openapi.vfs.VirtualFileWithId;
 import com.intellij.openapi.vfs.newvfs.persistent.PersistentFS;
 import com.intellij.psi.search.EverythingGlobalScope;
@@ -22,10 +29,13 @@ import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.util.*;
 import com.intellij.util.containers.ConcurrentBitSet;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.containers.Stack;
 import com.intellij.util.indexing.impl.InvertedIndexValueIterator;
 import com.intellij.util.indexing.roots.*;
 import gnu.trove.THashSet;
-import gnu.trove.TIntHashSet;
+import it.unimi.dsi.fastutil.ints.IntIterable;
+import it.unimi.dsi.fastutil.ints.IntIterator;
+import it.unimi.dsi.fastutil.ints.IntSet;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -34,10 +44,14 @@ import java.io.IOException;
 import java.util.*;
 import java.util.function.IntPredicate;
 
+import static com.intellij.util.indexing.FileBasedIndexImpl.LOG;
 import static com.intellij.util.indexing.FileBasedIndexImpl.getCauseToRebuildIndex;
 
 @ApiStatus.Internal
 public abstract class FileBasedIndexEx extends FileBasedIndex {
+  @SuppressWarnings("SSBasedInspection")
+  private static final ThreadLocal<Stack<DumbModeAccessType>> ourDumbModeAccessTypeStack = ThreadLocal.withInitial(() -> new com.intellij.util.containers.Stack<>());
+  private static final RecursionGuard<Object> ourIgnoranceGuard = RecursionManager.createGuard("ignoreDumbMode");
   private final IndexAccessValidator myAccessValidator = new IndexAccessValidator();
 
   @ApiStatus.Internal
@@ -48,7 +62,7 @@ public abstract class FileBasedIndexEx extends FileBasedIndex {
   public abstract ProjectIndexableFilesFilter projectIndexableFiles(@Nullable Project project);
 
   @ApiStatus.Internal
-  abstract <K, V> UpdatableIndex<K, V, FileContent> getIndex(ID<K, V> indexId);
+  public abstract <K, V> UpdatableIndex<K, V, FileContent> getIndex(ID<K, V> indexId);
 
   @ApiStatus.Internal
   public abstract void waitUntilIndicesAreInitialized();
@@ -318,13 +332,13 @@ public abstract class FileBasedIndexEx extends FileBasedIndex {
   }
 
   @Override
-  public <K, V> boolean processFilesContainingAllKeys(@NotNull final ID<K, V> indexId,
-                                                      @NotNull final Collection<? extends K> dataKeys,
-                                                      @NotNull final GlobalSearchScope filter,
+  public <K, V> boolean processFilesContainingAllKeys(@NotNull ID<K, V> indexId,
+                                                      @NotNull Collection<? extends K> dataKeys,
+                                                      @NotNull GlobalSearchScope filter,
                                                       @Nullable Condition<? super V> valueChecker,
-                                                      @NotNull final Processor<? super VirtualFile> processor) {
+                                                      @NotNull Processor<? super VirtualFile> processor) {
     ProjectIndexableFilesFilter filesSet = projectIndexableFiles(filter.getProject());
-    final TIntHashSet set = collectFileIdsContainingAllKeys(indexId, dataKeys, filter, valueChecker, filesSet);
+    IntSet set = collectFileIdsContainingAllKeys(indexId, dataKeys, filter, valueChecker, filesSet);
     return set != null && processVirtualFiles(set, filter, processor);
   }
 
@@ -437,11 +451,11 @@ public abstract class FileBasedIndexEx extends FileBasedIndex {
   }
 
   @Nullable
-  private <K, V> TIntHashSet collectFileIdsContainingAllKeys(@NotNull final ID<K, V> indexId,
-                                                             @NotNull final Collection<? extends K> dataKeys,
-                                                             @NotNull final GlobalSearchScope filter,
-                                                             @Nullable final Condition<? super V> valueChecker,
-                                                             @Nullable final ProjectIndexableFilesFilter projectFilesFilter) {
+  private <K, V> IntSet collectFileIdsContainingAllKeys(@NotNull final ID<K, V> indexId,
+                                                        @NotNull final Collection<? extends K> dataKeys,
+                                                        @NotNull final GlobalSearchScope filter,
+                                                        @Nullable final Condition<? super V> valueChecker,
+                                                        @Nullable final ProjectIndexableFilesFilter projectFilesFilter) {
     IntPredicate accessibleFileFilter = getAccessibleFileIdFilter(filter.getProject());
     ValueContainer.IntPredicate idChecker = projectFilesFilter == null ? accessibleFileFilter::test : id ->
       projectFilesFilter.containsFileId(id) && accessibleFileFilter.test(id);
@@ -449,23 +463,83 @@ public abstract class FileBasedIndexEx extends FileBasedIndex {
       ProgressManager.checkCanceled();
       return true;
     };
-    ThrowableConvertor<UpdatableIndex<K, V, FileContent>, TIntHashSet, StorageException> convertor =
-      index -> InvertedIndexUtil.collectInputIdsContainingAllKeys(index, dataKeys, keyChecker, valueChecker, idChecker);
+    ThrowableConvertor<UpdatableIndex<K, V, FileContent>, IntSet, StorageException> convertor = index -> {
+      return InvertedIndexUtil.collectInputIdsContainingAllKeys(index, dataKeys, keyChecker, valueChecker, idChecker);
+    };
 
     return processExceptions(indexId, null, filter, convertor);
   }
 
-  private static boolean processVirtualFiles(@NotNull TIntHashSet ids,
-                                             @NotNull final GlobalSearchScope filter,
-                                             @NotNull final Processor<? super VirtualFile> processor) {
-    final PersistentFS fs = PersistentFS.getInstance();
-    return ids.forEach(id -> {
+  private static boolean processVirtualFiles(@NotNull IntIterable ids,
+                                             @NotNull VirtualFileFilter filter,
+                                             @NotNull Processor<? super VirtualFile> processor) {
+    PersistentFS fs = PersistentFS.getInstance();
+    for (IntIterator iterator = ids.iterator(); iterator.hasNext(); ) {
       ProgressManager.checkCanceled();
+      int id = iterator.nextInt();
       VirtualFile file = IndexInfrastructure.findFileByIdIfCached(fs, id);
       if (file != null && filter.accept(file)) {
-        return processor.process(file);
+        boolean processNext = processor.process(file);
+        ProgressManager.checkCanceled();
+        if (!processNext) {
+          return false;
+        }
       }
-      return true;
-    });
+    }
+    return true;
+  }
+
+  @Override
+  public @Nullable DumbModeAccessType getCurrentDumbModeAccessType() {
+    DumbModeAccessType result = getCurrentDumbModeAccessType_NoDumbChecks();
+    if (result != null) {
+      LOG.assertTrue(ContainerUtil.exists(ProjectManager.getInstance().getOpenProjects(), p -> DumbService.isDumb(p)), "getCurrentDumbModeAccessType may only be called during indexing");
+    }
+    return result;
+  }
+
+  @Nullable DumbModeAccessType getCurrentDumbModeAccessType_NoDumbChecks() {
+    Stack<DumbModeAccessType> dumbModeAccessTypeStack = ourDumbModeAccessTypeStack.get();
+    if (dumbModeAccessTypeStack.isEmpty()) {
+      return null;
+    }
+
+    ApplicationManager.getApplication().assertReadAccessAllowed();
+    ourIgnoranceGuard.prohibitResultCaching(dumbModeAccessTypeStack.get(0));
+    return dumbModeAccessTypeStack.peek();
+  }
+
+  @Override
+  @ApiStatus.Internal
+  public <T> @NotNull Processor<? super T> inheritCurrentDumbAccessType(@NotNull Processor<? super T> processor) {
+    Stack<DumbModeAccessType> stack = ourDumbModeAccessTypeStack.get();
+    if (stack.isEmpty()) return processor;
+
+    DumbModeAccessType access = stack.peek();
+    return t -> ignoreDumbMode(access, () -> processor.process(t));
+  }
+
+  @ApiStatus.Internal
+  @ApiStatus.Experimental
+  @Override
+  public <T, E extends Throwable> T ignoreDumbMode(@NotNull DumbModeAccessType dumbModeAccessType,
+                                                   @NotNull ThrowableComputable<T, E> computable) throws E {
+    ApplicationManager.getApplication().assertReadAccessAllowed();
+    if (FileBasedIndex.isIndexAccessDuringDumbModeEnabled()) {
+      Stack<DumbModeAccessType> dumbModeAccessTypeStack = ourDumbModeAccessTypeStack.get();
+      boolean preventCaching = dumbModeAccessTypeStack.empty();
+      dumbModeAccessTypeStack.push(dumbModeAccessType);
+      try {
+        return preventCaching
+               ? ourIgnoranceGuard.computePreventingRecursion(dumbModeAccessType, false, computable)
+               : computable.compute();
+      }
+      finally {
+        DumbModeAccessType type = dumbModeAccessTypeStack.pop();
+        assert dumbModeAccessType == type;
+      }
+    } else {
+      return computable.compute();
+    }
   }
 }

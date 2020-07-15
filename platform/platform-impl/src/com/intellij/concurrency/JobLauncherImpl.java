@@ -7,12 +7,13 @@ import com.intellij.openapi.application.ex.ApplicationUtil;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.progress.WrappedProgressIndicator;
 import com.intellij.openapi.progress.impl.CoreProgressManager;
+import com.intellij.openapi.progress.util.ProgressWrapper;
 import com.intellij.openapi.progress.util.StandardProgressIndicatorBase;
 import com.intellij.util.Consumer;
 import com.intellij.util.ExceptionUtil;
 import com.intellij.util.Processor;
-import com.intellij.util.indexing.DumbModeAccessType;
 import com.intellij.util.indexing.FileBasedIndex;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -24,9 +25,6 @@ import java.util.Queue;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * @author cdr
- */
 public class JobLauncherImpl extends JobLauncher {
   static final int CORES_FORK_THRESHOLD = 1;
 
@@ -47,14 +45,13 @@ public class JobLauncherImpl extends JobLauncher {
     Processor<? super T> processor = ((CoreProgressManager)pm).isPrioritizedThread(Thread.currentThread())
                                      ? t -> pm.computePrioritized(() -> thingProcessor.process(t))
                                      : thingProcessor;
-    processor = wrapWithIgnoringDumbMode(processor);
+    processor = FileBasedIndex.getInstance().inheritCurrentDumbAccessType(processor);
     processor = ClientId.decorateProcessor(processor);
 
     List<ApplierCompleter<T>> failedSubTasks = Collections.synchronizedList(new ArrayList<>());
     ApplierCompleter<T> applier = new ApplierCompleter<>(null, runInReadAction, failFastOnAcquireReadAction, wrapper, things, processor, 0, things.size(), failedSubTasks, null);
     try {
-      ProgressIndicator existing = pm.getProgressIndicator();
-      if (existing == progress) {
+      if (progress != null && isAlreadyUnder(progress)) {
         // there must be nested invokeConcurrentlies.
         // In this case, try to avoid placing tasks to the FJP queue because extra applier.get() or pool.invoke() can cause pool over-compensation with too many workers
         applier.compute();
@@ -106,12 +103,15 @@ public class JobLauncherImpl extends JobLauncher {
     return applier.completeTaskWhichFailToAcquireReadAction();
   }
 
-  private static <T> Processor<? super T> wrapWithIgnoringDumbMode(Processor<? super T> processor) {
-    DumbModeAccessType dumbModeAccessType = FileBasedIndex.getInstance().getCurrentDumbModeAccessType();
-    if (dumbModeAccessType == null) return processor;
-    return (t) -> {
-      return FileBasedIndex.getInstance().ignoreDumbMode(dumbModeAccessType, () -> processor.process(t));
-    };
+  private static boolean isAlreadyUnder(@NotNull ProgressIndicator progress) {
+    progress = ProgressWrapper.unwrapAll(progress);
+    ProgressIndicator existing = ProgressManager.getGlobalProgressIndicator();
+    while (existing != null) {
+      if (existing == progress) return true;
+      if (!(existing instanceof WrappedProgressIndicator)) return false;
+      existing = ProgressWrapper.unwrap(existing);
+    }
+    return false;
   }
 
   // if {@code things} are too few to be processed in the real pool, returns TRUE if processed successfully, FALSE if not
@@ -162,7 +162,7 @@ public class JobLauncherImpl extends JobLauncher {
     return task;
   }
 
-  private static class VoidForkJoinTask implements Job<Void> {
+  private static final class VoidForkJoinTask implements Job<Void> {
     private final Runnable myAction;
     private final Consumer<? super Future<?>> myOnDoneCallback;
     private enum Status { STARTED, EXECUTED } // null=not yet executed, STARTED=started execution, EXECUTED=finished
@@ -263,7 +263,7 @@ public class JobLauncherImpl extends JobLauncher {
                                   @NotNull final ProgressIndicator progress,
                                   @NotNull final T tombStone,
                                   @NotNull final Processor<? super T> thingProcessor) {
-    class MyTask implements Callable<Boolean> {
+    final class MyTask implements Callable<Boolean> {
       private final int mySeq;
       private boolean result;
 
@@ -291,7 +291,7 @@ public class JobLauncherImpl extends JobLauncher {
                   break;
                 }
               }
-              catch (RuntimeException e) {
+              catch (RuntimeException|Error e) {
                 failedToProcess.add(element);
                 throw e;
               }

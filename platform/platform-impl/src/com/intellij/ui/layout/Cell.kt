@@ -99,8 +99,8 @@ class ValidationInfoBuilder(val component: JComponent) {
 interface CellBuilder<out T : JComponent> {
   val component: T
 
-  fun comment(text: String, maxLineLength: Int = 70): CellBuilder<T>
-  fun commentComponent(text: String, maxLineLength: Int = 70): CellBuilder<T>
+  fun comment(text: String, maxLineLength: Int = 70, forComponent: Boolean = false): CellBuilder<T>
+  fun commentComponent(component: JComponent, forComponent: Boolean = false): CellBuilder<T>
   fun focused(): CellBuilder<T>
   fun withValidationOnApply(callback: ValidationInfoBuilder.(T) -> ValidationInfo?): CellBuilder<T>
   fun withValidationOnInput(callback: ValidationInfoBuilder.(T) -> ValidationInfo?): CellBuilder<T>
@@ -278,6 +278,13 @@ abstract class Cell : BaseBuilder {
                        comment: String?): CellBuilder<JBCheckBox> {
     val component = JBCheckBox(text, modelBinding.get())
     return component(comment = comment).withSelectedBinding(modelBinding)
+  }
+
+  fun checkBox(@Nls text: String,
+               property: GraphProperty<Boolean>,
+               comment: String? = null): CellBuilder<JBCheckBox> {
+    val component = JBCheckBox(text, property.get())
+    return component(comment = comment).withGraphProperty(property).applyToComponent { component.bind(property) }
   }
 
   open fun radioButton(@Nls text: String, @Nls comment: String? = null): CellBuilder<JBRadioButton> {
@@ -546,6 +553,20 @@ abstract class Cell : BaseBuilder {
     constraints(*constraints)
     if (comment != null) comment(comment)
     if (growPolicy != null) growPolicy(growPolicy)
+  }
+}
+
+private fun JBCheckBox.bind(property: GraphProperty<Boolean>) {
+  val mutex = AtomicBoolean()
+  property.afterChange {
+    mutex.lockOrSkip {
+      isSelected = property.get()
+    }
+  }
+  addItemListener {
+    mutex.lockOrSkip {
+      property.set(isSelected)
+    }
   }
 }
 

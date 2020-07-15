@@ -6,20 +6,19 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.*
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.util.io.BufferExposingByteArrayOutputStream
-import com.intellij.openapi.vfs.refreshVfs
+import com.intellij.serviceContainer.ComponentManagerImpl
 import com.intellij.testFramework.ApplicationRule
 import com.intellij.testFramework.DisposableRule
 import com.intellij.testFramework.ExtensionTestUtil
-import com.intellij.testFramework.TemporaryDirectory
 import com.intellij.testFramework.assertions.Assertions.assertThat
+import com.intellij.testFramework.refreshVfs
+import com.intellij.testFramework.rules.InMemoryFsRule
 import com.intellij.util.io.lastModified
-import com.intellij.util.io.systemIndependentPath
 import com.intellij.util.io.write
 import com.intellij.util.io.writeChild
 import com.intellij.util.pico.DefaultPicoContainer
 import com.intellij.util.xmlb.XmlSerializerUtil
 import com.intellij.util.xmlb.annotations.Attribute
-import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import kotlinx.coroutines.runBlocking
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.assertj.core.data.MapEntry
@@ -33,7 +32,8 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.nio.file.Path
-import java.nio.file.Paths
+import java.util.*
+import kotlin.collections.HashMap
 import kotlin.properties.Delegates
 
 internal class ApplicationStoreTest {
@@ -45,7 +45,7 @@ internal class ApplicationStoreTest {
 
   @JvmField
   @Rule
-  val tempDirManager = TemporaryDirectory()
+  val fsRule = InMemoryFsRule()
 
   @JvmField
   @Rule
@@ -56,8 +56,8 @@ internal class ApplicationStoreTest {
 
   @Before
   fun setUp() {
-    testAppConfig = tempDirManager.newPath()
-    componentStore = MyComponentStore(testAppConfig.systemIndependentPath)
+    testAppConfig = fsRule.fs.getPath("/app-config")
+    componentStore = MyComponentStore(testAppConfig)
   }
 
   @Test
@@ -79,7 +79,7 @@ internal class ApplicationStoreTest {
     val component = SeveralStoragesConfigured()
 
     val streamProvider = MyStreamProvider()
-    val map = Object2ObjectOpenHashMap<String, String>()
+    val map = HashMap<String, String>()
     val fileSpec = "new.xml"
     map[fileSpec] = "<application>\n  <component name=\"A\" foo=\"newValue\" />\n</application>"
     streamProvider.data[RoamingType.DEFAULT] = map
@@ -90,7 +90,7 @@ internal class ApplicationStoreTest {
     componentStore.initComponent(component, null, null)
     assertThat(component.foo).isEqualTo("newValue")
 
-    assertThat(Paths.get(storageManager.expandMacros(fileSpec))).doesNotExist()
+    assertThat(storageManager.expandMacro(fileSpec)).doesNotExist()
   }
 
   @Test
@@ -129,48 +129,47 @@ internal class ApplicationStoreTest {
     testAppConfig.refreshVfs()
 
     val storageManager = ApplicationManager.getApplication().stateStore.storageManager
-    val optionsPath = storageManager.expandMacros(APP_CONFIG)
-    val rootConfigPath = storageManager.expandMacros(ROOT_CONFIG)
+    val optionsPath = storageManager.expandMacro(APP_CONFIG)
+    val rootConfigPath = storageManager.expandMacro(ROOT_CONFIG)
     val map = getExportableComponentsMap(false, true, storageManager)
     assertThat(map).isNotEmpty
 
     fun test(item: ExportableItem) {
       val file = item.file
-      assertThat(map[file]).containsExactly(item)
+      assertThat(map.get(file)).containsExactly(item)
       assertThat(file).doesNotExist()
     }
 
-    test(ExportableItem(Paths.get(optionsPath, "filetypes.xml"), "File types", RoamingType.DEFAULT))
-    test(ExportableItem(Paths.get(rootConfigPath, "filetypes"), "File types (schemes)", RoamingType.DEFAULT))
-    test(ExportableItem(Paths.get(optionsPath, "customization.xml"), "Menus and toolbars customization", RoamingType.DEFAULT))
-    test(ExportableItem(Paths.get(optionsPath, "templates.xml"), "Live templates", RoamingType.DEFAULT))
-    test(ExportableItem(Paths.get(rootConfigPath, "templates"), "Live templates (schemes)", RoamingType.DEFAULT))
+    test(ExportableItem(optionsPath.resolve("filetypes.xml"), "File types", RoamingType.DEFAULT))
+    test(ExportableItem(rootConfigPath.resolve("filetypes"), "File types (schemes)", RoamingType.DEFAULT))
+    test(ExportableItem(optionsPath.resolve("customization.xml"), "Menus and toolbars customization", RoamingType.DEFAULT))
+    test(ExportableItem(optionsPath.resolve("templates.xml"), "Live templates", RoamingType.DEFAULT))
+    test(ExportableItem(rootConfigPath.resolve("templates"), "Live templates (schemes)", RoamingType.DEFAULT))
   }
 
   @Test
-  fun `import settings`() = runBlocking<Unit> {
-    testAppConfig.refreshVfs()
-
+  fun `import settings`() {
     val component = A()
     componentStore.initComponent(component, null, null)
 
     component.options.foo = "new"
 
-    componentStore.save()
+    runBlocking {
+      componentStore.save()
+    }
 
     val storageManager = componentStore.storageManager
 
-    val configPath = storageManager.expandMacros(ROOT_CONFIG)
-    val configDir = Paths.get(configPath)
+    val configDir = storageManager.expandMacro(ROOT_CONFIG)
 
     val componentPath = configDir.resolve("a.xml")
-    assertThat(componentPath).isRegularFile
+    assertThat(componentPath).isRegularFile()
 
     // additional export path
     val additionalPath = configDir.resolve("foo")
     additionalPath.writeChild("bar.icls", "")
     val exportedData = BufferExposingByteArrayOutputStream()
-    exportSettings(setOf(componentPath, additionalPath), exportedData, configPath)
+    exportSettings(setOf(componentPath, additionalPath), exportedData, configDir)
 
     val relativePaths = getPaths(exportedData.toInputStream())
     assertThat(relativePaths).containsOnly("a.xml", "foo/", "foo/bar.icls", "IntelliJ IDEA Global Settings")
@@ -181,8 +180,8 @@ internal class ApplicationStoreTest {
     val componentKey = A::class.java.name
     picoContainer.registerComponent(DefaultPicoContainer.InstanceComponentAdapter(componentKey, component))
     try {
-      assertThat(getExportableComponentsMap(false, false, storageManager, relativePaths)).containsOnly(
-        componentPath.to(listOf(ExportableItem(componentPath, ""))), additionalPath.to(listOf(ExportableItem(additionalPath, " (schemes)"))))
+      assertThat(getExportableComponentsMap(isOnlyExisting = false, isComputePresentableNames = false, storageManager = storageManager, onlyPaths = relativePaths))
+        .containsOnly(componentPath.to(listOf(ExportableItem(componentPath, ""))), additionalPath.to(listOf(ExportableItem(additionalPath, " (schemes)"))))
     }
     finally {
       picoContainer.unregisterComponent(componentKey)
@@ -386,13 +385,13 @@ internal class ApplicationStoreTest {
 
     override fun processChildren(path: String, roamingType: RoamingType, filter: (String) -> Boolean, processor: (String, InputStream, Boolean) -> Boolean) = true
 
-    val data: MutableMap<RoamingType, MutableMap<String, String>> = Object2ObjectOpenHashMap()
+    val data: MutableMap<RoamingType, MutableMap<String, String>> = EnumMap(RoamingType::class.java)
 
     override fun write(fileSpec: String, content: ByteArray, size: Int, roamingType: RoamingType) {
       getMap(roamingType)[fileSpec] = String(content, 0, size, Charsets.UTF_8)
     }
 
-    private fun getMap(roamingType: RoamingType): MutableMap<String, String> = data.getOrPut(roamingType) { Object2ObjectOpenHashMap() }
+    private fun getMap(roamingType: RoamingType): MutableMap<String, String> = data.computeIfAbsent(roamingType) { HashMap() }
 
     override fun read(fileSpec: String, roamingType: RoamingType, consumer: (InputStream?) -> Unit): Boolean {
       val data = getMap(roamingType)[fileSpec]
@@ -406,17 +405,19 @@ internal class ApplicationStoreTest {
     }
   }
 
-  private class MyComponentStore(testAppConfigPath: String) : ComponentStoreWithExtraComponents() {
+  private class MyComponentStore(testAppConfigPath: Path) : ComponentStoreWithExtraComponents() {
+    override val serviceContainer: ComponentManagerImpl
+      get() = ApplicationManager.getApplication() as ComponentManagerImpl
+
     override val storageManager = ApplicationStorageManager(ApplicationManager.getApplication())
 
     init {
       setPath(testAppConfigPath)
     }
 
-    override fun setPath(path: String) {
-      storageManager.addMacro(APP_CONFIG, path)
+    override fun setPath(path: Path) {
       // yes, in tests APP_CONFIG equals to ROOT_CONFIG (as ICS does)
-      storageManager.addMacro(ROOT_CONFIG, path)
+      storageManager.setMacros(listOf(Macro(APP_CONFIG, path), Macro(ROOT_CONFIG, path)))
     }
 
     override suspend fun doSave(result: SaveResult, forceSavingAllSettings: Boolean) {
@@ -452,7 +453,7 @@ internal class ApplicationStoreTest {
 
 internal data class TestState(@Attribute var foo: String = "", @Attribute var bar: String = "")
 
-@State(name = "A", storages = [(Storage("a.xml"))], additionalExportFile = "foo")
+@State(name = "A", storages = [(Storage("a.xml"))], additionalExportDirectory = "foo")
 internal open class A : PersistentStateComponent<TestState> {
   var options = TestState()
 

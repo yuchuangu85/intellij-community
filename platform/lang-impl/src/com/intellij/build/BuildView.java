@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.build;
 
 import com.intellij.build.events.BuildEvent;
@@ -26,15 +12,12 @@ import com.intellij.execution.filters.Filter;
 import com.intellij.execution.filters.HyperlinkInfo;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.runners.ExecutionEnvironment;
-import com.intellij.execution.runners.FakeRerunAction;
 import com.intellij.execution.ui.ConsoleView;
 import com.intellij.execution.ui.ConsoleViewContentType;
 import com.intellij.execution.ui.ExecutionConsole;
 import com.intellij.execution.ui.RunContentDescriptor;
-import com.intellij.execution.ui.actions.CloseAction;
 import com.intellij.ide.IdeBundle;
 import com.intellij.ide.OccurenceNavigator;
-import com.intellij.ide.actions.PinActiveTabAction;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.actionSystem.ex.ActionUtil;
 import com.intellij.openapi.application.ApplicationManager;
@@ -47,6 +30,7 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -150,7 +134,7 @@ public class BuildView extends CompositeView<ExecutionConsole>
     ExecutionConsole executionConsole = myExecutionConsole;
     if (executionConsole != null) {
       executionConsole.getComponent(); //create editor to be able to add console editor actions
-      if (myViewSettingsProvider.isExecutionViewHidden() || !myViewSettingsProvider.isSideBySideView()) {
+      if (myViewSettingsProvider.isExecutionViewHidden()) {
         addViewAndShowIfNeeded(executionConsole, CONSOLE_VIEW_NAME, myViewManager.isConsoleEnabledByDefault());
       }
     }
@@ -161,13 +145,8 @@ public class BuildView extends CompositeView<ExecutionConsole>
       if (eventView == null) {
         String eventViewName = BuildTreeConsoleView.class.getName();
         eventView = new BuildTreeConsoleView(myProject, myBuildDescriptor, myExecutionConsole, myViewSettingsProvider);
-        if (myViewSettingsProvider.isSideBySideView()) {
-          addView(eventView, eventViewName);
-          showView(eventViewName);
-        }
-        else {
-          addViewAndShowIfNeeded(eventView, eventViewName, !myViewManager.isConsoleEnabledByDefault());
-        }
+        addView(eventView, eventViewName);
+        showView(eventViewName);
       }
     }
 
@@ -240,7 +219,7 @@ public class BuildView extends CompositeView<ExecutionConsole>
   }
 
   @Override
-  public void attachToProcess(ProcessHandler processHandler) {
+  public void attachToProcess(@NotNull ProcessHandler processHandler) {
     delegateToConsoleView(view -> view.attachToProcess(processHandler));
   }
 
@@ -295,6 +274,10 @@ public class BuildView extends CompositeView<ExecutionConsole>
 
   @Override
   public AnAction @NotNull [] createConsoleActions() {
+    if (!myViewManager.isBuildContentView()) {
+      // console actions should be integrated with the provided toolbar when the console is shown not on Build tw
+      return AnAction.EMPTY_ARRAY;
+    }
     final DefaultActionGroup rerunActionGroup = new DefaultActionGroup();
     AnAction stopAction = null;
     if (myBuildDescriptor.getProcessHandler() != null) {
@@ -304,31 +287,13 @@ public class BuildView extends CompositeView<ExecutionConsole>
       ActionUtil.copyFrom(stopAction, IdeActions.ACTION_STOP_PROGRAM);
       stopAction.registerCustomShortcutSet(stopAction.getShortcutSet(), this);
     }
-    final DefaultActionGroup consoleActionGroup = new DefaultActionGroup() {
-      @Override
-      public void update(@NotNull AnActionEvent e) {
-        super.update(e);
-        String eventViewName = BuildTreeConsoleView.class.getName();
-        e.getPresentation().setVisible(myViewSettingsProvider != null && !myViewSettingsProvider.isSideBySideView()
-                                       && !BuildView.this.isViewVisible(eventViewName));
-      }
-    };
 
     ExecutionConsole consoleView = getConsoleView();
     if (consoleView instanceof ConsoleView) {
       consoleView.getComponent(); //create editor to be able to add console editor actions
-      final AnAction[] consoleActions = ((ConsoleView)consoleView).createConsoleActions();
-      for (AnAction anAction : consoleActions) {
-        if (anAction instanceof StopAction) {
-          if (stopAction == null) {
-            stopAction = anAction;
-          }
-        }
-        else if (!(anAction instanceof FakeRerunAction ||
-                   anAction instanceof PinActiveTabAction ||
-                   anAction instanceof CloseAction)) {
-          consoleActionGroup.add(anAction);
-        }
+      if (stopAction == null) {
+        final AnAction[] consoleActions = ((ConsoleView)consoleView).createConsoleActions();
+        stopAction = Arrays.stream(consoleActions).filter(StopAction.class::isInstance).findFirst().orElse(null);
       }
     }
     final DefaultActionGroup actionGroup = new DefaultActionGroup();
@@ -340,10 +305,6 @@ public class BuildView extends CompositeView<ExecutionConsole>
       rerunActionGroup.add(stopAction);
     }
     actionGroup.add(rerunActionGroup);
-    if (myViewManager.isBuildContentView() && (myViewSettingsProvider == null || !myViewSettingsProvider.isSideBySideView())) {
-      actionGroup.addAll(getSwitchActions());
-      actionGroup.addSeparator();
-    }
     final DefaultActionGroup otherActionGroup = new DefaultActionGroup();
 
     List<AnAction> otherActions = myBuildDescriptor.getActions();
@@ -354,7 +315,7 @@ public class BuildView extends CompositeView<ExecutionConsole>
       }
       otherActionGroup.addSeparator();
     }
-    return new AnAction[]{actionGroup, consoleActionGroup, otherActionGroup};
+    return new AnAction[]{actionGroup, otherActionGroup};
   }
 
   @Override

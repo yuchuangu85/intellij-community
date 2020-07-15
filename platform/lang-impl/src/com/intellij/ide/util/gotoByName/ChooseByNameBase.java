@@ -1490,7 +1490,7 @@ public abstract class ChooseByNameBase implements ChooseByNameViewModel {
     return NameUtil.buildMatcher(pattern, NameUtil.MatchingCaseSensitivity.NONE);
   }
 
-  private static class HintLabel extends JLabel {
+  private static final class HintLabel extends JLabel {
     private HintLabel(@NotNull String text) {
       super(text, RIGHT);
       setForeground(JBColor.DARK_GRAY);
@@ -1558,8 +1558,7 @@ public abstract class ChooseByNameBase implements ChooseByNameViewModel {
               protected boolean isOverflow(@NotNull Set<Object> elementsArray) {
                 tooManyUsagesStatus.pauseProcessingIfTooManyUsages();
                 if (elementsArray.size() > UsageLimitUtil.USAGES_LIMIT - myMaximumListSizeLimit && tooManyUsagesStatus.switchTooManyUsagesStatus()) {
-                  int usageCount = elementsArray.size() + myMaximumListSizeLimit;
-                  UsageViewManagerImpl.showTooManyUsagesWarningLater(getProject(), tooManyUsagesStatus, indicator, presentation, usageCount, null);
+                  UsageViewManagerImpl.showTooManyUsagesWarningLater(getProject(), tooManyUsagesStatus, indicator, null);
                 }
                 return false;
               }

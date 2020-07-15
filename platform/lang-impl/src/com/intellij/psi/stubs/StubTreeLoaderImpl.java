@@ -12,6 +12,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.util.RecursionManager;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileWithId;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
@@ -43,8 +44,7 @@ final class StubTreeLoaderImpl extends StubTreeLoader {
 
     try {
       byte[] content = vFile.contentsToByteArray();
-      vFile.setPreloadedContentHint(content);
-      try {
+      return vFile.computeWithPreloadedContentHint(content, () -> {
         FileContentImpl content1 = new FileContentImpl(vFile, content);
         if (project != null) {
           content1.setProject(project);
@@ -61,16 +61,14 @@ final class StubTreeLoaderImpl extends StubTreeLoader {
           tree = new StubTree((PsiFileStub<?>)element);
         }
         else {
-          tree = element instanceof ObjectStubBase ? new ObjectStubTree((ObjectStubBase<?>)element, true) : null;
+          tree = element instanceof ObjectStubBase ? new ObjectStubTree<>((ObjectStubBase<?>)element, true) : null;
         }
         if (tree != null) {
           tree.setDebugInfo("created from file content");
           return tree;
         }
-      }
-      finally {
-        vFile.setPreloadedContentHint(null);
-      }
+        return null;
+      });
     }
     catch (IOException e) {
       if (LOG.isDebugEnabled()) {
@@ -92,11 +90,6 @@ final class StubTreeLoaderImpl extends StubTreeLoader {
       return null;
     }
 
-    final int id = FileBasedIndex.getFileId(vFile);
-    if (id == 0) {
-      return null;
-    }
-
     boolean wasIndexedAlready = ((FileBasedIndexImpl)FileBasedIndex.getInstance()).isFileUpToDate(vFile);
 
     Document document = FileDocumentManager.getInstance().getCachedDocument(vFile);
@@ -108,7 +101,7 @@ final class StubTreeLoaderImpl extends StubTreeLoader {
     if (size == 1) {
       SerializedStubTree stubTree = datas.values().iterator().next();
 
-      if (!checkLengthMatch(project, vFile, wasIndexedAlready, document, saved)) {
+      if (vFile instanceof VirtualFileWithId && !checkLengthMatch(project, vFile, wasIndexedAlready, document, saved)) {
         return null;
       }
 
@@ -119,15 +112,18 @@ final class StubTreeLoaderImpl extends StubTreeLoader {
       catch (SerializerNotFoundException e) {
         return processError(vFile, "No stub serializer: " + vFile.getPresentableUrl() + ": " + e.getMessage(), e);
       }
+      if (stub == SerializedStubTree.NO_STUB) {
+        return null;
+      }
       ObjectStubTree<?> tree =
-        stub instanceof PsiFileStub ? new StubTree((PsiFileStub<?>)stub) : new ObjectStubTree((ObjectStubBase<?>)stub, true);
+        stub instanceof PsiFileStub ? new StubTree((PsiFileStub<?>)stub) : new ObjectStubTree<>((ObjectStubBase<?>)stub, true);
       tree.setDebugInfo("created from index");
       checkDeserializationCreatesNoPsi(tree);
       return tree;
     }
     if (size != 0) {
       return processError(vFile,
-                          "Twin stubs: " + vFile.getPresentableUrl() + " has " + size + " stub versions. Should only have one. id=" + id,
+                          "Twin stubs: " + vFile.getPresentableUrl() + " has " + size + " stub versions. Should only have one.",
                           null);
     }
 

@@ -59,7 +59,10 @@ public abstract class ProgressPanel extends ComponentPanel {
    *
    * @return the state
    */
+  @NotNull
   public abstract State getState();
+
+  public abstract void setState(@NotNull State state);
 
   /**
    * @return the label text
@@ -76,6 +79,11 @@ public abstract class ProgressPanel extends ComponentPanel {
   public abstract void setLabelEnabled(boolean enabled);
 
   public abstract void setCommentEnabled(boolean enabled);
+
+  public abstract void setText2(@Nullable String text);
+
+  public abstract void setText2Enabled(boolean enabled);
+
   /**
    * <p>Enables/disables the top separator dynamically. This method has effect only when progressbar panel
    * was created with {@link ProgressPanelBuilder#withTopSeparator()}.</p>
@@ -88,17 +96,11 @@ public abstract class ProgressPanel extends ComponentPanel {
   public abstract void setSeparatorEnabled(boolean enabled);
 
   @Nullable
-  public JButton getCancelButtonAsButton() {
-    return null;
-  }
+  public abstract JButton getCancelButtonAsButton();
 
   @Nullable
-  public InplaceButton getCancelButton() {
-    return null;
-  }
+  public abstract InplaceButton getCancelButton();
 
   @Nullable
-  public InplaceButton getSuspendButton() {
-    return null;
-  }
+  public abstract InplaceButton getSuspendButton();
 }

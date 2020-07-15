@@ -24,8 +24,6 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.LogicalPosition;
 import com.intellij.openapi.editor.ScrollType;
 import com.intellij.openapi.editor.colors.EditorColors;
-import com.intellij.openapi.editor.colors.EditorColorsManager;
-import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
@@ -250,7 +248,7 @@ public class ExtractMethodProcessor implements MatchProvider {
       throw new PrepareFailedException("Unable to extract method from annotation value", myElements[0]);
     }
 
-    myControlFlowWrapper = new ControlFlowWrapper(myProject, codeFragment, myElements);
+    myControlFlowWrapper = new ControlFlowWrapper(codeFragment, myElements);
 
     try {
       myExitStatements = myControlFlowWrapper.prepareExitStatements(myElements, codeFragment);
@@ -1209,7 +1207,8 @@ public class ExtractMethodProcessor implements MatchProvider {
     try {
       PsiCodeBlock block = JavaPsiFacade.getElementFactory(myProject).createCodeBlock();
       block.addRange(myElements[0], myElements[myElements.length - 1]);
-      ControlFlow flow = ControlFlowFactory.getInstance(myProject).getControlFlow(block, new LocalsControlFlowPolicy(block), false, false);
+      ControlFlow flow = ControlFlowFactory.getControlFlow(block, new LocalsControlFlowPolicy(block),
+                                                           ControlFlowOptions.NO_CONST_EVALUATE);
       return ControlFlowUtil.canCompleteNormally(flow, 0, flow.getSize());
     }
     catch (AnalysisCanceledException e) {
@@ -2124,9 +2123,7 @@ public class ExtractMethodProcessor implements MatchProvider {
     if (myShowErrorDialogs) {
       HighlightManager highlightManager = HighlightManager.getInstance(myProject);
       PsiStatement[] exitStatementsArray = myExitStatements.toArray(PsiStatement.EMPTY_ARRAY);
-      EditorColorsManager manager = EditorColorsManager.getInstance();
-      TextAttributes attributes = manager.getGlobalScheme().getAttributes(EditorColors.SEARCH_RESULT_ATTRIBUTES);
-      highlightManager.addOccurrenceHighlights(myEditor, exitStatementsArray, attributes, true, null);
+      highlightManager.addOccurrenceHighlights(myEditor, exitStatementsArray, EditorColors.SEARCH_RESULT_ATTRIBUTES, true, null);
       String message = RefactoringBundle
         .getCannotRefactorMessage(JavaRefactoringBundle.message("there.are.multiple.exit.points.in.the.selected.code.fragment"));
       CommonRefactoringUtil.showErrorHint(myProject, myEditor, message, myRefactoringName, myHelpId);

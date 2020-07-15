@@ -10,7 +10,7 @@ import com.intellij.util.xmlb.annotations.Transient
  * Passed params will be used as default values, so, do not use constructor if instance will be used as a state (unless you want to change defaults)
  */
 @Suppress("PropertyName")
-@State(name = "UsageViewSettings", storages = [Storage("usageView.xml")])
+@State(name = "UsageViewSettings", storages = [Storage("usageView.xml")], reportStatistic = true)
 open class UsageViewSettings(
   isGroupByFileStructure: Boolean = true,
   isGroupByModule: Boolean = true,
@@ -67,7 +67,7 @@ open class UsageViewSettings(
   var isShowModules by property(false)
 
   @get:OptionTag("IS_PREVIEW_USAGES")
-  var isPreviewUsages by property(false)
+  var isPreviewUsages by property(true)
 
   @get:OptionTag("IS_REPLACE_PREVIEW_USAGES")
   var isReplacePreviewUsages by property(true)
@@ -95,6 +95,12 @@ open class UsageViewSettings(
 
   @get:OptionTag("GROUP_BY_DIRECTORY_STRUCTURE")
   var isGroupByDirectoryStructure: Boolean by property(isGroupByDirectoryStructure)
+
+  /**
+   * Compact middle directories option for directories usage grouping
+   */
+  @get:OptionTag("COMPACT_MIDDLE_DIRECTORIES")
+  var isCompactMiddleDirectories by property(true)
 
   @get:OptionTag("GROUP_BY_SCOPE")
   var isGroupByScope by property(isGroupByScope)

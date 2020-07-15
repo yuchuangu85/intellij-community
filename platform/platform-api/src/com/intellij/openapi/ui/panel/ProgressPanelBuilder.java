@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.ui.panel;
 
 import com.intellij.icons.AllIcons;
@@ -6,7 +6,9 @@ import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.ui.popup.IconButton;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.ui.*;
+import com.intellij.ui.InplaceButton;
+import com.intellij.ui.SeparatorComponent;
+import com.intellij.ui.SeparatorOrientation;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
@@ -33,6 +35,7 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
   private boolean smallVariant;
 
   private boolean commentEnabled = true;
+  private boolean text2Enabled;
   private boolean topSeparatorEnabled;
 
   public ProgressPanelBuilder(JProgressBar progressBar) {
@@ -137,6 +140,12 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
     return this;
   }
 
+  @NotNull
+  public ProgressPanelBuilder withText2() {
+    text2Enabled = true;
+    return this;
+  }
+
   /**
      * Enable separator on top of the panel.
      *
@@ -177,9 +186,10 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
     return width;
   }
 
-  private class LabeledPanelImpl extends ProgressPanel {
+  private final class LabeledPanelImpl extends ProgressPanel {
     private final JLabel label;
     private final JLabel comment;
+    private final JLabel text2;
 
     private String myCommentText = emptyComment();
     private boolean myServiceComment = false;
@@ -201,17 +211,32 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
 
       comment = new JLabel(myCommentText);
       comment.setForeground(UIUtil.getContextHelpForeground());
+
+      if (text2Enabled) {
+        text2 = new JLabel();
+        text2.setForeground(UIUtil.getContextHelpForeground());
+      }
+      else {
+        text2 = null;
+      }
+
       if (SystemInfo.isMac) {
         Font font = comment.getFont();
         float size = font.getSize2D();
         Font smallFont = font.deriveFont(size - 2.0f);
         comment.setFont(smallFont);
+        if (text2 != null) {
+          text2.setFont(smallFont);
+        }
       }
 
       if (StringUtil.isNotEmpty(initialLabelText)) {
         Dimension size = comment.getPreferredSize();
         size.width = label.getMinimumSize().width;
         comment.setMinimumSize(size);
+        if (text2 != null) {
+          text2.setMinimumSize(size);
+        }
       }
 
       cancelIcon = new IconButton(null,
@@ -242,6 +267,9 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
         Dimension size = comment.getPreferredSize();
         size.width = label.getMinimumSize().width;
         comment.setMinimumSize(size);
+        if (text2 != null) {
+          text2.setMinimumSize(size);
+        }
       }
     }
 
@@ -265,6 +293,25 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
     @Override
     public void setCommentEnabled(boolean enabled) {
       comment.setEnabled(enabled);
+    }
+
+    @Override
+    public void setText2(@Nullable String text) {
+      if (text2 != null) {
+        boolean empty = StringUtil.isEmpty(text);
+        if (empty && !text2.isVisible()) {
+          return;
+        }
+        text2.setText(empty ? " " : text);
+        text2.setVisible(true);
+      }
+    }
+
+    @Override
+    public void setText2Enabled(boolean enabled) {
+      if (text2 != null) {
+        text2.setEnabled(enabled);
+      }
     }
 
     @Override
@@ -302,9 +349,30 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
       }
     }
 
+    @NotNull
     @Override
     public State getState() {
       return state;
+    }
+
+    @Override
+    public void setState(@NotNull State state) {
+      if (this.state == state || state == State.CANCELLED || mySuspendButton == null) {
+        return;
+      }
+
+      this.state = state;
+
+      if (state == State.PLAYING) {
+        mySuspendButton.setIcons(pauseIcon);
+        setCommentText(null, true);
+      }
+      else {
+        mySuspendButton.setIcons(resumeIcon);
+        setCommentText(IdeBundle.message("comment.text.paused"), true);
+      }
+      mySuspendButton.revalidate();
+      mySuspendButton.repaint();
     }
 
     private void addToPanel(JPanel panel, GridBagConstraints gc) {
@@ -361,10 +429,13 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
       }
       if (resumeAction != null && pauseAction != null) {
         mySuspendButton = new InplaceButton(pauseIcon, a -> {
+          if (state == State.CANCELLED) {
+            return;
+          }
           if (state == State.PLAYING) {
             mySuspendButton.setIcons(resumeIcon);
             state = State.PAUSED;
-            setCommentText(IdeBundle.message("comment.text.paused"), true);
+            setCommentText(IdeBundle.message("comment.text.resume"), true);
             pauseAction.run();
           }
           else {
@@ -387,16 +458,25 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
       }
 
       if (commentEnabled) {
-        gc.gridy++;
-        gc.gridx = labelAbove ? 0 : 1;
-        gc.insets = labelAbove ? JBUI.insets(-1, 13, 0, 13) : JBUI.insets(-1, 12, 0, 13);
-        gc.weightx = 1.0;
-        gc.anchor = GridBagConstraints.LINE_START;
-        gc.fill = GridBagConstraints.HORIZONTAL;
-        panel.add(comment, gc);
+        addLabel(panel, gc, comment);
+      }
+
+      if (text2 != null) {
+        addLabel(panel, gc, text2);
+        text2.setVisible(false);
       }
 
       gc.gridy++;
+    }
+
+    private void addLabel(@NotNull JPanel panel, @NotNull GridBagConstraints gc, @NotNull JComponent label) {
+      gc.gridy++;
+      gc.gridx = labelAbove ? 0 : 1;
+      gc.insets = labelAbove ? JBUI.insets(-1, 13, 0, 13) : JBUI.insets(-1, 12, 0, 13);
+      gc.weightx = 1.0;
+      gc.anchor = GridBagConstraints.LINE_START;
+      gc.fill = GridBagConstraints.HORIZONTAL;
+      panel.add(label, gc);
     }
 
     private void addButton(@NotNull JPanel panel, @NotNull GridBagConstraints gc, @NotNull InplaceButton button, boolean cancel) {
@@ -411,7 +491,7 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
       panel.add(button, gc);
     }
 
-    private class HoverListener extends MouseAdapter {
+    private final class HoverListener extends MouseAdapter {
       private final boolean myCancel;
 
       private HoverListener(boolean cancel) {
@@ -430,7 +510,7 @@ public class ProgressPanelBuilder implements GridBagPanelBuilder, PanelBuilder {
 
       @Override
       public void mouseExited(MouseEvent e) {
-        setCommentText(state != State.PAUSED ? null : IdeBundle.message("comment.text.paused"), true);
+        setCommentText(state == State.PAUSED ? IdeBundle.message("comment.text.paused") : null, true);
       }
     }
   }

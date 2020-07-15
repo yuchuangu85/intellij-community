@@ -37,8 +37,10 @@ import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.impl.IdeGlassPaneImpl;
 import com.intellij.ui.*;
+import com.intellij.ui.components.DefaultLinkButtonUI;
 import com.intellij.ui.popup.OurHeavyWeightPopup;
 import com.intellij.ui.scale.JBUIScale;
+import com.intellij.ui.tree.ui.DefaultTreeUI;
 import com.intellij.util.EventDispatcher;
 import com.intellij.util.IJSwingUtilities;
 import com.intellij.util.ObjectUtils;
@@ -444,6 +446,7 @@ public final class LafManagerImpl extends LafManager implements PersistentStateC
           CommonBundle.getErrorTitle(),
           Messages.getErrorIcon()
         );
+        LOG.error(e);
         return;
       }
     }
@@ -459,6 +462,7 @@ public final class LafManagerImpl extends LafManager implements PersistentStateC
           CommonBundle.getErrorTitle(),
           Messages.getErrorIcon()
         );
+        LOG.error(e);
         return;
       }
     }
@@ -490,6 +494,7 @@ public final class LafManagerImpl extends LafManager implements PersistentStateC
           CommonBundle.getErrorTitle(),
           Messages.getErrorIcon()
         );
+        LOG.error(e);
         return;
       }
     }
@@ -504,6 +509,7 @@ public final class LafManagerImpl extends LafManager implements PersistentStateC
           CommonBundle.getErrorTitle(),
           Messages.getErrorIcon()
         );
+        LOG.error(e);
         return;
       }
     }
@@ -577,6 +583,7 @@ public final class LafManagerImpl extends LafManager implements PersistentStateC
   @Override
   public void updateUI() {
     final UIDefaults uiDefaults = UIManager.getLookAndFeelDefaults();
+    uiDefaults.put("LinkButtonUI", DefaultLinkButtonUI.class.getName());
 
     fixPopupWeight();
 
@@ -600,10 +607,7 @@ public final class LafManagerImpl extends LafManager implements PersistentStateC
 
     uiDefaults.put(RenderingHints.KEY_TEXT_ANTIALIASING, AntialiasingType.getKeyForCurrentScope(false));
     uiDefaults.put(RenderingHints.KEY_TEXT_LCD_CONTRAST, UIUtil.getLcdContrastValue());
-    uiDefaults.put(RenderingHints.KEY_FRACTIONALMETRICS,
-                   UISettings.FORCE_USE_FRACTIONAL_METRICS
-                   ? RenderingHints.VALUE_FRACTIONALMETRICS_ON
-                   : RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
+    uiDefaults.put(RenderingHints.KEY_FRACTIONALMETRICS, UISettings.getPREFERRED_FRACTIONAL_METRICS_VALUE());
 
     for (Frame frame : Frame.getFrames()) {
       updateUI(frame);
@@ -679,7 +683,7 @@ public final class LafManagerImpl extends LafManager implements PersistentStateC
 
   private static void patchTreeUI(UIDefaults defaults) {
     patchBorder(defaults, "Tree.border");
-    defaults.put("TreeUI", "com.intellij.ui.tree.ui.DefaultTreeUI");
+    defaults.put("TreeUI", DefaultTreeUI.class.getName());
     defaults.put("Tree.repaintWholeRow", true);
     if (isUnsupported(defaults.getIcon("Tree.collapsedIcon"))) {
       defaults.put("Tree.collapsedIcon", LafIconLookup.getIcon("treeCollapsed"));
@@ -1039,7 +1043,7 @@ public final class LafManagerImpl extends LafManager implements PersistentStateC
     }
   }
 
-  private static class DefaultMenuArrowIcon extends MenuArrowIcon {
+  private static final class DefaultMenuArrowIcon extends MenuArrowIcon {
     private static final BooleanSupplier dark = () -> ColorUtil.isDark(UIManager.getColor("MenuItem.selectionBackground"));
     private DefaultMenuArrowIcon() {
       super(AllIcons.Icons.Ide.NextStep,

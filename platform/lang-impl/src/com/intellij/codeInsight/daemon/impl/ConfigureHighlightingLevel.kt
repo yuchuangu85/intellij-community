@@ -2,10 +2,12 @@
 package com.intellij.codeInsight.daemon.impl
 
 import com.intellij.codeInsight.daemon.DaemonBundle.message
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.codeInsight.daemon.impl.analysis.FileHighlightingSetting
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightLevelUtil.forceRootHighlighting
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightingLevelManager
 import com.intellij.lang.Language
+import com.intellij.lang.injection.InjectedLanguageManager
 import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.actionSystem.CommonDataKeys.PSI_FILE
 import com.intellij.openapi.editor.markup.InspectionsLevel
@@ -31,7 +33,7 @@ fun getConfigureHighlightingLevelPopup(context: DataContext): JBPopup? {
   languages.sortedBy { it.displayName }.forEach {
     if (isSeparatorNeeded) group.add(Separator.create(it.displayName))
     group.add(LevelAction(InspectionsLevel.NONE, provider, it))
-    group.add(LevelAction(InspectionsLevel.ERRORS, provider, it))
+    group.add(LevelAction(InspectionsLevel.SYNTAX, provider, it))
     if (isAllInspectionsEnabled) group.add(LevelAction(InspectionsLevel.ALL, provider, it))
   }
   group.add(Separator.create())
@@ -49,7 +51,7 @@ private class LevelAction(val level: InspectionsLevel, val provider: FileViewPro
     val manager = HighlightingLevelManager.getInstance(file.project) ?: return false
     return level == when {
       manager.shouldInspect(file) -> InspectionsLevel.ALL
-      manager.shouldHighlight(file) -> InspectionsLevel.ERRORS
+      manager.shouldHighlight(file) -> InspectionsLevel.SYNTAX
       else -> InspectionsLevel.NONE
     }
   }
@@ -59,9 +61,11 @@ private class LevelAction(val level: InspectionsLevel, val provider: FileViewPro
     val file = provider.getPsi(language) ?: return
     forceRootHighlighting(file, when (level) {
       InspectionsLevel.NONE -> FileHighlightingSetting.SKIP_HIGHLIGHTING
-      InspectionsLevel.ERRORS -> FileHighlightingSetting.SKIP_INSPECTION
+      InspectionsLevel.SYNTAX -> FileHighlightingSetting.SKIP_INSPECTION
       InspectionsLevel.ALL -> FileHighlightingSetting.FORCE_HIGHLIGHTING
     })
+    InjectedLanguageManager.getInstance(file.project).dropFileCaches(file)
+    DaemonCodeAnalyzer.getInstance(file.project).restart()
   }
 }
 

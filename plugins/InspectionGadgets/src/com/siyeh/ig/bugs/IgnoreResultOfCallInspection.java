@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2015 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2020 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,6 +76,8 @@ public class IgnoreResultOfCallInspection extends BaseInspection {
         .parameterTypes("T"));
   private static final Set<String> IGNORE_ANNOTATIONS = ContainerUtil
     .immutableSet("org.assertj.core.util.CanIgnoreReturnValue", "com.google.errorprone.annotations.CanIgnoreReturnValue");
+  private static final Set<String> CHECK_ANNOTATIONS = ContainerUtil.immutableSet(
+    "javax.annotation.CheckReturnValue", "org.assertj.core.util.CheckReturnValue", "com.google.errorprone.annotations.CheckReturnValue");
   protected final MethodMatcher myMethodMatcher;
   /**
    * @noinspection PublicField
@@ -104,6 +106,7 @@ public class IgnoreResultOfCallInspection extends BaseInspection {
       .add("java.math.BigDecimal",".*")
       .add("java.net.InetAddress",".*")
       .add("java.net.URI",".*")
+      .add("java.nio.channels.AsynchronousChannelGroup",".*")
       .add("java.util.Arrays", ".*")
       .add("java.util.List", "of")
       .add("java.util.Set", "of")
@@ -112,7 +115,17 @@ public class IgnoreResultOfCallInspection extends BaseInspection {
       .add("java.util.UUID",".*")
       .add("java.util.regex.Matcher","pattern|toMatchResult|start|end|group|groupCount|matches|find|lookingAt|quoteReplacement|replaceAll|replaceFirst|regionStart|regionEnd|hasTransparentBounds|hasAnchoringBounds|hitEnd|requireEnd")
       .add("java.util.regex.Pattern",".*")
+      .add("java.util.concurrent.CountDownLatch","await|getCount")
+      .add("java.util.concurrent.ExecutorService","awaitTermination|isShutdown|isTerminated")
+      .add("java.util.concurrent.ForkJoinPool","awaitQuiescence")
+      .add("java.util.concurrent.Semaphore","tryAcquire|availablePermits|isFair|hasQueuedThreads|getQueueLength|getQueuedThreads")
+      .add("java.util.concurrent.locks.Condition","await|awaitNanos|awaitUntil")
+      .add("java.util.concurrent.locks.Lock","tryLock|newCondition")
       .add("java.util.stream.BaseStream",".*")
+      .add("java.util.stream.Stream",".*")
+      .add("java.util.stream.DoubleStream",".*")
+      .add("java.util.stream.IntStream",".*")
+      .add("java.util.stream.LongStream",".*")
       .finishDefault();
   }
 
@@ -204,6 +217,10 @@ public class IgnoreResultOfCallInspection extends BaseInspection {
       final PsiClass aClass = method.getContainingClass();
       if (aClass == null) return false;
       if (errorContainer != null && PsiUtilCore.hasErrorElementChild(errorContainer)) return false;
+      if (call instanceof PsiMethodCallExpression) {
+        PsiMethodCallExpression previousCall = MethodCallUtils.getQualifierMethodCall((PsiMethodCallExpression)call);
+        if (MOCK_LIBS_EXCLUDED_QUALIFIER_CALLS.test(previousCall)) return false;
+      }
       if (PropertyUtil.isSimpleGetter(method)) {
         return !isIgnored(method, null);
       }
@@ -223,7 +240,7 @@ public class IgnoreResultOfCallInspection extends BaseInspection {
         return !isIgnored(method, null);
       }
 
-      PsiAnnotation annotation = findAnnotationInTree(method, null, Collections.singleton("javax.annotation.CheckReturnValue"));
+      PsiAnnotation annotation = findAnnotationInTree(method, null, CHECK_ANNOTATIONS);
       if (annotation == null) {
         annotation = getAnnotationByShortNameCheckReturnValue(method);
       }
@@ -291,10 +308,6 @@ public class IgnoreResultOfCallInspection extends BaseInspection {
       final boolean honorInferred = Registry.is("ide.ignore.call.result.inspection.honor.inferred.pure");
       if (!honorInferred && !JavaMethodContractUtil.hasExplicitContractAnnotation(method)) return false;
       if (!JavaMethodContractUtil.isPure(method) || hasTrivialReturnValue(method)) return false;
-      if (call instanceof PsiMethodCallExpression) {
-        PsiMethodCallExpression previousCall = MethodCallUtils.getQualifierMethodCall((PsiMethodCallExpression)call);
-        if (MOCK_LIBS_EXCLUDED_QUALIFIER_CALLS.test(previousCall)) return false;
-      }
       if (!SideEffectChecker.mayHaveExceptionalSideEffect(method)) return true;
       if (!(call instanceof PsiCallExpression) || JavaMethodContractUtil.getMethodCallContracts(method, null).isEmpty()) return false;
       CommonDataflow.DataflowResult result = CommonDataflow.getDataflowResult(call);

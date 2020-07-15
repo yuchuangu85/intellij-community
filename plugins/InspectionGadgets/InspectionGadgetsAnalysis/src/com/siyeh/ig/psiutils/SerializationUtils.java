@@ -20,7 +20,7 @@ import com.intellij.psi.util.InheritanceUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public class SerializationUtils {
+public final class SerializationUtils {
 
   private SerializationUtils() {}
 
@@ -94,6 +94,10 @@ public class SerializationUtils {
   public static boolean isWriteObject(@NotNull PsiMethod method) {
     final PsiClassType type = TypeUtils.getType("java.io.ObjectOutputStream", method);
     return MethodUtils.methodMatches(method, null, PsiType.VOID, "writeObject", type);
+  }
+
+  public static boolean isReadObjectNoData(@NotNull PsiMethod method) {
+    return MethodUtils.methodMatches(method, null, PsiType.VOID, "readObjectNoData");
   }
 
   public static boolean isReadResolve(@NotNull PsiMethod method) {

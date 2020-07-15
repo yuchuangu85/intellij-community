@@ -23,10 +23,7 @@ import com.intellij.debugger.settings.DebuggerSettings;
 import com.intellij.debugger.settings.NodeRendererSettings;
 import com.intellij.debugger.ui.breakpoints.*;
 import com.intellij.debugger.ui.tree.ValueDescriptor;
-import com.intellij.debugger.ui.tree.render.ArrayRenderer;
-import com.intellij.debugger.ui.tree.render.ClassRenderer;
-import com.intellij.debugger.ui.tree.render.NodeRenderer;
-import com.intellij.debugger.ui.tree.render.PrimitiveRenderer;
+import com.intellij.debugger.ui.tree.render.*;
 import com.intellij.execution.CantRunException;
 import com.intellij.execution.ExecutionException;
 import com.intellij.execution.ExecutionResult;
@@ -116,7 +113,7 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
   private final List<NodeRenderer> myRenderers = new ArrayList<>();
 
   // we use null key here
-  private final Map<Type, NodeRenderer> myNodeRenderersMap = new HashMap<>();
+  private final Map<Type, Object> myNodeRenderersMap = new HashMap<>();
 
   private final SuspendManagerImpl mySuspendManager = new SuspendManagerImpl(this);
   protected CompoundPositionManager myPositionManager = CompoundPositionManager.EMPTY;
@@ -138,6 +135,7 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
     myRequestManager = new RequestManagerImpl(this);
     NodeRendererSettings.getInstance().addListener(this::reloadRenderers, myDisposable);
     NodeRenderer.EP_NAME.addChangeListener(this::reloadRenderers, myDisposable);
+    CompoundRendererProvider.EP_NAME.addChangeListener(this::reloadRenderers, myDisposable);
     reloadRenderers();
     myDebugProcessDispatcher.addListener(new DebugProcessListener() {
       @Override
@@ -195,12 +193,12 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
     return myReturnValueWatcher != null;
   }
 
+  /**
+   * @deprecated use {@link #getAutoRendererAsync(Type)}
+   */
+  @Deprecated
   public NodeRenderer getAutoRenderer(ValueDescriptor descriptor) {
-    return getAutoRenderer(descriptor.getType());
-  }
-
-  @NotNull
-  public NodeRenderer getAutoRenderer(Type type) {
+    Type type = descriptor.getType();
     DebuggerManagerThreadImpl.assertIsManagerThread();
     // in case evaluation is not possible, force default renderer
     if (!isEvaluationPossible()) {
@@ -208,10 +206,15 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
     }
 
     try {
-      return myNodeRenderersMap.computeIfAbsent(type, t ->
-        myRenderers.stream().
-          filter(r -> DebuggerUtilsImpl.suppressExceptions(() -> r.isApplicable(type), false, true, ClassNotPreparedException.class)).
-          findFirst().orElseGet(() -> getDefaultRenderer(type)));
+      Object res = myNodeRenderersMap.get(type);
+      if (res instanceof NodeRenderer) {
+        return (NodeRenderer)res;
+      }
+      NodeRenderer renderer = myRenderers.stream().
+        filter(r -> DebuggerUtilsImpl.suppressExceptions(() -> r.isApplicable(type), false, true, ClassNotPreparedException.class)).
+        findFirst().orElseGet(() -> getDefaultRenderer(type));
+      myNodeRenderersMap.put(type, renderer);
+      return renderer;
     }
     catch (ClassNotPreparedException e) {
       LOG.info(e);
@@ -221,7 +224,7 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
   }
 
   @NotNull
-  public CompletableFuture<NodeRenderer> getAutoRendererAsync(Type type) {
+  public CompletableFuture<NodeRenderer> getAutoRendererAsync(@Nullable Type type) {
     DebuggerManagerThreadImpl.assertIsManagerThread();
     // in case evaluation is not possible, force default renderer
     if (!isEvaluationPossible()) {
@@ -229,21 +232,31 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
     }
 
     try {
-      NodeRenderer renderer = myNodeRenderersMap.get(type);
-      if (renderer != null) {
-        return CompletableFuture.completedFuture(renderer);
+      Object renderer = myNodeRenderersMap.get(type);
+      if (renderer instanceof NodeRenderer) {
+        return CompletableFuture.completedFuture((NodeRenderer)renderer);
       }
-      CompletableFuture<Boolean>[] futures = myRenderers.stream().map(r -> r.isApplicableAsync(type)).toArray(CompletableFuture[]::new);
-      return CompletableFuture.allOf(futures).thenApply(__ -> {
-        List<Boolean> res = StreamEx.of(futures).map(CompletableFuture::join).toList();
-        int idx = res.indexOf(true);
-        if (idx > -1) {
-          NodeRenderer r = myRenderers.get(idx);
-          myNodeRenderersMap.put(type, r);
-          return r;
-        }
-        return null;
+      else if (renderer instanceof CompletableFuture) {
+        //noinspection unchecked
+        return (CompletableFuture<NodeRenderer>)renderer;
+      }
+      CompletableFuture<NodeRenderer> res = DebuggerUtilsImpl.getApplicableRenderers(myRenderers, type)
+        .handle((renderers, throwable) -> {
+          DebuggerManagerThreadImpl.assertIsManagerThread();
+          NodeRenderer r = ContainerUtil.getFirstItem(renderers);
+          if (r == null || throwable != null) {
+            r = getDefaultRenderer(type); // do not cache the fallback renderer
+            myNodeRenderersMap.remove(type);
+          }
+          else {
+            // TODO: may add a new (possibly incorrect) value after the cleanup in reloadRenderers
+            myNodeRenderersMap.put(type, r);
+          }
+        return r;
       });
+      // check if future is already done
+      myNodeRenderersMap.putIfAbsent(type, res);
+      return res;
     }
     catch (ClassNotPreparedException e) {
       LOG.info(e);
@@ -1457,10 +1470,10 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
       ReferenceType result = null;
       List<ReferenceType> types = ContainerUtil.filter(getVirtualMachineProxy().classesByName(className), ReferenceType::isPrepared);
       // first try to quickly find the equal classloader only
-      result = types.stream().filter(refType -> Objects.equals(classLoader, refType.classLoader())).findFirst().orElse(null);
+      result = ContainerUtil.find(types, refType -> Objects.equals(classLoader, refType.classLoader()));
       // now do the full visibility check
       if (result == null && classLoader != null) {
-        result = types.stream().filter(refType -> isVisibleFromClassLoader(classLoader, refType)).findFirst().orElse(null);
+        result = ContainerUtil.find(types, refType -> isVisibleFromClassLoader(classLoader, refType));
       }
       if (result == null && evaluationContext != null) {
         EvaluationContextImpl evalContext = (EvaluationContextImpl)evaluationContext;
@@ -1755,7 +1768,7 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
     }
   }
 
-  private class RunToCursorCommand extends StepCommand {
+  private final class RunToCursorCommand extends StepCommand {
     private final RunToCursorBreakpoint myRunToCursorBreakpoint;
     private final boolean myIgnoreBreakpoints;
 
@@ -1993,6 +2006,7 @@ public abstract class DebugProcessImpl extends UserDataHolderBase implements Deb
         @Override
         protected void action() {
           closeProcess(false);
+          getManagerThread().processRemaining();
           doReattach();
         }
 

@@ -96,6 +96,7 @@ public class SimpleColoredComponent extends JComponent implements Accessible, Co
 
   private boolean myIconOnTheRight;
   private boolean myTransparentIconBackground;
+  private boolean myDynamicSearchMatchHighlighting;
 
   public SimpleColoredComponent() {
     myFragments = new ArrayList<>(3);
@@ -521,7 +522,7 @@ public class SimpleColoredComponent extends JComponent implements Accessible, Co
     for(char c = it.first(); c != CharacterIterator.DONE; c = it.next()) {
       Font font = basefont;
       if (!font.canDisplay(c)) {
-        for (SuitableFontProvider provider : SuitableFontProvider.EP_NAME.getExtensions()) {
+        for (SuitableFontProvider provider : SuitableFontProvider.EP_NAME.getExtensionsIfPointIsRegistered()) {
           font = provider.getFontAbleToDisplay(c, basefont.getSize(), basefont.getStyle(), basefont.getFamily());
           if (font != null) break;
         }
@@ -764,7 +765,7 @@ public class SimpleColoredComponent extends JComponent implements Accessible, Co
       }
       offset += getInsets().left;
 
-      class Frag {
+      final class Frag {
         private final int index;
         private final float start;
         private final float end;
@@ -879,7 +880,7 @@ public class SimpleColoredComponent extends JComponent implements Accessible, Co
         Color fgColor;
         if (attributes.isSearchMatch()) {
           fgColor = new JBColor(Gray._50, Gray._0);
-          UIUtil.drawSearchMatch(g, x1, x2 + 1, height);
+          UIUtil.drawSearchMatch(g, x1, x2, height);
         }
         else if (attributes.isClickable()) {
           boolean selected = UIUtil.getTreeSelectionBackground(true) == getBackground();
@@ -903,7 +904,7 @@ public class SimpleColoredComponent extends JComponent implements Accessible, Co
   }
 
   private boolean drawWithClipping(int index, Graphics2D g, Font font, float x1, float x2, float baseline) {
-    if (!SystemInfo.isMacOSCatalina) return false;
+    if (!SystemInfo.isMacOSCatalina || !myDynamicSearchMatchHighlighting) return false;
     ColoredFragment fragment = myFragments.get(index);
     if (!fragment.attributes.isSearchMatch()) return false;
     ColoredFragment prevFragment = index > 0 ? myFragments.get(index - 1) : null;
@@ -921,7 +922,7 @@ public class SimpleColoredComponent extends JComponent implements Accessible, Co
                           + (nextFragment != null ? nextFragment.text : "");
       Graphics2D clippedGraphics = (Graphics2D)g.create();
       try {
-        clippedGraphics.setClip(new Rectangle2D.Float(x1, 0, x2 - x1 + 1, getHeight()));
+        clippedGraphics.setClip(new Rectangle2D.Float(x1, 0, x2 - x1, getHeight()));
 
         if (prevFragment != null) x1 -= computeStringWidth(prevFragment, font);
         clippedGraphics.drawString(mergedText, x1, baseline);
@@ -1049,6 +1050,10 @@ public class SimpleColoredComponent extends JComponent implements Accessible, Co
 
   public void setTransparentIconBackground(boolean transparentIconBackground) {
     myTransparentIconBackground = transparentIconBackground;
+  }
+
+  public void setDynamicSearchMatchHighlighting(boolean dynamicSearchMatchHighlighting) {
+    myDynamicSearchMatchHighlighting = dynamicSearchMatchHighlighting;
   }
 
   public static int getTextBaseLine(@NotNull FontMetrics metrics, final int height) {
@@ -1322,7 +1327,7 @@ public class SimpleColoredComponent extends JComponent implements Accessible, Co
     void draw(Graphics2D g2, float x, float y);
   }
 
-  private static class LayoutTextRenderer implements TextRenderer {
+  private static final class LayoutTextRenderer implements TextRenderer {
     private final TextLayout myLayout;
 
     private LayoutTextRenderer(TextLayout layout) {
@@ -1340,7 +1345,7 @@ public class SimpleColoredComponent extends JComponent implements Accessible, Co
     }
   }
 
-  private static class SimpleTextRenderer implements TextRenderer {
+  private static final class SimpleTextRenderer implements TextRenderer {
     private final String myText;
     private final float myWidth;
 

@@ -293,7 +293,7 @@ class InjectionRegistrarImpl extends MultiHostRegistrarImpl implements MultiHost
     boolean mergeHappened = newFile != psiFile;
     Place mergedPlace = place;
     if (mergeHappened) {
-      InjectedLanguageUtil.clearCaches(psiFile, documentWindow);
+      InjectedLanguageUtil.clearCaches(psiFile.getProject(), documentWindow);
       psiFile = newFile;
       viewProvider = (InjectedFileViewProvider)psiFile.getViewProvider();
       documentWindow = viewProvider.getDocument();
@@ -672,9 +672,6 @@ class InjectionRegistrarImpl extends MultiHostRegistrarImpl implements MultiHost
     InjectedFileViewProvider viewProvider = InjectedFileViewProvider.create(PsiManagerEx.getInstanceEx(project), virtualFile, documentWindow, finalLanguage);
     Set<Language> languages = viewProvider.getLanguages();
     ASTNode[] parsedNodes = new ASTNode[languages.size()];
-
-    virtualFile.setContent(null, decodedChars, false);
-    virtualFile.setWritable(virtualFile.getDelegate().isWritable());
 
     int i = 0;
     for (Language lang : languages) {

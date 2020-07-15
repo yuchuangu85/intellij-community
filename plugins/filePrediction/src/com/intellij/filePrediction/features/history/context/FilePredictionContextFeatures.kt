@@ -11,14 +11,20 @@ import com.intellij.openapi.vfs.VirtualFile
 internal class FilePredictionContextFeatures: FilePredictionFeatureProvider {
   override fun getName(): String = "context"
 
-  override fun getFeatures(): Array<String> = arrayOf("opened")
+  override fun getFeatures(): Array<String> = arrayOf("opened", "prev_opened")
 
   override fun calculateFileFeatures(project: Project,
                                      newFile: VirtualFile,
                                      prevFile: VirtualFile?,
                                      refs: ExternalReferencesResult): Map<String, FilePredictionFeature> {
     val result = HashMap<String, FilePredictionFeature>()
-    result["opened"] = FilePredictionFeature.binary(FileEditorManager.getInstance(project).isFileOpen(newFile))
+    if (!project.isDisposed) {
+      result["opened"] = FilePredictionFeature.binary(FileEditorManager.getInstance(project).isFileOpen(newFile))
+
+      if (prevFile == null || !FileEditorManager.getInstance(project).isFileOpen(prevFile)) {
+        result["prev_opened"] = FilePredictionFeature.binary(false)
+      }
+    }
     return result
   }
 }

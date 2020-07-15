@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.profile.codeInspection.ui;
 
 import com.intellij.codeHighlighting.HighlightDisplayLevel;
@@ -14,7 +14,6 @@ import com.intellij.openapi.actionSystem.ex.ComboBoxAction;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
-import com.intellij.profile.codeInspection.ui.table.SeverityRenderer;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -87,10 +86,10 @@ public abstract class LevelChooserAction extends ComboBoxAction implements DumbA
     myChosen = severity;
     final Presentation templatePresentation = getTemplatePresentation();
     templatePresentation.setText(SingleInspectionProfilePanel.renderSeverity(severity));
-    templatePresentation.setIcon(SeverityRenderer.getIcon(HighlightDisplayLevel.find(severity)));
+    templatePresentation.setIcon(HighlightDisplayLevel.find(severity).getIcon());
   }
 
-  private class HighlightSeverityAction extends DumbAwareAction {
+  private final class HighlightSeverityAction extends DumbAwareAction {
     private final HighlightSeverity mySeverity;
 
     public HighlightSeverity getSeverity() {
@@ -101,7 +100,7 @@ public abstract class LevelChooserAction extends ComboBoxAction implements DumbA
       mySeverity = severity;
       final Presentation presentation = getTemplatePresentation();
       presentation.setText(SingleInspectionProfilePanel.renderSeverity(severity));
-      presentation.setIcon(SeverityRenderer.getIcon(HighlightDisplayLevel.find(severity)));
+      presentation.setIcon(HighlightDisplayLevel.find(severity).getIcon());
     }
 
     @Override

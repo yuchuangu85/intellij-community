@@ -2,14 +2,12 @@
 package org.jetbrains.idea.svn;
 
 import com.intellij.execution.process.ProcessOutput;
-import com.intellij.ide.startup.impl.StartupManagerImpl;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.Presentation;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.command.undo.UndoManager;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
-import com.intellij.openapi.startup.StartupManager;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.TestDialog;
 import com.intellij.openapi.util.SystemInfo;
@@ -36,6 +34,7 @@ import org.jetbrains.idea.svn.actions.CreateExternalAction;
 import org.jetbrains.idea.svn.api.Url;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.rules.ExternalResource;
 
@@ -54,14 +53,13 @@ import static com.intellij.openapi.util.text.StringUtil.isEmptyOrSpaces;
 import static com.intellij.openapi.vfs.VfsUtilCore.virtualToIoFile;
 import static com.intellij.testFramework.EdtTestUtil.runInEdtAndWait;
 import static com.intellij.testFramework.RunAll.runAll;
-import static com.intellij.testFramework.UsefulTestCase.assertDoesntExist;
-import static com.intellij.testFramework.UsefulTestCase.assertExists;
+import static com.intellij.testFramework.UsefulTestCase.*;
 import static com.intellij.util.ObjectUtils.notNull;
 import static com.intellij.util.containers.ContainerUtil.map2Array;
 import static com.intellij.util.lang.CompoundRuntimeException.throwIfNotEmpty;
 import static java.util.Collections.singletonMap;
 import static org.jetbrains.idea.svn.SvnUtil.parseUrl;
-import static org.junit.Assert.*;
+import static org.junit.Assume.assumeFalse;
 
 public abstract class SvnTestCase extends AbstractJunitVcsTestCase {
   @ClassRule public static final ApplicationRule appRule = new ApplicationRule();
@@ -106,8 +104,14 @@ public abstract class SvnTestCase extends AbstractJunitVcsTestCase {
     return getPluginHomePath("svn4idea");
   }
 
+  @BeforeClass
+  public static void assumeNotMacUnderTeamCity() {
+    String message = "Mac svn binaries are not added yet";
+    assumeFalse(message, IS_UNDER_TEAMCITY && SystemInfo.isMac);
+  }
+
   @Before
-  public void setUp() throws Exception {
+  public void before() throws Exception {
     myTempDirFixture = IdeaTestFixtureFactory.getFixtureFactory().createTempDirTestFixture();
     myTempDirFixture.setUp();
     resetCanonicalTempPathCache(myTempDirFixture.getTempDirPath());
@@ -135,7 +139,6 @@ public abstract class SvnTestCase extends AbstractJunitVcsTestCase {
     vcs = SvnVcs.getInstance(myProject);
     myGate = new MockChangeListManagerGate(changeListManager);
 
-    ((StartupManagerImpl)StartupManager.getInstance(myProject)).runPostStartupActivitiesRegisteredDynamically();
     refreshSvnMappingsSynchronously();
     refreshChanges();
   }
@@ -188,7 +191,7 @@ public abstract class SvnTestCase extends AbstractJunitVcsTestCase {
   }
 
   @After
-  public void tearDown() throws Exception {
+  public void after() throws Exception {
     new RunAll(
       () -> changeListManager.waitEverythingDoneInTestMode(),
       () -> runInEdtAndWait(this::tearDownProject),
@@ -374,7 +377,7 @@ public abstract class SvnTestCase extends AbstractJunitVcsTestCase {
     });
   }
 
-  protected void withDisabledChangeListManager(@NotNull ThrowableRunnable<? extends Exception> action) throws Exception {
+  private void withDisabledChangeListManager(@NotNull ThrowableRunnable<? extends Exception> action) throws Exception {
     changeListManager.waitUntilRefreshed();
     changeListManager.forceStopInTestMode();
     action.run();
@@ -387,7 +390,7 @@ public abstract class SvnTestCase extends AbstractJunitVcsTestCase {
     return new VcsDirectoryMapping(toSystemIndependentName(directory.getPath()), vcs.getName());
   }
 
-  protected void createAnotherRepo() throws Exception {
+  private void createAnotherRepo() throws Exception {
     File repo = virtualToIoFile(myTempDirFixture.findOrCreateDir("anotherRepo"));
     copyDir(myRepoRoot, repo);
     myAnotherRepoUrl = (SystemInfo.isWindows ? "file:///" : "file://") + toSystemIndependentName(repo.getPath());
@@ -467,8 +470,8 @@ public abstract class SvnTestCase extends AbstractJunitVcsTestCase {
     runAndVerifyAcrossLocks(workingDir, myRunner, input, verifier, primitiveVerifier);
   }
 
-  public static void runAndVerifyAcrossLocks(File workingDir, final TestClientRunner runner, final String[] input,
-    final Processor<ProcessOutput> verifier, final Processor<ProcessOutput> primitiveVerifier) throws IOException {
+  private static void runAndVerifyAcrossLocks(File workingDir, final TestClientRunner runner, final String[] input,
+                                              final Processor<ProcessOutput> verifier, final Processor<ProcessOutput> primitiveVerifier) throws IOException {
     for (int i = 0; i < 5; i++) {
       final ProcessOutput output = runner.runClient("svn", null, workingDir, input);
       if (output.getExitCode() != 0 && !isEmptyOrSpaces(output.getStderr())) {

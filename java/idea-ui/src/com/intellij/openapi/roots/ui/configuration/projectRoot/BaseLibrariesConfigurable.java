@@ -1,6 +1,4 @@
-/*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.roots.ui.configuration.projectRoot;
 
 import com.intellij.CommonBundle;
@@ -11,7 +9,6 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.impl.libraries.LibraryEx;
-import com.intellij.openapi.roots.impl.libraries.LibraryImpl;
 import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.roots.libraries.LibraryTable;
 import com.intellij.openapi.roots.libraries.LibraryTablePresentation;
@@ -349,7 +346,7 @@ public abstract class BaseLibrariesConfigurable extends BaseStructureConfigurabl
     return JavaUiBundle.message("configurable.empty.text.select.library");
   }
 
-  private class CopyLibraryAction extends AnAction {
+  private final class CopyLibraryAction extends AnAction {
    private CopyLibraryAction() {
       super(CommonBundle.messagePointer("button.copy"), CommonBundle.messagePointer("button.copy"), COPY_ICON);
     }
@@ -379,7 +376,7 @@ public abstract class BaseLibrariesConfigurable extends BaseStructureConfigurabl
       if (myTree.getSelectionPaths() == null || myTree.getSelectionPaths().length != 1) {
         e.getPresentation().setEnabled(false);
       } else {
-        e.getPresentation().setEnabled(getSelectedObject() instanceof LibraryImpl);
+        e.getPresentation().setEnabled(getSelectedObject() instanceof LibraryEx);
       }
     }
   }

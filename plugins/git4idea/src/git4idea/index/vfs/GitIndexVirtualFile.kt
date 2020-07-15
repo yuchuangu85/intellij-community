@@ -2,11 +2,12 @@
 package git4idea.index.vfs
 
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.util.ThrowableComputable
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vcs.FilePath
 import com.intellij.openapi.vcs.VcsException
@@ -64,6 +65,7 @@ class GitIndexVirtualFile(private val project: Project,
   override fun getLength(): Long = cachedData.get()?.length ?: 0
   override fun getTimeStamp(): Long = 0
   override fun getModificationStamp(): Long = modificationStamp
+  override fun getFileType(): FileType = filePath.virtualFile?.fileType ?: super.getFileType()
   override fun refresh(asynchronous: Boolean, recursive: Boolean, postRunnable: Runnable?) {
     refresher.refresh(listOf(this), asynchronous, postRunnable)
   }
@@ -116,6 +118,17 @@ class GitIndexVirtualFile(private val project: Project,
 
   @Throws(IOException::class)
   override fun contentsToByteArray(): ByteArray {
+    if (ApplicationManager.getApplication().isDispatchThread) {
+      return ProgressManager.getInstance().runProcessWithProgressSynchronously(ThrowableComputable<ByteArray, IOException> {
+        contentToByteArrayImpl()
+      }, GitBundle.message("stage.vfs.read.process", name), false, project)
+    }
+    else {
+      return contentToByteArrayImpl()
+    }
+  }
+
+  private fun contentToByteArrayImpl(): ByteArray {
     return try {
       GitFileUtils.getFileContent(project, root, "", VcsFileUtil.relativePath(root, filePath))
     }

@@ -26,14 +26,9 @@ import com.intellij.util.*;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.execution.ParametersListUtil;
-import com.intellij.util.graph.DFSTBuilder;
-import com.intellij.util.graph.GraphGenerator;
-import com.intellij.util.graph.InboundSemiGraph;
+import com.intellij.util.graph.*;
 import com.intellij.util.lang.UrlClassLoader;
-import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.*;
 
 import java.io.*;
 import java.lang.invoke.MethodHandle;
@@ -105,6 +100,11 @@ public final class PluginManagerCore {
   @SuppressWarnings("StaticNonFinalField")
   @ApiStatus.Internal
   public static boolean ourDisableNonBundledPlugins;
+
+  /**
+   * Broken plugins stored in IDEA
+   */
+  private static final String BROKEN_PLUGIN_FILE = "/brokenPlugins.txt";
 
   /**
    * Bundled plugins that were updated.
@@ -190,35 +190,43 @@ public final class PluginManagerCore {
     return set != null && set.contains(descriptor.getVersion());
   }
 
+  public static void updateBrokenPlugins(Map<PluginId, Set<String>> brokenPlugins){
+    ourBrokenPluginVersions = new java.lang.ref.SoftReference<>(brokenPlugins);
+  }
+
   private static @NotNull Map<PluginId, Set<String>> getBrokenPluginVersions() {
     Map<PluginId, Set<String>> result = SoftReference.dereference(ourBrokenPluginVersions);
-    if (result != null) {
-      return result;
-    }
-
     if (System.getProperty("idea.ignore.disabled.plugins") != null) {
       result = Collections.emptyMap();
       ourBrokenPluginVersions = new java.lang.ref.SoftReference<>(result);
       return result;
     }
+    if (result != null) {
+      return result;
+    }
+    result = readBrokenPluginFile();
+    ourBrokenPluginVersions = new java.lang.ref.SoftReference<>(result);
+    return result;
+  }
 
-    result = new HashMap<>();
-    try (InputStream resource = PluginManagerCore.class.getResourceAsStream("/brokenPlugins.txt");
-         BufferedReader br = new BufferedReader(new InputStreamReader(resource, StandardCharsets.UTF_8))) {
+  private static Map<PluginId, Set<String>> readBrokenPluginFile() {
+    Map<PluginId, Set<String>> result = new HashMap<>();
+    try (BufferedReader br = new BufferedReader(
+      new InputStreamReader(PluginManagerCore.class.getResourceAsStream(BROKEN_PLUGIN_FILE), StandardCharsets.UTF_8))
+    ) {
       String s;
       while ((s = br.readLine()) != null) {
         s = s.trim();
         if (s.startsWith("//")) {
           continue;
         }
-
         List<String> tokens = ParametersListUtil.parse(s);
         if (tokens.isEmpty()) {
           continue;
         }
-
         if (tokens.size() == 1) {
-          throw new RuntimeException("brokenPlugins.txt is broken. The line contains plugin name, but does not contains version: " + s);
+          throw new RuntimeException(
+            BROKEN_PLUGIN_FILE + " is broken. The line contains plugin name, but does not contains version: " + s);
         }
 
         PluginId pluginId = PluginId.getId(tokens.get(0));
@@ -227,10 +235,8 @@ public final class PluginManagerCore {
       }
     }
     catch (IOException e) {
-      throw new RuntimeException("Failed to read /brokenPlugins.txt", e);
+      throw new RuntimeException("Failed to read " + BROKEN_PLUGIN_FILE, e);
     }
-
-    ourBrokenPluginVersions = new java.lang.ref.SoftReference<>(result);
     return result;
   }
 
@@ -344,7 +350,7 @@ public final class PluginManagerCore {
     }
 
     for (IdeaPluginDescriptorImpl o : loadedPlugins) {
-      if (!o.getUseIdeaClassLoader()) {
+      if (!o.isUseIdeaClassLoader()) {
         continue;
       }
 
@@ -433,12 +439,14 @@ public final class PluginManagerCore {
       descriptor.jarFiles = null;
     }
 
-    if (descriptor.getUseIdeaClassLoader()) {
+    if (descriptor.isUseIdeaClassLoader()) {
       getLogger().warn(descriptor.getPluginId() + " uses deprecated `use-idea-classloader` attribute");
       ClassLoader loader = PluginManagerCore.class.getClassLoader();
       try {
         // `UrlClassLoader#addURL` can't be invoked directly, because the core classloader is created at bootstrap in a "lost" branch
-        MethodHandle addURL = MethodHandles.lookup().findVirtual(loader.getClass(), "addURL", MethodType.methodType(void.class, URL.class));
+        Class<?> loaderClass = loader.getClass();
+        if (loaderClass.getName().endsWith(".BootstrapClassLoaderUtil$TransformingLoader")) loaderClass = loaderClass.getSuperclass();
+        MethodHandle addURL = MethodHandles.lookup().findVirtual(loaderClass, "addURL", MethodType.methodType(void.class, URL.class));
         for (Path pathElement : classPath) {
           addURL.invoke(loader, localFileToUrl(pathElement, descriptor));
         }
@@ -453,8 +461,7 @@ public final class PluginManagerCore {
       for (Path pathElement : classPath) {
         urls.add(localFileToUrl(pathElement, descriptor));
       }
-      PluginClassLoader loader =
-        new PluginClassLoader(urlLoaderBuilder.urls(urls), parentLoaders, descriptor, descriptor.getVersion(), descriptor.getPluginPath());
+      PluginClassLoader loader = new PluginClassLoader(urlLoaderBuilder.urls(urls), parentLoaders, descriptor, descriptor.getPluginPath());
       if (usePluginClassLoader) {
         loader.setCoreLoader(coreLoader);
       }
@@ -464,7 +471,8 @@ public final class PluginManagerCore {
 
   private static @NotNull URL localFileToUrl(@NotNull Path file, @NotNull IdeaPluginDescriptor descriptor) {
     try {
-      return file.normalize().toUri().toURL();  // it is important not to have traversal elements in classpath
+      // it is important not to have traversal elements in classpath
+      return file.normalize().toUri().toURL();
     }
     catch (MalformedURLException e) {
       throw new PluginException("Corrupted path element: `" + file + '`', e, descriptor.getPluginId());
@@ -708,7 +716,7 @@ public final class PluginManagerCore {
 
   public static void getDescriptorsToMigrate(@NotNull Path dir,
                                              @Nullable BuildNumber compatibleBuildNumber,
-                                             @Nullable String bundledPluginsPath,
+                                             @Nullable Path bundledPluginsPath,
                                              @Nullable Map<PluginId, Set<String>> brokenPluginVersions,
                                              List<IdeaPluginDescriptorImpl> pluginsToMigrate,
                                              List<IdeaPluginDescriptorImpl> incompatiblePlugins) throws ExecutionException, InterruptedException {
@@ -716,11 +724,8 @@ public final class PluginManagerCore {
       brokenPluginVersions != null ? brokenPluginVersions : getBrokenPluginVersions(),
       () -> compatibleBuildNumber == null ? getBuildNumber() : compatibleBuildNumber
     );
-    DescriptorListLoadingContext context = new DescriptorListLoadingContext(0, Collections.emptySet(), loadingResult);
-    if (bundledPluginsPath != null) {
-      context.loadBundledPlugins = true;
-      context.bundledPluginsPath = bundledPluginsPath;
-    }
+    int flags = DescriptorListLoadingContext.IGNORE_MISSING_SUB_DESCRIPTOR | DescriptorListLoadingContext.IGNORE_MISSING_INCLUDE;
+    DescriptorListLoadingContext context = new DescriptorListLoadingContext(flags, Collections.emptySet(), loadingResult, bundledPluginsPath);
     PluginDescriptorLoader.loadBundledDescriptorsAndDescriptorsFromDir(context, dir);
 
     for (IdeaPluginDescriptorImpl descriptor : loadingResult.idMap.values()) {
@@ -957,7 +962,7 @@ public final class PluginManagerCore {
     return UrlClassLoader.build().allowLock().useCache().urlsInterned();
   }
 
-  static @NotNull BuildNumber getBuildNumber() {
+  public static @NotNull BuildNumber getBuildNumber() {
     BuildNumber result = ourBuildNumber;
     if (result == null) {
       result = BuildNumber.fromString(getPluginsCompatibleBuild());
@@ -1080,7 +1085,8 @@ public final class PluginManagerCore {
     return getIncompatibleMessage(buildNumber, descriptor.getSinceBuild(), descriptor.getUntilBuild()) != null;
   }
 
-  static @Nullable String getIncompatibleMessage(@NotNull BuildNumber buildNumber, @Nullable String sinceBuild, @Nullable String untilBuild) {
+  public static @Nullable @Nls String getIncompatibleMessage(@NotNull BuildNumber buildNumber, @Nullable @NonNls String sinceBuild,
+                                                             @Nullable @NonNls String untilBuild) {
     try {
       String message = null;
       BuildNumber sinceBuildNumber = sinceBuild == null ? null : BuildNumber.fromString(sinceBuild, null, null);
@@ -1575,6 +1581,23 @@ public final class PluginManagerCore {
       }
     }
 
+    return true;
+  }
+
+  public static boolean processAllBackwardDependencies(@NotNull IdeaPluginDescriptorImpl rootDescriptor,
+                                                       boolean withOptionalDeps,
+                                                       @NotNull Function<IdeaPluginDescriptor, FileVisitResult> consumer) {
+    CachingSemiGraph<IdeaPluginDescriptorImpl> semiGraph = createPluginIdGraph(Arrays.asList(ourPlugins),
+                                                                               (id) -> (IdeaPluginDescriptorImpl)getPlugin(id),
+                                                                               withOptionalDeps,
+                                                                               findPluginByModuleDependency(ALL_MODULES_MARKER) != null);
+    Graph<IdeaPluginDescriptorImpl> graph = GraphGenerator.generate(semiGraph);
+    Set<IdeaPluginDescriptorImpl> dependencies = new LinkedHashSet<>();
+    GraphAlgorithms.getInstance().collectOutsRecursively(graph, rootDescriptor, dependencies);
+    for (IdeaPluginDescriptorImpl dependency : dependencies) {
+      if (dependency == rootDescriptor) continue;
+      if (consumer.apply(dependency) == FileVisitResult.TERMINATE) return false;
+    }
     return true;
   }
 

@@ -24,9 +24,10 @@ import com.intellij.openapi.ui.CheckBoxWithDescription
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Ref
 import com.intellij.openapi.util.SystemInfo
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.ToolWindowId
-import com.intellij.openapi.wm.ToolWindowManager.Companion.getInstance
+import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener
 import com.intellij.platform.DirectoryProjectConfigurator
 import com.intellij.psi.PsiDocumentManager
@@ -40,26 +41,28 @@ import com.jetbrains.python.newProject.welcome.PyWelcomeCollector.Companion.Proj
 import com.jetbrains.python.newProject.welcome.PyWelcomeCollector.Companion.ScriptResult
 import com.jetbrains.python.psi.LanguageLevel
 import com.jetbrains.python.run.PythonRunConfigurationProducer
+import com.jetbrains.python.sdk.pythonSdk
 import org.jetbrains.annotations.CalledInAny
 import org.jetbrains.concurrency.CancellablePromise
 import java.awt.event.ItemEvent
 import java.util.concurrent.Callable
 import javax.swing.JPanel
 
+internal class PyWelcomeConfigurator : DirectoryProjectConfigurator {
+  override fun isEdtRequired() = false
 
-class PyWelcomeConfigurator : DirectoryProjectConfigurator {
+  override fun configureProject(project: Project, baseDir: VirtualFile, moduleRef: Ref<Module>, isProjectCreatedWithWizard: Boolean) {
+    if (isProjectCreatedWithWizard) {
+      return
+    }
 
-  override fun configureProject(project: Project, baseDir: VirtualFile, moduleRef: Ref<Module>, newProject: Boolean) {
-    if (newProject) return
-
-    StartupManager.getInstance(project).runWhenProjectIsInitialized(
-      DumbAwareRunnable { PyWelcome.welcomeUser(project, baseDir, false) }
-    )
+    StartupManager.getInstance(project).runAfterOpened {
+      PyWelcome.welcomeUser(project, baseDir, moduleRef.get(), false)
+    }
   }
 }
 
-object PyWelcomeGenerator {
-
+internal object PyWelcomeGenerator {
   fun createWelcomeSettingsPanel(): JPanel {
     return CheckBoxWithDescription(
       JBCheckBox(PyWelcomeBundle.message("py.welcome.new.project.text"),
@@ -70,36 +73,43 @@ object PyWelcomeGenerator {
     )
   }
 
-  fun welcomeUser(project: Project, baseDir: VirtualFile): Unit = PyWelcome.welcomeUser(project, baseDir, true)
+  fun welcomeUser(project: Project, baseDir: VirtualFile, module: Module) {
+    PyWelcome.welcomeUser(project, baseDir, module, true)
+  }
 }
 
 private object PyWelcome {
-
   private val LOG = Logger.getInstance(PyWelcome::class.java)
 
   @CalledInAny
-  internal fun welcomeUser(project: Project, baseDir: VirtualFile, newProject: Boolean) {
+  fun welcomeUser(project: Project, baseDir: VirtualFile, module: Module?, newProject: Boolean) {
     val enabled = PyWelcomeSettings.instance.createWelcomeScriptForEmptyProject
 
-    if (enabled) PyWelcomeCollector.logWelcomeProject(project, if (newProject) ProjectType.NEW else ProjectType.OPENED)
+    PyWelcomeCollector.logWelcomeProject(project, if (newProject) ProjectType.NEW else ProjectType.OPENED)
 
     if (enabled &&
-        isEmptyProject(baseDir).also { if (!it) PyWelcomeCollector.logWelcomeScript(project, ScriptResult.NOT_EMPTY) }) {
+        isEmptyProject(project, baseDir, module).also { if (!it) PyWelcomeCollector.logWelcomeScript(project, ScriptResult.NOT_EMPTY) }) {
       prepareFileAndOpen(project, baseDir).onSuccess {
         if (it != null) {
           // expand tree after the welcome script is created, otherwise expansion will have no effect on empty tree
-          expandProjectTree(project)
+          expandProjectTree(project, ToolWindowManager.getInstance(project))
           createRunConfiguration(project, it)
         }
       }
     }
     else {
-      expandProjectTree(project)
+      expandProjectTree(project, ToolWindowManager.getInstance(project))
     }
   }
 
-  private fun isEmptyProject(baseDir: VirtualFile): Boolean {
-    return baseDir.children.all { ProjectCoreUtil.isProjectOrWorkspaceFile(it) }
+  private fun isEmptyProject(project: Project, baseDir: VirtualFile, module: Module?): Boolean {
+    val sdkBinary = (module?.pythonSdk ?: project.pythonSdk)?.homeDirectory
+    val innerSdk = sdkBinary != null && VfsUtil.isAncestor(baseDir, sdkBinary, true)
+
+    return baseDir.children.all {
+      ProjectCoreUtil.isProjectOrWorkspaceFile(it) ||
+      (innerSdk && it.isDirectory && VfsUtil.isAncestor(it, sdkBinary!!, true))
+    }
   }
 
   private fun prepareFileAndOpen(project: Project, baseDir: VirtualFile): CancellablePromise<PsiFile?> {
@@ -127,8 +137,10 @@ private object PyWelcome {
   }
 
   @CalledInAny
-  private fun expandProjectTree(project: Project) {
-    val toolWindow = getInstance(project).getToolWindow(ToolWindowId.PROJECT_VIEW)
+  private fun expandProjectTree(project: Project, toolWindowManager: ToolWindowManager) {
+    // the approach was taken from com.intellij.platform.PlatformProjectViewOpener
+
+    val toolWindow = toolWindowManager.getToolWindow(ToolWindowId.PROJECT_VIEW)
     if (toolWindow == null) {
       val listener = ProjectViewListener(project)
       // collected listener will release the connection
@@ -236,16 +248,18 @@ private object PyWelcome {
 
     private var toolWindowRegistered = false
 
-    override fun toolWindowsRegistered(ids: List<String>) {
+    override fun toolWindowsRegistered(ids: List<String>, toolWindowManager: ToolWindowManager) {
       if (ToolWindowId.PROJECT_VIEW in ids) {
         toolWindowRegistered = true
         Disposer.dispose(this) // to release message bus connection
-        expandProjectTree(project)
+        expandProjectTree(project, toolWindowManager)
       }
     }
 
     override fun dispose() {
-      if (!toolWindowRegistered) PyWelcomeCollector.logWelcomeProjectView(project, ProjectViewResult.NO_TOOLWINDOW)
+      if (!toolWindowRegistered) {
+        PyWelcomeCollector.logWelcomeProjectView(project, ProjectViewResult.NO_TOOLWINDOW)
+      }
     }
   }
 }

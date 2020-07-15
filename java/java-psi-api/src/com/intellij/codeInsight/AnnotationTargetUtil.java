@@ -171,12 +171,9 @@ public class AnnotationTargetUtil {
    */
   public static @Nullable TargetType findAnnotationTarget(@NotNull PsiAnnotation annotation, TargetType @NotNull ... types) {
     if (types.length != 0) {
-      PsiJavaCodeReferenceElement ref = annotation.getNameReferenceElement();
-      if (ref != null) {
-        PsiElement annotationType = ref.resolve();
-        if (annotationType instanceof PsiClass) {
-          return findAnnotationTarget((PsiClass)annotationType, types);
-        }
+      PsiClass annotationType = annotation.resolveAnnotationType();
+      if (annotationType != null) {
+        return findAnnotationTarget(annotationType, types);
       }
     }
 
@@ -236,7 +233,9 @@ public class AnnotationTargetUtil {
     if (list == null) return null;
     PsiClass annotationClass = JavaPsiFacade.getInstance(modifierListOwner.getProject())
       .findClass(annotation, modifierListOwner.getResolveScope());
-    if (annotationClass != null && findAnnotationTarget(annotationClass, TargetType.TYPE_USE) != null) {
+    if (annotationClass != null && findAnnotationTarget(annotationClass, TargetType.TYPE_USE) != null &&
+        // External annotations for types are not supported
+        !(modifierListOwner instanceof PsiCompiledElement)) {
       PsiElement parent = list.getParent();
       PsiTypeElement type = null;
       if (parent instanceof PsiMethod) {

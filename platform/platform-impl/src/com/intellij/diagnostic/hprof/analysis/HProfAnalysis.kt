@@ -35,7 +35,8 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 
 class HProfAnalysis(private val hprofFileChannel: FileChannel,
-                    private val tempFilenameSupplier: TempFilenameSupplier) {
+                    private val tempFilenameSupplier: TempFilenameSupplier,
+                    private val analysisCallback: (AnalysisContext, ProgressIndicator) -> String) {
 
   interface TempFilenameSupplier {
     fun getTempFilePath(type: String): Path
@@ -51,10 +52,12 @@ class HProfAnalysis(private val hprofFileChannel: FileChannel,
 
   private var includeMetaInfo = true
 
-  @TestOnly
   fun setIncludeMetaInfo(value: Boolean) {
     includeMetaInfo = value
   }
+
+  var onlyStrongReferences = false
+  var includeClassesAsRoots = true
 
   private fun openTempEmptyFileChannel(@NonNls type: String): FileChannel {
     val tempPath = tempFilenameSupplier.getTempFilePath(type)
@@ -135,7 +138,8 @@ class HProfAnalysis(private val hprofFileChannel: FileChannel,
 
       val nominatedClassNames = nominatedClasses.map { it.classDefinition.name }
       val analysisConfig = AnalysisConfig(perClassOptions = AnalysisConfig.PerClassOptions(classNames = nominatedClassNames),
-                                          metaInfoOptions = AnalysisConfig.MetaInfoOptions(include = includeMetaInfo))
+                                          metaInfoOptions = AnalysisConfig.MetaInfoOptions(include = includeMetaInfo),
+                                          traverseOptions = AnalysisConfig.TraverseOptions(onlyStrongReferences = onlyStrongReferences, includeClassesAsRoots = includeClassesAsRoots))
       val analysisContext = AnalysisContext(
         navigator,
         analysisConfig,
@@ -146,9 +150,10 @@ class HProfAnalysis(private val hprofFileChannel: FileChannel,
         histogram
       )
 
-      val analysisReport = AnalyzeGraph(analysisContext).analyze(PartialProgressIndicator(progress, 0.4, 0.4))
-
-      result.appendln(analysisReport)
+      val analysisReport = analysisCallback(analysisContext, PartialProgressIndicator(progress, 0.4, 0.4))
+      if (analysisReport.isNotBlank()) {
+        result.appendln(analysisReport)
+      }
 
       analysisStopwatch.stop()
 

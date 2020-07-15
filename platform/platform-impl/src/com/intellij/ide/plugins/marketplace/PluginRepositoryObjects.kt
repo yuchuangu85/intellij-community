@@ -4,8 +4,7 @@ package com.intellij.ide.plugins.marketplace
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.intellij.ide.plugins.PluginNode
-
-const val PAID_TAG = "Paid"
+import com.intellij.ide.plugins.newui.Tags
 
 /**
  * Object from Search Service for getting compatible updates for IDE.
@@ -37,6 +36,7 @@ data class IntellijUpdateMetadata(
   val version: String = "",
   val notes: String = "",
   val dependencies: Set<String> = emptySet(),
+  val optionalDependencies: Set<String> = emptySet(),
   val since: String? = null,
   val until: String? = null,
   val productCode: String? = null,
@@ -57,7 +57,12 @@ data class IntellijUpdateMetadata(
     pluginNode.version = version
     pluginNode.url = url
     pluginNode.size = size.toString()
-    for (dep in dependencies) pluginNode.addDepends(dep)
+    for (dep in dependencies) {
+      pluginNode.addDepends(dep, false)
+    }
+    for (dep in optionalDependencies) {
+      pluginNode.addDepends(dep, true)
+    }
     return pluginNode
   }
 }
@@ -69,6 +74,7 @@ internal class MarketplaceSearchPluginData(
   var isPaid: Boolean = false,
   val rating: Double = 0.0,
   val name: String = "",
+  val cdate: Long? = null,
   val vendor: String = "",
   @get:JsonProperty("updateId")
   val externalUpdateId: String? = null,
@@ -85,7 +91,8 @@ internal class MarketplaceSearchPluginData(
     pluginNode.vendor = vendor
     pluginNode.externalPluginId = externalPluginId
     pluginNode.externalUpdateId = externalUpdateId
-    if (isPaid) pluginNode.tags = listOf(PAID_TAG)
+    if (cdate != null) pluginNode.date = cdate
+    if (isPaid) pluginNode.tags = listOf(Tags.Paid.name)
     return pluginNode
   }
 }
@@ -105,4 +112,14 @@ data class FeatureImpl(
   val version: String? = null,
   val implementationName: String? = null,
   val bundled: Boolean = false
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+class MarketplaceBrokenPlugin(
+  val id: String = "",
+  val version: String = "",
+  val since: String? = null,
+  val until: String? = null,
+  val originalSince: String? = null,
+  val originalUntil: String? = null
 )

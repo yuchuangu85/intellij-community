@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.xml.util;
 
@@ -8,7 +8,7 @@ import org.jetbrains.annotations.*;
 
 import static com.intellij.xml.CommonXmlStrings.*;
 
-public class XmlStringUtil {
+public final class XmlStringUtil {
 
   private XmlStringUtil() {
   }
@@ -130,6 +130,10 @@ public class XmlStringUtil {
                                                             @NonNls @NotNull String tagWord,
                                                             @NonNls @NotNull String attributes) {
     return String.format("<%s %s>%s</%s>", tagWord, attributes, text, tagWord);
+  }
+
+  public static @NotNull String formatLink(@NonNls @NotNull String targetUrl, @Nls @NotNull String text) {
+    return wrapInHtmlTagWithAttributes(text, "a", "href=\"" + targetUrl + "\"");
   }
 
   public static boolean isWrappedInHtml(@NotNull String tooltip) {

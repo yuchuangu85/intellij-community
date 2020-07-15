@@ -8,7 +8,7 @@ import com.intellij.openapi.vcs.VcsDataKeys;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.ChangesUtil;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.ListSelection;
+import com.intellij.openapi.ListSelection;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.JBTreeTraverser;
@@ -252,7 +252,7 @@ public abstract class VcsTreeModelData {
         if (node.shouldExpandByDefault()) {
           return () -> {
             //noinspection unchecked
-            Enumeration<ChangesBrowserNode<?>> children = node.children();
+            Enumeration<ChangesBrowserNode<?>> children = (Enumeration)node.children();
             return ContainerUtil.iterate(children);
           };
         }

@@ -24,6 +24,7 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.DumbServiceImpl
 import com.intellij.openapi.util.JDOMUtil
+import com.intellij.openapi.util.RecursionManager
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.codeStyle.CodeStyleSettingsManager
@@ -587,7 +588,7 @@ class A {{
                           "} }")
   }
 
-  void "test stop at SELECTION when invoked surround template by tab"() {
+  void "test stop at END when invoked surround template by tab"() {
     myFixture.configureByText "a.txt", "<caret>"
 
     final TemplateManager manager = TemplateManager.getInstance(getProject())
@@ -598,7 +599,21 @@ class A {{
     myFixture.type('arg')
     state.nextTab()
     assert !state
-    checkResultByText 'foo arg bar  goo <caret> after'
+    checkResultByText 'foo arg bar <caret> goo  after'
+  }
+
+  void "test stop at SELECTION when invoked surround template by tab and END missing"() {
+    myFixture.configureByText "a.txt", "<caret>"
+
+    final TemplateManager manager = TemplateManager.getInstance(getProject())
+    final Template template = manager.createTemplate("xxx", "user", 'foo $ARG$ bar goo $SELECTION$ after')
+    template.addVariable("ARG", "", "", true)
+
+    startTemplate(template)
+    myFixture.type('arg')
+    state.nextTab()
+    assert !state
+    checkResultByText 'foo arg bar goo <caret> after'
   }
 
   void "test concat macro"() {
@@ -1253,16 +1268,14 @@ class Foo {
 
     myFixture.configureByText "a.java", "class Foo {{ System.out.println(helloW<caret>) }}"
     LiveTemplateCompletionContributor.setShowTemplatesInTests(true, myFixture.getTestRootDisposable())
-    DumbServiceImpl.getInstance(getProject()).runInDumbMode(new Runnable() {
-      @Override
-      void run() {
-        myFixture.completeBasic()
-        assert myFixture.lookup
-        assert myFixture.lookupElementStrings.contains('helloWorld')
-        myFixture.type('\t')
-        myFixture.checkResult "class Foo {{ System.out.println(\"Hello, World\") }}"
-      }
-    })
+    DumbServiceImpl.getInstance(getProject()).runInDumbMode {
+      RecursionManager.disableMissedCacheAssertions(testRootDisposable)
+      myFixture.completeBasic()
+      assert myFixture.lookup
+      assert myFixture.lookupElementStrings.contains('helloWorld')
+      myFixture.type('\t')
+      myFixture.checkResult "class Foo {{ System.out.println(\"Hello, World\") }}"
+    }
   }
 
   void "test log livetemplate started event"() {

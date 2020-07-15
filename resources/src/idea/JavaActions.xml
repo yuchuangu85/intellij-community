@@ -150,8 +150,8 @@
       <add-to-group group-id="Internal" anchor="last"/>
     </group>
 
-    <action internal="true" id="TestParseEventLogWhitelistAction"
-            class="com.intellij.internal.statistic.actions.TestParseEventLogWhitelistAction">
+    <action internal="true" id="TestParseEventsSchemeAction"
+            class="com.intellij.internal.statistic.actions.TestParseEventsSchemeAction">
     </action>
 
     <action internal="true" id="CollectFUStatisticsAction"
@@ -188,8 +188,12 @@
       <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="ReplaceInPath"/>
       <add-to-group group-id="NavbarPopupMenu" anchor="after" relative-to-action="ReplaceInPath"/>
       <add-to-group group-id="FavoritesViewPopupMenu" anchor="after" relative-to-action="ReplaceInPath"/>
-      <add-to-group group-id="EditorPopupMenu1" anchor="after" relative-to-action="FindUsages"/>
     </reference>
+
+    <group id="EditorPopupMenuAnalyze" class="com.intellij.ide.actions.EditorPopupNoSelectionGroup">
+      <reference ref="AnalyzeMenu"/>
+      <add-to-group group-id="EditorPopupMenu1" anchor="after" relative-to-action="FindUsages"/>
+    </group>
 
     <group id="ProjectViewAnalysisGroup">
       <add-to-group group-id="ProjectViewPopupMenuModifyGroup" anchor="first"/>
@@ -726,6 +730,8 @@
 
     <action id="MethodOverloadSwitchUp" class="com.intellij.codeInsight.editorActions.JavaMethodOverloadSwitchUpAction"/>
     <action id="MethodOverloadSwitchDown" class="com.intellij.codeInsight.editorActions.JavaMethodOverloadSwitchDownAction" />
+
+    <action class="com.intellij.find.findUsages.GroupByPackageAction" id="UsageGrouping.Package"/>
   </actions>
 </idea-plugin>
 

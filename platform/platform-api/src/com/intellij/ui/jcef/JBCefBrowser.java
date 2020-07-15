@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.jcef;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -11,14 +11,18 @@ import org.cef.callback.CefContextMenuParams;
 import org.cef.callback.CefMenuModel;
 import org.cef.handler.*;
 import org.cef.misc.BoolRef;
-import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 
 import static com.intellij.ui.jcef.JBCefEventUtils.*;
 import static org.cef.callback.CefMenuModel.MenuId.MENU_ID_USER_LAST;
@@ -31,11 +35,13 @@ import static org.cef.callback.CefMenuModel.MenuId.MENU_ID_USER_LAST;
  *
  * @author tav
  */
-@ApiStatus.Experimental
 public class JBCefBrowser implements JBCefDisposable {
   private static final String BLANK_URI = "about:blank";
 
   private static final String JBCEFBROWSER_INSTANCE_PROP = "JBCefBrowser.instance";
+
+  @NotNull private static final List<Consumer<JBCefBrowser>> ourOnBrowserMoveResizeCallbacks =
+    Collections.synchronizedList(new ArrayList<>(1));
 
   @NotNull private final JBCefClient myCefClient;
   @NotNull private final JPanel myComponent;
@@ -45,6 +51,7 @@ public class JBCefBrowser implements JBCefDisposable {
   @Nullable private final CefLifeSpanHandler myLifeSpanHandler;
   @NotNull private final DisposeHelper myDisposeHelper = new DisposeHelper();
 
+  private final AtomicInteger myJSQueryCounter = new AtomicInteger(0);
   private final boolean myIsDefaultClient;
   private volatile boolean myIsCefBrowserCreated;
   @Nullable private volatile LoadDeferrer myLoadDeferrer;
@@ -52,9 +59,9 @@ public class JBCefBrowser implements JBCefDisposable {
   protected CefContextMenuHandler myDefaultContextMenuHandler;
   private final ReentrantLock myCookieManagerLock = new ReentrantLock();
 
-  private static class LoadDeferrer {
-    @Nullable protected final String myHtml;
-    @NotNull protected final String myUrl;
+  private static final class LoadDeferrer {
+    @Nullable private final String myHtml;
+    @NotNull private final String myUrl;
 
     private LoadDeferrer(@Nullable String html, @NotNull String url) {
       myHtml = html;
@@ -127,11 +134,34 @@ public class JBCefBrowser implements JBCefDisposable {
     myComponent.setFocusTraversalPolicyProvider(true);
     myComponent.setFocusTraversalPolicy(new MyFTP());
 
+    myComponent.addComponentListener(new ComponentAdapter() {
+      @Override
+      public void componentResized(ComponentEvent e) {
+        ourOnBrowserMoveResizeCallbacks.forEach(callback -> callback.accept(JBCefBrowser.this));
+      }
+
+      @Override
+      public void componentMoved(ComponentEvent e) {
+        ourOnBrowserMoveResizeCallbacks.forEach(callback -> callback.accept(JBCefBrowser.this));
+      }
+
+      @Override
+      public void componentShown(ComponentEvent e) {
+        ourOnBrowserMoveResizeCallbacks.forEach(callback -> callback.accept(JBCefBrowser.this));
+      }
+
+      @Override
+      public void componentHidden(ComponentEvent e) {
+        ourOnBrowserMoveResizeCallbacks.forEach(callback -> callback.accept(JBCefBrowser.this));
+      }
+    });
+
     if (cefBrowser == null) {
       myCefClient.addLifeSpanHandler(myLifeSpanHandler = new CefLifeSpanHandlerAdapter() {
           @Override
           public void onAfterCreated(CefBrowser browser) {
             myIsCefBrowserCreated = true;
+            myCefClient.notifyBrowserCreated(JBCefBrowser.this);
             LoadDeferrer loader = myLoadDeferrer;
             if (loader != null) {
               loader.load(browser);
@@ -237,7 +267,7 @@ public class JBCefBrowser implements JBCefDisposable {
   }
 
   private static void loadString(CefBrowser cefBrowser, String html, String url) {
-    url = JBCefFileSchemeHandler.registerLoadHTMLRequest(cefBrowser, html, url);
+    url = JBCefFileSchemeHandlerFactory.registerLoadHTMLRequest(cefBrowser, html, url);
     cefBrowser.loadURL(url);
   }
 
@@ -351,11 +381,33 @@ public class JBCefBrowser implements JBCefDisposable {
     return myDisposeHelper.isDisposed();
   }
 
+  boolean isCefBrowserCreated() {
+    return myIsCefBrowserCreated;
+  }
+
+  int getJSQueryCounter() {
+    return myJSQueryCounter.incrementAndGet();
+  }
+
   /**
    * Returns {@code JBCefBrowser} instance associated with this {@code CefBrowser}.
    */
   public static JBCefBrowser getJBCefBrowser(@NotNull CefBrowser browser) {
     return (JBCefBrowser)((JComponent)browser.getUIComponent()).getClientProperty(JBCEFBROWSER_INSTANCE_PROP);
+  }
+
+  /**
+   * For internal usage.
+   */
+  public static void addOnBrowserMoveResizeCallback(@NotNull Consumer<JBCefBrowser> callback) {
+    ourOnBrowserMoveResizeCallbacks.add(callback);
+  }
+
+  /**
+   * For internal usage.
+   */
+  public static void removeOnBrowserMoveResizeCallback(@NotNull Consumer<JBCefBrowser> callback) {
+    ourOnBrowserMoveResizeCallbacks.remove(callback);
   }
 
   protected class DefaultCefContextMenuHandler extends CefContextMenuHandlerAdapter {

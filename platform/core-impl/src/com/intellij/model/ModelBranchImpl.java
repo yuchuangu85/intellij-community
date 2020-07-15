@@ -6,34 +6,38 @@ import com.intellij.model.psi.PsiSymbolReference;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
+import com.intellij.openapi.editor.impl.DocumentImpl;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.SimpleModificationTracker;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
+import com.intellij.psi.impl.file.PsiFileImplUtil;
 import com.intellij.psi.search.DelegatingGlobalSearchScope;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.util.IncorrectOperationException;
+import com.intellij.util.LocalTimeCounter;
 import com.intellij.util.Processor;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.function.Consumer;
 
 @ApiStatus.Experimental
 @ApiStatus.Internal
-public class ModelBranchImpl implements ModelBranch {
+public final class ModelBranchImpl implements ModelBranch {
   private final Map<VirtualFile, VirtualFile> myVFileCopies = new HashMap<>();
   private final Map<Document, List<DocumentEvent>> myDocumentChanges = new HashMap<>();
   private final List<Runnable> myAfterMerge = new ArrayList<>();
   private final SimpleModificationTracker myFileSetChanges = new SimpleModificationTracker();
   private final Project myProject;
   private boolean myMerged;
-  private static final Map<Thread, ModelBranchImpl> ourCurrentBranches = Collections.synchronizedMap(new HashMap<>());
 
   private ModelBranchImpl(@NotNull Project project) {
     myProject = project;
@@ -41,34 +45,25 @@ public class ModelBranchImpl implements ModelBranch {
 
   @NotNull
   static ModelPatch performInBranch(@NotNull Project project, @NotNull Consumer<ModelBranch> action) {
-    Thread thread = Thread.currentThread();
-    assert ourCurrentBranches.get(thread) == null;
-
     ModelBranchImpl branch = new ModelBranchImpl(project);
-    ourCurrentBranches.put(thread, branch);
-    try {
-      action.accept(branch);
-      return new ModelPatch() {
-        @Override
-        public void applyBranchChanges() {
-          branch.mergeBack();
-        }
+    action.accept(branch);
+    return new ModelPatch() {
+      @Override
+      public void applyBranchChanges() {
+        branch.mergeBack();
+      }
 
-        @Override
-        public @NotNull Map<VirtualFile, CharSequence> getBranchChanges() {
-          Map<VirtualFile, CharSequence> result = new HashMap<>();
-          for (Document document : branch.myDocumentChanges.keySet()) {
-            VirtualFile file = Objects.requireNonNull(FileDocumentManager.getInstance().getFile(document));
-            VirtualFile original = branch.findOriginalFile(file);
-            result.put(original, document.getImmutableCharSequence());
-          }
-          return result;
+      @Override
+      public @NotNull Map<VirtualFile, CharSequence> getBranchChanges() {
+        Map<VirtualFile, CharSequence> result = new HashMap<>();
+        for (Document document : branch.myDocumentChanges.keySet()) {
+          VirtualFile file = Objects.requireNonNull(FileDocumentManager.getInstance().getFile(document));
+          VirtualFile original = branch.findOriginalFile(file);
+          result.put(original, document.getImmutableCharSequence());
         }
-      };
-    }
-    finally {
-      ourCurrentBranches.remove(thread);
-    }
+        return result;
+      }
+    };
   }
 
   @Override
@@ -138,14 +133,30 @@ public class ModelBranchImpl implements ModelBranch {
   }
 
   @Override
+  @NotNull
+  public <T extends PsiSymbolReference> T obtainReferenceCopy(@NotNull T original) {
+    PsiElement psiCopy = obtainPsiCopy(original.getElement());
+    TextRange range = original.getRangeInElement();
+    PsiReference[] refs = psiCopy.getReferences();
+    T found = findSimilarReference(original, range, refs);
+    if (found == null) throw new AssertionError("Cannot find " + original +
+                                                " of " + original.getClass() +
+                                                " at " + range +
+                                                " in the copy, where references are " + Arrays.toString(refs));
+    return found;
+  }
+
+  @Override
   @Nullable
   public <T extends PsiSymbolReference> T findReferenceCopy(@NotNull T original) {
     PsiElement psiCopy = findPsiCopy(original.getElement());
-    if (psiCopy == null) return null;
+    return psiCopy == null ? null : findSimilarReference(original, original.getRangeInElement(), psiCopy.getReferences());
+  }
 
-    TextRange range = original.getRangeInElement();
+  @Nullable
+  private static <T> T findSimilarReference(@NotNull T original, TextRange range, PsiReference[] references) {
     //noinspection unchecked
-    return (T)ContainerUtil.find(psiCopy.getReferences(), r -> r.getClass() == original.getClass() && range.equals(r.getRangeInElement()));
+    return (T)ContainerUtil.find(references, r -> r.getClass() == original.getClass() && range.equals(r.getRangeInElement()));
   }
 
   @Override
@@ -179,13 +190,28 @@ public class ModelBranchImpl implements ModelBranch {
     assert !myMerged;
     myMerged = true;
 
+    for (Map.Entry<VirtualFile, VirtualFile> entry : myVFileCopies.entrySet()) {
+      VirtualFile original = entry.getKey();
+      String copyName = entry.getValue().getName();
+      if (!original.getName().equals(copyName)) {
+        PsiFileImplUtil.saveDocumentIfFileWillBecomeBinary(original, copyName);
+        try {
+          original.rename(this, copyName);
+        }
+        catch (IOException e) {
+          throw new IncorrectOperationException(e);
+        }
+      }
+    }
+
     for (Document document : myDocumentChanges.keySet()) {
       VirtualFile file = Objects.requireNonNull(FileDocumentManager.getInstance().getFile(document));
-      Document original = FileDocumentManager.getInstance().getDocument(findOriginalFile(file));
+      DocumentImpl original = (DocumentImpl) FileDocumentManager.getInstance().getDocument(findOriginalFile(file));
       assert original != null;
 
       for (DocumentEvent event : myDocumentChanges.get(document)) {
-        original.replaceString(event.getOffset(), event.getOffset() + event.getOldLength(), event.getNewFragment());
+        original.replaceString(event.getOffset(), event.getOffset() + event.getOldLength(), event.getMoveOffset(),
+                               event.getNewFragment(), LocalTimeCounter.currentTime(), false);
       }
     }
 
@@ -208,6 +234,11 @@ public class ModelBranchImpl implements ModelBranch {
         }
         return false;
       }
+
+      @Override
+      public @NotNull Collection<ModelBranch> getModelBranchesAffectingScope() {
+        return Collections.singleton(ModelBranchImpl.this);
+      }
     };
   }
 
@@ -216,8 +247,20 @@ public class ModelBranchImpl implements ModelBranch {
   }
 
   public static boolean processBranchedFilesInScope(@NotNull GlobalSearchScope scope, @NotNull Processor<? super VirtualFile> processor) {
-    ModelBranchImpl branch = ourCurrentBranches.get(Thread.currentThread());
-    return branch == null || ContainerUtil.process(branch.myVFileCopies.values(), f -> !scope.contains(f) || processor.process(f));
+    Collection<ModelBranch> branches = scope.getModelBranchesAffectingScope();
+    return branches.isEmpty() || processBranchedFilesInScope(scope, processor, branches);
   }
 
+  private static boolean processBranchedFilesInScope(GlobalSearchScope scope,
+                                                     Processor<? super VirtualFile> processor,
+                                                     Collection<ModelBranch> branches) {
+    for (ModelBranch branch : branches) {
+      for (VirtualFile file : ((ModelBranchImpl)branch).myVFileCopies.values()) {
+        if (scope.contains(file) && !processor.process(file)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
 }

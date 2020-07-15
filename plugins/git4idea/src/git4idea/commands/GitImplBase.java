@@ -136,6 +136,11 @@ public abstract class GitImplBase implements Git {
       GitExecutable executable = handler.getExecutable();
       try {
         version = GitExecutableManager.getInstance().identifyVersion(executable);
+
+        if (version.getType() == GitVersion.Type.WSL1 &&
+            !Registry.is("git.allow.wsl1.executables")) {
+          throw new GitNotInstalledException(GitBundle.message("executable.error.git.not.installed"), null);
+        }
       }
       catch (ProcessCanceledException e) {
         throw e;
@@ -159,7 +164,7 @@ public abstract class GitImplBase implements Git {
         }
       }
       catch (IOException e) {
-        return GitCommandResult.startError("Failed to start Git process " + e.getLocalizedMessage());
+        return GitCommandResult.startError(GitBundle.message("git.executable.unknown.error.message", e.getLocalizedMessage()));
       }
     }
     else {
@@ -287,7 +292,8 @@ public abstract class GitImplBase implements Git {
       if (outputType == ProcessOutputTypes.STDOUT) {
         myOutputCollector.outputLineReceived(line);
       }
-      else if (outputType == ProcessOutputTypes.STDERR && !looksLikeProgress(line)) {
+      else if (outputType == ProcessOutputTypes.STDERR &&
+               !suppressStderrLine(line)) {
         myOutputCollector.errorLineReceived(line);
       }
     }
@@ -300,7 +306,7 @@ public abstract class GitImplBase implements Git {
     @Override
     public void startFailed(@NotNull Throwable t) {
       myStartFailed = true;
-      myOutputCollector.errorLineReceived("Failed to start Git process " + t.getLocalizedMessage());
+      myOutputCollector.errorLineReceived(GitBundle.message("git.executable.unknown.error.message", t.getLocalizedMessage()));
     }
   }
 
@@ -333,7 +339,6 @@ public abstract class GitImplBase implements Git {
         && progressIndicator != null
         && !progressIndicator.getModalityState().dominates(ModalityState.NON_MODAL)) {
       GitExecutableProblemsNotifier.getInstance(project).notifyExecutionError(e);
-      if (e instanceof ProcessCanceledException) throw (ProcessCanceledException)e;
       throw new ProcessCanceledException(e);
     }
     else {
@@ -363,7 +368,6 @@ public abstract class GitImplBase implements Git {
           if (outputType == ProcessOutputTypes.SYSTEM) return;
           if (outputType == ProcessOutputTypes.STDOUT && handler.isStdoutSuppressed()) return;
           if (outputType == ProcessOutputTypes.STDERR && handler.isStderrSuppressed()) return;
-          if (outputType == ProcessOutputTypes.STDERR && looksLikeProgress(line)) return;
 
           List<Pair<String, Key>> lineChunks = new ArrayList<>();
           myAnsiEscapeDecoder.escapeText(line, outputType, (text, key) -> lineChunks.add(Pair.create(text, key)));
@@ -392,19 +396,31 @@ public abstract class GitImplBase implements Git {
     };
   }
 
-  private static boolean looksLikeProgress(@NotNull String line) {
-    String trimmed = StringUtil.trimStart(line, REMOTE_PROGRESS_PREFIX);
-    return ContainerUtil.exists(PROGRESS_INDICATORS, indicator -> StringUtil.startsWith(trimmed, indicator));
+  private static boolean suppressStderrLine(@NotNull String line) {
+    return ContainerUtil.exists(SUPPRESSED_PROGRESS_INDICATORS, indicator -> StringUtil.startsWith(line, indicator));
   }
 
-  public static final String REMOTE_PROGRESS_PREFIX = "remote: ";
+  public static boolean looksLikeProgress(@NotNull String line) {
+    return ContainerUtil.exists(SUPPRESSED_PROGRESS_INDICATORS, indicator -> StringUtil.startsWith(line, indicator)) ||
+           ContainerUtil.exists(PROGRESS_INDICATORS, indicator -> StringUtil.startsWith(line, indicator));
+  }
 
-  public static final String[] PROGRESS_INDICATORS = {
-    "Counting objects:",
-    "Compressing objects:",
-    "Writing objects:",
-    "Receiving objects:",
-    "Resolving deltas:"
+  private static final String[] SUPPRESSED_PROGRESS_INDICATORS = {
+    "remote: Counting objects: ",
+    "remote: Enumerating objects: ",
+    "remote: Compressing objects: ",
+    "remote: Writing objects: ",
+    "remote: Receiving objects: ",
+    "remote: Resolving deltas: ",
+    "remote: Finding sources: ",
+    "Receiving objects: ",
+    "Resolving deltas: ",
+    "Updating files: ",
+    "Checking out files: "
+  };
+
+  private static final String[] PROGRESS_INDICATORS = {
+    "remote: Total "
   };
 
   private static boolean looksLikeError(@NotNull final String text) {

@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes.patch;
 
 import com.intellij.openapi.diff.impl.patch.FilePatch;
@@ -23,7 +23,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-public class ApplyPatchDefaultExecutor implements ApplyPatchExecutor<AbstractFilePatchInProgress> {
+public class ApplyPatchDefaultExecutor implements ApplyPatchExecutor<AbstractFilePatchInProgress<?>> {
   protected final Project myProject;
 
   public ApplyPatchDefaultExecutor(Project project) {
@@ -38,7 +38,8 @@ public class ApplyPatchDefaultExecutor implements ApplyPatchExecutor<AbstractFil
 
   @CalledInAwt
   @Override
-  public void apply(@NotNull List<? extends FilePatch> remaining, @NotNull MultiMap<VirtualFile, AbstractFilePatchInProgress> patchGroupsToApply,
+  public void apply(@NotNull List<? extends FilePatch> remaining,
+                    @NotNull MultiMap<VirtualFile, AbstractFilePatchInProgress<?>> patchGroupsToApply,
                     @Nullable LocalChangeList localList,
                     @Nullable String fileName,
                     @Nullable ThrowableComputable<? extends Map<String, Map<String, CharSequence>>, PatchSyntaxException> additionalInfo) {
@@ -54,21 +55,20 @@ public class ApplyPatchDefaultExecutor implements ApplyPatchExecutor<AbstractFil
   }
 
   @NotNull
-  protected Collection<PatchApplier> getPatchAppliers(@NotNull MultiMap<VirtualFile, AbstractFilePatchInProgress> patchGroups,
+  protected Collection<PatchApplier> getPatchAppliers(@NotNull MultiMap<VirtualFile, AbstractFilePatchInProgress<?>> patchGroups,
                                                       @Nullable LocalChangeList localList,
                                                       @NotNull CommitContext commitContext) {
-    final Collection<PatchApplier> appliers = new ArrayList<>();
+    Collection<PatchApplier> appliers = new ArrayList<>();
     for (VirtualFile base : patchGroups.keySet()) {
-      appliers.add(new PatchApplier(myProject, base,
-                                    ContainerUtil
-                                      .map(patchGroups.get(base), patchInProgress -> patchInProgress.getPatch()), localList,
-                                    commitContext));
+      appliers.add(new PatchApplier(myProject, base, ContainerUtil.map(patchGroups.get(base), patchInProgress -> {
+        return patchInProgress.getPatch();
+      }), localList, commitContext));
     }
     return appliers;
   }
 
 
-  public static void applyAdditionalInfoBefore(final Project project,
+  public static void applyAdditionalInfoBefore(@NotNull Project project,
                                                @Nullable ThrowableComputable<? extends Map<String, Map<String, CharSequence>>, ? extends PatchSyntaxException> additionalInfo,
                                                @Nullable CommitContext commitContext) {
     final List<PatchEP> extensions = PatchEP.EP_NAME.getExtensions(project);
@@ -93,9 +93,9 @@ public class ApplyPatchDefaultExecutor implements ApplyPatchExecutor<AbstractFil
     }
   }
 
-  public static Set<String> pathsFromGroups(MultiMap<VirtualFile, AbstractFilePatchInProgress> patchGroups) {
+  public static Set<String> pathsFromGroups(@NotNull MultiMap<VirtualFile, AbstractFilePatchInProgress<?>> patchGroups) {
     final Set<String> selectedPaths = new HashSet<>();
-    final Collection<? extends AbstractFilePatchInProgress> values = patchGroups.values();
+    final Collection<? extends AbstractFilePatchInProgress<?>> values = patchGroups.values();
     for (AbstractFilePatchInProgress value : values) {
       final String path = value.getPatch().getBeforeName() == null ? value.getPatch().getAfterName() : value.getPatch().getBeforeName();
       selectedPaths.add(path);

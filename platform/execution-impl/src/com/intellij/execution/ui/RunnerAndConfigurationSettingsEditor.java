@@ -2,6 +2,7 @@
 package com.intellij.execution.ui;
 
 import com.intellij.execution.RunnerAndConfigurationSettings;
+import com.intellij.execution.configurations.RunConfigurationBase;
 import com.intellij.execution.impl.RunnerAndConfigurationSettingsImpl;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.SettingsEditor;
@@ -12,10 +13,10 @@ import javax.swing.*;
 
 public class RunnerAndConfigurationSettingsEditor extends SettingsEditor<RunnerAndConfigurationSettings> {
 
-  private final RunConfigurationFragmentedEditor<FragmentedSettings> myConfigurationEditor;
+  private final RunConfigurationFragmentedEditor<RunConfigurationBase<?>> myConfigurationEditor;
 
   public RunnerAndConfigurationSettingsEditor(RunnerAndConfigurationSettings settings,
-                                              RunConfigurationFragmentedEditor<FragmentedSettings> configurationEditor) {
+                                              RunConfigurationFragmentedEditor<RunConfigurationBase<?>> configurationEditor) {
     super(settings.createFactory());
     myConfigurationEditor = configurationEditor;
     myConfigurationEditor.addSettingsEditorListener(editor -> fireEditorStateChanged());
@@ -24,14 +25,14 @@ public class RunnerAndConfigurationSettingsEditor extends SettingsEditor<RunnerA
 
   @Override
   protected void resetEditorFrom(@NotNull RunnerAndConfigurationSettings s) {
-    myConfigurationEditor.resetFrom((FragmentedSettings)s.getConfiguration());
     myConfigurationEditor.resetEditorFrom((RunnerAndConfigurationSettingsImpl)s);
+    myConfigurationEditor.resetFrom((RunConfigurationBase<?>)s.getConfiguration());
   }
 
   @Override
   protected void applyEditorTo(@NotNull RunnerAndConfigurationSettings s) throws ConfigurationException {
-    myConfigurationEditor.applyTo((FragmentedSettings)s.getConfiguration());
     myConfigurationEditor.applyEditorTo((RunnerAndConfigurationSettingsImpl)s);
+    myConfigurationEditor.applyTo((RunConfigurationBase<?>)s.getConfiguration());
   }
 
   @Override

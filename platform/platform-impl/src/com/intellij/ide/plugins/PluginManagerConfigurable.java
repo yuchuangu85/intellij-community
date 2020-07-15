@@ -19,7 +19,6 @@ import com.intellij.openapi.application.ex.ApplicationInfoEx;
 import com.intellij.openapi.application.ex.ApplicationManagerEx;
 import com.intellij.openapi.application.impl.ApplicationInfoImpl;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.options.ConfigurationException;
@@ -38,6 +37,7 @@ import com.intellij.openapi.updateSettings.impl.UpdateSettings;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.ThrowableNotNullFunction;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.util.text.StringUtilRt;
 import com.intellij.ui.*;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextField;
@@ -113,19 +113,10 @@ public class PluginManagerConfigurable
   private final JLabel myUpdateCounter = new CountComponent();
   private final CountIcon myCountIcon = new CountIcon();
 
-  private final MyPluginModel myPluginModel = new MyPluginModel() {
-    @Override
-    @NotNull
-    public Collection<IdeaPluginDescriptor> getCustomRepoPlugins() {
-      return getCustomRepositoryPlugins();
-    }
-  };
+  private final MyPluginModel myPluginModel = new MyPluginModel();
 
   private PluginUpdatesService myPluginUpdatesService;
 
-  private Collection<IdeaPluginDescriptor> myCustomRepositoryPluginsList;
-  private Map<String, List<IdeaPluginDescriptor>> myCustomRepositoryPluginsMap;
-  private final Object myRepositoriesLock = new Object();
   private List<String> myTagsSorted;
   private List<String> myVendorsSorted;
 
@@ -164,6 +155,12 @@ public class PluginManagerConfigurable
   @Override
   public Component getCenterComponent(@NotNull TopComponentController controller) {
     myPluginModel.setTopController(controller);
+    return myTabHeaderComponent;
+  }
+
+  @NotNull
+  public JComponent getTopComponent() {
+    myPluginModel.setTopController(TopComponentController.EMPTY);
     return myTabHeaderComponent;
   }
 
@@ -314,10 +311,7 @@ public class PluginManagerConfigurable
   }
 
   private void resetPanels() {
-    synchronized (myRepositoriesLock) {
-      myCustomRepositoryPluginsList = null;
-      myCustomRepositoryPluginsMap = null;
-    }
+    CustomPluginRepositoryService.getInstance().clearCache();
 
     myTagsSorted = null;
     myVendorsSorted = null;
@@ -380,7 +374,7 @@ public class PluginManagerConfigurable
           List<PluginsGroup> groups = new ArrayList<>();
 
           try {
-            Map<String, List<IdeaPluginDescriptor>> customRepositoriesMap = loadCustomRepositoryPlugins();
+            Map<String, List<IdeaPluginDescriptor>> customRepositoriesMap = CustomPluginRepositoryService.getInstance().getCustomRepositoryPluginMap();
             try {
               addGroupViaLightDescriptor(groups, IdeBundle.message("plugins.configurable.featured"), "is_featured_search=true",
                                          "/sortBy:featured");
@@ -472,7 +466,7 @@ public class PluginManagerConfigurable
               case TAG:
                 if (ContainerUtil.isEmpty(myTagsSorted)) { // XXX
                   Set<String> allTags = new HashSet<>();
-                  for (IdeaPluginDescriptor descriptor : getCustomRepositoryPlugins()) {
+                  for (IdeaPluginDescriptor descriptor : CustomPluginRepositoryService.getInstance().getCustomRepositoryPlugins()) {
                     if (descriptor instanceof PluginNode) {
                       List<String> tags = ((PluginNode)descriptor).getTags();
                       if (!ContainerUtil.isEmpty(tags)) {
@@ -662,7 +656,7 @@ public class PluginManagerConfigurable
             @Override
             protected void handleQuery(@NotNull String query, @NotNull PluginsGroup result) {
               try {
-                Map<String, List<IdeaPluginDescriptor>> customRepositoriesMap = loadCustomRepositoryPlugins();
+                Map<String, List<IdeaPluginDescriptor>> customRepositoriesMap = CustomPluginRepositoryService.getInstance().getCustomRepositoryPluginMap();
 
                 SearchQueryParser.Marketplace parser = new SearchQueryParser.Marketplace(query);
 
@@ -688,7 +682,11 @@ public class PluginManagerConfigurable
                   return;
                 }
 
-                List<PluginNode> plugins = MarketplaceRequests.getInstance().searchPlugins(parser.getUrlQuery(), 10000);
+                List<PluginNode> pluginsFromMarketplace = MarketplaceRequests.getInstance().searchPlugins(parser.getUrlQuery(), 10000);
+                List<IdeaPluginDescriptor> plugins = UpdateChecker.mergePluginsFromRepositories(
+                  pluginsFromMarketplace,
+                  ContainerUtil.flatten(customRepositoriesMap.values())
+                ); // compare plugin versions between marketplace & custom repositories
                 result.descriptors.addAll(plugins);
 
                 if (parser.searchQuery != null) {
@@ -1196,20 +1194,31 @@ public class PluginManagerConfigurable
     if (plugin instanceof PluginNode) {
       tags = ((PluginNode)plugin).getTags();
 
-      if (productCode != null && tags != null && !tags.contains("Paid")) {
-        tags = new ArrayList<>(tags);
-        tags.add(0, "Paid");
+      if (productCode != null) {
+        if (LicensePanel.isEA2Product(productCode)) {
+          if (tags != null && tags.contains(Tags.Paid.name())) {
+            tags = new ArrayList<>(tags);
+            tags.remove(Tags.Paid.name());
+          }
+        }
+        else if (tags == null) {
+          return Collections.singletonList(Tags.Paid.name());
+        }
+        else if (!tags.contains(Tags.Paid.name())) {
+          tags = new ArrayList<>(tags);
+          tags.add(Tags.Paid.name());
+        }
       }
     }
-    else if (productCode != null && !plugin.isBundled()) {
+    else if (productCode != null && !plugin.isBundled() && !LicensePanel.isEA2Product(productCode)) {
       LicensingFacade instance = LicensingFacade.getInstance();
       if (instance != null) {
         String stamp = instance.getConfirmationStamp(productCode);
         if (stamp != null) {
-          return Collections.singletonList(stamp.startsWith("eval:") ? "Trial" : "Purchased");
+          return Collections.singletonList(stamp.startsWith("eval:") ? Tags.Trial.name() : Tags.Purchased.name());
         }
       }
-      return Collections.singletonList("Paid");
+      return Collections.singletonList(Tags.Paid.name());
     }
     if (ContainerUtil.isEmpty(tags)) {
       return Collections.emptyList();
@@ -1217,11 +1226,11 @@ public class PluginManagerConfigurable
 
     if (tags.size() > 1) {
       tags = new ArrayList<>(tags);
-      if (tags.remove("EAP")) {
-        tags.add(0, "EAP");
+      if (tags.remove(Tags.EAP.name())) {
+        tags.add(0, Tags.EAP.name());
       }
-      if (tags.remove("Paid")) {
-        tags.add(0, "Paid");
+      if (tags.remove(Tags.Paid.name())) {
+        tags.add(0, Tags.Paid.name());
       }
     }
 
@@ -1296,7 +1305,14 @@ public class PluginManagerConfigurable
     if (plugin instanceof PluginNode) {
       size = ((PluginNode)plugin).getSize();
     }
-    return getFormatLength(size);
+    if (!StringUtil.isEmptyOrSpaces(size)) {
+      try {
+        return StringUtilRt.formatFileSize(Long.parseLong(size)).toUpperCase(Locale.ENGLISH);
+      }
+      catch (NumberFormatException ignore) {
+      }
+    }
+    return null;
   }
 
   @NotNull
@@ -1368,7 +1384,7 @@ public class PluginManagerConfigurable
     Downloads, Name, Rating, Relevance, Updated
   }
 
-  private class MarketplaceSortByAction extends ToggleAction implements DumbAware {
+  private final class MarketplaceSortByAction extends ToggleAction implements DumbAware {
     private final SortBySearchOption myOption;
     private boolean myState;
 
@@ -1422,7 +1438,7 @@ public class PluginManagerConfigurable
     Downloaded, NeedUpdate, Enabled, Disabled, Invalid, Bundled
   }
 
-  private class InstalledSearchOptionAction extends ToggleAction implements DumbAware {
+  private final class InstalledSearchOptionAction extends ToggleAction implements DumbAware {
     private final InstalledSearchOption myOption;
     private boolean myState;
 
@@ -1479,7 +1495,7 @@ public class PluginManagerConfigurable
   private static class GroupByActionGroup extends DefaultActionGroup implements CheckedActionGroup {
   }
 
-  private class ChangePluginStateAction extends DumbAwareAction {
+  private final class ChangePluginStateAction extends DumbAwareAction {
     private final boolean myEnable;
 
     private ChangePluginStateAction(boolean enable) {
@@ -1528,62 +1544,6 @@ public class PluginManagerConfigurable
     return pane;
   }
 
-  @NotNull
-  private Collection<IdeaPluginDescriptor> getCustomRepositoryPlugins() {
-    synchronized (myRepositoriesLock) {
-      if (myCustomRepositoryPluginsList != null) {
-        return myCustomRepositoryPluginsList;
-      }
-    }
-    LOG.info("PluginManagerConfigurable#getCustomRepoPlugins() has been called before PluginManagerConfigurable#createMarketplaceTab()"); // XXX
-    return ContainerUtil.emptyList();
-  }
-
-  @NotNull
-  private Map<String, List<IdeaPluginDescriptor>> loadCustomRepositoryPlugins() {
-    synchronized (myRepositoriesLock) {
-      if (myCustomRepositoryPluginsMap != null) {
-        return myCustomRepositoryPluginsMap;
-      }
-    }
-    Map<PluginId, IdeaPluginDescriptor> latestCustomPluginsAsMap = new HashMap<>();
-    Map<String, List<IdeaPluginDescriptor>> customRepositoryPluginsMap = new HashMap<>();
-    for (String host : RepositoryHelper.getPluginHosts()) {
-      try {
-        if (host != null) {
-          List<IdeaPluginDescriptor> descriptors = RepositoryHelper.loadPlugins(host, null);
-          for (IdeaPluginDescriptor descriptor : descriptors) {
-            PluginId pluginId = descriptor.getPluginId();
-            IdeaPluginDescriptor savedDescriptor = latestCustomPluginsAsMap.get(pluginId);
-            if (savedDescriptor == null) {
-              latestCustomPluginsAsMap.put(pluginId, descriptor);
-            } else {
-              if (StringUtil.compareVersionNumbers(descriptor.getVersion(), savedDescriptor.getVersion()) > 0) {
-                latestCustomPluginsAsMap.put(pluginId, descriptor);
-              }
-            }
-          }
-          customRepositoryPluginsMap.put(host, descriptors);
-        }
-      }
-      catch (IOException e) {
-        LOG.info(host, e);
-      }
-    }
-
-    ApplicationManager.getApplication().executeOnPooledThread(() -> {
-      UpdateChecker.updateDescriptorsForInstalledPlugins(InstalledPluginsState.getInstance());
-    });
-
-    synchronized (myRepositoriesLock) {
-      if (myCustomRepositoryPluginsMap == null) {
-        myCustomRepositoryPluginsMap = customRepositoryPluginsMap;
-        myCustomRepositoryPluginsList = latestCustomPluginsAsMap.values();
-      }
-      return myCustomRepositoryPluginsMap;
-    }
-  }
-
   private void addGroup(
     @NotNull List<? super PluginsGroup> groups,
     @NotNull @Nls String name,
@@ -1611,9 +1571,9 @@ public class PluginManagerConfigurable
     @NotNull @NonNls String showAllQuery
   ) throws IOException {
     addGroup(groups, name, showAllQuery, descriptors -> {
-      List<PluginNode> pluginNodes = MarketplaceRequests.getInstance().searchPlugins(query, ITEMS_PER_GROUP);
-      descriptors.addAll(pluginNodes);
-      return pluginNodes.size() == ITEMS_PER_GROUP;
+      List<PluginNode> pluginNodes = MarketplaceRequests.getInstance().searchPlugins(query, ITEMS_PER_GROUP * 2);
+      descriptors.addAll(ContainerUtil.getFirstItems(pluginNodes, ITEMS_PER_GROUP));
+      return pluginNodes.size() >= ITEMS_PER_GROUP;
     });
   }
 
@@ -1732,7 +1692,7 @@ public class PluginManagerConfigurable
     };
   }
 
-  private class InstallFromDiskAction extends DumbAwareAction {
+  private final class InstallFromDiskAction extends DumbAwareAction {
     private InstallFromDiskAction() {super(IdeBundle.messagePointer("action.InstallFromDiskAction.text"));}
 
     @Override

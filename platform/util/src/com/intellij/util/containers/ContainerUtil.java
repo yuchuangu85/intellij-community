@@ -5,6 +5,10 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.util.*;
 import com.intellij.util.*;
 import gnu.trove.*;
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenCustomHashMap;
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.objects.ObjectOpenCustomHashSet;
+import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
@@ -16,9 +20,9 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 import java.util.function.IntFunction;
 
-@SuppressWarnings("MethodOverridesStaticMethodOfSuperclass")
 @ApiStatus.NonExtendable
 // cannot be final because of https://plugins.jetbrains.com/plugin/7831-illuminated-cloud
 public class ContainerUtil {
@@ -84,7 +88,6 @@ public class ContainerUtil {
   /**
    * @deprecated Use {@link TreeMap#TreeMap(Map)}
    */
-  @SuppressWarnings("unused")
   @Contract(pure = true)
   @Deprecated
   public static @NotNull <K extends Comparable<? super K>, V> TreeMap<K, V> newTreeMap(@NotNull Map<? extends K, ? extends V> map) {
@@ -153,7 +156,6 @@ public class ContainerUtil {
   /**
    * @deprecated Use {@link IdentityHashMap#IdentityHashMap()}
    */
-  @SuppressWarnings("unused")
   @Deprecated
   public static @NotNull <K, V> IdentityHashMap<K, V> newIdentityHashMap() {
     return new IdentityHashMap<>();
@@ -303,16 +305,6 @@ public class ContainerUtil {
   }
 
   /**
-   * @deprecated Use {@link SmartList(T)}
-   */
-  @SafeVarargs
-  @Contract(pure = true)
-  @Deprecated
-  public static @NotNull <T> List<T> newSmartList(T @NotNull ... elements) {
-    return new SmartList<>(elements);
-  }
-
-  /**
    * @deprecated Use {@link HashSet#HashSet()}
    */
   @Contract(pure = true)
@@ -333,6 +325,7 @@ public class ContainerUtil {
   @SafeVarargs
   @Contract(pure = true)
   public static @NotNull <T> HashSet<T> newHashSet(T @NotNull ... elements) {
+    //noinspection SSBasedInspection
     return new HashSet<>(Arrays.asList(elements));
   }
 
@@ -394,7 +387,7 @@ public class ContainerUtil {
   }
 
   /**
-   * @deprecated Use {@link THashSet#THashSet()}
+   * @deprecated Use {@link HashSet#HashSet()}
    */
   @Deprecated
   @Contract(pure = true)
@@ -403,15 +396,10 @@ public class ContainerUtil {
   }
 
   /**
-   * @deprecated Use {@link THashSet#THashSet(TObjectHashingStrategy)}
+   * @deprecated Use {@link HashSet}
    */
-  @Deprecated
-  @Contract(pure = true)
-  public static @NotNull <T> THashSet<T> newTroveSet(@NotNull TObjectHashingStrategy<T> strategy) {
-    return new THashSet<>(strategy);
-  }
-
   @SafeVarargs
+  @Deprecated
   @Contract(pure = true)
   public static @NotNull <T> THashSet<T> newTroveSet(T @NotNull ... elements) {
     return new THashSet<>(Arrays.asList(elements));
@@ -427,7 +415,11 @@ public class ContainerUtil {
     return new THashSet<>(Arrays.asList(elements), strategy);
   }
 
+  /**
+   * @deprecated Use {@link HashSet}.
+   */
   @Contract(pure = true)
+  @Deprecated
   public static @NotNull <T> THashSet<T> newTroveSet(@NotNull TObjectHashingStrategy<T> strategy, @NotNull Collection<? extends T> elements) {
     return new THashSet<>(elements, strategy);
   }
@@ -450,15 +442,19 @@ public class ContainerUtil {
     return new THashSet<>(identityStrategy());
   }
 
-  @Contract(pure = true)
-  public static @NotNull <K> THashSet<K> newIdentityTroveSet(int initialCapacity) {
-    return new THashSet<>(initialCapacity, identityStrategy());
-  }
+  /**
+   * @deprecated Use {@link it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet}.
+   */
+  @Deprecated
   @Contract(pure = true)
   public static @NotNull <K> THashSet<K> newIdentityTroveSet(@NotNull Collection<? extends K> collection) {
     return new THashSet<>(collection, identityStrategy());
   }
 
+  /**
+   * @deprecated Use {@link it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap}
+   */
+  @Deprecated
   @Contract(pure = true)
   public static @NotNull <K,V> THashMap<K,V> newIdentityTroveMap() {
     return new THashMap<>(identityStrategy());
@@ -540,7 +536,7 @@ public class ContainerUtil {
 
   @Contract(pure = true)
   public static @NotNull <T> Set<T> union(@NotNull Collection<? extends T> set, @NotNull Collection<? extends T> set2) {
-    Set<T> result = new THashSet<>(set.size() + set2.size());
+    Set<T> result = new HashSet<>(set.size() + set2.size());
     result.addAll(set);
     result.addAll(set2);
     return result;
@@ -555,7 +551,7 @@ public class ContainerUtil {
       case 1:
         return Collections.singleton(elements[0]);
       default:
-        return Collections.unmodifiableSet(newTroveSet(elements));
+        return Collections.unmodifiableSet(new HashSet<>(Arrays.asList(elements)));
     }
   }
 
@@ -623,8 +619,32 @@ public class ContainerUtil {
     };
   }
 
-  public static class ImmutableMapBuilder<K, V> {
-    private final Map<K, V> myMap = new THashMap<>();
+  public static void trimMap(@NotNull Map<?,?> map) {
+    if (map instanceof Object2ObjectOpenHashMap<?, ?>) {
+      ((Object2ObjectOpenHashMap<?, ?>)map).trim();
+    }
+    else if (map instanceof THashMap) {
+      ((THashMap<?, ?>)map).trimToSize();
+    }
+    else if (map instanceof Object2ObjectOpenCustomHashMap) {
+      ((Object2ObjectOpenCustomHashMap<?, ?>)map).trim();
+    }
+  }
+
+  public static void trimSet(@NotNull Set<?> set) {
+    if (set instanceof ObjectOpenHashSet<?>) {
+      ((ObjectOpenHashSet<?>)set).trim();
+    }
+    else if (set instanceof THashSet) {
+      ((THashSet<?>)set).trimToSize();
+    }
+    else if (set instanceof ObjectOpenCustomHashSet) {
+      ((ObjectOpenCustomHashSet<?>)set).trim();
+    }
+  }
+
+  public static final class ImmutableMapBuilder<K, V> {
+    private final Map<K, V> myMap = new HashMap<>();
 
     public @NotNull ImmutableMapBuilder<K, V> put(K key, V value) {
       myMap.put(key, value);
@@ -655,7 +675,7 @@ public class ContainerUtil {
     }
 
     @Override
-    public void forEach(java.util.function.Consumer<? super E> action) {
+    public void forEach(Consumer<? super E> action) {
       myStore.forEach(action);
     }
   }
@@ -690,7 +710,7 @@ public class ContainerUtil {
     }
 
     @Override
-    public void forEach(java.util.function.Consumer<? super E> action) {
+    public void forEach(Consumer<? super E> action) {
       //noinspection ForLoopReplaceableByForEach
       for (int i = 0, length = myStore.length; i < length; i++) {
         action.accept(myStore[i]);
@@ -700,16 +720,18 @@ public class ContainerUtil {
 
   @Contract(pure = true)
   public static @NotNull <K, V> Map<K, V> intersection(@NotNull Map<? extends K, ? extends V> map1, @NotNull Map<? extends K, ? extends V> map2) {
+    if (map1.isEmpty() || map2.isEmpty()) return Collections.emptyMap();
+
     if (map2.size() < map1.size()) {
       Map<? extends K, ? extends V> t = map1;
       map1 = map2;
       map2 = t;
     }
     final Map<K, V> res = new HashMap<>(map1);
-    for (Map.Entry<? extends K, ? extends V> entry : map2.entrySet()) {
+    for (Map.Entry<? extends K, ? extends V> entry : map1.entrySet()) {
       K key = entry.getKey();
-      V v2 = entry.getValue();
-      V v1 = map1.get(key);
+      V v1 = entry.getValue();
+      V v2 = map2.get(key);
       if (!Objects.equals(v1, v2)) {
         res.remove(key);
       }
@@ -735,16 +757,19 @@ public class ContainerUtil {
                                                    @NotNull List<? extends T> list2,
                                                    @NotNull Comparator<? super T> comparator,
                                                    boolean mergeEqualItems,
-                                                   @NotNull Consumer<? super T> processor) {
+                                                   // (element in the result, is element from the list1)
+                                                   @NotNull PairConsumer<? super T, ? super Boolean> processor) {
     int index1 = 0;
     int index2 = 0;
     while (index1 < list1.size() || index2 < list2.size()) {
       T e;
       if (index1 >= list1.size()) {
         e = list2.get(index2++);
+        processor.consume(e, false);
       }
       else if (index2 >= list2.size()) {
         e = list1.get(index1++);
+        processor.consume(e, true);
       }
       else {
         T element1 = list1.get(index1);
@@ -755,22 +780,25 @@ public class ContainerUtil {
           index2++;
           if (mergeEqualItems) {
             e = element1;
+            processor.consume(e, true);
           }
           else {
-            processor.consume(element1);
+            processor.consume(element1, true);
             e = element2;
+            processor.consume(e, false);
           }
         }
         else if (c < 0) {
           e = element1;
           index1++;
+          processor.consume(e, true);
         }
         else {
           e = element2;
           index2++;
+          processor.consume(e, false);
         }
       }
-      processor.consume(e);
     }
   }
 
@@ -780,7 +808,7 @@ public class ContainerUtil {
                                                       @NotNull Comparator<? super T> comparator,
                                                       boolean mergeEqualItems) {
     final List<T> result = new ArrayList<>(list1.size() + list2.size());
-    processSortedListsInOrder(list1, list2, comparator, mergeEqualItems, result::add);
+    processSortedListsInOrder(list1, list2, comparator, mergeEqualItems, (t, __) -> result.add(t));
     return result;
   }
 
@@ -1006,7 +1034,7 @@ public class ContainerUtil {
 
   @Contract(pure = true)
   public static @NotNull <K, V> Map<K, V> map2Map(@NotNull Collection<? extends Pair<? extends K, ? extends V>> collection) {
-    Map<K, V> result = new THashMap<>(collection.size());
+    Map<K, V> result = new HashMap<>(collection.size());
     for (Pair<? extends K, ? extends V> pair : collection) {
       result.put(pair.first, pair.second);
     }
@@ -1043,7 +1071,7 @@ public class ContainerUtil {
   }
 
   @Contract(pure=true)
-  public static <T, V> V @NotNull [] map2Array(@NotNull Collection<? extends T> collection, V @NotNull [] to, @NotNull Function<? super T, V> mapper) {
+  public static <T, V> V @NotNull [] map2Array(@NotNull Collection<? extends T> collection, V @NotNull [] to, @NotNull Function<? super T, ? extends V> mapper) {
     return map2List(collection, mapper).toArray(to);
   }
 
@@ -1637,6 +1665,8 @@ public class ContainerUtil {
    */
   @Contract(pure = true)
   public static @NotNull <T> Collection<T> intersection(@NotNull Collection<? extends T> collection1, @NotNull Collection<? extends T> collection2) {
+    if (collection1.isEmpty() || collection2.isEmpty()) return emptyList();
+
     List<T> result = new ArrayList<>();
     for (T t : collection1) {
       if (collection2.contains(t)) {
@@ -1648,6 +1678,9 @@ public class ContainerUtil {
 
   @Contract(pure = true)
   public static @NotNull <E extends Enum<E>> EnumSet<E> intersection(@NotNull EnumSet<E> collection1, @NotNull EnumSet<E> collection2) {
+    if (collection1.isEmpty()) return collection1;
+    if (collection2.isEmpty()) return collection2;
+
     EnumSet<E> result = EnumSet.copyOf(collection1);
     result.retainAll(collection2);
     return result;

@@ -13,7 +13,6 @@ import com.intellij.psi.*
 import com.intellij.psi.search.PsiElementProcessor
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.PsiUtil
-import com.intellij.refactoring.extractMethod.PrepareFailedException
 import com.intellij.refactoring.extractMethod.newImpl.ExtractMethodHelper.findUsedTypeParameters
 import com.intellij.refactoring.extractMethod.newImpl.ExtractMethodHelper.hasExplicitModifier
 import com.intellij.refactoring.extractMethod.newImpl.ExtractMethodHelper.inputParameterOf
@@ -210,13 +209,19 @@ object ExtractMethodPipeline {
   }
 
   fun withForcedStatic(analyzer: CodeFragmentAnalyzer, extractOptions: ExtractOptions): ExtractOptions? {
-    val targetClass = PsiTreeUtil.getParentOfType(ExtractMethodHelper.getValidParentOf(extractOptions.elements.first()), PsiClass::class.java)!!
-    val fieldUsages = analyzer.findFieldUsages(targetClass, extractOptions.elements)
-    if (fieldUsages.any { it.isWrite }) return null
+    val targetClass = PsiTreeUtil.getParentOfType(extractOptions.anchor, PsiClass::class.java)!!
+    if (PsiUtil.isLocalOrAnonymousClass(targetClass) || PsiUtil.isInnerClass(targetClass)) return null
+    val localUsages = analyzer.findInstanceMemberUsages(targetClass, extractOptions.elements)
+    val (violatedUsages, fieldUsages) = localUsages
+      .partition { localUsage -> PsiUtil.isAccessedForWriting(localUsage.reference) || localUsage.member !is PsiField }
+
+    if (violatedUsages.isNotEmpty()) return null
+
     val fieldInputParameters =
-      fieldUsages.groupBy { it.field }.entries.map { (field, fieldUsages) ->
+      fieldUsages.groupBy { it.member }.entries.map { (field, fieldUsages) ->
+        field as PsiField
         InputParameter(
-          references = fieldUsages.map { it.classMemberReference },
+          references = fieldUsages.map { it.reference },
           name = field.name,
           type = field.type
         )
@@ -232,9 +237,8 @@ object ExtractMethodPipeline {
     val firstStatement = method.body?.statements?.firstOrNull() ?: return false
     val startsOnBegin = firstStatement.textRange in TextRange(elements.first().textRange.startOffset, elements.last().textRange.endOffset)
     val outStatements = method.body?.statements.orEmpty().dropWhile { it.textRange.endOffset <= elements.last().textRange.endOffset }
-    val hasOuterFinalFieldAssignments = analyzer
-      .findFieldUsages(holderClass, outStatements)
-      .any { it.isWrite && it.field.hasExplicitModifier(PsiModifier.FINAL) }
+    val hasOuterFinalFieldAssignments = analyzer.findInstanceMemberUsages(holderClass, outStatements)
+      .any { localUsage -> localUsage.member.hasModifierProperty(PsiModifier.FINAL) && PsiUtil.isAccessedForWriting(localUsage.reference) }
     return method.isConstructor && startsOnBegin && !hasOuterFinalFieldAssignments && analyzer.findOutputVariables().isEmpty()
   }
 

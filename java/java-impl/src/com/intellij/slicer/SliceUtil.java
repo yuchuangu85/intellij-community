@@ -52,9 +52,6 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * @author cdr
- */
 class SliceUtil {
   static boolean processUsagesFlownDownTo(@NotNull PsiElement expression,
                                           @NotNull Processor<? super SliceUsage> processor,
@@ -116,7 +113,7 @@ class SliceUtil {
     }
     if (expression instanceof PsiVariable) {
       PsiVariable variable = (PsiVariable)expression;
-      Collection<PsiExpression> values = DfaUtil.getCachedVariableValues(variable, original);
+      Collection<PsiExpression> values = DfaUtil.getVariableValues(variable, original);
       PsiExpression initializer = variable.getInitializer();
       if (values.isEmpty() && initializer != null) {
         values = Collections.singletonList(initializer);
@@ -144,7 +141,7 @@ class SliceUtil {
         return processFieldUsages((PsiField)variable, builder.dropSyntheticField(), processor);
       }
       else if (variable instanceof PsiParameter) {
-        return processParameterUsages((PsiParameter)variable, builder.withFilter(JavaValueFilter::popFrame), processor);
+        return processParameterUsages((PsiParameter)variable, builder.withFilter(f -> f.popFrame(variable.getProject())), processor);
       }
     }
     if (expression instanceof PsiMethodCallExpression) { // ctr call can't return value or be container get, so don't use PsiCall here
@@ -271,7 +268,7 @@ class SliceUtil {
     Collection<PsiMethod> overrides = new THashSet<>();
     SearchScope scope = builder.getSearchScope();
     if (qualifierClass != null && qualifierClass != methodCalled.getContainingClass()) {
-      scope = JavaTargetElementEvaluator.getHierarchyScope(qualifierClass, scope);
+      scope = JavaTargetElementEvaluator.getHierarchyScope(qualifierClass, scope, false);
     }
     overrides.addAll(OverridingMethodsSearch.search(methodCalled, scope, true).findAll());
     overrides.add(methodCalled);
@@ -402,10 +399,11 @@ class SliceUtil {
 
     // first, check if we are looking for a specific method call.
     // it happens when we were processing that very same method() return values somewhere up the tree
-    PsiCall specificMethodCall = findSpecificMethodCallUpTheTree(builder.getParent(), method);
+    SliceUsage specificMethodCall = findSpecificMethodCallUpTheTree(builder.getParent(), method);
     if (specificMethodCall != null) {
-      return processMethodCall(builder, processor, actualParameterType, actualParameters,
-                               paramSeqNo, specificMethodCall);
+      SliceValueFilter filter = specificMethodCall.params.valueFilter;
+      return processMethodCall(builder.withFilter(f -> f.copyStackFrom(filter)), 
+                               processor, actualParameterType, actualParameters, paramSeqNo, specificMethodCall.getElement());
     }
 
     Collection<PsiMethod> superMethods = ContainerUtil.set(method.findDeepestSuperMethods());
@@ -428,11 +426,11 @@ class SliceUtil {
     return true;
   }
 
-  private static PsiCall findSpecificMethodCallUpTheTree(SliceUsage parent, PsiMethod method) {
+  private static SliceUsage findSpecificMethodCallUpTheTree(SliceUsage parent, PsiMethod method) {
     while (parent != null) {
       PsiElement element = parent.getElement();
-      if (element instanceof PsiCall && ((PsiCall)element).resolveMethod() == method) {
-        return (PsiCall)element;
+      if (element instanceof PsiCall && method.getManager().areElementsEquivalent(((PsiCall)element).resolveMethod(), method)) {
+        return parent;
       }
       parent = parent.getParent();
     }

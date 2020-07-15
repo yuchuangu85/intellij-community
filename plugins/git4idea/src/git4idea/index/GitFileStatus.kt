@@ -4,7 +4,7 @@ package git4idea.index
 import com.intellij.openapi.vcs.FilePath
 import com.intellij.openapi.vcs.FileStatus
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.vcsUtil.VcsUtil
+import git4idea.GitContentRevision
 
 data class GitFileStatus(val index: StatusCode,
                          val workTree: StatusCode,
@@ -12,7 +12,7 @@ data class GitFileStatus(val index: StatusCode,
                          val origPath: FilePath? = null) {
 
   constructor(root: VirtualFile, record: LightFileStatus.StatusRecord) :
-    this(record.index, record.workTree, VcsUtil.getFilePath(root, record.path), record.origPath?.let { VcsUtil.getFilePath(root, it) })
+    this(record.index, record.workTree, GitContentRevision.createPath(root, record.path), record.origPath?.let { GitContentRevision.createPath(root, it) })
 
   fun isConflicted(): Boolean = isConflicted(index, workTree)
 
@@ -24,6 +24,10 @@ data class GitFileStatus(val index: StatusCode,
   fun getUnStagedStatus(): FileStatus? = if (isIgnored(workTree) || isUntracked(workTree) || isConflicted()) null
   else getFileStatus(workTree)
 }
+
+fun untrackedStatus(filePath: FilePath) = GitFileStatus('?', '?', filePath, null)
+fun ignoredStatus(filePath: FilePath) = GitFileStatus('!', '!', filePath, null)
+fun notChangedStatus(filePath: FilePath) = GitFileStatus(' ', ' ', filePath, null)
 
 fun GitFileStatus.has(contentVersion: ContentVersion): Boolean {
   return when (contentVersion) {

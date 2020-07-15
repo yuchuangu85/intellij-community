@@ -41,7 +41,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  *
  * It is assumed that index stamps are monotonically increasing.
  */
-public class IndexingStamp {
+public final class IndexingStamp {
   private static final long INDEX_DATA_OUTDATED_STAMP = -2L;
 
   private static final int VERSION = 15;
@@ -275,7 +275,7 @@ public class IndexingStamp {
   /**
    * The class is meant to be accessed from synchronized block only
    */
-  private static class Timestamps {
+  private static final class Timestamps {
     private static final FileAttribute PERSISTENCE = new FileAttribute("__index_stamps__", 2, false);
     private TObjectLongHashMap<ID<?, ?>> myIndexStamps;
     private boolean myIsDirty = false;
@@ -415,6 +415,7 @@ public class IndexingStamp {
 
   @TestOnly
   public static void dropIndexingTimeStamps(int fileId) throws IOException {
+    myTimestampsCache.remove(fileId);
     try (DataOutputStream out =  FSRecords.writeAttribute(fileId, Timestamps.PERSISTENCE)) {
       new Timestamps(null).writeToStream(out);
     }

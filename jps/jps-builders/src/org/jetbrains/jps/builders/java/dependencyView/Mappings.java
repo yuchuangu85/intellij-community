@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.jps.builders.java.dependencyView;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -129,7 +129,7 @@ public class Mappings {
       myRemovedSuperClasses = myIsDelta ? new IntIntTransientMultiMaplet() : null;
       myAddedSuperClasses = myIsDelta ? new IntIntTransientMultiMaplet() : null;
 
-      final CollectionFactory<String> fileCollectionFactory = new CollectionFactory<String>() {
+      final BuilderCollectionFactory<String> fileCollectionFactory = new BuilderCollectionFactory<String>() {
         @Override
         public Collection<String> create() {
           return new THashSet<>(FileUtil.PATH_HASHING_STRATEGY); // todo: do we really need set and not a list here?
@@ -297,7 +297,7 @@ public class Mappings {
     boolean isSame(ProtoMember member);
   }
 
-  private class Util {
+  private final class Util {
     @Nullable
     private final Mappings myMappings;
 
@@ -736,7 +736,7 @@ public class Mappings {
     void affectStaticMemberOnDemandUsages(int ownerClass, final TIntHashSet classes, final Set<? super UsageRepr.Usage> affectedUsages, final TIntHashSet dependents) {
       debug("Affect static member on-demand import usage referenced of class ", ownerClass);
       affectedUsages.add(UsageRepr.createImportStaticOnDemandUsage(myContext, ownerClass));
-      
+
       classes.forEach(cls -> {
         appendDependents(cls, dependents);
         debug("Affect static member on-demand import usage referenced of class ", cls);
@@ -1018,7 +1018,7 @@ public class Mappings {
     boolean belongsToCurrentTargetChunk(File file);
   }
 
-  private class Differential {
+  private final class Differential {
     private static final int INLINABLE_FIELD_MODIFIERS_MASK = Opcodes.ACC_FINAL;
 
     final Mappings myDelta;
@@ -1699,11 +1699,12 @@ public class Mappings {
 
           if (harmful || valueChanged || becameLessAccessible) {
             if (myProcessConstantsIncrementally) {
-              debug("Potentially inlined field changed it's access or value => affecting field usages");
+              debug("Potentially inlined field changed its access or value => affecting field usages and static member import usages");
               myFuture.affectFieldUsages(field, propagated.get(), field.createUsage(myContext, it.name), state.myAffectedUsages, state.myDependants);
+              myFuture.affectStaticMemberImportUsages(field.name, it.name, propagated.get(), state.myAffectedUsages, state.myDependants);
             }
             else {
-              debug("Potentially inlined field changed it's access or value => a switch to non-incremental mode requested");
+              debug("Potentially inlined field changed its access or value => a switch to non-incremental mode requested");
               if (!incrementalDecision(it.name, field, myAffectedFiles, myFilesToCompile, myFilter)) {
                 debug("End of Differentiate, returning false");
                 return false;

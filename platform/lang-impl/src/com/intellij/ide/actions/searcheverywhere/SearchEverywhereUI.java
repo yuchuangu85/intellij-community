@@ -49,6 +49,7 @@ import com.intellij.ui.scale.JBUIScale;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.usages.*;
 import com.intellij.usages.impl.UsageViewManagerImpl;
+import com.intellij.util.Alarm;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.Consumer;
 import com.intellij.util.Processor;
@@ -247,7 +248,7 @@ public final class SearchEverywhereUI extends SearchEverywhereUIBase implements 
       myToolbar.updateActionsImmediately();
     }
     repaint();
-    rebuildList();
+    scheduleRebuildList();
   }
 
   private final JLabel myAdvertisementLabel = new JBLabel();
@@ -471,7 +472,7 @@ public final class SearchEverywhereUI extends SearchEverywhereUIBase implements 
       updateTooltip();
       Runnable onChanged = () -> {
         myToolbar.updateActionsImmediately();
-        rebuildList();
+        scheduleRebuildList();
       };
       if (contributor == null) {
         String actionText = IdeUICustomization.getInstance().projectMessage("checkbox.include.non.project.items");
@@ -555,6 +556,13 @@ public final class SearchEverywhereUI extends SearchEverywhereUIBase implements 
              ? JBUI.CurrentTheme.BigPopup.selectedTabTextColor()
              : super.getForeground();
     }
+  }
+
+  private static final long REBUILD_LIST_DELAY = 100;
+  private final Alarm rebuildListAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
+
+  private void scheduleRebuildList() {
+    if (rebuildListAlarm.getActiveRequestCount() == 0) rebuildListAlarm.addRequest(() -> rebuildList(), REBUILD_LIST_DELAY);
   }
 
   private void rebuildList() {
@@ -716,7 +724,7 @@ public final class SearchEverywhereUI extends SearchEverywhereUIBase implements 
           }
         }
 
-        rebuildList();
+        scheduleRebuildList();
       }
     });
 
@@ -738,7 +746,7 @@ public final class SearchEverywhereUI extends SearchEverywhereUIBase implements 
       public void exitDumbMode() {
         ApplicationManager.getApplication().invokeLater(() -> {
           updateSearchFieldAdvertisement();
-          rebuildList();
+          scheduleRebuildList();
         });
       }
     });
@@ -979,6 +987,7 @@ public final class SearchEverywhereUI extends SearchEverywhereUIBase implements 
     return isAllTabSelected() ? getAllTabContributors() : Collections.singleton(mySelectedTab.getContributor().get());
   }
 
+  @Override
   @TestOnly
   public Future<List<Object>> findElementsForPattern(String pattern) {
     CompletableFuture<List<Object>> future = new CompletableFuture<>();
@@ -988,6 +997,12 @@ public final class SearchEverywhereUI extends SearchEverywhereUIBase implements 
     });
     mySearchField.setText(pattern);
     return future;
+  }
+
+  @Override
+  @TestOnly
+  public void clearResults() {
+    myListModel.clear();
   }
 
   private class CompositeCellRenderer implements ListCellRenderer<Object> {
@@ -1438,9 +1453,7 @@ public final class SearchEverywhereUI extends SearchEverywhereUIBase implements 
               tooManyUsagesStatus.pauseProcessingIfTooManyUsages();
               if (foundElements.size() + alreadyFoundCount >= UsageLimitUtil.USAGES_LIMIT &&
                   tooManyUsagesStatus.switchTooManyUsagesStatus()) {
-                int usageCount = foundElements.size() + alreadyFoundCount;
-                UsageViewManagerImpl.showTooManyUsagesWarningLater(
-                  getProject(), tooManyUsagesStatus, progressIndicator, presentation, usageCount, null);
+                UsageViewManagerImpl.showTooManyUsagesWarningLater(getProject(), tooManyUsagesStatus, progressIndicator, null);
                 return !progressIndicator.isCanceled();
               }
               return true;

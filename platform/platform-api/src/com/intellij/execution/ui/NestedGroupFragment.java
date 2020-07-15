@@ -2,8 +2,8 @@
 package com.intellij.execution.ui;
 
 import com.intellij.openapi.options.ConfigurationException;
-import com.intellij.openapi.options.SettingsEditorListener;
 import com.intellij.openapi.util.Disposer;
+import com.intellij.openapi.util.NotNullLazyValue;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
@@ -14,7 +14,21 @@ import java.util.function.Predicate;
 
 public abstract class NestedGroupFragment<S extends FragmentedSettings> extends SettingsEditorFragment<S, JComponent> {
 
-  private final List<SettingsEditorFragment<S, ?>> myChildren;
+  private final NotNullLazyValue<List<SettingsEditorFragment<S, ?>>> myChildren = NotNullLazyValue.createValue(() -> {
+    List<SettingsEditorFragment<S, ?>> children = createChildren();
+    for (SettingsEditorFragment<S, ?> child : children) {
+      Disposer.register(this, child);
+      child.addSettingsEditorListener(editor -> {
+        if (child.isSelected()) {
+          setSelected(true);
+        }
+        updateVisibility();
+        fireEditorStateChanged();
+      });
+    }
+    return children;
+  });
+
   private JComponent myGroupComponent;
 
   protected NestedGroupFragment(String id,
@@ -22,17 +36,16 @@ public abstract class NestedGroupFragment<S extends FragmentedSettings> extends 
                                 @Nls(capitalization = Nls.Capitalization.Sentence) String group,
                                 Predicate<S> initialSelection) {
     super(id, name, group, null, null, null, initialSelection);
-    myChildren = createChildren();
-    SettingsEditorListener<S> listener = editor -> { updateVisibility(); fireEditorStateChanged(); };
-    for (SettingsEditorFragment<S, ?> child : myChildren) {
-      Disposer.register(this, child);
-      child.addSettingsEditorListener(listener);
-    }
   }
 
   @Override
   public final List<SettingsEditorFragment<S, ?>> getChildren() {
-    return myChildren;
+    return myChildren.getValue();
+  }
+
+  @Override
+  public String getChildrenGroupName() {
+    return getName();
   }
 
   @Override
@@ -41,8 +54,13 @@ public abstract class NestedGroupFragment<S extends FragmentedSettings> extends 
     updateVisibility();
   }
 
+  @Override
+  public boolean isInitiallyVisible(S s) {
+    return super.isInitiallyVisible(s) || ContainerUtil.exists(getChildren(), fragment -> fragment.isInitiallyVisible(s));
+  }
+
   private void updateVisibility() {
-    myGroupComponent.setVisible(isSelected() || ContainerUtil.exists(getChildren(), fragment -> fragment.isSelected()));
+    myGroupComponent.setVisible(isSelected());
   }
 
   @Override
@@ -65,6 +83,7 @@ public abstract class NestedGroupFragment<S extends FragmentedSettings> extends 
     @Override
   protected @NotNull JComponent createEditor() {
      myGroupComponent = new FragmentedSettingsBuilder<>(getChildren(), this).createCompoundEditor();
+     if (myComponent == null) myComponent = myGroupComponent;
      updateVisibility();
      return myGroupComponent;
   }

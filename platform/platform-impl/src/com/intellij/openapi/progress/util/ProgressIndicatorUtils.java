@@ -26,7 +26,6 @@ import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.ide.PooledThreadExecutor;
 
 import java.util.List;
 import java.util.concurrent.*;
@@ -42,7 +41,7 @@ import java.util.concurrent.locks.Lock;
  *
  * @author gregsh
  */
-public class ProgressIndicatorUtils {
+public final class ProgressIndicatorUtils {
   private static final Logger LOG = Logger.getInstance(ProgressIndicatorUtils.class);
 
   @NotNull
@@ -64,7 +63,7 @@ public class ProgressIndicatorUtils {
 
   @NotNull
   public static CompletableFuture<?> scheduleWithWriteActionPriority(@NotNull ProgressIndicator progressIndicator, @NotNull ReadTask readTask) {
-    return scheduleWithWriteActionPriority(progressIndicator, PooledThreadExecutor.INSTANCE, readTask);
+    return scheduleWithWriteActionPriority(progressIndicator, AppExecutorUtil.getAppExecutorService(), readTask);
   }
 
   /**

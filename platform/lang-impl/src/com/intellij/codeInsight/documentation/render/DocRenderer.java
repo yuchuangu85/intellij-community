@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.documentation.render;
 
 import com.intellij.codeInsight.CodeInsightBundle;
@@ -9,10 +9,8 @@ import com.intellij.icons.AllIcons;
 import com.intellij.ide.IdeEventQueue;
 import com.intellij.ide.ui.UISettings;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.actionSystem.ActionGroup;
-import com.intellij.openapi.actionSystem.DefaultActionGroup;
-import com.intellij.openapi.actionSystem.IdeActions;
-import com.intellij.openapi.actionSystem.MouseShortcut;
+import com.intellij.openapi.actionSystem.*;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.*;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
@@ -22,8 +20,10 @@ import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.markup.GutterIconRenderer;
 import com.intellij.openapi.editor.markup.RangeHighlighter;
 import com.intellij.openapi.editor.markup.TextAttributes;
+import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.keymap.KeymapManager;
 import com.intellij.openapi.keymap.KeymapUtil;
+import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
@@ -42,6 +42,7 @@ import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.StartupUiUtil;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import javax.swing.event.HyperlinkEvent;
@@ -50,6 +51,7 @@ import javax.swing.text.html.HTMLEditorKit;
 import javax.swing.text.html.ImageView;
 import javax.swing.text.html.StyleSheet;
 import java.awt.*;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseEvent;
 import java.awt.font.TextAttribute;
 import java.awt.image.ImageObserver;
@@ -58,6 +60,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 class DocRenderer implements EditorCustomElementRenderer {
+  private static final Logger LOG = Logger.getInstance(DocRenderer.class);
   private static final DocRendererMemoryManager MEMORY_MANAGER = new DocRendererMemoryManager();
   private static final DocRenderImageManager IMAGE_MANAGER = new DocRenderImageManager();
 
@@ -159,7 +162,16 @@ class DocRenderer implements EditorCustomElementRenderer {
 
   @Override
   public ActionGroup getContextMenuGroup(@NotNull Inlay inlay) {
-    return new DefaultActionGroup(myItem.createToggleAction(), new DocRenderItem.ChangeFontSize());
+    DefaultActionGroup group = new DefaultActionGroup();
+    group.add(new CopySelection());
+    group.addSeparator();
+    group.add(myItem.createToggleAction());
+    AnAction toggleRenderAllAction = ActionManager.getInstance().getAction(IdeActions.ACTION_TOGGLE_RENDERED_DOC_FOR_ALL);
+    if (toggleRenderAllAction != null) {
+      group.add(toggleRenderAllAction);
+    }
+    group.add(new DocRenderItem.ChangeFontSize());
+    return group;
   }
 
   private static int scale(int value) {
@@ -200,6 +212,7 @@ class DocRenderer implements EditorCustomElementRenderer {
       clearCachedComponent();
       myPane = new EditorPane();
       myPane.setEditable(false);
+      myPane.getCaret().setSelectionVisible(true);
       myPane.putClientProperty("caretWidth", 0); // do not reserve space for caret (making content one pixel narrower than component)
       myPane.setEditorKit(createEditorKit(editor));
       myPane.setBorder(JBUI.Borders.empty());
@@ -208,7 +221,10 @@ class DocRenderer implements EditorCustomElementRenderer {
       // disable kerning for now - laying out all fragments in a file with it takes too much time
       fontAttributes.put(TextAttribute.KERNING, 0);
       myPane.setFont(myPane.getFont().deriveFont(fontAttributes));
-      myPane.setForeground(getTextColor(editor.getColorsScheme()));
+      Color textColor = getTextColor(editor.getColorsScheme());
+      myPane.setForeground(textColor);
+      myPane.setSelectedTextColor(textColor);
+      myPane.setSelectionColor(editor.getSelectionModel().getTextAttributes().getBackgroundColor());
       UIUtil.enableEagerSoftWrapping(myPane);
       String textToRender = myItem.textToRender;
       if (textToRender == null) {
@@ -355,6 +371,7 @@ class DocRenderer implements EditorCustomElementRenderer {
         "ol {padding: 0 20 0 0}" +
         "ul {padding: 0 20 0 0}" +
         "li {padding: 1 0 2 0}" +
+        "li p {padding-top: 0}" +
         "table p {padding-bottom: 0}" +
         "th {text-align: left}" +
         "td {padding: 2 0 2 0}" +
@@ -416,6 +433,36 @@ class DocRenderer implements EditorCustomElementRenderer {
 
     Editor getEditor() {
       return myItem.editor;
+    }
+
+    void removeSelection() {
+      doWithRepaintTracking(() -> select(0, 0));
+    }
+
+    boolean hasSelection() {
+      return getSelectionStart() != getSelectionEnd();
+    }
+
+    @Nullable Point getSelectionPositionInEditor() {
+      if (myPane != this ||
+          myItem.inlay == null ||
+          myItem.inlay.getRenderer() != DocRenderer.this) {
+        return null;
+      }
+      Rectangle inlayBounds = myItem.inlay.getBounds();
+      if (inlayBounds == null) {
+        return null;
+      }
+      Rectangle boundsWithinInlay = getEditorPaneBoundsWithinInlay(myItem.inlay);
+      Rectangle locationInPane;
+      try {
+        locationInPane = modelToView(getSelectionStart());
+      }
+      catch (BadLocationException e) {
+        LOG.error(e);
+        locationInPane = new Rectangle();
+      }
+      return new Point(inlayBounds.x + boundsWithinInlay.x + locationInPane.x, inlayBounds.y + boundsWithinInlay.y + locationInPane.y);
     }
 
     private void scheduleUpdate() {
@@ -490,7 +537,7 @@ class DocRenderer implements EditorCustomElementRenderer {
     }
   }
 
-  private static class MyScalingImageView extends ImageView {
+  private static final class MyScalingImageView extends ImageView {
     private int myAvailableWidth;
 
     private MyScalingImageView(Element element) {
@@ -565,6 +612,29 @@ class DocRenderer implements EditorCustomElementRenderer {
         }
       };
       super.paint(scalingGraphics, a);
+    }
+  }
+
+  private class CopySelection extends DumbAwareAction {
+    CopySelection() {
+      super(CodeInsightBundle.messagePointer("doc.render.copy.action.text"), AllIcons.Actions.Copy);
+      AnAction copyAction = ActionManager.getInstance().getAction(IdeActions.ACTION_COPY);
+      if (copyAction != null) {
+        copyShortcutFrom(copyAction);
+      }
+    }
+
+    @Override
+    public void update(@NotNull AnActionEvent e) {
+      e.getPresentation().setVisible(myPane != null && myPane.hasSelection());
+    }
+
+    @Override
+    public void actionPerformed(@NotNull AnActionEvent e) {
+      String text = myPane == null ? null : myPane.getSelectedText();
+      if (!StringUtil.isEmpty(text)) {
+        CopyPasteManager.getInstance().setContents(new StringSelection(text));
+      }
     }
   }
 }

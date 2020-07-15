@@ -5,6 +5,7 @@ import com.intellij.ProjectTopics;
 import com.intellij.compiler.CompilerConfiguration;
 import com.intellij.compiler.CompilerConfigurationImpl;
 import com.intellij.compiler.CompilerWorkspaceConfiguration;
+import com.intellij.compiler.YourKitProfilerService;
 import com.intellij.compiler.impl.CompilerUtil;
 import com.intellij.compiler.impl.javaCompiler.BackendCompiler;
 import com.intellij.compiler.impl.javaCompiler.eclipse.EclipseCompilerConfiguration;
@@ -53,6 +54,7 @@ import com.intellij.openapi.vfs.newvfs.BulkFileListener;
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
 import com.intellij.openapi.vfs.newvfs.impl.FileNameCache;
 import com.intellij.openapi.wm.IdeFrame;
+import com.intellij.serviceContainer.AlreadyDisposedException;
 import com.intellij.util.*;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.concurrency.SequentialTaskExecutor;
@@ -103,7 +105,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
+import java.util.function.Function;
 import static com.intellij.openapi.util.Pair.pair;
 import static org.jetbrains.jps.api.CmdlineRemoteProto.Message.ControllerMessage.ParametersMessage.TargetTypeBuildScope;
 
@@ -386,7 +388,7 @@ public final class BuildManager implements Disposable {
       final List<String> filtered = new ArrayList<>(paths.size());
       for (File file : paths) {
         final String path = FileUtil.toSystemIndependentName(file.getPath());
-        if (PATH_FILTER.fun(path)) {
+        if (PATH_FILTER.apply(path)) {
           filtered.add(path);
         }
       }
@@ -941,7 +943,7 @@ public final class BuildManager implements Disposable {
 
   @NotNull
   public static Pair<Sdk, JavaSdkVersion> getBuildProcessRuntimeSdk(@NotNull Project project) {
-    return getRuntimeSdk(project, 11);
+    return getRuntimeSdk(project, 8);
   }
 
   @NotNull
@@ -1141,8 +1143,28 @@ public final class BuildManager implements Disposable {
     for (String option : userAdditionalOptionsList) {
       cmdLine.addParameter(option);
     }
+
+    final Path workDirectory = getBuildSystemDirectory();
+    try {
+      Files.createDirectories(workDirectory);
+    }
+    catch (IOException e) {
+      LOG.warn(e);
+    }
+
     if (isProfilingMode) {
-      cmdLine.addParameter("-agentlib:yjpagent=disablealloc,delay=10000,sessionname=ExternalBuild");
+      try {
+        YourKitProfilerService yourKitProfilerService = ServiceManager.getService(YourKitProfilerService.class);
+        if (yourKitProfilerService == null) {
+          throw new IOException("Performance Plugin is missing or disabled");
+        }
+        yourKitProfilerService.copyYKLibraries(workDirectory);
+        String yjpagent = workDirectory.resolve(yourKitProfilerService.getYKAgentFullName()).toAbsolutePath().toString();
+        cmdLine.addParameter("-agentpath:" + yjpagent + "=disablealloc,delay=10000,sessionname=ExternalBuild");
+      }
+      catch (IOException e) {
+        LOG.warn(e);
+      }
     }
 
     // debugging
@@ -1189,13 +1211,6 @@ public final class BuildManager implements Disposable {
 
     cmdLine.addParameter("-Dio.netty.noUnsafe=true");
 
-    final Path workDirectory = getBuildSystemDirectory();
-    try {
-      Files.createDirectories(workDirectory);
-    }
-    catch (IOException e) {
-      LOG.warn(e);
-    }
 
     final File projectSystemRoot = getProjectSystemDirectory(project);
     if (projectSystemRoot != null) {
@@ -1519,6 +1534,9 @@ public final class BuildManager implements Disposable {
         try {
           ApplicationManager.getApplication().getMessageBus().syncPublisher(BuildManagerListener.TOPIC).buildFinished(myProject, sessionId, myIsAutomake);
         }
+        catch (AlreadyDisposedException e) {
+          LOG.warn(e);
+        }
         catch (Throwable e) {
           LOG.error(e);
         }
@@ -1720,7 +1738,7 @@ public final class BuildManager implements Disposable {
     }
   }
 
-  private static class ProjectData {
+  private static final class ProjectData {
     @NotNull
     final ExecutorService taskQueue;
     private final Set<InternedPath> myChanged = new THashSet<>();

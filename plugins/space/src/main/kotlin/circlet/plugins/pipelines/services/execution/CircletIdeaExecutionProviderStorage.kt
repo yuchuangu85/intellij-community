@@ -1,13 +1,19 @@
 package circlet.plugins.pipelines.services.execution
 
-import circlet.pipelines.common.api.*
-import circlet.pipelines.config.api.*
+import circlet.pipelines.common.api.ExecutionStatus
+import circlet.pipelines.common.api.GraphExecId
+import circlet.pipelines.common.api.StepExecId
+import circlet.pipelines.config.api.ScriptAction
+import circlet.pipelines.config.api.ScriptJob
+import circlet.pipelines.config.api.ScriptStep
+import circlet.pipelines.config.api.flatten
 import circlet.pipelines.engine.api.storage.*
-import circlet.pipelines.provider.api.*
-import circlet.pipelines.provider.local.*
-import circlet.platform.api.*
-import libraries.io.random.*
-import libraries.klogging.*
+import circlet.pipelines.messages.TextMessageSeverity
+import circlet.pipelines.provider.api.ServiceCredentials
+import circlet.pipelines.provider.local.LocalExecutionProviderStorage
+import circlet.platform.api.nowMs
+import libraries.io.random.Random
+import libraries.klogging.KLogging
 
 class CircletIdeaExecutionProviderStorage : LocalExecutionProviderStorage {
     companion object : KLogging()
@@ -32,9 +38,9 @@ class CircletIdeaExecutionProviderStorage : LocalExecutionProviderStorage {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
-    override fun registerSnapshot(snapshotId: String, stepExecutionId: Long) {
+    override fun registerSnapshot(snapshotId: String, stepExecutionId: StepExecId) {
         val step = findStepExecution(stepExecutionId, false) ?: error("Execution step is not found")
-        volumeSnapshots.add(CircletIdeaVolumeSnapshotEntity(Random.nextLong(), snapshotId, nowMs, step.graph.id, stepExecutionId, this))
+        volumeSnapshots.add(CircletIdeaVolumeSnapshotEntity(Random.nextLong(), snapshotId, nowMs, step.graph.id, stepExecutionId.value, this))
     }
 
     override fun deleteSnapshotsByGraphExecution(graphExecution: AGraphExecutionEntity): Int {
@@ -45,12 +51,13 @@ class CircletIdeaExecutionProviderStorage : LocalExecutionProviderStorage {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
-    override fun findStepExecution(id: Long, forUpdate: Boolean): AStepExecutionEntity<ScriptStep.Process<*, *>>? {
-        return stepExecutions.firstOrNull { it.id == id }
+    override fun findStepExecution(id: StepExecId, forUpdate: Boolean): AStepExecutionEntity<ScriptStep.Process<*, *>>? {
+        return stepExecutions.firstOrNull { it.id == id.value }
     }
 
-    override fun findStepExecutions(ids: List<Long>, forUpdate: Boolean): Sequence<AStepExecutionEntity<ScriptStep.Process<*, *>>> {
-        return stepExecutions.filter { it.id in ids }.asSequence()
+    override fun findStepExecutions(ids: List<StepExecId>, forUpdate: Boolean): Sequence<AStepExecutionEntity<ScriptStep.Process<*, *>>> {
+        val idValues = ids.map { it.value }
+        return stepExecutions.filter { it.id in idValues }.asSequence()
     }
 
     override fun findAuthClient(graphExecution: AGraphExecutionEntity): ServiceCredentials? {
@@ -62,15 +69,15 @@ class CircletIdeaExecutionProviderStorage : LocalExecutionProviderStorage {
         return volumeSnapshots.firstOrNull { it.stepExecutionId == stepExec.id }
     }
 
-    override fun findSnapshotCreationPoint(graphExecutionId: Long): AStepExecutionEntity<ScriptStep.Process<*, *>>? {
+    override fun findSnapshotCreationPoint(graphExecutionId: GraphExecId): AStepExecutionEntity<ScriptStep.Process<*, *>>? {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
-    override fun findGraphExecutionById(graphExecutionId: Long): AGraphExecutionEntity? {
-        return executions.firstOrNull { it.id == graphExecutionId }
+    override fun findGraphExecutionById(graphExecutionId: GraphExecId): AGraphExecutionEntity? {
+        return executions.firstOrNull { it.id == graphExecutionId.value }
     }
 
-    override fun createGraphExecution(
+    fun createGraphExecution(
 
         actionMeta: ScriptAction,
         bootstrapStepFactory: (AGraphExecutionEntity) -> ScriptStep.Process.Container?): AGraphExecutionEntity {
@@ -112,6 +119,20 @@ class CircletIdeaExecutionProviderStorage : LocalExecutionProviderStorage {
         executions.add(graphExecutionEntity)
 
         return graphExecutionEntity
+    }
+
+    override fun createGraphExecution(actionMeta: ScriptJob,
+                                      bootstrapStepFactory: (AGraphExecutionEntity) -> ScriptStep.Process.Container?): AGraphExecutionEntity {
+        TODO("Not yet implemented")
+    }
+
+    override fun createGraphExecutions(idToActionMeta: Map<Long, ScriptJob>,
+                                       bootstrapStepFactory: (AGraphExecutionEntity) -> ScriptStep.Process.Container?): Map<Long, AGraphExecutionEntity> {
+        TODO("Not yet implemented")
+    }
+
+    override fun createStepExecutionCustomMessage(stepExec: StepExecId, message: String, severity: TextMessageSeverity) {
+        TODO("Not yet implemented")
     }
 
     override suspend fun <T> invoke(name: String, body: AutomationStorageTransaction.() -> T): T {
@@ -160,5 +181,8 @@ class CircletIdeaExecutionProviderStorage : LocalExecutionProviderStorage {
         }
 
         override fun enableDebug() { }
+        override fun onThrowable(th: Throwable) {
+
+        }
     }
 }

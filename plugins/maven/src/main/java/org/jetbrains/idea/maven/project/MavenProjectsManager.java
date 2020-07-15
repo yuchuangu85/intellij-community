@@ -1,14 +1,13 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.project;
 
-import com.intellij.CommonBundle;
 import com.intellij.build.BuildProgressListener;
 import com.intellij.build.SyncViewManager;
 import com.intellij.configurationStore.SettingsSavingComponentJavaAdapter;
 import com.intellij.ide.startup.StartupManagerEx;
-import com.intellij.notification.*;
-import com.intellij.notification.impl.NotificationSettings;
-import com.intellij.notification.impl.NotificationsConfigurationImpl;
+import com.intellij.notification.EventLog;
+import com.intellij.notification.Notification;
+import com.intellij.notification.NotificationGroup;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
@@ -31,7 +30,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.roots.impl.ModuleRootManagerImpl;
-import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.startup.StartupManager;
 import com.intellij.openapi.util.*;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -46,7 +45,7 @@ import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.io.PathKt;
 import com.intellij.util.ui.update.Update;
-import com.intellij.workspace.api.TypedEntityStorageBuilder;
+import com.intellij.workspaceModel.storage.WorkspaceEntityStorageBuilder;
 import gnu.trove.THashMap;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.ApiStatus;
@@ -55,21 +54,18 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 import org.jetbrains.concurrency.AsyncPromise;
 import org.jetbrains.concurrency.Promise;
-import org.jetbrains.concurrency.Promises;
 import org.jetbrains.idea.maven.buildtool.MavenSyncConsole;
 import org.jetbrains.idea.maven.importing.MavenFoldersImporter;
 import org.jetbrains.idea.maven.importing.MavenPomPathModuleService;
 import org.jetbrains.idea.maven.importing.MavenProjectImporter;
-import org.jetbrains.idea.maven.importing.worktree.LegacyBrigdeIdeModifiableModelsProvider;
+import org.jetbrains.idea.maven.importing.worktree.IdeModifiableModelsProviderBridge;
 import org.jetbrains.idea.maven.model.*;
 import org.jetbrains.idea.maven.project.MavenArtifactDownloader.DownloadResult;
 import org.jetbrains.idea.maven.server.MavenEmbedderWrapper;
-import org.jetbrains.idea.maven.server.MavenServerManager;
 import org.jetbrains.idea.maven.server.MavenServerProgressIndicator;
 import org.jetbrains.idea.maven.server.NativeMavenProjectHolder;
 import org.jetbrains.idea.maven.utils.*;
 
-import javax.swing.event.HyperlinkEvent;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -80,7 +76,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 @State(name = "MavenProjectsManager")
-public class MavenProjectsManager extends MavenSimpleProjectComponent
+public final class MavenProjectsManager extends MavenSimpleProjectComponent
   implements PersistentStateComponent<MavenProjectsManagerState>, SettingsSavingComponentJavaAdapter, Disposable {
   private static final int IMPORT_DELAY = 1000;
   private static final String NON_MANAGED_POM_NOTIFICATION_GROUP_ID = "Maven: non-managed pom.xml";
@@ -139,7 +135,7 @@ public class MavenProjectsManager extends MavenSimpleProjectComponent
     mySaveQueue = new MavenMergingUpdateQueue("Maven save queue", SAVE_DELAY, !isUnitTestMode(), this);
     myProgressListener = ServiceManager.getService(myProject, SyncViewManager.class);
     MavenRehighlighter.install(project, this);
-    Disposer.register(project, this::projectClosed);
+    Disposer.register(this, this::projectClosed);
   }
 
   @Override
@@ -189,20 +185,20 @@ public class MavenProjectsManager extends MavenSimpleProjectComponent
 
   @Override
   public void initializeComponent() {
-    if (!isNormalProject()) return;
+    if (!isNormalProject()) {
+      return;
+    }
 
-    StartupManagerEx startupManager = StartupManagerEx.getInstanceEx(myProject);
-
+    StartupManager startupManager = StartupManager.getInstance(myProject);
     startupManager.registerStartupActivity(() -> {
       boolean wasMavenized = !myState.originalFiles.isEmpty();
-      if (!wasMavenized) return;
+      if (!wasMavenized) {
+        return;
+      }
       initMavenized();
     });
 
-    startupManager.registerPostStartupActivity(() -> {
-      if (!isMavenizedProject()) {
-        showNotificationOrphanMavenProject(myProject);
-      }
+    startupManager.runAfterOpened(() -> {
       CompilerManager.getInstance(myProject).addBeforeTask(new CompileTask() {
         @Override
         public boolean execute(@NotNull CompileContext context) {
@@ -213,62 +209,15 @@ public class MavenProjectsManager extends MavenSimpleProjectComponent
     });
   }
 
-  private void showNotificationOrphanMavenProject(final Project project) {
-    final NotificationSettings notificationSettings = NotificationsConfigurationImpl.getSettings(NON_MANAGED_POM_NOTIFICATION_GROUP_ID);
-    if (!notificationSettings.isShouldLog() && notificationSettings.getDisplayType().equals(NotificationDisplayType.NONE)) {
-      return;
-    }
-
-    List<VirtualFile> pomFiles = MavenUtil.streamPomFiles(project, project.getBaseDir()).collect(Collectors.toList());
-
-    for (VirtualFile file : pomFiles) {
-      showBalloon(
-        MavenProjectBundle.message("maven.orphan.notification.title"),
-        MavenProjectBundle.message("maven.orphan.notification.msg", file.getPresentableUrl()),
-        NON_MANAGED_POM_NOTIFICATION_GROUP, NotificationType.INFORMATION, new NotificationListener.Adapter() {
-          @Override
-          protected void hyperlinkActivated(@NotNull Notification notification, @NotNull HyperlinkEvent e) {
-            if ("#add".equals(e.getDescription())) {
-              addManagedFilesOrUnignore(Collections.singletonList(file));
-              notification.expire();
-            }
-            else if ("#disable".equals(e.getDescription())) {
-              final int result = Messages.showYesNoDialog(
-                myProject,
-                MavenProjectBundle.message("maven.notification.nonmanaged.pom.will.be.disabled.message", NON_MANAGED_POM_NOTIFICATION_GROUP_ID),
-                MavenProjectBundle.message("maven.notification.nonmanaged.pom.disable.title"),
-                MavenProjectBundle.message("maven.notification.disable"), CommonBundle.getCancelButtonText(), Messages.getWarningIcon());
-              if (result == Messages.YES) {
-                NotificationsConfigurationImpl.getInstanceImpl().changeSettings(
-                  NON_MANAGED_POM_NOTIFICATION_GROUP_ID, NotificationDisplayType.NONE, false, false);
-                notification.expire();
-              }
-              else {
-                notification.hideBalloon();
-              }
-            }
-          }
-        }
-      );
-    }
-  }
-
-  public void showBalloon(@NotNull final String title,
-                          @NotNull final String message,
-                          @NotNull final NotificationGroup group,
-                          @NotNull final NotificationType type,
-                          @Nullable final NotificationListener listener) {
-    group.createNotification(title, message, type, listener).notify(myProject);
-  }
-
   private void initMavenized() {
     doInit(false);
   }
 
   private void initNew(List<VirtualFile> files, MavenExplicitProfiles explicitProfiles) {
     myState.originalFiles = MavenUtil.collectPaths(files);
-    getWorkspaceSettings().setEnabledProfiles(explicitProfiles.getEnabledProfiles());
-    getWorkspaceSettings().setDisabledProfiles(explicitProfiles.getDisabledProfiles());
+    MavenWorkspaceSettings workspaceSettings = getWorkspaceSettings();
+    workspaceSettings.setEnabledProfiles(explicitProfiles.getEnabledProfiles());
+    workspaceSettings.setDisabledProfiles(explicitProfiles.getDisabledProfiles());
     doInit(true);
   }
 
@@ -280,7 +229,9 @@ public class MavenProjectsManager extends MavenSimpleProjectComponent
   private void doInit(final boolean isNew) {
     initLock.lock();
     try {
-      if (isInitialized.getAndSet(true)) return;
+      if (isInitialized.getAndSet(true)) {
+        return;
+      }
 
       initProjectsTree(!isNew);
 
@@ -406,7 +357,7 @@ public class MavenProjectsManager extends MavenSimpleProjectComponent
 
     myWatcher = new MavenProjectsManagerWatcher(myProject, this, myProjectsTree, getGeneralSettings(), myReadingProcessor);
 
-    myImportingQueue = new MavenMergingUpdateQueue(getClass().getName() + ": Importing queue", IMPORT_DELAY, !isUnitTestMode(), myProject);
+    myImportingQueue = new MavenMergingUpdateQueue(getClass().getName() + ": Importing queue", IMPORT_DELAY, !isUnitTestMode(), this);
 
     myImportingQueue.makeUserAware(myProject);
     myImportingQueue.makeDumbAware(myProject);
@@ -1260,8 +1211,8 @@ public class MavenProjectsManager extends MavenSimpleProjectComponent
 
   public List<Module> importProjects() {
     if (MavenUtil.newModelEnabled(myProject)) {
-      TypedEntityStorageBuilder builder = TypedEntityStorageBuilder.Companion.create();
-      return importProjects(new LegacyBrigdeIdeModifiableModelsProvider(myProject, builder));
+      WorkspaceEntityStorageBuilder builder = WorkspaceEntityStorageBuilder.Companion.create();
+      return importProjects(new IdeModifiableModelsProviderBridge(myProject, builder));
     }
     else {
       return importProjects(new IdeModifiableModelsProviderImpl(myProject));
@@ -1362,6 +1313,10 @@ public class MavenProjectsManager extends MavenSimpleProjectComponent
 
   public void addProjectsTreeListener(MavenProjectsTree.Listener listener) {
     myProjectsTreeDispatcher.addListener(listener);
+  }
+
+  public void addProjectsTreeListener(@NotNull MavenProjectsTree.Listener listener, @NotNull Disposable parentDisposable) {
+    myProjectsTreeDispatcher.addListener(listener, parentDisposable);
   }
 
   @TestOnly

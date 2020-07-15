@@ -102,7 +102,7 @@ public final class PushController implements Disposable {
   @NotNull
   private <R extends Repository, S extends PushSource, T extends PushTarget> List<PushSupport<R, S, T>> getAffectedSupports() {
     Collection<AbstractVcs> vcss = ContainerUtil.map2Set(myAllRepos, repository -> repository.getVcs());
-    return ContainerUtil.map(vcss, (Function<AbstractVcs, PushSupport<R, S, T>>)vcs -> {
+    return ContainerUtil.map(vcss, vcs -> {
       //noinspection unchecked
       return DvcsUtil.getPushSupport(vcs);
     });
@@ -607,7 +607,7 @@ public final class PushController implements Disposable {
     return result;
   }
 
-  private static class PushInfoImpl implements PushInfo {
+  private static final class PushInfoImpl implements PushInfo {
 
     private final Repository myRepository;
     private final PushSpec<PushSource, PushTarget> myPushSpec;

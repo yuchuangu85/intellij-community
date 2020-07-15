@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.psi.impl.source.tree.injected;
 
@@ -16,6 +16,7 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.ex.DocumentEx;
 import com.intellij.openapi.editor.impl.EditorImpl;
 import com.intellij.openapi.editor.markup.TextAttributes;
+import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.progress.ProgressIndicator;
@@ -45,12 +46,13 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * @deprecated Use {@link InjectedLanguageManager} instead
  */
 @Deprecated
-public class InjectedLanguageUtil {
+public final class InjectedLanguageUtil {
   public static final Key<IElementType> INJECTED_FRAGMENT_TYPE = Key.create("INJECTED_FRAGMENT_TYPE");
   public static final Key<Boolean> FRANKENSTEIN_INJECTION = InjectedLanguageManager.FRANKENSTEIN_INJECTION;
 
@@ -341,8 +343,9 @@ public class InjectedLanguageUtil {
       ProgressManager.checkCanceled();
       if ("EL".equals(current.getLanguage().getID())) break;
       result = SoftReference.deref(current.getUserData(INJECTED_PSI));
-      if (result == null || !result.isModCountUpToDate(hostPsiFile) || !result.isValid()) {
+      if (result == null || !result.isModCountUpToDate() || !result.isValid()) {
         result = injectedManager.processInPlaceInjectorsFor(hostPsiFile, current);
+        preventResultFromGCWhileInjectedPsiIsReachable(result);
       }
 
       current = current.getParent();
@@ -394,11 +397,32 @@ public class InjectedLanguageUtil {
     }
   }
 
+  private static final Key<InjectionResult> INJECTION_HOLDER_BACK_REFERENCE = Key.create("INJECTION_HOLDER_BACK_REFERENCE");
+
+  /**
+   * Prevents InjectionResult from being GC-ed while there are references to the PSI inside,
+   * to avoid new injected PSI being created when there's one alive already.
+   */
+  private static void preventResultFromGCWhileInjectedPsiIsReachable(@Nullable InjectionResult result) {
+    if (result != null && result.files != null) {
+      for (PsiFile injectedPsiFile : result.files) {
+        injectedPsiFile.getViewProvider().putUserData(INJECTION_HOLDER_BACK_REFERENCE, result);
+      }
+    }
+  }
+
   @NotNull
   private static InjectionResult getEmptyInjectionResult(@NotNull PsiFile host) {
     return CachedValuesManager.getCachedValue(host, () ->
       CachedValueProvider.Result.createSingleDependency(new InjectionResult(host, null, null),
                                                         PsiModificationTracker.MODIFICATION_COUNT));
+  }
+
+  /**
+   * Quick check if we should bother injecting something inside this PSI at all
+   */
+  public static boolean isInjectable(@NotNull PsiElement element, boolean probeUp) {
+    return stopLookingForInjection(element) || element.getFirstChild() != null || probeUp;
   }
 
   /**
@@ -526,10 +550,11 @@ public class InjectedLanguageUtil {
     file.putUserData(INJECTED_DOCS_KEY, null);
   }
 
-  static void clearCaches(@NotNull PsiFile injected, @NotNull DocumentWindowImpl documentWindow) {
-    VirtualFileWindowImpl virtualFile = (VirtualFileWindowImpl)injected.getVirtualFile();
-    PsiManagerEx psiManagerEx = (PsiManagerEx)injected.getManager();
-    if (psiManagerEx.getProject().isDisposed()) return;
+  static void clearCaches(@NotNull Project project, @NotNull DocumentWindow documentWindow) {
+    if (project.isDisposed()) return;
+    VirtualFileWindowImpl virtualFile =
+      (VirtualFileWindowImpl)Objects.requireNonNull(FileDocumentManager.getInstance().getFile(documentWindow));
+    PsiManagerEx psiManagerEx = PsiManagerEx.getInstanceEx(project);
 
     DebugUtil.performPsiModification("injected clearCaches", () ->
       psiManagerEx.getFileManager().setViewProvider(virtualFile, null));

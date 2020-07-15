@@ -7,6 +7,7 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.AbstractExtensionPointBean;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.util.DefaultBundleService;
 import com.intellij.util.ReflectionUtil;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
@@ -31,6 +32,10 @@ public abstract class DynamicBundle extends AbstractBundle {
                                       @NotNull ClassLoader baseLoader,
                                       @NotNull ResourceBundle.Control control) {
     ResourceBundle base = super.findBundle(pathToBundle, baseLoader, control);
+
+    if (DefaultBundleService.isDefaultBundle()) {
+      return base;
+    }
 
     LanguageBundleEP langBundle = findLanguageBundle();
     if (langBundle == null) return base;

@@ -12,7 +12,6 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.ProjectLevelVcsManager;
@@ -68,18 +67,21 @@ abstract class GitMergeAction extends GitRepositoryAction {
     final VirtualFile selectedRoot;
     final String progressTitle;
     final Supplier<GitLineHandler> handlerProvider;
-    @NotNull private final List<String> selectedBranches;
+    @NotNull final List<String> selectedBranches;
     final boolean commitAfterMerge;
+    @NotNull final List<String> selectedOptions;
 
     DialogState(@NotNull VirtualFile root,
                 @NotNull String title,
                 @NotNull Supplier<GitLineHandler> provider,
                 @NotNull List<String> selectedBranches,
-                boolean commitAfterMerge) {
+                boolean commitAfterMerge,
+                @NotNull List<String> selectedOptions) {
       selectedRoot = root;
       progressTitle = title;
       handlerProvider = provider;
       this.selectedBranches = selectedBranches;
+      this.selectedOptions = selectedOptions;
       this.commitAfterMerge = commitAfterMerge;
     }
   }
@@ -89,11 +91,15 @@ abstract class GitMergeAction extends GitRepositoryAction {
                                                @NotNull VirtualFile defaultRoot);
 
   @Override
-  protected void perform(@NotNull Project project, @NotNull List<VirtualFile> gitRoots, @NotNull VirtualFile defaultRoot) {
+  protected final void perform(@NotNull Project project, @NotNull List<VirtualFile> gitRoots, @NotNull VirtualFile defaultRoot) {
     DialogState dialogState = displayDialog(project, gitRoots, defaultRoot);
     if (dialogState == null) {
       return;
     }
+    perform(dialogState, project);
+  }
+
+  protected void perform(@NotNull DialogState dialogState, @NotNull Project project) {
     VirtualFile selectedRoot = dialogState.selectedRoot;
     Supplier<GitLineHandler> handlerProvider = dialogState.handlerProvider;
     Label beforeLabel = LocalHistory.getInstance().putSystemLabel(project, "Before update");
@@ -227,7 +233,7 @@ abstract class GitMergeAction extends GitRepositoryAction {
                                                                 getActionName(), null);
     }
     else {
-      GitUIUtil.notifyError(project, "Git " + getActionName() + " Failed", result.getErrorOutputAsJoinedString(), true, null);
+      GitUIUtil.notifyError(project, GitBundle.message("merge.action.operation.failed", getActionName()), result.getErrorOutputAsJoinedString(), true, null);
       repository.update();
     }
   }

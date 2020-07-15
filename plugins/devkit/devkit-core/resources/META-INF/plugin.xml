@@ -39,6 +39,7 @@
     <getDataRule key="TestLocationData" implementationClass="org.jetbrains.idea.devkit.testAssistant.TestLocationDataRule"/>
 
     <automaticRenamerFactory implementation="org.jetbrains.idea.devkit.refactoring.InspectionAutomaticRenamerFactory"/>
+    <httpRequestHandler implementation="org.jetbrains.idea.devkit.debug.HttpDebugListener"/>
 
     <junitPatcher implementation="org.jetbrains.idea.devkit.run.JUnitDevKitPatcher"/>
     <compiler.buildTargetScopeProvider implementation="org.jetbrains.idea.devkit.build.PluginModuleBuildScopeProvider"/>
@@ -48,7 +49,7 @@
 
     <dom.fileMetaData implementation="org.jetbrains.idea.devkit.dom.impl.PluginDescriptorDomFileDescription"
                       rootTagName="idea-plugin"
-                      stubVersion="12"/>
+                      stubVersion="14"/>
     <dom.extender domClass="org.jetbrains.idea.devkit.dom.Extensions"
                   extenderClass="org.jetbrains.idea.devkit.dom.impl.ExtensionsDomExtender"/>
     <dom.extender domClass="org.jetbrains.idea.devkit.dom.Action"
@@ -83,6 +84,8 @@
     <moduleType id="PLUGIN_MODULE" implementationClass="org.jetbrains.idea.devkit.module.PluginModuleType" classpathProvider="true"/>
     <sdkType implementation="org.jetbrains.idea.devkit.projectRoots.IdeaJdk"/>
     <compileServer.plugin classpath="devkit-jps-plugin.jar"/>
+    <backgroundPostStartupActivity implementation="org.jetbrains.idea.devkit.module.PluginModuleConvertToGradleStartupActivity"/>
+
     <fileTemplateGroup implementation="org.jetbrains.idea.devkit.DevKitFileTemplatesFactory"/>
     <lang.documentationProvider language="XML"
                                 implementationClass="org.jetbrains.idea.devkit.references.extensions.ExtensionPointDocumentationProvider"/>
@@ -107,7 +110,7 @@
                      groupPath="Plugin DevKit"
                      key="inspections.component.not.registered.name" groupKey="inspections.group.code" enabledByDefault="true"
                      level="WARNING" implementationClass="org.jetbrains.idea.devkit.inspections.ComponentNotRegisteredInspection"/>
-    <localInspection language="JAVA" shortName="InspectionDescriptionNotFoundInspection" displayName="Inspection description checker"
+    <localInspection language="UAST" shortName="InspectionDescriptionNotFoundInspection" displayName="Inspection description checker"
                      groupPath="Plugin DevKit" groupKey="inspections.group.description.file"
                      enabledByDefault="true" level="WARNING"
                      implementationClass="org.jetbrains.idea.devkit.inspections.InspectionDescriptionNotFoundInspection"/>
@@ -129,11 +132,6 @@
                      enabledByDefault="true"
                      level="WARNING"
                      implementationClass="org.jetbrains.idea.devkit.inspections.PostfixTemplateDescriptionNotFoundInspection"/>
-    <localInspection language="JAVA" displayName="Java 5 nullability annotation on array"
-                     groupPath="Plugin DevKit" groupKey="inspections.group.description.file"
-                     enabledByDefault="false"
-                     level="WARNING" isInternal="true"
-                     implementationClass="org.jetbrains.idea.devkit.inspections.OldJetBrainsAnnotationInspection"/>
     <!--suppress PluginXmlCapitalization -->
     <localInspection shortName="ComponentRegistrationProblems"
                      key="inspections.registration.problems.name"
@@ -151,7 +149,7 @@
                      groupPath="Plugin DevKit" groupKey="inspections.group.code"
                      enabledByDefault="true" level="WARNING"
                      implementationClass="org.jetbrains.idea.devkit.inspections.internal.UndesirableClassUsageInspection"/>
-    <localInspection language="JAVA" shortName="FileEqualsUsage" displayName="File.equals() usage"
+    <localInspection language="UAST" shortName="FileEqualsUsage" displayName="File.equals() usage"
                      groupPath="Plugin DevKit" groupKey="inspections.group.code"
                      enabledByDefault="true" level="WARNING"
                      implementationClass="org.jetbrains.idea.devkit.inspections.internal.FileEqualsUsageInspection"/>
@@ -180,7 +178,7 @@
                      enabledByDefault="true" level="WARNING"
                      implementationClass="org.jetbrains.idea.devkit.inspections.internal.DontUseNewPairInspection"/>
     <!--suppress PluginXmlCapitalization -->
-    <localInspection language="JAVA" shortName="UseVirtualFileEquals" displayName="Use VirtualFile.equals"
+    <localInspection language="UAST" shortName="UseVirtualFileEquals" displayName="Use VirtualFile.equals"
                      groupPath="Plugin DevKit" groupKey="inspections.group.code"
                      enabledByDefault="true" level="WARNING"
                      implementationClass="org.jetbrains.idea.devkit.inspections.internal.UseVirtualFileEqualsInspection"/>
@@ -196,7 +194,7 @@
                      groupPath="Plugin DevKit" groupKey="inspections.group.code"
                      enabledByDefault="true" level="WARNING"
                      implementationClass="org.jetbrains.idea.devkit.inspections.UElementAsPsiInspection"/>
-    <localInspection language="JAVA" shortName="UsePrimitiveTypes" displayName="Use .equals with primitive types"
+    <localInspection language="UAST" shortName="UsePrimitiveTypes" displayName="Use .equals with primitive types"
                      groupPath="Plugin DevKit" groupKey="inspections.group.code"
                      enabledByDefault="true" level="WARNING"
                      implementationClass="org.jetbrains.idea.devkit.inspections.internal.UsePrimitiveTypesInspection"/>
@@ -345,7 +343,7 @@
     <lang.documentationProvider language="JSON"
                                 order="first"
                                 implementationClass="org.jetbrains.idea.devkit.themes.ThemeJsonDocumentationProvider"/>
-    <notificationWhitelist groupIds="Update from Sources;IntelliJ API Annotations;Plugin DevKit Deployment;testdata;DevKit Errors"/>
+    <notificationAllowlist groupIds="Update from Sources;IntelliJ API Annotations;Plugin DevKit Deployment;testdata;DevKit Errors"/>
   </extensions>
   <extensions defaultExtensionNs="JavaScript.JsonSchema">
     <ProviderFactory implementation="org.jetbrains.idea.devkit.themes.ThemeJsonSchemaProviderFactory"/>

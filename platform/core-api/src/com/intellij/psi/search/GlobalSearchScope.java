@@ -2,6 +2,7 @@
 package com.intellij.psi.search;
 
 import com.intellij.core.CoreBundle;
+import com.intellij.model.ModelBranch;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.FileTypeRegistry;
 import com.intellij.openapi.module.Module;
@@ -17,10 +18,7 @@ import com.intellij.psi.PsiFile;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.THashSet;
-import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.NonNls;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.*;
 
 import java.util.*;
 
@@ -41,9 +39,9 @@ public abstract class GlobalSearchScope extends SearchScope implements ProjectAw
     this(null);
   }
 
-  @Nullable
+  @ApiStatus.NonExtendable
   @Override
-  public Project getProject() {
+  public @Nullable Project getProject() {
     return myProject;
   }
 
@@ -83,6 +81,13 @@ public abstract class GlobalSearchScope extends SearchScope implements ProjectAw
    */
   @NotNull
   public Collection<UnloadedModuleDescription> getUnloadedModulesBelongingToScope() {
+    return Collections.emptySet();
+  }
+
+  /**
+   * @return a set of model branches whose copied files this scope might contain
+   */
+  public @NotNull Collection<ModelBranch> getModelBranchesAffectingScope() {
     return Collections.emptySet();
   }
 
@@ -160,6 +165,11 @@ public abstract class GlobalSearchScope extends SearchScope implements ProjectAw
       @Override
       public Collection<UnloadedModuleDescription> getUnloadedModulesBelongingToScope() {
         return GlobalSearchScope.this.getUnloadedModulesBelongingToScope();
+      }
+
+      @Override
+      public @NotNull Collection<ModelBranch> getModelBranchesAffectingScope() {
+        return GlobalSearchScope.this.getModelBranchesAffectingScope();
       }
 
       @NonNls
@@ -340,11 +350,10 @@ public abstract class GlobalSearchScope extends SearchScope implements ProjectAw
   }
 
   /**
-   * Please consider using {@link this#filesWithLibrariesScope} or {@link this#filesWithoutLibrariesScope} for optimization
+   * Please consider using {@link #filesWithLibrariesScope} or {@link #filesWithoutLibrariesScope} for optimization
    */
-  @NotNull
   @Contract(pure = true)
-  public static GlobalSearchScope filesScope(@NotNull Project project, @NotNull Collection<? extends VirtualFile> files) {
+  public static @NotNull GlobalSearchScope filesScope(@NotNull Project project, @NotNull Collection<? extends VirtualFile> files) {
     return filesScope(project, files, null);
   }
 
@@ -457,6 +466,11 @@ public abstract class GlobalSearchScope extends SearchScope implements ProjectAw
     }
 
     @Override
+    public @NotNull Collection<ModelBranch> getModelBranchesAffectingScope() {
+      return ContainerUtil.intersection(myScope1.getModelBranchesAffectingScope(), myScope2.getModelBranchesAffectingScope());
+    }
+
+    @Override
     public boolean equals(Object o) {
       if (this == o) return true;
       if (!(o instanceof IntersectionScope)) return false;
@@ -523,6 +537,15 @@ public abstract class GlobalSearchScope extends SearchScope implements ProjectAw
       Set<UnloadedModuleDescription> result = new LinkedHashSet<>();
       for (GlobalSearchScope scope : myScopes) {
         result.addAll(scope.getUnloadedModulesBelongingToScope());
+      }
+      return result;
+    }
+
+    @Override
+    public @NotNull Collection<ModelBranch> getModelBranchesAffectingScope() {
+      Set<ModelBranch> result = new LinkedHashSet<>();
+      for (GlobalSearchScope scope : myScopes) {
+        result.addAll(scope.getModelBranchesAffectingScope());
       }
       return result;
     }

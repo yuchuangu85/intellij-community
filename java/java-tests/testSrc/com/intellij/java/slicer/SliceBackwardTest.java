@@ -30,9 +30,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-/**
- * @author cdr
- */
 public class SliceBackwardTest extends SliceTestCase {
   private void doTest() throws Exception {
     doTest("");
@@ -58,7 +55,7 @@ public class SliceBackwardTest extends SliceTestCase {
     params.valueFilter = filter.isEmpty() ? JavaValueFilter.ALLOW_EVERYTHING : provider.parseFilter(element, filter);
     List<ExceptionAnalysisProvider.StackLine> lines = StreamEx.of(stack).map(line -> {
       String[] parts = line.split(":");
-      return new ExceptionAnalysisProvider.StackLine(parts[0], parts[1]);
+      return new ExceptionAnalysisProvider.StackLine(parts[0], parts[1], null);
     }).toList();
     assertTrue(params.valueFilter instanceof JavaValueFilter);
     params.valueFilter = ((JavaValueFilter)params.valueFilter).withStack(lines);
@@ -106,6 +103,7 @@ public class SliceBackwardTest extends SliceTestCase {
   public void testSearchOverriddenMethodsInThisClassHierarchyParamDfa() throws Exception { doTest();}
   public void testAppend() throws Exception { doTest();}
   public void testRequireNonNull() throws Exception { doTest();}
+  public void testBackAndForward() throws Exception { doTest();}
   
   public void testFilterIntRange() throws Exception { doTest(">=0");}
   public void testFilterIntRangeArray() throws Exception { doTest(">=0");}
@@ -117,6 +115,15 @@ public class SliceBackwardTest extends SliceTestCase {
   public void testFilterAssertionViolation() throws Exception { doTest("-1");}
   public void testReturnParameter() throws Exception { doTest(); }
   
-  public void testStackFilterSimple() throws Exception { doTest("null",
-                                                                "MainTest:test", "MainTest:foo", "MainTest:main");}
+  public void testStackFilterSimple() throws Exception { 
+    doTest("null", "MainTest:test", "MainTest:foo", "MainTest:main");
+  }
+  
+  public void testStackFilterBridgeMethod() throws Exception {
+    doTest("null", "MainTest$Bar:get", "MainTest$Bar:get", "MainTest:bar", "MainTest:main");
+  }                                                               
+  
+  public void testStackFilterBridgeMethod2() throws Exception {
+    doTest("null", "MainTest$Bar:get", "MainTest$Bar:get", "MainTest:bar", "MainTest:main");
+  }                                                               
 }

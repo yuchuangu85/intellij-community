@@ -10,20 +10,22 @@ import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.ValidationInfo;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiDirectory;
 import com.intellij.psi.PsiNameHelper;
+import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.ColoredListCellRenderer;
 import com.intellij.ui.ListSpeedSearch;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.util.ExceptionUtil;
-import com.intellij.util.Function;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.ui.accessibility.ScreenReader;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.devkit.DevKitBundle;
+import org.jetbrains.idea.devkit.dom.index.IdeaPluginRegistrationIndex;
 import org.jetbrains.idea.devkit.util.ActionData;
 import org.jetbrains.idea.devkit.util.ActionType;
 
@@ -37,7 +39,6 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -83,14 +84,19 @@ public class NewActionDialog extends DialogWrapper implements ActionData {
     init();
     setTitle(DevKitBundle.message("new.action.dialog.title"));
     ActionManager actionManager = ActionManager.getInstance();
-    String[] actionIds = actionManager.getActionIds("");
-    Arrays.sort(actionIds);
+
+    List<String> actionIds = actionManager.getActionIdList("");
+    actionIds.sort(null);
     List<ActionGroup> actionGroups = new ArrayList<>();
-    for(String actionId: actionIds) {
+    for (String actionId : actionIds) {
       if (actionManager.isGroup(actionId)) {
         AnAction anAction = actionManager.getAction(actionId);
         if (anAction instanceof DefaultActionGroup) {
-          actionGroups.add((ActionGroup) anAction);
+          boolean hasDefinedId = !IdeaPluginRegistrationIndex.processGroup(project, actionId, GlobalSearchScope.allScope(project),
+                                                                           group -> false);
+          if (hasDefinedId) {
+            actionGroups.add((ActionGroup)anAction);
+          }
         }
       }
     }
@@ -116,7 +122,7 @@ public class NewActionDialog extends DialogWrapper implements ActionData {
         }
       }
     });
-    new ListSpeedSearch<>(myGroupList, (Function<ActionGroup, String>)o -> ActionManager.getInstance().getId(o));
+    new ListSpeedSearch<>(myGroupList, o -> ActionManager.getInstance().getId(o));
 
     myActionList.setCellRenderer(new MyActionRenderer());
     myActionList.addListSelectionListener(new ListSelectionListener() {
@@ -341,7 +347,7 @@ public class NewActionDialog extends DialogWrapper implements ActionData {
     protected void customizeCellRenderer(@NotNull JList list, AnAction value, int index, boolean selected, boolean hasFocus) {
       append(ActionManager.getInstance().getId(value), SimpleTextAttributes.REGULAR_ATTRIBUTES);
       String text = value.getTemplatePresentation().getText();
-      if (text != null) {
+      if (StringUtil.isNotEmpty(text)) {
         append(" (" + text + ")", SimpleTextAttributes.REGULAR_ATTRIBUTES);
       }
     }

@@ -1085,6 +1085,16 @@ class W {
     doTest 'def bar(String ss) { <caret>ss }', 'java.lang.String'
   }
 
+  void 'test closure param'() {
+    doTest '''\
+interface I { def foo(String s) }
+def bar(I i) {}
+bar { var ->
+  <caret>var
+}
+''', 'java.lang.String'
+  }
+
   void 'test assignment in cycle independent on index'() {
     doTest '''\
 def foo
@@ -1277,4 +1287,5 @@ class C {
 [new C()]*.field.las<caret>t()
 ''', JAVA_LANG_INTEGER
   }
+
 }

@@ -22,10 +22,7 @@ import com.intellij.lang.LanguageAnnotators;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.actionSystem.ex.AnActionListener;
-import com.intellij.openapi.application.ApplicationListener;
-import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.ModalityState;
-import com.intellij.openapi.application.WriteAction;
+import com.intellij.openapi.application.*;
 import com.intellij.openapi.application.impl.LaterInvocator;
 import com.intellij.openapi.command.CommandEvent;
 import com.intellij.openapi.command.CommandListener;
@@ -73,7 +70,6 @@ import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent;
 import com.intellij.profile.ProfileChangeAdapter;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.PsiManagerEx;
-import com.intellij.psi.impl.PsiModificationTrackerImpl;
 import com.intellij.ui.AppUIUtil;
 import com.intellij.util.KeyedLazyInstance;
 import com.intellij.util.ThreeState;
@@ -320,11 +316,14 @@ public final class DaemonListeners implements Disposable {
       }
     }, this);
 
-    LaterInvocator.addModalityStateListener(__ -> {
-      // before showing dialog we are in non-modal context yet, and before closing dialog we are still in modal context
-      boolean inModalContext = Registry.is("ide.perProjectModality") || LaterInvocator.isInModalContext();
-      stopDaemon(inModalContext, "Modality change. Was modal: " + inModalContext);
-      myDaemonCodeAnalyzer.setUpdateByTimerEnabled(inModalContext);
+    LaterInvocator.addModalityStateListener(new ModalityStateListener() {
+      @Override
+      public void beforeModalityStateChanged(boolean entering, @NotNull Object modalEntity) {
+        // before showing dialog we are in non-modal context yet, and before closing dialog we are still in modal context
+        boolean inModalContext = Registry.is("ide.perProjectModality") || LaterInvocator.isInModalContext();
+        stopDaemon(inModalContext, "Modality change. Was modal: " + inModalContext);
+        myDaemonCodeAnalyzer.setUpdateByTimerEnabled(inModalContext);
+      }
     }, this);
 
     connection.subscribe(SeverityRegistrar.SEVERITIES_CHANGED_TOPIC, () -> stopDaemonAndRestartAllFiles("Severities changed"));
@@ -358,15 +357,22 @@ public final class DaemonListeners implements Disposable {
     connection.subscribe(DynamicPluginListener.TOPIC, new DynamicPluginListener() {
       @Override
       public void pluginLoaded(@NotNull IdeaPluginDescriptor pluginDescriptor) {
-        ((PsiModificationTrackerImpl)PsiManager.getInstance(myProject).getModificationTracker()).incCounter();
+        PsiManager.getInstance(myProject).dropPsiCaches();
         stopDaemonAndRestartAllFiles("Plugin installed");
       }
 
       @Override
       public void beforePluginUnload(@NotNull IdeaPluginDescriptor pluginDescriptor, boolean isUpdate) {
-        ((PsiModificationTrackerImpl)PsiManager.getInstance(myProject).getModificationTracker()).incCounter();
-        stopDaemonAndRestartAllFiles("Plugin will be uninstalled");
+        PsiManager.getInstance(myProject).dropPsiCaches();
+        stopDaemon(false, "Plugin will be uninstalled");
         removeHighlightersOnPluginUnload(pluginDescriptor);
+        myDaemonCodeAnalyzer.clearProgressIndicator();
+        IntentionsUI.getInstance(project).invalidate();
+      }
+
+      @Override
+      public void pluginUnloaded(@NotNull IdeaPluginDescriptor pluginDescriptor, boolean isUpdate) {
+        stopDaemonAndRestartAllFiles("Plugin unloaded");
       }
     });
     connection.subscribe(FileHighlightingSettingListener.SETTING_CHANGE, (root, setting) ->
@@ -374,7 +380,7 @@ public final class DaemonListeners implements Disposable {
         PsiFile file = root.getContainingFile();
         if (file != null) {
           // force clearing all PSI caches, including those in WholeFileInspectionFactory
-          ((PsiModificationTrackerImpl)PsiManager.getInstance(myProject).getModificationTracker()).incCounter();
+          PsiManager.getInstance(myProject).dropPsiCaches();
         }
       }));
   }

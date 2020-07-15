@@ -64,8 +64,7 @@ public final class IdeaPluginDescriptorImpl implements IdeaPluginDescriptor {
 
   private @Nullable List<Element> myActionElements;
   // extension point name -> list of extension elements
-  // LinkedHashMap for predictable register order
-  private @Nullable LinkedHashMap<String, List<Element>> epNameToExtensionElements;
+  private @Nullable Map<String, List<Element>> epNameToExtensionElements;
 
   final ContainerDescriptor appContainerDescriptor = new ContainerDescriptor();
   final ContainerDescriptor projectContainerDescriptor = new ContainerDescriptor();
@@ -109,6 +108,11 @@ public final class IdeaPluginDescriptorImpl implements IdeaPluginDescriptor {
     return moduleContainerDescriptor;
   }
 
+  @Override
+  public @NotNull List<IdeaPluginDependency> getDependencies() {
+    return pluginDependencies == null ? Collections.emptyList() : Collections.unmodifiableList(pluginDependencies);
+  }
+
   @ApiStatus.Internal
   public @NotNull List<PluginDependency> getPluginDependencies() {
     return pluginDependencies == null ? Collections.emptyList() : pluginDependencies;
@@ -132,11 +136,12 @@ public final class IdeaPluginDescriptorImpl implements IdeaPluginDescriptor {
 
     XmlReader.readIdAndName(this, element);
 
+    //some information required for "incomplete" plugins can be in included files
+    PathBasedJdomXIncluder.resolveNonXIncludeElement(element, basePath, context, pathResolver);
     if (myId != null && context.isPluginDisabled(myId)) {
       markAsIncomplete(context, null, null);
     }
     else {
-      PathBasedJdomXIncluder.resolveNonXIncludeElement(element, basePath, context, pathResolver);
       if (myId == null || myName == null) {
         // read again after resolve
         XmlReader.readIdAndName(this, element);
@@ -161,6 +166,10 @@ public final class IdeaPluginDescriptorImpl implements IdeaPluginDescriptor {
       Element productElement = element.getChild("product-descriptor");
       if (productElement != null) {
         readProduct(context, productElement);
+      }
+      List<Element> moduleElements = element.getChildren("module");
+      for (Element moduleElement : moduleElements) {
+        readModule(moduleElement);
       }
       return false;
     }
@@ -188,6 +197,10 @@ public final class IdeaPluginDescriptorImpl implements IdeaPluginDescriptor {
     doRead(element, DescriptorListLoadingContext.createSingleDescriptorContext(Collections.emptySet()), this);
   }
 
+  /**
+   * @return {@code true} - if there are compatibility problems with IDE (`depends`, `since-until`).
+   * <br>{@code false} - otherwise
+   */
   private boolean doRead(@NotNull Element element,
                         @NotNull DescriptorListLoadingContext context,
                         @NotNull IdeaPluginDescriptorImpl mainDescriptor) {
@@ -218,20 +231,7 @@ public final class IdeaPluginDescriptorImpl implements IdeaPluginDescriptor {
           break;
 
         case "module":
-          String moduleName = child.getAttributeValue("value");
-          if (moduleName != null) {
-            if (myModules == null) {
-              myModules = Collections.singletonList(PluginId.getId(moduleName));
-            }
-            else {
-              if (myModules.size() == 1) {
-                List<PluginId> singleton = myModules;
-                myModules = new ArrayList<>(4);
-                myModules.addAll(singleton);
-              }
-              myModules.add(PluginId.getId(moduleName));
-            }
-          }
+          readModule(child);
           break;
 
         case "application-components":
@@ -314,6 +314,23 @@ public final class IdeaPluginDescriptorImpl implements IdeaPluginDescriptor {
       }
     }
     return false;
+  }
+
+  private void readModule(Element child) {
+    String moduleName = child.getAttributeValue("value");
+    if (moduleName != null) {
+      if (myModules == null) {
+        myModules = Collections.singletonList(PluginId.getId(moduleName));
+      }
+      else {
+        if (myModules.size() == 1) {
+          List<PluginId> singleton = myModules;
+          myModules = new ArrayList<>(4);
+          myModules.addAll(singleton);
+        }
+        myModules.add(PluginId.getId(moduleName));
+      }
+    }
   }
 
   private void readProduct(@NotNull DescriptorListLoadingContext context, @NotNull Element child) {
@@ -551,7 +568,7 @@ public final class IdeaPluginDescriptorImpl implements IdeaPluginDescriptor {
   public void registerExtensions(@NotNull ExtensionsAreaImpl area,
                                  @NotNull IdeaPluginDescriptorImpl rootDescriptor,
                                  @NotNull ContainerDescriptor containerDescriptor,
-                                 @Nullable List<Runnable> listenerCallbacks) {
+                                 @Nullable List<? super Runnable> listenerCallbacks) {
     Map<String, List<Element>> extensions = containerDescriptor.extensions;
     if (extensions != null) {
       area.registerExtensions(extensions, rootDescriptor, listenerCallbacks);
@@ -834,6 +851,11 @@ public final class IdeaPluginDescriptorImpl implements IdeaPluginDescriptor {
   }
 
   public boolean unloadClassLoader(int timeoutMs) {
+    if (timeoutMs == 0) {
+      myLoader = null;
+      return true;
+    }
+
     GCWatcher watcher = GCWatcher.tracking(myLoader);
     myLoader = null;
     return watcher.tryCollect(timeoutMs);
@@ -849,7 +871,7 @@ public final class IdeaPluginDescriptorImpl implements IdeaPluginDescriptor {
     return myLoader != null ? myLoader : getClass().getClassLoader();
   }
 
-  public boolean getUseIdeaClassLoader() {
+  public boolean isUseIdeaClassLoader() {
     return myUseIdeaClassLoader;
   }
 
@@ -886,9 +908,7 @@ public final class IdeaPluginDescriptorImpl implements IdeaPluginDescriptor {
       epNameToExtensionElements = descriptor.epNameToExtensionElements;
     }
     else if (descriptor.epNameToExtensionElements != null) {
-      descriptor.epNameToExtensionElements.forEach((name, list) -> {
-        addExtensionList(epNameToExtensionElements, name, list);
-      });
+      descriptor.epNameToExtensionElements.forEach((name, list) -> addExtensionList(epNameToExtensionElements, name, list));
     }
 
     if (myActionElements == null) {
@@ -946,6 +966,6 @@ public final class IdeaPluginDescriptorImpl implements IdeaPluginDescriptor {
 
   @Override
   public String toString() {
-    return "PluginDescriptor(name=" + myName + ", id=" + myId + ", path=" + path + ")";
+    return "PluginDescriptor(name=" + myName + ", id=" + myId + ", path=" + path + ", version=" + myVersion + ")";
   }
 }

@@ -2,16 +2,14 @@
 package com.intellij;
 
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.util.DefaultBundleService;
 import com.intellij.util.containers.ConcurrentFactoryMap;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.*;
 
 import java.lang.ref.Reference;
 import java.lang.ref.SoftReference;
-import java.util.Locale;
-import java.util.Map;
-import java.util.MissingResourceException;
-import java.util.ResourceBundle;
+import java.util.*;
 import java.util.function.Supplier;
 
 /**
@@ -33,6 +31,7 @@ import java.util.function.Supplier;
 public abstract class AbstractBundle {
   private static final Logger LOG = Logger.getInstance(AbstractBundle.class);
   private Reference<ResourceBundle> myBundle;
+  private Reference<ResourceBundle> myDefaultBundle;
   @NonNls private final String myPathToBundle;
 
   protected AbstractBundle(@NonNls @NotNull String pathToBundle) {
@@ -40,6 +39,7 @@ public abstract class AbstractBundle {
   }
 
   @NotNull
+  @Contract(pure = true)
   public String getMessage(@NotNull String key, Object @NotNull ... params) {
     return message(getResourceBundle(), key, params);
   }
@@ -98,20 +98,39 @@ public abstract class AbstractBundle {
   @ApiStatus.Internal
   @NotNull
   protected ResourceBundle getResourceBundle(@Nullable ClassLoader classLoader) {
-    ResourceBundle bundle = com.intellij.reference.SoftReference.dereference(myBundle);
-    if (bundle == null) {
-      bundle = getResourceBundle(myPathToBundle, classLoader == null ? getClass().getClassLoader() : classLoader);
+    ResourceBundle bundle;
+    if (DefaultBundleService.isDefaultBundle()) {
+      bundle = getBundle(classLoader, myDefaultBundle);
+      myDefaultBundle = new SoftReference<>(bundle);
+    } else {
+      bundle = getBundle(classLoader, myBundle);
       myBundle = new SoftReference<>(bundle);
     }
     return bundle;
   }
 
+  private ResourceBundle getBundle(@Nullable ClassLoader classLoader, @Nullable Reference<ResourceBundle> bundleReference) {
+    ResourceBundle bundle = com.intellij.reference.SoftReference.dereference(bundleReference);
+    if (bundle != null) {
+      return bundle;
+    }
+    return getResourceBundle(myPathToBundle, classLoader == null ? getClass().getClassLoader() : classLoader);
+  }
+
   private static final Map<ClassLoader, Map<String, ResourceBundle>> ourCache =
+    ConcurrentFactoryMap.createWeakMap(k -> ContainerUtil.createConcurrentSoftValueMap());
+
+  private static final Map<ClassLoader, Map<String, ResourceBundle>> ourDefaultCache =
     ConcurrentFactoryMap.createWeakMap(k -> ContainerUtil.createConcurrentSoftValueMap());
 
   @NotNull
   public ResourceBundle getResourceBundle(@NotNull String pathToBundle, @NotNull ClassLoader loader) {
-    Map<String, ResourceBundle> map = ourCache.get(loader);
+    return DefaultBundleService.isDefaultBundle()
+           ? getResourceBundle(pathToBundle, loader, ourDefaultCache.get(loader))
+           : getResourceBundle(pathToBundle, loader, ourCache.get(loader));
+  }
+
+  public ResourceBundle getResourceBundle(@NotNull String pathToBundle, @NotNull ClassLoader loader, Map<String, ResourceBundle> map) {
     ResourceBundle result = map.get(pathToBundle);
     if (result == null) {
       try {

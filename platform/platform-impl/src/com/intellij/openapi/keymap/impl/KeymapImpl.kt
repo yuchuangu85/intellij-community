@@ -80,7 +80,7 @@ open class KeymapImpl @JvmOverloads constructor(private var dataHolder: SchemeDa
 
   override fun getSchemeState(): SchemeState? = schemeState
 
-  private val actionIdToShortcuts = THashMap<String, MutableList<Shortcut>>()
+  private val actionIdToShortcuts = HashMap<String, MutableList<Shortcut>>()
     get() {
       val dataHolder = dataHolder
       if (dataHolder != null) {
@@ -186,12 +186,9 @@ open class KeymapImpl @JvmOverloads constructor(private var dataHolder: SchemeDa
     otherKeymap.cleanShortcutsCache()
 
     otherKeymap.actionIdToShortcuts.clear()
-    otherKeymap.actionIdToShortcuts.ensureCapacity(actionIdToShortcuts.size)
-    actionIdToShortcuts.forEachEntry { actionId, shortcuts ->
-      otherKeymap.actionIdToShortcuts.put(actionId, SmartList(shortcuts))
-      true
+    for (entry in actionIdToShortcuts.entries) {
+      otherKeymap.actionIdToShortcuts.put(entry.key, ContainerUtil.copyList(entry.value))
     }
-
     // after actionIdToShortcuts (on first access we lazily read itself)
     otherKeymap.parent = parent
     otherKeymap.name = name
@@ -744,6 +741,7 @@ private val visualStudioKeymap = "com.intellij.plugins.visualstudiokeymap"
 private val xcodeKeymap = "com.intellij.plugins.xcodekeymap"
 private val visualAssistKeymap = "com.intellij.plugins.visualassistkeymap"
 private val riderKeymap = "com.intellij.plugins.riderkeymap"
+private val vsCodeKeymap = "com.intellij.plugins.vscodekeymap"
 
 internal fun notifyAboutMissingKeymap(keymapName: String, message: String, isParent: Boolean) {
   val connection = ApplicationManager.getApplication().messageBus.connect()
@@ -775,6 +773,8 @@ internal fun notifyAboutMissingKeymap(keymapName: String, message: String, isPar
             "Xcode" -> xcodeKeymap
             "Rider",
             "Rider OSX"-> riderKeymap
+            "VSCode",
+            "VSCode OSX"-> vsCodeKeymap
             else -> null
           }
           val action: AnAction? = when (pluginId) {

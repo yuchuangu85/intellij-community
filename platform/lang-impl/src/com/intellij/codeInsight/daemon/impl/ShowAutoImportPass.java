@@ -12,6 +12,7 @@ import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInspection.HintAction;
 import com.intellij.injected.editor.EditorWindow;
 import com.intellij.lang.annotation.HighlightSeverity;
+import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.IdeActions;
 import com.intellij.openapi.application.Application;
@@ -21,7 +22,7 @@ import com.intellij.openapi.application.impl.LaterInvocator;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.EditorActivityManager;
-import com.intellij.openapi.editor.EditorFactory;
+import com.intellij.openapi.editor.impl.ImaginaryEditor;
 import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
@@ -176,37 +177,36 @@ public class ShowAutoImportPass extends TextEditorHighlightingPass {
     if (actions.isEmpty()) return;
     Document document = PsiDocumentManager.getInstance(file.getProject()).getDocument(file);
     if (document == null) return;
-    Editor editor = EditorFactory.getInstance().createEditor(document, file.getProject());
-    try {
-      for (HintAction action : actions) {
-        action.fixSilently(editor);
-      }
-    }
-    finally {
-      EditorFactory.getInstance().releaseEditor(editor);
+    Editor editor = new ImaginaryEditor(file.getProject(), document);
+    for (HintAction action : actions) {
+      action.fixSilently(editor);
     }
   }
+
+  /**
+   * Run syntax highlighting and extract hint actions from resulting quick fixes. e.g. import suggestions.
+   * Must be run outside EDT.
+   */
   @NotNull
   public static List<HintAction> getImportHints(@NotNull PsiFile file) {
     if (ApplicationManager.getApplication().isDispatchThread()) {
       // really can't run highlighting from within EDT
       // also, guard against recursive call optimize imports->add imports->optimize imports (in AddImportAction.doAddImport())
-      return Collections.emptyList();
+      throw new IllegalStateException("Must not be run from within EDT"); //return Collections.emptyList();
     }
     Project project = file.getProject();
     Document document = PsiDocumentManager.getInstance(project).getDocument(file);
-    if (document == null || !hasUnresolvedReferences(file)) return Collections.emptyList();
+    if (document == null || InjectedLanguageManager.getInstance(project).isInjectedFragment(file) || !hasUnresolvedReferences(file)) {
+      return Collections.emptyList();
+    }
 
     DaemonProgressIndicator progress = new DaemonProgressIndicator();
     AtomicReference<List<HighlightInfo>> infos = new AtomicReference<>(Collections.emptyList());
-    ((ApplicationImpl)ApplicationManager.getApplication()).executeByImpatientReader(() -> {
-        ProgressManager.getInstance().executeProcessUnderProgress(() -> {
-          infos.set(DaemonCodeAnalyzerEx.getInstanceEx(project).runMainPasses(file, document, progress));
-        }, progress);
-    });
+    ((ApplicationImpl)ApplicationManager.getApplication()).executeByImpatientReader(() ->
+      ProgressManager.getInstance().executeProcessUnderProgress(() ->
+        infos.set(DaemonCodeAnalyzerEx.getInstanceEx(project).runMainPasses(file, document, progress)), progress));
 
     List<HintAction> result = new ArrayList<>(infos.get().size());
-    Editor editor = null;
     for (HighlightInfo info : infos.get()) {
       for (HintAction action : extractHints(info)) {
         if (action.isAvailable(project, null, file)) {
@@ -222,9 +222,12 @@ public class ShowAutoImportPass extends TextEditorHighlightingPass {
     file.accept(new PsiRecursiveElementWalkingVisitor() {
       @Override
       public void visitElement(@NotNull PsiElement element) {
-        if (element instanceof PsiReference && ((PsiReference)element).resolve() == null) {
-          result.set(true);
-          stopWalking();
+        for (PsiReference reference : element.getReferences()) {
+          if (reference.resolve() == null) {
+            result.set(true);
+            stopWalking();
+            break;
+          }
         }
         super.visitElement(element);
       }

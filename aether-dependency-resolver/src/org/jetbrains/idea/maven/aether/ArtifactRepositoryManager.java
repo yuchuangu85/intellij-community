@@ -39,9 +39,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
 import java.util.*;
 
 /**
@@ -52,7 +49,7 @@ import java.util.*;
  * instance of this component should be managed by the code which requires dependency resolution functionality
  * all necessary params like path to local repo should be passed in constructor
  */
-public class ArtifactRepositoryManager {
+public final class ArtifactRepositoryManager {
   private static final VersionScheme ourVersioning = new GenericVersionScheme();
   private static final JreProxySelector ourProxySelector = new JreProxySelector();
   private static final Logger LOG = LoggerFactory.getLogger(ArtifactRepositoryManager.class);
@@ -90,37 +87,59 @@ public class ArtifactRepositoryManager {
 
   public ArtifactRepositoryManager(@NotNull File localRepositoryPath, @NotNull final ProgressConsumer progressConsumer) {
     // recreate remote repository objects to ensure the latest proxy settings are used
-    this(localRepositoryPath, Arrays.asList(createRemoteRepository(MAVEN_CENTRAL_REPOSITORY), createRemoteRepository(JBOSS_COMMUNITY_REPOSITORY)), progressConsumer);
+    this(localRepositoryPath, createDefaultRemoteRepositories(), progressConsumer);
   }
 
-  public ArtifactRepositoryManager(@NotNull File localRepositoryPath, List<RemoteRepository> remoteRepositories, @NotNull final ProgressConsumer progressConsumer) {
+  public ArtifactRepositoryManager(@NotNull File localRepositoryPath, List<RemoteRepository> remoteRepositories, @NotNull ProgressConsumer progressConsumer) {
+    this(localRepositoryPath, remoteRepositories, progressConsumer, false);
+  }
+
+  public ArtifactRepositoryManager(@NotNull File localRepositoryPath, List<RemoteRepository> remoteRepositories, @NotNull ProgressConsumer progressConsumer, boolean offline) {
     myRemoteRepositories.addAll(remoteRepositories);
     final DefaultRepositorySystemSession session = MavenRepositorySystemUtils.newSession();
     if (progressConsumer != ProgressConsumer.DEAF) {
-      session.setTransferListener((TransferListener)Proxy
-        .newProxyInstance(session.getClass().getClassLoader(), new Class[]{TransferListener.class}, new InvocationHandler() {
-          private final EnumSet<TransferEvent.EventType> checkCancelEvents = EnumSet.of(TransferEvent.EventType.INITIATED, TransferEvent.EventType.STARTED, TransferEvent.EventType.PROGRESSED);
+      session.setTransferListener(new TransferListener() {
         @Override
-        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-          final Object event = args[0];
-          if (event instanceof TransferEvent) {
-            final TransferEvent.EventType type = ((TransferEvent)event).getType();
-            if (checkCancelEvents.contains(type) && progressConsumer.isCanceled()) {
-              throw new TransferCancelledException();
-            }
-            progressConsumer.consume(event.toString());
-            //if (type != TransferEvent.EventType.PROGRESSED) {
-            //  progressConsumer.consume(event.toString());
-            //}
-          }
-          return null;
+        public void transferInitiated(TransferEvent event) throws TransferCancelledException {
+          handle(event);
         }
-      }));
+
+        @Override
+        public void transferStarted(TransferEvent event) throws TransferCancelledException {
+          handle(event);
+        }
+
+        @Override
+        public void transferProgressed(TransferEvent event) throws TransferCancelledException {
+          handle(event);
+        }
+
+        @Override
+        public void transferCorrupted(TransferEvent event) {
+        }
+
+        @Override
+        public void transferSucceeded(TransferEvent event) {
+
+        }
+
+        @Override
+        public void transferFailed(TransferEvent event) {
+        }
+
+        private void handle(TransferEvent event) throws TransferCancelledException {
+          if (progressConsumer.isCanceled()) {
+            throw new TransferCancelledException();
+          }
+          progressConsumer.consume(event.toString());
+        }
+      });
     }
     // setup session here
 
     session.setLocalRepositoryManager(ourSystem.newLocalRepositoryManager(session, new LocalRepository(localRepositoryPath)));
     session.setProxySelector(ourProxySelector);
+    session.setOffline(offline);
     session.setReadOnly();
     mySession = session;
   }
@@ -157,11 +176,19 @@ public class ArtifactRepositoryManager {
     );
   }
 
-  public Collection<File> resolveDependency(String groupId, String artifactId, String version, boolean includeTransitiveDependencies,
-                                            List<String> excludedDependencies) throws Exception {
-    final List<File> files = new ArrayList<>();
-    for (Artifact artifact : resolveDependencyAsArtifact(groupId, artifactId, version, EnumSet.of(ArtifactKind.ARTIFACT), includeTransitiveDependencies,
-                                                         excludedDependencies)) {
+  public @NotNull Collection<File> resolveDependency(String groupId,
+                                                     String artifactId,
+                                                     String version,
+                                                     boolean includeTransitiveDependencies,
+                                                     List<String> excludedDependencies) throws Exception {
+    Collection<Artifact> artifacts = resolveDependencyAsArtifact(groupId, artifactId, version, EnumSet.of(ArtifactKind.ARTIFACT),
+                                                                 includeTransitiveDependencies, excludedDependencies);
+    if (artifacts.isEmpty()) {
+      return Collections.emptyList();
+    }
+
+    List<File> files = new ArrayList<>(artifacts.size());
+    for (Artifact artifact : artifacts) {
       files.add(artifact.getFile());
     }
     return files;
@@ -340,6 +367,11 @@ public class ArtifactRepositoryManager {
   public static RemoteRepository createRemoteRepository(RemoteRepository prototype) {
     final String url = prototype.getUrl();
     return new RemoteRepository.Builder(prototype.getId(), prototype.getContentType(), url).setProxy(ourProxySelector.getProxy(url)).build();
+  }
+
+  @NotNull
+  public static List<RemoteRepository> createDefaultRemoteRepositories() {
+    return Arrays.asList(createRemoteRepository(MAVEN_CENTRAL_REPOSITORY), createRemoteRepository(JBOSS_COMMUNITY_REPOSITORY));
   }
 
   private CollectRequest createCollectRequest(String groupId, String artifactId, Collection<VersionConstraint> versions, final Set<ArtifactKind> kinds) {

@@ -7,16 +7,14 @@ import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Pair;
-import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.*;
 import com.intellij.openapi.vfs.impl.ArchiveHandler;
 import com.intellij.openapi.vfs.newvfs.events.*;
 import com.intellij.util.Function;
+import com.intellij.util.containers.CollectionFactory;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.messages.MessageBusConnection;
-import gnu.trove.THashMap;
-import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
@@ -26,9 +24,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
-import static com.intellij.openapi.util.Pair.pair;
-
-public class VfsImplUtil {
+public final class VfsImplUtil {
   private static final Logger LOG = Logger.getInstance(VfsImplUtil.class);
 
   private static final String FILE_SEPARATORS = "/" + (File.separatorChar == '/' ? "" : File.separator);
@@ -91,10 +87,12 @@ public class VfsImplUtil {
         file = file.findChildIfCached(pathElement);
       }
 
-      if (file == null) return pair(null, last);
+      if (file == null) {
+        return new Pair<>(null, last);
+      }
     }
 
-    return pair(file, null);
+    return new Pair<>(file, null);
   }
 
   @Nullable
@@ -144,7 +142,7 @@ public class VfsImplUtil {
     }
 
     Iterable<String> parts = StringUtil.tokenize(normalizedPath.substring(basePath.length()), FILE_SEPARATORS);
-    return pair(root, parts);
+    return new Pair<>(root, parts);
   }
 
   public static void refresh(@NotNull NewVirtualFileSystem vfs, boolean asynchronous) {
@@ -167,7 +165,7 @@ public class VfsImplUtil {
    * <code>
    *  FileDocumentManager.getInstance().saveDocument(document);
    *  runExternalToolToChangeFile(virtualFile.getPath()) // changes file externally in milliseconds, probably without changing file's length
-   *  VfsUtil.markDirtyAndRefresh(true, true, true, virtualFile); // might be replace with {@link #forceSyncRefresh(VirtualFile)}
+   *  VfsUtil.markDirtyAndRefresh(true, true, true, virtualFile); // might be replaced with {@link #forceSyncRefresh(VirtualFile)}
    * </code>
    */
   public static void forceSyncRefresh(@NotNull VirtualFile file) {
@@ -176,8 +174,8 @@ public class VfsImplUtil {
 
   private static final AtomicBoolean ourSubscribed = new AtomicBoolean(false);
   private static final Object ourLock = new Object();
-  private static final Map<String, Pair<ArchiveFileSystem, ArchiveHandler>> ourHandlerCache = new THashMap<>(FileUtil.PATH_HASHING_STRATEGY); // guarded by ourLock
-  private static final Map<String, Set<String>> ourDominatorsMap = new THashMap<>(FileUtil.PATH_HASHING_STRATEGY);
+  private static final Map<String, Pair<ArchiveFileSystem, ArchiveHandler>> ourHandlerCache = CollectionFactory.createFilePathMap(); // guarded by ourLock
+  private static final Map<String, Set<String>> ourDominatorsMap = CollectionFactory.createFilePathMap();
 
   @NotNull
   public static <T extends ArchiveHandler> T getHandler(@NotNull ArchiveFileSystem vfs,
@@ -193,11 +191,11 @@ public class VfsImplUtil {
 
       if (record == null) {
         handler = producer.fun(localPath);
-        record = pair(vfs, handler);
+        record = new Pair<>(vfs, handler);
         ourHandlerCache.put(localPath, record);
 
         forEachDirectoryComponent(localPath, containingDirectoryPath -> {
-          Set<String> handlers = ourDominatorsMap.computeIfAbsent(containingDirectoryPath, __ -> new THashSet<>());
+          Set<String> handlers = ourDominatorsMap.computeIfAbsent(containingDirectoryPath, __ -> new HashSet<>());
           handlers.add(localPath);
         });
       }
@@ -236,20 +234,9 @@ public class VfsImplUtil {
           for (VFileEvent event : events) {
             if (!(event.getFileSystem() instanceof LocalFileSystem)) continue;
 
-            if (event instanceof VFileCreateEvent) continue;  // new files don't affect existing handlers (and getFile() is costly)
-
-            if (event instanceof VFilePropertyChangeEvent &&
-                !VirtualFile.PROP_NAME.equals(((VFilePropertyChangeEvent)event).getPropertyName())) {
-              continue;
-            }
+            if (!(event instanceof VFileContentChangeEvent)) continue;
 
             String path = event.getPath();
-            if (event instanceof VFilePropertyChangeEvent) {
-              path = ((VFilePropertyChangeEvent)event).getOldPath();
-            }
-            else if (event instanceof VFileMoveEvent) {
-              path = ((VFileMoveEvent)event).getOldPath();
-            }
 
             VirtualFile file = event.getFile();
             if (file == null || !file.isDirectory()) {
@@ -306,7 +293,7 @@ public class VfsImplUtil {
 
     private void registerPathToRefresh(@NotNull String path, @NotNull ArchiveFileSystem vfs) {
       if (myRootsToRefresh == null) myRootsToRefresh = new HashSet<>();
-      myRootsToRefresh.add(pair(path, vfs));
+      myRootsToRefresh.add(new Pair<>(path, vfs));
     }
 
     private void scheduleRefresh() {
@@ -329,5 +316,64 @@ public class VfsImplUtil {
       InvalidationState state = invalidate(null, localPath);
       if (state == null) throw new IllegalArgumentException(localPath + " not in " + ourHandlerCache.keySet());
     }
+  }
+
+  /**
+   * check whether {@code event} (in LocalFileSystem) affects some jars and if so, generate appropriate additional JarFileSystem-events and corresponding after-event-actions.
+   * For example, "delete/change/move '/tmp/x.jar'" event should generate "delete jar:///tmp/x.jar!/" events.
+   */
+  @NotNull
+  public static List<VFileDeleteEvent> getJarInvalidationEvents(@NotNull VFileEvent event, @NotNull List<? super Runnable> outApplyActions) {
+    if (!(event instanceof VFileDeleteEvent ||
+          event instanceof VFileMoveEvent ||
+          event instanceof VFilePropertyChangeEvent && VirtualFile.PROP_NAME.equals(((VFilePropertyChangeEvent)event).getPropertyName()))) {
+      return Collections.emptyList();
+    }
+    String path;
+    if (event instanceof VFilePropertyChangeEvent) {
+      path = ((VFilePropertyChangeEvent)event).getOldPath();
+    }
+    else if (event instanceof VFileMoveEvent) {
+      path = ((VFileMoveEvent)event).getOldPath();
+    }
+    else {
+      path = event.getPath();
+    }
+
+    VirtualFile file = event.getFile();
+    if (file == null) {
+      return Collections.emptyList();
+    }
+    Collection<String> jarPaths = ourDominatorsMap.get(path);
+    if (jarPaths == null) {
+      jarPaths = Collections.singletonList(path);
+    }
+    List<VFileDeleteEvent> events = new ArrayList<>(jarPaths.size());
+    for (String jarPath : jarPaths) {
+      Pair<ArchiveFileSystem, ArchiveHandler> handlerPair = ourHandlerCache.get(jarPath);
+      if (handlerPair == null) {
+        continue;
+      }
+      ArchiveFileSystem fileSystem = handlerPair.first;
+      NewVirtualFile root = ManagingFS.getInstance().findRoot(fileSystem.composeRootPath(jarPath), fileSystem);
+      if (root != null) {
+        VFileDeleteEvent jarDeleteEvent = new VFileDeleteEvent(event.getRequestor(), root, event.isFromRefresh());
+        Runnable runnable = () -> {
+          Pair<ArchiveFileSystem, ArchiveHandler> pair = ourHandlerCache.remove(jarPath);
+          if (pair != null) {
+            pair.second.dispose();
+            forEachDirectoryComponent(jarPath, containingDirectoryPath -> {
+              Set<String> handlers = ourDominatorsMap.get(containingDirectoryPath);
+              if (handlers != null && handlers.remove(jarPath) && handlers.isEmpty()) {
+                ourDominatorsMap.remove(containingDirectoryPath);
+              }
+            });
+          }
+        };
+        events.add(jarDeleteEvent);
+        outApplyActions.add(runnable);
+      }
+    }
+    return events;
   }
 }

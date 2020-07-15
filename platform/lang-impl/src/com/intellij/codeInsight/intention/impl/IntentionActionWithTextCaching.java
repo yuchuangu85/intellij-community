@@ -27,9 +27,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
 
-/**
-* @author cdr
-*/
 public class IntentionActionWithTextCaching implements Comparable<IntentionActionWithTextCaching>, PossiblyDumbAware, ShortcutProvider, IntentionActionDelegate {
   private static final Logger LOG = Logger.getInstance(IntentionActionWithTextCaching.class);
   private final List<IntentionAction> myOptionIntentions = new ArrayList<>();
@@ -162,7 +159,7 @@ public class IntentionActionWithTextCaching implements Comparable<IntentionActio
     @NotNull
     @Override
     public String getText() {
-      return myAction.getText();
+      return myText;
     }
 
     @Override

@@ -74,6 +74,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.ide.BuiltInServerManager;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.Border;
 import javax.swing.event.HyperlinkEvent;
@@ -91,14 +92,15 @@ import java.awt.image.RenderedImage;
 import java.awt.image.renderable.RenderContext;
 import java.awt.image.renderable.RenderableImage;
 import java.awt.image.renderable.RenderableImageProducer;
+import java.io.IOException;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.List;
-import java.util.*;
 import java.util.Vector;
+import java.util.*;
 import java.util.regex.Pattern;
 
 public class DocumentationComponent extends JPanel implements Disposable, DataProvider, WidthBasedLayout {
@@ -1170,7 +1172,7 @@ public class DocumentationComponent extends JPanel implements Disposable, DataPr
 
       private Image getImage() {
         if (!myImageLoaded) {
-          Image image = ImageLoader.loadFromUrl(imageUrl);
+          Image image = loadImageFromUrl();
           myImage = ImageUtil.toBufferedImage(image != null ?
                                               image :
                                               ((ImageIcon)UIManager.getLookAndFeelDefaults().get("html.missingImage")).getImage());
@@ -1178,6 +1180,26 @@ public class DocumentationComponent extends JPanel implements Disposable, DataPr
         }
         return myImage;
       }
+
+      @Nullable
+      private Image loadImageFromUrl() {
+        Image image = ImageLoader.loadFromUrl(imageUrl);
+        if (image != null &&
+            image.getWidth(null) > 0 &&
+            image.getHeight(null) > 0) {
+          return image;
+        }
+        try {
+          BufferedImage direct = ImageIO.read(imageUrl);
+          if (direct != null) return ImageUtil.ensureHiDPI(direct, ScaleContext.create(myEditorPane));
+        }
+        catch (IOException e) {
+          //ignore
+        }
+
+        return image;
+      }
+
     }, null));
   }
 
@@ -1279,7 +1301,7 @@ public class DocumentationComponent extends JPanel implements Disposable, DataPr
     }
   }
 
-  private class EditDocumentationSourceAction extends BaseNavigateToSourceAction {
+  private final class EditDocumentationSourceAction extends BaseNavigateToSourceAction {
 
     private EditDocumentationSourceAction() {
       super(true);
@@ -1312,7 +1334,7 @@ public class DocumentationComponent extends JPanel implements Disposable, DataPr
   }
 
 
-  private class ExternalDocAction extends AnAction implements HintManagerImpl.ActionToIgnore {
+  private final class ExternalDocAction extends AnAction implements HintManagerImpl.ActionToIgnore {
     private ExternalDocAction() {
       super(CodeInsightBundle.message("javadoc.action.view.external"), null, AllIcons.Actions.PreviousOccurence);
       registerCustomShortcutSet(ActionManager.getInstance().getAction(IdeActions.ACTION_EXTERNAL_JAVADOC).getShortcutSet(), null);
@@ -1792,7 +1814,7 @@ public class DocumentationComponent extends JPanel implements Disposable, DataPr
     }
   }
 
-  private class MyScalingImageView extends ImageView {
+  private final class MyScalingImageView extends ImageView {
     private MyScalingImageView(Element elem) {super(elem);}
 
     @Override

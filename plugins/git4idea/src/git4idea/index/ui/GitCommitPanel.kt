@@ -8,6 +8,7 @@ import com.intellij.openapi.actionSystem.ex.CheckboxAction
 import com.intellij.openapi.editor.colors.EditorColorsListener
 import com.intellij.openapi.editor.colors.EditorColorsScheme
 import com.intellij.openapi.editor.ex.EditorEx
+import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComponentContainer
 import com.intellij.openapi.util.Disposer
@@ -34,6 +35,13 @@ import javax.swing.border.EmptyBorder
 abstract class GitCommitPanel(private val project: Project,
                               parent: Disposable) : BorderLayoutPanel(), EditorColorsListener, ComponentContainer, DataProvider {
   var isAmend: Boolean = false
+    internal set(value) {
+      if (field != value) {
+        field = value
+        commitButton.text = getCommitText()
+        updateCommitMessage()
+      }
+    }
 
   private var lastCommitMessage: String = ""
   private var lastAmendMessage: String = ""
@@ -51,6 +59,7 @@ abstract class GitCommitPanel(private val project: Project,
 
   private fun buildPanel(): Component {
     val centerPanel = JBUI.Panels.simplePanel()
+    centerPanel.background = getButtonPanelBackground()
 
     val amendActionToolbar = ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN,
                                                                              DefaultActionGroup(AmendAction()), true)
@@ -58,13 +67,12 @@ abstract class GitCommitPanel(private val project: Project,
     amendActionToolbar.setReservePlaceAutoPopupIcon(false)
     amendActionToolbar.component.isOpaque = false
     amendActionToolbar.component.border = null
-    amendActionToolbar.component.background = getButtonPanelBackground()
 
-    val bottomPanel = JBPanel<JBPanel<*>>(HorizontalLayout(JBUI.scale(4), SwingConstants.CENTER))
-    bottomPanel.background = getButtonPanelBackground()
+    val bottomPanel = JBUI.Panels.simplePanel()
+    bottomPanel.isOpaque = false
     bottomPanel.border = getButtonPanelBorder()
-    bottomPanel.add(commitButton)
-    bottomPanel.add(amendActionToolbar.component)
+    bottomPanel.addToLeft(commitButton)
+    bottomPanel.addToRight(amendActionToolbar.component)
 
     commitMessage.editorField.addSettingsProvider { it.setBorder(JBUI.Borders.emptyLeft(6)) }
     commitMessage.editorField.setPlaceholder(VcsBundle.message("commit.message.placeholder"))
@@ -78,6 +86,15 @@ abstract class GitCommitPanel(private val project: Project,
   protected abstract fun rootsToCommit(): Collection<VcsRoot>
 
   protected abstract fun isFocused(): Boolean
+
+  internal fun createCommitAction(): AnAction {
+    return object: DumbAwareAction() {
+      override fun actionPerformed(e: AnActionEvent) = performCommit()
+      override fun update(e: AnActionEvent) {
+        e.presentation.isEnabledAndVisible = rootsToCommit().isNotEmpty()
+      }
+    }
+  }
 
   private fun getButtonPanelBorder(): Border =
     EmptyBorder(0, JBUI.scale(4), 0, 0)
@@ -138,11 +155,7 @@ abstract class GitCommitPanel(private val project: Project,
   inner class AmendAction : CheckboxAction(VcsBundle.messagePointer("checkbox.amend")) {
     override fun isSelected(e: AnActionEvent): Boolean = isAmend
     override fun setSelected(e: AnActionEvent, state: Boolean) {
-      if (isAmend != state) {
-        isAmend = state
-        commitButton.text = getCommitText()
-        updateCommitMessage()
-      }
+      isAmend = state
     }
   }
 }

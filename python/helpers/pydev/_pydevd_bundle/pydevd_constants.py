@@ -76,7 +76,7 @@ elif IS_IRONPYTHON:
 
 IS_64BIT_PROCESS = sys.maxsize > (2 ** 32)
 
-IS_LINUX = sys.platform in ('linux', 'linux2')
+IS_LINUX = sys.platform.startswith('linux')
 IS_MACOS = sys.platform == 'darwin'
 
 IS_PYTHON_STACKLESS = "stackless" in sys.version.lower()
@@ -139,6 +139,11 @@ try:
 except:
     # Jython 2.1 doesn't accept that construct
     SUPPORT_GEVENT = False
+
+try:
+    DROP_INTO_DEBUGGER_ON_FAILED_TESTS = os.environ.get('DROP_INTO_DEBUGGER_ON_FAILED_TESTS', 'False') == 'True'
+except:
+    DROP_INTO_DEBUGGER_ON_FAILED_TESTS = False
 
 # At the moment gevent supports Python >= 2.6 and Python >= 3.3
 USE_LIB_COPY = SUPPORT_GEVENT and \

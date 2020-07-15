@@ -229,16 +229,17 @@ public class EditorPainter implements TextDrawingCallback {
     }
 
     private void paintRightMargin() {
-      if (!isMarginShown()) return;
-
-      Color visualGuidesColor = myEditor.getColorsScheme().getColor(EditorColors.VISUAL_INDENT_GUIDE_COLOR);
-      if (visualGuidesColor != null) {
-        myGraphics.setColor(visualGuidesColor);
-        for (Integer marginX : myCorrector.softMarginsX()) {
-          LinePainter2D.paint(myGraphics, marginX, 0, marginX, myClip.height);
+      if (myEditor.getSettings().isRightMarginShown()) {
+        Color visualGuidesColor = myEditor.getColorsScheme().getColor(EditorColors.VISUAL_INDENT_GUIDE_COLOR);
+        if (visualGuidesColor != null) {
+          myGraphics.setColor(visualGuidesColor);
+          for (Integer marginX : myCorrector.softMarginsX()) {
+            LinePainter2D.paint(myGraphics, marginX, 0, marginX, myClip.height);
+          }
         }
       }
 
+      if (!isMarginShown()) return;
       myGraphics.setColor(myEditor.getColorsScheme().getColor(EditorColors.RIGHT_MARGIN_COLOR));
       float baseMarginWidth = getBaseMarginWidth(myView);
       int baseMarginX = myCorrector.marginX(baseMarginWidth);
@@ -647,7 +648,11 @@ public class EditorPainter implements TextDrawingCallback {
         if (bgColor == null && attrs.getBackgroundColor() != null) bgColor = attrs.getBackgroundColor();
         if (effectColor == null && attrs.getEffectColor() != null) {
           EffectType type = attrs.getEffectType();
-          if (type != null && type != EffectType.BOXED && type != EffectType.ROUNDED_BOX && type != EffectType.STRIKEOUT) {
+          if (type != null &&
+              type != EffectType.BOXED &&
+              type != EffectType.ROUNDED_BOX &&
+              type != EffectType.SLIGHTLY_WIDER_BOX &&
+              type != EffectType.STRIKEOUT) {
             effectColor = attrs.getEffectColor();
             effectType = type;
           }
@@ -927,6 +932,7 @@ public class EditorPainter implements TextDrawingCallback {
       }
 
       boolean rounded = borderDescriptor.effectType == EffectType.ROUNDED_BOX;
+      int margin = borderDescriptor.effectType == EffectType.SLIGHTLY_WIDER_BOX ? 1 : 0;
       myGraphics.setColor(borderDescriptor.effectColor);
       VisualPosition startPosition = myView.offsetToVisualPosition(startOffset, true, false);
       VisualPosition endPosition = myView.offsetToVisualPosition(endOffset, false, true);
@@ -935,7 +941,10 @@ public class EditorPainter implements TextDrawingCallback {
         TFloatArrayList ranges = adjustedLogicalRangeToVisualRanges(startOffset, endOffset);
         for (int i = 0; i < ranges.size() - 1; i += 2) {
           float startX = myCorrector.singleLineBorderStart(ranges.get(i));
-          float endX = myCorrector.singleLineBorderEnd(ranges.get(i + 1));
+          if (startX - margin >= myCorrector.startX(startPosition.line)) {
+            startX -= margin;
+          }
+          float endX = myCorrector.singleLineBorderEnd(ranges.get(i + 1)) + margin;
           drawSimpleBorder(startX, endX, y, rounded);
         }
       }

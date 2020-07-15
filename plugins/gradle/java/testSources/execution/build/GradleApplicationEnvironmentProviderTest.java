@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.execution.build;
 
 import com.intellij.execution.*;
@@ -22,7 +22,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.gradle.importing.GradleBuildScriptBuilderEx;
 import org.jetbrains.plugins.gradle.importing.GradleSettingsImportingTestCase;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 /**
@@ -30,7 +29,6 @@ import org.junit.Test;
  */
 public class GradleApplicationEnvironmentProviderTest extends GradleSettingsImportingTestCase {
 
-  @Before
   @Override
   public void setUp() throws Exception {
     super.setUp();
@@ -39,7 +37,7 @@ public class GradleApplicationEnvironmentProviderTest extends GradleSettingsImpo
 
   @Test
   public void testApplicationRunConfigurationSettingsImport() throws Exception {
-    PlatformTestUtil.getOrCreateProjectTestBaseDir(myProject);
+    PlatformTestUtil.getOrCreateProjectBaseDir(myProject);
     @Language("Java")
     String appClass = "package my;\n" +
                       "import java.util.Arrays;\n" +
@@ -106,7 +104,7 @@ public class GradleApplicationEnvironmentProviderTest extends GradleSettingsImpo
   }
 
   @NotNull
-  private String runAppAndGetOutput(RunnerAndConfigurationSettings configurationSettings) {
+  private static String runAppAndGetOutput(RunnerAndConfigurationSettings configurationSettings) {
     final Semaphore done = new Semaphore();
     done.down();
     ExternalSystemProgressNotificationManager notificationManager =

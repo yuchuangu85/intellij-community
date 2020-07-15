@@ -2,6 +2,7 @@
 
 package com.intellij.refactoring.suggested
 
+import com.intellij.codeInsight.FileModificationService
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CustomShortcutSet
@@ -148,6 +149,7 @@ internal fun performSuggestedRefactoring(
           if (!isOk) {
             SuggestedRefactoringFeatureUsage.logEvent(SuggestedRefactoringFeatureUsage.POPUP_CANCELED, refactoringData, state, actionPlace)
           }
+          Disposer.dispose(component)
         }
       )
       component.onOk = callbacks.onOk
@@ -314,6 +316,8 @@ private fun performWithDumbEditor(editor: Editor, action: () -> Unit) {
 }
 
 private fun performRename(refactoringSupport: SuggestedRefactoringSupport, data: SuggestedRenameData, project: Project, editor: Editor) {
+  if (!FileModificationService.getInstance().preparePsiElementForWrite(data.declaration)) return
+
   val relativeCaretOffset = editor.caretModel.offset - refactoringSupport.anchorOffset(data.declaration)
 
   val newName = data.declaration.name!!

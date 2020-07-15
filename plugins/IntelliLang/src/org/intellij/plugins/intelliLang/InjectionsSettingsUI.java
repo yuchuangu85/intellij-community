@@ -302,9 +302,8 @@ public final class InjectionsSettingsUI extends SearchableConfigurable.Parent.Ab
           if (place.isEnabled()) enablePlacesCount++;
         }
       }
-      myCountLabel.setText(IntelliLangBundle
-                             .message("label.text.0.injection.1.2.of.3.place.4.enabled", items.size(), items.size() > 1 ? "s" : "",
-                                      enablePlacesCount, placesCount, placesCount > 1 ? "s" : ""));
+      myCountLabel.setText(
+        IntelliLangBundle.message("label.text.0.injection.1.2.of.3.place.4.enabled", items.size(), enablePlacesCount, placesCount));
     }
     else {
       myCountLabel.setText(IntelliLangBundle.message("label.text.no.injections.configured"));
@@ -456,7 +455,7 @@ public final class InjectionsSettingsUI extends SearchableConfigurable.Parent.Ab
     return "reference.settings.injection.language.injection.settings";
   }
 
-  private class InjectionsTable extends TableView<InjInfo> {
+  private final class InjectionsTable extends TableView<InjInfo> {
     private InjectionsTable(final List<InjInfo> injections) {
       super(new ListTableModel<>(createInjectionColumnInfos(), injections, 1));
       setAutoResizeMode(AUTO_RESIZE_LAST_COLUMN);
@@ -854,7 +853,7 @@ public final class InjectionsSettingsUI extends SearchableConfigurable.Parent.Ab
     }
   }
 
-  private static class InjInfo {
+  private static final class InjInfo {
     final BaseInjection injection;
     final CfgInfo cfgInfo;
     final boolean bundled;

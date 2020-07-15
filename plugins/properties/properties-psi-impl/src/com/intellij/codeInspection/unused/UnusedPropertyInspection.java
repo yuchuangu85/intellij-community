@@ -29,9 +29,6 @@ import org.jetbrains.annotations.Nullable;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-/**
- * @author cdr
- */
 public class UnusedPropertyInspection extends PropertiesInspectionBase {
   public static final String SHORT_NAME = "UnusedProperty";
   private static final Logger LOG = Logger.getInstance(UnusedPropertyInspection.class);
@@ -85,7 +82,8 @@ public class UnusedPropertyInspection extends PropertiesInspectionBase {
         ASTNode[] nodes = propertyNode.getChildren(null);
         PsiElement key = nodes.length == 0 ? property : nodes[0].getPsi();
         LocalQuickFix fix = PropertiesQuickFixFactory.getInstance().createRemovePropertyLocalFix();
-        holder.registerProblem(key, PropertiesBundle.message("unused.property.problem.descriptor.name"),
+        holder.registerProblem(key, isOnTheFly ? PropertiesBundle.message("unused.property.problem.descriptor.name") 
+                                               : PropertiesBundle.message("unused.property.problem.descriptor.name.offline", property.getUnescapedKey()),
                                ProblemHighlightType.LIKE_UNUSED_SYMBOL, fix);
       }
     };

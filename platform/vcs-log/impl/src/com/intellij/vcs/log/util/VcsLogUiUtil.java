@@ -47,7 +47,7 @@ import java.util.function.Predicate;
 
 import static com.intellij.vcs.log.ui.AbstractVcsLogUi.LOG_HIGHLIGHTER_FACTORY_EP;
 
-public class VcsLogUiUtil {
+public final class VcsLogUiUtil {
   @NotNull
   public static JComponent installProgress(@NotNull JComponent component,
                                            @NotNull VcsLogData logData,
@@ -199,7 +199,14 @@ public class VcsLogUiUtil {
     }
   }
 
-  private static class VcsLogPlaceNavigator implements Place.Navigator {
+  @NotNull
+  public static Dimension expandToFitToolbar(@NotNull Dimension size, @NotNull JComponent toolbar) {
+    Dimension preferredSize = toolbar.getPreferredSize();
+    int minToolbarSize = Math.round(Math.min(preferredSize.width, preferredSize.height) * 1.5f);
+    return new Dimension(Math.max(size.width, minToolbarSize), Math.max(size.height, minToolbarSize));
+  }
+
+  private static final class VcsLogPlaceNavigator implements Place.Navigator {
     @NonNls private static final String PLACE_KEY = "Vcs.Log.Ui.History.PlaceKey";
     @NotNull private final VcsLogUiEx myUi;
 

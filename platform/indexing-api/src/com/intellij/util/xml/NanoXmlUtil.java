@@ -21,7 +21,7 @@ import java.io.Reader;
 import java.io.StringReader;
 import java.util.Properties;
 
-public class NanoXmlUtil {
+public final class NanoXmlUtil {
   private static final Logger LOG = Logger.getInstance(NanoXmlUtil.class);
 
   private NanoXmlUtil() {
@@ -290,7 +290,7 @@ public class NanoXmlUtil {
     }
   }
 
-  public static class ParserStoppedXmlException extends XMLException {
+  public static final class ParserStoppedXmlException extends XMLException {
     public static final ParserStoppedXmlException INSTANCE = new ParserStoppedXmlException();
 
     private ParserStoppedXmlException() {

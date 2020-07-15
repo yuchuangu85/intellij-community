@@ -18,7 +18,6 @@ package com.intellij.diagnostic.hprof.analysis
 import com.intellij.diagnostic.hprof.classstore.ClassDefinition
 import com.intellij.diagnostic.hprof.histogram.Histogram
 import com.intellij.diagnostic.hprof.navigator.ObjectNavigator
-import com.intellij.diagnostic.hprof.util.IntList
 import com.intellij.diagnostic.hprof.util.PartialProgressIndicator
 import com.intellij.diagnostic.hprof.visitors.HistogramVisitor
 import com.google.common.base.Stopwatch
@@ -33,7 +32,11 @@ import gnu.trove.TIntHashSet
 import gnu.trove.TIntIntHashMap
 import gnu.trove.TLongArrayList
 
-class AnalyzeGraph(private val analysisContext: AnalysisContext) {
+fun analyzeGraph(analysisContext: AnalysisContext, progress: ProgressIndicator): String {
+  return AnalyzeGraph(analysisContext).analyze(progress)
+}
+
+open class AnalyzeGraph(protected val analysisContext: AnalysisContext) {
 
   private var strongRefHistogram: Histogram? = null
   private var softWeakRefHistogram: Histogram? = null
@@ -50,7 +53,7 @@ class AnalyzeGraph(private val analysisContext: AnalysisContext) {
 
   private val nominatedInstances = HashMap<ClassDefinition, TIntHashSet>()
 
-  fun analyze(progress: ProgressIndicator): String {
+  open fun analyze(progress: ProgressIndicator): String {
     val sb = StringBuilder()
 
     val includePerClassSection = analysisContext.config.perClassOptions.classNames.isNotEmpty()
@@ -166,7 +169,7 @@ class AnalyzeGraph(private val analysisContext: AnalysisContext) {
 
   private val config = analysisContext.config
 
-  private fun traverseInstanceGraph(progress: ProgressIndicator): String {
+  protected fun traverseInstanceGraph(progress: ProgressIndicator): String {
     val result = StringBuilder()
 
     val nav = analysisContext.navigator
@@ -203,14 +206,16 @@ class AnalyzeGraph(private val analysisContext: AnalysisContext) {
       }
     }
 
-    // Mark all class object as to be visited, set them as their own parents
-    classStore.forEachClass { classDefinition ->
-      addIdToSetIfOrphan(rootsSet, classDefinition.id.toInt())
-      classDefinition.staticFields.forEach { staticField ->
-        addIdToSetIfOrphan(rootsSet, staticField.objectId.toInt())
-      }
-      classDefinition.constantFields.forEach { objectId ->
-        addIdToSetIfOrphan(rootsSet, objectId.toInt())
+    if (analysisContext.config.traverseOptions.includeClassesAsRoots) {
+      // Mark all class object as to be visited, set them as their own parents
+      classStore.forEachClass { classDefinition ->
+        addIdToSetIfOrphan(rootsSet, classDefinition.id.toInt())
+        classDefinition.objectStaticFields.forEach { staticField ->
+          addIdToSetIfOrphan(rootsSet, staticField.value.toInt())
+        }
+        classDefinition.constantFields.forEach { objectId ->
+          addIdToSetIfOrphan(rootsSet, objectId.toInt())
+        }
       }
     }
 

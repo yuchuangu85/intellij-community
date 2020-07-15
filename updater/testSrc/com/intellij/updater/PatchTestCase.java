@@ -20,8 +20,8 @@ public abstract class PatchTestCase extends UpdaterTestCase {
   protected File myOlderDir;
 
   @Override
-  public void setUp() throws Exception {
-    super.setUp();
+  public void before() throws Exception {
+    super.before();
 
     myOlderDir = getTempFile("oldDir");
     myNewerDir = getTempFile("newDir");
@@ -65,7 +65,7 @@ public abstract class PatchTestCase extends UpdaterTestCase {
   }
 
   protected static Map<String, Long> digest(Patch patch, File dir) throws IOException {
-    return new TreeMap<>(patch.digestFiles(dir, Collections.emptyList(), false));
+    return new TreeMap<>(patch.digestFiles(dir, Collections.emptySet(), false));
   }
 
   protected static List<PatchAction> sortActions(List<PatchAction> actions) {

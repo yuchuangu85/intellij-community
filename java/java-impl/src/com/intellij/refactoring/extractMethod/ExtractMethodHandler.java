@@ -29,8 +29,6 @@ import com.intellij.openapi.editor.LogicalPosition;
 import com.intellij.openapi.editor.ScrollType;
 import com.intellij.openapi.editor.SelectionModel;
 import com.intellij.openapi.editor.colors.EditorColors;
-import com.intellij.openapi.editor.colors.EditorColorsManager;
-import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.project.Project;
@@ -47,7 +45,8 @@ import com.intellij.refactoring.HelpID;
 import com.intellij.refactoring.IntroduceTargetChooser;
 import com.intellij.refactoring.RefactoringActionHandler;
 import com.intellij.refactoring.RefactoringBundle;
-import com.intellij.refactoring.extractMethod.newImpl.*;
+import com.intellij.refactoring.extractMethod.newImpl.ExtractMethodHelper;
+import com.intellij.refactoring.extractMethod.newImpl.MethodExtractor;
 import com.intellij.refactoring.extractMethod.preview.ExtractMethodPreviewManager;
 import com.intellij.refactoring.introduceVariable.IntroduceVariableBase;
 import com.intellij.refactoring.listeners.RefactoringEventData;
@@ -169,7 +168,9 @@ public class ExtractMethodHandler implements RefactoringActionHandler, ContextAw
 
   public static void invokeOnElements(@NotNull Project project, final Editor editor, PsiFile file, PsiElement @NotNull [] elements) {
     if (Registry.is("java.refactoring.extractMethod.newImplementation") && canUseNewImpl(project, file, elements)) {
-      new MethodExtractor().doExtract(editor, getRefactoringName(), HelpID.EXTRACT_METHOD);
+      TextRange selection = ExtractMethodHelper.findEditorSelection(editor);
+      if (selection == null && elements.length == 1) selection = elements[0].getTextRange();
+      if (selection != null) new MethodExtractor().doExtract(file, selection, getRefactoringName(), HelpID.EXTRACT_METHOD);
       return;
     }
 
@@ -283,9 +284,8 @@ public class ExtractMethodHandler implements RefactoringActionHandler, ContextAw
     if (e.getFile() == file) {
       final TextRange textRange = e.getTextRange();
       final HighlightManager highlightManager = HighlightManager.getInstance(project);
-      EditorColorsManager colorsManager = EditorColorsManager.getInstance();
-      TextAttributes attributes = colorsManager.getGlobalScheme().getAttributes(EditorColors.SEARCH_RESULT_ATTRIBUTES);
-      highlightManager.addRangeHighlight(editor, textRange.getStartOffset(), textRange.getEndOffset(), attributes, true, null);
+      highlightManager.addRangeHighlight(editor, textRange.getStartOffset(), textRange.getEndOffset(), 
+                                         EditorColors.SEARCH_RESULT_ATTRIBUTES, true, null);
       final LogicalPosition logicalPosition = editor.offsetToLogicalPosition(textRange.getStartOffset());
       editor.getScrollingModel().scrollTo(logicalPosition, ScrollType.MAKE_VISIBLE);
       WindowManager.getInstance().getStatusBar(project).setInfo(RefactoringBundle.message("press.escape.to.remove.the.highlighting"));

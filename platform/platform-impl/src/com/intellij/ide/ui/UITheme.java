@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.ui;
 
 import com.google.common.hash.Hasher;
@@ -30,12 +30,17 @@ import javax.swing.plaf.BorderUIResource;
 import javax.swing.plaf.ColorUIResource;
 import javax.swing.plaf.IconUIResource;
 import java.awt.*;
+import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.function.Function;
 
 import static com.intellij.util.ui.JBUI.Borders.customLine;
@@ -44,7 +49,7 @@ import static com.intellij.util.ui.JBUI.asUIResource;
 /**
  * @author Konstantin Bulenkov
  */
-public class UITheme {
+public final class UITheme {
   public static final String FILE_EXT_ENDING = ".theme.json";
 
   private static final Logger LOG = Logger.getInstance(UITheme.class);
@@ -58,6 +63,7 @@ public class UITheme {
   private Map<String, Object> icons;
   private IconPathPatcher patcher;
   private Map<String, Object> background;
+  private Map<String, Object> emptyFrameBackground;
   private Map<String, Object> colors;
   private ClassLoader providerClassLoader = getClass().getClassLoader();
   private String editorSchemeName;
@@ -75,6 +81,34 @@ public class UITheme {
 
   public String getAuthor() {
     return author;
+  }
+
+  public URL getResource(String path) {
+    if (isTempTheme()) {
+      File file = new File(path);
+      if (file.exists()) {
+        try {
+          return file.toURI().toURL();
+        }
+        catch (MalformedURLException e) {
+          LOG.warn(e);
+        }
+      }
+    }
+    return getProviderClassLoader().getResource(path);
+  }
+
+  public InputStream getResourceAsStream(String path) {
+    URL url = getResource(path);
+    try {
+      return url != null ? url.openStream() : null;
+    } catch (IOException e) {
+      return null;
+    }
+  }
+
+  private boolean isTempTheme() {
+    return "Temp theme".equals(id);
   }
 
   @NotNull
@@ -199,8 +233,8 @@ public class UITheme {
 
               private void patchColorAttribute(@NotNull Element svg, String attrName) {
                 String color = svg.getAttribute(attrName);
-                if (color != null) {
-                  String newColor = newPalette.get(StringUtil.toLowerCase(color));
+                if (!StringUtil.isEmpty(color)) {
+                  String newColor = newPalette.get(toCanonicalColor(color));
                   if (newColor != null) {
                     svg.setAttribute(attrName, newColor);
                     if (alphas.get(newColor) != null) {
@@ -216,6 +250,15 @@ public class UITheme {
     }
 
     return theme;
+  }
+
+  private static String toCanonicalColor(String color) {
+    String s = StringUtil.toLowerCase(color);
+    //todo[kb]: add support for red, white, black, and other named colors
+    if (s.startsWith("#") && s.length() < 7) {
+      s = "#" + ColorUtil.toHex(ColorUtil.fromHex(s));
+    }
+    return s;
   }
 
   private static String toColorString(String key, boolean darkTheme) {
@@ -288,6 +331,10 @@ public class UITheme {
 
   public Map<String, Object> getBackground() {
     return background;
+  }
+
+  public Map<String, Object> getEmptyFrameBackground() {
+    return emptyFrameBackground;
   }
 
   public void applyProperties(UIDefaults defaults) {
@@ -567,10 +614,7 @@ public class UITheme {
     }
   }
 
-  //
-  //json deserialization methods
-  //
-
+  //<editor-fold desc="JSON deserialization methods">
   @SuppressWarnings("unused")
   private void setName(String name) {
     this.name = name;
@@ -605,6 +649,10 @@ public class UITheme {
     this.background = background;
   }
 
+  public void setEmptyFrameBackground(Map<String, Object> emptyFrameBackground) {
+    this.emptyFrameBackground = emptyFrameBackground;
+  }
+
   public Map<String, Object> getColors() {
     return colors;
   }
@@ -612,4 +660,5 @@ public class UITheme {
   public void setColors(Map<String, Object> colors) {
     this.colors = colors;
   }
+  //</editor-fold>
 }

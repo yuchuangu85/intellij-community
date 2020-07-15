@@ -10,6 +10,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.QualifiedName;
+import com.intellij.util.ObjectUtils;
 import com.jetbrains.python.PyNames;
 import com.jetbrains.python.PyTokenTypes;
 import com.jetbrains.python.PythonDialectsTokenSetProvider;
@@ -19,6 +20,7 @@ import com.jetbrains.python.codeInsight.dataflow.scope.ScopeUtil;
 import com.jetbrains.python.codeInsight.typing.PyTypingTypeProvider;
 import com.jetbrains.python.documentation.docstrings.DocStringUtil;
 import com.jetbrains.python.psi.*;
+import com.jetbrains.python.psi.impl.ParamHelper;
 import com.jetbrains.python.psi.impl.PyBuiltinCache;
 import com.jetbrains.python.psi.impl.PyClassImpl;
 import com.jetbrains.python.psi.resolve.PyResolveContext;
@@ -252,11 +254,11 @@ public class PythonDocumentationProvider implements DocumentationProvider {
         }
       }
       else if (parameter.getParameter() instanceof PySlashParameter) {
-        paramName = "/";
+        paramName = PySlashParameter.TEXT;
         showType = false;
       }
       else if (parameter.getParameter() instanceof PySingleStarParameter) {
-        paramName = "*";
+        paramName = PySingleStarParameter.TEXT;
         showType = false;
       }
       else {
@@ -271,11 +273,7 @@ public class PythonDocumentationProvider implements DocumentationProvider {
         result.append(formatTypeWithLinks(paramType, function, context));
       }
       final String defaultValue = parameter.getDefaultValueText();
-      if (defaultValue != null) {
-        // According to PEP 8 equal sign should be surrounded by spaces if annotation is present
-        result.append(showType ? " = " : "=");
-        result.append(escaped(defaultValue));
-      }
+      result.append(escaped(ObjectUtils.notNull(ParamHelper.getDefaultValuePartInSignature(defaultValue, showType), "")));
       first = false;
     }
 
@@ -373,7 +371,7 @@ public class PythonDocumentationProvider implements DocumentationProvider {
   @NotNull
   static ChainIterable<String> describeDecorators(@NotNull PyDecoratable decoratable,
                                                   @NotNull Function<String, String> escapedCalleeMapper,
-                                                  @NotNull Function<String, String> escaper,
+                                                  @NotNull Function<@NotNull String, @NotNull String> escaper,
                                                   @NotNull String separator,
                                                   @NotNull String suffix) {
     final ChainIterable<String> result = new ChainIterable<>();
@@ -401,13 +399,13 @@ public class PythonDocumentationProvider implements DocumentationProvider {
   @NotNull
   static ChainIterable<String> describeClass(@NotNull PyClass cls,
                                              @NotNull Function<? super String, String> escapedNameMapper,
-                                             @NotNull Function<? super String, String> escaper,
+                                             @NotNull Function<@NotNull ? super String, @NotNull String> escaper,
                                              boolean link,
                                              boolean linkAncestors,
                                              @NotNull TypeEvalContext context) {
     final ChainIterable<String> result = new ChainIterable<>();
 
-    final String name = escapedNameMapper.apply(escaper.apply(cls.getName()));
+    final String name = escapedNameMapper.apply(escaper.apply(StringUtil.notNullize(cls.getName(), PyNames.UNNAMED_ELEMENT)));
     result.addItem(escaper.apply("class "));
     result.addItem(link ? PyDocumentationLink.toContainingClass(name) : name);
 
@@ -493,7 +491,7 @@ public class PythonDocumentationProvider implements DocumentationProvider {
   @NotNull
   private static Iterable<String> describeDecorator(@NotNull PyDecorator decorator,
                                                     @NotNull Function<String, String> escapedCalleeMapper,
-                                                    @NotNull Function<String, String> escaper) {
+                                                    @NotNull Function<@NotNull String, @NotNull String> escaper) {
     final ChainIterable<String> result = new ChainIterable<>();
 
     result
@@ -511,8 +509,9 @@ public class PythonDocumentationProvider implements DocumentationProvider {
   // provides ctrl+Q doc
   @Override
   public String generateDoc(@NotNull PsiElement element, @Nullable PsiElement originalElement) {
-    if (PythonRuntimeService.getInstance().isInPydevConsole(element) || originalElement != null && PythonRuntimeService.getInstance().isInPydevConsole(originalElement)) {
-      return PythonRuntimeService.getInstance().createPydevDoc(element, originalElement);
+    final PythonRuntimeService runtimeService = PythonRuntimeService.getInstance();
+    if (runtimeService.isInPydevConsole(element) || originalElement != null && runtimeService.isInPydevConsole(originalElement)) {
+      return runtimeService.createPydevDoc(element, originalElement);
     }
     return new PyDocumentationBuilder(element, originalElement).build();
   }

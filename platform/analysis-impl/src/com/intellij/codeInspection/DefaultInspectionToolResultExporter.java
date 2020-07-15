@@ -335,7 +335,10 @@ public class DefaultInspectionToolResultExporter implements InspectionToolResult
 
   @Override
   public void suppressProblem(@NotNull CommonProblemDescriptor descriptor) {
-    mySuppressedElements.put(myProblemElements.removeValue(descriptor), descriptor);
+    RefEntity removed = myProblemElements.removeValue(descriptor);
+    if (removed != null) {
+      mySuppressedElements.put(removed, descriptor);
+    }
   }
 
   @Override
@@ -439,6 +442,11 @@ public class DefaultInspectionToolResultExporter implements InspectionToolResult
         }
       }
     }
+  }
+
+  @Override
+  public RefEntity getElement(@NotNull CommonProblemDescriptor descriptor) {
+    return myProblemElements.getKeyFor(descriptor);
   }
 
   @Contract("null -> null")

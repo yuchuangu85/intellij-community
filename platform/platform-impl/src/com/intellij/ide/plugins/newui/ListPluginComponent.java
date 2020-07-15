@@ -21,7 +21,10 @@ import com.intellij.ui.components.labels.LinkListener;
 import com.intellij.ui.components.panels.NonOpaquePanel;
 import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.ui.*;
+import com.intellij.util.ui.AbstractLayoutManager;
+import com.intellij.util.ui.JBInsets;
+import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.JBValue;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -40,7 +43,7 @@ import java.util.ListIterator;
 public class ListPluginComponent extends JPanel {
   public static final Color DisabledColor = JBColor.namedColor("Plugins.disabledForeground", new JBColor(0xB1B1B1, 0x696969));
   public static final Color GRAY_COLOR = JBColor.namedColor("Label.infoForeground", new JBColor(Gray._120, Gray._135));
-  private static final Color HOVER_COLOR = JBColor.namedColor("Plugins.lightSelectionBackground", new JBColor(0xF5F9FF, 0x36393B));
+  public static final Color HOVER_COLOR = JBColor.namedColor("Plugins.lightSelectionBackground", new JBColor(0xF5F9FF, 0x36393B));
 
   private final MyPluginModel myPluginModel;
   private final LinkListener<Object> mySearchListener;
@@ -253,18 +256,29 @@ public class ListPluginComponent extends JPanel {
   }
 
   private void createTag() {
-    if (myPlugin.getProductCode() != null) {
-      String tag = ContainerUtil.getFirstItem(PluginManagerConfigurable.getTags(myPlugin));
-      if (tag == null) {
-        return;
+    String tag = null;
+
+    if (myPlugin.getProductCode() == null) {
+      if (myMarketplace && !LicensePanel.isEA2Product(myPlugin.getPluginId().getIdString())) {
+        List<String> tags = ((PluginNode)myPlugin).getTags();
+        if (tags != null && tags.contains(Tags.Paid.name())) {
+          tag = Tags.Paid.name();
+        }
       }
-
-      TagComponent component = new TagComponent(tag);
-      //noinspection unchecked
-      component.setListener(mySearchListener, component);
-
-      myLayout.setTagComponent(PluginManagerConfigurable.setTinyFont(component));
     }
+    else {
+      tag = ContainerUtil.getFirstItem(PluginManagerConfigurable.getTags(myPlugin));
+    }
+
+    if (tag == null) {
+      return;
+    }
+
+    TagComponent component = new TagComponent(tag);
+    //noinspection unchecked
+    component.setListener(mySearchListener, component);
+
+    myLayout.setTagComponent(PluginManagerConfigurable.setTinyFont(component));
   }
 
   private void setTagTooltip(@Nullable String text) {
@@ -276,7 +290,7 @@ public class ListPluginComponent extends JPanel {
   private void createLicensePanel() {
     String productCode = myPlugin.getProductCode();
     LicensingFacade instance = LicensingFacade.getInstance();
-    if (myMarketplace || productCode == null || instance == null || myPlugin.isBundled()) {
+    if (myMarketplace || productCode == null || instance == null || myPlugin.isBundled() || LicensePanel.isEA2Product(productCode)) {
       return;
     }
 
@@ -343,7 +357,8 @@ public class ListPluginComponent extends JPanel {
       if (myVersion != null) {
         myVersion.setText(PluginManagerConfigurable.getVersion(myPlugin, descriptor));
       }
-      if (myPlugin.getProductCode() == null && descriptor.getProductCode() != null) {
+      if (myPlugin.getProductCode() == null && descriptor.getProductCode() != null &&
+          !myPlugin.isBundled() && !LicensePanel.isEA2Product(descriptor.getProductCode())) {
         if (myUpdateLicensePanel == null) {
           myLayout.addLineComponent(myUpdateLicensePanel = new LicensePanel(true));
           myUpdateLicensePanel.setBorder(JBUI.Borders.emptyTop(3));

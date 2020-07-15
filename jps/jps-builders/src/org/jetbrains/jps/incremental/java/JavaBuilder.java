@@ -54,8 +54,7 @@ import org.jetbrains.jps.model.serialization.PathMacroUtil;
 import org.jetbrains.jps.service.JpsServiceManager;
 import org.jetbrains.jps.service.SharedThreadPool;
 
-import javax.tools.Diagnostic;
-import javax.tools.JavaFileObject;
+import javax.tools.*;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
@@ -75,7 +74,7 @@ import static com.intellij.openapi.util.Pair.pair;
 /**
  * @author Eugene Zhuravlev
  */
-public class JavaBuilder extends ModuleLevelBuilder {
+public final class JavaBuilder extends ModuleLevelBuilder {
   private static final Logger LOG = Logger.getInstance(JavaBuilder.class);
   private static final String JAVA_EXTENSION = "java";
 
@@ -1122,7 +1121,7 @@ public class JavaBuilder extends ModuleLevelBuilder {
     return map;
   }
 
-  private static class DiagnosticSink implements DiagnosticOutputConsumer {
+  private static final class DiagnosticSink implements DiagnosticOutputConsumer {
     private final CompileContext myContext;
     private final AtomicInteger myErrorCount = new AtomicInteger(0);
     private final AtomicInteger myWarningCount = new AtomicInteger(0);
@@ -1167,10 +1166,16 @@ public class JavaBuilder extends ModuleLevelBuilder {
         if (line.startsWith(ExternalJavacManager.STDOUT_LINE_PREFIX)) {
           //noinspection UseOfSystemOutOrSystemErr
           System.out.println(line);
+          if (LOG.isDebugEnabled()) {
+            LOG.debug(line);
+          }
         }
         else if (line.startsWith(ExternalJavacManager.STDERR_LINE_PREFIX)) {
           //noinspection UseOfSystemOutOrSystemErr
           System.err.println(line);
+          if (LOG.isDebugEnabled()) {
+            LOG.debug(line);
+          }
         }
         else if (line.contains("\\bjava.lang.OutOfMemoryError\\b")) {
           myContext.processMessage(new CompilerMessage(BUILDER_NAME, BuildMessage.Kind.ERROR, "OutOfMemoryError: insufficient memory"));
@@ -1276,7 +1281,7 @@ public class JavaBuilder extends ModuleLevelBuilder {
     }
   }
 
-  private class ClassProcessingConsumer implements OutputFileConsumer {
+  private final class ClassProcessingConsumer implements OutputFileConsumer {
     private final CompileContext myContext;
     private final OutputFileConsumer myDelegateOutputFileSink;
 

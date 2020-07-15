@@ -340,7 +340,7 @@ public abstract class DialogWrapper {
    * or validation description with component where problem has been found.
    *
    * @return {@code null} if everything is OK or validation descriptor
-   * 
+   *
    * @see <a href="https://jetbrains.design/intellij/principles/validation_errors/">Validation errors guidelines</a>
    */
   @Nullable
@@ -357,7 +357,7 @@ public abstract class DialogWrapper {
    *
    * @return {@code List<ValidationInfo>} of invalid fields. List
    * is empty if no errors found.
-   * 
+   *
    * @see <a href="https://jetbrains.design/intellij/principles/validation_errors/">Validation errors guidelines</a>
    */
   @NotNull
@@ -390,9 +390,7 @@ public abstract class DialogWrapper {
   }
 
   protected void updateErrorInfo(@NotNull List<ValidationInfo> info) {
-    boolean updateNeeded = Registry.is("ide.inplace.validation.tooltip") ?
-                           !myInfo.equals(info) : !myErrorText.isTextSet(info);
-
+    boolean updateNeeded = isInplaceValidationToolTipEnabled() ? !myInfo.equals(info) : !myErrorText.isTextSet(info);
     if (updateNeeded) {
       //noinspection SSBasedInspection
       SwingUtilities.invokeLater(() -> {
@@ -480,7 +478,7 @@ public abstract class DialogWrapper {
 
   private static boolean isRemoveHelpButton() {
     return !ApplicationInfo.contextHelpAvailable() ||
-           Registry.is("ide.remove.help.button.from.dialogs");
+           Registry.is("ide.remove.help.button.from.dialogs", false);
   }
 
   /**
@@ -506,7 +504,7 @@ public abstract class DialogWrapper {
       addHelpToLeftSide = true;
     }
 
-    if (SystemInfo.isMac) {
+    if (SystemInfoRt.isMac) {
       Action macOtherAction = ContainerUtil.find(actions, MacOtherAction.class::isInstance);
       if (macOtherAction != null) {
         leftSideActions.add(macOtherAction);
@@ -634,7 +632,7 @@ public abstract class DialogWrapper {
     JComponent doNotAskCheckbox = createDoNotAskCheckbox();
 
     JPanel lrButtonsPanel = new NonOpaquePanel(new GridBagLayout());
-    Insets insets = SystemInfo.isMacOSLeopard && UIUtil.isUnderIntelliJLaF() ? JBInsets.create(0, 8) : JBUI.emptyInsets();
+    Insets insets = SystemInfoRt.isMac && UIUtil.isUnderIntelliJLaF() ? JBInsets.create(0, 8) : JBUI.emptyInsets();
 
     if (!rightSideButtons.isEmpty() || !leftSideButtons.isEmpty()) {
       GridBag bag = new GridBag().setDefaultInsets(insets);
@@ -788,7 +786,7 @@ public abstract class DialogWrapper {
       button = new JButton(action);
     }
 
-    if (SystemInfo.isMac) {
+    if (SystemInfoRt.isMac) {
       button.putClientProperty("JButton.buttonType", "text");
     }
 
@@ -1206,7 +1204,7 @@ public abstract class DialogWrapper {
     if (myPreferredFocusedComponentFromPanel != null) {
       return myPreferredFocusedComponentFromPanel;
     }
-    return SystemInfo.isMac ? myPreferredFocusedComponent : null;
+    return SystemInfoRt.isMac ? myPreferredFocusedComponent : null;
   }
 
   /**
@@ -1376,7 +1374,7 @@ public abstract class DialogWrapper {
     if (!postponeValidation()) {
       startTrackingValidation();
     }
-    if (SystemInfo.isWindows) {
+    if (SystemInfoRt.isWindows || (SystemInfoRt.isLinux && Registry.is("ide.linux.enter.on.dialog.triggers.focused.button", true))) {
       installEnterHook(root, myDisposable);
     }
     myErrorTextAlarm.setActivationComponent(root);
@@ -1468,6 +1466,11 @@ public abstract class DialogWrapper {
    */
   public void pack() {
     myPeer.pack();
+  }
+
+  @Nullable
+  public Dimension getInitialSize() {
+    return null;
   }
 
   public Dimension getPreferredSize() {
@@ -1868,7 +1871,7 @@ public abstract class DialogWrapper {
           IdeFocusManager.getInstance(null).requestFocus(info.component, true);
         }
 
-        if (!Registry.is("ide.inplace.validation.tooltip")) {
+        if (!isInplaceValidationToolTipEnabled()) {
           DialogEarthquakeShaker.shake(getPeer().getWindow());
         }
 
@@ -1885,7 +1888,7 @@ public abstract class DialogWrapper {
     }
   }
 
-  protected class CancelAction extends DialogWrapperAction {
+  protected final class CancelAction extends DialogWrapperAction {
     private CancelAction() {
       super(CommonBundle.getCancelButtonText());
       addPropertyChangeListener(myRepaintOnNameChangeListener);
@@ -1926,7 +1929,7 @@ public abstract class DialogWrapper {
     }
   }
 
-  private class HelpAction extends AbstractAction {
+  private final class HelpAction extends AbstractAction {
     private HelpAction() {
       super(CommonBundle.getHelpButtonText());
     }
@@ -1976,7 +1979,7 @@ public abstract class DialogWrapper {
     }
 
     List<ValidationInfo> corrected = ContainerUtil.filter(myInfo, vi -> !info.contains(vi));
-    if (Registry.is("ide.inplace.validation.tooltip")) {
+    if (isInplaceValidationToolTipEnabled()) {
       corrected.stream().filter(vi -> vi.component != null).
         map(vi -> ComponentValidator.getInstance(vi.component)).
         forEach(c -> c.ifPresent(vi -> vi.updateInfo(null)));
@@ -1984,7 +1987,7 @@ public abstract class DialogWrapper {
 
     myInfo = info;
 
-    if (Registry.is("ide.inplace.validation.tooltip") && !myInfo.isEmpty()) {
+    if (isInplaceValidationToolTipEnabled() && !myInfo.isEmpty()) {
       myInfo.forEach(vi -> {
         if (vi.component != null) {
           ComponentValidator v = ComponentValidator.getInstance(vi.component).
@@ -2013,6 +2016,10 @@ public abstract class DialogWrapper {
         myErrorTextAlarm.addRequest(updateErrorTextRunnable, 300, null);
       }
     }
+  }
+
+  private boolean isInplaceValidationToolTipEnabled() {
+    return Registry.is("ide.inplace.validation.tooltip", true);
   }
 
   /**
@@ -2045,7 +2052,7 @@ public abstract class DialogWrapper {
     return findInstance(KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner());
   }
 
-  private class ErrorText extends JPanel {
+  private final class ErrorText extends JPanel {
     private final JLabel myLabel = new JLabel();
     private final List<ValidationInfo> errors = new ArrayList<>();
 
@@ -2223,7 +2230,7 @@ public abstract class DialogWrapper {
     @Override
     public void executePaint(Component component, Graphics2D g) {
       for (ValidationInfo i : info) {
-        if (i.component != null && !Registry.is("ide.inplace.errors.outline")) {
+        if (i.component != null && !Registry.is("ide.inplace.errors.outline", true)) {
           int w = i.component.getWidth();
           Point p = SwingUtilities.convertPoint(i.component, w, 0, component);
           AllIcons.General.Error.paintIcon(component, g, p.x - 8, p.y - 8);
@@ -2253,5 +2260,4 @@ public abstract class DialogWrapper {
       }
     }
   }
-
 }

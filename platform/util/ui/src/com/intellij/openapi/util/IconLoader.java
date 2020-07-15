@@ -15,6 +15,7 @@ import com.intellij.ui.scale.JBUIScale;
 import com.intellij.ui.scale.ScaleContext;
 import com.intellij.ui.scale.ScaleContextSupport;
 import com.intellij.util.*;
+import com.intellij.util.containers.CollectionFactory;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.FixedHashMap;
 import com.intellij.util.ui.*;
@@ -59,7 +60,7 @@ public final class IconLoader {
   /**
    * This cache contains mapping between icons and disabled icons.
    */
-  private static final ConcurrentMap<Icon, Icon> ourIcon2DisabledIcon = ContainerUtil.createConcurrentWeakMap(200, 0.75f, Math.min(Runtime.getRuntime().availableProcessors(), 4), ContainerUtil.canonicalStrategy());
+  private static final ConcurrentMap<Icon, Icon> ourIcon2DisabledIcon = CollectionFactory.createConcurrentWeakMap(200, 0.75f, Math.min(Runtime.getRuntime().availableProcessors(), 4));
 
   private static volatile boolean STRICT_GLOBAL;
 
@@ -344,7 +345,7 @@ public final class IconLoader {
   @Nullable
   public static Image toImage(@NotNull Icon icon, @Nullable ScaleContext ctx) {
     if (icon instanceof RetrievableIcon) {
-      icon = ((RetrievableIcon)icon).retrieveIcon();
+      icon = getOrigin((RetrievableIcon)icon);
     }
     if (icon instanceof CachedImageIcon) {
       icon = ((CachedImageIcon)icon).getRealIcon(ctx);
@@ -354,6 +355,9 @@ public final class IconLoader {
       return ((ImageIcon)icon).getImage();
     }
     else {
+      if (icon.getIconWidth() <= 0 || icon.getIconHeight() <= 0) {
+        return null;
+      }
       BufferedImage image;
       if (GraphicsEnvironment.isHeadless()) { // for testing purpose
         image = UIUtil.createImage(ctx, icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_INT_ARGB, ROUND);
@@ -433,16 +437,25 @@ public final class IconLoader {
    */
   @NotNull
   public static Icon getDisabledIcon(@NotNull Icon icon) {
+    return getDisabledIcon(icon, null);
+  }
+
+  /**
+   * Same as {@link #getDisabledIcon(Icon)} with an ancestor component for HiDPI-awareness.
+   */
+  @NotNull
+  public static Icon getDisabledIcon(@NotNull Icon icon, @Nullable Component ancestor) {
     if (!ourIsActivated) {
       return icon;
     }
 
     if (icon instanceof LazyIcon) icon = ((LazyIcon)icon).getOrComputeIcon();
+    if (icon instanceof RetrievableIcon) icon = getOrigin((RetrievableIcon)icon);
 
     Icon disabledIcon = ourIcon2DisabledIcon.get(icon);
     if (disabledIcon == null) {
       disabledIcon = ConcurrencyUtil.cacheOrGet(ourIcon2DisabledIcon, icon,
-           filterIcon(icon, UIUtil::getGrayFilter/* returns laf-aware instance */, null)); // [tav] todo: lack ancestor
+        filterIcon(icon, UIUtil::getGrayFilter/* returns laf-aware instance */, ancestor));
     }
     return disabledIcon;
   }
@@ -467,7 +480,7 @@ public final class IconLoader {
       double scale;
       ScaleContextSupport ctxSupport = getScaleContextSupport(icon);
       if (ctxSupport != null) {
-        scale = ctxSupport.getScale(SYS_SCALE);
+        scale = StartupUiUtil.isJreHiDPI() ? ctxSupport.getScale(SYS_SCALE) : 1f;
       }
       else {
         scale = StartupUiUtil.isJreHiDPI() ? JBUIScale.sysScale(ancestor) : 1f;
@@ -548,7 +561,7 @@ public final class IconLoader {
   @NotNull
   public static Icon getMenuBarIcon(@NotNull Icon icon, boolean dark) {
     if (icon instanceof RetrievableIcon) {
-      icon = ((RetrievableIcon)icon).retrieveIcon();
+      icon = getOrigin((RetrievableIcon)icon);
     }
     if (icon instanceof MenuBarIconProvider) {
       return ((MenuBarIconProvider)icon).getMenuBarIcon(dark);

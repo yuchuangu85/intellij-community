@@ -7,7 +7,6 @@ import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.registry.Registry
 import com.intellij.patterns.ElementPattern
 import com.intellij.patterns.StandardPatterns
-import com.intellij.patterns.uast.UElementPattern
 import com.intellij.util.ProcessingContext
 import org.jetbrains.annotations.ApiStatus
 import org.jetbrains.uast.UElement
@@ -62,8 +61,6 @@ internal val USAGE_PSI_ELEMENT: Key<PsiElement> = Key.create("USAGE_PSI_ELEMENT"
 internal fun getOrCreateCachedElement(element: PsiElement,
                                       context: ProcessingContext,
                                       supportedUElementTypes: List<Class<out UElement>>): UElement? {
-  if (element is UElement) return element
-
   if (supportedUElementTypes.size == 1) {
     val requiredType = supportedUElementTypes[0]
     if (requiredType == UInjectionHost::class.java) {
@@ -130,8 +127,8 @@ fun uastReferenceProviderByUsage(provider: (UExpression, referencePsi: PsiLangua
  * Consider using [uastReferenceProviderByUsage] if you need to obtain additional context from a usage place.
  */
 @ApiStatus.Experimental
-fun PsiReferenceRegistrar.registerReferenceProviderByUsage(expressionPattern: UElementPattern<*, *>,
-                                                           usagePattern: UElementPattern<*, *>,
+fun PsiReferenceRegistrar.registerReferenceProviderByUsage(expressionPattern: ElementPattern<out UElement>,
+                                                           usagePattern: ElementPattern<out UElement>,
                                                            provider: UastReferenceProvider,
                                                            priority: Double = PsiReferenceRegistrar.DEFAULT_PRIORITY) {
   this.registerUastReferenceProvider(usagePattern, provider, priority)
@@ -140,3 +137,11 @@ fun PsiReferenceRegistrar.registerReferenceProviderByUsage(expressionPattern: UE
     this.registerUastReferenceProvider(expressionPattern, UastReferenceByUsageAdapter(usagePattern, provider), priority)
   }
 }
+
+@ApiStatus.Experimental
+fun PsiReferenceRegistrar.registerReferenceProviderByUsage(usagePattern: ElementPattern<out UElement>,
+                                                           provider: UastReferenceProvider,
+                                                           priority: Double = PsiReferenceRegistrar.DEFAULT_PRIORITY) {
+  registerReferenceProviderByUsage(uExpressionInVariable(), usagePattern, provider, priority)
+}
+

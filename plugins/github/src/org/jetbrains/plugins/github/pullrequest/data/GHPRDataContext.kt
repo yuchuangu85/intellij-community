@@ -4,25 +4,24 @@ package org.jetbrains.plugins.github.pullrequest.data
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.util.Disposer
 import org.jetbrains.plugins.github.api.GHRepositoryCoordinates
-import org.jetbrains.plugins.github.api.GithubApiRequestExecutor
 import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequest
 import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestShort
-import org.jetbrains.plugins.github.authentication.accounts.GithubAccount
+import org.jetbrains.plugins.github.pullrequest.avatars.CachingGithubAvatarIconsProvider
 import org.jetbrains.plugins.github.pullrequest.data.service.GHPRRepositoryDataService
 import org.jetbrains.plugins.github.pullrequest.data.service.GHPRSecurityService
 import org.jetbrains.plugins.github.pullrequest.search.GHPRSearchQueryHolder
 import org.jetbrains.plugins.github.util.GitRemoteUrlCoordinates
 
-internal class GHPRDataContext(val gitRepositoryCoordinates: GitRemoteUrlCoordinates,
-                               val repositoryCoordinates: GHRepositoryCoordinates,
-                               val account: GithubAccount,
-                               val requestExecutor: GithubApiRequestExecutor,
+internal class GHPRDataContext(val parsedRepositoryCoordinates: GHRepositoryCoordinates,
+                               val gitRemoteCoordinates: GitRemoteUrlCoordinates,
                                val searchHolder: GHPRSearchQueryHolder,
                                val listLoader: GHListLoader<GHPullRequestShort>,
                                val listUpdatesChecker: GHPRListUpdatesChecker,
                                val dataProviderRepository: GHPRDataProviderRepository,
                                val securityService: GHPRSecurityService,
-                               val repositoryDataService: GHPRRepositoryDataService) : Disposable {
+                               val repositoryDataService: GHPRRepositoryDataService,
+                               val avatarIconsProviderFactory: CachingGithubAvatarIconsProvider.Factory,
+                               val filesManager: GHPRFilesManager) : Disposable {
 
   private val listenersDisposable = Disposer.newDisposable("GH PR context listeners disposable")
 
@@ -36,10 +35,17 @@ internal class GHPRDataContext(val gitRepositoryCoordinates: GitRemoteUrlCoordin
     })
     dataProviderRepository.addDetailsLoadedListener(listenersDisposable) { details: GHPullRequest ->
       listLoader.updateData(details)
+      filesManager.updateTimelineFilePresentation(details)
+    }
+    filesManager.addBeforeTimelineFileOpenedListener(listenersDisposable) { file ->
+      val details = listLoader.loadedData.find { it.id == file.pullRequest.id }
+                    ?: dataProviderRepository.findDataProvider(file.pullRequest)?.detailsData?.loadedDetails
+      if (details != null) filesManager.updateTimelineFilePresentation(details)
     }
   }
 
   override fun dispose() {
+    Disposer.dispose(filesManager)
     Disposer.dispose(listenersDisposable)
     Disposer.dispose(dataProviderRepository)
     Disposer.dispose(listLoader)

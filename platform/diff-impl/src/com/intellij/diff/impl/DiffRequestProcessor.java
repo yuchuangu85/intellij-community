@@ -631,7 +631,7 @@ public abstract class DiffRequestProcessor implements Disposable {
     }
   }
 
-  private class DiffToolToggleAction extends AnAction implements DumbAware {
+  private final class DiffToolToggleAction extends AnAction implements DumbAware {
     @NotNull private final DiffTool myDiffTool;
 
     private DiffToolToggleAction(@NotNull DiffTool tool) {
@@ -706,6 +706,10 @@ public abstract class DiffRequestProcessor implements Disposable {
   }
 
   protected class MyNextDifferenceAction extends NextDifferenceAction {
+
+    public MyNextDifferenceAction() {
+    }
+
     @Override
     public void update(@NotNull AnActionEvent e) {
       if (DiffUtil.isFromShortcut(e)) {
@@ -749,6 +753,10 @@ public abstract class DiffRequestProcessor implements Disposable {
   }
 
   protected class MyPrevDifferenceAction extends PrevDifferenceAction {
+
+    public MyPrevDifferenceAction() {
+    }
+
     @Override
     public void update(@NotNull AnActionEvent e) {
       if (DiffUtil.isFromShortcut(e)) {
@@ -932,6 +940,10 @@ public abstract class DiffRequestProcessor implements Disposable {
   //
 
   protected class MyOpenInEditorAction extends OpenInEditorAction {
+
+    public MyOpenInEditorAction() {
+    }
+
     @Override
     protected void onAfterEditorOpened() {
       onAfterNavigate();

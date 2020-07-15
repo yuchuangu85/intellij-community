@@ -34,13 +34,16 @@ import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.JBTreeTraverser;
 import gnu.trove.THashMap;
 import gnu.trove.THashSet;
-import org.jetbrains.annotations.*;
+import org.jetbrains.annotations.ApiStatus;
+import org.jetbrains.annotations.NonNls;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 
-public class PsiClassImplUtil {
+public final class PsiClassImplUtil {
   private static final Logger LOG = Logger.getInstance(PsiClassImplUtil.class);
   private static final Key<ParameterizedCachedValue<Map<GlobalSearchScope, MembersMap>, PsiClass>> MAP_IN_CLASS_KEY = Key.create("MAP_KEY");
 
@@ -185,7 +188,7 @@ public class PsiClassImplUtil {
     return value;
   }
 
-  private static class ClassIconRequest {
+  private static final class ClassIconRequest {
     @NotNull private final PsiClass psiClass;
     private final int flags;
     private final Icon symbolIcon;
@@ -214,7 +217,7 @@ public class PsiClassImplUtil {
     }
   }
 
-  private static final Function<ClassIconRequest, Icon> FULL_ICON_EVALUATOR = (NullableFunction<ClassIconRequest, Icon>)r -> {
+  private static final Function<ClassIconRequest, Icon> FULL_ICON_EVALUATOR = r -> {
     if (!r.psiClass.isValid() || r.psiClass.getProject().isDisposed()) return null;
 
     boolean isLocked = BitUtil.isSet(r.flags, Iconable.ICON_FLAG_READ_STATUS) && !r.psiClass.isWritable();
@@ -286,9 +289,9 @@ public class PsiClassImplUtil {
   }
 
   public static boolean isMainOrPremainMethod(@NotNull PsiMethod method) {
-    if (!PsiType.VOID.equals(method.getReturnType())) return false;
     String name = method.getName();
     if (!("main".equals(name) || "premain".equals(name) || "agentmain".equals(name))) return false;
+    if (!PsiType.VOID.equals(method.getReturnType())) return false;
 
     PsiElementFactory factory = JavaPsiFacade.getElementFactory(method.getProject());
     MethodSignature signature = method.getSignature(PsiSubstitutor.EMPTY);
@@ -424,11 +427,12 @@ public class PsiClassImplUtil {
                                                     String name,
                                                     @NotNull LanguageLevel languageLevel,
                                                     @NotNull GlobalSearchScope resolveScope) {
-    Function<PsiMember, PsiSubstitutor> finalSubstitutor = new Function<PsiMember, PsiSubstitutor>() {
+    java.util.function.Function<PsiMember, PsiSubstitutor> finalSubstitutor = new java.util.function.Function<PsiMember, PsiSubstitutor>() {
       final ScopedClassHierarchy hierarchy = ScopedClassHierarchy.getHierarchy(aClass, resolveScope);
       final PsiElementFactory factory = JavaPsiFacade.getElementFactory(aClass.getProject());
+
       @Override
-      public PsiSubstitutor fun(PsiMember member) {
+      public PsiSubstitutor apply(PsiMember member) {
         PsiSubstitutor finalSubstitutor = member.hasModifierProperty(PsiModifier.STATIC) ? substitutor : obtainSubstitutor(member);
         return member instanceof PsiMethod ? checkRaw(isRaw, factory, (PsiMethod)member, finalSubstitutor) : finalSubstitutor;
       }
@@ -467,7 +471,7 @@ public class PsiClassImplUtil {
             }
 
             processor.handleEvent(PsiScopeProcessor.Event.SET_DECLARATION_HOLDER, containingClass);
-            if (!processor.execute(candidateField, state.put(PsiSubstitutor.KEY, finalSubstitutor.fun(candidateField)))) {
+            if (!processor.execute(candidateField, state.put(PsiSubstitutor.KEY, finalSubstitutor.apply(candidateField)))) {
               resolved = true;
             }
           }
@@ -502,7 +506,7 @@ public class PsiClassImplUtil {
               PsiClass containingClass = inner.getContainingClass();
               if (containingClass != null) {
                 processor.handleEvent(PsiScopeProcessor.Event.SET_DECLARATION_HOLDER, containingClass);
-                if (!processor.execute(inner, state.put(PsiSubstitutor.KEY, finalSubstitutor.fun(inner)))) {
+                if (!processor.execute(inner, state.put(PsiSubstitutor.KEY, finalSubstitutor.apply(inner)))) {
                   resolved = true;
                 }
               }
@@ -542,7 +546,7 @@ public class PsiClassImplUtil {
           }
 
           processor.handleEvent(PsiScopeProcessor.Event.SET_DECLARATION_HOLDER, containingClass);
-          if (!processor.execute(candidateMethod, state.put(PsiSubstitutor.KEY, finalSubstitutor.fun(candidateMethod)))) {
+          if (!processor.execute(candidateMethod, state.put(PsiSubstitutor.KEY, finalSubstitutor.apply(candidateMethod)))) {
             resolved = true;
           }
         }
@@ -1098,12 +1102,14 @@ public class PsiClassImplUtil {
     }
 
     FileIndexFacade fileIndex = ServiceManager.getService(file1.getProject(), FileIndexFacade.class);
+    FileIndexFacade fileIndex2 = ServiceManager.getService(file2.getProject(), FileIndexFacade.class);
     VirtualFile vfile1 = file1.getViewProvider().getVirtualFile();
     VirtualFile vfile2 = file2.getViewProvider().getVirtualFile();
     boolean lib1 = fileIndex.isInLibraryClasses(vfile1);
-    boolean lib2 = fileIndex.isInLibraryClasses(vfile2);
+    boolean lib2 = fileIndex2.isInLibraryClasses(vfile2);
 
-    return (fileIndex.isInSource(vfile1) || lib1) && (fileIndex.isInSource(vfile2) || lib2);
+    //if copy from another project, fileIndex of correct project should be requested
+    return (fileIndex.isInSource(vfile1) || lib1) && (fileIndex2.isInSource(vfile2) || lib2);
   }
 
   @NotNull

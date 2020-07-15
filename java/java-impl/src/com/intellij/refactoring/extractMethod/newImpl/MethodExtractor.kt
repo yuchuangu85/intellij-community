@@ -9,7 +9,6 @@ import com.intellij.openapi.command.CommandProcessor
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.colors.EditorColors
-import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.util.registry.Registry
@@ -17,6 +16,7 @@ import com.intellij.openapi.wm.WindowManager
 import com.intellij.psi.*
 import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.impl.source.PostprocessReformattingAspect
+import com.intellij.psi.util.PsiEditorUtil
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.refactoring.HelpID
 import com.intellij.refactoring.RefactoringBundle
@@ -27,9 +27,7 @@ import com.intellij.refactoring.extractMethod.newImpl.ExtractMethodHelper.wrapWi
 import com.intellij.refactoring.extractMethod.newImpl.ExtractMethodPipeline.selectTargetClass
 import com.intellij.refactoring.extractMethod.newImpl.ExtractMethodPipeline.withFilteredAnnotations
 import com.intellij.refactoring.extractMethod.newImpl.MapFromDialog.mapFromDialog
-import com.intellij.refactoring.extractMethod.newImpl.structures.DataOutput.ExpressionOutput
 import com.intellij.refactoring.extractMethod.newImpl.structures.ExtractOptions
-import com.intellij.refactoring.extractMethod.newImpl.structures.FlowOutput.ConditionalFlow
 import com.intellij.refactoring.introduceVariable.IntroduceVariableBase
 import com.intellij.refactoring.listeners.RefactoringEventData
 import com.intellij.refactoring.listeners.RefactoringEventListener
@@ -40,9 +38,9 @@ class MethodExtractor {
 
   private val LOG = Logger.getInstance(MethodExtractor::class.java)
 
-  fun doInplaceExtract(editor: Editor) {
+  fun doInplaceExtract(editor: Editor, file: PsiFile, range: TextRange) {
     val project = editor.project ?: return
-    val statements = ExtractSelector().suggestElementsToExtract(editor)
+    val statements = ExtractSelector().suggestElementsToExtract(file, range)
     val extractOptions = findExtractOptions(statements)
 
     fun command() {
@@ -59,15 +57,17 @@ class MethodExtractor {
     CommandProcessor.getInstance().executeCommand(project, ::command, ExtractMethodHandler.getRefactoringName(), null)
   }
 
-  fun doExtract(editor: Editor, refactoringName: String, helpId: String) {
+  fun doExtract(file: PsiFile, range: TextRange, refactoringName: String, helpId: String) {
+    val project = file.project
+    val editor = PsiEditorUtil.findEditor(file) ?: return
+
     if (Registry.`is`("java.refactoring.extractMethod.inplace")) {
-      doInplaceExtract(editor)
+      doInplaceExtract(editor, file, range)
       return
     }
-    val project = editor.project ?: return
-    val file = PsiDocumentManager.getInstance(project).getPsiFile(editor.document) ?: return
+
     try {
-      val statements = ExtractSelector().suggestElementsToExtract(editor)
+      val statements = ExtractSelector().suggestElementsToExtract(file, range)
       if (!CommonRefactoringUtil.checkReadOnlyStatus(file.project, file)) return
       if (statements.isEmpty()) {
         throw ExtractException(RefactoringBundle.message("selected.block.should.represent.a.set.of.statements.or.an.expression"), file)
@@ -94,7 +94,7 @@ class MethodExtractor {
       beforeData.addElements(options.elements.toTypedArray())
       options.project.messageBus.syncPublisher(RefactoringEventListener.REFACTORING_EVENT_TOPIC)
         .refactoringStarted("refactoring.extract.method", beforeData)
-      val (method, callElements) = extractMethod(options)
+      val (method, _) = extractMethod(options)
       val data = RefactoringEventData()
       data.addElement(method)
       options.project.messageBus.syncPublisher(RefactoringEventListener.REFACTORING_EVENT_TOPIC)
@@ -118,14 +118,16 @@ class MethodExtractor {
   ): Boolean {
     val project = editor.project ?: return false
     val file = PsiDocumentManager.getInstance(project).getPsiFile(editor.document) ?: return false
-    val elements = ExtractSelector().suggestElementsToExtract(editor)
+    val range = ExtractMethodHelper.findEditorSelection(editor) ?: return false
+    val elements = ExtractSelector().suggestElementsToExtract(file, range)
     if (elements.isEmpty()) throw ExtractException("Nothing to extract", file)
     var options = findExtractOptions(elements)
     val analyzer = CodeFragmentAnalyzer(elements)
 
     val candidates = ExtractMethodPipeline.findTargetCandidates(analyzer, options)
     val defaultTargetClass = candidates.firstOrNull { it !is PsiAnonymousClass } ?: candidates.first()
-    options = ExtractMethodPipeline.withTargetClass(analyzer, options, defaultTargetClass) ?: throw ExtractException("Fail", elements.first())
+    options = ExtractMethodPipeline.withTargetClass(analyzer, options, targetClass ?: defaultTargetClass)
+                                    ?: throw ExtractException("Fail", elements.first())
     options = options.copy(methodName = "newMethod")
     if (isConstructor != options.isConstructor){
       options = ExtractMethodPipeline.asConstructor(analyzer, options) ?: throw ExtractException("Fail", elements.first())
@@ -140,9 +142,6 @@ class MethodExtractor {
     }
     if (returnType != null) {
       options = options.copy(dataOutput = options.dataOutput.withType(returnType))
-    }
-    if (targetClass != null) {
-      options = ExtractMethodPipeline.withTargetClass(analyzer, options, targetClass) ?: options
     }
     if (disabledParameters.isNotEmpty()) {
       options = options.copy(
@@ -166,26 +165,21 @@ class MethodExtractor {
     val project = editor.project ?: return
     if (ranges.isEmpty()) return
     val highlightManager = HighlightManager.getInstance(project)
-    val colorsManager = EditorColorsManager.getInstance()
-    val attributes = colorsManager.globalScheme.getAttributes(EditorColors.SEARCH_RESULT_ATTRIBUTES)
     ranges.forEach { textRange ->
-      highlightManager.addRangeHighlight(editor, textRange.startOffset, textRange.endOffset, attributes, true, null)
+      highlightManager.addRangeHighlight(editor, textRange.startOffset, textRange.endOffset, 
+                                         EditorColors.SEARCH_RESULT_ATTRIBUTES, true, null)
     }
-    WindowManager.getInstance().getStatusBar(project).setInfo(RefactoringBundle.message("press.escape.to.remove.the.highlighting"))
+    WindowManager.getInstance().getStatusBar(project).info = RefactoringBundle.message("press.escape.to.remove.the.highlighting")
   }
 
   fun extractMethod(extractOptions: ExtractOptions): Pair<PsiMethod, List<PsiElement>> {
     val dependencies = withFilteredAnnotations(extractOptions)
     val factory = PsiElementFactory.getInstance(dependencies.project)
     val styleManager = CodeStyleManager.getInstance(dependencies.project)
-    var flowOutput = dependencies.flowOutput
-    if (dependencies.dataOutput is ExpressionOutput && flowOutput is ConditionalFlow) {
-      flowOutput = flowOutput.copy(statements = flowOutput.statements.filterNot { it is PsiReturnStatement })
-    }
     val codeBlock = BodyBuilder(factory)
       .build(
         dependencies.elements,
-        flowOutput,
+        dependencies.flowOutput,
         dependencies.dataOutput,
         dependencies.inputParameters,
         dependencies.disabledParameters,

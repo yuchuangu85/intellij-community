@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.documentation.render;
 
 import com.intellij.codeInsight.CodeInsightBundle;
@@ -51,7 +51,7 @@ import java.util.List;
 import java.util.*;
 import java.util.function.BooleanSupplier;
 
-public class DocRenderItem {
+public final class DocRenderItem {
   private static final Key<DocRenderItem> OUR_ITEM = Key.create("doc.render.item");
   private static final Key<Collection<DocRenderItem>> OUR_ITEMS = Key.create("doc.render.items");
   private static final Key<Disposable> LISTENERS_DISPOSABLE = Key.create("doc.render.listeners.disposable");
@@ -79,10 +79,14 @@ public class DocRenderItem {
     if (existing == null) {
       if (itemsToSet.isEmpty()) return;
       editor.putUserData(OUR_ITEMS, items = new ArrayList<>());
+      if (DocRenderManager.isDocRenderingEnabled(editor)) {
+        collapseNewItems = true;
+      }
     }
     else {
       items = existing;
     }
+    boolean finalCollapseNewItems = collapseNewItems;
     keepScrollingPositionWhile(editor, () -> {
       List<Runnable> foldingTasks = new ArrayList<>();
       List<DocRenderItem> itemsToUpdateInlays = new ArrayList<>();
@@ -104,9 +108,9 @@ public class DocRenderItem {
       }
       Collection<DocRenderItem> newRenderItems = new ArrayList<>();
       for (DocRenderPassFactory.Item item : itemsToSet) {
-        DocRenderItem newItem = new DocRenderItem(editor, item.textRange, collapseNewItems ? null : item.textToRender);
+        DocRenderItem newItem = new DocRenderItem(editor, item.textRange, finalCollapseNewItems ? null : item.textToRender);
         newRenderItems.add(newItem);
-        if (collapseNewItems) {
+        if (finalCollapseNewItems) {
           updated |= newItem.toggle(foldingTasks);
           newItem.textToRender = item.textToRender;
           itemsToUpdateInlays.add(newItem);
@@ -146,9 +150,13 @@ public class DocRenderItem {
         }, connection);
         editor.getCaretModel().addCaretListener(new MyCaretListener(), connection);
 
-        DocRenderMouseEventBridge mouseEventBridge = new DocRenderMouseEventBridge();
+        DocRenderSelectionManager selectionManager = new DocRenderSelectionManager(editor);
+        Disposer.register(connection, selectionManager);
+
+        DocRenderMouseEventBridge mouseEventBridge = new DocRenderMouseEventBridge(selectionManager);
         editor.addEditorMouseListener(mouseEventBridge, connection);
         editor.addEditorMouseMotionListener(mouseEventBridge, connection);
+
         IconVisibilityController iconVisibilityController = new IconVisibilityController();
         editor.addEditorMouseListener(iconVisibilityController, connection);
         editor.addEditorMouseMotionListener(iconVisibilityController, connection);
@@ -187,16 +195,22 @@ public class DocRenderItem {
     Project project = editor.getProject();
     if (project == null) return null;
     PsiDocumentManager.getInstance(project).commitDocument(editor.getDocument());
-    return items.stream().filter(item -> {
-      if (!item.isValid()) return false;
+    DocRenderItem foundItem = null;
+    int foundStartOffset = 0;
+    for (DocRenderItem item : items) {
+      if (!item.isValid()) continue;
       PsiDocCommentBase comment = item.getComment();
-      if (comment == null) return false;
+      if (comment == null) continue;
       PsiElement owner = comment.getOwner();
-      if (owner == null) return false;
+      if (owner == null) continue;
       TextRange ownerTextRange = owner.getTextRange();
-      if (ownerTextRange == null) return false;
-      return ownerTextRange.containsOffset(offset);
-    }).findFirst().orElse(null);
+      if (ownerTextRange == null || !ownerTextRange.containsOffset(offset)) continue;
+      int startOffset = ownerTextRange.getStartOffset();
+      if (foundItem != null && foundStartOffset >= startOffset) continue;
+      foundItem = item;
+      foundStartOffset = startOffset;
+    }
+    return foundItem;
   }
 
   static void resetToDefaultState(@NotNull Editor editor) {
@@ -386,7 +400,7 @@ public class DocRenderItem {
     return textToRender;
   }
 
-  private static class RelevantOffsets {
+  private static final class RelevantOffsets {
     private final int foldStartOffset;
     private final int foldEndOffset;
     private final int inlayOffset;
@@ -430,7 +444,7 @@ public class DocRenderItem {
     }
   }
 
-  private static class MyVisibleAreaListener implements VisibleAreaListener {
+  private static final class MyVisibleAreaListener implements VisibleAreaListener {
     private int lastWidth;
     private AffineTransform lastFrcTransform;
 
@@ -533,7 +547,7 @@ public class DocRenderItem {
     }
   }
 
-  private static class ToggleRenderingAction extends DumbAwareAction {
+  private static final class ToggleRenderingAction extends DumbAwareAction {
     private final DocRenderItem item;
 
     private ToggleRenderingAction(DocRenderItem item) {

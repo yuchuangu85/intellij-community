@@ -29,6 +29,7 @@ import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.registry.RegistryValue;
 import com.intellij.openapi.util.registry.RegistryValueListener;
 import com.intellij.openapi.vcs.FilePath;
+import com.intellij.openapi.vcs.ProjectLevelVcsManager;
 import com.intellij.openapi.vcs.VcsBundle;
 import com.intellij.openapi.vcs.VcsConfiguration;
 import com.intellij.openapi.vcs.VcsException;
@@ -48,6 +49,7 @@ import com.intellij.ui.JBColor;
 import com.intellij.ui.components.panels.Wrapper;
 import com.intellij.ui.content.Content;
 import com.intellij.util.Alarm;
+import com.intellij.util.NotNullFunction;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.messages.MessageBusConnection;
 import com.intellij.util.ui.JBUI;
@@ -127,6 +129,14 @@ public class ChangesViewManager implements ChangesViewEx,
     @Override
     public void preloadTabContent(@NotNull Content content) {
       content.putUserData(Content.TAB_DND_TARGET_KEY, new MyContentDnDTarget(myProject, content));
+    }
+  }
+
+  public static class ContentPredicate implements NotNullFunction<Project, Boolean> {
+    @NotNull
+    @Override
+    public Boolean fun(Project project) {
+      return ProjectLevelVcsManager.getInstance(project).hasActiveVcss();
     }
   }
 
@@ -290,7 +300,7 @@ public class ChangesViewManager implements ChangesViewEx,
     myToolWindowPanel.openEditorPreview();
   }
 
-  public static class ChangesViewToolWindowPanel extends SimpleToolWindowPanel implements ChangesViewContentManagerListener, Disposable {
+  public static final class ChangesViewToolWindowPanel extends SimpleToolWindowPanel implements ChangesViewContentManagerListener, Disposable {
     @NotNull private static final RegistryValue isToolbarHorizontalSetting = Registry.get("vcs.local.changes.toolbar.horizontal");
     @NotNull private static final RegistryValue isEditorDiffPreview = Registry.get("show.diff.preview.as.editor.tab");
     @NotNull private static final RegistryValue isOpenEditorDiffPreviewWithSingleClick =
@@ -337,7 +347,7 @@ public class ChangesViewManager implements ChangesViewEx,
         myChangesViewManager.myState.groupingKeys = myView.getGroupingSupport().getGroupingKeys();
         scheduleRefresh();
       });
-      ChangesDnDSupport.install(myProject, myView);
+      ChangesViewDnDSupport.install(myProject, myView, this);
 
       myChangesPanel.getToolbarActionGroup().addAll(createChangesToolbarActions(myView.getTreeExpander()));
       myChangesPanel.setToolbarHorizontal(commitWorkflowManager.isNonModal() && isToolbarHorizontalSetting.asBoolean());
@@ -448,6 +458,8 @@ public class ChangesViewManager implements ChangesViewEx,
     }
 
     private void setDiffPreview(boolean force) {
+      if (myDisposed) return;
+
       boolean isEditorPreview = isCommitToolWindow(myProject) || isEditorDiffPreview.asBoolean();
       if (!force) {
         if (isEditorPreview && myDiffPreview instanceof EditorTabPreview) return;
@@ -706,7 +718,7 @@ public class ChangesViewManager implements ChangesViewEx,
 
         invokeLaterIfNeeded(() -> {
           if (myDisposed) return;
-          indicator.checkCanceled();
+          if (canBeCancelled) indicator.checkCanceled();
 
           for (ChangesViewModifier extension : ChangesViewModifier.KEY.getExtensions(myProject)) {
             extension.modifyTreeModelBuilder(treeModelBuilder);
@@ -844,7 +856,7 @@ public class ChangesViewManager implements ChangesViewEx,
       return new ChangesViewCommitPanel(myView, changesViewToolWindowPanel);
   }
 
-  private static class MyContentDnDTarget extends VcsToolwindowDnDTarget {
+  private static final class MyContentDnDTarget extends VcsToolwindowDnDTarget {
     private MyContentDnDTarget(@NotNull Project project, @NotNull Content content) {
       super(project, content);
     }
@@ -856,8 +868,8 @@ public class ChangesViewManager implements ChangesViewEx,
       if (attachedObject instanceof ShelvedChangeListDragBean) {
         ChangesViewToolWindowPanel panel = ((ChangesViewManager)getInstance(myProject)).initToolWindowPanel();
         ShelveChangesManager.unshelveSilentlyWithDnd(myProject, (ShelvedChangeListDragBean)attachedObject,
-                                                     ChangesDnDSupport.getDropRootNode(panel.myView, event),
-                                                     !ChangesDnDSupport.isCopyAction(event));
+                                                     ChangesTreeDnDSupport.getDropRootNode(panel.myView, event),
+                                                     !ChangesTreeDnDSupport.isCopyAction(event));
       }
     }
 

@@ -17,14 +17,13 @@ import com.intellij.lang.refactoring.RefactoringSupportProvider;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.CommandProcessor;
+import com.intellij.openapi.diagnostic.Attachment;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.RangeMarker;
 import com.intellij.openapi.editor.SelectionModel;
 import com.intellij.openapi.editor.colors.EditorColors;
-import com.intellij.openapi.editor.colors.EditorColorsManager;
-import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
@@ -66,10 +65,12 @@ import com.intellij.util.containers.MultiMap;
 import com.siyeh.ig.psiutils.CommentTracker;
 import com.siyeh.ig.psiutils.VariableAccessUtils;
 import com.siyeh.ipp.psiutils.ErrorUtil;
+import one.util.streamex.EntryStream;
 import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.*;
 
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -304,26 +305,33 @@ public abstract class IntroduceVariableBase extends IntroduceHandlerBase {
     while (expression != null) {
       if (!expressions.contains(expression) && !(expression instanceof PsiParenthesizedExpression) && !(expression instanceof PsiSuperExpression) &&
           (acceptVoid || !PsiType.VOID.equals(expression.getType()))) {
-        if (expression instanceof PsiMethodReferenceExpression) {
+        if (isExtractable(expression)) {
           expressions.add(expression);
-        }
-        else if (!(expression instanceof PsiAssignmentExpression)) {
-          if (!(expression instanceof PsiReferenceExpression)) {
-            expressions.add(expression);
-          }
-          else {
-            if (!(expression.getParent() instanceof PsiMethodCallExpression)) {
-              final PsiElement resolve = ((PsiReferenceExpression)expression).resolve();
-              if (!(resolve instanceof PsiClass) && !(resolve instanceof PsiPackage)) {
-                expressions.add(expression);
-              }
-            }
-          }
         }
       }
       expression = PsiTreeUtil.getParentOfType(expression, PsiExpression.class);
     }
     return expressions;
+  }
+
+  public static boolean isExtractable(PsiExpression expression) {
+    if (expression instanceof PsiMethodReferenceExpression) {
+      return true;
+    }
+    else if (!(expression instanceof PsiAssignmentExpression)) {
+      if (!(expression instanceof PsiReferenceExpression)) {
+        return true;
+      }
+      else {
+        if (!(expression.getParent() instanceof PsiMethodCallExpression)) {
+          final PsiElement resolve = ((PsiReferenceExpression)expression).resolve();
+          if (!(resolve instanceof PsiClass) && !(resolve instanceof PsiPackage)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
   public static PsiElement[] findStatementsAtOffset(final Editor editor, final PsiFile file, final int offset) {
@@ -368,7 +376,7 @@ public abstract class IntroduceVariableBase extends IntroduceHandlerBase {
     if (tempExpr == null) {
       tempExpr = getSelectedExpression(project, file, startOffset, endOffset);
     }
-    return tempExpr;
+    return isExtractable(tempExpr) ? tempExpr : null;
   }
 
   /**
@@ -631,6 +639,16 @@ public abstract class IntroduceVariableBase extends IntroduceHandlerBase {
       return false;
     }
 
+    try {
+      JavaPsiFacade.getElementFactory(project).createTypeElementFromText(
+        GenericsUtil.getVariableTypeByExpressionType(originalType).getCanonicalText(), expr);
+    }
+    catch (IncorrectOperationException ignore) {
+      String message = RefactoringBundle.getCannotRefactorMessage(JavaRefactoringBundle.message("unknown.expression.type"));
+      showErrorMessage(project, editor, message);
+      return false;
+    }
+
     for (PsiPatternVariable variable : JavaPsiPatternUtil.getExposedPatternVariables(expr)) {
       if (VariableAccessUtils.getVariableReferences(variable, variable.getDeclarationScope()).stream()
         .anyMatch(ref -> !PsiTreeUtil.isAncestor(expr, ref, true))) {
@@ -714,6 +732,21 @@ public abstract class IntroduceVariableBase extends IntroduceHandlerBase {
           JavaReplaceChoice finalChoice = settings.getReplaceChoice();
           PsiExpression[] selectedOccurrences = finalChoice.filter(occurrenceManager);
           final PsiElement chosenAnchor = getAnchor(selectedOccurrences);
+          if (chosenAnchor == null) {
+            String text = file.getText();
+            String textWithOccurrences = StreamEx.of(selectedOccurrences)
+              .map(e -> getPhysicalElement(e).getTextRange())
+              .flatMapToEntry(range -> EntryStream.of(range.getStartOffset(), "[", range.getEndOffset(), "]").toMap())
+              .sortedBy(Map.Entry::getKey)
+              .prepend(0, "")
+              .append(text.length(), "")
+              .map(Function.identity())
+              .pairMap((prev, next) -> text.substring(prev.getKey(), next.getKey()) + next.getValue())
+              .joining();
+            LOG.error("Unable to find anchor for a new variable; selectedOccurrences.length = "+selectedOccurrences.length,
+                      new Attachment("source.java", textWithOccurrences));
+            return;
+          }
 
           final RefactoringEventData beforeData = new RefactoringEventData();
           beforeData.addElement(expr);
@@ -752,7 +785,7 @@ public abstract class IntroduceVariableBase extends IntroduceHandlerBase {
     boolean inFinalContext = occurrenceManager.isInFinalContext();
     PsiExpression expr = occurrenceManager.getMainOccurence();
     PsiExpression[] selectedOccurrences = choice.filter(occurrenceManager);
-    final InputValidator validator = new InputValidator(IntroduceVariableBase.this, project, occurrenceManager);
+    final InputValidator validator = new InputValidator(this, project, occurrenceManager);
     final TypeSelectorManagerImpl typeSelectorManager = new TypeSelectorManagerImpl(project, originalType, expr, selectedOccurrences);
     typeSelectorManager.setAllOccurrences(true);
 
@@ -1032,9 +1065,7 @@ public abstract class IntroduceVariableBase extends IntroduceHandlerBase {
     if (editor == null) return;
     if (ApplicationManager.getApplication().isUnitTestMode()) return;
     HighlightManager highlightManager = HighlightManager.getInstance(project);
-    EditorColorsManager colorsManager = EditorColorsManager.getInstance();
-    TextAttributes attributes = colorsManager.getGlobalScheme().getAttributes(EditorColors.SEARCH_RESULT_ATTRIBUTES);
-    highlightManager.addOccurrenceHighlights(editor, replacedOccurrences, attributes, true, null);
+    highlightManager.addOccurrenceHighlights(editor, replacedOccurrences, EditorColors.SEARCH_RESULT_ATTRIBUTES, true, null);
     WindowManager.getInstance().getStatusBar(project).setInfo(RefactoringBundle.message("press.escape.to.remove.the.highlighting"));
   }
 

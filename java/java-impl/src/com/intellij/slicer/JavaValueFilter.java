@@ -48,9 +48,9 @@ public class JavaValueFilter implements SliceValueFilter {
     return new JavaValueFilter(myDfaFilter, myStackFilter.pushFrame());
   }
 
-  @NotNull JavaValueFilter popFrame() {
+  @NotNull JavaValueFilter popFrame(Project project) {
     if (myStackFilter == null) return this;
-    return new JavaValueFilter(myDfaFilter, myStackFilter.popFrame());
+    return new JavaValueFilter(myDfaFilter, myStackFilter.popFrame(project));
   }
   
   @NotNull JavaValueFilter dropFrameFilter() {
@@ -68,8 +68,8 @@ public class JavaValueFilter implements SliceValueFilter {
     return new JavaValueFilter(myDfaFilter.unwrap(), myStackFilter);
   }
 
-  @NotNull SearchScope correctScope(@NotNull Project project, @NotNull SearchScope scope) {
-    return myStackFilter == null ? scope : myStackFilter.correctScope(project, scope);
+  @NotNull SearchScope correctScope(@NotNull SearchScope scope) {
+    return myStackFilter == null ? scope : myStackFilter.correctScope(scope);
   }
 
   @Override
@@ -96,5 +96,12 @@ public class JavaValueFilter implements SliceValueFilter {
 
   public boolean requiresAssertionViolation(PsiElement element) {
     return myDfaFilter != null && myDfaFilter.requiresAssertionViolation(element);
+  }
+
+  JavaValueFilter copyStackFrom(SliceValueFilter filter) {
+    if (filter instanceof JavaValueFilter && ((JavaValueFilter)filter).myStackFilter != myStackFilter) {
+      return new JavaValueFilter(myDfaFilter, ((JavaValueFilter)filter).myStackFilter);
+    }
+    return this;
   }
 }

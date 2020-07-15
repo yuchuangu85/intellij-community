@@ -55,7 +55,7 @@ public class PsiReferenceRegistrarImpl extends PsiReferenceRegistrar {
   }
 
   void cleanup() {
-    for (Disposable disposable : myCleanupDisposables) {
+    for (Disposable disposable : new ArrayList<>(myCleanupDisposables)) {
       Disposer.dispose(disposable);
     }
     myCleanupDisposables.clear();
@@ -105,7 +105,13 @@ public class PsiReferenceRegistrarImpl extends PsiReferenceRegistrar {
     }
     providerBinding.registerProvider(provider, pattern, priority);
     if (parentDisposable != null) {
-      Disposable disposable = () -> unregisterReferenceProvider(scope, provider);
+      Disposable disposable = new Disposable() {
+        @Override
+        public void dispose() {
+          PsiReferenceRegistrarImpl.this.unregisterReferenceProvider(scope, provider);
+          myCleanupDisposables.remove(this);
+        }
+      };
       Disposer.register(parentDisposable, disposable);
       myCleanupDisposables.add(disposable);
     }
@@ -149,10 +155,14 @@ public class PsiReferenceRegistrarImpl extends PsiReferenceRegistrar {
     providerBinding.registerProvider(names, pattern, caseSensitive, provider, priority);
     if (parentDisposable != null) {
       NamedObjectProviderBinding finalProviderBinding = providerBinding;
-      Disposable disposable = () -> {
-        finalProviderBinding.unregisterProvider(provider);
-        if (finalProviderBinding.isEmpty()) {
-          myNamedBindingsMap.remove(scopeClass);
+      Disposable disposable = new Disposable() {
+        @Override
+        public void dispose() {
+          finalProviderBinding.unregisterProvider(provider);
+          if (finalProviderBinding.isEmpty()) {
+            myNamedBindingsMap.remove(scopeClass);
+          }
+          myCleanupDisposables.remove(this);
         }
       };
       myCleanupDisposables.add(disposable);

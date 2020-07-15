@@ -4,6 +4,7 @@ package com.intellij.vcs.log.ui.filter;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.DataManager;
 import com.intellij.openapi.actionSystem.ActionGroup;
+import com.intellij.openapi.actionSystem.impl.AutoPopupSupportingListener;
 import com.intellij.openapi.ui.GraphicsConfig;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.openapi.ui.popup.ListPopup;
@@ -18,7 +19,6 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import javax.swing.border.Border;
-import javax.swing.border.LineBorder;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.Area;
@@ -27,7 +27,8 @@ import java.util.function.Supplier;
 
 public abstract class VcsLogPopupComponent extends JPanel {
   private static final int GAP_BEFORE_ARROW = 3;
-  private static final int BORDER_SIZE = 2;
+  protected static final int BORDER_SIZE = 2;
+  protected static final int ARC_SIZE = 10;
 
   private final PopupState myPopupState = new PopupState();
   @NotNull private final Supplier<String> myDisplayName;
@@ -43,7 +44,7 @@ public abstract class VcsLogPopupComponent extends JPanel {
     myValueLabel = new DynamicLabel(this::getCurrentText);
     setDefaultForeground();
     setFocusable(true);
-    setBorder(createUnfocusedBorder());
+    setBorder(wrapBorder(createUnfocusedBorder()));
 
     setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
     if (myNameLabel != null) add(myNameLabel);
@@ -91,12 +92,12 @@ public abstract class VcsLogPopupComponent extends JPanel {
     addFocusListener(new FocusAdapter() {
       @Override
       public void focusGained(@NotNull FocusEvent e) {
-        setBorder(createFocusedBorder());
+        setBorder(wrapBorder(createFocusedBorder()));
       }
 
       @Override
       public void focusLost(@NotNull FocusEvent e) {
-        setBorder(createUnfocusedBorder());
+        setBorder(wrapBorder(createUnfocusedBorder()));
       }
     });
   }
@@ -154,6 +155,7 @@ public abstract class VcsLogPopupComponent extends JPanel {
     if (myPopupState.isRecentlyHidden()) return; // do not show new popup
     ListPopup popup = createPopupMenu();
     popup.addListener(myPopupState);
+    AutoPopupSupportingListener.installOn(popup);
     popup.showUnderneathOf(this);
   }
 
@@ -165,20 +167,25 @@ public abstract class VcsLogPopupComponent extends JPanel {
   }
 
   private static Border createFocusedBorder() {
-    return BorderFactory.createCompoundBorder(new FilledRoundedBorder(UIUtil.getFocusedBorderColor(), 10, BORDER_SIZE),
-                                              JBUI.Borders.empty(2));
+    return new FilledRoundedBorder(UIUtil.getFocusedBorderColor(), ARC_SIZE, BORDER_SIZE);
   }
 
-  private static Border createUnfocusedBorder() {
-    return BorderFactory.createCompoundBorder(BorderFactory.createEmptyBorder(BORDER_SIZE, BORDER_SIZE, BORDER_SIZE, BORDER_SIZE),
-                                              JBUI.Borders.empty(2));
+  protected Border createUnfocusedBorder() {
+    return JBUI.Borders.empty(BORDER_SIZE);
   }
 
-  private static class FilledRoundedBorder extends LineBorder {
+  private static Border wrapBorder(Border outerBorder) {
+    return BorderFactory.createCompoundBorder(outerBorder, JBUI.Borders.empty(2));
+  }
+
+  public static class FilledRoundedBorder implements Border {
+    private final Color myColor;
+    private final int myThickness;
     private final int myArcSize;
 
-    FilledRoundedBorder(@NotNull Color color, int arcSize, int thickness) {
-      super(color, thickness);
+    public FilledRoundedBorder(@NotNull Color color, int arcSize, int thickness) {
+      myColor = color;
+      myThickness = thickness;
       myArcSize = arcSize;
     }
 
@@ -186,9 +193,12 @@ public abstract class VcsLogPopupComponent extends JPanel {
     public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
       GraphicsConfig config = GraphicsUtil.setupAAPainting(g);
 
-      g.setColor(lineColor);
-      Area area = new Area(new RoundRectangle2D.Double(x, y, width, height, myArcSize, myArcSize));
-      int innerArc = Math.max(myArcSize - thickness, 0);
+      g.setColor(myColor);
+
+      int thickness = JBUI.scale(myThickness);
+      int arcSize = JBUI.scale(myArcSize);
+      Area area = new Area(new RoundRectangle2D.Double(x, y, width, height, arcSize, arcSize));
+      int innerArc = Math.max(arcSize - thickness, 0);
       area.subtract(new Area(new RoundRectangle2D.Double(x + thickness, y + thickness,
                                                          width - 2 * thickness, height - 2 * thickness,
                                                          innerArc, innerArc)));
@@ -196,9 +206,19 @@ public abstract class VcsLogPopupComponent extends JPanel {
 
       config.restore();
     }
+
+    @Override
+    public Insets getBorderInsets(Component c) {
+      return JBUI.insets(myThickness);
+    }
+
+    @Override
+    public boolean isBorderOpaque() {
+      return false;
+    }
   }
 
-  private static class DynamicLabel extends JLabel {
+  private static final class DynamicLabel extends JLabel {
     private final Supplier<String> myText;
 
     private DynamicLabel(@NotNull Supplier<String> text) {myText = text;}

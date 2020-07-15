@@ -19,7 +19,6 @@ import com.intellij.openapi.util.*;
 import com.intellij.psi.PsiCompiledElement;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
-import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiUtilBase;
@@ -44,7 +43,6 @@ public class TemplateManagerImpl extends TemplateManager implements Disposable {
   private final Project myProject;
   private static final Key<Boolean> ourTemplateTesting = Key.create("TemplateTesting");
 
-  private static final Key<TemplateState> TEMPLATE_STATE_KEY = Key.create("TEMPLATE_STATE_KEY");
   private final TemplateManagerListener myEventPublisher;
 
   public TemplateManagerImpl(@NotNull Project project) {
@@ -97,35 +95,22 @@ public class TemplateManagerImpl extends TemplateManager implements Disposable {
 
   @Nullable
   public static TemplateState getTemplateState(@NotNull Editor editor) {
-    UserDataHolder stateHolder = InjectedLanguageUtil.getTopLevelEditor(editor);
-    TemplateState templateState = stateHolder.getUserData(TEMPLATE_STATE_KEY);
-    if (templateState != null && templateState.isDisposed()) {
-      stateHolder.putUserData(TEMPLATE_STATE_KEY, null);
-      return null;
-    }
-    return templateState;
+    return (TemplateState) TemplateManagerUtilBase.getTemplateState(editor);
   }
 
   @Nullable
   static TemplateState clearTemplateState(@NotNull Editor editor) {
-    TemplateState prevState = getTemplateState(editor);
-    if (prevState != null) {
-      Editor stateEditor = prevState.getEditor();
-      if (stateEditor != null) {
-        stateEditor.putUserData(TEMPLATE_STATE_KEY, null);
-      }
-    }
-    return prevState;
+    return (TemplateState) TemplateManagerUtilBase.clearTemplateState(editor);
   }
 
   @NotNull
   private TemplateState initTemplateState(@NotNull Editor editor) {
-    Editor topLevelEditor = InjectedLanguageUtil.getTopLevelEditor(editor);
+    Editor topLevelEditor = TemplateManagerUtilBase.getTopLevelEditor(editor);
     TemplateState prevState = clearTemplateState(topLevelEditor);
     if (prevState != null) Disposer.dispose(prevState);
     TemplateState state = new TemplateState(myProject, topLevelEditor);
     Disposer.register(this, state);
-    topLevelEditor.putUserData(TEMPLATE_STATE_KEY, state);
+    TemplateManagerUtilBase.setTemplateState(topLevelEditor, state);
     return state;
   }
 
@@ -179,7 +164,8 @@ public class TemplateManagerImpl extends TemplateManager implements Disposable {
       else {
         editor.getSelectionModel().removeSelection();
       }
-      templateState.start(substituteTemplate((TemplateImpl)template, editor), processor, predefinedVarValues);
+      templateState
+        .start(substituteTemplate((TemplateImpl)template, editor), processor, predefinedVarValues);
       myEventPublisher.templateStarted(templateState);
     };
     if (inSeparateCommand) {
@@ -445,6 +431,10 @@ public class TemplateManagerImpl extends TemplateManager implements Disposable {
 
   @NotNull
   private TemplateImpl substituteTemplate(@NotNull TemplateImpl template, @NotNull Editor editor) {
+    PsiFile psiFile = PsiDocumentManager.getInstance(myProject).getPsiFile(editor.getDocument());
+    if (psiFile == null) {
+      return template;
+    }
     for (TemplateSubstitutor substitutor : TemplateSubstitutor.EP_NAME.getExtensionList()) {
       final TemplateImpl substituted = substitutor.substituteTemplate(new TemplateSubstitutionContext(myProject, editor), template);
       if (substituted != null) {

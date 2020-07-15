@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vfs.encoding;
 
 import com.intellij.concurrency.JobSchedulerImpl;
@@ -36,7 +36,6 @@ import gnu.trove.THashSet;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.ide.PooledThreadExecutor;
 
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
@@ -89,7 +88,7 @@ public class EncodingManagerImpl extends EncodingManager implements PersistentSt
   private static final Key<Charset> CACHED_CHARSET_FROM_CONTENT = Key.create("CACHED_CHARSET_FROM_CONTENT");
 
   private final ExecutorService changedDocumentExecutor = AppExecutorUtil.createBoundedApplicationPoolExecutor(
-    "EncodingManagerImpl Document Pool", PooledThreadExecutor.INSTANCE, JobSchedulerImpl.getJobPoolParallelism(), this);
+    "EncodingManagerImpl Document Pool", AppExecutorUtil.getAppExecutorService(), JobSchedulerImpl.getJobPoolParallelism(), this);
 
   private final AtomicBoolean myDisposed = new AtomicBoolean();
 
@@ -196,7 +195,7 @@ public class EncodingManagerImpl extends EncodingManager implements PersistentSt
     }
   }
 
-  private static class DocumentEncodingDetectRequest implements Runnable {
+  private static final class DocumentEncodingDetectRequest implements Runnable {
     private final Reference<Document> ref;
     @NotNull private final AtomicBoolean myDisposed;
 

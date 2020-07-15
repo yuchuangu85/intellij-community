@@ -267,7 +267,7 @@ public abstract class CodeStyleAbstractPanel implements Disposable, ComponentHig
       mySettings,
       settings -> {
         settings.setRightMargin(getDefaultLanguage(), getAdjustedRightMargin());
-        CodeStyleManager.getInstance(project).reformat(psiFile);
+        doReformat(project, psiFile);
       });
     return getDocumentBeforeChanges(project, psiFile);
   }

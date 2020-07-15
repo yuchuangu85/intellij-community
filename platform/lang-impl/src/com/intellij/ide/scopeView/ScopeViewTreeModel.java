@@ -388,9 +388,7 @@ final class ScopeViewTreeModel extends BaseTreeModel<AbstractTreeNode<?>> implem
           }
         });
         Comparator<? super NodeDescriptor<?>> comparator = this.comparator;
-        if (comparator != null) {
-          result.sort(comparator);
-        }
+        if (comparator != null) result.sort(comparator);
         return result;
       }
     }
@@ -1055,7 +1053,7 @@ final class ScopeViewTreeModel extends BaseTreeModel<AbstractTreeNode<?>> implem
       Object id = roots.get(0).node.getRootID();
       if (roots.stream().anyMatch(root -> !root.node.getRootID().equals(id))) return AllIcons.Nodes.ModuleGroup;
       if (id instanceof Module) {
-        return ((ModuleType<?>)ModuleType.get((Module)id)).getIcon();
+        return ModuleType.get((Module)id).getIcon();
       }
       return AllIcons.Nodes.Module;
     }

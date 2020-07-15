@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide;
 
 import com.intellij.ui.AppUIUtil;
@@ -9,7 +9,7 @@ import java.awt.*;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 
-public class ActiveWindowsWatcher {
+public final class ActiveWindowsWatcher {
 
   private final static LinkedHashSet<Window> activatedWindows = new LinkedHashSet<>();
 
@@ -26,7 +26,7 @@ public class ActiveWindowsWatcher {
   public static void updateActivatedWindowSet() {
     for (Iterator<Window> iter = activatedWindows.iterator(); iter.hasNext(); ) {
       Window window = iter.next();
-      if (!window.isVisible() || ComponentUtil.isMinimized(window) || AppUIUtil.isInFullscreen(window)) {
+      if (!window.isFocusableWindow() || !window.isVisible() || ComponentUtil.isMinimized(window) || AppUIUtil.isInFullscreen(window)) {
         iter.remove();
       }
     }

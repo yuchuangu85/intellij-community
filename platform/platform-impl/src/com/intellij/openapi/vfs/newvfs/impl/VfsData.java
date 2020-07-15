@@ -74,7 +74,6 @@ public class VfsData {
   private final ConcurrentBitSet myInvalidatedIds = new ConcurrentBitSet();
   private TIntHashSet myDyingIds = new TIntHashSet();
 
-  private boolean myHasChangedParents; // synchronized by read-write lock; clients outside read-action deserve to get outdated result
   private final IntObjectMap<VirtualDirectoryImpl> myChangedParents = ContainerUtil.createConcurrentIntObjectMap();
 
   public VfsData() {
@@ -151,7 +150,7 @@ public class VfsData {
     int key = id >>> SEGMENT_BITS;
     Segment segment = mySegments.get(key);
     if (segment != null || !create) return segment;
-    return mySegments.cacheOrGet(key, new Segment(this));
+    return mySegments.cacheOrGet(key, new Segment(this, key));
   }
 
   public boolean hasLoadedFile(int id) {
@@ -159,7 +158,7 @@ public class VfsData {
     return segment != null && segment.myObjectArray.get(getOffset(id)) != null;
   }
 
-  public static class FileAlreadyCreatedException extends RuntimeException {
+  public static final class FileAlreadyCreatedException extends RuntimeException {
     private FileAlreadyCreatedException(@NotNull String message) {
       super(message);
     }
@@ -193,12 +192,11 @@ public class VfsData {
 
   @Nullable
   VirtualDirectoryImpl getChangedParent(int id) {
-    return myHasChangedParents ? myChangedParents.get(id): null;
+    return myChangedParents.get(id);
   }
 
-  void changeParent(int id, @NotNull VirtualDirectoryImpl parent) {
+  private void changeParent(int id, @NotNull VirtualDirectoryImpl parent) {
     ApplicationManager.getApplication().assertWriteAccessAllowed();
-    myHasChangedParents = true;
     myChangedParents.put(id, parent);
   }
 
@@ -210,16 +208,30 @@ public class VfsData {
   }
 
   static class Segment {
+    private final int myIndex;
     // user data for files, DirectoryData for folders
-    private final AtomicReferenceArray<Object> myObjectArray = new AtomicReferenceArray<>(SEGMENT_SIZE);
+    private final AtomicReferenceArray<Object> myObjectArray;
 
     // <nameId, flags> pairs, "flags" part containing flags per se and modification stamp
-    private final AtomicIntegerArray myIntArray = new AtomicIntegerArray(SEGMENT_SIZE * 2);
+    private final AtomicIntegerArray myIntArray;
 
     @NotNull
     final VfsData vfsData;
 
-    Segment(@NotNull VfsData vfsData) {
+    // the reference is synchronized by read-write lock; clients outside read-action deserve to get outdated result
+    @Nullable Segment replacement;
+
+    Segment(@NotNull VfsData vfsData, int index) {
+      this(vfsData, index, new AtomicReferenceArray<>(SEGMENT_SIZE), new AtomicIntegerArray(SEGMENT_SIZE * 2));
+    }
+
+    private Segment(@NotNull VfsData vfsData,
+                    int index,
+                    @NotNull AtomicReferenceArray<Object> objectArray,
+                    @NotNull AtomicIntegerArray intArray) {
+      myIndex = index;
+      myObjectArray = objectArray;
+      myIntArray = intArray;
       this.vfsData = vfsData;
     }
 
@@ -283,6 +295,14 @@ public class VfsData {
         }
       }
     }
+
+    void changeParent(int fileId, VirtualDirectoryImpl directory) {
+      assert replacement == null;
+      replacement = new Segment(vfsData, myIndex, myObjectArray, myIntArray);
+      boolean replaced = vfsData.mySegments.replace(myIndex, this, replacement);
+      assert replaced;
+      vfsData.changeParent(fileId, directory);
+    }
   }
 
   // non-final field accesses are synchronized on this instance, but this happens in VirtualDirectoryImpl
@@ -305,7 +325,7 @@ public class VfsData {
       VirtualFileSystemEntry[] children = new VirtualFileSystemEntry[ids.length];
       for (int i = 0; i < ids.length; i++) {
         int childId = ids[i];
-        VirtualFileSystemEntry child = parent.mySegment.vfsData.getFileById(childId, parent, putToMemoryCache);
+        VirtualFileSystemEntry child = parent.getVfsData().getFileById(childId, parent, putToMemoryCache);
         if (child == null) {
           throw new AssertionError("No file for id " + childId + ", parentId = " + parent.myId);
         }

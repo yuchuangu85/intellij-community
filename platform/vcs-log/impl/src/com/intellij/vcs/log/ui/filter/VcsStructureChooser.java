@@ -268,7 +268,7 @@ public class VcsStructureChooser extends DialogWrapper {
     return descriptor.getElement().getFile();
   }
 
-  private static class MyCheckboxTreeCellRenderer extends JPanel implements TreeCellRenderer {
+  private static final class MyCheckboxTreeCellRenderer extends JPanel implements TreeCellRenderer {
     @NotNull private final WithModulesListCellRenderer myTextRenderer;
     @NotNull public final JCheckBox myCheckbox;
     @NotNull private final SelectionManager mySelectionManager;
@@ -303,7 +303,7 @@ public class VcsStructureChooser extends DialogWrapper {
       myFictive = new JBList();
       myFictive.setBackground(RenderingUtil.getBackground(tree));
       myFictive.setSelectionBackground(UIUtil.getListSelectionBackground(true));
-      myFictive.setSelectionForeground(UIUtil.getListSelectionForeground());
+      myFictive.setSelectionForeground(UIUtil.getListSelectionForeground(true));
 
       myTextRenderer = new WithModulesListCellRenderer(project, myModulesSet) {
         @Override

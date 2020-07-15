@@ -46,6 +46,7 @@ class RootIndex {
 
   private final Map<VirtualFile, String> myPackagePrefixByRoot;
   private final Map<VirtualFile, DirectoryInfo> myRootInfos;
+  private final boolean myHasNonDirectoryRoots;
   private final ConcurrentBitSet myNonInterestingIds = new ConcurrentBitSet();
   @NotNull private final Project myProject;
   final PackageDirectoryCache myPackageDirectoryCache;
@@ -68,6 +69,7 @@ class RootIndex {
     Set<VirtualFile> allRoots = info.getAllRoots();
     MultiMap<String, VirtualFile> rootsByPackagePrefix = MultiMap.create(allRoots.size(), 0.75f);
     myRootInfos = new HashMap<>(allRoots.size());
+    myHasNonDirectoryRoots = ContainerUtil.exists(allRoots, r -> !r.isDirectory());
     myPackagePrefixByRoot = new HashMap<>(allRoots.size());
     List<List<VirtualFile>> hierarchies = new ArrayList<>(allRoots.size());
     for (VirtualFile root : allRoots) {
@@ -236,36 +238,36 @@ class RootIndex {
 
     for (AdditionalLibraryRootsProvider provider : AdditionalLibraryRootsProvider.EP_NAME.getExtensionList()) {
       Collection<SyntheticLibrary> libraries = provider.getAdditionalProjectLibraries(project);
-      for (SyntheticLibrary descriptor : libraries) {
-        for (VirtualFile sourceRoot : descriptor.getSourceRoots()) {
-          if (!ensureValid(sourceRoot, descriptor)) continue;
+      for (SyntheticLibrary library : libraries) {
+        for (VirtualFile sourceRoot : library.getSourceRoots()) {
+          if (!ensureValid(sourceRoot, library, provider)) continue;
 
           info.libraryOrSdkSources.add(sourceRoot);
           info.classAndSourceRoots.add(sourceRoot);
-          if (descriptor instanceof JavaSyntheticLibrary) {
+          if (library instanceof JavaSyntheticLibrary) {
             info.packagePrefix.put(sourceRoot, "");
           }
-          info.sourceOfLibraries.putValue(sourceRoot, descriptor);
+          info.sourceOfLibraries.putValue(sourceRoot, library);
         }
-        for (VirtualFile classRoot : descriptor.getBinaryRoots()) {
-          if (!ensureValid(classRoot, project)) continue;
+        for (VirtualFile classRoot : library.getBinaryRoots()) {
+          if (!ensureValid(classRoot, project, provider)) continue;
 
           info.libraryOrSdkClasses.add(classRoot);
           info.classAndSourceRoots.add(classRoot);
-          if (descriptor instanceof JavaSyntheticLibrary) {
+          if (library instanceof JavaSyntheticLibrary) {
             info.packagePrefix.put(classRoot, "");
           }
-          info.classOfLibraries.putValue(classRoot, descriptor);
+          info.classOfLibraries.putValue(classRoot, library);
         }
-        for (VirtualFile file : descriptor.getExcludedRoots()) {
-          if (!ensureValid(file, project)) continue;
-          info.excludedFromLibraries.putValue(file, descriptor);
+        for (VirtualFile file : library.getExcludedRoots()) {
+          if (!ensureValid(file, project, provider)) continue;
+          info.excludedFromLibraries.putValue(file, library);
         }
       }
     }
     for (DirectoryIndexExcludePolicy policy : DirectoryIndexExcludePolicy.EP_NAME.getExtensions(project)) {
       List<VirtualFile> files = ContainerUtil.mapNotNull(policy.getExcludeUrlsForProject(), url -> VirtualFileManager.getInstance().findFileByUrl(url));
-      info.excludedFromProject.addAll(ContainerUtil.filter(files, file -> ensureValid(file, policy)));
+      info.excludedFromProject.addAll(ContainerUtil.filter(files, file -> ensureValid(file, project, policy)));
 
       Function<Sdk, List<VirtualFile>> fun = policy.getExcludeSdkRootsStrategy();
 
@@ -287,7 +289,7 @@ class RootIndex {
 
         for (Sdk sdk: sdks) {
           info.excludedFromSdkRoots
-            .addAll(ContainerUtil.filter(fun.fun(sdk), file -> ensureValid(file, policy) && !roots.contains(file)));
+            .addAll(ContainerUtil.filter(fun.fun(sdk), file -> ensureValid(file, sdk, policy) && !roots.contains(file)));
         }
       }
     }
@@ -303,12 +305,17 @@ class RootIndex {
   }
 
   private static boolean ensureValid(@NotNull VirtualFile file, @NotNull Object container) {
-    if (!(file instanceof VirtualFileWithId)) {
-      //skip roots from unsupported file systems (e.g. http)
-      return false;
-    }
+    return ensureValid(file, container, null);
+  }
+
+  private static boolean ensureValid(@NotNull VirtualFile file, @NotNull Object container, @Nullable Object containerProvider) {
     if (!file.isValid()) {
-      LOG.error("Invalid root " + file + " in " + container);
+      if (containerProvider != null) {
+        LOG.error("Invalid root " + file + " in " + container + " provided by " + containerProvider.getClass());
+      }
+      else {
+        LOG.error("Invalid root " + file + " in " + container);
+      }
       return false;
     }
     return true;
@@ -346,7 +353,7 @@ class RootIndex {
       }
     }
 
-    private static class Node {
+    private static final class Node {
       private final Module myKey;
       private final List<Edge> myEdges = new ArrayList<>();
       private Set<String> myUnloadedDependentModules;
@@ -591,14 +598,25 @@ class RootIndex {
 
   @NotNull
   DirectoryInfo getInfoForFile(@NotNull VirtualFile file) {
-    if (!file.isValid() || !(file instanceof VirtualFileWithId)) {
+    if (!file.isValid()) {
       return NonProjectDirectoryInfo.INVALID;
     }
 
-    for (VirtualFile each = file; each != null; each = each.getParent()) {
-      int id = ((VirtualFileWithId)each).getId();
-      if (!myNonInterestingIds.get(id)) {
-        DirectoryInfo info = handleInterestingId(id, each);
+    if (!file.isDirectory()) {
+      DirectoryInfo info = getOwnFileInfo(file);
+      if (info != null) return info;
+
+      file = file.getParent();
+    }
+
+    if (file instanceof VirtualFileWithId) {
+      for (VirtualFile each = file; each != null; each = each.getParent()) {
+        DirectoryInfo info = getOwnInfo(((VirtualFileWithId)each).getId(), each);
+        if (info != null) return info;
+      }
+    } else {
+      for (VirtualFile each = file; each != null; each = each.getParent()) {
+        DirectoryInfo info = getOwnInfo(each);
         if (info != null) return info;
       }
     }
@@ -607,7 +625,22 @@ class RootIndex {
   }
 
   @Nullable
-  private DirectoryInfo handleInterestingId(int id, @NotNull VirtualFile file) {
+  private DirectoryInfo getOwnFileInfo(@NotNull VirtualFile file) {
+    if (myHasNonDirectoryRoots) {
+      return file instanceof VirtualFileWithId
+             ? getOwnInfo(((VirtualFileWithId)file).getId(), file)
+             : getOwnInfo(file);
+    }
+    return ourFileTypes.isFileIgnored(file) ? NonProjectDirectoryInfo.IGNORED : null;
+  }
+
+  @Nullable
+  private DirectoryInfo getOwnInfo(int id, VirtualFile file) {
+    return myNonInterestingIds.get(id) ? null : handleInterestingId(id, file);
+  }
+
+  @Nullable
+  private DirectoryInfo getOwnInfo(@NotNull VirtualFile file) {
     DirectoryInfo info = myRootInfos.get(file);
     if (info != null) {
       return info;
@@ -617,12 +650,24 @@ class RootIndex {
       return NonProjectDirectoryInfo.IGNORED;
     }
 
-    if ((id > 500_000_000 || id < 0) && LOG.isDebugEnabled()) {
-      LOG.error("Invalid id: " + id + " for " + file + " of " + file.getClass());
+    return null;
+  }
+
+  @Nullable
+  private DirectoryInfo handleInterestingId(int id, @NotNull VirtualFile file) {
+    DirectoryInfo info = myRootInfos.get(file);
+    if (info == null && ourFileTypes.isFileIgnored(file)) {
+      info = NonProjectDirectoryInfo.IGNORED;
     }
 
-    myNonInterestingIds.set(id);
-    return null;
+    if (info == null) {
+      if ((id > 500_000_000 || id < 0) && LOG.isDebugEnabled()) {
+        LOG.error("Invalid id: " + id + " for " + file + " of " + file.getClass());
+      }
+
+      myNonInterestingIds.set(id);
+    }
+    return info;
   }
 
   @NotNull

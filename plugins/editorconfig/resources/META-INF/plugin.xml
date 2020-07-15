@@ -40,6 +40,7 @@ To create an EditorConfig file in a directory, right-click this directory and se
     <projectService serviceImplementation="org.editorconfig.configmanagement.editor.EditorConfigPreviewManager"/>
     <gotoFileContributor implementation="org.editorconfig.configmanagement.finder.EditorConfigGotoFileContributor"/>
     <stripTrailingSpacesFilterFactory implementation="org.editorconfig.configmanagement.EditorConfigTrailingSpacesFilterFactory"/>
+    <editorNotificationProvider implementation="org.editorconfig.configmanagement.editor.EditorConfigEditorNotificationProvider"/>
 
     <!-- Language support -->
     <fileType name="EditorConfig" 
@@ -389,7 +390,7 @@ To create an EditorConfig file in a directory, right-click this directory and se
         name="EditorConfig File"
         schemeClass="com.intellij.psi.codeStyle.CodeStyleScheme"
         implementationClass="org.editorconfig.configmanagement.export.EditorConfigExporter"/>
-    <notificationWhitelist groupIds="EditorConfig;editorconfig"/>
+    <notificationAllowlist groupIds="EditorConfig;editorconfig"/>
   </extensions>
 
 

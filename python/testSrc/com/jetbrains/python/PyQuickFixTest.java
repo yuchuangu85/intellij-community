@@ -166,6 +166,12 @@ public class PyQuickFixTest extends PyTestCase {
     doInspectionTest(PyDictCreationInspection.class, PyPsiBundle.message("QFIX.dict.creation"), true, true);
   }
 
+  // PY-40177
+  public void testDictCreationWithDoubleStars() {
+    runWithLanguageLevel(LanguageLevel.getLatest(),
+                         () -> doInspectionTest(PyDictCreationInspection.class, PyPsiBundle.message("QFIX.dict.creation"), true, true));
+  }
+
   public void testTransformClassicClass() {
     doInspectionTest(PyClassicStyleClassInspection.class, PyPsiBundle.message("QFIX.classic.class.transform"), true, true);
   }
@@ -356,6 +362,11 @@ public class PyQuickFixTest extends PyTestCase {
   }
 
   public void testListCreation() {
+    doInspectionTest(PyListCreationInspection.class, PyPsiBundle.message("QFIX.list.creation"), true, true);
+  }
+
+  // PY-16194
+  public void testListCreationOnlyConsecutiveAppends() {
     doInspectionTest(PyListCreationInspection.class, PyPsiBundle.message("QFIX.list.creation"), true, true);
   }
 
@@ -636,7 +647,7 @@ public class PyQuickFixTest extends PyTestCase {
   // PY-20452
   public void testRemoveRedundantEscapeInOnePartRegExp() {
     myFixture.enableInspections(new RedundantEscapeInspection());
-    myFixture.configureByText(PythonFileType.INSTANCE, "import re\nre.compile(\"(?P<foo>((\\/(?P<bar>.+))?))\")");
+    myFixture.configureByText(PythonFileType.INSTANCE, "import re\nre.compile(\"(?P<foo>((<caret>\\/(?P<bar>.+))?))\")");
 
     final List<IntentionAction> quickFixes = myFixture.getAllQuickFixes();
     assertEquals(1, quickFixes.size());
@@ -653,7 +664,7 @@ public class PyQuickFixTest extends PyTestCase {
     myFixture.enableInspections(new RedundantEscapeInspection());
     myFixture.configureByText(PythonFileType.INSTANCE, "import re\n" +
                                                        "re.compile(\"(?P<foo>\"\n" +
-                                                       "           \"((\\/(?P<bar>.+))?))\")");
+                                                       "           \"((<caret>\\/(?P<bar>.+))?))\")");
 
     final List<IntentionAction> quickFixes = myFixture.getAllQuickFixes();
     assertEquals(1, quickFixes.size());

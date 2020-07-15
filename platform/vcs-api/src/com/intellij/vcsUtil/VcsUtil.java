@@ -28,6 +28,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.StatusBar;
 import com.intellij.util.Function;
 import com.intellij.util.ThrowableConvertor;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -39,6 +40,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @SuppressWarnings("UtilityClassWithoutPrivateConstructor")
+@ApiStatus.NonExtendable
 public class VcsUtil {
   protected static final char[] ourCharsToBeChopped = {'/', '\\'};
   private static final Logger LOG = Logger.getInstance(VcsUtil.class);
@@ -161,25 +163,23 @@ public class VcsUtil {
     return findVcsByKey(project, key);
   }
 
-  @Nullable
-  public static VirtualFile getVcsRootFor(@NotNull Project project, FilePath filePath) {
+  public static @Nullable VirtualFile getVcsRootFor(@NotNull Project project, FilePath filePath) {
     return computeValue(project, manager -> manager.getVcsRootFor(filePath));
   }
 
-  @Nullable
-  public static VirtualFile getVcsRootFor(@NotNull Project project, @Nullable VirtualFile file) {
+  public static @Nullable VirtualFile getVcsRootFor(@NotNull Project project, @Nullable VirtualFile file) {
     return computeValue(project, manager -> manager.getVcsRootFor(file));
   }
 
   @Nullable
-  private static <T> T computeValue(@NotNull Project project, @NotNull Function<? super ProjectLevelVcsManager, ? extends T> provider) {
+  private static <T> T computeValue(@NotNull Project project, @NotNull java.util.function.Function<? super ProjectLevelVcsManager, ? extends T> provider) {
     return ReadAction.compute(() -> {
       //  IDEADEV-17916, when e.g. ContentRevision.getContent is called in
       //  a future task after the component has been disposed.
       T result = null;
       if (!project.isDisposed()) {
         ProjectLevelVcsManager manager = ProjectLevelVcsManager.getInstance(project);
-        result = manager != null ? provider.fun(manager) : null;
+        result = manager != null ? provider.apply(manager) : null;
       }
       return result;
     });
@@ -257,10 +257,9 @@ public class VcsUtil {
   /**
    * @deprecated use {@link #getFilePath(String, boolean)}
    */
-  @NotNull
   @Deprecated
-  public static FilePath getFilePathForDeletedFile(@NotNull String path, boolean isDirectory) {
-    return VcsContextFactory.SERVICE.getInstance().createFilePathOn(new File(path), isDirectory);
+  public static @NotNull FilePath getFilePathForDeletedFile(@NotNull String path, boolean isDirectory) {
+    return VcsContextFactory.SERVICE.getInstance().createFilePath(path, isDirectory);
   }
 
   @NotNull
@@ -558,6 +557,13 @@ public class VcsUtil {
     return mappings;
   }
 
+  /**
+   * Get path to the file in the last commit. If file was renamed locally, returns the previous file path.
+   *
+   * @param project the context project
+   * @param path    the path to check
+   * @return the name of file in the last commit or argument
+   */
   @NotNull
   public static FilePath getLastCommitPath(@NotNull Project project, @NotNull FilePath path) {
     if (project.isDefault()) return path;

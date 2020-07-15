@@ -79,7 +79,7 @@ public abstract class TodoTreeBuilder implements Disposable {
   /** Updates tree if containing files change VCS status. */
   private final MyFileStatusListener myFileStatusListener;
   private TodoTreeStructure myTreeStructure;
-  private StructureTreeModel myModel;
+  private StructureTreeModel<TodoTreeStructure> myModel;
   private boolean myDisposed;
 
   TodoTreeBuilder(JTree tree, Project project) {
@@ -100,11 +100,7 @@ public abstract class TodoTreeBuilder implements Disposable {
     //setCanYieldUpdate(true);
   }
 
-  public StructureTreeModel getModel() {
-    return myModel;
-  }
-
-  public void setModel(StructureTreeModel model) {
+  public void setModel(StructureTreeModel<TodoTreeStructure> model) {
     myModel = model;
   }
 
@@ -301,8 +297,12 @@ public abstract class TodoTreeBuilder implements Disposable {
    */
   private void markFileAsDirty(@NotNull PsiFile psiFile) {
     ApplicationManager.getApplication().assertIsWriteThread();
-    VirtualFile vFile = psiFile.getVirtualFile();
-    if (vFile != null && !(vFile instanceof LightVirtualFile)) { // If PSI file isn't valid then its VirtualFile can be null
+    markFileAsDirty(psiFile.getVirtualFile()); // If PSI file isn't valid then its VirtualFile can be null
+  }
+
+  private void markFileAsDirty(VirtualFile vFile) {
+    ApplicationManager.getApplication().assertIsWriteThread();
+    if (vFile != null && !(vFile instanceof LightVirtualFile)) {
       myDirtyFileSet.add(vFile);
     }
   }
@@ -664,14 +664,9 @@ public abstract class TodoTreeBuilder implements Disposable {
       }
       else if (child instanceof PsiDirectory) { // directory will be removed
         PsiDirectory psiDirectory = (PsiDirectory)child;
-        for (Iterator<PsiFile> i = getAllFiles(); i.hasNext();) {
-          PsiFile psiFile = i.next();
-          if (psiFile == null) { // skip invalid PSI files
-            continue;
-          }
-          if (PsiTreeUtil.isAncestor(psiDirectory, psiFile, true)) {
-            markFileAsDirty(psiFile);
-          }
+        for (VirtualFile virtualFile : myFileTree.getFiles(psiDirectory.getVirtualFile())) {
+          if (!virtualFile.isValid()) continue;
+          markFileAsDirty(virtualFile);
         }
         updateTree();
       }

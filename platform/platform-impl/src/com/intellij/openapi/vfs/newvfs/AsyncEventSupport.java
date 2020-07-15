@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vfs.newvfs;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -29,7 +29,7 @@ public final class AsyncEventSupport {
   private static final Logger LOG = Logger.getInstance(AsyncEventSupport.class);
 
   @ApiStatus.Internal
-  public static final ExtensionPointName<AsyncFileListener> EP_NAME = ExtensionPointName.create("com.intellij.vfs.asyncListener");
+  public static final ExtensionPointName<AsyncFileListener> EP_NAME = new ExtensionPointName<>("com.intellij.vfs.asyncListener");
   private static boolean ourSuppressAppliers;
 
   public static void startListening() {
@@ -53,7 +53,6 @@ public final class AsyncEventSupport {
         appliersFromBefore = null;
         afterVfsChange(appliers);
       }
-
     });
   }
 
@@ -66,9 +65,8 @@ public final class AsyncEventSupport {
     }
 
     List<AsyncFileListener.ChangeApplier> appliers = new ArrayList<>();
-    List<AsyncFileListener> allListeners = ContainerUtil.concat(
-      EP_NAME.getExtensionList(),
-      ((VirtualFileManagerImpl)VirtualFileManager.getInstance()).getAsyncFileListeners());
+    List<AsyncFileListener> allListeners = new ArrayList<>(EP_NAME.getExtensionList());
+    ((VirtualFileManagerImpl)VirtualFileManager.getInstance()).addAsyncFileListenersTo(allListeners);
     for (AsyncFileListener listener : allListeners) {
       ProgressManager.checkCanceled();
       long startNs = System.nanoTime();
@@ -105,7 +103,7 @@ public final class AsyncEventSupport {
     }
   }
 
-  private static void afterVfsChange(List<? extends AsyncFileListener.ChangeApplier> appliers) {
+  private static void afterVfsChange(@NotNull List<? extends AsyncFileListener.ChangeApplier> appliers) {
     for (AsyncFileListener.ChangeApplier applier : appliers) {
       PingProgress.interactWithEdtProgress();
       try {
@@ -117,7 +115,8 @@ public final class AsyncEventSupport {
     }
   }
 
-  static void processEvents(List<? extends VFileEvent> events, @Nullable List<? extends AsyncFileListener.ChangeApplier> appliers) {
+  static void processEventsFromRefresh(@NotNull List<? extends VFileEvent> events,
+                                       @Nullable List<? extends AsyncFileListener.ChangeApplier> appliers) {
     ApplicationManager.getApplication().assertWriteAccessAllowed();
     if (appliers != null) {
       beforeVfsChange(appliers);

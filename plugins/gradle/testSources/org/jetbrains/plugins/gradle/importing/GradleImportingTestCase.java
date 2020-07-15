@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.importing;
 
 import com.intellij.execution.RunManagerEx;
@@ -9,16 +9,20 @@ import com.intellij.openapi.externalSystem.importing.ImportSpec;
 import com.intellij.openapi.externalSystem.importing.ImportSpecBuilder;
 import com.intellij.openapi.externalSystem.model.ProjectSystemId;
 import com.intellij.openapi.externalSystem.model.settings.ExternalSystemExecutionSettings;
+import com.intellij.openapi.externalSystem.service.execution.TestUnknownSdkResolver;
 import com.intellij.openapi.externalSystem.settings.ExternalSystemSettingsListenerAdapter;
 import com.intellij.openapi.externalSystem.test.ExternalSystemImportingTestCase;
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
+import com.intellij.openapi.externalSystem.util.environment.Environment;
 import com.intellij.openapi.projectRoots.*;
 import com.intellij.openapi.projectRoots.impl.JavaHomeFinder;
 import com.intellij.openapi.projectRoots.impl.SdkConfigurationUtil;
 import com.intellij.openapi.roots.DependencyScope;
+import com.intellij.openapi.roots.ui.configuration.UnknownSdkResolver;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.TestDialog;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.newvfs.impl.VfsRootAccess;
@@ -45,7 +49,6 @@ import org.jetbrains.plugins.gradle.settings.GradleProjectSettings;
 import org.jetbrains.plugins.gradle.settings.GradleSystemSettings;
 import org.jetbrains.plugins.gradle.tooling.VersionMatcherRule;
 import org.jetbrains.plugins.gradle.tooling.builder.AbstractModelBuilderTest;
-import com.intellij.openapi.externalSystem.util.environment.Environment;
 import org.jetbrains.plugins.gradle.util.GradleConstants;
 import org.jetbrains.plugins.gradle.util.GradleUtil;
 import org.junit.Assume;
@@ -67,7 +70,7 @@ import static org.jetbrains.plugins.gradle.tooling.builder.AbstractModelBuilderT
 import static org.jetbrains.plugins.gradle.tooling.builder.AbstractModelBuilderTest.SUPPORTED_GRADLE_VERSIONS;
 import static org.junit.Assume.assumeThat;
 
-@RunWith(value = Parameterized.class)
+@RunWith(Parameterized.class)
 public abstract class GradleImportingTestCase extends ExternalSystemImportingTestCase {
   public static final String BASE_GRADLE_VERSION = AbstractModelBuilderTest.BASE_GRADLE_VERSION;
   protected static final String GRADLE_JDK_NAME = "Gradle JDK";
@@ -75,10 +78,9 @@ public abstract class GradleImportingTestCase extends ExternalSystemImportingTes
 
   @Rule public TestName name = new TestName();
 
-  @Rule public VersionMatcherRule versionMatcherRule = new VersionMatcherRule();
-  @NotNull
-  @org.junit.runners.Parameterized.Parameter()
-  public String gradleVersion;
+  public VersionMatcherRule versionMatcherRule = asOuterRule(new VersionMatcherRule());
+  @Parameterized.Parameter
+  public @NotNull String gradleVersion;
   private GradleProjectSettings myProjectSettings;
   private String myJdkHome;
 
@@ -112,6 +114,16 @@ public abstract class GradleImportingTestCase extends ExternalSystemImportingTes
     if (!allowedRoots.isEmpty()) {
       VfsRootAccess.allowRootAccess(myTestFixture.getTestRootDisposable(), ArrayUtilRt.toStringArray(allowedRoots));
     }
+
+    Registry.get("unknown.sdk").setValue(false);
+    UnknownSdkResolver.EP_NAME.getPoint().registerExtension(TestUnknownSdkResolver.INSTANCE, getTestRootDisposable());
+
+    TestUnknownSdkResolver.INSTANCE.setUnknownSdkFixMode(TestUnknownSdkResolver.TestUnknownSdkFixMode.REAL_LOCAL_FIX);
+  }
+
+  @Override
+  protected boolean runInDispatchThread() {
+    return false;
   }
 
   @NotNull
@@ -191,11 +203,6 @@ public abstract class GradleImportingTestCase extends ExternalSystemImportingTes
     roots.add(myJdkHome);
     roots.addAll(collectRootsInside(myJdkHome));
     roots.add(PathManager.getConfigPath());
-  }
-
-  @Override
-  public String getName() {
-    return name.getMethodName() == null ? super.getName() : FileUtil.sanitizeFileName(name.getMethodName());
   }
 
   @Parameterized.Parameters(name = "{index}: with Gradle-{0}")

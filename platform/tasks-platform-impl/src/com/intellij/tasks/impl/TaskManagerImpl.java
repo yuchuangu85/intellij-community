@@ -59,7 +59,7 @@ import java.util.concurrent.TimeoutException;
 /**
  * @author Dmitry Avdeev
  */
-@State(name = "TaskManager", storages = @Storage(StoragePathMacros.WORKSPACE_FILE), reportStatistic = true)
+@State(name = "TaskManager", storages = @Storage(StoragePathMacros.WORKSPACE_FILE))
 public final class TaskManagerImpl extends TaskManager implements PersistentStateComponent<TaskManagerImpl.Config>, Disposable {
   private static final Logger LOG = Logger.getInstance(TaskManagerImpl.class);
 
@@ -519,14 +519,15 @@ public final class TaskManagerImpl extends TaskManager implements PersistentStat
     task.setActive(true);
     addTask(task);
     if (task.isIssue()) {
-      StartupManager.getInstance(myProject).runWhenProjectIsInitialized(
-        () -> ProgressManager.getInstance().run(new com.intellij.openapi.progress.Task.Backgroundable(myProject, TaskBundle
-          .message("progress.title.updating", task.getPresentableId())) {
-          @Override
-          public void run(@NotNull ProgressIndicator indicator) {
-            updateIssue(task.getId());
-          }
-        }));
+      StartupManager.getInstance(myProject).runWhenProjectIsInitialized(() -> {
+        ProgressManager.getInstance().run(new com.intellij.openapi.progress.Task.Backgroundable(myProject, TaskBundle
+            .message("progress.title.updating", task.getPresentableId())) {
+            @Override
+            public void run(@NotNull ProgressIndicator indicator) {
+              updateIssue(task.getId());
+            }
+          });
+      });
     }
     LocalTask oldActiveTask = myActiveTask;
     boolean isChanged = !task.equals(oldActiveTask);

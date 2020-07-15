@@ -466,9 +466,14 @@ public class StandardInstructionVisitor extends InstructionVisitor {
     }
     DfType dfType = memState.getDfType(value);
     if (instruction.getMutationSignature().mutatesThis() && Mutability.fromDfType(dfType).isUnmodifiable()) {
-      reportMutabilityViolation(true, instruction.getContext());
-      if (dfType instanceof DfReferenceType) {
-        memState.setDfType(value, ((DfReferenceType)dfType).dropMutability().meet(Mutability.MUTABLE.asDfType()));
+      PsiMethod method = instruction.getTargetMethod();
+      // Inferred mutation annotation may infer mutates="this" if invisible state is mutated (e.g. cached hashCode is stored).
+      // So let's conservatively skip the warning here. Such contract is still useful because it assures that nothing else is mutated.
+      if (method != null && JavaMethodContractUtil.getContractInfo(method).isExplicit()) {
+        reportMutabilityViolation(true, instruction.getContext());
+        if (dfType instanceof DfReferenceType) {
+          memState.setDfType(value, ((DfReferenceType)dfType).dropMutability().meet(Mutability.MUTABLE.asDfType()));
+        }
       }
     }
     if (!(value.getType() instanceof PsiArrayType) &&
@@ -935,6 +940,28 @@ public class StandardInstructionVisitor extends InstructionVisitor {
   }
 
   @Override
+  public DfaInstructionState[] visitIsAssignableFromInstruction(IsAssignableInstruction instruction,
+                                                                DataFlowRunner runner,
+                                                                DfaMemoryState memState) {
+    PsiType superClass = DfConstantType.getConstantOfType(memState.getDfType(memState.pop()), PsiType.class);
+    PsiType subClass = DfConstantType.getConstantOfType(memState.getDfType(memState.pop()), PsiType.class);
+    ThreeState result = ThreeState.UNSURE;
+    if (superClass != null && subClass != null) {
+      TypeConstraint superType = TypeConstraints.instanceOf(superClass);
+      TypeConstraint subType = TypeConstraints.instanceOf(subClass);
+      if (subType.meet(superType) == TypeConstraints.BOTTOM) {
+        result = ThreeState.NO;
+      } else {
+        TypeConstraint negated = subType.tryNegate();
+        if (negated != null && negated.meet(superType) == TypeConstraints.BOTTOM) {
+          result = ThreeState.YES;
+        }
+      }
+    }
+    return new DfaInstructionState[]{makeBooleanResult(instruction, runner, memState, result)};
+  }
+
+  @Override
   public DfaInstructionState[] visitInstanceof(InstanceofInstruction instruction, DataFlowRunner runner, DfaMemoryState memState) {
     myReachable.add(instruction);
 
@@ -993,7 +1020,7 @@ public class StandardInstructionVisitor extends InstructionVisitor {
     return states.toArray(DfaInstructionState.EMPTY_ARRAY);
   }
 
-  private DfaInstructionState makeBooleanResult(BinopInstruction instruction,
+  private DfaInstructionState makeBooleanResult(ExpressionPushingInstruction<?> instruction,
                                                 DataFlowRunner runner,
                                                 DfaMemoryState memState,
                                                 @NotNull ThreeState result) {

@@ -3,7 +3,10 @@ package com.intellij.openapi.vfs.newvfs;
 
 import com.intellij.codeInsight.daemon.impl.FileStatusMap;
 import com.intellij.ide.IdeBundle;
-import com.intellij.openapi.application.*;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ModalityState;
+import com.intellij.openapi.application.TransactionGuard;
+import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.application.impl.ApplicationImpl;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.vfs.AsyncFileListener;
@@ -25,7 +28,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
-class RefreshSessionImpl extends RefreshSession {
+final class RefreshSessionImpl extends RefreshSession {
   private static final Logger LOG = Logger.getInstance(RefreshSession.class);
 
   private static final AtomicLong ID_COUNTER = new AtomicLong(0);
@@ -54,11 +57,8 @@ class RefreshSessionImpl extends RefreshSession {
   }
 
   private Throwable rememberStartTrace() {
-    if (ApplicationManager.getApplication().isUnitTestMode() &&
-        (myIsAsync || !ApplicationManager.getApplication().isDispatchThread())) {
-      return new Throwable();
-    }
-    return null;
+    boolean trace = ApplicationManager.getApplication().isUnitTestMode() && (myIsAsync || !ApplicationManager.getApplication().isDispatchThread());
+    return trace ? new Throwable() : null;
   }
 
   RefreshSessionImpl(@NotNull List<? extends VFileEvent> events) {
@@ -190,12 +190,13 @@ class RefreshSessionImpl extends RefreshSession {
     }
   }
 
-  private void fireEventsInWriteAction(List<? extends VFileEvent> events, @Nullable List<? extends AsyncFileListener.ChangeApplier> appliers) {
+  private void fireEventsInWriteAction(@NotNull List<? extends VFileEvent> events,
+                                       @Nullable List<? extends AsyncFileListener.ChangeApplier> appliers) {
     final VirtualFileManagerEx manager = (VirtualFileManagerEx)VirtualFileManager.getInstance();
 
     manager.fireBeforeRefreshStart(myIsAsync);
     try {
-      AsyncEventSupport.processEvents(events, appliers);
+      AsyncEventSupport.processEventsFromRefresh(events, appliers);
     }
     catch (AssertionError e) {
       if (FileStatusMap.CHANGES_NOT_ALLOWED_DURING_HIGHLIGHTING.equals(e.getMessage())) {

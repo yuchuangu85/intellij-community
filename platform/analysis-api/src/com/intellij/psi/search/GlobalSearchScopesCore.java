@@ -22,7 +22,7 @@ import org.jetbrains.annotations.NotNull;
 import javax.swing.*;
 import java.util.*;
 
-public class GlobalSearchScopesCore {
+public final class GlobalSearchScopesCore {
   @NotNull
   public static GlobalSearchScope projectProductionScope(@NotNull Project project) {
     return new ProductionScopeFilter(project);
@@ -61,7 +61,7 @@ public class GlobalSearchScopesCore {
     return new FilterScopeAdapter(project, set);
   }
 
-  private static class FilterScopeAdapter extends GlobalSearchScope {
+  private static final class FilterScopeAdapter extends GlobalSearchScope {
     private final NamedScope mySet;
     private final PsiManager myManager;
 
@@ -94,13 +94,6 @@ public class GlobalSearchScopesCore {
     @Override
     public Icon getIcon() {
       return mySet.getIcon();
-    }
-
-    @NotNull
-    @Override
-    public Project getProject() {
-      //noinspection ConstantConditions
-      return super.getProject();
     }
 
     @Override
@@ -138,7 +131,7 @@ public class GlobalSearchScopesCore {
     }
   }
 
-  private static class ProductionScopeFilter extends GlobalSearchScope {
+  private static final class ProductionScopeFilter extends GlobalSearchScope {
     private final ProjectFileIndex myFileIndex;
 
     private ProductionScopeFilter(@NotNull Project project) {
@@ -179,7 +172,7 @@ public class GlobalSearchScopesCore {
     }
   }
 
-  private static class TestScopeFilter extends GlobalSearchScope {
+  private static final class TestScopeFilter extends GlobalSearchScope {
     private TestScopeFilter(@NotNull Project project) {
       super(project);
     }
@@ -211,17 +204,17 @@ public class GlobalSearchScopesCore {
     }
   }
 
-  public static class DirectoryScope extends GlobalSearchScope {
+  public static final class DirectoryScope extends GlobalSearchScope {
     private final VirtualFile myDirectory;
     private final boolean myWithSubdirectories;
 
-    private DirectoryScope(@NotNull PsiDirectory psiDirectory, final boolean withSubdirectories) {
+    private DirectoryScope(@NotNull PsiDirectory psiDirectory, boolean withSubdirectories) {
       super(psiDirectory.getProject());
       myWithSubdirectories = withSubdirectories;
       myDirectory = psiDirectory.getVirtualFile();
     }
 
-    public DirectoryScope(@NotNull Project project, @NotNull VirtualFile directory, final boolean withSubdirectories) {
+    public DirectoryScope(@NotNull Project project, @NotNull VirtualFile directory, boolean withSubdirectories) {
       super(project);
       myWithSubdirectories = withSubdirectories;
       myDirectory = directory;
@@ -299,19 +292,12 @@ public class GlobalSearchScopesCore {
 
     @NotNull
     @Override
-    public Project getProject() {
-      //noinspection ConstantConditions
-      return super.getProject();
-    }
-
-    @NotNull
-    @Override
     public String getDisplayName() {
       return AnalysisBundle.message("display.name.directory.0", myDirectory.getName());
     }
   }
 
-  static class DirectoriesScope extends GlobalSearchScope {
+  static final class DirectoriesScope extends GlobalSearchScope {
     private final Set<? extends VirtualFile> myDirectories;
     private final Set<? extends VirtualFile> myDirectoriesWithSubdirectories;
 
@@ -412,13 +398,6 @@ public class GlobalSearchScopesCore {
         return new DirectoriesScope(getProject(), directories, directoriesWithSubdirectories);
       }
       return super.uniteWith(scope);
-    }
-
-    @NotNull
-    @Override
-    public Project getProject() {
-      //noinspection ConstantConditions
-      return super.getProject();
     }
 
     @NotNull

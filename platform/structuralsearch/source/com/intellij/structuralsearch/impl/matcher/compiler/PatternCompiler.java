@@ -45,7 +45,7 @@ import java.util.regex.Pattern;
 /**
  * Compiles the handlers for usability
  */
-public class PatternCompiler {
+public final class PatternCompiler {
 
   private static final Logger LOG = Logger.getInstance(PatternCompiler.class);
   private static String ourLastSearchPlan;
@@ -75,7 +75,7 @@ public class PatternCompiler {
     try {
       final List<PsiElement> elements = compileByAllPrefixes(project, options, result, context, prefixes, checkForErrors);
       final CompiledPattern pattern = context.getPattern();
-      checkForUnknownVariables(pattern, elements);
+      collectVariableNodes(pattern, elements, checkForErrors);
       pattern.setNodes(elements);
       if (checkForErrors) {
         profile.checkSearchPattern(pattern);
@@ -110,37 +110,14 @@ public class PatternCompiler {
     }
   }
 
-  private static void checkForUnknownVariables(final CompiledPattern pattern, List<? extends PsiElement> elements)
+  private static void collectVariableNodes(final CompiledPattern pattern, List<? extends PsiElement> elements, boolean checkForErrors)
     throws MalformedPatternException {
 
     for (PsiElement element : elements) {
       pattern.putVariableNode(Configuration.CONTEXT_VAR_NAME, element);
-      element.accept(new PsiRecursiveElementWalkingVisitor() {
-        @Override
-        public void visitElement(@NotNull PsiElement element) {
-          if (element.getUserData(CompiledPattern.HANDLER_KEY) != null) {
-            return;
-          }
-          super.visitElement(element);
-
-          if (!(element instanceof LeafElement)) {
-            return;
-          }
-          final String text = element.getText();
-          if (!pattern.isTypedVar(text)) {
-            for (String prefix : pattern.getTypedVarPrefixes()) {
-              if (text.contains(prefix)) {
-                throw new MalformedPatternException();
-              }
-            }
-            return;
-          }
-          final MatchingHandler handler = pattern.getHandler(pattern.getTypedVarString(element));
-          if (handler == null) {
-            throw new MalformedPatternException();
-          }
-        }
-      });
+      if (checkForErrors) {
+        checkForUnknownVariables(pattern, element);
+      }
       element.accept(new PsiRecursiveElementWalkingVisitor() {
         @Override
         public void visitElement(@NotNull PsiElement element) {
@@ -162,6 +139,35 @@ public class PatternCompiler {
         }
       });
     }
+  }
+
+  private static void checkForUnknownVariables(CompiledPattern pattern, PsiElement element) {
+    element.accept(new PsiRecursiveElementWalkingVisitor() {
+      @Override
+      public void visitElement(@NotNull PsiElement element) {
+        if (element.getUserData(CompiledPattern.HANDLER_KEY) != null) {
+          return;
+        }
+        super.visitElement(element);
+
+        if (!(element instanceof LeafElement)) {
+          return;
+        }
+        final String text = element.getText();
+        if (!pattern.isTypedVar(text)) {
+          for (String prefix : pattern.getTypedVarPrefixes()) {
+            if (text.contains(prefix)) {
+              throw new MalformedPatternException();
+            }
+          }
+          return;
+        }
+        final MatchingHandler handler = pattern.getHandler(pattern.getTypedVarString(element));
+        if (handler == null) {
+          throw new MalformedPatternException();
+        }
+      }
+    });
   }
 
   @TestOnly
@@ -428,70 +434,69 @@ public class PatternCompiler {
       else {
         // the same variable can occur multiple times in a single template
         // no need to process it more than once
-
-        MatchVariableConstraint constraint = options.getVariableConstraint(name);
-        if (constraint == null) {
-          // we do not edited the constraints
-          constraint = options.addNewVariableConstraint(name);
-        }
-
-        final SubstitutionHandler handler = result.createSubstitutionHandler(
-          name,
-          compiledName,
-          constraint.isPartOfSearchResults(),
-          constraint.getMinCount(),
-          constraint.getMaxCount(),
-          constraint.isGreedy()
-        );
-        handler.setRepeatedVar(repeated);
-
-        if (constraint.isWithinHierarchy()) {
-          handler.setSubtype(true);
-        }
-
-        if (constraint.isStrictlyWithinHierarchy()) {
-          handler.setStrictSubtype(true);
-        }
-
-        if (!StringUtil.isEmptyOrSpaces(constraint.getRegExp())) {
-          MatchPredicate predicate = new RegExpPredicate(
-            constraint.getRegExp(),
-            options.isCaseSensitiveMatch(),
-            name,
-            constraint.isWholeWordsOnly(),
-            constraint.isPartOfSearchResults()
-          );
-          if (constraint.isInvertRegExp()) {
-            predicate = new NotPredicate(predicate);
+        try {
+          MatchVariableConstraint constraint = options.getVariableConstraint(name);
+          if (constraint == null) {
+            // we do not edited the constraints
+            constraint = options.addNewVariableConstraint(name);
           }
-          addPredicate(handler, predicate);
-        }
 
-        if (!StringUtil.isEmptyOrSpaces(constraint.getReferenceConstraint())) {
-          try {
+          final SubstitutionHandler handler = result.createSubstitutionHandler(
+            name,
+            compiledName,
+            constraint.isPartOfSearchResults(),
+            constraint.getMinCount(),
+            constraint.getMaxCount(),
+            constraint.isGreedy()
+          );
+          handler.setRepeatedVar(repeated);
+
+          if (constraint.isWithinHierarchy()) {
+            handler.setSubtype(true);
+          }
+
+          if (constraint.isStrictlyWithinHierarchy()) {
+            handler.setStrictSubtype(true);
+          }
+
+          if (!StringUtil.isEmptyOrSpaces(constraint.getRegExp())) {
+            MatchPredicate predicate = new RegExpPredicate(
+              constraint.getRegExp(),
+              options.isCaseSensitiveMatch(),
+              name,
+              constraint.isWholeWordsOnly(),
+              constraint.isPartOfSearchResults()
+            );
+            if (constraint.isInvertRegExp()) {
+              predicate = new NotPredicate(predicate);
+            }
+            addPredicate(handler, predicate);
+          }
+
+          if (!StringUtil.isEmptyOrSpaces(constraint.getReferenceConstraint())) {
             MatchPredicate predicate = new ReferencePredicate(constraint.getReferenceConstraint(), options.getFileType(), project);
             if (constraint.isInvertReference()) {
               predicate = new NotPredicate(predicate);
             }
             addPredicate(handler, predicate);
-          } catch (MalformedPatternException e) {
-            if (checkForErrors) throw e;
           }
-        }
 
-        addExtensionPredicates(options, constraint, handler);
-        addScriptConstraint(project, name, constraint, handler, variableNames, options, checkForErrors);
+          addExtensionPredicates(options, constraint, handler);
+          addScriptConstraint(project, name, constraint, handler, variableNames, options, checkForErrors);
 
-        if (!StringUtil.isEmptyOrSpaces(constraint.getContainsConstraint())) {
-          MatchPredicate predicate = new ContainsPredicate(name, constraint.getContainsConstraint());
-          if (constraint.isInvertContainsConstraint()) {
-            predicate = new NotPredicate(predicate);
+          if (!StringUtil.isEmptyOrSpaces(constraint.getContainsConstraint())) {
+            MatchPredicate predicate = new ContainsPredicate(name, constraint.getContainsConstraint());
+            if (constraint.isInvertContainsConstraint()) {
+              predicate = new NotPredicate(predicate);
+            }
+            addPredicate(handler, predicate);
           }
-          addPredicate(handler, predicate);
-        }
 
-        if (!StringUtil.isEmptyOrSpaces(constraint.getWithinConstraint())) {
-          assert false;
+          if (!StringUtil.isEmptyOrSpaces(constraint.getWithinConstraint())) {
+            assert false;
+          }
+        } catch (MalformedPatternException e) {
+          if (checkForErrors) throw e;
         }
       }
       prevOffset = offset;
@@ -508,25 +513,29 @@ public class PatternCompiler {
         constraint.isGreedy()
       );
 
-      if (!StringUtil.isEmptyOrSpaces(constraint.getWithinConstraint())) {
-        MatchPredicate predicate = new WithinPredicate(constraint.getWithinConstraint(), options.getFileType(), project);
-        if (constraint.isInvertWithinConstraint()) {
-          predicate = new NotPredicate(predicate);
+      try {
+        if (!StringUtil.isEmptyOrSpaces(constraint.getWithinConstraint())) {
+          MatchPredicate predicate = new WithinPredicate(constraint.getWithinConstraint(), options.getFileType(), project);
+          if (constraint.isInvertWithinConstraint()) {
+            predicate = new NotPredicate(predicate);
+          }
+          addPredicate(handler, predicate);
         }
-        addPredicate(handler, predicate);
-      }
 
-      addExtensionPredicates(options, constraint, handler);
-      addScriptConstraint(project, Configuration.CONTEXT_VAR_NAME, constraint, handler, variableNames, options, checkForErrors);
+        addExtensionPredicates(options, constraint, handler);
+        addScriptConstraint(project, Configuration.CONTEXT_VAR_NAME, constraint, handler, variableNames, options, checkForErrors);
+      } catch (MalformedPatternException e) {
+        if (checkForErrors) throw e;
+      }
     }
 
     buf.append(text.substring(prevOffset));
 
     final PsiElement[] patternElements;
     try {
-      PatternContextInfo contextInfo = new PatternContextInfo(PatternTreeContext.Block,
-                                                              options.getPatternContext(),
-                                                              constraint != null ? constraint.getContextConstraint() : null);
+      final PatternContextInfo contextInfo = new PatternContextInfo(PatternTreeContext.Block,
+                                                                    options.getPatternContext(),
+                                                                    constraint != null ? constraint.getContextConstraint() : null);
       patternElements = MatcherImplUtil.createTreeFromText(buf.toString(), contextInfo, options.getFileType(),
                                                            options.getDialect(), project, false);
       if (patternElements.length == 0 && checkForErrors) throw new MalformedPatternException();
@@ -567,12 +576,16 @@ public class PatternCompiler {
                                           SubstitutionHandler handler, Set<String> variableNames, MatchOptions matchOptions,
                                           boolean checkForErrors)
     throws MalformedPatternException {
-    if (constraint.getScriptCodeConstraint()!= null && constraint.getScriptCodeConstraint().length() > 2) {
-      final String script = StringUtil.unquoteString(constraint.getScriptCodeConstraint());
-      if (checkForErrors) {
-        final String problem = ScriptSupport.checkValidScript(script, matchOptions);
-        if (problem != null) {
+    final String scriptCodeConstraint = constraint.getScriptCodeConstraint();
+    if (scriptCodeConstraint.length() > 2) {
+      final String script = StringUtil.unquoteString(scriptCodeConstraint);
+      final String problem = ScriptSupport.checkValidScript(script, matchOptions);
+      if (problem != null) {
+        if (checkForErrors) {
           throw new MalformedPatternException("Script constraint for " + constraint.getName() + " has problem " + problem);
+        }
+        else {
+          return;
         }
       }
       addPredicate(handler, new ScriptPredicate(project, name, script, variableNames, matchOptions));

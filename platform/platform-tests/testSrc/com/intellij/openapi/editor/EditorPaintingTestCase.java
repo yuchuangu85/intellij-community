@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.editor;
 
 import com.intellij.openapi.application.ex.PathManagerEx;
@@ -51,7 +51,7 @@ public abstract class EditorPaintingTestCase extends AbstractEditorTest {
   }
 
   @Override
-  protected void tearDown() throws Exception {
+  protected void tearDown() {
     new RunAll()
       .append(() -> JBUIScale.setUserScaleFactorForTest(oldUserScaleFactor))
       .append(() -> FontLayoutService.setInstance(null))
@@ -264,7 +264,7 @@ public abstract class EditorPaintingTestCase extends AbstractEditorTest {
 
   private File saveTmpImage(BufferedImage image, String nameSuffix) throws IOException {
     File savedImage = FileUtil.createTempFile(getName() + "-" + nameSuffix, ".png", false);
-    addTmpFileToKeep(savedImage);
+    addTmpFileToKeep(savedImage.toPath());
     ImageIO.write(image, "png", savedImage);
     return savedImage;
   }
@@ -320,7 +320,7 @@ public abstract class EditorPaintingTestCase extends AbstractEditorTest {
   }
 
   // font which, once created, should be rendered identically on all platforms
-  protected static class BitmapFont {
+  protected static final class BitmapFont {
     private static final float FONT_SIZE = 12;
     private static final int CHAR_WIDTH = 10;
     private static final int CHAR_HEIGHT = 12;
@@ -376,7 +376,7 @@ public abstract class EditorPaintingTestCase extends AbstractEditorTest {
     }
   }
 
-  private static class UniformHighlighter implements EditorHighlighter {
+  private static final class UniformHighlighter implements EditorHighlighter {
     @NotNull
     private final TextAttributes myAttributes;
     private Document myDocument;

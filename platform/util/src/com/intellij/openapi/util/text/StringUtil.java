@@ -613,7 +613,7 @@ public class StringUtil extends StringUtilRt {
   }
 
   /**
-   * @return string with paired quotaion marks (quote (") or apostrophe (')) removed
+   * @return string with paired quotation marks (quote (") or apostrophe (')) removed
    */
   @Contract(pure = true)
   public static @NotNull String unquoteString(@NotNull String s) {
@@ -935,6 +935,28 @@ public class StringUtil extends StringUtilRt {
     while (index >= 0 && builder.charAt(index) == symbol) index--;
     builder.setLength(index + 1);
     return builder;
+  }
+
+  @Contract(value = "null -> null; !null -> !null", pure = true)
+  public static @Nullable CharSequence trim(@Nullable CharSequence s) {
+    if (s == null) return null;
+    int startIndex = 0;
+    int length = s.length();
+    if (length == 0) return s;
+    while (startIndex < length && Character.isWhitespace(s.charAt(startIndex))) startIndex++;
+
+    if (startIndex == length) {
+      return Strings.EMPTY_CHAR_SEQUENCE;
+    }
+
+    int endIndex = length - 1;
+    while (endIndex >= startIndex && Character.isWhitespace(s.charAt(endIndex))) endIndex--;
+    endIndex++;
+
+    if (startIndex > 0 || endIndex < length) {
+      return s.subSequence(startIndex, endIndex);
+    }
+    return s;
   }
 
   @Contract(pure = true)

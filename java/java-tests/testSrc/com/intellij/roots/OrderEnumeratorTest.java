@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.roots;
 
 import com.intellij.openapi.module.Module;
@@ -15,9 +15,7 @@ import java.util.List;
 
 import static com.intellij.openapi.roots.OrderEnumerator.orderEntries;
 
-
 public class OrderEnumeratorTest extends ModuleRootManagerTestCase {
-
   public void testLibrary() {
     ModuleRootModificationUtil.addDependency(myModule, createJDomLibrary());
 
@@ -251,7 +249,7 @@ public class OrderEnumeratorTest extends ModuleRootManagerTestCase {
   }
 
   private void addModuleRoots(boolean addSources, boolean addTests) throws IOException {
-    VirtualFile tmp = refreshAndFindFile(createTempDirectory(true));
+    VirtualFile tmp = getTempDir().createVirtualDir();
     VirtualFile contDir = createChildDirectory(tmp, "content");
     VirtualFile outDir = createChildDirectory(tmp, "out");
     CompilerProjectExtension.getInstance(myProject).setCompilerOutputUrl(outDir.getUrl());

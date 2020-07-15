@@ -34,6 +34,7 @@ import com.intellij.openapi.application.impl.LaterInvocator;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.actionSystem.EditorAction;
 import com.intellij.openapi.editor.actionSystem.EditorActionHandlerBean;
+import com.intellij.openapi.extensions.ExtensionPointListener;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.extensions.PluginDescriptor;
 import com.intellij.openapi.extensions.PluginId;
@@ -55,13 +56,13 @@ import com.intellij.openapi.wm.IdeFrame;
 import com.intellij.psi.PsiFile;
 import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.ReflectionUtil;
+import com.intellij.util.containers.CollectionFactory;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.util.messages.MessageBusConnection;
 import com.intellij.util.ui.UIUtil;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
-import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import org.jdom.Element;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
@@ -76,6 +77,7 @@ import java.awt.event.InputEvent;
 import java.awt.event.WindowEvent;
 import java.util.List;
 import java.util.*;
+import java.util.function.Supplier;
 
 public final class ActionManagerImpl extends ActionManagerEx implements Disposable {
   private static final ExtensionPointName<ActionConfigurationCustomizer> EP =
@@ -94,6 +96,7 @@ public final class ActionManagerImpl extends ActionManagerEx implements Disposab
   private static final String MOUSE_SHORTCUT_ELEMENT_NAME = "mouse-shortcut";
   private static final String DESCRIPTION = "description";
   private static final String TEXT_ATTR_NAME = "text";
+  private static final String KEY_ATTR_NAME = "key";
   private static final String POPUP_ATTR_NAME = "popup";
   private static final String COMPACT_ATTR_NAME = "compact";
   private static final String SEPARATOR_ELEMENT_NAME = "separator";
@@ -132,10 +135,10 @@ public final class ActionManagerImpl extends ActionManagerEx implements Disposab
   private static final int UPDATE_DELAY_AFTER_TYPING = 500;
 
   private final Object myLock = new Object();
-  private final Map<String, AnAction> myId2Action = new Object2ObjectOpenHashMap<>();
+  private final Map<String, AnAction> myId2Action = CollectionFactory.createSmallMemoryFootprintMap();
   private final MultiMap<PluginId, String> myPlugin2Id = new MultiMap<>();
   private final Object2IntMap<String> myId2Index = new Object2IntOpenHashMap<>();
-  private final Map<Object, String> myAction2Id = new Object2ObjectOpenHashMap<>();
+  private final Map<Object, String> myAction2Id = CollectionFactory.createSmallMemoryFootprintMap();
   private final MultiMap<String, String> myId2GroupId = new MultiMap<>();
   private final List<String> myNotRegisteredInternalActionIds = new ArrayList<>();
   private final List<AnActionListener> myActionListeners = ContainerUtil.createLockFreeCopyOnWriteList();
@@ -165,6 +168,19 @@ public final class ActionManagerImpl extends ActionManagerEx implements Disposab
     }
 
     EP.forEachExtensionSafe(customizer -> customizer.customize(this));
+    DynamicActionConfigurationCustomizer.EP_NAME.forEachExtensionSafe(customizer -> customizer.registerActions(this));
+    DynamicActionConfigurationCustomizer.EP_NAME.addExtensionPointListener(
+      new ExtensionPointListener<DynamicActionConfigurationCustomizer>() {
+        @Override
+        public void extensionAdded(@NotNull DynamicActionConfigurationCustomizer extension, @NotNull PluginDescriptor pluginDescriptor) {
+          extension.registerActions(ActionManagerImpl.this);
+        }
+
+        @Override
+        public void extensionRemoved(@NotNull DynamicActionConfigurationCustomizer extension, @NotNull PluginDescriptor pluginDescriptor) {
+          extension.unregisterActions(ActionManagerImpl.this);
+        }
+      }, this);
     EDITOR_ACTION_HANDLER_EP.addChangeListener(this::updateAllHandlers, this);
   }
 
@@ -574,16 +590,21 @@ public final class ActionManagerImpl extends ActionManagerEx implements Disposab
   }
 
   @Override
-  public String @NotNull [] getActionIds(@NotNull String idPrefix) {
+  public @NotNull List<String> getActionIdList(@NotNull String idPrefix) {
+    List<String> result = new ArrayList<>();
     synchronized (myLock) {
-      ArrayList<String> idList = new ArrayList<>();
       for (String id : myId2Action.keySet()) {
         if (id.startsWith(idPrefix)) {
-          idList.add(id);
+          result.add(id);
         }
       }
-      return ArrayUtilRt.toStringArray(idList);
     }
+    return result;
+  }
+
+  @Override
+  public String @NotNull [] getActionIds(@NotNull String idPrefix) {
+    return ArrayUtilRt.toStringArray(getActionIdList(idPrefix));
   }
 
   @Override
@@ -630,14 +651,14 @@ public final class ActionManagerImpl extends ActionManagerEx implements Disposab
     String descriptionValue = element.getAttributeValue(DESCRIPTION);
 
     ActionStub stub = new ActionStub(className, id, plugin, iconPath, projectType, () -> {
-      String text = computeActionText(bundle, id, ACTION_ELEMENT_NAME, textValue);
-      if (text == null) {
+      Supplier<String> text = () -> computeActionText(bundle, id, ACTION_ELEMENT_NAME, textValue);
+      if (text.get() == null) {
         reportActionError(plugin.getPluginId(), "'text' attribute is mandatory (actionId=" + id +
                                                 ", plugin=" + plugin + ")");
       }
       Presentation presentation = new Presentation();
       presentation.setText(text);
-      presentation.setDescription(computeDescription(bundle, id, ACTION_ELEMENT_NAME, descriptionValue));
+      presentation.setDescription(() -> computeDescription(bundle, id, ACTION_ELEMENT_NAME, descriptionValue));
       return presentation;
     });
 
@@ -762,18 +783,19 @@ public final class ActionManagerImpl extends ActionManagerEx implements Disposab
 
       registerOrReplaceActionInner(element, id, group, plugin);
       Presentation presentation = group.getTemplatePresentation();
+      String finalId = id;
 
       // text
-      String text = computeActionText(bundle, id, GROUP_ELEMENT_NAME, element.getAttributeValue(TEXT_ATTR_NAME));
+      Supplier<String> text = () -> computeActionText(bundle, finalId, GROUP_ELEMENT_NAME, element.getAttributeValue(TEXT_ATTR_NAME));
       // don't override value which was set in API with empty value from xml descriptor
-      if (!StringUtil.isEmpty(text) || presentation.getText() == null) {
+      if (!StringUtil.isEmpty(text.get()) || presentation.getText() == null) {
         presentation.setText(text);
       }
 
       // description
-      String description = computeDescription(bundle, id, GROUP_ELEMENT_NAME, element.getAttributeValue(DESCRIPTION));
+      Supplier<String> description = () -> computeDescription(bundle, finalId, GROUP_ELEMENT_NAME, element.getAttributeValue(DESCRIPTION));
       // don't override value which was set in API with empty value from xml descriptor
-      if (!StringUtil.isEmpty(description) || presentation.getDescription() == null) {
+      if (!StringUtil.isEmpty(description.get()) || presentation.getDescription() == null) {
         presentation.setDescription(description);
       }
 
@@ -810,7 +832,7 @@ public final class ActionManagerImpl extends ActionManagerEx implements Disposab
           }
         }
         else if (SEPARATOR_ELEMENT_NAME.equals(name)) {
-          processSeparatorNode((DefaultActionGroup)group, child, plugin.getPluginId());
+          processSeparatorNode((DefaultActionGroup)group, child, plugin.getPluginId(), bundle);
         }
         else if (GROUP_ELEMENT_NAME.equals(name)) {
           AnAction action = processGroupElement(child, plugin, bundle);
@@ -952,13 +974,15 @@ public final class ActionManagerImpl extends ActionManagerEx implements Disposab
    *                    case separator will be added to group described in the <add-to-group ....> subelement.
    * @param element     XML element which represent separator.
    */
-  private void processSeparatorNode(@Nullable DefaultActionGroup parentGroup, Element element, PluginId pluginId) {
+  private void processSeparatorNode(@Nullable DefaultActionGroup parentGroup, @NotNull Element element, PluginId pluginId, @Nullable ResourceBundle bundle) {
     if (!SEPARATOR_ELEMENT_NAME.equals(element.getName())) {
       reportActionError(pluginId, "unexpected name of element \"" + element.getName() + "\"");
       return;
     }
     String text = element.getAttributeValue(TEXT_ATTR_NAME);
-    Separator separator = text != null ? new Separator(text) : Separator.getInstance();
+    String key = element.getAttributeValue(KEY_ATTR_NAME);
+    Separator separator =
+      text != null ? new Separator(text) : key != null ? createSeparator(bundle, key) : Separator.getInstance();
     if (parentGroup != null) {
       parentGroup.add(separator, this);
     }
@@ -968,6 +992,12 @@ public final class ActionManagerImpl extends ActionManagerEx implements Disposab
         processAddToGroupNode(separator, child, pluginId, isSecondary(child));
       }
     }
+  }
+
+  @NotNull
+  private static Separator createSeparator(@Nullable ResourceBundle bundle, @NotNull String key) {
+    String text = bundle != null ? AbstractBundle.messageOrNull(bundle, key) : null;
+    return text != null ? new Separator(text) : Separator.getInstance();
   }
 
   private void processUnregisterNode(Element element, PluginId pluginId) {
@@ -1089,7 +1119,7 @@ public final class ActionManagerImpl extends ActionManagerEx implements Disposab
         processGroupElement(child, plugin, bundle);
         break;
       case SEPARATOR_ELEMENT_NAME:
-        processSeparatorNode(null, child, plugin.getPluginId());
+        processSeparatorNode(null, child, plugin.getPluginId(), bundle);
         break;
       case REFERENCE_ELEMENT_NAME:
         processReferenceNode(child, plugin.getPluginId(), initialStartup);
@@ -1104,7 +1134,7 @@ public final class ActionManagerImpl extends ActionManagerEx implements Disposab
   }
 
   @ApiStatus.Internal
-  public static @Nullable String checkUnloadActions(@NotNull IdeaPluginDescriptorImpl pluginDescriptor) {
+  public static @Nullable String checkUnloadActions(PluginId pluginId, @NotNull IdeaPluginDescriptorImpl pluginDescriptor) {
     List<Element> elements = pluginDescriptor.getActionDescriptionElements();
     if (elements == null) {
       return null;
@@ -1113,7 +1143,7 @@ public final class ActionManagerImpl extends ActionManagerEx implements Disposab
       if (!element.getName().equals(ACTION_ELEMENT_NAME) &&
           !(element.getName().equals(GROUP_ELEMENT_NAME) && canUnloadGroup(element)) &&
           !element.getName().equals(REFERENCE_ELEMENT_NAME)) {
-        return "Plugin " + pluginDescriptor.getPluginId() + " is not unload-safe because of action element " + element.getName();
+        return "Plugin " + pluginId + " is not unload-safe because of action element " + element.getName();
       }
     }
     return null;
@@ -1517,18 +1547,13 @@ public final class ActionManagerImpl extends ActionManagerEx implements Disposab
   }
 
   public void preloadActions(@NotNull ProgressIndicator indicator) {
-    Application application = ApplicationManager.getApplication();
-
-    for (String id : getActionIds()) {
+    List<String> ids;
+    synchronized (myLock) {
+      ids = new ArrayList<>(myId2Action.keySet());
+    }
+    for (String id : ids) {
       indicator.checkCanceled();
-      if (application.isDisposed()) {
-        return;
-      }
-
-      AnAction action = getAction(id);
-      if (action instanceof PreloadableAction) {
-        ((PreloadableAction)action).preload();
-      }
+      getActionImpl(id, false);
       // don't preload ActionGroup.getChildren() because that would un-stub child actions
       // and make it impossible to replace the corresponding actions later
       // (via unregisterAction+registerAction, as some app components do)

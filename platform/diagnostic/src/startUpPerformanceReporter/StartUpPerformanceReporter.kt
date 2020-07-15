@@ -17,13 +17,13 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.StartupActivity
 import com.intellij.util.SystemProperties
 import com.intellij.util.concurrency.NonUrgentExecutor
+import com.intellij.util.containers.CollectionFactory
 import com.intellij.util.io.jackson.IntelliJPrettyPrinter
 import com.intellij.util.io.outputStream
 import com.intellij.util.io.write
 import it.unimi.dsi.fastutil.objects.Object2IntMap
 import it.unimi.dsi.fastutil.objects.Object2LongMap
 import it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap
-import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import java.nio.ByteBuffer
 import java.nio.file.Paths
 import java.util.concurrent.atomic.AtomicInteger
@@ -41,7 +41,7 @@ class StartUpPerformanceReporter : StartupActivity, StartUpPerformanceService {
   companion object {
     internal val LOG = logger<StartUpMeasurer>()
 
-    internal const val VERSION = "21"
+    internal const val VERSION = "22"
 
     internal fun sortItems(items: MutableList<ActivityImpl>) {
       items.sortWith(Comparator { o1, o2 ->
@@ -63,11 +63,11 @@ class StartUpPerformanceReporter : StartupActivity, StartUpPerformanceService {
     private fun doLogStats(projectName: String): StartUpPerformanceReporterValues? {
       val items = mutableListOf<ActivityImpl>()
       val instantEvents = mutableListOf<ActivityImpl>()
-      val activities = Object2ObjectOpenHashMap<String, MutableList<ActivityImpl>>()
-      val serviceActivities = Object2ObjectOpenHashMap<String, MutableList<ActivityImpl>>()
+      val activities = CollectionFactory.createSmallMemoryFootprintMap<String, MutableList<ActivityImpl>>()
+      val serviceActivities = CollectionFactory.createSmallMemoryFootprintMap<String, MutableList<ActivityImpl>>()
       val services = mutableListOf<ActivityImpl>()
 
-      val threadNameManager = ThreadNameManager()
+      val threadNameManager = IdeThreadNameManager()
 
       var end = -1L
 
@@ -110,7 +110,7 @@ class StartUpPerformanceReporter : StartupActivity, StartUpPerformanceService {
 
       val pluginCostMap = computePluginCostMap()
 
-      val w = IdeaFormatWriter(activities, pluginCostMap, threadNameManager)
+      val w = IdeIdeaFormatWriter(activities, pluginCostMap, threadNameManager)
       val startTime = items.first().start
       for (item in items) {
         val pluginId = item.pluginId ?: continue
@@ -236,7 +236,7 @@ private class StartUpPerformanceReporterValues(val pluginCostMap: MutableMap<Str
 private fun computePluginCostMap(): MutableMap<String, Object2LongMap<String>> {
   var result: MutableMap<String, Object2LongMap<String>>
   synchronized(StartUpMeasurer.pluginCostMap) {
-    result = Object2ObjectOpenHashMap(StartUpMeasurer.pluginCostMap)
+    result = CollectionFactory.createSmallMemoryFootprintMap(StartUpMeasurer.pluginCostMap)
     StartUpMeasurer.pluginCostMap.clear()
   }
 

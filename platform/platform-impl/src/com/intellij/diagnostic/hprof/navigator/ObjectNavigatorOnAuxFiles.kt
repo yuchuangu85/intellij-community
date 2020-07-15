@@ -44,6 +44,7 @@ class ObjectNavigatorOnAuxFiles(
   private var softWeakReferenceIndex: Int = -1
   private var currentObjectId = 0L
   private var arraySize = 0
+  private var arrayData: ByteArray? = null
   private var currentClass: ClassDefinition? = null
   private val references = TLongArrayList()
   private var softWeakReferenceId = 0L
@@ -121,22 +122,63 @@ class ObjectNavigatorOnAuxFiles(
     preloadInstance(classDefinition, referenceResolution)
   }
 
+  override fun getStringInstanceFieldValue(): String? {
+    val coder = extraData
+    goToInstanceField("java.lang.String", "value")
+    arrayData?.let { data ->
+      val arrayClass = getClass()
+      if (arrayClass.name == "[B") {  // Java 9+
+        if (coder == 0 /* String.LATIN1 */) {
+          return data.toString(Charsets.ISO_8859_1)
+        }
+        else if (coder == 1 /* String.UTF16 */) {
+          return decodeUTF16String(data)
+        }
+      }
+      else if (arrayClass.name == "[C") {  // Java 8 and earlier
+        val buffer = ByteBuffer.wrap(data).asCharBuffer()
+        return buffer.toString()
+      }
+    }
+    return null
+  }
+
+  private fun decodeUTF16String(data: ByteArray): String {
+    val utf16Class = classStore.getClassIfExists("java.lang.StringUTF16")
+    if (utf16Class != null) {
+      val hiByteShift = utf16Class.getPrimitiveStaticFieldValue("HI_BYTE_SHIFT")
+      val loByteShift = utf16Class.getPrimitiveStaticFieldValue("LO_BYTE_SHIFT")
+      if (hiByteShift != null && loByteShift != null) {
+        val chars = CharArray(data.size / 2) { index ->
+          ((data[index * 2].toInt() shl hiByteShift.toInt()) or (data [index * 2 + 1].toInt() shl loByteShift.toInt())).toChar()
+        }
+        return String(chars)
+      }
+    }
+    return data.toString(Charsets.UTF_16)
+  }
+
   override fun getExtraData(): Int {
     return extraData
   }
 
   private fun preloadPrimitiveArray() {
     arraySize = aux.readNonNegativeLEB128Int()
+    val size = Type.getType(getClass().name).size
+    arrayData = ByteArray(arraySize * size)
+    aux.get(arrayData)
   }
 
   private fun preloadClass(classId: Int,
                            referenceResolution: ReferenceResolution) {
     arraySize = 0
+    arrayData = null
 
     if (referenceResolution != ReferenceResolution.NO_REFERENCES) {
       val classDefinition = classStore[classId]
       classDefinition.constantFields.forEach(references::add)
-      classDefinition.staticFields.forEach { references.add(it.objectId) }
+      classDefinition.objectStaticFields.forEach { references.add(it.value) }
+      references.add(classDefinition.classLoaderId)
     }
   }
 
@@ -145,6 +187,7 @@ class ObjectNavigatorOnAuxFiles(
     val nonNullElementsCount = aux.readNonNegativeLEB128Int()
 
     arraySize = nullElementsCount + nonNullElementsCount
+    arrayData = null
 
     if (referenceResolution != ReferenceResolution.NO_REFERENCES) {
       for (i in 0 until nonNullElementsCount) {
@@ -156,6 +199,7 @@ class ObjectNavigatorOnAuxFiles(
   private fun preloadInstance(classDefinition: ClassDefinition,
                               referenceResolution: ReferenceResolution) {
     arraySize = 0
+    arrayData = null
 
     if (referenceResolution == ReferenceResolution.NO_REFERENCES) {
       return
@@ -195,18 +239,18 @@ class ObjectNavigatorOnAuxFiles(
     }
     while (true)
 
-    if (isExtraDataPresent(classDefinition)) {
-      preloadExtraData()
+    references.add(classDefinition.id)
+
+    if (classDefinition == directByteBufferClass) {
+      extraData = aux.readNonNegativeLEB128Int()
+    }
+    else if (classDefinition == stringClass) {
+      extraData = aux.get().toInt()
     }
   }
 
   private val directByteBufferClass = classStore.getClassIfExists("java.nio.DirectByteBuffer")
-
-  private fun isExtraDataPresent(classDefinition: ClassDefinition): Boolean = classDefinition == directByteBufferClass
-
-  private fun preloadExtraData() {
-    extraData = aux.readNonNegativeLEB128Int()
-  }
+  private val stringClass = classStore.getClassIfExists("java.lang.String")
 
   override fun getSoftReferenceId(): Long {
     return if (referenceType == ReferenceType.Soft) softWeakReferenceId else 0
@@ -248,8 +292,8 @@ class ObjectNavigatorOnAuxFiles(
       if (classDefinition.id == id) {
         rootReason = RootReason.createClassDefinitionReason(classDefinition)
       }
-      classDefinition.staticFields.firstOrNull {
-        it.objectId == id
+      classDefinition.objectStaticFields.firstOrNull {
+        it.value == id
       }?.let {
         rootReason = RootReason.createStaticFieldReferenceReason(classDefinition, it.name)
       }

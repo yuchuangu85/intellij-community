@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.coverage;
 
 import com.intellij.coverage.*;
@@ -11,9 +11,11 @@ import com.intellij.execution.configurations.RunConfigurationBase;
 import com.intellij.execution.configurations.RunnerSettings;
 import com.intellij.execution.configurations.coverage.CoverageConfigurable;
 import com.intellij.execution.configurations.coverage.CoverageEnabledConfiguration;
+import com.intellij.execution.configurations.coverage.CoverageFragment;
 import com.intellij.execution.configurations.coverage.JavaCoverageEnabledConfiguration;
 import com.intellij.execution.junit.RefactoringListeners;
 import com.intellij.execution.process.ProcessHandler;
+import com.intellij.execution.ui.SettingsEditorFragment;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications;
@@ -39,6 +41,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -54,6 +57,11 @@ public class CoverageJavaRunConfigurationExtension extends RunConfigurationExten
   @Nullable
   public SettingsEditor createEditor(@NotNull RunConfigurationBase configuration) {
     return new CoverageConfigurable(configuration);
+  }
+
+  @Override
+  protected <P extends RunConfigurationBase<?>> List<SettingsEditorFragment<P, ?>> createFragments(@NotNull P configuration) {
+    return Collections.singletonList(new CoverageFragment<P>(configuration));
   }
 
   @Override
@@ -227,7 +235,7 @@ public class CoverageJavaRunConfigurationExtension extends RunConfigurationExten
     return CoverageEnabledConfiguration.isApplicableTo(configuration);
   }
 
-  private static class MyPackageAccessor extends MyAccessor implements RefactoringListeners.Accessor<PsiPackage> {
+  private static final class MyPackageAccessor extends MyAccessor implements RefactoringListeners.Accessor<PsiPackage> {
 
 
     private MyPackageAccessor(Project project, ClassFilter[] patterns, int idx, String[] filters) {
@@ -251,7 +259,7 @@ public class CoverageJavaRunConfigurationExtension extends RunConfigurationExten
     }
   }
 
-  private static class MyClassAccessor extends MyAccessor implements RefactoringListeners.Accessor<PsiClass> {
+  private static final class MyClassAccessor extends MyAccessor implements RefactoringListeners.Accessor<PsiClass> {
 
     private MyClassAccessor(Project project, ClassFilter[] patterns, int idx, String[] filters) {
       super(project, patterns, idx, filters);

@@ -41,7 +41,7 @@ import java.util.stream.Stream;
 public class JpsProjectTaskRunner extends ProjectTaskRunner {
   private static final Logger LOG = Logger.getInstance(JpsProjectTaskRunner.class);
   @ApiStatus.Internal
-  public static final Key<JpsBuildData> JPS_BUILD_DATA_KEY = KeyWithDefaultValue.create("jps_build_data", MyJpsBuildData::new);
+  public static final Key<JpsBuildData> JPS_BUILD_DATA_KEY = KeyWithDefaultValue.create("jps_build_data", () -> new MyJpsBuildData());
   @ApiStatus.Internal
   public static final Key<Object> EXECUTION_SESSION_ID_KEY = ExecutionManagerImpl.EXECUTION_SESSION_ID_KEY;
 
@@ -314,7 +314,7 @@ public class JpsProjectTaskRunner extends ProjectTaskRunner {
     }
   }
 
-  private static class MyNotificationCollector implements AutoCloseable {
+  private static final class MyNotificationCollector implements AutoCloseable {
     @NotNull private final ProjectTaskContext myContext;
     @Nullable private final ProjectTaskNotification myTaskNotification;
     @NotNull private final Runnable myOnFinished;
@@ -371,7 +371,7 @@ public class JpsProjectTaskRunner extends ProjectTaskRunner {
     }
   }
 
-  private static class MyCompileStatusNotification implements CompileStatusNotification {
+  private static final class MyCompileStatusNotification implements CompileStatusNotification {
 
     private final MyNotificationCollector myCollector;
     private final AtomicBoolean finished = new AtomicBoolean();

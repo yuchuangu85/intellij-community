@@ -19,14 +19,17 @@ import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.projectRoots.impl.JavaAwareProjectJdkTableImpl;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.util.Disposer;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.PathUtil;
 import com.intellij.util.messages.MessageBusConnection;
+import com.intellij.util.net.NetUtils;
 import com.intellij.util.xmlb.Converter;
 import com.intellij.util.xmlb.annotations.Attribute;
 import org.apache.lucene.search.Query;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.idea.maven.MavenDisposable;
 import org.jetbrains.idea.maven.buildtool.MavenSyncConsole;
 import org.jetbrains.idea.maven.execution.MavenExecutionOptions;
 import org.jetbrains.idea.maven.execution.MavenRunnerSettings;
@@ -38,9 +41,9 @@ import org.jetbrains.idea.maven.utils.MavenLog;
 import org.jetbrains.idea.maven.utils.MavenUtil;
 
 import java.io.File;
+import java.io.IOException;
 import java.rmi.RemoteException;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.jar.Attributes;
 
@@ -57,7 +60,7 @@ public class MavenServerManager implements PersistentStateComponent<MavenServerM
   private static final String DEFAULT_VM_OPTIONS =
     "-Xmx768m";
 
-  private final Map<Project, MavenServerConnector> myServerConnectors = new ConcurrentHashMap<>();
+  private final Map<Project, MavenServerConnector> myServerConnectors = new HashMap<>();
   private File eventListenerJar;
 
   public boolean checkMavenSettings(Project project, MavenSyncConsole console) {
@@ -73,7 +76,7 @@ public class MavenServerManager implements PersistentStateComponent<MavenServerM
       return false;
     }
 
-    Sdk jdk = getJdk(project);
+    Sdk jdk = getJdk(project, MavenWorkspaceSettingsComponent.getInstance(project).getSettings());
     if (!verifyMavenSdkRequirements(jdk, distribution.getVersion())) {
       console.showQuickFixJDK(distribution.getVersion());
       return false;
@@ -82,18 +85,25 @@ public class MavenServerManager implements PersistentStateComponent<MavenServerM
   }
 
   public void unregisterConnector(MavenServerConnector serverConnector) {
-    myServerConnectors.values().remove(serverConnector);
+    synchronized (myServerConnectors) {
+      myServerConnectors.values().remove(serverConnector);
+    }
   }
 
   public void shutdownServer(Project project) {
-    MavenServerConnector connector = myServerConnectors.get(project);
+    MavenServerConnector connector = null;
+    synchronized (myServerConnectors) {
+      connector = myServerConnectors.get(project);
+    }
     if (connector != null) {
       connector.shutdown(true);
     }
   }
 
   public Collection<MavenServerConnector> getAllConnectors() {
-    return Collections.unmodifiableCollection(myServerConnectors.values());
+    synchronized (myServerConnectors) {
+      return new ArrayList<>(myServerConnectors.values());
+    }
   }
 
   static class State {
@@ -136,45 +146,50 @@ public class MavenServerManager implements PersistentStateComponent<MavenServerM
 
   public MavenServerConnector getConnector(@NotNull Project project) {
     MavenWorkspaceSettings settings = MavenWorkspaceSettingsComponent.getInstance(project).getSettings();
-    Sdk jdk = getJdk(project);
+    Sdk jdk = getJdk(project, settings);
 
-    MavenServerConnector connector = myServerConnectors.get(project);
-    if (connector == null) {
-      connector = myServerConnectors.computeIfAbsent(project, p -> new MavenServerConnector(p, this, settings,  jdk));
-      registerDisposable(project, connector);
-
+    synchronized (myServerConnectors) {
+      MavenServerConnector connector = myServerConnectors.get(project);
+      if (connector == null) {
+        return registerNewConnector(project, settings, jdk);
+      }
+      if (!compatibleParameters(connector, jdk, settings)) {
+        connector.shutdown(false);
+        return registerNewConnector(project, settings, jdk);
+      }
       return connector;
     }
+  }
 
-    if (!compatibleParameters(connector, jdk, settings)) {
-      connector.shutdown(false);
-      connector = new MavenServerConnector(project, this, settings, jdk);
-      registerDisposable(project, connector);
-      myServerConnectors.put(project, connector);
-    }
+  private MavenServerConnector registerNewConnector(Project project, MavenWorkspaceSettings settings, Sdk jdk) {
+    Integer debugPort = getDebugPort(project);
+    MavenServerConnector connector = new MavenServerConnector(project, this, settings, jdk, debugPort);
+    Disposer.register(MavenDisposable.getInstance(project), connector);
+    myServerConnectors.put(project, connector);
     return connector;
   }
 
-  @NotNull
-  private Sdk getJdk(Project project) {
-    if(ApplicationManager.getApplication().isUnitTestMode()) {
-      return JavaAwareProjectJdkTableImpl.getInstanceEx().getInternalJdk();
+  private Integer getDebugPort(Project project) {
+    if ((project.isDefault() && Registry.is("maven.server.debug.default")) ||
+        Registry.is("maven.server.debug")) {
+      try {
+        return NetUtils.findAvailableSocketPort();
+      }
+      catch (IOException e) {
+        MavenLog.LOG.warn(e);
+      }
     }
-    Sdk jdk = ProjectRootManager.getInstance(project).getProjectSdk();
-    if (jdk == null) {
-      MavenLog.LOG.warn("cannot find JDK for project " + project);
-      jdk = JavaAwareProjectJdkTableImpl.getInstanceEx().getInternalJdk();
-    }
-    return jdk;
+    return null;
   }
 
-  private void registerDisposable(Project project, MavenServerConnector connector) {
-    if (project.isDefault()) {
-      Disposer.register(this, connector);
+  @NotNull
+  private Sdk getJdk(Project project, MavenWorkspaceSettings settings) {
+    if (ApplicationManager.getApplication().isUnitTestMode()) {
+      return JavaAwareProjectJdkTableImpl.getInstanceEx().getInternalJdk();
     }
-    else {
-      Disposer.register(project, connector);
-    }
+    String jdkForImporterName = settings.importingSettings.getJdkForImporter();
+
+    return MavenUtil.getJdk(project, jdkForImporterName);
   }
 
   private boolean compatibleParameters(MavenServerConnector connector, Sdk jdk, MavenWorkspaceSettings settings) {
@@ -194,7 +209,12 @@ public class MavenServerManager implements PersistentStateComponent<MavenServerM
 
 
   public synchronized void shutdown(boolean wait) {
-    myServerConnectors.values().forEach(c -> c.shutdown(wait));
+
+    Collection<MavenServerConnector> values;
+    synchronized (myServerConnectors) {
+      values = new ArrayList<>(myServerConnectors.values());
+    }
+    values.forEach(c -> c.shutdown(wait));
   }
 
   public static boolean verifyMavenSdkRequirements(@NotNull Sdk jdk, String mavenVersion) {
@@ -390,11 +410,15 @@ public class MavenServerManager implements PersistentStateComponent<MavenServerM
   }
 
   public void addDownloadListener(MavenServerDownloadListener listener) {
-    myServerConnectors.values().forEach(l -> l.addDownloadListener(listener));
+    synchronized (myServerConnectors) {
+      myServerConnectors.values().forEach(l -> l.addDownloadListener(listener));
+    }
   }
 
   public void removeDownloadListener(MavenServerDownloadListener listener) {
-    myServerConnectors.values().forEach(l -> l.removeDownloadListener(listener));
+    synchronized (myServerConnectors) {
+      myServerConnectors.values().forEach(l -> l.removeDownloadListener(listener));
+    }
   }
 
   public static MavenServerSettings convertSettings(MavenGeneralSettings settings) {

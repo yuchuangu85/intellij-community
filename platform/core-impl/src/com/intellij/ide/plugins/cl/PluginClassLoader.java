@@ -3,15 +3,14 @@ package com.intellij.ide.plugins.cl;
 
 import com.intellij.diagnostic.PluginException;
 import com.intellij.diagnostic.StartUpMeasurer;
-import com.intellij.ide.plugins.IdeaPluginDescriptor;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.extensions.PluginDescriptor;
 import com.intellij.openapi.extensions.PluginId;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.lang.UrlClassLoader;
-import gnu.trove.THashSet;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -40,8 +39,7 @@ public final class PluginClassLoader extends UrlClassLoader {
   }
 
   private ClassLoader[] myParents;
-  private final IdeaPluginDescriptor myPluginDescriptor;
-  private final String myPluginVersion;
+  private final PluginDescriptor myPluginDescriptor;
   private final List<String> myLibDirectories;
 
   private final AtomicLong edtTime = new AtomicLong();
@@ -50,26 +48,27 @@ public final class PluginClassLoader extends UrlClassLoader {
   private final AtomicInteger loadedClassCounter = new AtomicInteger();
   private ClassLoader myCoreLoader;
 
+  // to simplify analyzing of heap dump (dynamic plugin reloading)
+  private final PluginId pluginId;
+
   public PluginClassLoader(@NotNull List<URL> urls,
                            @NotNull ClassLoader @NotNull [] parents,
-                           @NotNull IdeaPluginDescriptor pluginDescriptor,
-                           String version,
+                           @NotNull PluginDescriptor pluginDescriptor,
                            @Nullable Path pluginRoot) {
-    this(build().urls(urls).allowLock().useCache(), parents, pluginDescriptor, version, pluginRoot);
+    this(build().urls(urls).allowLock().useCache(), parents, pluginDescriptor, pluginRoot);
   }
 
   public PluginClassLoader(@NotNull Builder builder,
                            @NotNull ClassLoader @NotNull [] parents,
-                           @Nullable IdeaPluginDescriptor pluginDescriptor,
-                           String version,
+                           @NotNull PluginDescriptor pluginDescriptor,
                            @Nullable Path pluginRoot) {
     super(builder);
 
     myParents = parents;
     myPluginDescriptor = pluginDescriptor;
-    myPluginVersion = version;
-    myLibDirectories = new SmartList<>();
+    pluginId = pluginDescriptor.getPluginId();
 
+    myLibDirectories = new SmartList<>();
     if (pluginRoot != null) {
       Path libDir = pluginRoot.resolve("lib");
       if (Files.exists(libDir)) {
@@ -135,9 +134,11 @@ public final class PluginClassLoader extends UrlClassLoader {
                                                                              ParameterType parameter,
                                                                              boolean withRoot) {
     for (ClassLoader parent : myParents) {
-      if (parent == myCoreLoader) continue;
+      if (parent == myCoreLoader) {
+        continue;
+      }
       if (visited == null) {
-        visited = new THashSet<>();
+        visited = new HashSet<>();
         visited.add(this);
       }
 
@@ -225,21 +226,21 @@ public final class PluginClassLoader extends UrlClassLoader {
 
   private static final Set<String> KOTLIN_STDLIB_CLASSES_USED_IN_SIGNATURES = ContainerUtil.set(
     "kotlin.sequences.Sequence",
-    "kotlin.Lazy",
-    "kotlin.Unit",
-    "kotlin.Pair",
-    "kotlin.Triple",
+    "kotlin.Lazy", "kotlin.Unit",
+    "kotlin.Pair", "kotlin.Triple",
     "kotlin.jvm.internal.DefaultConstructorMarker",
     "kotlin.jvm.internal.ClassBasedDeclarationContainer",
     "kotlin.properties.ReadWriteProperty",
-    "kotlin.properties.ReadOnlyProperty"
-  );
+    "kotlin.properties.ReadOnlyProperty");
 
   private static boolean mustBeLoadedByPlatform(String className) {
-    if (className.startsWith("java.")) return true;
-    //some commonly used classes from kotlin-runtime must be loaded by the platform classloader. Otherwise if a plugin bundles its own version
+    if (className.startsWith("java.")) {
+      return true;
+    }
+
+    // some commonly used classes from kotlin-runtime must be loaded by the platform classloader. Otherwise if a plugin bundles its own version
     // of kotlin-runtime.jar it won't be possible to call platform's methods with these types in signatures from such a plugin.
-    //We assume that these classes don't change between Kotlin versions so it's safe to always load them from platform's kotlin-runtime.
+    // We assume that these classes don't change between Kotlin versions so it's safe to always load them from platform's kotlin-runtime.
     return className.startsWith("kotlin.") && (className.startsWith("kotlin.jvm.functions.") ||
                                                (className.startsWith("kotlin.reflect.") &&
                                                 className.indexOf('.', 15 /* "kotlin.reflect".length */) < 0) ||
@@ -352,8 +353,7 @@ public final class PluginClassLoader extends UrlClassLoader {
     List<Enumeration<URL>> resources = new ArrayList<>();
     resources.add(findOwnResources(name));
     processResourcesInParents(name, findResourcesInPluginCL, findResourcesInCl, resources);
-    //noinspection unchecked,ToArrayCallWithZeroLengthArrayArgument
-    return new DeepEnumeration(resources.toArray(new Enumeration[resources.size()]));
+    return new DeepEnumeration(resources);
   }
 
   private Enumeration<URL> findOwnResources(String name) throws IOException {
@@ -377,36 +377,37 @@ public final class PluginClassLoader extends UrlClassLoader {
         }
       }
     }
-
     return null;
   }
 
   public @NotNull PluginId getPluginId() {
-    return myPluginDescriptor.getPluginId();
+    return pluginId;
   }
 
-  public @NotNull IdeaPluginDescriptor getPluginDescriptor() {
+  public @NotNull PluginDescriptor getPluginDescriptor() {
     return myPluginDescriptor;
   }
 
   @Override
   public String toString() {
-    return "PluginClassLoader[" + myPluginDescriptor + ", " + myPluginVersion + "] " + super.toString();
+    return "PluginClassLoader[" + myPluginDescriptor + "] " + super.toString();
   }
 
   private static final class DeepEnumeration implements Enumeration<URL> {
-    private final Enumeration<URL>[] myEnumerations;
+    private final List<Enumeration<URL>> list;
     private int myIndex;
 
-    DeepEnumeration(Enumeration<URL>[] enumerations) {
-      myEnumerations = enumerations;
+    DeepEnumeration(@NotNull List<Enumeration<URL>> enumerations) {
+      list = enumerations;
     }
 
     @Override
     public boolean hasMoreElements() {
-      while (myIndex < myEnumerations.length) {
-        Enumeration<URL> e = myEnumerations[myIndex];
-        if (e != null && e.hasMoreElements()) return true;
+      while (myIndex < list.size()) {
+        Enumeration<URL> e = list.get(myIndex);
+        if (e != null && e.hasMoreElements()) {
+          return true;
+        }
         myIndex++;
       }
       return false;
@@ -417,7 +418,7 @@ public final class PluginClassLoader extends UrlClassLoader {
       if (!hasMoreElements()) {
         throw new NoSuchElementException();
       }
-      return myEnumerations[myIndex].nextElement();
+      return list.get(myIndex).nextElement();
     }
   }
 

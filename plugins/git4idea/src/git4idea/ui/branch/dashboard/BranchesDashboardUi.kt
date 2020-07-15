@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.ui.branch.dashboard
 
 import com.intellij.icons.AllIcons
@@ -12,7 +12,6 @@ import com.intellij.openapi.progress.util.ProgressWindow
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
-import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.vcs.changes.ui.ChangesBrowserBase
 import com.intellij.openapi.wm.IdeFocusManager
 import com.intellij.ui.IdeBorderFactory.createBorder
@@ -29,7 +28,6 @@ import com.intellij.util.ui.components.BorderLayoutPanel
 import com.intellij.util.ui.table.ComponentsListFocusTraversalPolicy
 import com.intellij.vcs.log.VcsLogBranchLikeFilter
 import com.intellij.vcs.log.VcsLogFilterCollection
-import com.intellij.vcs.log.VcsLogFilterCollection.*
 import com.intellij.vcs.log.data.VcsLogData
 import com.intellij.vcs.log.impl.MainVcsLogUiProperties
 import com.intellij.vcs.log.impl.VcsLogManager
@@ -53,7 +51,7 @@ import git4idea.i18n.GitBundle.message
 import git4idea.i18n.GitBundleExtensions.messagePointer
 import git4idea.ui.branch.dashboard.BranchesDashboardActions.DeleteBranchAction
 import git4idea.ui.branch.dashboard.BranchesDashboardActions.FetchAction
-import git4idea.ui.branch.dashboard.BranchesDashboardActions.GroupByDirectoryAction
+import git4idea.ui.branch.dashboard.BranchesDashboardActions.GroupBranchByDirectoryAction
 import git4idea.ui.branch.dashboard.BranchesDashboardActions.NewBranchAction
 import git4idea.ui.branch.dashboard.BranchesDashboardActions.ShowBranchDiffAction
 import git4idea.ui.branch.dashboard.BranchesDashboardActions.ShowMyBranchesAction
@@ -75,7 +73,8 @@ internal class BranchesDashboardUi(project: Project, private val logUi: Branches
   private val branchesTreeWithLogPanel = simplePanel()
   private val mainPanel = simplePanel().apply { DataManager.registerDataProvider(this, uiController) }
   private val branchesSearchFieldPanel = simplePanel()
-  private val branchesSearchField = NonOpaquePanel(tree.installSearchField(JBUI.Borders.emptyLeft(5))).apply(UIUtil::setNotOpaqueRecursively)
+  private val branchesSearchField =
+    NonOpaquePanel(tree.installSearchField().apply { textEditor.border = JBUI.Borders.emptyLeft(5) }).apply(UIUtil::setNotOpaqueRecursively)
 
   private lateinit var branchesPanelExpandableController: ExpandablePanelController
 
@@ -99,10 +98,12 @@ internal class BranchesDashboardUi(project: Project, private val logUi: Branches
                                                                   logUi.filterUi.textFilterComponent.textEditor)
   }
 
+  private val showBranches get() = logUi.properties.get(SHOW_GIT_BRANCHES_LOG_PROPERTY)
+
   init {
     initMainUi()
     installLogUi()
-    updateBranchesTree(true)
+    toggleBranchesPanelVisibility()
   }
 
   @CalledInAwt
@@ -141,7 +142,7 @@ internal class BranchesDashboardUi(project: Project, private val logUi: Branches
 
     createFocusFilterFieldAction(branchesSearchField)
 
-    val groupByDirectoryAction = GroupByDirectoryAction(tree)
+    val groupByDirectoryAction = GroupBranchByDirectoryAction(tree)
     val toggleFavoriteAction = ToggleFavoriteAction()
     val fetchAction = FetchAction(this)
     val showMyBranchesAction = ShowMyBranchesAction(uiController)
@@ -189,12 +190,11 @@ internal class BranchesDashboardUi(project: Project, private val logUi: Branches
     mainPanel.isFocusCycleRoot = true
     mainPanel.focusTraversalPolicy = BRANCHES_UI_FOCUS_TRAVERSAL_POLICY
     startLoadingBranches()
-    toggleBranchesPanelVisibility()
   }
 
   fun toggleBranchesPanelVisibility() {
-    val showBranches = logUi.properties.get(SHOW_GIT_BRANCHES_LOG_PROPERTY)
     branchesPanelExpandableController.toggleExpand(showBranches)
+    updateBranchesTree(true)
   }
 
   private fun createFocusFilterFieldAction(searchField: Component) {
@@ -226,7 +226,9 @@ internal class BranchesDashboardUi(project: Project, private val logUi: Branches
   }
 
   fun updateBranchesTree(initial: Boolean) {
-    tree.update(initial)
+    if (showBranches) {
+      tree.update(initial)
+    }
   }
 
   fun refreshTree() {
@@ -309,7 +311,7 @@ private class BranchViewSplitter(first: JComponent? = null, second: JComponent? 
 private class DiffPreviewSplitter(diffPreview: VcsLogChangeProcessor, uiProperties: VcsLogUiProperties, mainComponent: JComponent)
   : FrameDiffPreview<VcsLogChangeProcessor>(diffPreview, uiProperties, mainComponent,
                                             "vcs.branch.view.diff.splitter.proportion",
-                                            Registry.`is`("vcs.log.diff.preview.vertical"), 0.3f) {
+                                            uiProperties[MainVcsLogUiProperties.DIFF_PREVIEW_VERTICAL_SPLIT], 0.3f) {
   override fun updatePreview(state: Boolean) {
     previewDiff.updatePreview(state)
   }

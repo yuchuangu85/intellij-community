@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package org.zmlx.hg4idea.repo;
 
@@ -29,7 +29,7 @@ import org.zmlx.hg4idea.util.HgUtil;
 
 import java.util.*;
 
-public class HgRepositoryImpl extends RepositoryImpl implements HgRepository {
+public final class HgRepositoryImpl extends RepositoryImpl implements HgRepository {
 
   private static final Logger LOG = Logger.getInstance(HgRepositoryImpl.class);
 
@@ -215,7 +215,7 @@ public class HgRepositoryImpl extends RepositoryImpl implements HgRepository {
         myOpenedBranches = HgBranchesCommand.collectNames(branchCommandResult);
       }
 
-      BackgroundTaskUtil.executeOnPooledThread(project, ()
+      BackgroundTaskUtil.executeOnPooledThread(this, ()
         -> BackgroundTaskUtil.syncPublisher(project, HgVcs.STATUS_TOPIC).update(project, getRoot()));
     }
   }

@@ -7,6 +7,7 @@ import com.intellij.lang.ant.AntSupport;
 import com.intellij.lang.ant.config.*;
 import com.intellij.lang.ant.config.actions.TargetAction;
 import com.intellij.lang.ant.dom.AntDomFileDescription;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataContext;
@@ -50,7 +51,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 
 @State(name = "AntConfiguration", storages = @Storage("ant.xml"), useLoadedStateAsExisting = false)
-public class AntConfigurationImpl extends AntConfigurationBase implements PersistentStateComponent<Element> {
+public class AntConfigurationImpl extends AntConfigurationBase implements PersistentStateComponent<Element>, Disposable {
   public static final ValueProperty<AntReference> DEFAULT_ANT = new ValueProperty<>("defaultAnt", AntReference.BUNDLED_ANT);
   private static final ValueProperty<AntConfiguration> INSTANCE = new ValueProperty<>("$instance", null);
   public static final AbstractProperty<String> DEFAULT_JDK_NAME = new AbstractProperty<String>() {
@@ -160,9 +161,12 @@ public class AntConfigurationImpl extends AntConfigurationBase implements Persis
         }
         return antFiles == null? NO_OP : new FileDeletionChangeApplier(toDelete, antFiles);
       }
-    }, project);
+    }, this);
   }
 
+  @Override
+  public void dispose() {
+  }
 
   @Override
   public Element getState() {
@@ -256,9 +260,9 @@ public class AntConfigurationImpl extends AntConfigurationBase implements Persis
                   myInitThread = Thread.currentThread();
                   // first, remove existing files
                   for (AntBuildFile file : myBuildFiles) {
+                    myBuildFiles.remove(file);
                     removeBuildFileImpl(file);
                   }
-                  myBuildFiles.clear();
 
                   // then fill the configuration with the files configured in xml
                   final VirtualFileManager vfManager = VirtualFileManager.getInstance();
@@ -442,9 +446,9 @@ public class AntConfigurationImpl extends AntConfigurationBase implements Persis
   private void removeBuildFiles(Collection<AntBuildFileBase> files) {
     for (AntBuildFileBase file : files) {
       incModificationCount();
+      myBuildFiles.remove(file);
       removeBuildFileImpl(file);
     }
-    myBuildFiles.removeAll(files);
     updateRegisteredActions();
   }
 
@@ -669,8 +673,7 @@ public class AntConfigurationImpl extends AntConfigurationBase implements Persis
     synchronized (this) {
       // unregister Ant actions
       ActionManagerEx actionManager = ActionManagerEx.getInstanceEx();
-      final String[] oldIds = actionManager.getActionIds(AntConfiguration.getActionIdPrefix(project));
-      for (String oldId : oldIds) {
+      for (String oldId : actionManager.getActionIdList(AntConfiguration.getActionIdPrefix(project))) {
         actionManager.unregisterAction(oldId);
       }
       final Set<String> registeredIds = new HashSet<>();

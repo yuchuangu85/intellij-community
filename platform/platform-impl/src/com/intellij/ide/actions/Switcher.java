@@ -1,24 +1,6 @@
 // Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.actions;
 
-import static com.intellij.ide.lightEdit.LightEditFeatureUsagesUtil.OpenPlace.RecentFiles;
-import static com.intellij.openapi.keymap.KeymapUtil.getActiveKeymapShortcuts;
-import static java.awt.event.KeyEvent.CTRL_DOWN_MASK;
-import static java.awt.event.KeyEvent.KEY_PRESSED;
-import static java.awt.event.KeyEvent.KEY_RELEASED;
-import static java.awt.event.KeyEvent.VK_ALT;
-import static java.awt.event.KeyEvent.VK_BACK_SPACE;
-import static java.awt.event.KeyEvent.VK_CONTROL;
-import static java.awt.event.KeyEvent.VK_DELETE;
-import static java.awt.event.KeyEvent.VK_DOWN;
-import static java.awt.event.KeyEvent.VK_ENTER;
-import static java.awt.event.KeyEvent.VK_ESCAPE;
-import static java.awt.event.KeyEvent.VK_LEFT;
-import static java.awt.event.KeyEvent.VK_Q;
-import static java.awt.event.KeyEvent.VK_RIGHT;
-import static java.awt.event.KeyEvent.VK_UP;
-import static javax.swing.KeyStroke.getKeyStroke;
-
 import com.intellij.featureStatistics.FeatureUsageTracker;
 import com.intellij.ide.DataManager;
 import com.intellij.ide.IdeBundle;
@@ -30,19 +12,7 @@ import com.intellij.ide.ui.UISettings;
 import com.intellij.ide.ui.UISettingsState;
 import com.intellij.ide.util.gotoByName.QuickSearchComponent;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.actionSystem.ActionManager;
-import com.intellij.openapi.actionSystem.ActionPlaces;
-import com.intellij.openapi.actionSystem.AnAction;
-import com.intellij.openapi.actionSystem.AnActionEvent;
-import com.intellij.openapi.actionSystem.CommonDataKeys;
-import com.intellij.openapi.actionSystem.CustomShortcutSet;
-import com.intellij.openapi.actionSystem.DataContext;
-import com.intellij.openapi.actionSystem.DataProvider;
-import com.intellij.openapi.actionSystem.IdeActions;
-import com.intellij.openapi.actionSystem.KeyboardShortcut;
-import com.intellij.openapi.actionSystem.PlatformDataKeys;
-import com.intellij.openapi.actionSystem.Shortcut;
-import com.intellij.openapi.actionSystem.ShortcutSet;
+import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.actionSystem.impl.PresentationFactory;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.Experiments;
@@ -53,11 +23,7 @@ import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx;
 import com.intellij.openapi.fileEditor.ex.IdeDocumentHistory;
-import com.intellij.openapi.fileEditor.impl.EditorHistoryManager;
-import com.intellij.openapi.fileEditor.impl.EditorTabPresentationUtil;
-import com.intellij.openapi.fileEditor.impl.EditorWindow;
-import com.intellij.openapi.fileEditor.impl.FileEditorManagerImpl;
-import com.intellij.openapi.fileEditor.impl.IdeDocumentHistoryImpl;
+import com.intellij.openapi.fileEditor.impl.*;
 import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.DumbAwareAction;
@@ -80,21 +46,7 @@ import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.openapi.wm.WindowManager;
 import com.intellij.openapi.wm.impl.ToolWindowManagerImpl;
 import com.intellij.problems.WolfTheProblemSolver;
-import com.intellij.ui.CaptionPanel;
-import com.intellij.ui.ClickListener;
-import com.intellij.ui.CollectionListModel;
-import com.intellij.ui.ColoredListCellRenderer;
-import com.intellij.ui.Gray;
-import com.intellij.ui.JBColor;
-import com.intellij.ui.ListActions;
-import com.intellij.ui.ListUtil;
-import com.intellij.ui.ScrollPaneFactory;
-import com.intellij.ui.ScrollingUtil;
-import com.intellij.ui.SimpleTextAttributes;
-import com.intellij.ui.SpeedSearchBase;
-import com.intellij.ui.SpeedSearchComparator;
-import com.intellij.ui.SpeedSearchObjectWithWeight;
-import com.intellij.ui.WindowMoveListener;
+import com.intellij.ui.*;
 import com.intellij.ui.border.CustomLineBorder;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
@@ -104,68 +56,32 @@ import com.intellij.ui.popup.PopupUpdateProcessorBase;
 import com.intellij.ui.scale.JBUIScale;
 import com.intellij.ui.speedSearch.NameFilteringListModel;
 import com.intellij.ui.speedSearch.SpeedSearchUtil;
-import com.intellij.util.Alarm;
-import com.intellij.util.ArrayUtil;
-import com.intellij.util.Consumer;
-import com.intellij.util.Function;
-import com.intellij.util.IconUtil;
-import com.intellij.util.ObjectUtils;
+import com.intellij.util.*;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.StatusText;
 import com.intellij.util.ui.UIUtil;
-import java.awt.AWTEvent;
-import java.awt.AWTKeyStroke;
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Component;
-import java.awt.Container;
-import java.awt.Dimension;
-import java.awt.Event;
-import java.awt.FocusTraversalPolicy;
-import java.awt.Font;
-import java.awt.KeyboardFocusManager;
-import java.awt.Window;
-import java.awt.event.ActionEvent;
-import java.awt.event.FocusAdapter;
-import java.awt.event.FocusEvent;
-import java.awt.event.InputEvent;
-import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
-import java.awt.event.MouseMotionListener;
-import java.beans.PropertyChangeEvent;
-import java.beans.PropertyChangeListener;
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.Supplier;
-import javax.swing.AbstractAction;
-import javax.swing.ActionMap;
-import javax.swing.JComponent;
-import javax.swing.JLabel;
-import javax.swing.JList;
-import javax.swing.JPanel;
-import javax.swing.JRootPane;
-import javax.swing.JScrollPane;
-import javax.swing.ListModel;
-import javax.swing.ListSelectionModel;
-import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
-import javax.swing.border.Border;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import javax.swing.*;
+import javax.swing.border.Border;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+import java.awt.*;
+import java.awt.event.*;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.io.File;
+import java.util.List;
+import java.util.*;
+import java.util.function.Supplier;
+
+import static com.intellij.ide.lightEdit.LightEditFeatureUsagesUtil.OpenPlace.RecentFiles;
+import static com.intellij.openapi.keymap.KeymapUtil.getActiveKeymapShortcuts;
+import static java.awt.event.KeyEvent.*;
+import static javax.swing.KeyStroke.getKeyStroke;
 
 /**
  * @author Konstantin Bulenkov
@@ -316,10 +232,6 @@ public final class Switcher extends AnAction implements DumbAware {
       Project project = e.getProject();
       e.getPresentation().setEnabledAndVisible(SWITCHER_KEY.get(project) != null);
     }
-
-    static boolean isEnabled() {
-      return getActiveKeymapShortcuts(TOGGLE_CHECK_BOX_ACTION_ID).getShortcuts().length > 0;
-    }
   }
 
   public static class IterateItemsAction extends DumbAwareAction implements DumbAware {
@@ -341,6 +253,8 @@ public final class Switcher extends AnAction implements DumbAware {
 
   public static class SwitcherPanel extends JPanel implements KeyListener, MouseListener, MouseMotionListener, DataProvider,
                                                               QuickSearchComponent, Disposable {
+    static final int SWITCHER_ELEMENTS_LIMIT = 30;
+
     static final Object RECENT_LOCATIONS = new Object();
     final JBPopup myPopup;
     final JBList<Object> toolWindows;
@@ -634,9 +548,7 @@ public final class Switcher extends AnAction implements DumbAware {
       myClickListener.installOn(files);
       ScrollingUtil.ensureSelectionExists(files);
 
-      myShowOnlyEditedFilesCheckBox = new MyCheckBox(ToggleCheckBoxAction.isEnabled() ? TOGGLE_CHECK_BOX_ACTION_ID
-                                                                                      : actionId,
-                                                     onlyEdited);
+      myShowOnlyEditedFilesCheckBox = new MyCheckBox(TOGGLE_CHECK_BOX_ACTION_ID, onlyEdited);
       myTopPanel = createTopPanel(myShowOnlyEditedFilesCheckBox,
                                   isCheckboxMode() ? IdeBundle.message("title.popup.recent.files") : title,
                                   pinned);
@@ -842,48 +754,48 @@ public final class Switcher extends AnAction implements DumbAware {
           editors.add(new FileInfo(pair.first, pair.second, project));
         }
       }
-      if (editors.size() < 2 || pinned) {
-        if (pinned && editors.size() > 1) {
-          for (FileInfo fileInfo : editors) {
-            if (addedFiles.add(fileInfo.first))
-              filesData.add(fileInfo);
-          }
-        }
-        int maxFiles = Math.max(editors.size(), filesForInit.size());
-        int minIndex = pinned ? 0 : (filesForInit.size() - Math.min(toolWindowsCount, maxFiles));
-        List<VirtualFile> selectedFiles = Arrays.asList(editorManager.getSelectedFiles());
-        for (int i = filesForInit.size() - 1; i >= minIndex; i--) {
-          if (pinned
-              && UISettings.getInstance().getEditorTabPlacement() != UISettings.TABS_NONE
-              && selectedFiles.contains(filesForInit.get(i)) ) {
-            continue;
-          }
 
-          FileInfo info = new FileInfo(filesForInit.get(i), null, project);
-          boolean add = true;
-          if (pinned) {
-            for (FileInfo fileInfo : filesData) {
-              if (fileInfo.first.equals(info.first)) {
-                add = false;
-                break;
+      if (!pinned) {
+        for (FileInfo editor : editors) {
+          addedFiles.add(editor.first);
+          filesData.add(editor);
+          if (filesData.size() >= SWITCHER_ELEMENTS_LIMIT) break;
+        }
+      }
+
+      List<VirtualFile> selectedFiles = Arrays.asList(editorManager.getSelectedFiles());
+      if (filesData.size() <= 1 || pinned) {
+        if (!filesForInit.isEmpty()) {
+          int editorsFilesCount = (int) editors.stream().map(info -> info.first).distinct().count();
+          int maxFiles = Math.max(editorsFilesCount, filesForInit.size());
+          int minIndex = pinned ? 0 : (filesForInit.size() - Math.min(toolWindowsCount, maxFiles));
+          for (int i = filesForInit.size() - 1; i >= minIndex; i--) {
+            if (pinned
+                && UISettings.getInstance().getEditorTabPlacement() != UISettings.TABS_NONE
+                && selectedFiles.contains(filesForInit.get(i))) {
+              continue;
+            }
+
+            FileInfo info = new FileInfo(filesForInit.get(i), null, project);
+            boolean add = true;
+            if (pinned) {
+              for (FileInfo fileInfo : filesData) {
+                if (fileInfo.first.equals(info.first)) {
+                  add = false;
+                  break;
+                }
               }
             }
-          }
-          if (add) {
-            if (addedFiles.add(info.first)) {
-              filesData.add(info);
+            if (add) {
+              if (addedFiles.add(info.first)) {
+                filesData.add(info);
+              }
             }
           }
         }
         if (editors.size() == 1 && (filesData.isEmpty() || !editors.get(0).getFirst().equals(filesData.get(0).getFirst()))) {
           if (addedFiles.add(editors.get(0).first)) {
             filesData.add(0, editors.get(0));
-          }
-        }
-      } else {
-        for (int i = 0; i < Math.min(30, editors.size()); i++) {
-          if (addedFiles.add(editors.get(i).first)) {
-            filesData.add(editors.get(i));
           }
         }
       }
@@ -900,7 +812,7 @@ public final class Switcher extends AnAction implements DumbAware {
       if (forward) {
         for (int i = 0; i < model.getSize(); i++) {
           FileInfo fileInfo = model.getElementAt(i);
-          if (!fileInfo.first.equals(currentFile)) {
+          if (!isTheSameTab(currentWindow, currentFile, fileInfo)) {
             return i;
           }
         }
@@ -908,13 +820,17 @@ public final class Switcher extends AnAction implements DumbAware {
       else {
         for (int i = model.getSize() - 1; i >= 0; i--) {
           FileInfo fileInfo = model.getElementAt(i);
-          if (!fileInfo.first.equals(currentFile)) {
+          if (!isTheSameTab(currentWindow, currentFile, fileInfo)) {
             return i;
           }
         }
       }
 
       return -1;
+    }
+
+    private static boolean isTheSameTab(EditorWindow currentWindow, VirtualFile currentFile, FileInfo fileInfo) {
+      return fileInfo.first.equals(currentFile) && (fileInfo.second == null || fileInfo.second.equals(currentWindow));
     }
 
     @NotNull
@@ -1477,7 +1393,7 @@ public final class Switcher extends AnAction implements DumbAware {
     }
   }
 
-  private static class MyCheckBox extends JBCheckBox {
+  private static final class MyCheckBox extends JBCheckBox {
     private MyCheckBox(@NotNull String actionId, boolean selected) {
       super(layoutText(actionId), selected);
       setOpaque(false);
@@ -1485,12 +1401,14 @@ public final class Switcher extends AnAction implements DumbAware {
     }
 
     private static String layoutText(@NotNull String actionId) {
+      String text = "<html>" + IdeBundle.message("recent.files.checkbox.label");
       ShortcutSet shortcuts = getActiveKeymapShortcuts(actionId);
-      return "<html>"
-             + IdeBundle.message("recent.files.checkbox.label")
-             + " <font color=\"" + RecentLocationsAction.Holder.SHORTCUT_HEX_COLOR + "\">"
-             + KeymapUtil.getShortcutsText(shortcuts.getShortcuts()) + "</font>"
-             + "</html>";
+      if (shortcuts.getShortcuts().length > 0) {
+        text += " <font color=\"" + RecentLocationsAction.Holder.SHORTCUT_HEX_COLOR + "\">"
+                + KeymapUtil.getShortcutsText(shortcuts.getShortcuts()) + "</font>"
+                + "</html>";
+      }
+      return text;
     }
   }
 

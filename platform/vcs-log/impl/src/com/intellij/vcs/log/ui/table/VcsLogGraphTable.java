@@ -188,11 +188,12 @@ public class VcsLogGraphTable extends TableWithProgress implements DataProvider,
   }
 
   public void updateDataPack(@NotNull VisiblePack visiblePack, boolean permGraphChanged) {
-    Selection previousSelection = getSelection();
     boolean filtersChanged = !getModel().getVisiblePack().getFilters().equals(visiblePack.getFilters());
 
+    Selection previousSelection = getSelection();
     getModel().setVisiblePack(visiblePack);
     previousSelection.restore(visiblePack.getVisibleGraph(), true, permGraphChanged);
+
     for (VcsLogHighlighter highlighter : myHighlighters) {
       highlighter.update(visiblePack, permGraphChanged);
     }
@@ -749,13 +750,13 @@ public class VcsLogGraphTable extends TableWithProgress implements DataProvider,
     }
   }
 
-  private class StringCellRenderer extends ColoredTableCellRenderer {
+  private final class StringCellRenderer extends ColoredTableCellRenderer {
     private StringCellRenderer() {
       setCellState(new GraphCommitCellRenderer.BorderlessTableCellState());
     }
 
     @Override
-    protected void customizeCellRenderer(JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
+    protected void customizeCellRenderer(@NotNull JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
       if (value == null) {
         return;
       }
@@ -997,7 +998,7 @@ public class VcsLogGraphTable extends TableWithProgress implements DataProvider,
     }
   }
 
-  private class MyTopBottomBorder implements Border {
+  private final class MyTopBottomBorder implements Border {
     @NotNull private final JBInsets myInsets;
 
     private MyTopBottomBorder(int top, int bottom) {

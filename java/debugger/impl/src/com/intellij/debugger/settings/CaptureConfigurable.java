@@ -294,7 +294,7 @@ public class CaptureConfigurable implements SearchableConfigurable, NoScroll {
     return IntStreamEx.of(table.getSelectedRows()).map(table::convertRowIndexToModel).mapToObj(myTableModel::get);
   }
 
-  private static class MyTableModel extends AbstractTableModel implements ItemRemovable {
+  private static final class MyTableModel extends AbstractTableModel implements ItemRemovable {
     public static final int ENABLED_COLUMN = 0;
     public static final int CLASS_COLUMN = 1;
     public static final int METHOD_COLUMN = 2;
@@ -326,7 +326,7 @@ public class CaptureConfigurable implements SearchableConfigurable, NoScroll {
     private void scanPoints() {
       if (Registry.is("debugger.capture.points.annotations")) {
         List<CapturePoint> capturePointsFromAnnotations = new ArrayList<>();
-        processCaptureAnnotations((capture, e, annotation) -> {
+        processCaptureAnnotations(null, (capture, e, annotation) -> {
           if (e instanceof PsiMethod) {
             addCapturePointIfNeeded(e, (PsiMethod)e, "this", capture, capturePointsFromAnnotations);
           }
@@ -544,9 +544,11 @@ public class CaptureConfigurable implements SearchableConfigurable, NoScroll {
     void accept(boolean capture, PsiModifierListOwner e, PsiAnnotation annotation);
   }
 
-  static void processCaptureAnnotations(CapturePointConsumer consumer) {
+  static void processCaptureAnnotations(@Nullable Project project, CapturePointConsumer consumer) {
     ApplicationManager.getApplication().assertReadAccessAllowed();
-    Project project = JavaDebuggerSupport.getContextProjectForEditorFieldsInDebuggerConfigurables();
+    if (project == null) { // fallback
+      project = JavaDebuggerSupport.getContextProjectForEditorFieldsInDebuggerConfigurables();
+    }
     DebuggerProjectSettings debuggerProjectSettings = DebuggerProjectSettings.getInstance(project);
     scanPointsInt(project, debuggerProjectSettings, true, consumer);
     scanPointsInt(project, debuggerProjectSettings, false, consumer);
@@ -578,7 +580,7 @@ public class CaptureConfigurable implements SearchableConfigurable, NoScroll {
       .toList();
   }
 
-  private class AsyncAnnotationsDialog extends DialogWrapper {
+  private final class AsyncAnnotationsDialog extends DialogWrapper {
     private final AnnotationsPanel myAsyncSchedulePanel;
     private final AnnotationsPanel myAsyncExecutePanel;
     private final DebuggerProjectSettings mySettings;

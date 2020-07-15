@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.completion;
 
 import com.intellij.codeInsight.ExpectedTypeInfo;
@@ -27,6 +27,7 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.RangeMarker;
 import com.intellij.openapi.editor.ScrollType;
+import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
@@ -49,7 +50,7 @@ import java.util.List;
 /**
 * @author peter
 */
-public class ConstructorInsertHandler implements InsertHandler<LookupElementDecorator<LookupElement>> {
+public final class ConstructorInsertHandler implements InsertHandler<LookupElementDecorator<LookupElement>> {
   private static final Logger LOG = Logger.getInstance(ConstructorInsertHandler.class);
   public static final ConstructorInsertHandler SMART_INSTANCE = new ConstructorInsertHandler(true);
   public static final ConstructorInsertHandler BASIC_INSTANCE = new ConstructorInsertHandler(false);
@@ -77,7 +78,7 @@ public class ConstructorInsertHandler implements InsertHandler<LookupElementDeco
 
     final PsiElement position = SmartCompletionDecorator.getPosition(context, delegate);
     if (position == null) return;
-    
+
     final PsiExpression enclosing = PsiTreeUtil.getContextOfType(position, PsiExpression.class, true);
     final PsiAnonymousClass anonymousClass = PsiTreeUtil.getParentOfType(position, PsiAnonymousClass.class);
     final boolean inAnonymous = anonymousClass != null && anonymousClass.getParent() == enclosing;
@@ -246,7 +247,7 @@ public class ConstructorInsertHandler implements InsertHandler<LookupElementDeco
                                                : hasConstructorParameters(psiClass, place);
 
     RangeMarker refEnd = context.getDocument().createRangeMarker(context.getTailOffset(), context.getTailOffset());
-    
+
     JavaCompletionUtil.insertParentheses(context, delegate, false, hasParams, forAnonymous);
 
     if (constructor != null) {
@@ -309,6 +310,7 @@ public class ConstructorInsertHandler implements InsertHandler<LookupElementDeco
   private static Runnable createOverrideRunnable(final Editor editor, final PsiFile file, final Project project) {
     return () -> {
       TemplateManager.getInstance(project).finishTemplate(editor);
+      if (DumbService.getInstance(project).isDumb()) return;
 
       PsiDocumentManager.getInstance(project).commitDocument(editor.getDocument());
       final PsiAnonymousClass

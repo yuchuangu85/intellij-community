@@ -6,12 +6,12 @@ import java.util.*
 class LimitedPriorityQueue<T>(private val sizeLimit: Int, comparator: Comparator<T>) {
 
   val biggestElements: List<T>
-    get() = queue.toList()
+    @Synchronized get() = queue.toList()
 
   private val queue = PriorityQueue(comparator)
 
   @Synchronized
-  fun addFile(element: T) {
+  fun addElement(element: T) {
     queue.add(element)
     while (queue.size > sizeLimit) {
       queue.poll()

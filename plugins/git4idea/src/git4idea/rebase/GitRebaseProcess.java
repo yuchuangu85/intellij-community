@@ -376,6 +376,7 @@ public class GitRebaseProcess {
     return filter(repositories, repository -> myChangeListManager.haveChangesUnder(repository.getRoot()) != ThreeState.NO);
   }
 
+  @CalledInBackground
   protected void notifySuccess() {
     String rebasedBranch = getCommonCurrentBranchNameIfAllTheSame(myRebaseSpec.getAllRepositories());
     GitRebaseParams params = myRebaseSpec.getParams();
@@ -469,7 +470,7 @@ public class GitRebaseProcess {
     return new GitDefaultMergeDialogCustomizer(repository.getProject());
   }
 
-  private static class GitRebaseMergeDialogCustomizer extends MergeDialogCustomizer {
+  private static final class GitRebaseMergeDialogCustomizer extends MergeDialogCustomizer {
     @NotNull private final GitRepository myRepository;
     @NotNull private final String myRebasingBranch;
     @NotNull private final String myBasePresentable;

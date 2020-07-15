@@ -46,8 +46,8 @@ public abstract class VirtualFileSystemEntry extends NewVirtualFile {
     DIRTY_FLAG | IS_SYMLINK_FLAG | HAS_SYMLINK_FLAG | IS_SPECIAL_FLAG | IS_WRITABLE_FLAG | IS_HIDDEN_FLAG | INDEXED_FLAG | CHILDREN_CACHED;
 
   @NotNull // except NULL_VIRTUAL_FILE
-  final VfsData.Segment mySegment;
-  private final VirtualDirectoryImpl myParent;
+  private volatile VfsData.Segment mySegment;
+  private volatile VirtualDirectoryImpl myParent;
   final int myId;
   private volatile CachedFileType myFileType;
 
@@ -74,7 +74,31 @@ public abstract class VirtualFileSystemEntry extends NewVirtualFile {
     myId = -42;
   }
 
-  void registerLink(VirtualFileSystem fs) {
+  @NotNull VfsData getVfsData() {
+    return getSegment().vfsData;
+  }
+
+  VfsData.@NotNull Segment getSegment() {
+    VfsData.Segment segment = mySegment;
+    if (segment.replacement != null) {
+      segment = updateSegmentAndParent(segment);
+    }
+    return segment;
+  }
+
+  private VfsData.Segment updateSegmentAndParent(VfsData.Segment segment) {
+    while (segment.replacement != null) {
+      segment = segment.replacement;
+    }
+    VirtualDirectoryImpl changedParent = segment.vfsData.getChangedParent(myId);
+    if (changedParent != null) {
+      myParent = changedParent;
+    }
+    mySegment = segment;
+    return segment;
+  }
+
+  void registerLink(@NotNull VirtualFileSystem fs) {
     if (fs instanceof LocalFileSystemImpl && is(VFileProperty.SYMLINK) && isValid()) {
       ((LocalFileSystemImpl)fs).symlinkUpdated(myId, myParent, getPath(), getCanonicalPath());
     }
@@ -98,13 +122,16 @@ public abstract class VirtualFileSystemEntry extends NewVirtualFile {
   }
 
   public final int getNameId() {
-    return mySegment.getNameId(myId);
+    return getSegment().getNameId(myId);
   }
 
   @Override
   public VirtualDirectoryImpl getParent() {
-    VirtualDirectoryImpl changedParent = mySegment.vfsData.getChangedParent(myId);
-    return changedParent != null ? changedParent : myParent;
+    VfsData.Segment segment = mySegment;
+    if (segment.replacement != null) {
+      updateSegmentAndParent(segment);
+    }
+    return myParent;
   }
 
   public boolean hasSymlink() {
@@ -118,19 +145,19 @@ public abstract class VirtualFileSystemEntry extends NewVirtualFile {
 
   @Override
   public long getModificationStamp() {
-    return isValid() ? mySegment.getModificationStamp(myId) : -1;
+    return isValid() ? getSegment().getModificationStamp(myId) : -1;
   }
 
   public void setModificationStamp(long modificationStamp) {
-    mySegment.setModificationStamp(myId, modificationStamp);
+    getSegment().setModificationStamp(myId, modificationStamp);
   }
 
   boolean getFlagInt(int mask) {
-    return mySegment.getFlag(myId, mask);
+    return getSegment().getFlag(myId, mask);
   }
 
   void setFlagInt(int mask, boolean value) {
-    mySegment.setFlag(myId, mask, value);
+    getSegment().setFlag(myId, mask, value);
   }
 
   public boolean isFileIndexed() {
@@ -304,7 +331,7 @@ public abstract class VirtualFileSystemEntry extends NewVirtualFile {
 
   @Override
   public boolean exists() {
-    return mySegment.vfsData.isFileValid(myId);
+    return getVfsData().isFileValid(myId);
   }
 
   @Override
@@ -324,7 +351,7 @@ public abstract class VirtualFileSystemEntry extends NewVirtualFile {
 
     VirtualDirectoryImpl parent = getParent();
     parent.removeChild(this);
-    mySegment.setNameId(myId, FileNameCache.storeName(newName));
+    getSegment().setNameId(myId, FileNameCache.storeName(newName));
     parent.addChild(this);
     ((PersistentFSImpl)PersistentFS.getInstance()).incStructuralModificationCount();
   }
@@ -336,7 +363,7 @@ public abstract class VirtualFileSystemEntry extends NewVirtualFile {
     parent.removeChild(this);
 
     VirtualDirectoryImpl directory = (VirtualDirectoryImpl)newParent;
-    mySegment.vfsData.changeParent(myId, directory);
+    getSegment().changeParent(myId, directory);
     directory.addChild(this);
     updateLinkStatus();
     ((PersistentFSImpl)PersistentFS.getInstance()).incStructuralModificationCount();
@@ -348,7 +375,7 @@ public abstract class VirtualFileSystemEntry extends NewVirtualFile {
   }
 
   public void invalidate() {
-    mySegment.vfsData.invalidateFile(myId);
+    getVfsData().invalidateFile(myId);
   }
 
   @NotNull
@@ -429,7 +456,7 @@ public abstract class VirtualFileSystemEntry extends NewVirtualFile {
   }
 
   @Override
-  public boolean isRecursiveOrCircularSymLink() {
+  public boolean isRecursiveOrCircularSymlink() {
     if (!is(VFileProperty.SYMLINK)) return false;
     NewVirtualFile resolved = getCanonicalFile();
     // invalid symlink
@@ -458,7 +485,9 @@ public abstract class VirtualFileSystemEntry extends NewVirtualFile {
     FileType type = cache == null ? null : cache.getUpToDateOrNull();
     if (type == null) {
       type = super.getFileType();
-      myFileType = CachedFileType.forType(type);
+      if (ApplicationManager.getApplication().isReadAccessAllowed()) {
+        myFileType = CachedFileType.forType(type);
+      }
     }
     return type;
   }

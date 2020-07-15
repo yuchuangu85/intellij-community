@@ -1,13 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.impl;
 
 import com.intellij.execution.BeforeRunTask;
 import com.intellij.execution.ExecutionBundle;
 import com.intellij.execution.RunnerAndConfigurationSettings;
 import com.intellij.execution.configurations.RunConfiguration;
+import com.intellij.execution.configurations.RunConfigurationBase;
 import com.intellij.execution.configurations.WithoutOwnBeforeRunSteps;
 import com.intellij.execution.runners.ProgramRunner;
-import com.intellij.execution.ui.FragmentedSettings;
 import com.intellij.execution.ui.RunConfigurationFragmentedEditor;
 import com.intellij.execution.ui.RunnerAndConfigurationSettingsEditor;
 import com.intellij.icons.AllIcons;
@@ -31,7 +31,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.List;
 
-public class ConfigurationSettingsEditorWrapper extends SettingsEditor<RunnerAndConfigurationSettings>
+public final class ConfigurationSettingsEditorWrapper extends SettingsEditor<RunnerAndConfigurationSettings>
   implements BeforeRunStepsPanel.StepsBeforeRunListener {
   public static final DataKey<ConfigurationSettingsEditorWrapper> CONFIGURATION_EDITOR_KEY = DataKey.create("ConfigurationSettingsEditor");
   @NonNls private static final String EXPAND_PROPERTY_KEY = "ExpandBeforeRunStepsPanel";
@@ -194,7 +194,8 @@ public class ConfigurationSettingsEditorWrapper extends SettingsEditor<RunnerAnd
     SettingsEditor<?> configurationEditor = settings.getConfiguration().getConfigurationEditor();
     //noinspection unchecked
     return configurationEditor instanceof RunConfigurationFragmentedEditor<?>
-           ? new RunnerAndConfigurationSettingsEditor(settings, (RunConfigurationFragmentedEditor<FragmentedSettings>)configurationEditor)
+           ? new RunnerAndConfigurationSettingsEditor(settings,
+                                                      (RunConfigurationFragmentedEditor<RunConfigurationBase<?>>)configurationEditor)
            : new ConfigurationSettingsEditorWrapper(settings, (SettingsEditor<RunConfiguration>)configurationEditor);
   }
 }

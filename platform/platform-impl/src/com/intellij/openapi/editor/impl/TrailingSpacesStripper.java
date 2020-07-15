@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.editor.impl;
 
 import com.intellij.ide.DataManager;
@@ -21,25 +21,21 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.text.CharArrayUtil;
-import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public final class TrailingSpacesStripper implements FileDocumentManagerListener {
-
   private static final Key<Boolean> DISABLE_FOR_FILE_KEY = Key.create("DISABLE_TRAILING_SPACE_STRIPPER_FOR_FILE_KEY");
 
-  private final Set<Document> myDocumentsToStripLater = new THashSet<>();
+  private final Set<Document> myDocumentsToStripLater = new HashSet<>();
 
   @Override
   public void beforeAllDocumentsSaving() {
-    Set<Document> documentsToStrip = new THashSet<>(myDocumentsToStripLater);
+    Set<Document> documentsToStrip = new HashSet<>(myDocumentsToStripLater);
     myDocumentsToStripLater.clear();
     for (Document document : documentsToStrip) {
       strip(document);
@@ -230,7 +226,7 @@ public final class TrailingSpacesStripper implements FileDocumentManagerListener
     return null;
   }
 
-  private static class MyTrailingSpacesOptions implements TrailingSpacesOptions {
+  private static final class MyTrailingSpacesOptions implements TrailingSpacesOptions {
     private @Nullable Boolean myStripTrailingSpaces;
     private @Nullable Boolean myEnsureNewLineAtEOF;
     private @Nullable Boolean myChangedLinesOnly;

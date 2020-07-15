@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -37,12 +37,12 @@ import org.jetbrains.idea.maven.utils.MavenProgressIndicator;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public abstract class MavenTestCase extends UsefulTestCase {
   protected static final String MAVEN_COMPILER_PROPERTIES = "<properties>\n" +
@@ -176,36 +176,21 @@ public abstract class MavenTestCase extends UsefulTestCase {
   }
 
   @Override
-  protected void runTest() throws Throwable {
+  protected void runTestRunnable(@NotNull ThrowableRunnable<Throwable> testRunnable) throws Throwable {
     try {
       if (runInWriteAction()) {
-        try {
-          WriteAction.runAndWait(() -> super.runTest());
-        }
-        catch (Throwable throwable) {
-          ExceptionUtil.rethrowAllAsUnchecked(throwable);
-        }
+        WriteAction.runAndWait(() -> super.runTestRunnable(testRunnable));
       }
       else {
-        super.runTest();
+        super.runTestRunnable(testRunnable);
       }
     }
-    catch (Exception throwable) {
-      Throwable each = throwable;
-      do {
-        if (each instanceof HeadlessException) {
-          printIgnoredMessage("Doesn't work in Headless environment");
-          return;
-        }
+    catch (Throwable throwable) {
+      if (ExceptionUtil.causedBy(throwable, HeadlessException.class)) {
+        printIgnoredMessage("Doesn't work in Headless environment");
       }
-      while ((each = each.getCause()) != null);
       throw throwable;
     }
-  }
-
-  @Override
-  protected void invokeTestRunnable(@NotNull Runnable runnable) {
-    runnable.run();
   }
 
   protected boolean runInWriteAction() {
@@ -481,8 +466,8 @@ public abstract class MavenTestCase extends UsefulTestCase {
     assertOrderedElementsAreEqual(actual, expected.toArray());
   }
 
-  protected static <T> void assertUnorderedElementsAreEqual(Collection<T> actual, Collection<T> expected) {
-    assertEquals(new HashSet<>(expected), new HashSet<>(actual));
+  protected static <T> void assertUnorderedElementsAreEqual(@NotNull Collection<T> actual, @NotNull Collection<T> expected) {
+    assertThat(actual).hasSameElementsAs(expected);
   }
 
   protected static void assertUnorderedPathsAreEqual(Collection<String> actual, Collection<String> expected) {

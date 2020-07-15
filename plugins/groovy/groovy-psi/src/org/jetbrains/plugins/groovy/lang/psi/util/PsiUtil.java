@@ -17,12 +17,14 @@ import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.VisibilityUtil;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.containers.Stack;
 import gnu.trove.TIntStack;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.codeInspection.utils.ControlFlowUtils;
 import org.jetbrains.plugins.groovy.config.GroovyConfigUtils;
+import org.jetbrains.plugins.groovy.ext.newify.NewifyMemberContributor;
 import org.jetbrains.plugins.groovy.extensions.GroovyApplicabilityProvider;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyLexer;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyTokenTypes;
@@ -64,10 +66,7 @@ import org.jetbrains.plugins.groovy.lang.psi.api.toplevel.imports.GrImportStatem
 import org.jetbrains.plugins.groovy.lang.psi.api.util.GrNamedArgumentsOwner;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.Instruction;
 import org.jetbrains.plugins.groovy.lang.psi.dataFlow.types.TypeInferenceHelper;
-import org.jetbrains.plugins.groovy.lang.psi.impl.GrMapType;
-import org.jetbrains.plugins.groovy.lang.psi.impl.GrTupleType;
-import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyPsiManager;
-import org.jetbrains.plugins.groovy.lang.psi.impl.PsiImplUtil;
+import org.jetbrains.plugins.groovy.lang.psi.impl.*;
 import org.jetbrains.plugins.groovy.lang.psi.impl.signatures.GrClosureSignatureUtil;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.TypesUtil;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.literals.GrLiteralImpl;
@@ -93,7 +92,7 @@ import static org.jetbrains.plugins.groovy.lang.psi.util.GroovyCommonClassNames.
 /**
  * @author ven
  */
-public class PsiUtil {
+public final class PsiUtil {
   private static final Logger LOG = Logger.getInstance(PsiUtil.class);
 
   public static final Key<JavaIdentifier> NAME_IDENTIFIER = new Key<>("Java Identifier");
@@ -1129,7 +1128,6 @@ public class PsiUtil {
         return false;
       }
     }
-    //noinspection SuspiciousMethodCalls
     return ControlFlowUtils.collectReturns(controlFlowOwner, true).contains(statement);
   }
 
@@ -1208,6 +1206,31 @@ public class PsiUtil {
   public static boolean isCompileStatic(PsiElement e) {
     PsiMember containingMember = PsiTreeUtil.getParentOfType(e, PsiMember.class, false, GrAnnotation.class);
     return containingMember != null && GroovyPsiManager.getInstance(containingMember.getProject()).isCompileStatic(containingMember);
+  }
+
+  public static boolean isNewified(@Nullable PsiElement expr) {
+    if (!(expr instanceof GrReferenceExpression)) {
+      return false;
+    }
+    GrReferenceExpression refExpr = (GrReferenceExpression)expr;
+    if (refExpr.isQualified()) {
+      return false;
+    }
+    String referenceName = refExpr.getReferenceName();
+    if (referenceName == null) {
+      return false;
+    }
+    List<PsiAnnotation> newifyAnnotations = NewifyMemberContributor.getNewifyAnnotations(expr);
+    for (PsiAnnotation anno : newifyAnnotations) {
+      if (NewifyMemberContributor.matchesPattern(referenceName, anno)) {
+        return true;
+      }
+      List<PsiClass> selectedClasses = GrAnnotationUtil.getClassArrayValue(anno, "value", true);
+      if (selectedClasses.stream().anyMatch(clazz -> referenceName.equals(clazz.getName()))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @Nullable

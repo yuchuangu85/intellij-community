@@ -218,7 +218,7 @@ public class AddFieldQuickFix implements LocalQuickFix {
           else {
             seen = true;
           }
-          sb.append(params[i].getText());
+          sb.append(params[i].getName());
         }
         sb.append(")");
         functionText += "    " + sb;
@@ -233,7 +233,7 @@ public class AddFieldQuickFix implements LocalQuickFix {
     );
   }
 
-  private static class CreateFieldCallback implements Function<String, PyStatement> {
+  private static final class CreateFieldCallback implements Function<String, PyStatement> {
     private final Project myProject;
     private final String myItemName;
     private final String myInitializer;

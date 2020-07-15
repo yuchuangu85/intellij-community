@@ -29,13 +29,14 @@ import com.intellij.util.ui.tree.TreeUtil
 import com.intellij.util.ui.update.DisposableUpdate
 import com.intellij.util.ui.update.MergingUpdateQueue
 import git4idea.GitUtil
+import git4idea.i18n.GitBundle
 import git4idea.merge.GitMergeUtil
 import git4idea.repo.GitConflict
 import git4idea.repo.GitConflict.ConflictSide
 import git4idea.repo.GitConflict.Status
-import git4idea.repo.GitConflictsHolder
 import git4idea.repo.GitRepository
 import git4idea.repo.GitRepositoryChangeListener
+import git4idea.status.GitStagingAreaHolder
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
 import java.util.*
@@ -85,7 +86,8 @@ class GitConflictsPanel(
     }
 
     val connection = project.messageBus.connect(this)
-    connection.subscribe(GitConflictsHolder.CONFLICTS_CHANGE, GitConflictsHolder.ConflictsListener { updateConflicts() })
+    connection.subscribe(GitStagingAreaHolder.TOPIC,
+                         GitStagingAreaHolder.StagingAreaListener { updateConflicts() })
     connection.subscribe(GitRepository.GIT_REPO_CHANGE, GitRepositoryChangeListener { updateConflicts() })
 
     updateConflicts()
@@ -116,7 +118,7 @@ class GitConflictsPanel(
       val repos = GitUtil.getRepositories(project)
       for (repo in repos) {
         if (GitMergeUtil.isReverseRoot(repo)) newReversedRoots.add(repo.root)
-        newConflicts.addAll(repo.conflictsHolder.conflicts)
+        newConflicts.addAll(repo.stagingAreaHolder.allConflicts)
       }
 
       runInEdt {
@@ -152,7 +154,8 @@ class GitConflictsPanel(
     for (conflict in conflicts) {
       val file = LocalFileSystem.getInstance().refreshAndFindFileByPath(conflict.filePath.path)
       if (file == null) {
-        VcsNotifier.getInstance(project).notifyError("Can't Resolve Conflict", "Can't find file for ${conflict.filePath}")
+        VcsNotifier.getInstance(project).notifyError(GitBundle.message("conflicts.merge.window.error.title"),
+                                                     GitBundle.message("conflicts.merge.window.error.message", conflict.filePath))
         continue
       }
 
@@ -179,7 +182,7 @@ class GitConflictsPanel(
     if (locks.any { it.isLocked }) return
     locks.forEach { it.lock() }
 
-    object : Task.Backgroundable(project, StringUtil.pluralize("Resolving Conflict", conflicts.size), true) {
+    object : Task.Backgroundable(project, GitBundle.message("conflicts.accept.progress", conflicts.size), true) {
       override fun run(indicator: ProgressIndicator) {
         mergeHandler.acceptOneVersion(conflicts, reversed, takeTheirs)
       }
@@ -237,13 +240,13 @@ private class ConflictChangesBrowserNode(conflict: GitConflict) : ChangesBrowser
     val oursStatus = conflict.getStatus(ConflictSide.OURS, true)
     val theirsStatus = conflict.getStatus(ConflictSide.THEIRS, true)
     val conflictType = when {
-      oursStatus == Status.DELETED && theirsStatus == Status.DELETED -> "both deleted"
-      oursStatus == Status.ADDED && theirsStatus == Status.ADDED -> "both added"
-      oursStatus == Status.MODIFIED && theirsStatus == Status.MODIFIED -> "both modified"
-      oursStatus == Status.DELETED -> "deleted by you"
-      theirsStatus == Status.DELETED -> "deleted by them"
-      oursStatus == Status.ADDED -> "added by you"
-      theirsStatus == Status.ADDED -> "added by them"
+      oursStatus == Status.DELETED && theirsStatus == Status.DELETED -> GitBundle.message("conflicts.type.both.deleted")
+      oursStatus == Status.ADDED && theirsStatus == Status.ADDED -> GitBundle.message("conflicts.type.both.added")
+      oursStatus == Status.MODIFIED && theirsStatus == Status.MODIFIED -> GitBundle.message("conflicts.type.both.modified")
+      oursStatus == Status.DELETED -> GitBundle.message("conflicts.type.deleted.by.you")
+      theirsStatus == Status.DELETED -> GitBundle.message("conflicts.type.deleted.by.them")
+      oursStatus == Status.ADDED -> GitBundle.message("conflicts.type.added.by.you")
+      theirsStatus == Status.ADDED -> GitBundle.message("conflicts.type.added.by.them")
       else -> throw IllegalStateException("ours: $oursStatus; theirs: $theirsStatus")
     }
     renderer.append(spaceAndThinSpace() + conflictType, SimpleTextAttributes.GRAYED_ATTRIBUTES)

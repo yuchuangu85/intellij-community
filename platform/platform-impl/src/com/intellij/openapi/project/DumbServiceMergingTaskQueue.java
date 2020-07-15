@@ -6,7 +6,6 @@ import com.intellij.openapi.diagnostic.ControlFlowException;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.util.ProgressIndicatorBase;
-import com.intellij.openapi.progress.util.ProgressIndicatorListenerAdapter;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.wm.ex.ProgressIndicatorEx;
 import org.jetbrains.annotations.NotNull;
@@ -23,16 +22,6 @@ public class DumbServiceMergingTaskQueue {
 
   //includes running tasks too
   private final Map<DumbModeTask, ProgressIndicatorBase> myProgresses = new HashMap<>();
-
-  /**
-   * Removes all tasks from Queue without disposing the tasks
-   */
-  void clearTasksQueue() {
-    //we use myProgresses to keep tasks for dispose
-    synchronized (myLock) {
-      myTasksQueue.clear();
-    }
-  }
 
   /**
    * Disposes tasks, cancel underlying progress indicators, clears tasks queue
@@ -161,12 +150,12 @@ public class DumbServiceMergingTaskQueue {
     }
     catch (Throwable t) {
       if (!(t instanceof ControlFlowException)) {
-        LOG.warn("Faieded to cancel DumbModeTask indicator: " + t.getMessage(), t);
+        LOG.warn("Failed to cancel DumbModeTask indicator: " + t.getMessage(), t);
       }
     }
   }
 
-  public static class QueuedDumbModeTask implements AutoCloseable {
+  static class QueuedDumbModeTask implements AutoCloseable {
     private final DumbModeTask myTask;
     private final ProgressIndicatorEx myIndicator;
 
@@ -182,15 +171,15 @@ public class DumbServiceMergingTaskQueue {
     }
 
     @NotNull
-    public ProgressIndicatorEx getIndicator() {
+    ProgressIndicatorEx getIndicator() {
       return myIndicator;
     }
 
-    public void executeTask() {
+    void executeTask() {
       executeTask(null);
     }
 
-    public void executeTask(@Nullable ProgressIndicator customIndicator) {
+    void executeTask(@Nullable ProgressIndicator customIndicator) {
       //this is the cancellation check
       myIndicator.checkCanceled();
       myIndicator.setIndeterminate(true);
@@ -211,8 +200,12 @@ public class DumbServiceMergingTaskQueue {
       myTask.performInDumbMode(customIndicator);
     }
 
-    public void registerStageStarted(@NotNull IdeActivity activity) {
+    void registerStageStarted(@NotNull IdeActivity activity) {
       activity.stageStarted(myTask.getClass());
+    }
+
+    String getInfoString() {
+      return String.valueOf(myTask);
     }
   }
 }

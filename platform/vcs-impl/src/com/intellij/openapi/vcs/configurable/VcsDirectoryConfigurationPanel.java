@@ -78,7 +78,7 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
   private final VcsUpdateInfoScopeFilterConfigurable myScopeFilterConfig;
   private JBLoadingPanel myLoadingPanel;
 
-  private static class MapInfo {
+  private static final class MapInfo {
     static final MapInfo SEPARATOR = new MapInfo(new VcsDirectoryMapping("SEPARATOR", "SEP"), Type.SEPARATOR); //NON-NLS
     static final Comparator<MapInfo> COMPARATOR = (o1, o2) -> {
       if (o1.type.isRegistered() && o2.type.isRegistered() || o1.type == Type.UNREGISTERED && o2.type == Type.UNREGISTERED) {
@@ -129,7 +129,7 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
     }
 
     @Override
-    protected void customizeCellRenderer(JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
+    protected void customizeCellRenderer(@NotNull JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
       if (value instanceof MapInfo) {
         MapInfo info = (MapInfo)value;
 
@@ -213,7 +213,7 @@ public class VcsDirectoryConfigurationPanel extends JPanel implements Configurab
       public TableCellRenderer getRenderer(final MapInfo info) {
         return new ColoredTableCellRenderer() {
           @Override
-          protected void customizeCellRenderer(JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
+          protected void customizeCellRenderer(@NotNull JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
             if (info == MapInfo.SEPARATOR) {
               if (!selected) {
                 setBackground(getUnregisteredRootBackground());

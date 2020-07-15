@@ -48,8 +48,9 @@ public final class BeanExtensionPoint<T> extends ExtensionPointImpl<T> {
   @Override
   void unregisterExtensions(@NotNull ComponentManager componentManager,
                             @NotNull PluginDescriptor pluginDescriptor,
-                            @NotNull List<Element> elements,
-                            @NotNull List<Runnable> listenerCallbacks) {
+                            @NotNull List<? extends Element> elements,
+                            @NotNull List<? super Runnable> priorityListenerCallbacks,
+                            @NotNull List<? super Runnable> listenerCallbacks) {
     Map<String, String> defaultAttributes = new HashMap<>();
     try {
       Object defaultInstance = componentManager.instantiateExtensionWithPicoContainerOnlyIfNeeded(getClassName(), pluginDescriptor);
@@ -68,6 +69,6 @@ public final class BeanExtensionPoint<T> extends ExtensionPointImpl<T> {
       XmlExtensionAdapter xmlExtensionAdapter = (XmlExtensionAdapter)adapter;
       return xmlExtensionAdapter.getPluginDescriptor() != pluginDescriptor ||
              !xmlExtensionAdapter.isLoadedFromAnyElement(elements, defaultAttributes);
-    }, false, listenerCallbacks);
+    }, false, priorityListenerCallbacks, listenerCallbacks);
   }
 }

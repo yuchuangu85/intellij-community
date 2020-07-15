@@ -13,7 +13,8 @@ import java.util.Map;
  *
  * <p>A root node can be created via {@link #newDisposable()}, to which children are attached via subsequent calls to {@link #register(Disposable, Disposable)}.
  * Invoking {@link #dispose(Disposable)} will process all its registered children's {@link Disposable#dispose()} method.</p>
- *
+ * <p>
+ * See <a href="https://www.jetbrains.org/intellij/sdk/docs/basics/disposers.html">Disposer and Disposable</a> in SDK Docs.
  * @see Disposable
  */
 public final class Disposer {
@@ -60,6 +61,8 @@ public final class Disposer {
 
   /**
    * Registers {@code child} so it is disposed right before its {@code parent}. See {@link Disposer class JavaDoc} for more details.
+   * This overrides parent disposable for {@code child}, i.e. if {@code child} is already registered with {@code oldParent},
+   * it's unregistered from {@code oldParent} before registering with {@code parent}.
    *
    * @throws com.intellij.util.IncorrectOperationException If {@code child} has been registered with {@code parent} before;
    *                                                       if {@code parent} is being disposed ({@link #isDisposing(Disposable)}) or

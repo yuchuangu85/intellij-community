@@ -1,5 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
-
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.diff.impl.patch;
 
 import com.google.common.collect.Iterables;
@@ -8,11 +7,13 @@ import com.intellij.openapi.util.ThrowableComputable;
 import com.intellij.openapi.util.text.LineTokenizer;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.SmartList;
+import com.intellij.util.io.PathKt;
 import com.intellij.vcsUtil.VcsFileUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -20,7 +21,7 @@ import java.util.regex.Pattern;
 import static com.intellij.util.containers.ContainerUtil.filter;
 import static com.intellij.util.containers.ContainerUtil.findAll;
 
-public class PatchReader {
+public final class PatchReader {
   @NonNls public static final String NO_NEWLINE_SIGNATURE = UnifiedDiffWriter.NO_NEWLINE_SIGNATURE;
   private final List<String> myLines;
   private final PatchReader.PatchContentParser myPatchContentParser;
@@ -46,6 +47,10 @@ public class PatchReader {
 
   public PatchReader(CharSequence patchContent) {
     this(patchContent, true);
+  }
+
+  public PatchReader(@NotNull Path file) {
+    this(PathKt.readChars(file), true);
   }
 
   public PatchReader(CharSequence patchContent, boolean saveHunks) {
@@ -102,8 +107,8 @@ public class PatchReader {
   }
 
   public void parseAllPatches() throws PatchSyntaxException {
-    final ListIterator<String> iterator = myLines.listIterator();
-    if (! iterator.hasNext()) {
+    ListIterator<String> iterator = myLines.listIterator();
+    if (!iterator.hasNext()) {
       myPatches = Collections.emptyList();
       return;
     }
@@ -137,7 +142,8 @@ public class PatchReader {
           final String lastName = myPatchContentParser.getLastName();
           if (lastName == null) {
             myAdditionalInfoParser.acceptError(new PatchSyntaxException(iterator.previousIndex(), "Contains additional information without patch itself"));
-          } else {
+          }
+          else {
             myAdditionalInfoParser.copyToResult(lastName);
           }
         }
@@ -166,7 +172,7 @@ public class PatchReader {
     return myPatchFileInfo;
   }
 
-  private static class AdditionalInfoParser implements Parser {
+  private static final class AdditionalInfoParser implements Parser {
     // first is path!
     private final Map<String,Map<String, CharSequence>> myResultMap;
     private final boolean myIgnoreMode;
@@ -249,7 +255,7 @@ public class PatchReader {
   }
 
 
-  static class PatchContentParser implements Parser {
+  final static class PatchContentParser implements Parser {
     private final boolean mySaveHunks;
     private DiffFormat myDiffFormat = null;
     private final List<FilePatch> myPatches;

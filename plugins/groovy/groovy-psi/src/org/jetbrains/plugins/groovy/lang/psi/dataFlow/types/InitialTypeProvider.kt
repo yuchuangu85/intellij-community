@@ -8,8 +8,12 @@ import org.jetbrains.plugins.groovy.lang.psi.GrControlFlowOwner
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrField
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.VariableDescriptor
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.impl.ResolvedVariableDescriptor
+import org.jetbrains.plugins.groovy.lang.psi.controlFlow.impl.isNestedFlowProcessingAllowed
+import org.jetbrains.plugins.groovy.lang.psi.dataFlow.DFAType
 
-class InitialTypeProvider(val start: GrControlFlowOwner) {
+
+internal class InitialTypeProvider(private val start: GrControlFlowOwner,
+                                   private val initialTypes: Map<VariableDescriptor, DFAType>) {
 
   private val parentFlowOwner by lazyPub {
     val parent = start.parent
@@ -22,8 +26,21 @@ class InitialTypeProvider(val start: GrControlFlowOwner) {
   }
 
   fun initialType(descriptor: VariableDescriptor): PsiType? {
+    if (isNestedFlowProcessingAllowed()) {
+      val typeFromInitialContext = initialTypes[descriptor]?.getResultType(start.manager)
+      if (typeFromInitialContext != null) return typeFromInitialContext
+      val type = getTypeFromParentDFA(descriptor)
+      if (type != null) return type
+    }
     val resolvedDescriptor = descriptor as? ResolvedVariableDescriptor ?: return null
     val field = resolvedDescriptor.variable as? GrField ?: return null
     return field.typeGroovy
+  }
+
+  private fun getTypeFromParentDFA(descriptor: VariableDescriptor): PsiType? {
+    val parentFlowOwner = this.parentFlowOwner ?: return null
+    val parentCache = TypeInferenceHelper.getInferenceCache(parentFlowOwner)
+    val instruction = parentInstruction ?: return null
+    return parentCache.getInferredType(descriptor, instruction, false)
   }
 }

@@ -221,7 +221,7 @@ public class AbstractPopup implements JBPopup, ScreenAreaConsumer {
                                         boolean inStack,
                                         boolean modalContext,
                                         Component @NotNull [] focusOwners,
-                                        @Nullable String adText,
+                                        @Nullable @NlsContexts.PopupAdvertisement String adText,
                                         int adTextAlignment,
                                         boolean headerAlwaysFocusable,
                                         @NotNull List<? extends Pair<ActionListener, KeyStroke>> keyboardActions,
@@ -864,6 +864,11 @@ public class AbstractPopup implements JBPopup, ScreenAreaConsumer {
     if (myLocateWithinScreen) {
       ScreenUtil.moveToFit(targetBounds, screen, null);
     }
+    else {
+      //even when LocateWithinScreen option is disabled, popup should not be shown in invisible area
+      fitToVisibleArea(targetBounds);
+    }
+
 
     if (myMouseOutCanceller != null) {
       myMouseOutCanceller.myEverEntered = targetBounds.equals(original);
@@ -1101,6 +1106,18 @@ public class AbstractPopup implements JBPopup, ScreenAreaConsumer {
     myState = State.SHOWN;
 
     afterShowSync();
+  }
+
+  private static void fitToVisibleArea(Rectangle targetBounds) {
+    Point topLeft = new Point(targetBounds.x, targetBounds.y);
+    Point bottomRight = new Point((int)targetBounds.getMaxX(), (int)targetBounds.getMaxY());
+    Rectangle topLeftScreen = ScreenUtil.getScreenRectangle(topLeft);
+    Rectangle bottomRightScreen = ScreenUtil.getScreenRectangle(bottomRight);
+    if (topLeft.x < topLeftScreen.x || topLeft.y < topLeftScreen.y
+        || bottomRight.x > bottomRightScreen.getMaxX() || bottomRight.y > bottomRightScreen.getMaxY()) {
+      Rectangle centerScreen = ScreenUtil.getScreenRectangle(new Point((int)targetBounds.getCenterX(), (int)targetBounds.getCenterY()));
+      ScreenUtil.moveToFit(targetBounds, centerScreen, null);
+    }
   }
 
   public void focusPreferredComponent() {
@@ -1830,7 +1847,7 @@ public class AbstractPopup implements JBPopup, ScreenAreaConsumer {
     if (doRevalidate) myContent.revalidate();
   }
 
-  public void setWarning(@NotNull String text) {
+  public void setWarning(@NotNull @NlsContexts.Label String text) {
     JBLabel label = new JBLabel(text, UIUtil.getBalloonWarningIcon(), SwingConstants.CENTER);
     label.setOpaque(true);
     Color color = HintUtil.getInformationColor();

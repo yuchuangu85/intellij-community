@@ -9,9 +9,9 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
 import com.intellij.openapi.project.Project
 import com.intellij.vcs.log.ui.VcsLogPanel
+import com.intellij.openapi.util.Disposer
 import com.intellij.vcs.log.ui.VcsLogUiEx
 import com.intellij.vcs.log.ui.editor.VCS_LOG_FILE_DISPLAY_NAME_GENERATOR
-import com.intellij.vcs.log.ui.editor.VcsLogEditor
 import com.intellij.vcs.log.ui.editor.VcsLogFile
 import javax.swing.JComponent
 
@@ -69,15 +69,25 @@ internal fun closeLogTabs(project: Project, editorTabIds: List<String>): Boolean
 
   val editorManager = FileEditorManager.getInstance(project)
 
-  val editorsToIdsMap = editorManager.allEditors.asIterable().associateWith {
-    getLogIds(it).intersect(tabsToClose)
-  }.filterValues { logIds -> logIds.isNotEmpty() }
+  val editorsToIdsMap = editorManager.allEditors.asIterable().filter {
+    getLogIds(it).intersect(tabsToClose).isNotEmpty()
+  }
 
-  for ((logEditor, ids) in editorsToIdsMap) {
-    (logEditor as? VcsLogEditor)?.disposeLogUis()
+  for (logEditor in editorsToIdsMap) {
+    val ids = logEditor.disposeLogUis()
     ApplicationManager.getApplication().invokeLater({ editorManager.closeFile(logEditor.file!!) }, ModalityState.NON_MODAL,
                                                     { project.isDisposed })
     tabsToClose.removeAll(ids)
   }
   return tabsToClose.isEmpty()
+}
+
+internal fun FileEditor.disposeLogUis(): List<String> {
+  val logUis = VcsLogContentUtil.getLogUis(component)
+  val disposedIds = logUis.map { it.id }
+  if (logUis.isNotEmpty()) {
+    component.removeAll()
+    logUis.forEach(Disposer::dispose)
+  }
+  return disposedIds
 }

@@ -145,6 +145,13 @@ public final class PatchApplier {
     return executePatchGroup(group, localChangeList, true, false);
   }
 
+  /**
+   * Pass 'null' {@code targetChangeList} if changelist doesn't matter, changes will be applied as-it into default changelist.
+   * If default changelist is changed before refresh, a race is possible that will put some of applied changes into the new default changelist.
+   * <p>
+   * If {@code targetChangeList} is specified, method will need to synchronously await for CLM refresh.
+   * In this case, current thread MUST NOT be EDT or hold ReadLock, to prevent deadlock with VFS refresh.
+   */
   private static ApplyPatchStatus executePatchGroup(@NotNull Collection<PatchApplier> group,
                                                     @Nullable LocalChangeList targetChangeList,
                                                     boolean showSuccessNotification,
@@ -154,7 +161,7 @@ public final class PatchApplier {
     }
 
     Project project = group.iterator().next().myProject;
-    return PartialChangesUtil.computeUnderChangeList(project, targetChangeList, VcsBundle.getString("patch.apply.progress.title"), () -> {
+    return PartialChangesUtil.computeUnderChangeListSync(project, targetChangeList, () -> {
       ApplyPatchStatus result = ApplyPatchStatus.SUCCESS;
       for (PatchApplier patchApplier : group) {
         result = ApplyPatchStatus.and(result, patchApplier.nonWriteActionPreCheck());
@@ -199,7 +206,7 @@ public final class PatchApplier {
       AtomicBoolean doRollback = new AtomicBoolean();
       if (result == ApplyPatchStatus.FAILURE) {
         ApplicationManager.getApplication().invokeAndWait(() -> {
-         doRollback.set(askToRollback(project, group));
+          doRollback.set(askToRollback(project, group));
         });
       }
       if (result == ApplyPatchStatus.ABORT || doRollback.get()) {
@@ -220,7 +227,7 @@ public final class PatchApplier {
       refreshPassedFiles(project, directlyAffected, indirectlyAffected);
 
       return result;
-    }, true);
+    });
   }
 
   @CalledInAwt
@@ -288,15 +295,16 @@ public final class PatchApplier {
 
   @Nullable
   private ApplyPatchStatus executeWritable() {
-    final ReadonlyStatusHandler.OperationStatus readOnlyFilesStatus =
+    ReadonlyStatusHandler.OperationStatus readOnlyFilesStatus =
       ReadonlyStatusHandler.getInstance(myProject).ensureFilesWritable(myVerifier.getWritableFiles());
     if (readOnlyFilesStatus.hasReadonlyFiles()) {
       showError(myProject, readOnlyFilesStatus.getReadonlyFilesMessage());
       return ApplyPatchStatus.ABORT;
     }
+
     myFailedPatches.addAll(myVerifier.filterBadFileTypePatches());
     ApplyPatchStatus result = myFailedPatches.isEmpty() ? null : ApplyPatchStatus.FAILURE;
-    final List<PatchAndFile> textPatches = myVerifier.getTextPatches();
+    List<PatchAndFile> textPatches = myVerifier.getTextPatches();
     try {
       markInternalOperation(textPatches, true);
       return ApplyPatchStatus.and(result, actualApply(textPatches, myVerifier.getBinaryPatches(), myCommitContext));
@@ -316,7 +324,7 @@ public final class PatchApplier {
     return isSuccess ? ApplyPatchStatus.SUCCESS : ApplyPatchStatus.FAILURE;
   }
 
-  private static void markInternalOperation(List<? extends PatchAndFile> textPatches, boolean set) {
+  private static void markInternalOperation(List<PatchAndFile> textPatches, boolean set) {
     for (PatchAndFile patch : textPatches) {
       ChangesUtil.markInternalOperation(patch.getFile(), set);
     }
@@ -330,8 +338,7 @@ public final class PatchApplier {
     return myVerifier.getAllAffected();
   }
 
-  @CalledInAwt
-  private static void refreshPassedFiles(@NotNull final Project project,
+  private static void refreshPassedFiles(@NotNull Project project,
                                          @NotNull Collection<? extends FilePath> directlyAffected,
                                          @NotNull Collection<? extends VirtualFile> indirectlyAffected) {
     final LocalFileSystem lfs = LocalFileSystem.getInstance();
@@ -345,39 +352,35 @@ public final class PatchApplier {
     vcsDirtyScopeManager.filesDirty(indirectlyAffected, null);
   }
 
-  @Nullable
-  private ApplyPatchStatus actualApply(final List<? extends PatchAndFile> textPatches,
-                                       final List<? extends PatchAndFile> binaryPatches,
-                                       final CommitContext commitContext) {
-    final ApplyPatchContext context = new ApplyPatchContext(myBaseDirectory, 0, true, true);
-    ApplyPatchStatus status;
-
+  private @Nullable ApplyPatchStatus actualApply(@NotNull List<PatchAndFile> textPatches,
+                                                @NotNull List<PatchAndFile> binaryPatches,
+                                                @Nullable CommitContext commitContext) {
+    ApplyPatchContext context = new ApplyPatchContext(myBaseDirectory, 0, true, true);
     try {
-      status = applyList(textPatches, context, null, commitContext);
-
-      if (status == ApplyPatchStatus.ABORT) return status;
-
-      status = applyList(binaryPatches, context, status, commitContext);
+      ApplyPatchStatus status = applyList(textPatches, context, null, commitContext);
+      return status == ApplyPatchStatus.ABORT ? status : applyList(binaryPatches, context, status, commitContext);
     }
     catch (IOException e) {
       showError(myProject, e.getMessage());
       return ApplyPatchStatus.ABORT;
     }
-    return status;
   }
 
-  private ApplyPatchStatus applyList(final List<? extends PatchAndFile> patches,
-                                     final ApplyPatchContext context,
-                                     ApplyPatchStatus status,
-                                     CommitContext commiContext) throws IOException {
+  private @Nullable ApplyPatchStatus applyList(@NotNull List<PatchAndFile> patches,
+                                              @NotNull ApplyPatchContext context,
+                                              @Nullable ApplyPatchStatus status,
+                                              @Nullable CommitContext commitContext) throws IOException {
     for (PatchAndFile patch : patches) {
       ApplyFilePatchBase<?> applyFilePatch = patch.getApplyPatch();
-      ApplyPatchStatus patchStatus = ApplyPatchAction.applyContent(myProject, applyFilePatch, context, patch.getFile(), commiContext,
+      ApplyPatchStatus patchStatus = ApplyPatchAction.applyContent(myProject, applyFilePatch, context, patch.getFile(), commitContext,
                                                                    myReverseConflict, myLeftConflictPanelTitle, myRightConflictPanelTitle);
       if (patchStatus == ApplyPatchStatus.SUCCESS || patchStatus == ApplyPatchStatus.ALREADY_APPLIED) {
         applyAdditionalPatchData(patch.getFile(), applyFilePatch.getPatch());
       }
-      if (patchStatus == ApplyPatchStatus.ABORT) return patchStatus;
+      if (patchStatus == ApplyPatchStatus.ABORT) {
+        return patchStatus;
+      }
+
       status = ApplyPatchStatus.and(status, patchStatus);
       if (patchStatus == ApplyPatchStatus.FAILURE) {
         myFailedPatches.add(applyFilePatch.getPatch());

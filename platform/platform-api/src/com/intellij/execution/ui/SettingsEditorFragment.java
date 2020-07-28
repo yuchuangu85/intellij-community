@@ -33,6 +33,7 @@ public class SettingsEditorFragment<Settings, C extends JComponent> extends Sett
   private @Nullable String myHint;
   private @Nullable JComponent myHintComponent;
   private @Nullable Function<C, JComponent> myEditorGetter;
+  private boolean myRemovable = true;
 
   public SettingsEditorFragment(String id,
                                 @Nls(capitalization = Nls.Capitalization.Sentence) String name,
@@ -123,6 +124,14 @@ public class SettingsEditorFragment<Settings, C extends JComponent> extends Sett
     return myInitialSelection.test(settings);
   }
 
+  public boolean isRemovable() {
+    return myRemovable;
+  }
+
+  public void setRemovable(boolean removable) {
+    myRemovable = removable;
+  }
+
   public void setSelected(boolean selected) {
     myComponent.setVisible(selected);
     if (myHintComponent != null) {
@@ -142,10 +151,17 @@ public class SettingsEditorFragment<Settings, C extends JComponent> extends Sett
     myEditorGetter = editorGetter;
   }
 
+  @NotNull
   protected JComponent getEditorComponent() {
     JComponent component = component();
     if (myEditorGetter != null) return myEditorGetter.apply(component());
-    return component instanceof LabeledComponent ? ((LabeledComponent<?>)component).getComponent() : component;
+    if (component instanceof LabeledComponent) {
+      return ((LabeledComponent<?>)component).getComponent();
+    }
+    else if (component instanceof  TagButton) {
+      return ((TagButton)component).myButton;
+    }
+    return component;
   }
 
   public int getCommandLinePosition() {

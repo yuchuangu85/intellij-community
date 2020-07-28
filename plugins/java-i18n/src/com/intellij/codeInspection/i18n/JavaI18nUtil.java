@@ -14,19 +14,23 @@ import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.*;
 import com.intellij.psi.scope.util.PsiScopesUtil;
+import com.intellij.psi.util.PsiConcatenationUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.util.ArrayUtil;
 import gnu.trove.THashSet;
+import kotlin.sequences.SequencesKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.uast.*;
+import org.jetbrains.uast.expressions.UStringConcatenationsFacade;
 import org.jetbrains.uast.util.UastExpressionUtils;
 
 import java.text.ChoiceFormat;
 import java.text.Format;
 import java.text.MessageFormat;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public final class JavaI18nUtil extends I18nUtil {
   public static final PropertyCreationHandler DEFAULT_PROPERTY_CREATION_HANDLER =
@@ -129,7 +133,7 @@ public final class JavaI18nUtil extends I18nUtil {
   }
 
   @NotNull
-  static UExpression getTopLevelExpression(@NotNull UExpression expression) {
+  static UExpression getTopLevelExpression(@NotNull UExpression expression, boolean stopAtCall) {
     while (expression.getUastParent() instanceof UExpression) {
       final UExpression parent = (UExpression)expression.getUastParent();
       if (parent instanceof UBlockExpression || parent instanceof UReturnExpression) {
@@ -141,6 +145,15 @@ public final class JavaI18nUtil extends I18nUtil {
       }
       expression = parent;
       if (UastExpressionUtils.isAssignment(expression)) break;
+      if (expression instanceof UCallExpression && stopAtCall) {
+        UastCallKind kind = ((UCallExpression)expression).getKind();
+        if (kind == UastCallKind.METHOD_CALL) {
+          if (expression.getUastParent() instanceof UQualifiedReferenceExpression) {
+            expression = (UExpression)expression.getUastParent();
+          }
+          break;
+        }
+      }
     }
     return expression;
   }
@@ -281,7 +294,7 @@ public final class JavaI18nUtil extends I18nUtil {
     }
   }
 
-  public static Set<String> suggestExpressionOfType(final PsiClassType type, final PsiLiteralExpression context) {
+  public static Set<String> suggestExpressionOfType(final PsiClassType type, final PsiElement context) {
     PsiVariable[] variables = MacroUtil.getVariablesVisibleAt(context, "");
     Set<String> result = new LinkedHashSet<>();
     for (PsiVariable var : variables) {
@@ -303,7 +316,7 @@ public final class JavaI18nUtil extends I18nUtil {
   }
 
   private static void addAvailableMethodsOfType(final PsiClassType type,
-                                                final PsiLiteralExpression context,
+                                                final PsiElement context,
                                                 final Collection<? super String> result) {
     PsiScopesUtil.treeWalkUp((element, state) -> {
       if (element instanceof PsiMethod) {
@@ -422,5 +435,27 @@ public final class JavaI18nUtil extends I18nUtil {
       }
     }
     return paramsCount;
+  }
+
+  static String buildUnescapedFormatString(UStringConcatenationsFacade cf, List<? super UExpression> formatParameters) {
+    StringBuilder result = new StringBuilder();
+    int elIndex = 0;
+    for (UExpression expression : SequencesKt.asIterable(cf.getUastOperands())) {
+      if (expression instanceof ULiteralExpression) {
+        Object value = ((ULiteralExpression)expression).getValue();
+        if (value != null) {
+          result.append(PsiConcatenationUtil.formatString(value.toString(), false));
+        }
+      }
+      else {
+        result.append("{").append(elIndex++).append("}");
+        formatParameters.add(expression);
+      }
+    }
+    return result.toString();
+  }
+
+  static String composeParametersText(final List<UExpression> args) {
+    return args.stream().map(UExpression::getSourcePsi).filter(Objects::nonNull).map(psi -> psi.getText()).collect(Collectors.joining(","));
   }
 }

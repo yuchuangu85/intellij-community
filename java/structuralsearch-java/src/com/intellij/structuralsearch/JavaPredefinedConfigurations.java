@@ -1,9 +1,10 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.structuralsearch;
 
 import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.fileTypes.StdFileTypes;
 import com.intellij.structuralsearch.plugin.ui.Configuration;
+import org.jetbrains.annotations.NotNull;
 
 import static com.intellij.structuralsearch.PredefinedConfigurationUtil.createSearchTemplateInfo;
 import static com.intellij.structuralsearch.PredefinedConfigurationUtil.createSearchTemplateInfoSimple;
@@ -11,7 +12,8 @@ import static com.intellij.structuralsearch.PredefinedConfigurationUtil.createSe
 /**
 * @author Bas Leijdekkers
 */
-class JavaPredefinedConfigurations {
+final class JavaPredefinedConfigurations {
+  @NotNull
   public static Configuration[] createPredefinedTemplates() {
     return new Configuration[] {
       // Expression patterns

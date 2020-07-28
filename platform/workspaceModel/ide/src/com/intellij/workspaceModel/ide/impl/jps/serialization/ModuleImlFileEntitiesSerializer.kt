@@ -19,12 +19,13 @@ import com.intellij.workspaceModel.storage.bridgeEntities.*
 import org.jdom.Attribute
 import org.jdom.Element
 import org.jetbrains.jps.model.serialization.JDomSerializationUtil
+import org.jetbrains.jps.model.serialization.JpsProjectLoader
 import org.jetbrains.jps.model.serialization.facet.JpsFacetSerializer
 import org.jetbrains.jps.model.serialization.java.JpsJavaModelSerializerExtension.*
 import org.jetbrains.jps.model.serialization.module.JpsModuleRootModelSerializer.*
 import org.jetbrains.jps.util.JpsPathUtil
-import java.io.File
 import java.io.StringReader
+import java.nio.file.Paths
 import java.util.*
 import kotlin.Comparator
 import kotlin.collections.ArrayList
@@ -327,6 +328,10 @@ internal open class ModuleImlFileEntitiesSerializer(internal val modulePath: Mod
     val externalSystemOptions = module.externalSystemOptions
     val customImlData = module.customImlData
     saveModuleOptions(externalSystemOptions, module.type, customImlData, writer)
+    if (customImlData?.customModuleOptions?.containsKey(JpsProjectLoader.CLASSPATH_ATTRIBUTE) == true) {
+      return
+    }
+
     saveJavaSettings(module.javaSettings, rootManagerElement)
 
     if (customImlData != null) {
@@ -584,7 +589,7 @@ internal open class ModuleListSerializerImpl(override val fileUrl: String,
     val moduleManagerTag = reader.loadComponent(fileUrl, componentName) ?: return emptyList()
     return ModuleManagerImpl.getPathsToModuleFiles(moduleManagerTag).map {
       //todo load module groups
-      File(it.path).toVirtualFileUrl(virtualFileManager)
+      Paths.get(it.path).toVirtualFileUrl(virtualFileManager)
     }
   }
 

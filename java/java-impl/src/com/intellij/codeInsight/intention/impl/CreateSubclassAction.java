@@ -29,6 +29,7 @@ import com.intellij.codeInsight.template.Template;
 import com.intellij.codeInsight.template.TemplateBuilderFactory;
 import com.intellij.codeInsight.template.TemplateBuilderImpl;
 import com.intellij.codeInsight.template.TemplateEditingAdapter;
+import com.intellij.codeInspection.util.IntentionName;
 import com.intellij.ide.scratch.ScratchUtil;
 import com.intellij.java.JavaBundle;
 import com.intellij.lang.java.JavaLanguage;
@@ -44,6 +45,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
@@ -62,7 +64,7 @@ import java.util.List;
 
 public class CreateSubclassAction extends BaseIntentionAction {
   private static final Logger LOG = Logger.getInstance(CreateSubclassAction.class);
-  private String myText = JavaBundle.message("intention.implement.abstract.class.default.text");
+  private @IntentionName String myText = JavaBundle.message("intention.implement.abstract.class.default.text");
 
   @Override
   @NotNull
@@ -127,7 +129,7 @@ public class CreateSubclassAction extends BaseIntentionAction {
     return aClass.getLanguage() == JavaLanguage.INSTANCE;
   }
 
-  protected static String getTitle(PsiClass psiClass) {
+  protected static @NlsContexts.Command String getTitle(PsiClass psiClass) {
     return psiClass.isInterface()
              ? CodeInsightBundle.message("intention.implement.abstract.class.interface.text")
              : psiClass.hasModifierProperty(PsiModifier.ABSTRACT)

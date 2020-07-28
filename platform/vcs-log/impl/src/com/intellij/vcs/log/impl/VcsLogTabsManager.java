@@ -131,8 +131,7 @@ public class VcsLogTabsManager {
     }
 
     @Override
-    public MainVcsLogUi createLogUi(@NotNull Project project,
-                                    @NotNull VcsLogData logData) {
+    public MainVcsLogUi createLogUi(@NotNull Project project, @NotNull VcsLogData logData) {
       MainVcsLogUi ui = myFactory.createLogUi(project, logData);
       myUiProperties.addTab(ui.getId(), myLogWindowKind);
       Disposer.register(ui, () -> {

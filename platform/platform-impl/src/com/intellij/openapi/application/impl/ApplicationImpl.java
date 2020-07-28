@@ -646,7 +646,7 @@ public class ApplicationImpl extends ComponentManagerImpl implements Application
     }
     else {
       return CompletableFuture.supplyAsync(() -> createProgressWindow(progressTitle, canBeCanceled, shouldShowModalWindow, project, parentComponent, cancelText),
-                                           EdtExecutorService.getInstance());
+                                           this::invokeLater);
     }
   }
 
@@ -1041,7 +1041,15 @@ public class ApplicationImpl extends ComponentManagerImpl implements Application
   public void assertIsDispatchThread() {
     if (isDispatchThread()) return;
     if (ShutDownTracker.isShutdownHookRunning()) return;
-    assertIsDispatchThread("Access is allowed from event dispatch thread with IW lock only.");
+    throwThreadAccessException("Access is allowed from event dispatch thread with IW lock only.");
+  }
+
+  @Override
+  public void assertIsNonDispatchThread() {
+    if (isUnitTestMode() || isHeadlessEnvironment()) return;
+    if (!isDispatchThread()) return;
+    if (ShutDownTracker.isShutdownHookRunning()) return;
+    throwThreadAccessException("Access from event dispatch thread is not allowed.");
   }
 
   @Override
@@ -1051,8 +1059,7 @@ public class ApplicationImpl extends ComponentManagerImpl implements Application
     assertIsWriteThread("Access is allowed from write thread only.");
   }
 
-  private void assertIsDispatchThread(String message) {
-    if (isDispatchThread()) return;
+  private static void throwThreadAccessException(String message) {
     throw new RuntimeExceptionWithAttachments(
       message,
       "EventQueue.isDispatchThread()=" + EventQueue.isDispatchThread() +

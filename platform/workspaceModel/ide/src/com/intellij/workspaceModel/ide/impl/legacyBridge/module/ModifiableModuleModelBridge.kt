@@ -12,6 +12,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.io.FileUtil
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.projectModel.ProjectModelBundle
 import com.intellij.util.PathUtil
 import com.intellij.util.io.systemIndependentPath
@@ -23,13 +24,14 @@ import com.intellij.workspaceModel.ide.impl.jps.serialization.JpsProjectEntities
 import com.intellij.workspaceModel.ide.impl.legacyBridge.LegacyBridgeModifiableBase
 import com.intellij.workspaceModel.ide.impl.legacyBridge.module.ModuleManagerComponentBridge.Companion.findModuleEntity
 import com.intellij.workspaceModel.ide.impl.legacyBridge.module.ModuleManagerComponentBridge.Companion.mutableModuleMap
+import com.intellij.workspaceModel.ide.impl.legacyBridge.module.roots.ModuleRootComponentBridge
 import com.intellij.workspaceModel.ide.legacyBridge.ModuleBridge
 import com.intellij.workspaceModel.storage.VirtualFileUrlManager
 import com.intellij.workspaceModel.storage.WorkspaceEntityStorageBuilder
 import com.intellij.workspaceModel.storage.bridgeEntities.*
-import java.io.File
 import java.io.IOException
 import java.nio.file.Path
+import java.nio.file.Paths
 
 internal class ModifiableModuleModelBridge(
   private val project: Project,
@@ -143,13 +145,15 @@ internal class ModifiableModuleModelBridge(
     removeUnloadedModule(moduleName)
 
     val builder = WorkspaceEntityStorageBuilder.create()
-    JpsProjectEntitiesLoader.loadModule(File(filePath), project.configLocation!!, builder, virtualFileManager)
+    JpsProjectEntitiesLoader.loadModule(Paths.get(filePath), project.configLocation!!, builder, virtualFileManager)
     diff.addDiff(builder)
     val moduleEntity = diff.entities(ModuleEntity::class.java).find { it.name == moduleName }
     if (moduleEntity == null) {
       throw IOException("Failed to load module from $filePath")
     }
 
+    LocalFileSystem.getInstance().refreshAndFindFileByNioFile(
+      ModuleManagerComponentBridge.getInstance(project).getModuleFilePath(moduleEntity))
     return createModuleInstance(moduleEntity, false)
   }
 
@@ -226,6 +230,10 @@ internal class ModifiableModuleModelBridge(
     for (moduleToDispose in myModulesToDispose.values) {
       val moduleEntity = storage.findModuleEntity(moduleToDispose)
                          ?: error("Could not find module to remove by $moduleToDispose")
+      val libraries = ModuleRootComponentBridge.getInstance(moduleToDispose).moduleLibraryTable.libraryEntities().toList()
+      libraries.forEach {
+        diff.removeEntity(it)
+      }
       diff.removeEntity(moduleEntity)
     }
 

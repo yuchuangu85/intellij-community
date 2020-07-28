@@ -2,19 +2,16 @@
 package com.intellij.java.propertyBased;
 
 import com.intellij.codeInsight.intention.impl.SealClassAction;
+import com.intellij.codeInsight.intention.impl.ShowIntentionActionsHandler;
 import com.intellij.openapi.application.WriteAction;
-import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
-import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.LanguageLevelProjectExtension;
-import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.RecursionManager;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.PsiDocumentManagerImpl;
-import com.intellij.psi.search.searches.ClassInheritorsSearch;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.refactoring.util.CommonRefactoringUtil;
 import com.intellij.testFramework.propertyBased.InvokeIntention;
@@ -78,13 +75,7 @@ public class MakeClassSealedPropertyTest extends BaseUnivocityTest {
       PsiDocumentManager.getInstance(myProject).commitAllDocuments();
       assertFalse(MadTestingUtil.containsErrorElements(viewProvider));
 
-      JavaGreenIntentionPolicy intentionPolicy = new JavaGreenIntentionPolicy() {
-        @Override
-        protected boolean shouldSkipIntention(@NotNull String actionText) {
-          return super.shouldSkipIntention(actionText) || actionText.equals("Add error message");
-        }
-      };
-      env.executeCommands(IntDistribution.uniform(1, 5), Generator.constant(new InvokeIntention(psiFile, intentionPolicy)));
+      env.executeCommands(IntDistribution.uniform(1, 5), Generator.constant(new InvokeIntention(psiFile, new JavaGreenIntentionPolicy())));
       PsiDocumentManager.getInstance(myProject).commitAllDocuments();
       assertFalse(MadTestingUtil.containsErrorElements(viewProvider));
     });
@@ -93,16 +84,14 @@ public class MakeClassSealedPropertyTest extends BaseUnivocityTest {
   private static boolean convertToSealedClass(@NotNull Editor editor,
                                               @NotNull SealClassAction makeSealedAction,
                                               @NotNull PsiIdentifier classIdentifier) {
-    Project project = classIdentifier.getProject();
-    return WriteCommandAction.runWriteCommandAction(project, (Computable<Boolean>)() -> {
-      try {
-        makeSealedAction.invoke(project, editor, classIdentifier);
-        return true;
-      }
-      catch (CommonRefactoringUtil.RefactoringErrorHintException e) {
-        return false;
-      }
-    });
+    try {
+      PsiFile containingFile = classIdentifier.getContainingFile();
+      ShowIntentionActionsHandler.chooseActionAndInvoke(containingFile, editor, makeSealedAction, makeSealedAction.getText());
+      return true;
+    }
+    catch (CommonRefactoringUtil.RefactoringErrorHintException e) {
+      return false;
+    }
   }
 
   private static boolean canConvertToSealedClass(@NotNull Editor editor,

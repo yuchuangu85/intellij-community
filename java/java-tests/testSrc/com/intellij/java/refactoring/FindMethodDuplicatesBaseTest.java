@@ -18,6 +18,8 @@ package com.intellij.java.refactoring;
 import com.intellij.JavaTestUtil;
 import com.intellij.analysis.AnalysisScope;
 import com.intellij.codeInsight.TargetElementUtil;
+import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.ui.TestDialog;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiMember;
@@ -44,8 +46,10 @@ public abstract class FindMethodDuplicatesBaseTest extends LightJavaCodeInsightT
     assertTrue("<caret> is not on method name", targetElement instanceof PsiMember);
     final PsiMember psiMethod = (PsiMember)targetElement;
 
+    assertSame(TestDialog.DEFAULT, Messages.getTestImplementation());
     try {
       MethodDuplicatesHandler.invokeOnScope(getProject(), psiMethod, new AnalysisScope(getFile()));
+      UIUtil.dispatchAllInvocationEvents();
     }
     catch (RuntimeException e) {
       if (shouldSucceed) {
@@ -53,7 +57,6 @@ public abstract class FindMethodDuplicatesBaseTest extends LightJavaCodeInsightT
       }
       return;
     }
-    UIUtil.dispatchAllInvocationEvents();
     if (shouldSucceed) {
       checkResultByFile(filePath + ".after");
     }

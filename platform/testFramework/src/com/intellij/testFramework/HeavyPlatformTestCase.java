@@ -54,7 +54,6 @@ import com.intellij.psi.impl.PsiManagerImpl;
 import com.intellij.psi.impl.source.tree.injected.InjectedLanguageManagerImpl;
 import com.intellij.refactoring.rename.inplace.InplaceRefactoring;
 import com.intellij.testFramework.fixtures.IdeaTestExecutionPolicy;
-import com.intellij.util.MemoryDumpHelper;
 import com.intellij.util.PlatformUtils;
 import com.intellij.util.ThrowableRunnable;
 import com.intellij.util.indexing.FileBasedIndex;
@@ -234,6 +233,11 @@ public abstract class HeavyPlatformTestCase extends UsefulTestCase implements Da
   }
 
   @Override
+  final void removeGlobalTempDirectory(@NotNull Path dir) {
+    temporaryDirectory.after();
+  }
+
+  @Override
   protected void setUp() throws Exception {
     super.setUp();
 
@@ -310,21 +314,6 @@ public abstract class HeavyPlatformTestCase extends UsefulTestCase implements Da
     OpenProjectTaskBuilder optionBuilder = getOpenProjectOptions();
     Path projectFile = getProjectDirOrFile(isCreateDirectoryBasedProject());
     return Objects.requireNonNull(ProjectManagerEx.getInstanceEx().openProject(projectFile, optionBuilder.build()));
-  }
-
-  public static @NotNull String publishHeapDump(@NotNull String fileNamePrefix) {
-    String fileName = fileNamePrefix + ".hprof.zip";
-    File dumpFile = new File(System.getProperty("teamcity.build.tempDir", System.getProperty("java.io.tmpdir")), fileName);
-    try {
-      FileUtil.delete(dumpFile);
-      MemoryDumpHelper.captureMemoryDumpZipped(dumpFile);
-    }
-    catch (Exception ex) {
-      ex.printStackTrace();
-    }
-    String dumpPath = dumpFile.getAbsolutePath();
-    System.out.println("##teamcity[publishArtifacts '" + dumpPath + "']");
-    return dumpPath;
   }
 
   protected boolean isCreateDirectoryBasedProject() {
@@ -408,7 +397,7 @@ public abstract class HeavyPlatformTestCase extends UsefulTestCase implements Da
     }
 
     FileBasedIndex fileBasedIndex = app.getServiceIfCreated(FileBasedIndex.class);
-    if (fileBasedIndex != null) {
+    if (fileBasedIndex instanceof FileBasedIndexImpl) {
       ((FileBasedIndexImpl)fileBasedIndex).cleanupForNextTest();
     }
 
@@ -503,8 +492,6 @@ public abstract class HeavyPlatformTestCase extends UsefulTestCase implements Da
       },
       () -> {
         JarFileSystemImpl.cleanupForNextTest();
-
-        temporaryDirectory.after();
         LaterInvocator.dispatchPendingFlushes();
       },
       () -> {

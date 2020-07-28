@@ -120,17 +120,18 @@ public class DirectoryGroupingRule extends SingleParentUsageGroupingRule impleme
       if (compactMiddleDirectories) {
         List<String> parentPathList = CompactGroupHelper.pathToPathList(myDir.getPath());
         List<String> relativePathList = CompactGroupHelper.pathToPathList(relativePathText);
+        String rel = relativePathText.startsWith("/") ? relativePathText.substring(1) : relativePathText;
+
         if (parentPathList.size() == relativePathList.size()) {
           VirtualFile baseDir = ProjectUtil.guessProjectDir(myProject);
           String relativePath = null;
           if (baseDir != null && baseDir.getParent() != null) {
-            relativePath = VfsUtilCore.getRelativePath(myDir, baseDir.getParent(), File.separatorChar)
-              .replace("\\", "/");
+            relativePath = VfsUtilCore.getRelativePath(myDir, baseDir.getParent(), File.separatorChar);
           }
           return relativePath == null ?
-                 relativePathText.startsWith("/") ? relativePathText.substring(1) : relativePathText : relativePath;
+                 rel : relativePath.replace("\\", "/");
         }
-        return relativePathText.startsWith("/") ? relativePathText.substring(1) : relativePathText;
+        return rel;
       }
       else {
         if (myFlattenDirs || myDir.getParent() == null) {
@@ -208,24 +209,30 @@ public class DirectoryGroupingRule extends SingleParentUsageGroupingRule impleme
 
     @Override
     public boolean hasCommonParent(@NotNull CompactGroup group) {
-      if (group instanceof DirectoryGroup) {
-        return !CompactGroupHelper.findLongestCommonParent(this.relativePathText, ((DirectoryGroup)group).relativePathText).isEmpty();
+      if(compactMiddleDirectories) {
+        if (group instanceof DirectoryGroup) {
+          return !CompactGroupHelper.findLongestCommonParent(this.relativePathText, ((DirectoryGroup)group).relativePathText).isEmpty();
+        }
       }
       return false;
     }
 
     @Override
     public boolean isParentOf(@NotNull CompactGroup group) {
-      if (group instanceof DirectoryGroup) {
-        return ((DirectoryGroup)group).myDir.getPath().startsWith(this.myDir.getPath());
+      if(compactMiddleDirectories) {
+        if (group instanceof DirectoryGroup) {
+          return ((DirectoryGroup)group).myDir.getPath().startsWith(this.myDir.getPath());
+        }
       }
       return false;
     }
 
     @Override
     public CompactGroup merge(@NotNull CompactGroup group) {
-      if (this.isParentOf(group)) {
-        return new DirectoryGroup(((DirectoryGroup)group).myDir, ((DirectoryGroup)group).relativePathText);
+      if(compactMiddleDirectories) {
+        if (this.isParentOf(group)) {
+          return new DirectoryGroup(((DirectoryGroup)group).myDir, ((DirectoryGroup)group).relativePathText);
+        }
       }
       return this;
     }
@@ -233,15 +240,15 @@ public class DirectoryGroupingRule extends SingleParentUsageGroupingRule impleme
     @NotNull
     @Override
     public List<CompactGroup> split(@NotNull CompactGroup group, boolean doNothingIfSubGroup) {
-      List<String> paths;
-      if (group instanceof DirectoryGroup) {
+
+      if (group instanceof DirectoryGroup && compactMiddleDirectories) {
         if (this.isParentOf(group)) {
           if (doNothingIfSubGroup) {
             return new ArrayList<>();
           }
         }
         VirtualFile myDir = this.myDir;
-        paths = CompactGroupHelper.findLongestCommonParent(this.relativePathText, ((DirectoryGroup)group).relativePathText);
+        List<String> paths = CompactGroupHelper.findLongestCommonParent(this.relativePathText, ((DirectoryGroup)group).relativePathText);
 
         if (!paths.isEmpty()) {
           VirtualFile parent = myDir;
@@ -275,7 +282,6 @@ public class DirectoryGroupingRule extends SingleParentUsageGroupingRule impleme
           return newGroups;
         }
       }
-
       return new ArrayList<>();
     }
   }

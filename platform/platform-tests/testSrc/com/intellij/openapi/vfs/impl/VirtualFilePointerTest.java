@@ -708,7 +708,7 @@ public class VirtualFilePointerTest extends BareTestFixtureTestCase {
         try {
           ready.countDown();
           while (run.get()) {
-            bb.myNode.update(((VirtualFilePointerImpl)fileToCreatePointer).myNode, fakeRoot);
+            bb.myNode.update(((VirtualFilePointerImpl)fileToCreatePointer).myNode, fakeRoot, "test", null);
           }
         }
         catch (Throwable e) {
@@ -1055,7 +1055,7 @@ public class VirtualFilePointerTest extends BareTestFixtureTestCase {
     assertTrue(pointer.getFile().isValid());
 
     PlatformTestUtil.startPerformanceTest("get()", 3000, () -> {
-      for (int i=0; i<800_000_000; i++) {
+      for (int i=0; i<200_000_000; i++) {
         assertNotNull(pointer.getFile());
       }
     }).assertTiming();

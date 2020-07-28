@@ -31,11 +31,11 @@ import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.source.resolve.JavaResolveUtil;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.psi.search.LocalSearchScope;
 import com.intellij.psi.search.searches.DirectClassInheritorsSearch;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.*;
 import com.intellij.util.JavaPsiConstructorUtil;
+import com.intellij.util.containers.ContainerUtil;
 import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -43,7 +43,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class HighlightClassUtil {
+public final class HighlightClassUtil {
   private static final QuickFixFactory QUICK_FIX_FACTORY = QuickFixFactory.getInstance();
 
   /**
@@ -251,6 +251,7 @@ public class HighlightClassUtil {
     if (virtualFile == null || virtualFile.getNameWithoutExtension().equals(aClass.getName())) {
       return null;
     }
+    if (isJavaHashBangScript(file)) return null;
     String message = JavaErrorBundle.message("public.class.should.be.named.after.file", aClass.getName());
     TextRange range = HighlightNamesUtil.getClassDeclarationTextRange(aClass);
     HighlightInfo errorResult = HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).
@@ -271,6 +272,13 @@ public class HighlightClassUtil {
     QuickFixAction.registerQuickFixAction(errorResult, QUICK_FIX_FACTORY.createRenameFileFix(aClass.getName() + JavaFileType.DOT_DEFAULT_EXTENSION));
     QuickFixAction.registerQuickFixAction(errorResult, QUICK_FIX_FACTORY.createRenameElementFix(aClass));
     return errorResult;
+  }
+
+  /**
+   * @return true if file correspond to the shebang script
+   */
+  public static boolean isJavaHashBangScript(PsiJavaFile containingFile) {
+    return containingFile.getText().startsWith("#!");
   }
 
   static HighlightInfo checkClassRestrictedKeyword(@NotNull LanguageLevel level, @NotNull PsiIdentifier identifier) {
@@ -965,7 +973,7 @@ public class HighlightClassUtil {
     }
     return null;
   }
-  
+
   public static HighlightInfo checkIllegalInstanceMemberInRecord(PsiMember member) {
     if (!member.hasModifierProperty(PsiModifier.STATIC)) {
       PsiClass aClass = member.getContainingClass();
@@ -1018,9 +1026,15 @@ public class HighlightClassUtil {
       else if (aClass.getContainingFile() == superClass.getContainingFile()) {
         return null;
       }
-      return HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR)
+      PsiIdentifier identifier = aClass.getNameIdentifier();
+      if (identifier == null) {
+        return null;
+      }
+      HighlightInfo info = HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR)
         .descriptionAndTooltip(JavaErrorBundle.message("not.allowed.in.sealed.hierarchy", aClass.getName()))
         .range(elementToHighlight).create();
+      QuickFixAction.registerQuickFixAction(info, QUICK_FIX_FACTORY.createAddToPermitsListFix(aClass, superClass));
+      return info;
     }
     return null;
   }
@@ -1038,13 +1052,23 @@ public class HighlightClassUtil {
     return null;
   }
 
-  static void checkPermitsList(PsiReferenceList list, 
+  static void checkPermitsList(PsiReferenceList list,
                                HighlightInfoHolder holder) {
     PsiElement parent = list.getParent();
     if (parent instanceof PsiClass && list.equals(((PsiClass)parent).getPermitsList())) {
       PsiClass aClass = (PsiClass)parent;
       PsiIdentifier nameIdentifier = aClass.getNameIdentifier();
       if (nameIdentifier == null) return;
+      if (aClass.isEnum() || aClass.isRecord()) {
+        String description = JavaErrorBundle.message(aClass.isRecord() ? "record.permits" : "permits.after.enum");
+        HighlightInfo info = HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR)
+          .range(list)
+          .descriptionAndTooltip(description)
+          .create();
+        QuickFixAction.registerQuickFixAction(info, QUICK_FIX_FACTORY.createDeleteFix(list));
+        holder.add(info);
+        return;
+      }
       if (!aClass.hasModifierProperty(PsiModifier.SEALED)) {
         HighlightInfo info = HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR)
           .range(list.getFirstChild())
@@ -1062,8 +1086,8 @@ public class HighlightClassUtil {
           PsiClass inheritorClass = (PsiClass)resolve;
           if (Arrays.stream(inheritorClass.getSuperTypes()).noneMatch(type -> aClass.equals(type.resolve()))) {
             holder.add(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(permitted)
-                         .descriptionAndTooltip(JavaErrorBundle.message("invalid.permits.clause.direct.implementation", 
-                                                                        inheritorClass.getName(), 
+                         .descriptionAndTooltip(JavaErrorBundle.message("invalid.permits.clause.direct.implementation",
+                                                                        inheritorClass.getName(),
                                                                         inheritorClass.isInterface() == aClass.isInterface() ? 1 : 2,
                                                                         aClass.getName()))
                          .create());
@@ -1088,15 +1112,31 @@ public class HighlightClassUtil {
   }
 
   public static HighlightInfo checkSealedNonEnumeratedInheritors(PsiClass psiClass) {
-    if (psiClass.hasModifierProperty(PsiModifier.SEALED) && psiClass.getPermitsListTypes().length == 0) {
+    if (psiClass.hasModifierProperty(PsiModifier.SEALED)) {
       PsiIdentifier nameIdentifier = psiClass.getNameIdentifier();
       if (nameIdentifier == null) return null;
       if (psiClass.isEnum()) return null;
-      if (!DirectClassInheritorsSearch.search(psiClass, new LocalSearchScope(psiClass.getContainingFile())).anyMatch(c -> !PsiUtil.isLocalOrAnonymousClass(c))) {
+
+      Collection<PsiClass> inheritors = DirectClassInheritorsSearch.search(psiClass).findAll();
+      if (inheritors.isEmpty()) {
         return HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR)
           .range(nameIdentifier)
           .descriptionAndTooltip(JavaErrorBundle.message("sealed.must.have.inheritors"))
           .create();
+      }
+      PsiFile parentFile = psiClass.getContainingFile();
+      boolean hasOutsideClasses = inheritors.stream().anyMatch(inheritor -> inheritor.getContainingFile() != parentFile);
+      if (hasOutsideClasses) {
+        Set<PsiElement> permittedClasses = ContainerUtil.map2Set(psiClass.getPermitsListTypes(), PsiClassType::resolve);
+        boolean hasMissingInheritors = inheritors.stream().anyMatch(inheritor -> !permittedClasses.contains(inheritor));
+        if (hasMissingInheritors) {
+          HighlightInfo info = HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR)
+            .range(nameIdentifier)
+            .descriptionAndTooltip(JavaErrorBundle.message("permit.list.must.contain.outside.inheritors"))
+            .create();
+          QuickFixAction.registerQuickFixAction(info, QUICK_FIX_FACTORY.createFillPermitsListFix(nameIdentifier));
+          return info;
+        }
       }
     }
     return null;

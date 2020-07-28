@@ -42,7 +42,7 @@ import java.util.*;
 /**
  * @author ven
  */
-public class ExpectedTypesProvider {
+public final class ExpectedTypesProvider {
   private static final ExpectedTypeInfo VOID_EXPECTED = createInfoImpl(PsiType.VOID, ExpectedTypeInfo.TYPE_OR_SUBTYPE, PsiType.VOID, TailType.SEMICOLON);
 
   private static final Logger LOG = Logger.getInstance(ExpectedTypesProvider.class);
@@ -1196,7 +1196,8 @@ public class ExpectedTypesProvider {
       @NonNls final String name = method.getName();
       final PsiElementFactory factory = JavaPsiFacade.getElementFactory(containingClass.getProject());
       int argCount = Math.max(index + 1, args.length);
-      if ("assertEquals".equals(name) || "assertSame".equals(name) && method.getParameterList().getParametersCount() == argCount) {
+      if (("assertEquals".equals(name) || "assertNotEquals".equals(name) || "assertSame".equals(name) || "assertNotSame".equals(name)) &&
+          method.getParameterList().getParametersCount() == argCount) {
         if (argCount == 2 ||
             argCount == 3 && method.getParameterList().getParameters()[0].getType().equalsToText(CommonClassNames.JAVA_LANG_STRING)) {
           int other = index == argCount - 1 ? index - 1 : index + 1;

@@ -257,7 +257,7 @@ internal class BranchesVcsLogUiFactory(logManager: VcsLogManager, logId: String,
   override fun createVcsLogUiImpl(logId: String,
                                   logData: VcsLogData,
                                   properties: MainVcsLogUiProperties,
-                                  colorManager: VcsLogColorManagerImpl,
+                                  colorManager: VcsLogColorManager,
                                   refresher: VisiblePackRefresherImpl,
                                   filters: VcsLogFilterCollection?) =
     BranchesVcsLogUi(logId, logData, colorManager, properties, refresher, filters)

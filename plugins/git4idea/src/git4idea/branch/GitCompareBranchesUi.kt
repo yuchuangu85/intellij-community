@@ -66,10 +66,10 @@ internal class GitCompareBranchesUi @JvmOverloads constructor(private val projec
 
     val topLogUiFactory = MyLogUiFactory("git-compare-branches-top-" + UUID.randomUUID(),
                                          MyPropertiesForHardcodedFilters(project.service<GitCompareBranchesTopLogProperties>()),
-                                         logManager, rangeFilter, rootFilter)
+                                         logManager.colorManager, rangeFilter, rootFilter)
     val bottomLogUiFactory = MyLogUiFactory("git-compare-branches-bottom-" + UUID.randomUUID(),
                                             MyPropertiesForHardcodedFilters(project.service<GitCompareBranchesBottomLogProperties>()),
-                                            logManager, rangeFilter.asReversed(), rootFilter)
+                                            logManager.colorManager, rangeFilter.asReversed(), rootFilter)
     val topLogUi = logManager.createLogUi(topLogUiFactory, VcsLogManager.LogWindowKind.EDITOR)
     val bottomLogUi = logManager.createLogUi(bottomLogUiFactory, VcsLogManager.LogWindowKind.EDITOR)
 
@@ -87,7 +87,7 @@ internal class GitCompareBranchesUi @JvmOverloads constructor(private val projec
 
   private class MyLogUiFactory(val logId: String,
                                val properties: MainVcsLogUiProperties,
-                               val logManager: VcsLogManager,
+                               val colorManager: VcsLogColorManager,
                                val rangeFilter: VcsLogRangeFilter,
                                val rootFilter: VcsLogRootFilter?) : VcsLogManager.VcsLogUiFactory<MainVcsLogUi> {
     override fun createLogUi(project: Project, logData: VcsLogData): MainVcsLogUi {
@@ -96,7 +96,7 @@ internal class GitCompareBranchesUi @JvmOverloads constructor(private val projec
       val initialSortType = properties.get<PermanentGraph.SortType>(MainVcsLogUiProperties.BEK_SORT_TYPE)
       val refresher = VisiblePackRefresherImpl(project, logData, collection(), initialSortType, vcsLogFilterer, logId)
 
-      return MyVcsLogUi(logId, logData, logManager.colorManager, properties, refresher, rangeFilter, rootFilter)
+      return MyVcsLogUi(logId, logData, colorManager, properties, refresher, rangeFilter, rootFilter)
     }
   }
 

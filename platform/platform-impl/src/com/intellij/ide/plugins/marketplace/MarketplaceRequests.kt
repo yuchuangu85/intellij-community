@@ -241,7 +241,12 @@ open class MarketplaceRequests {
     val externalUpdateId = pluginNode.externalUpdateId
     if (externalPluginId == null || externalUpdateId == null) return pluginNode
     val ideCompatibleUpdate = IdeCompatibleUpdate(externalUpdateId = externalUpdateId, externalPluginId = externalPluginId)
-    return loadPluginDescriptor(pluginNode.pluginId.idString, ideCompatibleUpdate)
+    return loadPluginDescriptor(pluginNode.pluginId.idString, ideCompatibleUpdate).apply {
+      // These three fields are not present in `IntellijUpdateMetadata`, but present in `MarketplaceSearchPluginData`
+      rating = pluginNode.rating
+      downloads = pluginNode.downloads
+      date = pluginNode.date
+    }
   }
 
   @Throws(IOException::class)
@@ -258,24 +263,30 @@ open class MarketplaceRequests {
       .tuner { connection -> connection.setUpETag(eTag) }
       .productNameAsUserAgent()
       .connect { request ->
-        indicator?.checkCanceled()
-        val connection = request.connection
-        if (file != null && connection.isNotModified(file)) {
-          return@connect file.bufferedReader().use(parser)
-        }
-        if (indicator != null) {
-          indicator.checkCanceled()
-          indicator.text2 = indicatorMessage
-        }
-        if (file != null) {
-          synchronized(INSTANCE) {
-            request.saveToFile(file, indicator)
-            connection.getHeaderField("ETag")?.let { saveETagForFile(file, it) }
+        try {
+          indicator?.checkCanceled()
+          val connection = request.connection
+          if (file != null && connection.isNotModified(file)) {
+            return@connect file.bufferedReader().use(parser)
           }
-          return@connect file.bufferedReader().use(parser)
-        }
-        else {
-          return@connect request.reader.use(parser)
+          if (indicator != null) {
+            indicator.checkCanceled()
+            indicator.text2 = indicatorMessage
+          }
+          if (file != null) {
+            synchronized(INSTANCE) {
+              request.saveToFile(file, indicator)
+              connection.getHeaderField("ETag")?.let { saveETagForFile(file, it) }
+            }
+            return@connect file.bufferedReader().use(parser)
+          }
+          else {
+            return@connect request.reader.use(parser)
+          }
+        } catch (e: Exception) {
+          val fileText = file?.readText()
+          LOG.error("Error reading Marketplace file: url=$url file=${file?.name}. File content:\n$fileText")
+          throw e
         }
       }
   }

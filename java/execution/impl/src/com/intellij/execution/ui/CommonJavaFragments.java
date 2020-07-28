@@ -8,9 +8,10 @@ import com.intellij.execution.application.ApplicationConfiguration;
 import com.intellij.execution.configurations.ModuleBasedConfiguration;
 import com.intellij.execution.configurations.RunConfigurationBase;
 import com.intellij.execution.impl.RunnerAndConfigurationSettingsImpl;
-import com.intellij.openapi.project.Project;
+import com.intellij.openapi.projectRoots.JavaSdkVersion;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.ui.ColoredListCellRenderer;
+import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
@@ -24,7 +25,7 @@ import java.util.function.Predicate;
 import static com.intellij.execution.ui.CommandLinePanel.setMinimumWidth;
 import static com.intellij.util.containers.ContainerUtil.exists;
 
-public class CommonJavaFragments {
+public final class CommonJavaFragments {
 
   public static <S extends RunConfigurationBase<?>> SettingsEditorFragment<S, JLabel> createBuildBeforeRun(BeforeRunComponent beforeRunComponent) {
     String buildAndRun = ExecutionBundle.message("application.configuration.title.build.and.run");
@@ -110,14 +111,17 @@ public class CommonJavaFragments {
                                        setter.accept(s, false);
                                      }
                                    },
-                                   s -> s.getDefaultModule() != s.getConfigurationModule().getModule());
+                                   s -> s.getDefaultModule() != s.getConfigurationModule().getModule() &&
+                                        s.getConfigurationModule().getModule() != null);
     fragment.setHint(ExecutionBundle.message("application.configuration.use.classpath.and.jdk.of.module.hint"));
     return fragment;
   }
 
   @NotNull
-  public static SettingsEditorFragment<ApplicationConfiguration, JrePathEditor> createJrePath(Project project) {
+  public static SettingsEditorFragment<ApplicationConfiguration, JrePathEditor> createJrePath(DefaultJreSelector defaultJreSelector) {
     JrePathEditor jrePathEditor = new JrePathEditor(false);
+    jrePathEditor.setDefaultJreSelector(defaultJreSelector);
+    //noinspection unchecked
     ComboBox<JrePathEditor.JreComboBoxItem> comboBox = jrePathEditor.getComponent();
     comboBox.setRenderer(new ColoredListCellRenderer<JrePathEditor.JreComboBoxItem>() {
       @Override
@@ -129,7 +133,16 @@ public class CommonJavaFragments {
         if (value != null) {
           if (index == -1) {
             append("java ");
-            append("(" + value.getPresentableText() + ")");
+            if (value.getVersion() != null) {
+              JavaSdkVersion version = JavaSdkVersion.fromVersionString(value.getVersion());
+              if (version != null) {
+                append(version.getDescription());
+              }
+            }
+            String description = value.getDescription();
+            if (description != null) {
+              append(" " + description, SimpleTextAttributes.GRAYED_ATTRIBUTES);
+            }
           }
           else value.render(this, selected);
         }
@@ -137,18 +150,20 @@ public class CommonJavaFragments {
     });
     UIUtil.setMonospaced(comboBox);
 
-    setMinimumWidth(jrePathEditor, 100);
+    setMinimumWidth(jrePathEditor, 200);
     jrePathEditor.getLabel().setVisible(false);
     jrePathEditor.getComponent().getAccessibleContext().setAccessibleName(jrePathEditor.getLabel().getText());
-    jrePathEditor.setDefaultJreSelector(DefaultJreSelector.projectSdk(project));
-    return new SettingsEditorFragment<>("jrePath", null, null, jrePathEditor, 5,
-                                        (configuration, editor) -> editor
-                                          .setPathOrName(configuration.getAlternativeJrePath(),
-                                                         configuration.isAlternativeJrePathEnabled()),
-                                        (configuration, editor) -> {
-                                          configuration.setAlternativeJrePath(editor.getJrePathOrName());
-                                          configuration.setAlternativeJrePathEnabled(editor.isAlternativeJreSelected());
-                                        },
-                                        configuration -> true);
+    SettingsEditorFragment<ApplicationConfiguration, JrePathEditor> jrePath =
+      new SettingsEditorFragment<>("jrePath", ExecutionBundle.message("run.configuration.jre.name"), null, jrePathEditor, 5,
+                                   (configuration, editor) -> editor.setPathOrName(configuration.getAlternativeJrePath(),
+                                                                                   configuration.isAlternativeJrePathEnabled()),
+                                   (configuration, editor) -> {
+                                     configuration.setAlternativeJrePath(editor.getJrePathOrName());
+                                     configuration.setAlternativeJrePathEnabled(editor.isAlternativeJreSelected());
+                                   },
+                                   configuration -> true);
+    jrePath.setRemovable(false);
+    jrePath.setHint(ExecutionBundle.message("run.configuration.jre.hint"));
+    return jrePath;
   }
 }

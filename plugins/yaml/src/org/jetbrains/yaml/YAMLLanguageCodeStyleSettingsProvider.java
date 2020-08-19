@@ -5,10 +5,7 @@ import com.intellij.application.options.CodeStyleAbstractPanel;
 import com.intellij.application.options.IndentOptionsEditor;
 import com.intellij.application.options.SmartIndentOptionsEditor;
 import com.intellij.lang.Language;
-import com.intellij.psi.codeStyle.CodeStyleSettings;
-import com.intellij.psi.codeStyle.CodeStyleSettingsCustomizable;
-import com.intellij.psi.codeStyle.CommonCodeStyleSettings;
-import com.intellij.psi.codeStyle.LanguageCodeStyleSettingsProvider;
+import com.intellij.psi.codeStyle.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.yaml.formatter.YAMLCodeStyleSettings;
@@ -36,6 +33,8 @@ public class YAMLLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSett
     indentOptions.INDENT_SIZE = 2;
     indentOptions.CONTINUATION_INDENT_SIZE = 2;
     indentOptions.USE_TAB_CHARACTER = false;
+    commonSettings.SPACE_WITHIN_BRACES = true;
+    commonSettings.SPACE_WITHIN_BRACKETS = true;
   }
 
   @Override
@@ -53,6 +52,11 @@ public class YAMLLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSett
   public void customizeSettings(@NotNull CodeStyleSettingsCustomizable consumer, @NotNull SettingsType settingsType) {
     if (settingsType == SettingsType.INDENT_SETTINGS) {
       consumer.showStandardOptions("INDENT_SIZE", "KEEP_INDENTS_ON_EMPTY_LINES");
+    }
+    else if (settingsType == SettingsType.SPACING_SETTINGS) {
+      consumer.showStandardOptions("SPACE_WITHIN_BRACES", "SPACE_WITHIN_BRACKETS");
+      consumer.showCustomOption(YAMLCodeStyleSettings.class, "SPACE_BEFORE_COLON", "Before ':'",
+                                CodeStyleSettingsCustomizableOptions.SPACES_OTHER.get());
     }
     else if (settingsType == SettingsType.WRAPPING_AND_BRACES_SETTINGS) {
       consumer.showStandardOptions("KEEP_LINE_BREAKS");

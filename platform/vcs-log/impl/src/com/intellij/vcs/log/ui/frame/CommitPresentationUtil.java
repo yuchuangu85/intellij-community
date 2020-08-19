@@ -2,24 +2,24 @@
 package com.intellij.vcs.log.ui.frame;
 
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.NlsSafe;
+import com.intellij.openapi.util.text.HtmlBuilder;
+import com.intellij.openapi.util.text.HtmlChunk;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.ui.FontUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.ColorUtil;
 import com.intellij.ui.JBColor;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.Convertor;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.util.text.DateFormatUtil;
-import com.intellij.util.ui.UIUtil;
 import com.intellij.vcs.commit.message.CommitMessageInspectionProfile;
 import com.intellij.vcs.commit.message.SubjectLimitInspection;
 import com.intellij.vcs.log.*;
 import com.intellij.vcs.log.util.VcsUserUtil;
 import com.intellij.vcsUtil.VcsUtil;
-import com.intellij.xml.CommonXmlStrings;
-import com.intellij.xml.util.XmlStringUtil;
 import org.jetbrains.annotations.Nls;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -61,7 +61,8 @@ public final class CommitPresentationUtil {
   }
 
   @NotNull
-  private static String escapeMultipleSpaces(@NotNull String text) {
+  @Nls
+  private static String escapeMultipleSpaces(@NotNull @Nls String text) {
     StringBuilder result = new StringBuilder();
     for (int i = 0; i < text.length(); i++) {
       if (text.charAt(i) == ' ') {
@@ -98,7 +99,7 @@ public final class CommitPresentationUtil {
       String hash = matcher.group();
 
       if (resolvedHashes.contains(hash)) {
-        hash = XmlStringUtil.formatLink(GO_TO_HASH + hash, hash);
+        hash = HtmlChunk.link(GO_TO_HASH + hash, hash).toString();
       }
       matcher.appendReplacement(result, hash);
     }
@@ -188,65 +189,54 @@ public final class CommitPresentationUtil {
                                              DateFormatUtil.formatDate(authorTime),
                                              DateFormatUtil.formatTime(authorTime));
 
-    String committerText = null;
+    HtmlBuilder builder = new HtmlBuilder().appendRaw(authorText);
     if (!VcsUserUtil.isSamePerson(author, committer)) {
-      committerText = getCommitterText(committer, commitTime != authorTime ? commitTime : null);
+      builder.append(HtmlChunk.br()).append(getCommitterHtml(committer, commitTime != authorTime ? commitTime : null));
     }
     else if (authorTime != commitTime) {
-      committerText = getCommitterText(null, commitTime);
-    }
-    authorText += (committerText != null ? "<br/>" + committerText : "");
-
-    return authorText;
-  }
-
-  @NotNull
-  @Nls
-  private static String getCommitterText(@Nullable VcsUser committer, @Nullable Long commitTime) {
-    if (committer == null && commitTime == null) {
-      return "";
+      builder.append(HtmlChunk.br()).append(getCommitterHtml(null, commitTime));
     }
 
-    String graySpan = "<span style='color:#" + ColorUtil.toHex(JBColor.GRAY) + "'>";
-    StringBuilder builder = new StringBuilder(graySpan);
-
-    if (commitTime == null) {
-      boolean withEmail = !committer.getEmail().isEmpty();
-      String by = VcsUserUtil.getShortPresentation(committer) +
-                  (withEmail ? "</span>" + getEmailText(committer) + graySpan : "");
-      builder.append(VcsLogBundle.message("vcs.log.details.committer.info.user", by));
-      builder.append("</span>");
-      return builder.toString();
-    }
-
-    String date = DateFormatUtil.formatDate(commitTime);
-    String time = DateFormatUtil.formatTime(commitTime);
-
-    if (committer != null) {
-      boolean withEmail = !committer.getEmail().isEmpty();
-      String by = VcsUserUtil.getShortPresentation(committer) +
-                  (withEmail ? "</span>" + getEmailText(committer) + graySpan : "");
-      String committedBy = VcsLogBundle.message("vcs.log.details.committer.info.user.date.time", by, date, time);
-      builder.append(committedBy);
-    }
-    else {
-      String committed = VcsLogBundle.message("vcs.log.details.committer.info.date.time", date, time);
-      builder.append(committed);
-    }
-    builder.append("</span>");
     return builder.toString();
   }
 
   @NotNull
-  private static String getAuthorName(@NotNull VcsUser user) {
-    String username = VcsUserUtil.getShortPresentation(user);
-    return user.getEmail().isEmpty() ? username : username + getEmailText(user);
+  private static HtmlChunk getCommitterHtml(@Nullable VcsUser committer, @Nullable Long commitTime) {
+    if (committer == null && commitTime == null) {
+      return HtmlChunk.empty();
+    }
+
+    HtmlChunk.Element graySpan = HtmlChunk.span("color:#" + ColorUtil.toHex(JBColor.GRAY));
+
+    String committed;
+    if (committer == null) {
+      String date = DateFormatUtil.formatDate(commitTime);
+      String time = DateFormatUtil.formatTime(commitTime);
+      committed = VcsLogBundle.message("vcs.log.details.committer.info.date.time", date, time);
+    } else {
+      String by = VcsUserUtil.getShortPresentation(committer) +
+                  (!committer.getEmail().isEmpty() ? "</span> " + getEmailLink(committer) + graySpan : "");
+      if (commitTime == null) {
+        committed = VcsLogBundle.message("vcs.log.details.committer.info.user", by);
+      } else {
+        String date = DateFormatUtil.formatDate(commitTime);
+        String time = DateFormatUtil.formatTime(commitTime);
+        committed = VcsLogBundle.message("vcs.log.details.committer.info.user.date.time", by, date, time);
+      }
+    }
+    return new HtmlBuilder().appendRaw(committed).wrapWith(graySpan);
   }
 
   @NotNull
-  @NonNls
-  private static String getEmailText(@NotNull VcsUser user) {
-    return " " + XmlStringUtil.formatLink("mailto:" + user.getEmail(), CommonXmlStrings.LT + user.getEmail() + CommonXmlStrings.GT);
+  @NlsSafe
+  private static String getAuthorName(@NotNull VcsUser user) {
+    String username = VcsUserUtil.getShortPresentation(user);
+    return user.getEmail().isEmpty() ? username : username + " " + getEmailLink(user);
+  }
+
+  @NotNull
+  private static HtmlChunk.Element getEmailLink(@NotNull VcsUser user) {
+    return HtmlChunk.link("mailto:" + user.getEmail(), "<" + user.getEmail() + ">");
   }
 
   @NotNull
@@ -269,7 +259,7 @@ public final class CommitPresentationUtil {
 
   @NotNull
   @Nls
-  public static String getBranchesText(@Nullable List<String> branches, boolean expanded, int availableWidth,
+  public static String getBranchesText(@Nullable List<@NlsSafe String> branches, boolean expanded, int availableWidth,
                                        @NotNull FontMetrics metrics) {
     if (branches == null) {
       return VcsLogBundle.message("vcs.log.details.in.branches.loading");
@@ -279,11 +269,13 @@ public final class CommitPresentationUtil {
     String head = VcsLogBundle.message("vcs.log.details.in.branches", branches.size()) + " ";
 
     if (expanded) {
-      return head + XmlStringUtil.formatLink(SHOW_HIDE_BRANCHES, VcsLogBundle.message("vcs.log.details.in.branches.hide")) +
-             UIUtil.BR + StringUtil.join(branches, UIUtil.BR);
+      return new HtmlBuilder().append(head)
+        .append(HtmlChunk.link(SHOW_HIDE_BRANCHES, VcsLogBundle.message("vcs.log.details.in.branches.hide")))
+        .append(HtmlChunk.br())
+        .appendWithSeparators(HtmlChunk.br(), ContainerUtil.map(branches, s -> HtmlChunk.text(s))).toString();
     }
 
-    String tail = "… " + XmlStringUtil.formatLink(SHOW_HIDE_BRANCHES, VcsLogBundle.message("vcs.log.details.in.branches.show.all"));
+    String tail = "… " + HtmlChunk.link(SHOW_HIDE_BRANCHES, VcsLogBundle.message("vcs.log.details.in.branches.show.all")).toString();
     int headWidth = metrics.stringWidth(head);
     int tailWidth = metrics.stringWidth(StringUtil.removeHtmlTags(tail));
     if (availableWidth <= headWidth + tailWidth) {

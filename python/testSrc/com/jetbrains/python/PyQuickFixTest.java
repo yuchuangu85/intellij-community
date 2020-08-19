@@ -2,6 +2,7 @@
 package com.jetbrains.python;
 
 import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.codeInspection.LocalInspectionTool;
 import com.intellij.codeInspection.ex.InspectionProfileImpl;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.testFramework.TestDataFile;
@@ -131,13 +132,13 @@ public class PyQuickFixTest extends PyTestCase {
   // PY-4556
   public void testAddSelfFunction() {
     doInspectionTest("AddSelfFunction.py", PyUnresolvedReferencesInspection.class,
-                     PyBundle.message("QFIX.unresolved.reference", "get_a", "self"), true, true);
+                     PyPsiBundle.message("QFIX.unresolved.reference", "get_a", "self"), true, true);
   }
 
   // PY-9721
   public void testAddSelfToClassmethod() {
     doInspectionTest("AddSelfToClassmethod.py", PyUnresolvedReferencesInspection.class,
-                     PyBundle.message("QFIX.unresolved.reference", "foo", "cls"), true, true);
+                     PyPsiBundle.message("QFIX.unresolved.reference", "foo", "cls"), true, true);
   }
 
   public void testAddCls() {
@@ -224,17 +225,28 @@ public class PyQuickFixTest extends PyTestCase {
   // PY-21204
   public void testAddFunctionFromFString() {
     runWithLanguageLevel(LanguageLevel.PYTHON36,
-                         () -> doInspectionTest(PyUnresolvedReferencesInspection.class, PyBundle.message("QFIX.NAME.unresolved.reference.create.function", "my_function"), true, true));
+                         () -> doInspectionTest(PyUnresolvedReferencesInspection.class, PyPsiBundle.message("QFIX.NAME.unresolved.reference.create.function", "my_function"), true, true));
   }
 
-  // PY-1602
-  public void testAddFunctionToModule() {
-    doInspectionTest(
-      "AddFunctionToModule.py",
-      PyUnresolvedReferencesInspection.class,
-      PyPsiBundle.message("QFIX.NAME.add.function.$0.to.module.$1", "frob", "AddFunctionToModule.py"),
-      true, true
-    );
+  // PY-1465
+  public void testAddFunctionToModuleInImport() {
+    doMultiFilesInspectionTest(PyUnresolvedReferencesInspection.class,
+                               PyPsiBundle.message("QFIX.NAME.add.function.$0.to.module.$1", "func", "mod.py"),
+                               "mod.py");
+  }
+
+  // PY-34710
+  public void testAddFunctionToModuleInFromImport() {
+    doMultiFilesInspectionTest(PyUnresolvedReferencesInspection.class,
+                               PyPsiBundle.message("QFIX.NAME.add.function.$0.to.module.$1", "foo", "mod.py"),
+                               "mod.py");
+  }
+
+  // PY-34710
+  public void testAddFunctionToPackageInFromImport() {
+    doMultiFilesInspectionTest(PyUnresolvedReferencesInspection.class,
+                               PyPsiBundle.message("QFIX.NAME.add.function.$0.to.module.$1", "foo", "__init__.py"),
+                               "mypack/__init__.py");
   }
 
   // PY-1470
@@ -346,14 +358,14 @@ public class PyQuickFixTest extends PyTestCase {
   // PY-2092
   public void testUnresolvedRefCreateFunction() {
     doInspectionTest(PyUnresolvedReferencesInspection.class,
-                     PyBundle.message("QFIX.NAME.unresolved.reference.create.function", "ref"), true, true);
+                     PyPsiBundle.message("QFIX.NAME.unresolved.reference.create.function", "ref"), true, true);
   }
 
   public void testUnresolvedRefNoCreateFunction() {
     myFixture.enableInspections(PyUnresolvedReferencesInspection.class);
     myFixture.configureByFile("UnresolvedRefNoCreateFunction.py");
     myFixture.checkHighlighting(true, false, false);
-    final IntentionAction intentionAction = myFixture.getAvailableIntention(PyBundle.message("QFIX.NAME.unresolved.reference.create.function", "ref"));
+    final IntentionAction intentionAction = myFixture.getAvailableIntention(PyPsiBundle.message("QFIX.NAME.unresolved.reference.create.function", "ref"));
     assertNull(intentionAction);
   }
 
@@ -468,12 +480,12 @@ public class PyQuickFixTest extends PyTestCase {
 
   public void testAddParameter() {
     doInspectionTest(PyUnresolvedReferencesInspection.class,
-                     PyBundle.message("QFIX.unresolved.reference.add.param.$0", "test"), true, true);
+                     PyPsiBundle.message("QFIX.unresolved.reference.add.param.$0", "test"), true, true);
   }
 
   // PY-6595
   public void testRenameUnresolvedReference() {
-    doInspectionTest(PyUnresolvedReferencesInspection.class, PyBundle.message("QFIX.rename.unresolved.reference"), true, true);
+    doInspectionTest(PyUnresolvedReferencesInspection.class, PyPsiBundle.message("QFIX.rename.unresolved.reference"), true, true);
   }
 
   // PY-3120
@@ -570,7 +582,7 @@ public class PyQuickFixTest extends PyTestCase {
 
   // PY-3051
   public void testUnresolvedRefTrueFalse() {
-    doInspectionTest(PyUnresolvedReferencesInspection.class, PyBundle.message("QFIX.unresolved.reference.replace.$0", "True"), true, true);
+    doInspectionTest(PyUnresolvedReferencesInspection.class, PyPsiBundle.message("QFIX.unresolved.reference.replace.$0", "True"), true, true);
   }
 
   public void testUnnecessaryBackslashInArgumentList() {
@@ -724,7 +736,7 @@ public class PyQuickFixTest extends PyTestCase {
     return PythonTestUtil.getTestDataPath() + "/inspections/";
   }
 
-  private void doInspectionTest(@NotNull Class inspectionClass,
+  private void doInspectionTest(@NotNull Class<? extends LocalInspectionTool> inspectionClass,
                                 @NotNull String quickFixName,
                                 boolean applyFix,
                                 boolean available) {
@@ -732,7 +744,7 @@ public class PyQuickFixTest extends PyTestCase {
   }
 
   protected void doInspectionTest(@TestDataFile @NonNls @NotNull String testFileName,
-                                  @NotNull Class inspectionClass,
+                                  @NotNull Class<? extends LocalInspectionTool> inspectionClass,
                                   @NonNls @NotNull String quickFixName,
                                   boolean applyFix,
                                   boolean available) {
@@ -750,7 +762,7 @@ public class PyQuickFixTest extends PyTestCase {
    * @throws Exception
    */
   protected void doInspectionTest(@NonNls String @NotNull [] testFiles,
-                                  @NotNull Class inspectionClass,
+                                  @NotNull Class<? extends LocalInspectionTool> inspectionClass,
                                   @NonNls @NotNull String quickFixName,
                                   boolean applyFix,
                                   boolean available) {
@@ -775,6 +787,20 @@ public class PyQuickFixTest extends PyTestCase {
     else {
       assertEmpty("Quick fix \"" + quickFixName + "\" should not be available", intentionActions);
     }
+  }
+
+  private void doMultiFilesInspectionTest(@NotNull Class<? extends LocalInspectionTool> inspectionClass,
+                                          @NotNull String intentionStr,
+                                          @NotNull String modifiedFile) {
+    myFixture.enableInspections(inspectionClass);
+    myFixture.copyDirectoryToProject(getTestName(true), "");
+    myFixture.configureFromTempProjectFile(getTestName(true) + ".py");
+    myFixture.checkHighlighting(true, false, false);
+    final IntentionAction intentionAction = myFixture.findSingleIntention(intentionStr);
+    assertNotNull(intentionAction);
+    myFixture.launchAction(intentionAction);
+    final String expectedFile = getTestName(true) + "/" + graftBeforeExt(modifiedFile, "_after");
+    myFixture.checkResultByFile(modifiedFile, expectedFile, true);
   }
 
   // Turns "name.ext" to "name_insertion.ext"

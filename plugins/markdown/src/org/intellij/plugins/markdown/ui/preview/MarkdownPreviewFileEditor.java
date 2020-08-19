@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.intellij.plugins.markdown.ui.preview;
 
 import com.intellij.CommonBundle;
@@ -74,12 +74,12 @@ public class MarkdownPreviewFileEditor extends UserDataHolderBase implements Fil
         .and(new HtmlPolicyBuilder()
                .allowElements("body", "pre", "hr", "code", "tr", "span")
                .allowAttributes(HtmlGenerator.Companion.getSRC_ATTRIBUTE_NAME()).globally()
-               .allowAttributes("class").onElements("code", "tr", "span")
+               .allowAttributes("class", "style").onElements("code", "tr", "span")
                .toFactory())
         .and(new HtmlPolicyBuilder()
-               .allowElements("font")
-               .allowAttributes("color").onElements("font")
-               .toFactory());
+          .allowElements("div")
+          .allowAttributes("class", "cache-id").onElements("div")
+          .toFactory());
     }
   };
   @NotNull
@@ -290,7 +290,6 @@ public class MarkdownPreviewFileEditor extends UserDataHolderBase implements Fil
       }
       settings.setMarkdownPreviewSettings(new MarkdownPreviewSettings(settings.getMarkdownPreviewSettings().getSplitEditorLayout(),
                                                                       MarkdownPreviewSettings.DEFAULT.getHtmlPanelProviderInfo(),
-                                                                      settings.getMarkdownPreviewSettings().isUseGrayscaleRendering(),
                                                                       settings.getMarkdownPreviewSettings().isAutoScrollPreview(),
                                                                       settings.getMarkdownPreviewSettings().isVerticalSplit()));
 
@@ -389,13 +388,13 @@ public class MarkdownPreviewFileEditor extends UserDataHolderBase implements Fil
     String styles = getCustomStyles();
 
     if (styles != null) {
-      panel.setCSS(styles, MarkdownCssSettings.DEFAULT.getStylesheetUri());
+      panel.setCSS(styles, MarkdownCssSettings.DEFAULT.getCustomStylesheetPath());
     }
     else {
-      String inlineCss = cssSettings.isTextEnabled() ? cssSettings.getStylesheetText() : null;
-      String customCssURI = cssSettings.isUriEnabled()
-                            ? cssSettings.getStylesheetUri()
-                            : MarkdownCssSettings.DEFAULT.getStylesheetUri();
+      String inlineCss = cssSettings.isTextEnabled() ? cssSettings.getCustomStylesheetText() : null;
+      String customCssURI = cssSettings.isCustomStylesheetEnabled()
+                            ? cssSettings.getCustomStylesheetPath()
+                            : MarkdownCssSettings.DEFAULT.getCustomStylesheetPath();
 
       panel.setCSS(inlineCss, customCssURI);
     }

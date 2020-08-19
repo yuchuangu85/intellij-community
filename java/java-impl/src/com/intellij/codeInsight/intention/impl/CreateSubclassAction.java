@@ -56,11 +56,12 @@ import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
+import com.intellij.util.containers.SmartHashSet;
+import com.siyeh.ig.psiutils.ClassUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class CreateSubclassAction extends BaseIntentionAction {
   private static final Logger LOG = Logger.getInstance(CreateSubclassAction.class);
@@ -262,6 +263,15 @@ public class CreateSubclassAction extends BaseIntentionAction {
       else {
         ref = (PsiJavaCodeReferenceElement)targetClass.getExtendsList().add(ref);
       }
+      if (psiClass.hasModifierProperty(PsiModifier.SEALED)) {
+        String createdClassName = Objects.requireNonNull(targetClass.getQualifiedName());
+        SmartHashSet<String> missingInheritors = new SmartHashSet<>();
+        missingInheritors.add(createdClassName);
+        if (psiClass.getPermitsList() == null) {
+          missingInheritors.addAll(ClassUtils.findSameFileInheritors(psiClass));
+        }
+        FillPermitsListFix.fillPermitsList(psiClass, missingInheritors);
+      }
       if (psiClass.hasTypeParameters() || includeClassName) {
         final Editor editor = CodeInsightUtil.positionCursorAtLBrace(project, targetClass.getContainingFile(), targetClass);
         final TemplateBuilderImpl templateBuilder = editor != null
@@ -359,6 +369,11 @@ public class CreateSubclassAction extends BaseIntentionAction {
                                                                    substitutor,
                                                                    baseConstructors, constructors, targetClass);
       editor.getCaretModel().moveToOffset(offset);
+    }
+
+    if (psiClass.hasModifierProperty(PsiModifier.SEALED)) {
+      PsiIdentifier targetNameIdentifier = Objects.requireNonNull(targetClass.getNameIdentifier());
+      editor.getCaretModel().moveToOffset(targetNameIdentifier.getTextRange().getStartOffset());
     }
 
     if (showChooser) OverrideImplementUtil.chooseAndImplementMethods(project, editor, targetClass);

@@ -4,6 +4,9 @@ package org.zmlx.hg4idea.log;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.NlsSafe;
+import com.intellij.openapi.util.text.HtmlBuilder;
+import com.intellij.openapi.util.text.HtmlChunk;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.FileStatus;
@@ -16,11 +19,13 @@ import com.intellij.openapi.vcs.changes.CurrentContentRevision;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.*;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.UIUtil;
 import com.intellij.vcs.log.*;
 import com.intellij.vcs.log.impl.VcsChangesLazilyParsedDetails;
 import com.intellij.vcs.log.impl.VcsFileStatusInfo;
 import com.intellij.vcsUtil.VcsFileUtil;
 import com.intellij.vcsUtil.VcsUtil;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.zmlx.hg4idea.*;
@@ -91,7 +96,7 @@ public final class HgHistoryUtil {
    */
   @NotNull
   public static List<VcsFullCommitDetails> history(@NotNull Project project, @NotNull VirtualFile root, int limit,
-                                                   @NotNull List<String> hashParameters, boolean silent)
+                                                   @NotNull List<@NonNls String> hashParameters, boolean silent)
     throws VcsException {
     HgVcs hgvcs = HgVcs.getInstance(project);
     assert hgvcs != null;
@@ -325,14 +330,15 @@ public final class HgHistoryUtil {
       return revisions;
     }
 
-    List<String> errors = result.getErrorLines();
+    List<@NlsSafe String> errors = result.getErrorLines();
     if (!errors.isEmpty()) {
       if (result.getExitValue() != 0) {
         if (silent) {
           LOG.debug(errors.toString());
         }
         else {
-          VcsNotifier.getInstance(project).notifyError(HgBundle.message("hg4idea.error.log.command.execution"), errors.toString());
+          String message = new HtmlBuilder().appendWithSeparators(HtmlChunk.br(), ContainerUtil.map(errors, HtmlChunk::text)).toString();
+          VcsNotifier.getInstance(project).notifyError(HgBundle.message("hg4idea.error.log.command.execution"), message);
         }
         return Collections.emptyList();
       }

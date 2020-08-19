@@ -4,10 +4,9 @@ package com.intellij.application.options.codeStyle;
 import com.intellij.openapi.application.ApplicationBundle;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.options.ConfigurationException;
-import com.intellij.psi.codeStyle.CodeStyleSettings;
-import com.intellij.psi.codeStyle.CommonCodeStyleSettings;
-import com.intellij.psi.codeStyle.CustomCodeStyleSettings;
-import com.intellij.psi.codeStyle.LanguageCodeStyleSettingsProvider;
+import com.intellij.openapi.util.NlsContexts;
+import com.intellij.openapi.util.NlsContexts.TabTitle;
+import com.intellij.psi.codeStyle.*;
 import com.intellij.psi.codeStyle.presentation.CodeStyleSettingPresentation;
 import com.intellij.ui.OptionGroup;
 import com.intellij.ui.ScrollPaneFactory;
@@ -18,6 +17,8 @@ import com.intellij.util.containers.MultiMap;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import gnu.trove.THashMap;
+import org.jetbrains.annotations.Nls;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -55,8 +56,12 @@ public class CodeStyleBlankLinesPanel extends CustomizableLanguageCodeStylePanel
     Map<CodeStyleSettingPresentation.SettingsGroup, List<CodeStyleSettingPresentation>> settings = CodeStyleSettingPresentation
       .getStandardSettings(getSettingsType());
 
-    OptionGroup keepBlankLinesOptionsGroup = createOptionsGroup(BLANK_LINES_KEEP, settings.get(new CodeStyleSettingPresentation.SettingsGroup(BLANK_LINES_KEEP)));
-    OptionGroup blankLinesOptionsGroup = createOptionsGroup(BLANK_LINES, settings.get(new CodeStyleSettingPresentation.SettingsGroup(BLANK_LINES)));
+    OptionGroup keepBlankLinesOptionsGroup = createOptionsGroup(CodeStyleSettingsCustomizableOptions.BLANK_LINES_KEEP.get(),
+                                                                settings.get(new CodeStyleSettingPresentation.SettingsGroup(
+                                                                  CodeStyleSettingsCustomizableOptions.BLANK_LINES_KEEP.get())));
+    OptionGroup blankLinesOptionsGroup = createOptionsGroup(CodeStyleSettingsCustomizableOptions.BLANK_LINES.get(),
+                                                            settings.get(new CodeStyleSettingPresentation.SettingsGroup(
+                                                              CodeStyleSettingsCustomizableOptions.BLANK_LINES.get())));
     if (keepBlankLinesOptionsGroup != null) {
       keepBlankLinesOptionsGroup.setAnchor(keepBlankLinesOptionsGroup.findAnchor());
       optionsPanel.add(keepBlankLinesOptionsGroup.createPanel(),
@@ -101,7 +106,7 @@ public class CodeStyleBlankLinesPanel extends CustomizableLanguageCodeStylePanel
   }
 
   @Nullable
-  private OptionGroup createOptionsGroup(@NotNull String groupName, @NotNull List<? extends CodeStyleSettingPresentation> settings) {
+  private OptionGroup createOptionsGroup(@NotNull @NlsContexts.BorderTitle String groupName, @NotNull List<? extends CodeStyleSettingPresentation> settings) {
     OptionGroup optionGroup = new OptionGroup(groupName);
     final List<IntOption> groupOptions = new SmartList<>();
     for (CodeStyleSettingPresentation setting: settings) {
@@ -182,20 +187,21 @@ public class CodeStyleBlankLinesPanel extends CustomizableLanguageCodeStylePanel
   }
 
   @Override
-  public void showCustomOption(Class<? extends CustomCodeStyleSettings> settingsClass,
-                               String fieldName,
-                               String title,
-                               String groupName, Object... options) {
+  public void showCustomOption(@NotNull Class<? extends CustomCodeStyleSettings> settingsClass,
+                               @NonNls @NotNull String fieldName,
+                               @NlsContexts.Label @NotNull String title,
+                               @Nls @Nullable String groupName,
+                               Object... options) {
     showCustomOption(settingsClass, fieldName, title, groupName, null, null, options);
   }
 
   @Override
-  public void showCustomOption(Class<? extends CustomCodeStyleSettings> settingsClass,
-                               String fieldName,
-                               String title,
-                               String groupName,
+  public void showCustomOption(@NotNull Class<? extends CustomCodeStyleSettings> settingsClass,
+                               @NonNls @NotNull String fieldName,
+                               @NlsContexts.Label @NotNull String title,
+                               @Nls @Nullable String groupName,
                                @Nullable OptionAnchor anchor,
-                               @Nullable String anchorFieldName,
+                               @NonNls @Nullable String anchorFieldName,
                                Object... options) {
     if (myIsFirstUpdate) {
       myCustomOptions.putValue(groupName, new IntOption(title, settingsClass, fieldName,anchor, anchorFieldName));
@@ -209,7 +215,7 @@ public class CodeStyleBlankLinesPanel extends CustomizableLanguageCodeStylePanel
   }
 
   @Override
-  public void renameStandardOption(String fieldName, String newTitle) {
+  public void renameStandardOption(@NonNls @NotNull String fieldName, @NlsContexts.Label @NotNull String newTitle) {
     if (myIsFirstUpdate) {
       myRenamedFields.put(fieldName, newTitle);
     }
@@ -306,7 +312,7 @@ public class CodeStyleBlankLinesPanel extends CustomizableLanguageCodeStylePanel
   }
 
   @Override
-  protected String getTabTitle() {
+  protected @TabTitle @NotNull String getTabTitle() {
     return ApplicationBundle.message("title.blank.lines");
   }
 }

@@ -6,6 +6,7 @@ import com.intellij.CommonBundle;
 import com.intellij.codeInsight.TargetElementUtil;
 import com.intellij.java.refactoring.JavaRefactoringBundle;
 import com.intellij.lang.java.JavaLanguage;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
@@ -135,15 +136,20 @@ public final class InlineMethodHandler extends JavaInlineActionHandler {
       ReadonlyStatusHandler.getInstance(project).ensureFilesWritable(Collections.singletonList(vFile));
     }
 
-    PsiJavaCodeReferenceElement refElement = null;
     if (reference != null) {
       final PsiElement referenceElement = reference.getElement();
-      if (referenceElement instanceof PsiJavaCodeReferenceElement) {
-        refElement = (PsiJavaCodeReferenceElement)referenceElement;
+      if (referenceElement.getLanguage() == JavaLanguage.INSTANCE && 
+          !(referenceElement instanceof PsiJavaCodeReferenceElement)) {
+        reference = null;
       }
     }
-    InlineMethodDialog dialog = new InlineMethodDialog(project, method, refElement, editor, allowInlineThisOnly);
-    dialog.show();
+    InlineMethodDialog dialog = new InlineMethodDialog(project, method, reference, editor, allowInlineThisOnly);
+    if (ApplicationManager.getApplication().isUnitTestMode()) {
+      dialog.doAction();
+    }
+    else {
+      dialog.show();
+    }
   }
 
   public static boolean checkRecursive(PsiMethod method) {
@@ -181,7 +187,7 @@ public final class InlineMethodHandler extends JavaInlineActionHandler {
 
   @Override
   public @NotNull String getActionName(PsiElement element) {
-    return getRefactoringName() + "...";
+    return RefactoringBundle.message("inline.method.action.name");
   }
 
   private static @NlsContexts.DialogTitle String getRefactoringName() {

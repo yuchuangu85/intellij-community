@@ -7,6 +7,7 @@ import com.intellij.openapi.util.SystemInfo
 import com.intellij.ui.mac.foundation.Foundation
 import com.sun.jna.platform.win32.Advapi32Util
 import com.sun.jna.platform.win32.WinReg
+import org.jetbrains.annotations.NonNls
 import java.util.function.Consumer
 
 internal abstract class SystemDarkThemeDetector {
@@ -40,14 +41,21 @@ internal abstract class SystemDarkThemeDetector {
     }
   }
 
-  private class MacOSDetector (override val detectionSupported: Boolean = JnaLoader.isLoaded()): AsyncDetector() {
+  private class MacOSDetector (override val detectionSupported: Boolean = JnaLoader.isLoaded() && SystemInfo.isMacOSMojave)
+      : AsyncDetector() {
+    companion object {
+      const val AQUA_THEME_NAME      = "NSAppearanceNameAqua"
+      const val DARK_AQUA_THEME_NAME = "NSAppearanceNameDarkAqua"
+    }
+
     override fun isDark(): Boolean {
       val pool = Foundation.NSAutoreleasePool()
       try {
         val appearanceID = Foundation.invoke(Foundation.invoke("NSApplication", "sharedApplication"), "effectiveAppearance")
-        val appearanceName = Foundation.invoke(appearanceID, "name")
-
-        return Foundation.toStringViaUTF8(appearanceName)?.contains("Dark") ?: false
+        val appearanceName = Foundation.invoke(appearanceID, "bestMatchFromAppearancesWithNames",
+                          Foundation.NSArray.createArrayOfStrings(AQUA_THEME_NAME, DARK_AQUA_THEME_NAME))
+        val ret = Foundation.invoke(appearanceName, "isEqualToString", Foundation.nsString(DARK_AQUA_THEME_NAME))
+        return ret.toInt() == 0
       }
       finally{
         pool.drain()
@@ -55,10 +63,11 @@ internal abstract class SystemDarkThemeDetector {
     }
   }
 
-  private class WindowsDetector (override val detectionSupported: Boolean = JnaLoader.isLoaded()): AsyncDetector() {
+  private class WindowsDetector (override val detectionSupported: Boolean = JnaLoader.isLoaded() && SystemInfo.isWin10OrNewer)
+      : AsyncDetector() {
     companion object {
-      const val REGISTRY_PATH = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
-      const val REGISTRY_VALUE = "AppsUseLightTheme"
+      @NonNls const val REGISTRY_PATH = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
+      @NonNls const val REGISTRY_VALUE = "AppsUseLightTheme"
     }
 
     override fun isDark(): Boolean {

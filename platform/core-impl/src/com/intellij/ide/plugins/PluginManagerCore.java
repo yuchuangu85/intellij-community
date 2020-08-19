@@ -5,6 +5,7 @@ import com.intellij.diagnostic.Activity;
 import com.intellij.diagnostic.LoadingState;
 import com.intellij.diagnostic.PluginException;
 import com.intellij.diagnostic.StartUpMeasurer;
+import com.intellij.ide.plugins.cl.PluginAwareClassLoader;
 import com.intellij.ide.plugins.cl.PluginClassLoader;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
@@ -19,6 +20,7 @@ import com.intellij.openapi.extensions.impl.ExtensionPointImpl;
 import com.intellij.openapi.extensions.impl.ExtensionsAreaImpl;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.BuildNumber;
+import com.intellij.openapi.util.NlsSafe;
 import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.reference.SoftReference;
@@ -50,7 +52,7 @@ import java.util.stream.Stream;
 
 // Prefer to use only JDK classes. Any post start-up functionality should be placed in PluginManager class.
 public final class PluginManagerCore {
-  public static final String META_INF = "META-INF/";
+  public static final @NonNls String META_INF = "META-INF/";
   public static final String IDEA_IS_INTERNAL_PROPERTY = "idea.is.internal";
 
   public static final PluginId CORE_ID = PluginId.getId("com.intellij");
@@ -71,9 +73,9 @@ public final class PluginManagerCore {
 
   static final String PROPERTY_PLUGIN_PATH = "plugin.path";
 
-  public static final String DISABLE = "disable";
-  public static final String ENABLE = "enable";
-  public static final String EDIT = "edit";
+  public static final @NonNls String DISABLE = "disable";
+  public static final @NonNls String ENABLE = "enable";
+  public static final @NonNls String EDIT = "edit";
 
   private static Reference<Map<PluginId, Set<String>>> ourBrokenPluginVersions;
   private static volatile IdeaPluginDescriptorImpl[] ourPlugins;
@@ -104,7 +106,7 @@ public final class PluginManagerCore {
   /**
    * Broken plugins stored in IDEA
    */
-  private static final String BROKEN_PLUGIN_FILE = "/brokenPlugins.txt";
+  private static final @NonNls String BROKEN_PLUGIN_FILE = "/brokenPlugins.txt";
 
   /**
    * Bundled plugins that were updated.
@@ -291,10 +293,16 @@ public final class PluginManagerCore {
    */
   @ApiStatus.Internal
   public static @NotNull PluginException createPluginException(@NotNull String errorMessage, @Nullable Throwable cause,
-                                                      @NotNull Class<?> pluginClass) {
+                                                               @NotNull Class<?> pluginClass) {
     ClassLoader classLoader = pluginClass.getClassLoader();
-    PluginId pluginId = classLoader instanceof PluginClassLoader ? ((PluginClassLoader)classLoader).getPluginId()
-                                                                 : getPluginByClassName(pluginClass.getName());
+    PluginId pluginId;
+    //noinspection InstanceofIncompatibleInterface
+    if (classLoader instanceof PluginAwareClassLoader) {
+      pluginId = ((PluginAwareClassLoader)classLoader).getPluginId();
+    }
+    else {
+      pluginId = getPluginByClassName(pluginClass.getName());
+    }
     return new PluginException(errorMessage, cause, pluginId);
   }
 
@@ -309,7 +317,7 @@ public final class PluginManagerCore {
   }
 
   @ApiStatus.Internal
-  public static @Nullable PluginDescriptor getPluginDescriptorOrPlatformByClassName(@NotNull String className) {
+  public static @Nullable PluginDescriptor getPluginDescriptorOrPlatformByClassName(@NotNull @NonNls String className) {
     List<IdeaPluginDescriptorImpl> loadedPlugins = ourLoadedPlugins;
     if (loadedPlugins == null ||
         className.startsWith("java.") ||
@@ -487,13 +495,20 @@ public final class PluginManagerCore {
     ourShadowedBundledPlugins = null;
   }
 
-  private static void logPlugins(@NotNull IdeaPluginDescriptorImpl @NotNull[] plugins) {
+  private static void logPlugins(@NotNull IdeaPluginDescriptorImpl @NotNull [] plugins,
+                                 Collection<IdeaPluginDescriptorImpl> incompletePlugins) {
     StringBuilder bundled = new StringBuilder();
     StringBuilder disabled = new StringBuilder();
     StringBuilder custom = new StringBuilder();
+    Set<PluginId> disabledPlugins = new HashSet<>();
     for (IdeaPluginDescriptor descriptor : plugins) {
       StringBuilder target;
       if (!descriptor.isEnabled()) {
+        if (!DisabledPluginsState.getDisabledIds().contains(descriptor.getPluginId())) {
+          // plugin will be logged as part of "Problems found loading plugins"
+          continue;
+        }
+        disabledPlugins.add(descriptor.getPluginId());
         target = disabled;
       }
       else if (descriptor.isBundled() || descriptor.getPluginId() == SPECIAL_IDEA_PLUGIN_ID) {
@@ -503,14 +518,12 @@ public final class PluginManagerCore {
         target = custom;
       }
 
-      if (target.length() > 0) {
-        target.append(", ");
-      }
-
-      target.append(descriptor.getName());
-      String version = descriptor.getVersion();
-      if (version != null) {
-        target.append(" (").append(version).append(')');
+      appendPlugin(descriptor, target);
+    }
+    for (IdeaPluginDescriptorImpl plugin : incompletePlugins) {
+      // log only explicitly disabled plugins
+      if (DisabledPluginsState.getDisabledIds().contains(plugin.getPluginId()) && !disabledPlugins.contains(plugin.getPluginId())) {
+        appendPlugin(plugin, disabled);
       }
     }
 
@@ -521,6 +534,18 @@ public final class PluginManagerCore {
     }
     if (disabled.length() > 0) {
       logger.info("Disabled plugins: " + disabled);
+    }
+  }
+
+  private static void appendPlugin(IdeaPluginDescriptor descriptor, StringBuilder target) {
+    if (target.length() > 0) {
+      target.append(", ");
+    }
+
+    target.append(descriptor.getName());
+    String version = descriptor.getVersion();
+    if (version != null) {
+      target.append(" (").append(version).append(')');
     }
   }
 
@@ -1380,11 +1405,11 @@ public final class PluginManagerCore {
     return result;
   }
 
-  private static String toPresentableName(@Nullable IdeaPluginDescriptor descriptor) {
+  private static @NlsSafe String toPresentableName(@Nullable IdeaPluginDescriptor descriptor) {
     return toPresentableName(descriptor == null ? null : descriptor.getName());
   }
 
-  private static @NotNull String toPresentableName(@Nullable String s) {
+  private static @NotNull @NlsSafe String toPresentableName(@Nullable String s) {
     return "\"" + (s == null ? "" : s) + "\"";
   }
 
@@ -1455,7 +1480,7 @@ public final class PluginManagerCore {
 
       activity.end();
       activity.setDescription("plugin count: " + ourLoadedPlugins.size());
-      logPlugins(initResult.sortedPlugins);
+      logPlugins(initResult.sortedPlugins, result.incompletePlugins.values());
     }
     catch (ExtensionInstantiationException e) {
       throw new PluginException(e, e.getExtensionOwnerId());

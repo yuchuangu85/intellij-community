@@ -21,6 +21,7 @@ import com.intellij.codeInsight.hint.HintManagerImpl;
 import com.intellij.codeInsight.hint.HintUtil;
 import com.intellij.ide.DataManager;
 import com.intellij.ide.actions.ShowSettingsUtilImpl;
+import com.intellij.lang.LangBundle;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -35,6 +36,9 @@ import com.intellij.openapi.editor.ex.EditorSettingsExternalizable;
 import com.intellij.openapi.editor.ex.util.EditorUtil;
 import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.NlsContexts;
+import com.intellij.openapi.util.text.HtmlBuilder;
+import com.intellij.openapi.util.text.HtmlChunk;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
@@ -179,7 +183,7 @@ public class FileInEditorProcessor {
     showHint(editor, messageBuilder.getMessage(), messageBuilder.createHyperlinkListener());
   }
 
-  public static void showHint(@NotNull Editor editor, @NotNull String info, @Nullable HyperlinkListener hyperlinkListener) {
+  public static void showHint(@NotNull Editor editor, @NotNull @NlsContexts.HintText String info, @Nullable HyperlinkListener hyperlinkListener) {
     JComponent component = HintUtil.createInformationLabel(info, hyperlinkListener, null, null);
     LightweightHint hint = new LightweightHint(component);
 
@@ -254,16 +258,16 @@ public class FileInEditorProcessor {
     @Override
     @NotNull
     public String getMessage() {
-      StringBuilder builder = new StringBuilder("<html>");
+      HtmlBuilder builder = new HtmlBuilder();
       LayoutCodeInfoCollector notifications = myProcessor.getInfoCollector();
       LOG.assertTrue(notifications != null);
 
       if (notifications.isEmpty() && !myNoChangesDetected) {
         if (myProcessChangesTextOnly) {
-          builder.append("No lines changed: changes since last revision are already properly formatted").append("<br>");
+          builder.append(LangBundle.message("formatter.in.editor.message.already.formatted")).br();
         }
         else {
-          builder.append("No lines changed: content is already properly formatted").append("<br>");
+          builder.append(LangBundle.message("formatter.in.editor.message.content.already.formatted")).br();
         }
       }
       else {
@@ -274,29 +278,28 @@ public class FileInEditorProcessor {
           builder.append(joinWithCommaAndCapitalize(reformatInfo, rearrangeInfo));
 
           if (myProcessChangesTextOnly) {
-            builder.append(" in changes since last revision");
+            builder.append(LangBundle.message("formatter.in.editor.message.changes.since.last.revision"));
           }
 
-          builder.append("<br>");
+          builder.br();
         }
         else if (myNoChangesDetected) {
-          builder.append("No lines changed: no changes since last revision").append("<br>");
+          builder.append(LangBundle.message("formatter.in.editor.message.no.changes.since.last.revision")).br();
         }
 
         String optimizeImportsNotification = notifications.getOptimizeImportsNotification();
         if (optimizeImportsNotification != null) {
-          builder.append(StringUtil.capitalize(optimizeImportsNotification)).append("<br>");
+          builder.append(StringUtil.capitalize(optimizeImportsNotification)).br();
         }
       }
 
       String shortcutText = KeymapUtil.getFirstKeyboardShortcutText(ActionManager.getInstance().getAction("ShowReformatFileDialog"));
-      String color = ColorUtil.toHex(JBColor.gray);
+      String color = ColorUtil.toHtmlColor(JBColor.gray);
 
-      builder.append("<span style='color:#").append(color).append("'>")
-        .append("<a href=''>Show</a> reformat dialog: ").append(shortcutText).append("</span>")
-        .append("</html>");
+      builder.append(HtmlChunk.span("color:"+color)
+                              .child(HtmlChunk.raw(LangBundle.message("formatter.in.editor.link.show.reformat.dialog"))).addText(shortcutText));
 
-      return builder.toString();
+      return builder.wrapWith("html").toString();
     }
 
     @Override
@@ -313,7 +316,7 @@ public class FileInEditorProcessor {
   }
 
   private abstract static class MessageBuilder {
-    public abstract String getMessage();
+    public abstract @NlsContexts.HintText String getMessage();
 
     @NotNull
     public abstract Runnable getHyperlinkRunnable();

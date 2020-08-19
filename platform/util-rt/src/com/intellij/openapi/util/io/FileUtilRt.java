@@ -74,6 +74,34 @@ public class FileUtilRt {
     return StringUtilRt.endsWithIgnoreCase(path, ".jar") || StringUtilRt.endsWithIgnoreCase(path, ".zip");
   }
 
+  @NotNull
+  public static List<String> splitPath(@NotNull String path, char separatorChar) {
+    List<String> list = new ArrayList<String>();
+    int index = 0;
+    int nextSeparator;
+    while ((nextSeparator = path.indexOf(separatorChar, index)) != -1) {
+      list.add(path.substring(index, nextSeparator));
+      index = nextSeparator + 1;
+    }
+    list.add(path.substring(index));
+    return list;
+  }
+
+  public static boolean isFilePathAcceptable(@NotNull File root, @Nullable FileFilter fileFilter) {
+    if (fileFilter == null) {
+      return true;
+    }
+    File file = root;
+    do {
+      if (!fileFilter.accept(file)) {
+        return false;
+      }
+      file = file.getParentFile();
+    }
+    while (file != null);
+    return true;
+  }
+
   protected interface SymlinkResolver {
     @NotNull
     String resolveSymlinksAndCanonicalize(@NotNull String path, char separatorChar, boolean removeLastSlash);
@@ -1124,6 +1152,38 @@ public class FileUtilRt {
     }
     catch (URISyntaxException e) {
       throw new IllegalArgumentException(path, e);  // unlikely, as `File#toURI()` doesn't declare any exceptions
+    }
+  }
+
+  public static int pathHashCode(@Nullable String path) {
+    if (path == null || path.isEmpty()) {
+      return 0;
+    }
+    path = toCanonicalPath(path, File.separatorChar, true);
+    return SystemInfoRt.isFileSystemCaseSensitive ? path.hashCode() : StringUtilRt.stringHashCodeInsensitive(path);
+  }
+
+  public static boolean filesEqual(@Nullable File file1, @Nullable File file2) {
+    // on macOS java.io.File.equals() is incorrectly case-sensitive
+    return pathsEqual(file1 == null ? null : file1.getPath(),
+                      file2 == null ? null : file2.getPath());
+  }
+
+  public static boolean pathsEqual(@Nullable String path1, @Nullable String path2) {
+    if (path1 == path2) {
+      return true;
+    }
+    if (path1 == null || path2 == null) {
+      return false;
+    }
+
+    path1 = toCanonicalPath(path1, File.separatorChar, true);
+    path2 = toCanonicalPath(path2, File.separatorChar, true);
+    if (SystemInfoRt.isFileSystemCaseSensitive) {
+      return path1.equals(path2);
+    }
+    else {
+      return path1.equalsIgnoreCase(path2);
     }
   }
 }

@@ -2,12 +2,17 @@
 package org.jetbrains.idea.devkit.kotlin.quickfix
 
 import com.intellij.codeInspection.i18n.I18nizeAction
+import com.intellij.codeInspection.i18n.I18nizeConcatenationQuickFix
 import com.intellij.codeInspection.i18n.JavaI18nUtil
 import com.intellij.ide.DataManager
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import junit.framework.TestCase
+import org.jetbrains.uast.UExpression
+import org.jetbrains.uast.expressions.UStringConcatenationsFacade.Companion.createFromTopConcatenation
+import org.junit.Assert
+import java.util.*
 
 private const val i18nizedExpr = "i18nizedExpr"
 
@@ -106,4 +111,77 @@ class KtI18nizeTest : LightJavaCodeInsightFixtureTestCase() {
       }
     }
   """.trimIndent(), i18nized = """p.MyBundle().message("key")""")
+
+  fun testConcatenationWithIfExpr() {
+    myFixture.configureByText("Test.kt", """
+      class MyTest {
+        fun f(prefix : Boolean){
+          val s = "Not a valid java identifier<caret> part in " + (if (prefix) "prefix" else "suffix"))
+        }
+      }
+    """.trimIndent())
+    val enclosingStringLiteral = I18nizeAction.getEnclosingStringLiteral(file, editor)
+    val concatenation = createFromTopConcatenation(enclosingStringLiteral)
+    assertNotNull(concatenation)
+    val args = ArrayList<UExpression?>()
+    Assert.assertEquals("Not a valid java identifier part in {0, choice, 0#prefix|1#suffix}",
+                        JavaI18nUtil.buildUnescapedFormatString(concatenation, args, project))
+    assertSize(1, args)
+    assertEquals("if (prefix) 0 else 1", args[0]!!.sourcePsi!!.text)
+  }
+  
+  fun testConcatenationWithIfExprNested() {
+    myFixture.configureByText("Test.kt", """
+      class MyTest {
+        fun f(list : java.util.List<String>){
+          val s = "Not a valid java identifier<caret> part in " + (if (list.size() == 1) list.get(0) + " prefix's" else "suffix's"))
+        }
+      }
+    """.trimIndent())
+    val enclosingStringLiteral = I18nizeAction.getEnclosingStringLiteral(file, editor)
+    val concatenation = createFromTopConcatenation(enclosingStringLiteral)
+    assertNotNull(concatenation)
+    val args = ArrayList<UExpression?>()
+    Assert.assertEquals("Not a valid java identifier part in {1, choice, 0#{0} prefix''''s|1#suffix''''s}",
+                        JavaI18nUtil.buildUnescapedFormatString(concatenation, args, project))
+    assertSize(2, args)
+    assertEquals("list.get(0)", args[0]!!.sourcePsi!!.text)
+    assertEquals("if (list.size() == 1) 0 else 1", args[1]!!.sourcePsi!!.text)
+  }
+
+  fun testConcatenationWithIfExprNested1() {
+    myFixture.configureByText("Test.kt", """
+      class MyTest {
+        fun f(list : java.util.List<String>){
+          val s = "Not a valid java identifier part in " + (if (list.size() == 1) list.get(0) + " prefix's" else "su<caret>ffix's"))
+        }
+      }
+    """.trimIndent())
+    val enclosingStringLiteral = I18nizeConcatenationQuickFix.getEnclosingLiteralConcatenation(myFixture.file.findElementAt(myFixture.editor.caretModel.offset))
+    
+    val concatenation = createFromTopConcatenation(enclosingStringLiteral)
+    assertNotNull(concatenation)
+    val args = ArrayList<UExpression?>()
+    Assert.assertEquals("Not a valid java identifier part in {1, choice, 0#{0} prefix''''s|1#suffix''''s}",
+                        JavaI18nUtil.buildUnescapedFormatString(concatenation, args, project))
+    assertSize(2, args)
+    assertEquals("list.get(0)", args[0]!!.sourcePsi!!.text)
+    assertEquals("if (list.size() == 1) 0 else 1", args[1]!!.sourcePsi!!.text)
+  }
+  
+  fun testConcatenationOfLiterals() {
+    myFixture.configureByText("Test.kt", """
+      class MyTest {
+        fun f(prefix : Boolean){
+          val s = "<caret>part in " + "suffix {0} and prefix '{1}'"
+        }
+      }
+    """.trimIndent())
+    val enclosingStringLiteral = I18nizeAction.getEnclosingStringLiteral(file, editor)
+    val concatenation = createFromTopConcatenation(enclosingStringLiteral)
+    assertNotNull(concatenation)
+    val args = ArrayList<UExpression?>()
+    Assert.assertEquals("part in suffix {0} and prefix '{1}'",
+                        JavaI18nUtil.buildUnescapedFormatString(concatenation, args, project))
+  }
 }

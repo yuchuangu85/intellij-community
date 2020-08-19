@@ -49,8 +49,9 @@ public class I18nizeBatchQuickFix extends I18nizeQuickFix implements BatchQuickF
     Set<PsiFile> contextFiles = new LinkedHashSet<>();
     for (CommonProblemDescriptor descriptor : descriptors) {
       PsiElement psiElement = ((ProblemDescriptor)descriptor).getPsiElement();
+      UPolyadicExpression polyadicExpression = I18nizeConcatenationQuickFix.getEnclosingLiteralConcatenation(psiElement);
       UStringConcatenationsFacade concatenation = UStringConcatenationsFacade.createFromTopConcatenation(
-        UastContextKt.toUElement(psiElement, UInjectionHost.class)
+        polyadicExpression != null ? polyadicExpression : UastContextKt.toUElement(psiElement, UInjectionHost.class)
       );
       if (concatenation != null) {
         PartiallyKnownString pks = concatenation.asPartiallyKnownString();
@@ -77,7 +78,7 @@ public class I18nizeBatchQuickFix extends I18nizeQuickFix implements BatchQuickF
         }
         else if (distinct.add(concatenation.getRootUExpression().getSourcePsi())) {
           ArrayList<UExpression> args = new ArrayList<>();
-          String value = JavaI18nUtil.buildUnescapedFormatString(concatenation, args);
+          String value = JavaI18nUtil.buildUnescapedFormatString(concatenation, args, project);
           String key = ObjectUtils.notNull(suggestKeyByPlace(concatenation.getRootUExpression()),
                                            I18nizeQuickFixDialog.suggestUniquePropertyKey(value, null, null));
           HardcodedStringContextData contextData = new HardcodedStringContextData(
@@ -127,17 +128,18 @@ public class I18nizeBatchQuickFix extends I18nizeQuickFix implements BatchQuickF
             String i18NText =
               dialog.getI18NText(data.getKey(), data.getValue(), JavaI18nUtil.composeParametersText(data.getContextData().getArgs()));
 
+            PsiElementFactory elementFactory = JavaPsiFacade.getElementFactory(project);
             PsiExpression expression;
             try {
-              expression = JavaPsiFacade.getElementFactory(project).createExpressionFromText(i18NText, psiElement);
+              expression = elementFactory.createExpressionFromText(i18NText, psiElement);
               if (language == JavaLanguage.INSTANCE) {
                 JavaCodeStyleManager.getInstance(project).shortenClassReferences(psiElement.replace(expression));
                 continue;
               }
             }
             catch (IncorrectOperationException e) {
-              LOG.error(e);
-              continue;
+              LOG.debug(e);
+              expression = elementFactory.createExpressionFromText(dialog.getI18NText(data.getKey(), data.getValue(), ""), psiElement);
             }
             
             @Nullable Couple<String> callDescriptor = getCallDescriptor(expression);

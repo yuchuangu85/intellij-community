@@ -11,15 +11,13 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.ExceptionUtil;
 import com.intellij.util.concurrency.Semaphore;
 import com.intellij.util.concurrency.SequentialTaskExecutor;
-import com.intellij.util.containers.CollectionFactory;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.containers.FileCollectionFactory;
 import com.intellij.util.containers.JBIterable;
 import com.intellij.util.containers.SmartHashSet;
 import com.intellij.util.execution.ParametersListUtil;
 import com.intellij.util.io.PersistentEnumeratorBase;
 import com.intellij.util.lang.JavaVersion;
-import gnu.trove.THashMap;
-import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.ModuleChunk;
@@ -39,7 +37,6 @@ import org.jetbrains.jps.incremental.messages.CompilerMessage;
 import org.jetbrains.jps.incremental.messages.ProgressMessage;
 import org.jetbrains.jps.javac.*;
 import org.jetbrains.jps.javac.ast.api.JavacFileData;
-import org.jetbrains.jps.javac.ast.api.JavacFileReferencesRegistrar;
 import org.jetbrains.jps.model.JpsDummyElement;
 import org.jetbrains.jps.model.JpsProject;
 import org.jetbrains.jps.model.java.JpsJavaExtensionService;
@@ -85,7 +82,6 @@ public final class JavaBuilder extends ModuleLevelBuilder {
   public static final Key<Boolean> IS_ENABLED = Key.create("_java_compiler_enabled_");
   public static final FileFilter JAVA_SOURCES_FILTER = FileFilters.withExtension(JAVA_EXTENSION);
 
-  private static final int RETIRE_POLICY_VERSIONS_COUNT = 5;
   private static final Key<Boolean> PREFER_TARGET_JDK_COMPILER = GlobalContextKey.create("_prefer_target_jdk_javac_");
   private static final Key<JavaCompilingTool> COMPILING_TOOL = Key.create("_java_compiling_tool_");
   private static final Key<ConcurrentMap<String, Collection<String>>> COMPILER_USAGE_STATISTICS = Key.create("_java_compiler_usage_stats_");
@@ -228,8 +224,7 @@ public final class JavaBuilder extends ModuleLevelBuilder {
                           @NotNull OutputConsumer outputConsumer,
                           @NotNull JavaCompilingTool compilingTool) throws ProjectBuildException, IOException {
     try {
-      final Set<File> filesToCompile = CollectionFactory.createFileLinkedSet();
-
+      Set<File> filesToCompile = FileCollectionFactory.createCanonicalFileLinkedSet();
       dirtyFilesHolder.processDirtyFiles((target, file, descriptor) -> {
         if (JAVA_SOURCES_FILTER.accept(file) && ourCompilableModuleTypes.contains(target.getModule().getModuleType())) {
           filesToCompile.add(file);
@@ -627,16 +622,24 @@ public final class JavaBuilder extends ModuleLevelBuilder {
       }
     }
 
-    if (compilerSdkVersion < 9 || chunkLanguageLevel <= 0) {
-      // javac up to version 9 supports all previous releases
-      // or
+    if (chunkLanguageLevel <= 0) {
       // was not able to determine jdk version, so assuming in-process compiler
       return false;
     }
-    // compiler version is 9+ here, so:
-    //  - java 5 and older are not supported for sure
-    //  - applying '5 versions back' policy deduced from the current behavior of those JDKs
-    return chunkLanguageLevel < 6 || Math.abs(compilerSdkVersion - chunkLanguageLevel) > RETIRE_POLICY_VERSIONS_COUNT;
+    return !isTargetReleaseSupported(compilerSdkVersion, chunkLanguageLevel);
+  }
+
+  private static boolean isTargetReleaseSupported(int compilerVersion, int targetPlatformVersion) {
+    if (targetPlatformVersion > compilerVersion) {
+      return false;
+    }
+    if (compilerVersion < 9) {
+      return true;
+    }
+    if (compilerVersion <= 11) {
+      return targetPlatformVersion >= 6;
+    }
+    return targetPlatformVersion >= 7;
   }
 
   private static boolean isJavac(final JavaCompilingTool compilingTool) {
@@ -857,7 +860,7 @@ public final class JavaBuilder extends ModuleLevelBuilder {
       "User-specified option \"" + option + "\" for \"" + chunk.getPresentableShortName() + "\" may conflict with the corresponding option calculated automatically according to project settings."
     ));
   }
-  
+
   private static void notifyOptionIgnored(CompileContext context, String option, ModuleChunk chunk) {
     context.processMessage(new CompilerMessage(BUILDER_NAME, BuildMessage.Kind.JPS_INFO,
       "User-specified option \"" + option + "\" is ignored for \"" + chunk.getPresentableShortName() + "\". This compilation parameter is set automatically according to project settings."
@@ -1074,7 +1077,7 @@ public final class JavaBuilder extends ModuleLevelBuilder {
     final Pair<JpsSdk<JpsDummyElement>, Integer> sdkVersionPair = getAssociatedSdk(chunk);
     if (sdkVersionPair != null) {
       final int sdkVersion = sdkVersionPair.second;
-      if (sdkVersion >= 6 && (sdkVersion < 9 || Math.abs(sdkVersion - targetLanguageLevel) <= RETIRE_POLICY_VERSIONS_COUNT)) {
+      if (sdkVersion >= 6 && isTargetReleaseSupported(sdkVersion, targetLanguageLevel)) {
         // current javac compiler does support required language level
         return pair(sdkVersionPair.first.getHomePath(), sdkVersion);
       }
@@ -1116,13 +1119,13 @@ public final class JavaBuilder extends ModuleLevelBuilder {
   }
 
   private static Map<File, Set<File>> buildOutputDirectoriesMap(CompileContext context, ModuleChunk chunk) {
-    final Map<File, Set<File>> map = new THashMap<>(FileUtil.FILE_HASHING_STRATEGY);
+    final Map<File, Set<File>> map = FileCollectionFactory.createCanonicalFileMap();
     for (ModuleBuildTarget target : chunk.getTargets()) {
       final File outputDir = target.getOutputDir();
       if (outputDir == null) {
         continue;
       }
-      final Set<File> roots = new THashSet<>(FileUtil.FILE_HASHING_STRATEGY);
+      final Set<File> roots = FileCollectionFactory.createCanonicalFileSet();
       for (JavaSourceRootDescriptor descriptor : context.getProjectDescriptor().getBuildRootIndex().getTargetRoots(target, context)) {
         roots.add(descriptor.root);
       }
@@ -1135,7 +1138,7 @@ public final class JavaBuilder extends ModuleLevelBuilder {
     private final CompileContext myContext;
     private final AtomicInteger myErrorCount = new AtomicInteger(0);
     private final AtomicInteger myWarningCount = new AtomicInteger(0);
-    private final Set<File> myFilesWithErrors = new THashSet<>(FileUtil.FILE_HASHING_STRATEGY);
+    private final Set<File> myFilesWithErrors = FileCollectionFactory.createCanonicalFileSet();
     @NotNull
     private final Collection<? extends JavacFileReferencesRegistrar> myRegistrars;
 

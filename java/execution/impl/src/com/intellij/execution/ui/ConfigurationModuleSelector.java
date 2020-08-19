@@ -17,6 +17,7 @@ package com.intellij.execution.ui;
 
 import com.intellij.application.options.ModuleDescriptionsComboBox;
 import com.intellij.application.options.ModuleListCellRenderer;
+import com.intellij.application.options.ModulesCombo;
 import com.intellij.application.options.ModulesComboBox;
 import com.intellij.execution.configurations.JavaRunConfigurationModule;
 import com.intellij.execution.configurations.ModuleBasedConfiguration;
@@ -26,6 +27,7 @@ import com.intellij.openapi.module.ModuleType;
 import com.intellij.openapi.module.ModuleTypeManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ui.configuration.ModulesAlphaComparator;
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.psi.PsiClass;
 import com.intellij.ui.ComboboxSpeedSearch;
 import com.intellij.ui.SortedComboBoxModel;
@@ -40,7 +42,7 @@ public class ConfigurationModuleSelector {
   public static final String NO_MODULE_TEXT = "<no module>";
   private final Project myProject;
   /** this field is {@code null} if and only if {@link #myModulesList} is not null */
-  private final ModuleDescriptionsComboBox myModulesDescriptionsComboBox;
+  private final ModulesCombo myModulesDescriptionsComboBox;
   /** this field is {@code null} if and only if {@link #myModulesDescriptionsComboBox} is not null */
   private final JComboBox<? extends Module> myModulesList;
 
@@ -60,14 +62,18 @@ public class ConfigurationModuleSelector {
     this(project, modulesDescriptionsComboBox, NO_MODULE_TEXT);
   }
 
-  public ConfigurationModuleSelector(Project project, ModuleDescriptionsComboBox modulesDescriptionsComboBox, String emptySelectionText) {
+  public ConfigurationModuleSelector(Project project, ModulesCombo modulesDescriptionsComboBox) {
+    this(project, modulesDescriptionsComboBox, NO_MODULE_TEXT);
+  }
+
+  public ConfigurationModuleSelector(Project project, ModulesCombo modulesDescriptionsComboBox, String emptySelectionText) {
     myProject = project;
     myModulesDescriptionsComboBox = modulesDescriptionsComboBox;
     myModulesList = null;
     modulesDescriptionsComboBox.allowEmptySelection(emptySelectionText);
   }
 
-  public ConfigurationModuleSelector(Project project, ModulesComboBox modulesComboBox, String noModule) {
+  public ConfigurationModuleSelector(Project project, ModulesComboBox modulesComboBox, @NlsContexts.ListItem String noModule) {
     myProject = project;
     myModulesList = modulesComboBox;
     myModulesDescriptionsComboBox = null;

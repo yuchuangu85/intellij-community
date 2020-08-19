@@ -18,6 +18,7 @@ import org.jetbrains.uast.UPolyadicExpression;
 import org.jetbrains.uast.UastContextKt;
 import org.jetbrains.uast.expressions.UInjectionHost;
 import org.jetbrains.uast.expressions.UStringConcatenationsFacade;
+import org.jetbrains.uast.generate.UastCodeGenerationPlugin;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,20 +56,22 @@ public class I18nizeConcatenationQuickFix extends I18nizeQuickFix {
   }
 
   @Override
-  protected PsiElement doReplacement(@NotNull final PsiFile psiFile,
-                                     @NotNull final Editor editor,
-                                     @Nullable UInjectionHost literalExpression,
-                                     String i18nizedText) throws IncorrectOperationException {
+  protected void doReplacement(@NotNull final PsiFile psiFile,
+                               @NotNull final Editor editor,
+                               @Nullable UInjectionHost literalExpression,
+                               String i18nizedText) throws IncorrectOperationException {
     @Nullable UPolyadicExpression concatenation = getEnclosingLiteralConcatenation(psiFile, editor);
     assert concatenation != null;
-    return doDocumentReplacement(psiFile, concatenation, i18nizedText, editor.getDocument());
+    UastCodeGenerationPlugin generationPlugin = UastCodeGenerationPlugin.byLanguage(psiFile.getLanguage());
+    doDocumentReplacement(psiFile, concatenation, i18nizedText, editor.getDocument(), generationPlugin);
   }
 
   @Override
   protected JavaI18nizeQuickFixDialog createDialog(final Project project, final PsiFile context, final UInjectionHost literalExpression) {
     final List<UExpression> args = new ArrayList<>();
+    UExpression expression = getEnclosingLiteralConcatenation(literalExpression.getSourcePsi());
     String formatString = JavaI18nUtil
-      .buildUnescapedFormatString(Objects.requireNonNull(UStringConcatenationsFacade.createFromTopConcatenation(literalExpression)), args);
+      .buildUnescapedFormatString(Objects.requireNonNull(UStringConcatenationsFacade.createFromTopConcatenation(expression)), args, project);
 
     return new JavaI18nizeQuickFixDialog(project, context, literalExpression, formatString, getCustomization(formatString), true, true) {
       @Override
@@ -101,7 +104,7 @@ public class I18nizeConcatenationQuickFix extends I18nizeQuickFix {
   }
 
   @Nullable
-  static UPolyadicExpression getEnclosingLiteralConcatenation(final PsiElement psiElement) {
+  public static UPolyadicExpression getEnclosingLiteralConcatenation(final PsiElement psiElement) {
     UPolyadicExpression uPolyadicExpression = UastContextKt.getUastParentOfType(psiElement, UPolyadicExpression.class);
     UStringConcatenationsFacade concatenation = UStringConcatenationsFacade.createFromTopConcatenation(
       uPolyadicExpression

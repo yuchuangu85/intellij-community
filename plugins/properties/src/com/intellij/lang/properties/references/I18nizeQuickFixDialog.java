@@ -17,6 +17,7 @@ import com.intellij.openapi.fileTypes.StdFileTypes;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Comparing;
@@ -29,12 +30,13 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.impl.source.resolve.FileContextUtil;
-import com.intellij.ui.DocumentAdapter;
-import com.intellij.ui.GuiUtils;
-import com.intellij.ui.TextFieldWithHistory;
+import com.intellij.ui.*;
+import com.intellij.ui.components.JBRadioButton;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -54,7 +56,7 @@ public class I18nizeQuickFixDialog extends DialogWrapper implements I18nizeQuick
   private static final Pattern PATTERN = Pattern.compile("\\p{InCombiningDiacriticalMarks}+");
 
   private JTextField myValue;
-  private JComboBox myKey;
+  private JTextField myKey;
   private final TextFieldWithHistory myPropertiesFile;
   protected JPanel myPanel;
   private JCheckBox myUseResourceBundle;
@@ -64,6 +66,10 @@ public class I18nizeQuickFixDialog extends DialogWrapper implements I18nizeQuick
 
   private JPanel myPropertiesFilePanel;
   protected JPanel myExtensibilityPanel;
+  private ComboBox<IProperty> myExistingProperties;
+  private JBRadioButton myCreateNewPropertyRb;
+  private JPanel myNewPanel;
+  private JBRadioButton myUseExistingPropertyRb;
 
   protected final String myDefaultPropertyValue;
   protected final DialogCustomization myCustomization;
@@ -112,12 +118,14 @@ public class I18nizeQuickFixDialog extends DialogWrapper implements I18nizeQuick
     myContext = FileContextUtil.getContextFile(context);
     myContextModules = ContainerUtil.createMaybeSingletonSet(ModuleUtilCore.findModuleForFile(myContext));
 
-    myDefaultPropertyValue = defaultPropertyValue;
+    myDefaultPropertyValue = escapeValue(defaultPropertyValue, context);
     myCustomization = customization != null ? customization:new DialogCustomization();
     setTitle(myCustomization.title != null ? myCustomization.title : PropertiesBundle.message("i18nize.dialog.title"));
 
     myPropertiesFile = new TextFieldWithHistory();
     myPropertiesFile.setHistorySize(-1);
+    myPropertiesFile.setEditable(false);
+    ComboboxSpeedSearch.installSpeedSearch(myPropertiesFile, p -> (String)p);
     myPropertiesFilePanel.add(GuiUtils.constructFieldWithBrowseButton(myPropertiesFile, new ActionListener() {
       @Override
       public void actionPerformed(ActionEvent e) {
@@ -166,8 +174,50 @@ public class I18nizeQuickFixDialog extends DialogWrapper implements I18nizeQuick
         PropertiesComponent.getInstance().setValue(KEY, Boolean.valueOf(myUseResourceBundle.isSelected()).toString());
       }
     });
+    
+    myExistingProperties.setRenderer(new ColoredListCellRenderer<IProperty>() {
+      @Override
+      protected void customizeCellRenderer(@NotNull JList<? extends IProperty> list,
+                                           IProperty value,
+                                           int index,
+                                           boolean selected,
+                                           boolean hasFocus) {
+        if (value != null) {
+          append(Objects.requireNonNull(value.getUnescapedKey()));
+          append(" (");
+          append(value.getPropertiesFile().getName());
+          append(")");
+        }
+      }
+    });
 
+    myExistingProperties.addActionListener(new ActionListener() {
+      @Override
+      public void actionPerformed(ActionEvent e) {
+        somethingChanged();
+      }
+    });
+    
+    ButtonGroup bg = new ButtonGroup();
+    bg.add(myCreateNewPropertyRb);
+    bg.add(myUseExistingPropertyRb);
+    ActionListener listener = new ActionListener() {
+      @Override
+      public void actionPerformed(ActionEvent e) {
+        myExistingProperties.setEnabled(myUseExistingPropertyRb.isSelected());
+        UIUtil.setEnabled(myNewPanel, myCreateNewPropertyRb.isSelected(), true);
+        somethingChanged();
+      }
+    };
+    myCreateNewPropertyRb.addActionListener(listener);
+    myUseExistingPropertyRb.addActionListener(listener);
+    myExistingProperties.setEnabled(false);
+    
     if (!ancestorResponsible) init();
+  }
+
+  protected String escapeValue(String value, @NotNull PsiFile context) {
+    return value;
   }
 
   @Override
@@ -181,22 +231,30 @@ public class I18nizeQuickFixDialog extends DialogWrapper implements I18nizeQuick
   }
 
   private JTextField getKeyTextField() {
-    return (JTextField)myKey.getEditor().getEditorComponent();
+    return myKey;
   }
 
   @NotNull
-  protected List<String> getExistingValueKeys(String value) {
+  protected List<IProperty> getExistingProperties(String value) {
     if(!myCustomization.suggestExistingProperties) {
       return Collections.emptyList();
     }
-    final ArrayList<String> result = new ArrayList<>();
+    final ArrayList<IProperty> result = new ArrayList<>();
 
     // check if property value already exists among properties file values and suggest corresponding key
-    PropertiesFile propertiesFile = getPropertiesFile();
-    if (propertiesFile != null) {
-      for (IProperty property : propertiesFile.getProperties()) {
-        if (Comparing.strEqual(property.getValue(), value)) {
-          result.add(0, property.getUnescapedKey());
+    List<String> propertyFiles = suggestPropertiesFiles();
+    if (!propertyFiles.isEmpty()) {
+      String selectedPath = FileUtil.toSystemIndependentName(getPropertiesFilePath());
+      propertyFiles.remove(selectedPath);
+      propertyFiles.add(0, selectedPath);
+      for (String path : propertyFiles) {
+        PropertiesFile propertiesFile = getPropertyFileByPath(path);
+        if (propertiesFile != null) {
+          for (IProperty property : propertiesFile.getProperties()) {
+            if (Comparing.strEqual(property.getUnescapedValue(), value) && property.getUnescapedKey() != null) {
+              result.add(property);
+            }
+          }
         }
       }
     }
@@ -277,19 +335,16 @@ public class I18nizeQuickFixDialog extends DialogWrapper implements I18nizeQuick
   }
 
   private void setKeyValueEditBoxes() {
-    final List<String> existingValueKeys = getExistingValueKeys(myDefaultPropertyValue);
+    getKeyTextField().setText(suggestPropertyKey(myDefaultPropertyValue));
+    final @NotNull List<IProperty> existingValueKeys = getExistingProperties(myDefaultPropertyValue);
 
-    if (existingValueKeys.isEmpty()) {
-      getKeyTextField().setText(suggestPropertyKey(myDefaultPropertyValue));
-    }
-    else {
-      for (String key : existingValueKeys) {
-        myKey.addItem(key);
+    if (!existingValueKeys.isEmpty()) {
+      for (IProperty key : existingValueKeys) {
+        myExistingProperties.addItem(key);
       }
-      myKey.setSelectedItem(existingValueKeys.get(0));
+      myExistingProperties.setSelectedItem(existingValueKeys.get(0));
     }
-
-
+    myUseExistingPropertyRb.setEnabled(!existingValueKeys.isEmpty());
     myValue.setText(escapeLineBreaks(myDefaultPropertyValue));
   }
 
@@ -342,9 +397,12 @@ public class I18nizeQuickFixDialog extends DialogWrapper implements I18nizeQuick
     myPropertiesFile.setHistory(paths);
     if (lastPath != null) {
       myPropertiesFile.setSelectedItem(lastPath);
+      myPropertiesFile.setText(lastPath);
     }
     if (myPropertiesFile.getSelectedIndex() == -1 && !paths.isEmpty()) {
-      myPropertiesFile.setText(paths.get(0));
+      String selectedItem = paths.get(0);
+      myPropertiesFile.setSelectedItem(selectedItem);
+      myPropertiesFile.setText(selectedItem);
     }
   }
 
@@ -364,9 +422,11 @@ public class I18nizeQuickFixDialog extends DialogWrapper implements I18nizeQuick
   }
 
   private void saveLastSelectedFile() {
-    PropertiesFile propertiesFile = getPropertiesFile();
-    if (propertiesFile != null) {
-      LastSelectedPropertiesFileStore.getInstance().saveLastSelectedPropertiesFile(myContext, propertiesFile);
+    if (myCreateNewPropertyRb.isSelected()) {
+      PropertiesFile propertiesFile = getPropertiesFile();
+      if (propertiesFile != null) {
+        LastSelectedPropertiesFileStore.getInstance().saveLastSelectedPropertiesFile(myContext, propertiesFile);
+      }
     }
   }
 
@@ -388,27 +448,46 @@ public class I18nizeQuickFixDialog extends DialogWrapper implements I18nizeQuick
     return I18nUtil.defaultSuggestPropertiesFiles(myProject, myContextModules);
   }
 
+  @Nullable
   protected PropertiesFile getPropertiesFile() {
-    String path = FileUtil.toSystemIndependentName(myPropertiesFile.getText());
+    String path = getPropertiesFilePath();
+    if (path == null) return null;
+    return getPropertyFileByPath(FileUtil.toSystemIndependentName(path));
+  }
+
+  private String getPropertiesFilePath() {
+    return (String)myPropertiesFile.getSelectedItem();
+  }
+
+  @Nullable
+  private PropertiesFile getPropertyFileByPath(String path) {
     VirtualFile virtualFile = LocalFileSystem.getInstance().findFileByPath(path);
     return virtualFile != null
            ? PropertiesImplUtil.getPropertiesFile(PsiManager.getInstance(myProject).findFile(virtualFile))
            : null;
   }
 
+  protected boolean useExistingProperty() {
+    if (myExistingProperties.isEnabled()) {
+      IProperty item = myExistingProperties.getItem();
+      if (item != null) return true;
+    }
+    return false;
+  }
+  
   private boolean createPropertiesFileIfNotExists() {
     if (getPropertiesFile() != null) return true;
-    final String path = FileUtil.toSystemIndependentName(myPropertiesFile.getText());
+    final String path = getPropertiesFilePath();
     if (StringUtil.isEmptyOrSpaces(path)) {
-      String message = PropertiesBundle.message("i18nize.empty.file.path", myPropertiesFile.getText());
+      String message = PropertiesBundle.message("i18nize.empty.file.path", path);
       Messages.showErrorDialog(myProject, message, PropertiesBundle.message("i18nize.error.creating.properties.file"));
       myPropertiesFile.requestFocusInWindow();
       return false;
     }
-    final FileType fileType = FileTypeManager.getInstance().getFileTypeByFileName(path);
+    final FileType fileType = FileTypeManager.getInstance().getFileTypeByFileName(FileUtil.toSystemIndependentName(path));
     if (fileType != PropertiesFileType.INSTANCE && fileType != StdFileTypes.XML) {
       String message = PropertiesBundle.message("i18nize.cant.create.properties.file.because.its.name.is.associated",
-                                                 myPropertiesFile.getText(), fileType.getDescription());
+                                                getPropertiesFilePath(), fileType.getDescription());
       Messages.showErrorDialog(myProject, message, PropertiesBundle.message("i18nize.error.creating.properties.file"));
       myPropertiesFile.requestFocusInWindow();
       return false;
@@ -466,7 +545,7 @@ public class I18nizeQuickFixDialog extends DialogWrapper implements I18nizeQuick
     for (PropertiesFile propertiesFile : propertiesFiles) {
       IProperty existingProperty = propertiesFile.findPropertyByKey(getKey());
       final String propValue = getValue();
-      if (existingProperty != null && !Comparing.strEqual(existingProperty.getValue(), propValue)) {
+      if (existingProperty != null && !Comparing.strEqual(existingProperty.getUnescapedValue(), propValue)) {
         final String messageText = PropertiesBundle.message("i18nize.dialog.error.property.already.defined.message", getKey(), propertiesFile.getName());
         final int code = Messages.showOkCancelDialog(myProject,
                                                      messageText,
@@ -488,11 +567,17 @@ public class I18nizeQuickFixDialog extends DialogWrapper implements I18nizeQuick
 
   @Override
   public String getValue() {
+    if (useExistingProperty()) {
+      return myExistingProperties.getItem().getUnescapedValue();
+    }
     return unescapeLineBreaks(myValue.getText());
   }
 
   @Override
   public String getKey() {
+    if (useExistingProperty()) {
+      return myExistingProperties.getItem().getUnescapedKey();
+    }
     return getKeyTextField().getText();
   }
 
@@ -515,6 +600,9 @@ public class I18nizeQuickFixDialog extends DialogWrapper implements I18nizeQuick
 
   @Override
   public Collection<PropertiesFile> getAllPropertiesFiles() {
+    if (useExistingProperty()) {
+      return Collections.singleton(myExistingProperties.getItem().getPropertiesFile());
+    }
     PropertiesFile propertiesFile = getPropertiesFile();
     if (propertiesFile == null) return Collections.emptySet();
     Collection<PropertiesFile> propertiesFiles;

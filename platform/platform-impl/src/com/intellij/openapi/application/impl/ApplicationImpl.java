@@ -36,6 +36,7 @@ import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.MessageDialogBuilder;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.*;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.serviceContainer.ComponentManagerImpl;
@@ -43,7 +44,6 @@ import com.intellij.ui.ComponentUtil;
 import com.intellij.util.*;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.concurrency.AppScheduledExecutorService;
-import com.intellij.util.concurrency.EdtExecutorService;
 import com.intellij.util.containers.Stack;
 import com.intellij.util.io.storage.HeavyProcessLatch;
 import com.intellij.util.messages.Topic;
@@ -584,6 +584,11 @@ public class ApplicationImpl extends ComponentManagerImpl implements Application
     }
   }
 
+  @Override
+  public final boolean isExitInProgress() {
+    return myExitInProgress;
+  }
+
   private void doExit(int flags, boolean restart, String[] beforeRestart) {
     boolean force = BitUtil.isSet(flags, FORCE_EXIT);
     try {
@@ -599,6 +604,12 @@ public class ApplicationImpl extends ComponentManagerImpl implements Application
       }
 
       stopServicePreloading();
+
+      if (isInstantShutdownPossible()) {
+        for (Frame frame : Frame.getFrames()) {
+          frame.setVisible(false);
+        }
+      }
 
       lifecycleListener.appWillBeClosed(restart);
       LifecycleUsageTriggerCollector.onIdeClose(restart);
@@ -633,6 +644,14 @@ public class ApplicationImpl extends ComponentManagerImpl implements Application
     finally {
       myExitInProgress = false;
     }
+  }
+
+  private static boolean isInstantShutdownPossible() {
+    if (!Registry.is("ide.instant.shutdown")) {
+      return false;
+    }
+
+    return !ProgressManager.getInstance().hasProgressIndicator();
   }
 
   private @NotNull CompletableFuture<ProgressWindow> createProgressWindowAsyncIfNeeded(@NotNull String progressTitle,
@@ -704,45 +723,45 @@ public class ApplicationImpl extends ComponentManagerImpl implements Application
       }
     };
 
-    if (hasUnsafeBgTasks || option.isToBeShown()) {
-      AtomicBoolean alreadyGone = new AtomicBoolean(false);
-      if (hasUnsafeBgTasks) {
-        Runnable dialogRemover = Messages.createMessageDialogRemover(null);
-        Runnable task = new Runnable() {
-          @Override
-          public void run() {
-            if (alreadyGone.get()) return;
-            if (!ProgressManager.getInstance().hasUnsafeProgressIndicator()) {
-              alreadyGone.set(true);
-              dialogRemover.run();
-            }
-            else {
-              AppExecutorUtil.getAppScheduledExecutorService().schedule(this, 1, TimeUnit.SECONDS);
-            }
-          }
-        };
-        AppExecutorUtil.getAppScheduledExecutorService().schedule(task, 1, TimeUnit.SECONDS);
-      }
-      String name = ApplicationNamesInfo.getInstance().getFullProductName();
-      String message = ApplicationBundle.message(hasUnsafeBgTasks ? "exit.confirm.prompt.tasks" : "exit.confirm.prompt", name);
-      int result = MessageDialogBuilder.yesNo(ApplicationBundle.message("exit.confirm.title"), message)
-        .yesText(ApplicationBundle.message("command.exit"))
-        .noText(CommonBundle.getCancelButtonText())
-        .doNotAsk(option).show();
-      if (alreadyGone.getAndSet(true)) {
-        if (!option.isToBeShown()) {
-          return true;
-        }
-        result = MessageDialogBuilder.yesNo(ApplicationBundle.message("exit.confirm.title"),
-                                            ApplicationBundle.message("exit.confirm.prompt", name))
-          .yesText(ApplicationBundle.message("command.exit"))
-          .noText(CommonBundle.getCancelButtonText())
-          .doNotAsk(option).show();
-      }
-      return result == Messages.YES;
+    if (!hasUnsafeBgTasks && !option.isToBeShown()) {
+      return true;
     }
 
-    return true;
+    AtomicBoolean alreadyGone = new AtomicBoolean(false);
+    if (hasUnsafeBgTasks) {
+      Runnable dialogRemover = Messages.createMessageDialogRemover(null);
+      Runnable task = new Runnable() {
+        @Override
+        public void run() {
+          if (alreadyGone.get()) return;
+          if (!ProgressManager.getInstance().hasUnsafeProgressIndicator()) {
+            alreadyGone.set(true);
+            dialogRemover.run();
+          }
+          else {
+            AppExecutorUtil.getAppScheduledExecutorService().schedule(this, 1, TimeUnit.SECONDS);
+          }
+        }
+      };
+      AppExecutorUtil.getAppScheduledExecutorService().schedule(task, 1, TimeUnit.SECONDS);
+    }
+
+    String message = ApplicationBundle.message(hasUnsafeBgTasks ? "exit.confirm.prompt.tasks" : "exit.confirm.prompt");
+    exitConfirmed = MessageDialogBuilder.yesNo(ApplicationBundle.message("exit.confirm.title"), message)
+      .yesText(ApplicationBundle.message("command.exit"))
+      .noText(CommonBundle.getCancelButtonText())
+      .doNotAsk(option)
+      .guessWindowAndAsk();
+    if (alreadyGone.getAndSet(true)) {
+      if (!option.isToBeShown()) {
+        return true;
+      }
+      exitConfirmed = MessageDialogBuilder.okCancel(ApplicationBundle.message("exit.confirm.title"), ApplicationBundle.message("exit.confirm.prompt"))
+        .yesText(ApplicationBundle.message("command.exit"))
+        .doNotAsk(option)
+        .guessWindowAndAsk();
+    }
+    return exitConfirmed;
   }
 
   private boolean canExit() {

@@ -186,8 +186,8 @@
     <applicationService serviceInterface="com.intellij.ui.IconDeferrer"
                         serviceImplementation="com.intellij.ui.IconDeferrerImpl"/>
 
-    <applicationService serviceInterface="com.intellij.ui.mac.MacMessagesEmulation"
-                        serviceImplementation="com.intellij.ui.messages.JBMacMessages"/>
+    <applicationService serviceInterface="com.intellij.ui.mac.MacMessages$MacMessageManagerProvider"
+                        serviceImplementation="com.intellij.ui.messages.MacMessageManagerProviderImpl"/>
 
     <applicationService serviceImplementation="com.intellij.psi.codeStyle.AppCodeStyleSettingsManager"/>
 
@@ -300,6 +300,7 @@
     <applicationService serviceImplementation="com.intellij.facet.impl.invalid.InvalidFacetType"/>
     <projectService serviceInterface="com.intellij.facet.impl.invalid.InvalidFacetManager"
                     serviceImplementation="com.intellij.facet.impl.invalid.InvalidFacetManagerImpl"/>
+    <backgroundPostStartupActivity implementation="com.intellij.facet.FacetTypeFeatureCollector"/>
     <projectService serviceInterface="com.intellij.openapi.module.ProjectLoadingErrorsNotifier"
                     serviceImplementation="com.intellij.openapi.module.impl.ProjectLoadingErrorsNotifierImpl"
                     testServiceImplementation="com.intellij.openapi.module.impl.ProjectLoadingErrorsHeadlessNotifier"/>
@@ -941,11 +942,8 @@
     <annotator language="TEXT" implementationClass="com.intellij.codeInsight.highlighting.LargeFilesAnnotator"/>
     <annotator language="" implementationClass="com.intellij.codeInsight.highlighting.HyperlinkAnnotator"/>
 
-    <applicationService serviceInterface="com.intellij.codeInsight.template.TemplateBuilderFactory"
-                        serviceImplementation="com.intellij.codeInsight.template.TemplateBuilderFactoryImpl"/>
-
     <projectService serviceImplementation="com.intellij.analysis.problemsView.toolWindow.HighlightingErrorsProvider"/>
-    <projectService serviceInterface="com.intellij.analysis.problemsView.ProblemsListener"
+    <projectService serviceInterface="com.intellij.analysis.problemsView.ProblemsCollector"
                     serviceImplementation="com.intellij.analysis.problemsView.toolWindow.ProjectErrorsCollector"/>
 
     <projectViewPane implementation="com.intellij.ide.scopeView.ScopeViewPane"/>
@@ -976,7 +974,8 @@
     <statistics.counterUsagesCollector groupId="move.refactoring" version="1"/>
     <statistics.counterUsagesCollector groupId="refactoring" version="1"/>
     <statistics.counterUsagesCollector groupId="package.management.ui" version="1"/>
-    <statistics.counterUsagesCollector groupId="completion" version="3"/>
+    <statistics.counterUsagesCollector groupId="completion" version="4"/>
+    <statistics.counterUsagesCollector implementationClass="com.intellij.find.findUsages.FindUsagesStatisticsCollector"/>
 
     <statistics.projectUsagesCollector implementation="com.intellij.internal.statistic.collectors.fus.fileTypes.FileTypeUsagesCollector"/>
     <statistics.validation.customValidationRule implementation="com.intellij.internal.statistic.collectors.fus.actions.persistence.ToolWindowCollector$ToolWindowUtilValidator" />
@@ -1148,23 +1147,28 @@
     <daemon.tooltipActionProvider order="last" id="defaultProvider" implementation="com.intellij.codeInsight.daemon.impl.DaemonTooltipActionProvider" />
 
     <schemeExporter
-        name="IntelliJ IDEA code style XML"
+        nameBundle="messages.ApplicationBundle"
+        nameKey="settings.export.target.intellij.xml"
         schemeClass="com.intellij.psi.codeStyle.CodeStyleScheme"
         implementationClass="com.intellij.application.options.schemes.SerializableSchemeExporter"/>
     <schemeExporter
-        name="IntelliJ IDEA color scheme (.icls)"
+        nameBundle="messages.ApplicationBundle"
+        nameKey="settings.export.target.color.scheme"
         schemeClass="com.intellij.openapi.editor.colors.EditorColorsScheme"
         implementationClass="com.intellij.application.options.colors.ColorSchemeExporter"/>
     <schemeExporter
-        name="Color scheme plugin .jar"
+        nameBundle="messages.ApplicationBundle"
+        nameKey="settings.export.target.color.scheme.plugin"
         schemeClass="com.intellij.openapi.editor.colors.EditorColorsScheme"
         implementationClass="com.intellij.application.options.colors.pluginExport.ColorSchemePluginExporter"/>
     <schemeImporter
-        name="IntelliJ IDEA code style XML"
+        nameBundle="messages.ApplicationBundle"
+        nameKey="settings.export.target.intellij.xml"
         schemeClass="com.intellij.psi.codeStyle.CodeStyleScheme"
         implementationClass="com.intellij.psi.impl.source.codeStyle.CodeStyleSchemeXmlImporter"/>
     <schemeImporter
-        name="IntelliJ IDEA color scheme (.icls) or settings (.jar)"
+        nameBundle="messages.ApplicationBundle"
+        nameKey="settings.import.source.color.scheme"
         schemeClass="com.intellij.openapi.editor.colors.EditorColorsScheme"
         implementationClass="com.intellij.application.options.colors.ColorSchemeImporter"/>
     <schemeExporter
@@ -1299,8 +1303,20 @@
       <description>Allows to use the Project Errors tab in the Problems View toolwindow.</description>
     </experimentalFeature>
     <projectService serviceImplementation="com.intellij.analysis.problemsView.toolWindow.ProblemsViewStateManager"/>
-    <notificationAllowlist groupIds="Problems View;Inspection Results;Find in Path;Dependencies;Execution;Suggest Run Dashboard;
-    Parameter Name Hints;Print;Actions;Load Error;Project Template;Run Anything;Reformat changed text;Module Manager;Project Loading Error"/>
+    <notificationGroup id="Automatic Module Unloading" displayType="BALLOON"/>
+    <notificationGroup id="Execution" displayType="NONE"/>
+    <notificationGroup id="Inspection Results" displayType="TOOL_WINDOW" toolWindowId="Inspection Results"/>
+    <notificationGroup id="Find in Path" displayType="TOOL_WINDOW" toolWindowId="Find" isLogByDefault="false"/>
+    <notificationGroup id="Dependencies" displayType="TOOL_WINDOW" toolWindowId="Dependency Viewer"/>
+    <notificationGroup id="Suggest Run Dashboard" displayType="BALLOON"/>
+    <notificationGroup id="Parameter Name Hints" displayType="BALLOON"/>
+    <notificationGroup id="Print" displayType="BALLOON"/>
+    <notificationGroup id="Project Template" displayType="BALLOON"/>
+    <notificationGroup id="Load Error" displayType="BALLOON"/>
+    <notificationGroup id="Module Manager" displayType="BALLOON" bundle="messages.ProjectBundle" key="notification.group.module.manager"/>
+    <notificationGroup id="Reformat changed text" displayType="BALLOON" bundle="messages.ApplicationBundle" key="reformat.changed.text.file.too.big.notification.groupId"/>
+    <notificationGroup id="Project Loading Error" displayType="BALLOON" bundle="messages.ProjectBundle" key="notification.group.project.loading.error"/>
+    <notificationGroup id="Run Anything" displayType="BALLOON" bundle="messages.IdeBundle" key="run.anything.custom.activity.notification.group.id"/>
 
     <codeInsight.lineMarkerProvider implementationClass="com.intellij.codeInsight.documentation.render.DocRenderDummyLineMarkerProvider"/>
 

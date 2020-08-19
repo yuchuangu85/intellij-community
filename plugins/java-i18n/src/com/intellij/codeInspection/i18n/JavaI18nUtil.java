@@ -24,6 +24,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.uast.*;
 import org.jetbrains.uast.expressions.UStringConcatenationsFacade;
+import org.jetbrains.uast.generate.UastCodeGenerationPlugin;
 import org.jetbrains.uast.util.UastExpressionUtils;
 
 import java.text.ChoiceFormat;
@@ -35,6 +36,9 @@ import java.util.stream.Collectors;
 public final class JavaI18nUtil extends I18nUtil {
   public static final PropertyCreationHandler DEFAULT_PROPERTY_CREATION_HANDLER =
     (project, propertiesFiles, key, value, parameters) -> createProperty(project, propertiesFiles, key, value, true);
+
+  public static final PropertyCreationHandler EMPTY_CREATION_HANDLER =
+    (project, propertiesFiles, key, value, parameters) -> {};
 
   private JavaI18nUtil() {
   }
@@ -437,15 +441,37 @@ public final class JavaI18nUtil extends I18nUtil {
     return paramsCount;
   }
 
-  static String buildUnescapedFormatString(UStringConcatenationsFacade cf, List<? super UExpression> formatParameters) {
+  public static String buildUnescapedFormatString(UStringConcatenationsFacade cf,
+                                                List<? super UExpression> formatParameters,
+                                                @NotNull Project project) {
+    return buildUnescapedFormatString(cf, formatParameters, project, false);
+  }
+
+  private static String buildUnescapedFormatString(UStringConcatenationsFacade cf,
+                                                   List<? super UExpression> formatParameters,
+                                                   @NotNull Project project,
+                                                   boolean nested) {
     StringBuilder result = new StringBuilder();
     int elIndex = 0;
+    boolean noEscapingRequired = !nested && SequencesKt.all(cf.getUastOperands(), expression -> expression instanceof ULiteralExpression);
     for (UExpression expression : SequencesKt.asIterable(cf.getUastOperands())) {
+      while (expression instanceof UParenthesizedExpression) {
+        expression = ((UParenthesizedExpression)expression).getExpression();
+      }
       if (expression instanceof ULiteralExpression) {
         Object value = ((ULiteralExpression)expression).getValue();
         if (value != null) {
-          result.append(PsiConcatenationUtil.formatString(value.toString(), false));
+          if (noEscapingRequired) {
+            result.append(value.toString());
+          }
+          else {
+            String formatString = PsiConcatenationUtil.formatString(value.toString(), false);
+            result.append(nested ? PsiConcatenationUtil.formatString(formatString, false) : formatString);
+          }
         }
+      }
+      else if (addChoicePattern(expression, formatParameters, project, result)) {
+        elIndex = formatParameters.size();
       }
       else {
         result.append("{").append(elIndex++).append("}");
@@ -453,6 +479,76 @@ public final class JavaI18nUtil extends I18nUtil {
       }
     }
     return result.toString();
+  }
+
+  private static boolean addChoicePattern(UExpression expression,
+                                          List<? super UExpression> formatParameters,
+                                          @NotNull Project project,
+                                          StringBuilder result) {
+    if (!(expression instanceof UIfExpression)) return false;
+    PsiElement sourcePsi = expression.getSourcePsi();
+    if (sourcePsi == null) return false;
+    UastCodeGenerationPlugin generationPlugin = UastCodeGenerationPlugin.byLanguage(sourcePsi.getLanguage());
+    if (generationPlugin == null) return false;
+
+    UExpression thenExpression = ((UIfExpression)expression).getThenExpression();
+    UExpression elseExpression = ((UIfExpression)expression).getElseExpression();
+    if (!(thenExpression instanceof ULiteralExpression) && 
+        !(elseExpression instanceof ULiteralExpression)) return false;
+
+    boolean nested = !(thenExpression instanceof ULiteralExpression && elseExpression instanceof ULiteralExpression);
+
+    String thenStr = getSideText(formatParameters, project, thenExpression, nested);
+    String elseStr = getSideText(formatParameters, project, elseExpression, nested);
+
+    result.append("{")
+      .append(formatParameters.size())
+      .append(", choice, 0#").append(thenStr)
+      .append("|1#").append(elseStr)
+      .append("}");
+
+
+    PsiElementFactory elementFactory = JavaPsiFacade.getElementFactory(project);
+    UIfExpression exCopy = UastContextKt.toUElement(sourcePsi.copy(), UIfExpression.class);
+    assert exCopy != null;
+    generationPlugin.replace(Objects.requireNonNull(exCopy.getThenExpression()), 
+                             Objects.requireNonNull(UastContextKt.toUElement(elementFactory.createExpressionFromText("0", null), ULiteralExpression.class)), 
+                             ULiteralExpression.class);
+
+    generationPlugin.replace(Objects.requireNonNull(exCopy.getElseExpression()), 
+                             Objects.requireNonNull(UastContextKt.toUElement(elementFactory.createExpressionFromText("1", null), ULiteralExpression.class)), 
+                             ULiteralExpression.class);
+    formatParameters.add(exCopy);
+    return true;
+  }
+
+  @NotNull
+  private static String getSideText(List<? super UExpression> formatParameters,
+                                    @NotNull Project project,
+                                    UExpression expression,
+                                    boolean nested) {
+    String elseStr;
+    if (expression instanceof ULiteralExpression) {
+      Object elseValue = ((ULiteralExpression)expression).getValue();
+      if (elseValue != null) {
+        elseStr = PsiConcatenationUtil.formatString(elseValue.toString(), false);
+        elseStr = nested ? PsiConcatenationUtil.formatString(elseStr, false) : elseStr;
+      }
+      else {
+        elseStr = "null";
+      }
+    }
+    else {
+      UStringConcatenationsFacade concatenation = UStringConcatenationsFacade.createFromTopConcatenation(expression);
+      if (concatenation != null) {
+        elseStr = buildUnescapedFormatString(concatenation, formatParameters, project, true);
+      }
+      else {
+        elseStr = "{" + formatParameters.size() + "}";
+        formatParameters.add(expression);
+      }
+    }
+    return elseStr;
   }
 
   static String composeParametersText(final List<UExpression> args) {

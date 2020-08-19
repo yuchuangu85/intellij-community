@@ -2,24 +2,24 @@
 
 package com.intellij.ui;
 
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.openapi.util.text.StringUtil;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
-import javax.swing.*;
 import java.util.ArrayList;
 
 public class SimpleColoredText implements ColoredTextContainer {
-  private final ArrayList<String> myTexts;
+  private final ArrayList<@NlsContexts.Label String> myTexts;
   private final ArrayList<SimpleTextAttributes> myAttributes;
-  private String myCachedToString = null;
+  private @Nls String myCachedToString = null;
 
   public SimpleColoredText() {
     myTexts = new ArrayList<>(3);
     myAttributes = new ArrayList<>(3);
   }
 
-  public SimpleColoredText(@NotNull String fragment, @NotNull SimpleTextAttributes attributes) {
+  public SimpleColoredText(@NotNull @NlsContexts.Label String fragment, @NotNull SimpleTextAttributes attributes) {
     this();
     append(fragment, attributes);
   }
@@ -31,7 +31,7 @@ public class SimpleColoredText implements ColoredTextContainer {
     myAttributes.add(attributes);
   }
 
-  public void insert(int index, @NotNull String fragment, @NotNull SimpleTextAttributes attributes) {
+  public void insert(int index, @NotNull @NlsContexts.Label String fragment, @NotNull SimpleTextAttributes attributes) {
     myTexts.add(index, fragment);
     myCachedToString = null;
     myAttributes.add(index, attributes);
@@ -52,7 +52,7 @@ public class SimpleColoredText implements ColoredTextContainer {
     }
   }
 
-  public String toString() {
+  public @Nls String toString() {
     if (myCachedToString == null) {
       myCachedToString = StringUtil.join(myTexts,"");
     }

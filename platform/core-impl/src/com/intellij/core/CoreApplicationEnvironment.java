@@ -251,15 +251,34 @@ public class CoreApplicationEnvironment {
   }
 
   public static <T> void registerExtensionPoint(@NotNull ExtensionsArea area, @NotNull String name, @NotNull Class<? extends T> aClass) {
+    registerExtensionPoint(area, name, aClass, false);
+  }
+
+  public static <T> void registerDynamicExtensionPoint(@NotNull ExtensionsArea area, @NotNull String name, @NotNull Class<? extends T> aClass) {
+    registerExtensionPoint(area, name, aClass, true);
+  }
+
+  @SuppressWarnings("TestOnlyProblems")
+  private static <T> void registerExtensionPoint(@NotNull ExtensionsArea area, @NotNull String name, @NotNull Class<? extends T> aClass, boolean dymanic) {
     if (!area.hasExtensionPoint(name)) {
       ExtensionPoint.Kind kind = aClass.isInterface() || Modifier.isAbstract(aClass.getModifiers()) ? ExtensionPoint.Kind.INTERFACE : ExtensionPoint.Kind.BEAN_CLASS;
-      //noinspection TestOnlyProblems
-      area.registerExtensionPoint(name, aClass.getName(), kind);
+      if (dymanic) {
+        area.registerDynamicExtensionPoint(name, aClass.getName(), kind);
+      }
+      else {
+        area.registerExtensionPoint(name, aClass.getName(), kind);
+      }
     }
   }
 
+  @SuppressWarnings("deprecation")
   public static <T> void registerApplicationExtensionPoint(@NotNull ExtensionPointName<T> extensionPointName, @NotNull Class<? extends T> aClass) {
     registerExtensionPoint(Extensions.getRootArea(), extensionPointName, aClass);
+  }
+
+  @SuppressWarnings("deprecation")
+  public static <T> void registerApplicationDynamicExtensionPoint(@NotNull String extensionPointName, @NotNull Class<? extends T> aClass) {
+    registerDynamicExtensionPoint(Extensions.getRootArea(), extensionPointName, aClass);
   }
 
   public static void registerExtensionPointAndExtensions(@NotNull Path pluginRoot, @NotNull String fileName, @NotNull ExtensionsArea area) {

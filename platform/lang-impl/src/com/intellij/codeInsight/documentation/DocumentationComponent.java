@@ -44,6 +44,7 @@ import com.intellij.openapi.util.DimensionService;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.InvalidDataException;
 import com.intellij.openapi.util.registry.Registry;
+import com.intellij.openapi.util.text.HtmlChunk;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.IdeFocusManager;
@@ -468,7 +469,7 @@ public class DocumentationComponent extends JPanel implements Disposable, DataPr
       public void hyperlinkUpdate(HyperlinkEvent e) {
         HyperlinkEvent.EventType type = e.getEventType();
         if (type == HyperlinkEvent.EventType.ACTIVATED) {
-          manager.navigateByLink(DocumentationComponent.this, e.getDescription());
+          manager.navigateByLink(DocumentationComponent.this, null, e.getDescription());
         }
       }
     };
@@ -968,9 +969,6 @@ public class DocumentationComponent extends JPanel implements Disposable, DataPr
     }
 
     String title = manager.getTitle(element);
-    if (title != null) {
-      title = StringUtil.escapeXmlEntities(title);
-    }
     if (externalUrl == null) {
       List<String> urls = provider.getUrlFor(element, originalElement);
       if (urls != null) {
@@ -997,27 +995,25 @@ public class DocumentationComponent extends JPanel implements Disposable, DataPr
       if (link != null) return link;
     }
 
-    return "<a href='external_doc'>External documentation" +
-           (title == null ? "" : (" for `" + title + "`")) +
-           "<icon src='AllIcons.Ide.External_link_arrow'></a></div>";
+    String linkText = "External documentation" + (title == null ? "" : " for `" + title + "`");
+    return HtmlChunk.link("external_doc", linkText)
+      .child(HtmlChunk.tag("icon").attr("src", "AllIcons.Ide.External_link_arrow")).toString();
   }
 
   private static String getLink(String title, String url) {
-    StringBuilder result = new StringBuilder();
     String hostname = getHostname(url);
     if (hostname == null) {
       return null;
     }
 
-    result.append("<a href='").append(url).append("'>");
+    String linkText;
     if (title == null) {
-      result.append("Documentation");
+      linkText = "Documentation on " + hostname;
     }
     else {
-      result.append("`").append(title).append("`");
+      linkText = "`" + title + "` on " + hostname;
     }
-    result.append(" on ").append(hostname).append("</a>");
-    return result.toString();
+    return HtmlChunk.link(url, linkText).toString();
   }
 
   static boolean shouldShowExternalDocumentationLink(DocumentationProvider provider,
@@ -1541,7 +1537,7 @@ public class DocumentationComponent extends JPanel implements Disposable, DataPr
     HTMLDocument.Iterator link = getLink(n);
     if (link != null) {
       String href = (String)link.getAttributes().getAttribute(HTML.Attribute.HREF);
-      myManager.navigateByLink(this, href);
+      myManager.navigateByLink(this, null, href);
     }
   }
 

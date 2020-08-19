@@ -29,12 +29,15 @@ import com.intellij.util.ui.JBDimension
 import com.intellij.util.ui.JBUI
 import git4idea.GitUtil
 import git4idea.GitVcs
+import git4idea.branch.GitBranchUtil
 import git4idea.branch.GitBranchUtil.equalBranches
 import git4idea.config.GitExecutableManager
 import git4idea.config.GitVersionSpecialty.NO_VERIFY_SUPPORTED
 import git4idea.fetch.GitFetchSupport
 import git4idea.i18n.GitBundle
 import git4idea.merge.dialog.*
+import git4idea.rebase.ComboBoxPrototypeRenderer
+import git4idea.rebase.ComboBoxPrototypeRenderer.Companion.COMBOBOX_VALUE_PROTOTYPE
 import git4idea.repo.GitRemote
 import git4idea.repo.GitRepository
 import git4idea.repo.GitRepositoryManager
@@ -45,6 +48,7 @@ import net.miginfocom.layout.LC
 import net.miginfocom.swing.MigLayout
 import java.awt.BorderLayout
 import java.awt.Insets
+import java.awt.event.InputEvent
 import java.awt.event.ItemEvent
 import java.awt.event.KeyEvent
 import javax.swing.JComponent
@@ -58,13 +62,13 @@ class GitPullDialog(private val project: Project,
                     private val roots: List<VirtualFile>,
                     private val defaultRoot: VirtualFile) : DialogWrapper(project) {
 
-  val selectedOptions = mutableSetOf<PullOption>()
+  val selectedOptions = mutableSetOf<GitPullOption>()
 
   private val repositories = sortRepositories(GitRepositoryManager.getInstance(project).repositories)
 
   private val branches = collectBranches().toMutableMap()
 
-  private val optionInfos = mutableMapOf<PullOption, OptionInfo<PullOption>>()
+  private val optionInfos = mutableMapOf<GitPullOption, OptionInfo<GitPullOption>>()
 
   private val repositoryField = createRepositoryField()
   private val remoteField = createRemoteField()
@@ -115,7 +119,7 @@ class GitPullDialog(private val project: Project,
 
   fun getSelectedBranches() = listOf(branchField.item)
 
-  fun isCommitAfterMerge() = PullOption.NO_COMMIT !in selectedOptions
+  fun isCommitAfterMerge() = GitPullOption.NO_COMMIT !in selectedOptions
 
   private fun collectBranches() = repositories.associateWith { repository -> getBranchesInRepo(repository) }
 
@@ -152,7 +156,7 @@ class GitPullDialog(private val project: Project,
     val repository = getSelectedRepository()
     val remote = getSelectedRemote()
 
-    val branches = getRemoteBranches(repository, remote)
+    val branches = GitBranchUtil.sortBranchNames(getRemoteBranches(repository, remote))
 
     val model = branchField.model as MutableCollectionComboBoxModel
 
@@ -182,7 +186,7 @@ class GitPullDialog(private val project: Project,
            ?: GitUtil.getDefaultOrFirstRemote(remotes)
   }
 
-  private fun optionChosen(option: PullOption) {
+  private fun optionChosen(option: GitPullOption) {
     if (option !in selectedOptions) {
       selectedOptions += option
     }
@@ -226,22 +230,40 @@ class GitPullDialog(private val project: Project,
       { selectedOptions },
       ::isOptionEnabled
     )
+
+    override fun handleSelect(handleFinalChoices: Boolean) {
+      if (handleFinalChoices) {
+        handleSelect()
+      }
+    }
+
+    override fun handleSelect(handleFinalChoices: Boolean, e: InputEvent?) {
+      if (handleFinalChoices) {
+        handleSelect()
+      }
+    }
+
+    private fun handleSelect() {
+      (selectedValues.firstOrNull() as? GitPullOption)?.let { option -> optionChosen(option) }
+
+      list.repaint()
+    }
   }
 
-  private fun getOptionInfo(option: PullOption) = optionInfos.computeIfAbsent(option) {
-    OptionInfo(option, option.option, GitBundle.message(option.descriptionKey))
+  private fun getOptionInfo(option: GitPullOption) = optionInfos.computeIfAbsent(option) {
+    OptionInfo(option, option.option, option.description)
   }
 
-  private fun createOptionPopupStep() = object : BaseListPopupStep<PullOption>(GitBundle.message("pull.options.modify.popup.title"),
-                                                                               getOptions()) {
-    override fun isSelectable(value: PullOption?) = isOptionEnabled(value!!)
+  private fun createOptionPopupStep() = object : BaseListPopupStep<GitPullOption>(GitBundle.message("pull.options.modify.popup.title"),
+                                                                                  getOptions()) {
+    override fun isSelectable(value: GitPullOption?) = isOptionEnabled(value!!)
 
-    override fun onChosen(selectedValue: PullOption, finalChoice: Boolean) = doFinalStep(Runnable { optionChosen(selectedValue) })
+    override fun onChosen(selectedValue: GitPullOption, finalChoice: Boolean) = doFinalStep(Runnable { optionChosen(selectedValue) })
   }
 
-  private fun getOptions() = PullOption.values().toMutableList().apply {
+  private fun getOptions() = GitPullOption.values().toMutableList().apply {
     if (!isNoVerifySupported) {
-      remove(PullOption.NO_VERIFY)
+      remove(GitPullOption.NO_VERIFY)
     }
   }
 
@@ -267,10 +289,10 @@ class GitPullDialog(private val project: Project,
       optionsPanel.isVisible = true
     }
 
-    val shownOptions = mutableSetOf<PullOption>()
+    val shownOptions = mutableSetOf<GitPullOption>()
 
     optionsPanel.components.forEach { c ->
-      @Suppress("UNCHECKED_CAST") val optionButton = c as OptionButton<PullOption>
+      @Suppress("UNCHECKED_CAST") val optionButton = c as OptionButton<GitPullOption>
       val pullOption = optionButton.option
 
       if (pullOption !in selectedOptions) {
@@ -288,9 +310,9 @@ class GitPullDialog(private val project: Project,
     }
   }
 
-  private fun createOptionButton(option: PullOption) = OptionButton(option, option.option) { optionChosen(option) }
+  private fun createOptionButton(option: GitPullOption) = OptionButton(option, option.option) { optionChosen(option) }
 
-  private fun isOptionEnabled(option: PullOption) = selectedOptions.all { it.isOptionSuitable(option) }
+  private fun isOptionEnabled(option: GitPullOption) = selectedOptions.all { it.isOptionSuitable(option) }
 
   private fun updateTitle() {
     val currentBranchName = getSelectedRepository().currentBranchName
@@ -359,7 +381,8 @@ class GitPullDialog(private val project: Project,
   private fun createRepositoryField() = ComboBox(CollectionComboBoxModel(repositories)).apply {
     isSwingPopup = false
     renderer = SimpleListCellRenderer.create("") { DvcsUtil.getShortRepositoryName(it) }
-    ui = FlatComboBoxUI(outerInsets = Insets(1, 1, 1, 0))
+    @Suppress("UsePropertyAccessSyntax")
+    setUI(FlatComboBoxUI(outerInsets = Insets(1, 1, 1, 0)))
 
     item = repositories.find { repo -> repo.root == defaultRoot }
 
@@ -372,9 +395,10 @@ class GitPullDialog(private val project: Project,
   private fun createRemoteField() = ComboBox<GitRemote>(MutableCollectionComboBoxModel()).apply {
     isSwingPopup = false
     renderer = SimpleListCellRenderer.create(GitBundle.message("util.remote.renderer.none")) { it.name }
-    ui = FlatComboBoxUI(
+    @Suppress("UsePropertyAccessSyntax")
+    setUI(FlatComboBoxUI(
       outerInsets = Insets(BW.get(), 0, BW.get(), 0),
-      popupEmptyText = GitBundle.message("pull.branch.no.matching.remotes"))
+      popupEmptyText = GitBundle.message("pull.branch.no.matching.remotes")))
 
     item = getCurrentOrDefaultRemote(getSelectedRepository())
 
@@ -411,11 +435,14 @@ class GitPullDialog(private val project: Project,
       }
     }.registerCustomShortcutSet(getFetchActionShortcut(), this)
 
-    ui = FlatComboBoxUI(
+    prototypeDisplayValue = COMBOBOX_VALUE_PROTOTYPE
+    renderer = ComboBoxPrototypeRenderer.create(this) { it }
+    @Suppress("UsePropertyAccessSyntax")
+    setUI(FlatComboBoxUI(
       Insets(1, 0, 1, 1),
       Insets(BW.get(), 0, BW.get(), BW.get()),
       GitBundle.message("pull.branch.nothing.to.pull"),
-      this@GitPullDialog::createBranchFieldPopupComponent)
+      this@GitPullDialog::createBranchFieldPopupComponent))
   }
 
   private fun createBranchFieldPopupComponent(content: JComponent): JComponent {

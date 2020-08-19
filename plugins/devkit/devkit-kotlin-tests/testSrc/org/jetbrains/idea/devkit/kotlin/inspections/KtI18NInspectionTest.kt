@@ -18,6 +18,59 @@ class KtI18NInspectionTest : LightJavaCodeInsightFixtureTestCase() {
     """.trimIndent())
     myFixture.testHighlighting()
   }
+
+  fun testPropagateToReceiver() {
+    myFixture.enableInspections(com.intellij.codeInspection.i18n.I18nInspection())
+    myFixture.configureByText("Foo.kt", """
+       public fun String.trimIndent(): String = this
+       fun foo(@org.jetbrains.annotations.NonNls <warning descr="[UNUSED_PARAMETER] Parameter 'message' is never used">message</warning>: String) { }
+       fun bar() {
+          foo("foo bar")
+          foo("foo bar".trimIndent())
+       }
+    """.trimIndent())
+    myFixture.testHighlighting()
+  }
+  
+  fun testPropagateThroughLocal() {
+    val inspection = com.intellij.codeInspection.i18n.I18nInspection()
+    inspection.setIgnoreForAllButNls(true)
+    myFixture.enableInspections(inspection)
+    myFixture.configureByText("Foo.kt", """
+       fun foo(@org.jetbrains.annotations.Nls <warning descr="[UNUSED_PARAMETER] Parameter 'message' is never used">message</warning>: String) { }
+       fun bar() {
+          var text = <warning descr="Hardcoded string literal: \"foo\""><warning descr="[VARIABLE_WITH_REDUNDANT_INITIALIZER] Variable 'text' initializer is redundant">"foo"</warning></warning>
+          text = <warning descr="Hardcoded string literal: \"bar\"">"bar"</warning>
+          foo(text)
+       }
+    """.trimIndent())
+    myFixture.testHighlighting()
+  }
+  
+  fun testPropertyAssignment() {
+    val inspection = com.intellij.codeInspection.i18n.I18nInspection()
+    inspection.setIgnoreForAllButNls(true)
+    myFixture.enableInspections(inspection)
+    myFixture.addClass(
+      """public class X {
+        |native @org.jetbrains.annotations.Nls String getFoo();
+        |native void setFoo(@org.jetbrains.annotations.Nls String s);
+        |}""".trimMargin())
+    myFixture.configureByText("Foo.kt", """
+       class Foo {
+          @org.jetbrains.annotations.Nls var prop = "";
+       
+          fun foo(x : X) {
+            // TODO: prop is resolved to getter 
+            // but Kotlin properties do not propagate annotations to getter ultra-light method 
+            prop = "value"
+            // TODO: foo is not resolved to X.getFoo()
+            x.foo = "value"
+          }
+        }
+    """.trimIndent())
+    myFixture.testHighlighting()
+  }
   
   fun testFunctionParametersOnlyNls() {
     val inspection = com.intellij.codeInspection.i18n.I18nInspection()

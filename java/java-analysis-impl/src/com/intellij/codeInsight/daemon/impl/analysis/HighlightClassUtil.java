@@ -278,7 +278,10 @@ public final class HighlightClassUtil {
    * @return true if file correspond to the shebang script
    */
   public static boolean isJavaHashBangScript(PsiJavaFile containingFile) {
-    return containingFile.getText().startsWith("#!");
+    PsiElement firstChild = containingFile.getFirstChild();
+    return firstChild instanceof PsiComment && 
+           ((PsiComment)firstChild).getTokenType() == JavaTokenType.END_OF_LINE_COMMENT && 
+           firstChild.getText().startsWith("#!");
   }
 
   static HighlightInfo checkClassRestrictedKeyword(@NotNull LanguageLevel level, @NotNull PsiIdentifier identifier) {
@@ -615,7 +618,7 @@ public final class HighlightClassUtil {
     }
     else if (aClass.isInterface()) {
       token = JavaTokenType.INTERFACE_KEYWORD;
-      feature = HighlightingFeature.LOCAL_INTERFACES;
+      feature = aClass.isAnnotationType() ? null : HighlightingFeature.LOCAL_INTERFACES;
     }
     else {
       return null;
@@ -625,6 +628,12 @@ public final class HighlightClassUtil {
       .findFirst(e -> e instanceof PsiKeyword && ((PsiKeyword)e).getTokenType().equals(token))
       .orElseThrow(NoSuchElementException::new);
     PsiFile file = aClass.getContainingFile();
+    if (feature == null) {
+      return HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR)
+        .range(anchor)
+        .descriptionAndTooltip(JavaErrorBundle.message("annotation.cannot.be.local"))
+        .create();
+    }
     return HighlightUtil.checkFeature(anchor, feature, PsiUtil.getLanguageLevel(file), file);
   }
 
@@ -1094,10 +1103,16 @@ public final class HighlightClassUtil {
           }
           else {
             if (currentModule == null && !psiFacade.arePackagesTheSame(aClass, inheritorClass)) {
-              holder.add(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR)
-                           .range(permitted)
-                           .descriptionAndTooltip(JavaErrorBundle.message("class.not.allowed.to.extend.sealed.class.from.another.package"))
-                           .create());
+              HighlightInfo info = HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR)
+                .range(permitted)
+                .descriptionAndTooltip(JavaErrorBundle.message("class.not.allowed.to.extend.sealed.class.from.another.package"))
+                .create();
+              PsiFile parentFile = aClass.getContainingFile();
+              if (parentFile instanceof PsiClassOwner) {
+                String parentPackage = ((PsiClassOwner)parentFile).getPackageName();
+                QuickFixAction.registerQuickFixAction(info, QUICK_FIX_FACTORY.createMoveClassToPackageFix(inheritorClass, parentPackage));
+              }
+              holder.add(info);
             }
             else if (currentModule != null && currentModule != JavaModuleGraphUtil.findDescriptorByElement(inheritorClass)) {
               holder.add(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR)

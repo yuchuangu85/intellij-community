@@ -164,6 +164,7 @@ class DistributionJARsBuilder {
 
       addModule("intellij.platform.builtInServer.impl")
       addModule("intellij.platform.credentialStore")
+      withoutModuleLibrary("intellij.platform.credentialStore", "dbus-java")
       addModule("intellij.json")
       addModule("intellij.spellchecker")
       addModule("intellij.platform.statistics")
@@ -315,6 +316,19 @@ class DistributionJARsBuilder {
 
     def validator = new ModuleStructureValidator(buildContext, platform.moduleJars)
     validator.validate()
+  }
+
+  @CompileStatic
+  List<String> getProductModules() {
+    List<String> result = new ArrayList<>();
+    for (moduleJar in platform.moduleJars.entrySet()) {
+      // Filter out jars with relative paths in name
+      if (moduleJar.key.contains("\\") || moduleJar.key.contains("/"))
+        continue
+
+      result.addAll(moduleJar.value)
+    }
+    return result
   }
 
   /**

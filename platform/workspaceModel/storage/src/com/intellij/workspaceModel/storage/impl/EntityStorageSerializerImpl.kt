@@ -10,6 +10,7 @@ import com.esotericsoftware.kryo.serializers.FieldSerializer
 import com.google.common.collect.HashBiMap
 import com.google.common.collect.HashMultimap
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.util.SmartList
 import com.intellij.util.containers.*
 import com.intellij.workspaceModel.storage.*
 import com.intellij.workspaceModel.storage.impl.containers.ImmutableIntIntUniqueBiMap
@@ -149,6 +150,7 @@ class EntityStorageSerializerImpl(private val typesResolver: EntityTypesResolver
     // TODO Scan OCSerializer for useful kryo settings and tricks
     kryo.register(java.util.ArrayList::class.java).instantiator = ObjectInstantiator { ArrayList<Any>() }
     kryo.register(HashMap::class.java).instantiator = ObjectInstantiator { HashMap<Any, Any>() }
+    kryo.register(SmartList::class.java).instantiator = ObjectInstantiator { SmartList<Any>() }
     kryo.register(LinkedHashMap::class.java).instantiator = ObjectInstantiator { LinkedHashMap<Any, Any>() }
     kryo.register(BidirectionalMap::class.java).instantiator = ObjectInstantiator { BidirectionalMap<Any, Any>() }
     kryo.register(HashSet::class.java).instantiator = ObjectInstantiator { HashSet<Any>() }
@@ -171,6 +173,7 @@ class EntityStorageSerializerImpl(private val typesResolver: EntityTypesResolver
     kryo.register(IntArray::class.java)
     kryo.register(Pair::class.java)
     kryo.register(MultimapStorageIndex::class.java)
+    kryo.register(VirtualFileIndex.VirtualFileUrlInfo::class.java)
 
     registerFieldSerializer(kryo, Collections.unmodifiableCollection<Any>(emptySet()).javaClass) {
       Collections.unmodifiableCollection(emptySet())
@@ -347,7 +350,7 @@ class EntityStorageSerializerImpl(private val typesResolver: EntityTypesResolver
       val refsTable = kryo.readClassAndObject(input) as RefsTable
 
       // Read indexes
-      val softLinks = kryo.readClassAndObject(input) as MultimapStorageIndex<PersistentEntityId<*>>
+      val softLinks = kryo.readClassAndObject(input) as MultimapStorageIndex
       val virtualFileIndex = kryo.readClassAndObject(input) as VirtualFileIndex
       val entitySourceIndex = kryo.readClassAndObject(input) as EntityStorageInternalIndex<EntitySource>
       val persistentIdIndex = kryo.readClassAndObject(input) as EntityStorageInternalIndex<PersistentEntityId<*>>

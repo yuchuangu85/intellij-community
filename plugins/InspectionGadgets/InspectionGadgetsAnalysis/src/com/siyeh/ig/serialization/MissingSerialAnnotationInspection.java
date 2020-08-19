@@ -46,10 +46,16 @@ public class MissingSerialAnnotationInspection extends BaseInspection {
       if (field.hasAnnotation(JAVA_IO_SERIAL) || !isConstant(field)) return;
 
       Optional<PsiClass> pClass = getSerializablePsiClass(field);
-      if (!pClass.isPresent()) return;
+      if (pClass.isEmpty()) return;
 
-      boolean candidateToBeAnnotated =
-        SerializationUtils.isExternalizable(pClass.get()) ? isSerialFieldInExternalizable(field) : isSerialFieldInSerializable(field);
+      boolean candidateToBeAnnotated;
+      if (pClass.get().isRecord()) {
+        candidateToBeAnnotated = isSerialFieldInExternalizable(field);
+      }
+      else {
+        candidateToBeAnnotated = SerializationUtils.isExternalizable(pClass.get()) ? isSerialFieldInExternalizable(field)
+                                                                                   : isSerialFieldInSerializable(field);
+      }
       if (candidateToBeAnnotated) {
         registerError(field.getNameIdentifier(), field);
       }
@@ -61,10 +67,16 @@ public class MissingSerialAnnotationInspection extends BaseInspection {
       if (method.hasAnnotation(JAVA_IO_SERIAL)) return;
 
       Optional<PsiClass> pClass = getSerializablePsiClass(method);
-      if (!pClass.isPresent()) return;
+      if (pClass.isEmpty()) return;
 
-      boolean candidateToBeAnnotated =
-        SerializationUtils.isExternalizable(pClass.get()) ? isSerialMethodInExternalizable(method) : isSerialMethodInSerializable(method);
+      boolean candidateToBeAnnotated;
+      if (pClass.get().isRecord()) {
+        candidateToBeAnnotated = isSerialMethodInExternalizable(method);
+      }
+      else {
+        candidateToBeAnnotated = SerializationUtils.isExternalizable(pClass.get()) ? isSerialMethodInExternalizable(method)
+                                                                                   : isSerialMethodInSerializable(method);
+      }
       if (candidateToBeAnnotated) {
         PsiIdentifier methodIdentifier = method.getNameIdentifier();
         if (methodIdentifier == null) return;
